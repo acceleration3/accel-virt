@@ -67,4 +67,3 @@ int TestRegistry::run(int argc, char **argv)
 
 }  // namespace av
 
-int main(int argc, char **argv) { return av::TestRegistry::instance().run(argc, argv); }

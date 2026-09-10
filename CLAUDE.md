@@ -6,7 +6,8 @@
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 display miniport
 (`rvkgpu.sys`), a custom in-process QEMU device (`virtio-gpu-rvk-pci`), and the
-wire protocol between them. Serialization comes from `../render-server`.
+wire protocol between them. Serialization comes from `render-server`'s
+`librvk_codec`, an external C-ABI library found through pkg-config.
 
 **Read before writing code:** `.specify/memory/constitution.md` (the rules that
 govern the project), `docs/testing.md` (how a display miniport is unit tested),
@@ -108,10 +109,11 @@ allocation. Nothing allocates on the submission path.
 enforces all three, so a violation is a failing unit test rather than a
 bugcheck in a VM.
 
-**Tests**: see `.specify/memory/constitution.md`, Principle III. Every branch,
+**Tests**: see `.specify/memory/constitution.md`, Principle IV. Every branch,
 invariants after every mutation, hostile input, and a fuzz target for anything
-that reads bytes it did not write. This is not aspirational; `tools/coverage.sh`
-and `tools/check_symbol_tests.py` are build gates.
+that reads bytes it did not write. This is not aspirational; `tools/gate.sh`
+runs every gate - `tools/check_design.py`, `tools/check_symbol_tests.py`, the
+kernel cross-build, 100% branch coverage and fuzz smoke - and fails the build.
 
 ## Adaptations from the standard decrapify-cpp rules
 

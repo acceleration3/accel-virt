@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""Gate for constitution Principle IV.5: no class or public method in
+src/core, src/device or src/proto without a test that names it.
+
+Private methods are covered through the public surface; requiring a test to
+name them would test the shape of the implementation instead of its behaviour.
+The harness is not a test: a fixture calling a method proves nothing about it.
+
+  check_symbol_tests.py [repository root]
+"""
+import os
+import re
+import sys
+
+from header_scan import declared_classes
+
+# Headers that declare a *required* interface - what core calls and the
+# platform provides - rather than a provided one. Testing these would test the
+# mock. Every entry needs a reason; the list is short on purpose.
+EXCLUDE = {
+    "src/core/platform.hpp": "the platform contract, implemented by src/km and "
+                             "tests/harness and exercised through every core test",
+}
+
+
+def test_corpus(root):
+    texts = []
+    for base, _dirs, files in os.walk(os.path.join(root, "tests")):
+        if os.path.join("tests", "harness") in os.path.relpath(base, root) + os.sep:
+            continue
+        for name in files:
+            if name.endswith((".cpp", ".hpp")):
+                with open(os.path.join(base, name)) as source:
+                    texts.append(source.read())
+    return "\n".join(texts)
+
+
+def main():
+    root = sys.argv[1] if len(sys.argv) > 1 else "."
+    corpus = test_corpus(root)
+    violations = []
+    for declared in declared_classes(root):
+        if declared.header in EXCLUDE:
+            continue
+        if not re.search(r"\b" + re.escape(declared.name) + r"\b", corpus):
+            violations.append(f"{declared.header}: class {declared.name} has no test naming it")
+        for method in declared.public_methods:
+            if not re.search(r"\b" + re.escape(method) + r"\b", corpus):
+                violations.append(
+                    f"{declared.header}: {declared.name}::{method} has no test naming it")
+    for violation in violations:
+        print(violation, file=sys.stderr)
+    if violations:
+        sys.exit(1)
+    print("symbol_tests: ok")
+
+
+if __name__ == "__main__":
+    main()

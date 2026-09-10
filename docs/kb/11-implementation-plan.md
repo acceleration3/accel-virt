@@ -1,0 +1,400 @@
+# 11 — Implementation plan: a paravirtual WDDM 3.2 GPU on a custom QEMU device
+
+## Decisions this plan is built on
+
+1. **Host is QEMU/KVM on Linux.** No Hyper-V, no Windows host.
+2. **No ivshmem.** The transport is a virtio-gpu device.
+3. **The host side lives inside QEMU.** A new in-process device,
+   `virtio-gpu-rvk-pci`, owns transport, memory mapping, fences, scanout and
+   host execution. No separate backend process, no vhost-user.
+4. **`render-server` is serialization only.** It contributes generated
+   encoders (linked into guest ICDs/UMD) and generated decoders (linked into
+   the QEMU device). It is not a transport, not a server, not an executor.
+5. **D3D is translated in the guest** by vkd3d-proton and DXVK, which are
+   ordinary Vulkan clients. Vulkan, OpenGL and OpenCL are the three serialized
+   APIs.
+6. **Target is full render + present** on WDDM 3.2 (`0x11007`).
+
+## Where the cut line goes, and why
+
+| Cut at | Guest ships | Host must be | Verdict |
+|---|---|---|---|
+| **D3DKMT** (GPU-PV, see `09-gpupv.md`) | nothing; host driver files projected in | Windows, same GPU vendor | Unavailable on a Linux host. |
+| **The DDI** (forward `DxgkDdi*`) | a KMD | something that executes vendor DMA buffers | Nothing to forward to. The DMA format is the vendor's. |
+| **The graphics API** (Vulkan/GL/CL) | ICDs + a KMD | Linux with any Vulkan/GL/CL driver | **Chosen.** |
+
+The KMD's job is therefore **not** to execute graphics. Its job is to be a
+credible WDDM GPU: own allocations, GPU virtual address space, fences and
+scanout, and move serialized command streams to the device.
+
+## Components
+
+```
+ GUEST (Windows 11 24H2)                           HOST (Linux)
+ ┌──────────────────────────────────────────┐     ┌─────────────────────────────────────────────┐
+ │ app                                      │     │ qemu-system-x86_64  (patched package)       │
+ │  ├ d3d12.dll   = vkd3d-proton  prebuilt  │     │  └ virtio-gpu-rvk-pci           NEW         │
+ │  ├ d3d11/dxgi  = DXVK          prebuilt  │     │     ├ VirtIOGPU base: 2D, scanout, EDID,    │
+ │  ├ vulkan-1.dll (Khronos loader)         │     │     │  cursor, control queue   (stock QEMU) │
+ │  │  └ rvk Vulkan ICD   ─┐                │     │     ├ capset + 3D commands                  │
+ │  ├ opengl32 → rvk GL ICD ├ encoders from │     │     ├ hostmem BAR  (mappable host memory)   │
+ │  └ OpenCL   → rvk CL ICD ┘ render-server │     │     ├ doorbell BAR (ioeventfd per context)  │
+ │        │ D3DKMT (gdi32)                  │     │     ├ fence pages + irqfd MSI-X             │
+ │        ▼                                 │     │     ├ worker thread per context             │
+ │ dxgkrnl.sys / dxgmms2.sys                │     │     ├ decoders from render-server (C ABI)   │
+ │        │ DDI (188 slots)                 │     │     └ executor: host libvulkan / GL / CL    │
+ │        ▼                                 │     │                                             │
+ │ rvkgpu.sys   WDDM 3.2 KMD       NEW      │◄───►│   PCI: virtio-gpu, MSI-X                    │
+ │  └ virtio-pci modern transport           │     └─────────────────────────────────────────────┘
+ │ DWM / D2D / MF → D3D12Core               │
+ │  └ rvkumd.dll  (last milestone)  NEW     │
+ └──────────────────────────────────────────┘
+```
+
+Four things get built:
+
+| Component | Language | Lives in |
+|---|---|---|
+| `rvkgpu.sys` — WDDM 3.2 miniport speaking virtio-gpu | C (kernel) | new driver project |
+| `virtio-gpu-rvk-pci` — QEMU device | C (QEMU style) | a patch on the QEMU package |
+| `librvk_codec` — encoders + decoders, C ABI | C++23 generated | `render-server` |
+| Guest ICDs moved onto D3DKMT, later `rvkumd.dll` | C++23 | guest driver project |
+
+## The QEMU device: `virtio-gpu-rvk-pci`
+
+### Shape
+
+Modeled directly on `virtio-gpu-rutabaga`, which QEMU 11.1.1 already ships as
+the loadable module `hw-display-virtio-gpu-rutabaga.so`: a subclass of
+`VirtIOGPU` that lets the base class handle the 2D protocol and overrides the
+3D command set. New files, and nothing else in QEMU changes:
+
+```
+hw/display/virtio-gpu-rvk.c        the device
+hw/display/virtio-gpu-rvk-pci.c    the PCI wrapper (virtio-gpu-rvk-pci)
+hw/display/meson.build             + module 'virtio-gpu-rvk', dep: librvk_codec
+hw/display/Kconfig                 + VIRTIO_GPU_RVK
+meson_options.txt / meson.build    + option 'rvk' (feature)
+```
+
+Built as module `hw-display-virtio-gpu-rvk.so` inside a **rebuilt QEMU
+package** (Arch PKGBUILD + patch). A drop-in module next to the distro QEMU is
+not a plan: every module carries a build stamp
+(`qemu_stamp_3baffb598960aa3aaa0bea5b85abe5d7b4d898b0` on the installed
+11.1.1) that must match the binary, and QEMU resolves which module provides a
+device type from a table compiled into the binary. Rebase the patch on each
+QEMU update; keeping it to new files makes that trivial.
+
+The codec is C++23; QEMU is C. The boundary is a narrow C API exported by
+`librvk_codec.so` and found through `pkg-config`. No C++ enters the QEMU tree.
+
+### Protocol
+
+Stock virtio-gpu is the envelope; the rvk wire format is the payload.
+
+| Mechanism | virtio-gpu feature | Used for |
+|---|---|---|
+| Display | base protocol + `VIRTIO_GPU_F_EDID` | `GET_DISPLAY_INFO`, `GET_EDID`, `SET_SCANOUT`, `RESOURCE_FLUSH` |
+| Context per guest API context | `VIRTIO_GPU_F_CONTEXT_INIT` | `CTX_CREATE` with a private capset id, per-context fence rings (`VIRTIO_GPU_FLAG_INFO_RING_IDX`) |
+| Memory objects | `VIRTIO_GPU_F_RESOURCE_BLOB` | `RESOURCE_CREATE_BLOB`, `RESOURCE_MAP_BLOB` / `UNMAP_BLOB` into shm id `VIRTIO_GPU_SHM_ID_HOST_VISIBLE` |
+| Slow-path commands | `SUBMIT_3D` on the control queue | context setup, object creation, rare calls |
+| Hot-path commands | **device extension**: per-context ring + doorbell | everything high-rate — see below |
+
+**Capset id.** Capset ids are 8 bits (`VIRTIO_GPU_CONTEXT_INIT_CAPSET_ID_MASK`)
+and 1–6 are assigned (VIRGL, VIRGL2, GFXSTREAM_VULKAN, VENUS, CROSS_DOMAIN,
+DRM). The spec reserves no private range. Pick a high id (e.g. `0x72`), define
+it in exactly one header shared by device and driver, and let the capset
+payload carry an rvk protocol version and a sub-API (Vulkan / GL / CL).
+
+**The hot path is deliberately outside the virtio spec.** The control queue is
+serviced on QEMU's main loop under the BQL; high-rate submission must not go
+through it. Both ends are ours, so the device adds its own ring + doorbell,
+negotiated through the capset.
+
+### Threading
+
+```
+guest vCPU stores to doorbell[ctx]
+  └ KVM ioeventfd (memory_region_add_eventfd)  — completed in the kernel, no BQL
+      └ worker thread for ctx wakes
+          decode   (librvk_codec)
+          execute  (host Vulkan / GL / CL)
+          advance fence value in the ctx's fence page
+          event_notifier_set(irqfd)   → KVM injects MSI-X, no BQL
+
+control queue (CTX_CREATE, RESOURCE_CREATE_BLOB, SET_SCANOUT, …)
+  └ main loop, BQL held → validate, hand off to the ctx thread, return
+      completion that must touch virtqueue state
+        └ aio_bh_schedule_oneshot → main loop → virtio_gpu_ctrl_response
+```
+
+Rules:
+
+- **No decoding or execution on the main loop, ever.** Stock
+  `virtio-gpu-gl` does much of its work there; that is a known bottleneck this
+  design avoids.
+- **One worker thread per guest context**, owning its host `VkQueue` or GL
+  context. Satisfies Vulkan's external queue synchronization and GL's
+  one-current-thread rule by construction.
+- **Virtqueue state only under the BQL**, reached from workers by bottom half.
+- **MSI-X from a worker via irqfd** — the mechanism virtio-pci already uses for
+  vhost: `kvm_irqchip_add_msi_route`, `kvm_irqchip_add_irqfd_notifier_gsi`, and
+  vector mask/unmask notifiers (`msix_set_vector_notifiers`) so a masked vector
+  is honoured. Fallback without an in-kernel irqchip: bottom half +
+  `msix_notify`.
+
+### Memory
+
+Two kinds of blob, chosen per allocation by the guest KMD:
+
+**Host-visible (`BLOB_MEM_HOST3D` + `USE_MAPPABLE`) — the default for
+anything the guest maps.** The worker allocates exportable host memory
+(`VK_KHR_external_memory_fd`), `mmap`s it, and the device inserts that host VA
+into the `hostmem` BAR at the offset given by `RESOURCE_MAP_BLOB`
+(`memory_region_init_ram_ptr` + `memory_region_add_subregion`, the same thing
+`virtio-gpu-gl` does for Venus). The guest `vkMapMemory` returns a pointer
+into the BAR: real host GPU memory, zero copy.
+
+**Guest-backed (`BLOB_MEM_GUEST`) — rings, fence pages, staging.** The KMD
+locks pages and sends their GPA list; the device maps them once for the
+object's lifetime. Rings and fence pages live here because the device touches
+them from worker threads constantly.
+
+Importing guest-backed pages into host Vulkan with
+`VK_EXT_external_memory_host` needs one contiguous host VA range, and locked
+guest pages are scattered. With guest RAM on `memory-backend-memfd`, the device
+can build a contiguous window by `mmap`ing the memfd at each page's file
+offset into a reserved region. Treat this as an optimization with copy as the
+fallback, not as a dependency.
+
+### Scanout
+
+- **M1:** the base class's 2D path — `RESOURCE_CREATE_2D`,
+  `RESOURCE_ATTACH_BACKING`, `SET_SCANOUT`, `RESOURCE_FLUSH`. Copies from guest
+  pages. Unchanged stock behaviour.
+- **Later:** host VRAM images exported as dmabuf and handed to QEMU's display
+  with `dpy_gl_scanout_dmabuf`. Needs a GL-capable QEMU display
+  (`-display gtk,gl=on`, `egl-headless`, `dbus,gl=on`, or SPICE with GL).
+
+### Faults and reset
+
+A context whose host API call reports device loss, or whose decode fails, is
+marked faulted in its fence page and gets an interrupt. The device destroys
+the host context; the guest KMD reports `DXGK_INTERRUPT_DMA_FAULTED` and lets
+`dxgkrnl` run TDR for that device only. A malformed frame never asserts — it
+faults the context, per `render-server`'s "errors are values on the wire" rule.
+
+**Security and stability trade-off, accepted deliberately:** guest-controlled
+bytes are decoded inside the QEMU process, which also hosts the host GPU
+driver. A decoder memory-safety bug is a guest-to-host escape at QEMU's
+privilege, and a crash in the host GPU driver kills the VM. Every decoder read
+must be bounds checked, the device should run QEMU under its usual sandboxing
+(`-sandbox on`, libvirt's confinement), and fuzzing the decoders against
+malformed frames belongs in the codec's test suite.
+
+### Launching
+
+libvirt does not know the device, so pass it through:
+
+```xml
+<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+  <memoryBacking><source type='memfd'/><access mode='shared'/></memoryBacking>
+  <devices><video><model type='none'/></video></devices>
+  <qemu:commandline>
+    <qemu:arg value='-device'/>
+    <qemu:arg value='virtio-gpu-rvk-pci,hostmem=8G,max_outputs=1'/>
+  </qemu:commandline>
+</domain>
+```
+
+## The guest driver: `rvkgpu.sys`
+
+### Binding and interrupts
+
+- Binds to the device's PCI identity. The device sets a **distinct PCI
+  subsystem id** so the INF matches `virtio-gpu-rvk-pci` and not stock
+  `virtio-gpu-pci` (and so Red Hat's `viogpudo` never claims ours). During M0–M1
+  the INF temporarily matches stock `PCI\VEN_1AF4&DEV_1050`.
+- Message-signaled interrupts via the INF
+  (`Interrupt Management\MessageSignaledInterruptProperties`, `MSISupported=1`,
+  `MessageNumberLimit`). `DxgkDdiInterruptRoutine(MiniportDeviceContext,
+  MessageNumber)` receives the vector number: one for the control queue, one
+  for config changes, one per fence ring.
+- A real ISR replaces WARP's synthetic-interrupt worker thread. The ISR reads
+  the fence page, calls `DxgkCbNotifyInterrupt(DMA_COMPLETED)`, returns TRUE;
+  `DxgkCbQueueDpc` follows. `DxgkCbSynchronizeExecution` remains the tool for
+  any completion raised outside the ISR.
+
+### virtio-pci transport inside a WDDM miniport
+
+`DxgkDdiStartDevice` receives the translated BAR resources in
+`DXGK_DEVICE_INFO`. The KMD walks the virtio PCI capabilities (common, notify,
+ISR, device config, shared memory), maps them with `DxgkCbMapMemory`, and runs
+split virtqueues on memory it allocates itself. There is no KMDF or virtio
+library underneath a WDDM miniport; this layer is written from the virtio 1.2
+spec, with Red Hat's `kvm-guest-drivers-windows` (`viogpudo`, `VirtIO/`) as the
+reference for doing it in a Windows kernel driver.
+
+### Segments
+
+| # | Kind | Backing |
+|--:|---|---|
+| 1 | Aperture | guest system memory → `BLOB_MEM_GUEST` |
+| 2 | Local, `CpuVisible`, `CpuTranslatedAddress` = hostmem BAR | host GPU memory → `BLOB_MEM_HOST3D` + `MAP_BLOB` |
+
+Segment 2 exists because the hostmem BAR is real storage the CPU can reach.
+Paging between them is a device command, not a CPU copy, when both sides are
+host-resolvable.
+
+### GPU virtual addresses are host handles
+
+Report GPU MMU support (`DXGKQAITYPE_GPUMMUCAPS`) and encode:
+
+```
+  bits 47..24   device object id
+  bits 23..0    offset within the object
+```
+
+`UPDATE_PAGE_TABLE` / `COPY_PAGE_TABLE_ENTRIES` become map inserts,
+`FLUSH_TLB` is a no-op, `DxgkDdiPatch` is never called. Virtual addressing is
+also what unlocks hardware queues, user-mode submission and native fences.
+Size the split against the codec's handle width before M3 and reject
+allocations that do not fit at `CreateAllocation`, not at map time.
+
+### One call, end to end
+
+```
+ICD      encode batch into ctx ring           (ring = locked allocation, mapped via Lock2)
+ICD      D3DKMTSubmitCommand                  (DMA buffer = {ring, head, tail, fence})
+KMD      DxgkDdiRender                        copy descriptor, allocation list, no patches
+KMD      DxgkDdiSubmitCommandVirtual          DISPATCH_LEVEL: publish tail, store doorbell, return
+QEMU     ioeventfd → worker                   decode → execute → fence page ← fence id
+QEMU     irqfd                                MSI-X
+KMD      ISR → DxgkCbNotifyInterrupt → DPC    VidSch completes the packet
+dxgkrnl  monitored fence signalled
+ICD      wait returns, read reply ring        (only for calls that return data)
+```
+
+Nothing on the submit path blocks, allocates or takes a mutex. Batching
+non-returning calls and flushing at returning calls is the codec's decision.
+From M6 the ICD stores the doorbell itself and the KMD leaves this path.
+
+### Presentation, in order
+
+1. **`DxgkDdiPresent` copy.** Host renders; the worker copies into the guest
+   swapchain allocation; the KMD flips it via the 2D scanout path. Works with
+   DWM on WARP and any host driver.
+2. **Flip via `DxgkDdiSetVidPnSourceAddress`** onto an allocation in segment 2.
+3. **Host-side composition.** Once DWM composites on `rvkgpu` (M8), the final
+   desktop is a host VRAM image and scanout is `dpy_gl_scanout_dmabuf`. Nothing
+   crosses back into the guest.
+
+A synthetic vsync (`DxgkCbNotifyInterrupt(CRTC_VSYNC)` at the mode's refresh
+rate, from a timer or a device vsync interrupt) is required from M1.
+
+## Milestones
+
+**M0 — load a stub miniport on stock QEMU.** `DriverEntry` → `DxgkInitialize`
+with `Version = 0x11007`, stub DDIs, `QueryAdapterInfo` answering
+`DRIVERCAPS` and one segment. INF matches stock `virtio-gpu-pci`. Establish the
+loop: build, test-sign, push, snapshot, boot. Debug output from the first line
+of `DriverEntry` through QEMU's `isa-debugcon` (`-device
+isa-debugcon,iobase=0x402,chardev=…`; one `WRITE_PORT_UCHAR` per byte, legal at
+any IRQL, no driver needed). **Done when** the device starts with no Code 43,
+and its log lands in a host file.
+
+**M1 — virtio transport and display, still stock QEMU.** Capability walk,
+split virtqueues, MSI-X ISR, `GET_DISPLAY_INFO`, `GET_EDID`,
+`RESOURCE_CREATE_2D`, `ATTACH_BACKING`, `SET_SCANOUT`, `RESOURCE_FLUSH`;
+VidPn, cofunctional modality, synthetic vsync. **Done when** the guest desktop
+runs at a chosen mode through `rvkgpu`, composited by DWM on WARP.
+
+**M2 — the patched QEMU and a skeleton device.** `virtio-gpu-rvk-pci`
+subclassing `VirtIOGPU`; M1 works unchanged on it. Add capset, `CTX_CREATE`,
+doorbell BAR with ioeventfd, one worker thread, fence page, irqfd MSI-X.
+**Done when** a ping command posted from a test program round-trips through
+ring, doorbell, worker, fence and ISR, with latency measured.
+Spikes to run here, because each can reshape M3:
+  - Host-visible mapping: can this host's NVIDIA driver export Vulkan memory
+    that `mmap`s into a KVM memslot through `hostmem`? If not, segment 2 falls
+    back to guest-backed memory plus copies.
+  - Guest-backed import: does the memfd remap window import with
+    `VK_EXT_external_memory_host` on this driver?
+  - irqfd from a worker thread with vector masking under a stress test.
+
+**M3 — memory and execution in the KMD.** Two segments, blob creation and
+mapping, GPU-VA-as-handle, `BuildPagingBuffer` for `TRANSFER`,
+`MAP_APERTURE_SEGMENT`, `UPDATE_PAGE_TABLE`, `FLUSH_TLB`; contexts;
+`SubmitCommandVirtual`; monitored fences; TDR plumbing. Device side: object
+table, blob mapping, per-context threads. **Done when**
+`D3DKMTCreateAllocation2` + `MapGpuVirtualAddress` + `SubmitCommand` + a fence
+wait completes from a test program, and a deliberately faulted context
+recovers without taking the adapter down.
+
+**M4 — Vulkan end to end.** Vulkan ICD on D3DKMT with the codec's encoders;
+device links the decoders and executes on host libvulkan. **Done when** the
+existing Vulkan probe/test suite passes in the guest with only this path in
+use, and vkd3d-proton's and DXVK's required extensions are reported.
+
+**M5 — presentation.** Swapchain allocations, `DxgkDdiPresent` copy, then
+flip. **Done when** a vkd3d-proton D3D12 sample renders in a window on the
+guest desktop.
+
+**M6 — user-mode submission.** Doorbells (`CreateDoorbell` /
+`ConnectDoorbell` map the context's doorbell page into the process;
+`DisconnectDoorbell` remaps a scratch page) and native fences. **Done when**
+the M5 sample runs with the KMD out of the submission path and per-submit cost
+is measured lower.
+
+**M7 — OpenGL and OpenCL.** Same kernel path, same device path, different
+capset sub-API and codec. **Done when** each API's existing test suite passes
+in the guest.
+
+**M8 — a UMD for the desktop.** `rvkumd.dll` implementing enough of the D3D
+UMD DDI that DWM composites on `rvkgpu`; switch scanout to dmabuf. **Done
+when** DWM no longer falls back to WARP and desktop frames reach QEMU's
+display without a guest copy.
+
+TDR is not a milestone. It is paid for at M3 and revisited at every milestone
+after.
+
+## Build, signing, and the development loop
+
+- **Driver build:** `clang-cl` + `lld-link` on Linux against the WDK and SDK
+  headers in `third_party/windows-kit/include`, linking `displib.lib`,
+  `ntoskrnl.lib`, `hal.lib`, `BufferOverflowK.lib` from
+  `third_party/windows-kit/lib/x64` (`tools/fetch_windows_kit.sh`). `DxgkInitialize` comes
+  from `displib.lib`. mingw cannot build a WDDM miniport. Decide at M0 whether
+  SAL/SEH friction warrants MSVC + WDK in a Windows build VM instead.
+- **QEMU build:** Arch `qemu` PKGBUILD with the device patch, installed as a
+  local package.
+- **Signing:** `bcdedit /set testsigning on` with a self-signed test
+  certificate; Secure Boot off in the guest firmware. Production signing (EV
+  certificate, Partner Center, HLK graphics tests) is out of scope.
+- **Recovery:** `virsh snapshot-create` before every driver install. A KMD that
+  fails in `StartDevice` can leave the guest with no display.
+- **Debugging:** `isa-debugcon` for the KMD from M0; a device-side log per
+  context from M2; QEMU's gdbstub with `dxgkrnl.pdb` / `ntoskrnl` symbols for
+  bugchecks.
+
+## Risks, most likely first
+
+1. **`DRIVERCAPS` / `GPUMMUCAPS` answers.** Wrong values fail silently later.
+   `dxgkrnl.sys` is symbolized in `re/ghidra-proj` — read its validation instead
+   of guessing.
+2. **Host-visible memory on NVIDIA.** Mapping exported driver memory into a
+   KVM memslot is the historically fragile part of Venus-style designs. M2
+   spike; fallback is guest-backed memory plus copies.
+3. **`EnumVidPnCofuncModality`.** Under-populated mode sets fail without a
+   diagnostic.
+4. **TDR.** The 2-second watchdog trips on the first host stall.
+   `QueryEngineStatus` must reflect worker progress, not ring occupancy.
+5. **IRQL on the submit path.** Blocking at DISPATCH_LEVEL is a bugcheck under
+   load, not a slowdown.
+6. **Shared allocations.** DWM composites surfaces other processes rendered;
+   device object identity must be global, not per-open. GPU-PV's
+   `DXGKVMB_COMMAND_SHAREOBJECTWITHHOST` is the warning.
+7. **QEMU rebase cost.** Keep the patch to new files so each update is a
+   rebuild, not a merge.
+8. **In-process decoding.** Accepted trade-off; mitigated by bounds-checked,
+   fuzzed decoders.

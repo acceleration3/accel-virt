@@ -6,6 +6,8 @@
 #include "../../src/core/gpu_virtual_address_space.hpp"
 #include "mock_platform.hpp"
 
+#include <cstdint>
+
 namespace av {
 
 class AddressSpaceFixture {

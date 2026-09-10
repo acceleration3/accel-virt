@@ -7,6 +7,9 @@
 
 #include "../../src/core/platform.hpp"
 
+#include <cstddef>
+#include <cstdint>
+
 namespace av {
 
 class MockPlatform final : public Platform {

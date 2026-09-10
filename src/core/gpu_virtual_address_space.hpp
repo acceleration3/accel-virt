@@ -4,7 +4,7 @@
  * and asks the driver to maintain the translation. There is no real page
  * table: a virtual range translates to (device object, offset), which the QEMU
  * device resolves to host memory.
- * See ../claude-scratch/wddm-kb/kb/04-memory.md. */
+ * See docs/kb/04-memory.md. */
 #ifndef AV_GPU_VIRTUAL_ADDRESS_SPACE_HPP
 #define AV_GPU_VIRTUAL_ADDRESS_SPACE_HPP
 
@@ -24,21 +24,21 @@ public:
 
     const ByteRange &span() const;
     bool             is_mapped() const;
-    std::uint32_t    object() const;
-    std::uint64_t    object_offset() const;
+    uint32_t    object() const;
+    uint64_t    object_offset() const;
 
-    [[nodiscard]] Status bind(std::uint32_t object, std::uint64_t object_offset);
+    [[nodiscard]] Status bind(uint32_t object, uint64_t object_offset);
     [[nodiscard]] Status unbind();
 
-    bool translate(std::uint64_t address, std::uint32_t &object,
-                   std::uint64_t &object_offset) const;
+    bool translate(uint64_t address, uint32_t &object,
+                   uint64_t &object_offset) const;
 
     bool invariants_hold(const ByteRange &bounds, const Alignment &page) const;
 
 private:
     ByteRange     span_;
-    std::uint32_t object_;
-    std::uint64_t object_offset_;
+    uint32_t object_;
+    uint64_t object_offset_;
     bool          mapped_;
 
     friend struct GpuVirtualAddressSpaceProbe;
@@ -46,8 +46,8 @@ private:
 
 class GpuVirtualAddressSpace {
 public:
-    static constexpr std::uint64_t page_size            = 4096u;
-    static constexpr std::uint32_t maximum_range_count  = 65536u;
+    static constexpr uint64_t page_size            = 4096u;
+    static constexpr uint32_t maximum_range_count  = 65536u;
 
     explicit GpuVirtualAddressSpace(Platform &platform);
     ~GpuVirtualAddressSpace();
@@ -56,35 +56,35 @@ public:
 
     [[nodiscard]] Status initialize(const ByteRange &bounds);
 
-    [[nodiscard]] Status reserve(std::uint64_t size, const Alignment &alignment,
-                                 std::uint64_t &reserved_base);
-    [[nodiscard]] Status map(std::uint64_t base, std::uint64_t size,
-                             std::uint32_t object, std::uint64_t object_offset);
-    [[nodiscard]] Status unmap(std::uint64_t base);
-    [[nodiscard]] Status release(std::uint64_t base);
+    [[nodiscard]] Status reserve(uint64_t size, const Alignment &alignment,
+                                 uint64_t &reserved_base);
+    [[nodiscard]] Status map(uint64_t base, uint64_t size,
+                             uint32_t object, uint64_t object_offset);
+    [[nodiscard]] Status unmap(uint64_t base);
+    [[nodiscard]] Status release(uint64_t base);
 
     /* On the submission path: must not allocate or block. */
-    [[nodiscard]] Status translate(std::uint64_t address, std::uint32_t &object,
-                                   std::uint64_t &object_offset) const;
+    [[nodiscard]] Status translate(uint64_t address, uint32_t &object,
+                                   uint64_t &object_offset) const;
 
     bool          invariants_hold() const;
-    std::uint32_t range_count() const;
+    uint32_t range_count() const;
 
     /* Lowered by tests so the table-exhaustion path is reachable without
      * allocating 64K ranges. */
-    void set_range_ceiling(std::uint32_t ceiling);
+    void set_range_ceiling(uint32_t ceiling);
 
 private:
     [[nodiscard]] Status grow();
-    [[nodiscard]] Status insert(std::uint32_t index, const VirtualRange &range);
-    std::uint32_t        lower_bound(std::uint64_t base) const;
-    VirtualRange        *find_exact(std::uint64_t base);
+    [[nodiscard]] Status insert(uint32_t index, const VirtualRange &range);
+    uint32_t        lower_bound(uint64_t base) const;
+    VirtualRange        *find_exact(uint64_t base);
 
     Platform     &platform_;
     VirtualRange *ranges_;
-    std::uint32_t count_;
-    std::uint32_t capacity_;
-    std::uint32_t ceiling_;
+    uint32_t count_;
+    uint32_t capacity_;
+    uint32_t ceiling_;
     ByteRange     bounds_;
     Alignment     page_;
 

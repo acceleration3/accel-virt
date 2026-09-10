@@ -3,6 +3,8 @@
 #include "guarded_buffer.hpp"
 
 #include <cstring>
+#include <cstddef>
+#include <cstdint>
 
 namespace av {
 

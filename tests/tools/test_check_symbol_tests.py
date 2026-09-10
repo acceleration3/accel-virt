@@ -1,0 +1,62 @@
+import unittest
+
+from source_tree import SourceTree
+from tool_run import ROOT, run
+
+CHECK = ROOT / "tools" / "check_symbol_tests.py"
+
+HEADER = """class Widget {
+public:
+    int named();
+    int unnamed();
+private:
+    int hidden();
+    int v_;
+};
+"""
+
+
+class SymbolTests(unittest.TestCase):
+    def setUp(self):
+        self.tree = SourceTree()
+        self.addCleanup(self.tree.remove)
+        self.tree.write("src/core/widget.hpp", HEADER)
+
+    def test_reports_a_public_method_no_test_names(self):
+        self.tree.write("tests/unit/test_widget.cpp", "Widget w; w.named();\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stderr.strip().splitlines(),
+                         ["src/core/widget.hpp: Widget::unnamed has no test naming it"])
+
+    def test_reports_a_class_no_test_names(self):
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("src/core/widget.hpp: class Widget has no test naming it", result.stderr)
+
+    def test_the_harness_does_not_count_as_a_test(self):
+        self.tree.write("tests/harness/fixture.cpp", "Widget w; w.named(); w.unnamed();\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 1)
+
+    def test_passes_when_every_public_method_is_named(self):
+        self.tree.write("tests/unit/test_widget.cpp", "Widget w; w.named(); w.unnamed();\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("symbol_tests: ok", result.stdout)
+
+    def test_the_platform_contract_is_excluded(self):
+        self.tree.write("src/core/platform.hpp",
+                        "class Platform {\npublic:\n    virtual int allocate() = 0;\n};\n")
+        self.tree.write("tests/unit/test_widget.cpp", "Widget w; w.named(); w.unnamed();\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_the_repository_passes(self):
+        result = run(CHECK, ROOT)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("symbol_tests: ok", result.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()

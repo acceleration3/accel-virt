@@ -2,6 +2,8 @@
 #include "../../src/core/platform.hpp"
 #include "../harness/test_registry.hpp"
 
+#include <cstdint>
+
 using av::Alignment;
 
 TEST(alignment, rejects_zero)

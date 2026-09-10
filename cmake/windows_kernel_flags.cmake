@@ -1,0 +1,35 @@
+# Replaces every flag the MSVC platform module chose for user mode. Loaded
+# through CMAKE_USER_MAKE_RULES_OVERRIDE_CXX by windows_kernel_toolchain.cmake.
+if(NOT AV_WINDOWS_KIT_DIR)
+  message(FATAL_ERROR "AV_WINDOWS_KIT_DIR is not set; run tools/fetch_windows_kit.sh")
+endif()
+
+# /X drops every system include directory, so only the kit is visible. The
+# include directories are virtual paths inside the case-insensitive overlay,
+# and use the joined -imsvc<dir> form because CMake collapses repeated option
+# words ("-imsvc a -imsvc b" becomes "-imsvc a b"). Under clang-cl -Wall means
+# -Weverything, hence /W4 plus the host build's explicit list.
+string(JOIN " " CMAKE_CXX_FLAGS_INIT
+  /kernel /GR- /EHs-c- /Zl /X /Z7
+  /D_AMD64_ /DAMD64 /D_WIN64 /DAV_CHECKED=1
+  /W4 /WX -Wextra -Wconversion -Wsign-conversion -Wshadow -Wold-style-cast
+  /clang:-ivfsoverlay${AV_WINDOWS_KIT_DIR}/overlay.yaml
+  -imsvc/windows-kit/km/crt -imsvc/windows-kit/km
+  -imsvc/windows-kit/wdk-shared -imsvc/windows-kit/sdk-shared)
+foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+  set(CMAKE_CXX_FLAGS_${config}_INIT "")
+  set(CMAKE_EXE_LINKER_FLAGS_${config}_INIT "")
+endforeach()
+
+# CMake links every executable with /subsystem:console after these flags,
+# which overrides /SUBSYSTEM:NATIVE. GsDriverEntry (BufferOverflowK.lib) seeds
+# the /GS cookie, then calls DriverEntry.
+set(CMAKE_CXX_CREATE_CONSOLE_EXE "")
+string(JOIN " " CMAKE_EXE_LINKER_FLAGS_INIT
+  /DRIVER /SUBSYSTEM:NATIVE /ENTRY:GsDriverEntry /NODEFAULTLIB /MANIFEST:NO
+  /OPT:REF /DEBUG)
+
+set(AV_WINDOWS_KIT_LIBRARIES ntoskrnl.lib hal.lib BufferOverflowK.lib displib.lib)
+list(TRANSFORM AV_WINDOWS_KIT_LIBRARIES PREPEND "\"${AV_WINDOWS_KIT_DIR}/lib/x64/")
+list(TRANSFORM AV_WINDOWS_KIT_LIBRARIES APPEND "\"")
+list(JOIN AV_WINDOWS_KIT_LIBRARIES " " CMAKE_CXX_STANDARD_LIBRARIES_INIT)

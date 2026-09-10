@@ -12,10 +12,10 @@ VirtualRange::VirtualRange(const ByteRange &span)
 
 const ByteRange &VirtualRange::span() const          { return span_; }
 bool             VirtualRange::is_mapped() const     { return mapped_; }
-std::uint32_t    VirtualRange::object() const        { return object_; }
-std::uint64_t    VirtualRange::object_offset() const { return object_offset_; }
+uint32_t    VirtualRange::object() const        { return object_; }
+uint64_t    VirtualRange::object_offset() const { return object_offset_; }
 
-Status VirtualRange::bind(std::uint32_t object, std::uint64_t object_offset)
+Status VirtualRange::bind(uint32_t object, uint64_t object_offset)
 {
     /* Zero is how an unbound range is spelled, so it cannot name an object. */
     if (object == 0u) return Status::invalid_parameter;
@@ -38,8 +38,8 @@ Status VirtualRange::unbind()
     return Status::ok;
 }
 
-bool VirtualRange::translate(std::uint64_t address, std::uint32_t &object,
-                             std::uint64_t &object_offset) const
+bool VirtualRange::translate(uint64_t address, uint32_t &object,
+                             uint64_t &object_offset) const
 {
     if (!mapped_ || !span_.contains(address)) return false;
     object = object_;
@@ -83,27 +83,27 @@ Status GpuVirtualAddressSpace::initialize(const ByteRange &bounds)
     return Status::ok;
 }
 
-std::uint32_t GpuVirtualAddressSpace::range_count() const { return count_; }
+uint32_t GpuVirtualAddressSpace::range_count() const { return count_; }
 
-void GpuVirtualAddressSpace::set_range_ceiling(std::uint32_t ceiling)
+void GpuVirtualAddressSpace::set_range_ceiling(uint32_t ceiling)
 {
     ceiling_ = ceiling;
 }
 
-std::uint32_t GpuVirtualAddressSpace::lower_bound(std::uint64_t base) const
+uint32_t GpuVirtualAddressSpace::lower_bound(uint64_t base) const
 {
-    std::uint32_t low = 0u, high = count_;
+    uint32_t low = 0u, high = count_;
     while (low < high) {
-        const std::uint32_t mid = low + (high - low) / 2u;
+        const uint32_t mid = low + (high - low) / 2u;
         if (ranges_[mid].span().base() < base) low = mid + 1u;
         else                                   high = mid;
     }
     return low;
 }
 
-VirtualRange *GpuVirtualAddressSpace::find_exact(std::uint64_t base)
+VirtualRange *GpuVirtualAddressSpace::find_exact(uint64_t base)
 {
-    const std::uint32_t index = lower_bound(base);
+    const uint32_t index = lower_bound(base);
     if (index < count_ && ranges_[index].span().base() == base)
         return &ranges_[index];
     return nullptr;
@@ -111,13 +111,13 @@ VirtualRange *GpuVirtualAddressSpace::find_exact(std::uint64_t base)
 
 Status GpuVirtualAddressSpace::grow()
 {
-    std::uint32_t wanted = (capacity_ == 0u) ? 16u : capacity_ * 2u;
+    uint32_t wanted = (capacity_ == 0u) ? 16u : capacity_ * 2u;
     if (wanted > ceiling_) {
         if (capacity_ >= ceiling_) return Status::no_space;
         wanted = ceiling_;
     }
-    const std::size_t bytes =
-        static_cast<std::size_t>(wanted) * sizeof(VirtualRange);
+    const size_t bytes =
+        static_cast<size_t>(wanted) * sizeof(VirtualRange);
     auto *fresh = static_cast<VirtualRange *>(
         platform_.allocate(bytes, Pool::non_paged));
     if (fresh == nullptr) return Status::no_memory;
@@ -125,29 +125,29 @@ Status GpuVirtualAddressSpace::grow()
     platform_.zero(fresh, bytes);
     if (count_ != 0u)
         platform_.copy(fresh, ranges_,
-                       static_cast<std::size_t>(count_) * sizeof(VirtualRange));
+                       static_cast<size_t>(count_) * sizeof(VirtualRange));
     platform_.release(ranges_);
     ranges_ = fresh;
     capacity_ = wanted;
     return Status::ok;
 }
 
-Status GpuVirtualAddressSpace::insert(std::uint32_t index,
+Status GpuVirtualAddressSpace::insert(uint32_t index,
                                       const VirtualRange &range)
 {
     if (count_ == capacity_) {
         const Status status = grow();
         if (status != Status::ok) return status;
     }
-    for (std::uint32_t i = count_; i > index; i--) ranges_[i] = ranges_[i - 1u];
+    for (uint32_t i = count_; i > index; i--) ranges_[i] = ranges_[i - 1u];
     ranges_[index] = range;
     count_++;
     return Status::ok;
 }
 
-Status GpuVirtualAddressSpace::reserve(std::uint64_t size,
+Status GpuVirtualAddressSpace::reserve(uint64_t size,
                                        const Alignment &alignment,
-                                       std::uint64_t &reserved_base)
+                                       uint64_t &reserved_base)
 {
     platform_.require_irql_at_most(Irql::passive, "GpuVirtualAddressSpace::reserve");
     InvariantScope<GpuVirtualAddressSpace> guard(platform_, *this, "reserve");
@@ -157,11 +157,11 @@ Status GpuVirtualAddressSpace::reserve(std::uint64_t size,
     if (size == 0u || !page_.divides(size)) return Status::invalid_parameter;
     if (size > bounds_.size())            return Status::too_large;
 
-    std::uint64_t cursor = 0u;
+    uint64_t cursor = 0u;
     if (!alignment.align_up(bounds_.base(), cursor)) return Status::no_space;
 
-    for (std::uint32_t i = 0u; i <= count_; i++) {
-        const std::uint64_t next =
+    for (uint32_t i = 0u; i <= count_; i++) {
+        const uint64_t next =
             (i < count_) ? ranges_[i].span().base() : bounds_.end();
         if (cursor < next && next - cursor >= size) {
             const Status status = insert(i, VirtualRange(ByteRange(cursor, size)));
@@ -170,7 +170,7 @@ Status GpuVirtualAddressSpace::reserve(std::uint64_t size,
             return Status::ok;
         }
         if (i < count_) {
-            std::uint64_t after = 0u;
+            uint64_t after = 0u;
             if (!alignment.align_up(ranges_[i].span().end(), after))
                 return Status::no_space;
             /* An aligned cursor past the end of the space cannot host a hole. */
@@ -181,9 +181,9 @@ Status GpuVirtualAddressSpace::reserve(std::uint64_t size,
     return Status::no_space;
 }
 
-Status GpuVirtualAddressSpace::map(std::uint64_t base, std::uint64_t size,
-                                   std::uint32_t object,
-                                   std::uint64_t object_offset)
+Status GpuVirtualAddressSpace::map(uint64_t base, uint64_t size,
+                                   uint32_t object,
+                                   uint64_t object_offset)
 {
     platform_.require_irql_at_most(Irql::passive, "GpuVirtualAddressSpace::map");
     InvariantScope<GpuVirtualAddressSpace> guard(platform_, *this, "map");
@@ -194,7 +194,7 @@ Status GpuVirtualAddressSpace::map(std::uint64_t base, std::uint64_t size,
     return range->bind(object, object_offset);
 }
 
-Status GpuVirtualAddressSpace::unmap(std::uint64_t base)
+Status GpuVirtualAddressSpace::unmap(uint64_t base)
 {
     platform_.require_irql_at_most(Irql::passive, "GpuVirtualAddressSpace::unmap");
     InvariantScope<GpuVirtualAddressSpace> guard(platform_, *this, "unmap");
@@ -204,30 +204,30 @@ Status GpuVirtualAddressSpace::unmap(std::uint64_t base)
     return range->unbind();
 }
 
-Status GpuVirtualAddressSpace::release(std::uint64_t base)
+Status GpuVirtualAddressSpace::release(uint64_t base)
 {
     platform_.require_irql_at_most(Irql::passive, "GpuVirtualAddressSpace::release");
     InvariantScope<GpuVirtualAddressSpace> guard(platform_, *this, "release");
 
-    const std::uint32_t index = lower_bound(base);
+    const uint32_t index = lower_bound(base);
     if (index >= count_ || ranges_[index].span().base() != base)
         return Status::not_found;
     if (ranges_[index].is_mapped()) return Status::invalid_state;
 
-    for (std::uint32_t i = index; i + 1u < count_; i++) ranges_[i] = ranges_[i + 1u];
+    for (uint32_t i = index; i + 1u < count_; i++) ranges_[i] = ranges_[i + 1u];
     count_--;
     ranges_[count_] = VirtualRange();
     return Status::ok;
 }
 
-Status GpuVirtualAddressSpace::translate(std::uint64_t address,
-                                         std::uint32_t &object,
-                                         std::uint64_t &object_offset) const
+Status GpuVirtualAddressSpace::translate(uint64_t address,
+                                         uint32_t &object,
+                                         uint64_t &object_offset) const
 {
     platform_.require_irql_at_most(Irql::dispatch,
                                    "GpuVirtualAddressSpace::translate");
 
-    std::uint32_t index = lower_bound(address);
+    uint32_t index = lower_bound(address);
     /* lower_bound lands on the range starting at `address`, or the one after
      * it; in the latter case the only candidate is the range before. */
     if (index == count_ || ranges_[index].span().base() != address) {
@@ -249,8 +249,8 @@ bool GpuVirtualAddressSpace::invariants_hold() const
     if (ceiling_ == 0u || ceiling_ > maximum_range_count) return false;
     if (count_ != 0u && !bounds_.is_representable()) return false;
 
-    std::uint64_t previous_end = bounds_.base();
-    for (std::uint32_t i = 0u; i < count_; i++) {
+    uint64_t previous_end = bounds_.base();
+    for (uint32_t i = 0u; i < count_; i++) {
         const VirtualRange &range = ranges_[i];
         if (!range.invariants_hold(bounds_, page_)) return false;
         if (range.span().base() < previous_end)     return false;

@@ -2,6 +2,8 @@
 
 #include "test_registry.hpp"
 
+#include <cstdint>
+
 namespace av {
 
 AddressSpaceFixture::AddressSpaceFixture() : platform_(), space_(platform_)

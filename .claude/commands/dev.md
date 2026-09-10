@@ -23,28 +23,32 @@ Read these, in this order:
 4. `docs/roadmap.md` — the 35 features, their status and dependencies.
 5. `README.md` — layout and build commands.
 
-The design this implements lives in the knowledge base at
-`../claude-scratch/wddm-kb/`:
+The design this implements lives in the knowledge base in `docs/kb/`:
 
-- `kb/11-implementation-plan.md` — the architecture and milestones. Read this.
-- `kb/02-kmd-contract.md`, `kb/04-memory.md`, `kb/05-scheduling.md`,
-  `kb/06-display.md` — the WDDM mechanisms.
-- `kb/10-warp-kmd.md` — `basicrender.sys`, Microsoft's own hardware-free WDDM
-  miniport, reverse engineered. The closest existing thing to what we build.
-- `kb/12-re-cookbook.md` — how to answer a question by reverse engineering
+- `docs/kb/11-implementation-plan.md` — the architecture and milestones. Read this.
+- `docs/kb/02-kmd-contract.md`, `docs/kb/04-memory.md`,
+  `docs/kb/05-scheduling.md`, `docs/kb/06-display.md` — the WDDM mechanisms.
+- `docs/kb/10-warp-kmd.md` — `basicrender.sys`, Microsoft's own hardware-free
+  WDDM miniport, reverse engineered. The closest existing thing to what we build.
+- `docs/kb/12-re-cookbook.md` — how to answer a question by reverse engineering
   instead of guessing.
 - `docs/ref/driver_init_table.md` — all 188 DDI slots and the WDDM level each
   arrived in.
 
 Normative headers (these outrank everything above when they disagree):
-`../claude-scratch/wddm-kb/headers/wdk-26100/c/Include/10.0.26100.0` and
-`.../headers/sdk/c/Include/10.0.26100.0`.
+`third_party/windows-kit/include/{km,wdk-shared,sdk-shared}`, the pinned WDK
+and SDK 10.0.26100 subset fetched by `tools/fetch_windows_kit.sh`.
+
+Nothing outside this repository is referenced; the `self_contained` gate keeps
+it that way.
 
 ## 2. Check the environment
 
+From the repository root:
+
 ```bash
-cd /home/accel/Coding/accel-virt
 git status --short && git log --oneline -3
+[ -f third_party/windows-kit/VERSION ] || tools/fetch_windows_kit.sh
 cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++ >/dev/null && cmake --build build 2>&1 | tail -3
 ctest --test-dir build 2>&1 | tail -3
 ls specs/ | head -40
@@ -54,25 +58,26 @@ Tools available, and what each is for:
 
 | | |
 |---|---|
-| `clang++` / `clang-cl` / `lld-link` | native tests, and the driver cross-build for Windows |
-| `cmake` + `ninja`, `ctest` | build and the single test entry point |
-| `llvm-cov`, `llvm-profdata` | `./tools/coverage.sh` — the 100% branch gate |
+| `clang++` / `clang-cl` / `lld-link` | native tests, and the driver cross-build (`rvkgpu.sys`, built by every `cmake --build build`) |
+| `cmake` + `ninja`, `ctest` | build and the test entry point of each configuration |
+| `llvm-cov`, `llvm-profdata` | the `coverage_gate` test in `build-coverage/` — the 100% branch gate |
 | `llvm-pdbutil` | Microsoft PDBs, public symbols only, no type info |
 | Ghidra 12.1.2 at `/opt/ghidra` | needs `JAVA_HOME=/usr/lib/jvm/java-26-openjdk`; the system default JDK 17 is too old |
-| `ghidra` MCP (`pyghidra-mcp`) | if its tools are absent this session, drive Ghidra headless with `../claude-scratch/wddm-kb/tools/q.py` instead. Never run both against the project at once — Ghidra locks it. |
+| `ghidra` MCP (`pyghidra-mcp`) | if its tools are absent this session, drive Ghidra headless with `tools/re/q.py` instead. Never run both against the project at once — Ghidra locks it. |
 | `qemu-system-x86_64` 11.1.1, `virsh` | the host side; `virtio-gpu-gl-pci` has `blob`, `hostmem`, `venus`, `drm_native_context` |
 
-Ghidra project, already imported and symbolized:
-`../claude-scratch/wddm-kb/ghidra-proj` — `dxgkrnl.sys` (9049 functions),
-`dxgmms2.sys`, `basicrender.sys`, `basicdisplay.sys`, `vkrnlintvsp.sys`,
-`vpci.sys`, `d3d12core.dll`, `dxcore.dll`.
+Ghidra project `re/ghidra-proj` (git-ignored): `dxgkrnl.sys`, `dxgmms2.sys`,
+`basicrender.sys`, `basicdisplay.sys`, `vkrnlintvsp.sys`, `vpci.sys`,
+`d3d12core.dll`, `d3d12.dll`, `dxcore.dll`, `dxgi.dll`, symbolized. If it is
+absent, `tools/re/build_workspace.sh` rebuilds it from the pinned
+`tools/re/binaries.txt`.
 
 ```bash
 export GHIDRA_INSTALL_DIR=/opt/ghidra JAVA_HOME=/usr/lib/jvm/java-26-openjdk
 PY=~/.local/share/uv/tools/pyghidra-mcp/bin/python
-cd ../claude-scratch/wddm-kb
-$PY tools/q.py ghidra-proj wddm dxgkrnl.sys funcs 'Doorbell'
-$PY tools/q.py ghidra-proj wddm basicrender.sys dec WarpKMSubmitCommandVirtual
+[ -d re/ghidra-proj/wddm.rep ] || tools/re/build_workspace.sh
+$PY tools/re/q.py re/ghidra-proj wddm dxgkrnl.sys funcs 'Doorbell'
+$PY tools/re/q.py re/ghidra-proj wddm basicrender.sys dec WarpKMSubmitCommandVirtual
 ```
 
 ## 3. Pick the work
@@ -114,10 +119,15 @@ corpus. Tests are written before the implementation and must fail first.
 **Both are build gates**, not review notes:
 
 ```bash
-ctest --test-dir build          # unit tests under ASan+UBSan, plus design_rules
-./tools/coverage.sh             # 100% branch coverage of src/, or it fails
-python3 tools/check_design.py . # static methods, stateless classes, untested API
+ctest --test-dir build   # unit tests (ASan+UBSan), design_rules, symbol_tests,
+                         # driver_image, self_contained, tools_tests
+tools/gate.sh            # the full verdict: the above, plus coverage_gate
+                         # (100% branches, AV_UNTESTABLE ratchet) and fuzz smoke
 ```
+
+`tools/check_design.py` (static methods, stateless classes) and
+`tools/check_symbol_tests.py` (public API no test names) run inside `ctest`;
+run either directly for a faster answer.
 
 `src/core/gpu_virtual_address_space.cpp` with
 `tests/unit/test_gpu_virtual_address_space.cpp` is the worked example of the

@@ -52,12 +52,12 @@ Constitution Principle III applies in full. Concretely, this feature is not done
 
 ### Reference material
 
-Knowledge base at `../claude-scratch/wddm-kb/kb/`:
+Knowledge base:
 
-- `05-scheduling.md`
-- `11-implementation-plan.md`
+- [`docs/kb/05-scheduling.md`](../../docs/kb/05-scheduling.md)
+- [`docs/kb/11-implementation-plan.md`](../../docs/kb/11-implementation-plan.md)
 
-Normative headers: `../claude-scratch/wddm-kb/headers/wdk-26100` and `headers/sdk`. Reverse-engineering targets, symbolized, in `../claude-scratch/wddm-kb/ghidra-proj` — read `dxgkrnl.sys` when the question is "what does the caller do with this", and `basicrender.sys` when it is "what is the minimum that works".
+Normative headers: `third_party/windows-kit/include/` (fetched by `tools/fetch_windows_kit.sh`). Reverse-engineering targets, symbolized, in `re/ghidra-proj` (built by `tools/re/build_workspace.sh`) — read `dxgkrnl.sys` when the question is "what does the caller do with this", and `basicrender.sys` when it is "what is the minimum that works".
 
 <!-- AUTOGEN:END -->
 

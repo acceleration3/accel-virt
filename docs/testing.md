@@ -133,7 +133,8 @@ submit, complete a fence, preempt, time out, reset, stop, remove.
 
 **The scenarios are derived from reverse engineering, not from guesswork.**
 `dxgkrnl.sys` 10.0.26100.9444 is imported into Ghidra with 106k symbols in
-`../claude-scratch/wddm-kb/ghidra-proj`. The real call order, the real
+`re/ghidra-proj`, rebuilt from the pinned `tools/re/binaries.txt` by
+`tools/re/build_workspace.sh`. The real call order, the real
 argument invariants, and the real IRQLs are readable there. `docs/ddi-sequences.md`
 records each sequence with the function in `dxgkrnl` it was taken from, so a
 scenario can be re-derived when it is questioned.

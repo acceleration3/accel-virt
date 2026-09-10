@@ -1,5 +1,7 @@
 #include "guarded_buffer.hpp"
 
+#include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 

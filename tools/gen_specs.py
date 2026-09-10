@@ -2,15 +2,17 @@
 """Generate specs/NNN-*/spec.md from the feature decomposition and the WDDM DDI
 table. Regenerating never overwrites hand-edited prose: everything between
 AUTOGEN markers is replaced, everything else is preserved."""
-import os, re, sys, datetime, textwrap
+import argparse, os, re, sys, datetime, textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 from features import FEATURES
 
-TABLE = os.path.join(ROOT, "docs/ref/driver_init_table.md")
 BEGIN, END = "<!-- AUTOGEN:BEGIN -->", "<!-- AUTOGEN:END -->"
+CLASSES_HEADING = "### Classes this feature introduces"
+# A spec lives at specs/NNN-name/spec.md, two directories below the root.
+SPEC_TO_ROOT = "/".join([".."] * 2)
+CLASSES_PLACEHOLDER = "| | object / system | | |"
 
 LEVEL_TITLES = {
     "BASE": "WDDM 1.0 (Windows Vista)", "WIN7": "WDDM 1.1 (Windows 7)",
@@ -25,9 +27,9 @@ LEVEL_TITLES = {
 }
 
 
-def load_table():
+def load_table(root):
     rows = []
-    for ln in open(TABLE):
+    for ln in open(os.path.join(root, "docs/ref/driver_init_table.md")):
         m = re.match(r"\| *(\d+) \| `([^`]+)` \| `([^`]+)` \| (\S+) \|", ln)
         if m:
             rows.append((int(m.group(1)), m.group(2), m.group(3), m.group(4)))
@@ -99,7 +101,7 @@ def body(feat, rows):
 
     a("### Design rules — binding on this feature")
     a("")
-    a("Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated "
+    a(f"Constitution Principle III and [`CLAUDE.md`]({SPEC_TO_ROOT}/CLAUDE.md). Restated "
       "here because it is checked at review, not assumed:")
     a("")
     a("- **Every unit of behaviour is a class that owns state.** No static "
@@ -134,7 +136,7 @@ def body(feat, rows):
     a("")
     a("| Class | Kind | State it owns | Responsibility (no \"and\") |")
     a("|---|---|---|---|")
-    a("| | object / system | | |")
+    a(CLASSES_PLACEHOLDER)
     a("")
     a("### Test requirements")
     a("")
@@ -161,34 +163,59 @@ def body(feat, rows):
     if refs:
         a("### Reference material")
         a("")
-        a("Knowledge base at `../claude-scratch/wddm-kb/kb/`:")
+        a("Knowledge base:")
         a("")
         for r in refs:
-            a(f"- `{r}`")
+            a(f"- [`docs/kb/{r}`]({SPEC_TO_ROOT}/docs/kb/{r})")
         a("")
-        a("Normative headers: `../claude-scratch/wddm-kb/headers/wdk-26100` and "
-          "`headers/sdk`. Reverse-engineering targets, symbolized, in "
-          "`../claude-scratch/wddm-kb/ghidra-proj` — read `dxgkrnl.sys` when the "
-          "question is \"what does the caller do with this\", and "
-          "`basicrender.sys` when it is \"what is the minimum that works\".")
+        a("Normative headers: `third_party/windows-kit/include/` (fetched by "
+          "`tools/fetch_windows_kit.sh`). Reverse-engineering targets, symbolized, "
+          "in `re/ghidra-proj` (built by `tools/re/build_workspace.sh`) — read "
+          "`dxgkrnl.sys` when the question is \"what does the caller do with "
+          "this\", and `basicrender.sys` when it is \"what is the minimum that "
+          "works\".")
         a("")
     return "\n".join(out)
 
 
+def class_rows(block):
+    """The rows a plan wrote into the classes table. They live inside the
+    generated block, so regeneration must carry them over or it erases the
+    plan's design decisions."""
+    if CLASSES_HEADING not in block:
+        return []
+    section = block.split(CLASSES_HEADING, 1)[1].split("\n### ", 1)[0]
+    rows = [ln for ln in section.split("\n") if ln.startswith("|")]
+    return [r for r in rows[2:] if r != CLASSES_PLACEHOLDER]
+
+
+def carry_class_rows(new_block, old_block):
+    rows = class_rows(old_block)
+    if not rows:
+        return new_block
+    return new_block.replace(CLASSES_PLACEHOLDER, "\n".join(rows), 1)
+
+
 def main():
-    rows = load_table()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", default=os.path.dirname(HERE),
+                        help="repository root holding docs/ and specs/")
+    root = parser.parse_args().root
+    rows = load_table(root)
     made = updated = 0
+    pattern = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END), flags=re.S)
     for feat in FEATURES:
         fid, short = feat[0], feat[1]
         title = feat[4]
-        d = os.path.join(ROOT, "specs", f"{fid}-{short}")
+        d = os.path.join(root, "specs", f"{fid}-{short}")
         os.makedirs(d, exist_ok=True)
         p = os.path.join(d, "spec.md")
         block = f"{BEGIN}\n\n{body(feat, rows)}\n{END}"
         if os.path.exists(p):
             s = open(p).read()
-            new = re.sub(re.escape(BEGIN) + r".*?" + re.escape(END), block, s,
-                         flags=re.S)
+            old = pattern.search(s)
+            fresh = carry_class_rows(block, old.group(0)) if old else block
+            new = pattern.sub(lambda _m: fresh, s)
             if new != s:
                 open(p, "w").write(new); updated += 1
         else:

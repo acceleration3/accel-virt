@@ -6,8 +6,8 @@
 #ifndef AV_PLATFORM_HPP
 #define AV_PLATFORM_HPP
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace av {
 
@@ -35,11 +35,11 @@ public:
     Platform(const Platform &) = delete;
     Platform &operator=(const Platform &) = delete;
 
-    virtual void *allocate(std::size_t bytes, Pool pool) = 0;
+    virtual void *allocate(size_t bytes, Pool pool) = 0;
     virtual void  release(void *block) = 0;
 
-    virtual void zero(void *dst, std::size_t bytes) = 0;
-    virtual void copy(void *dst, const void *src, std::size_t bytes) = 0;
+    virtual void zero(void *dst, size_t bytes) = 0;
+    virtual void copy(void *dst, const void *src, size_t bytes) = 0;
 
     virtual Irql current_irql() const = 0;
 

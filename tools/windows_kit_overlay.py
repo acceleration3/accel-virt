@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Write a clang VFS overlay that makes the Windows kit's headers resolvable on
+a case-sensitive filesystem.
+
+The kit was authored for NTFS: `kernelspecs.h` includes "DriverSpecs.h" and the
+file is `driverspecs.h`. Clang only matches case-insensitively against entries
+an overlay lists explicitly - a `directory-remap` falls through to the real
+filesystem - so every header is listed. `use-external-names` is off so a quoted
+include is searched beside the includer's virtual path, inside the overlay.
+
+  windows_kit_overlay.py third_party/windows-kit   ->  .../overlay.yaml
+"""
+import json
+import os
+import sys
+
+ROOTS = ("km", "wdk-shared", "sdk-shared")
+
+
+def entries(kit, relative):
+    listed = []
+    for name in sorted(os.listdir(os.path.join(kit, relative))):
+        path = os.path.join(relative, name)
+        if os.path.isdir(os.path.join(kit, path)):
+            listed.append({"name": name, "type": "directory",
+                           "contents": entries(kit, path)})
+        else:
+            listed.append({"name": name, "type": "file",
+                           "external-contents": path})
+    return listed
+
+
+def main():
+    if len(sys.argv) != 2:
+        sys.exit("usage: windows_kit_overlay.py <kit dir>")
+    kit = sys.argv[1]
+    roots = [{"name": f"/windows-kit/{root}", "type": "directory",
+              "contents": entries(kit, os.path.join("include", root))}
+             for root in ROOTS if os.path.isdir(os.path.join(kit, "include", root))]
+    overlay = {"version": 0, "case-sensitive": "false", "overlay-relative": True,
+               "use-external-names": False, "roots": roots}
+    with open(os.path.join(kit, "overlay.yaml"), "w") as out:
+        json.dump(overlay, out, indent=1)
+
+
+if __name__ == "__main__":
+    main()

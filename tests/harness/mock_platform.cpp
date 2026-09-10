@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cstddef>
+#include <cstdint>
 
 namespace av {
 

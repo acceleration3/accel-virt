@@ -12,3 +12,7 @@ coverage/
 *.profdata
 tests/corpus/*/crash-*
 tests/corpus/*/leak-*
+__pycache__/
+third_party/windows-kit/
+third_party/.cache/
+re/

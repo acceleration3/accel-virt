@@ -4,6 +4,9 @@
 #include "../harness/hostile_sweep.hpp"
 #include "../harness/test_registry.hpp"
 
+#include <cstddef>
+#include <cstdint>
+
 using av::Alignment;
 using av::AddressSpaceFixture;
 using av::ByteRange;
