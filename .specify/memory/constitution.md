@@ -1,6 +1,6 @@
 # accel-virt Constitution
 
-**Version**: 1.0.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-10
+**Version**: 2.0.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-10
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
 display miniport (`rvkgpu.sys`), a custom in-process QEMU device
@@ -32,7 +32,38 @@ the condition belongs in core.
 
 This is not architectural taste. It is what makes Principle III possible.
 
-### III. Test-first and exhaustive (NON-NEGOTIABLE)
+### III. Object-oriented, with state (NON-NEGOTIABLE)
+
+**Every unit of behaviour is a class that owns state. There are no static
+member functions, no stateless classes, and no free-function dumping grounds.**
+
+If a group of functions threads the same handle, buffer, bounds or platform
+through their parameter lists, that parameter is a member. `Alignment` owns an
+alignment. `ByteRange` owns a span. `GpuVirtualAddressSpace` owns a table and a
+`Platform&`. None of them receive what they own as an argument.
+
+Two kinds of class, and everything is one of them:
+
+- **Object classes** — one instance per real thing. `Adapter`, `Device`,
+  `Context`, `Allocation`, `VirtualRange`, `MonitoredFence`, `VirtQueue`,
+  `Doorbell`, `Edid`.
+- **System classes** — a long-lived service owning a collection, injected where
+  it is needed. `GpuVirtualAddressSpace`, `Scheduler`, `PagingEngine`,
+  `DisplayEngine`, `TimeoutDetector`.
+
+Dependencies are injected at construction, never reached for. Nothing consults
+a global, a singleton, or file-scope state.
+
+The only exceptions are the ABI boundaries C requires, and each is one line
+with no logic: the `DxgkDdi*` thunks in `src/km/`, which do nothing but
+`static_cast<Adapter *>(context)->method(...)`, and the `extern "C"` entry
+points QEMU and libFuzzer call.
+
+The full standard, including naming, ownership, error handling and the
+freestanding-kernel adaptations, is in [`CLAUDE.md`](../../CLAUDE.md) and is
+binding on every feature.
+
+### IV. Test-first and exhaustive (NON-NEGOTIABLE)
 
 **For every function in `src/core/`, `src/device/` and `src/proto/`, tests must
 exercise every branch, assert the module's invariants, and feed it garbage.**
@@ -74,7 +105,7 @@ exercise every branch, assert the module's invariants, and feed it garbage.**
 Tests are written before the implementation, and they must fail before they
 pass.
 
-### IV. Everything from outside is hostile
+### V. Everything from outside is hostile
 
 Bytes from the guest, the host, a user-mode process or a device register are
 attacker-controlled. The QEMU device decodes guest-authored bytes inside the
@@ -87,7 +118,7 @@ before it is used in arithmetic, and the arithmetic is overflow-checked.
 Trusting a value because "the driver on the other side wrote it" is forbidden;
 the other side may be malicious or may be an older version.
 
-### V. WDDM feature levels are phases, not shipped versions
+### VI. WDDM feature levels are phases, not shipped versions
 
 The driver always declares `DXGKDDI_INTERFACE_VERSION_WDDM3_2` (`0x11007`) and
 always builds against WDDM 3.2 headers. Windows 11 will not load a driver that
@@ -102,7 +133,7 @@ Never report a capability that is not implemented and tested. Half the failure
 modes in this domain are a driver claiming support and then behaving
 incorrectly, which surfaces as a silent failure far from the cause.
 
-### VI. IRQL and locking are typed, not documented
+### VII. IRQL and locking are typed, not documented
 
 Every core function declares its maximum IRQL in its signature's annotation
 macro (`AV_AT_PASSIVE`, `AV_AT_DISPATCH`, `AV_AT_ISR`). The native test build
@@ -113,7 +144,7 @@ once in `src/core/locks.h` and checked at runtime in debug builds.
 The submission path never blocks, never allocates and never takes a mutex.
 That is a testable property, and it is tested.
 
-### VII. No speculative structure
+### VIII. No speculative structure
 
 No interface with one implementation, no abstraction for a second backend that
 does not exist, no configuration flag with one setting. Add it when the second
@@ -121,7 +152,7 @@ case arrives. A feature level that the roadmap marks `stub` gets a stub that
 returns the correct "not supported" status and a test that proves it, not a
 partial implementation.
 
-### VIII. Reproducible and observable
+### IX. Reproducible and observable
 
 Every build is reproducible from a clean checkout with one command. Every
 failure path logs once, at the point of decision, with the value that caused
@@ -130,15 +161,20 @@ device exists.
 
 ## Technology constraints
 
-- **Language: C11** for `src/core`, `src/km`, `src/device`, `src/proto` and
-  `tests/`. Not C++. The guest side is kernel-mode, the host side is a QEMU
-  device, and the protocol headers are shared by both plus a C++ consumer;
-  C11 is the only language all three speak without ceremony. C++ lives in
-  `render-server`, behind a C ABI.
+- **Language: C++23**, freestanding subset — `-fno-exceptions -fno-rtti`, no
+  C++ standard library, no `new`/`delete`. `basicrender.sys`, Microsoft's own
+  WDDM miniport, is C++ classes with virtuals, so this is the supported way to
+  write one. RAII is not a style preference here: it removes cleanup branches,
+  which is what makes Principle IV's 100% branch coverage affordable.
+  The QEMU device is C++ behind a C ABI, exactly as QEMU already links
+  `rutabaga_gfx`; only `hw/display/virtio-gpu-rvk.c` is C.
 - **Toolchain**: clang/LLVM. Native tests and fuzzing with the host clang;
   the driver cross-built with `clang-cl` + `lld-link` against the WDK/SDK
   headers and import libraries. `gcc` is not supported.
 - **Build**: CMake + Ninja. `ctest` is the only test entry point.
+- **Kernel subset, enforced by the native build too**: the tests compile with
+  the same `-fno-exceptions -fno-rtti` and no standard library, so nothing can
+  depend on something the guest kernel will not have.
 - **Sanitizers**: the native test build runs ASan + UBSan by default. A test
   suite that cannot run clean under both does not merge.
 - **No dependency** may be added to `src/core` or `src/km`. `src/device` may
@@ -155,9 +191,11 @@ A task is done when all of the following hold:
 4. Every new externally-fed function has a fuzz target that survives a
    60-second smoke run.
 5. `tools/check_symbol_tests.py` passes.
-6. Invariant functions exist for new stateful modules and are called by tests.
-7. The feature level's capability reporting matches what is implemented.
-8. Documentation that the change makes wrong is fixed in the same change.
+6. Invariant methods exist on new stateful classes and are called by tests.
+7. No new static member function, stateless class, or free function outside the
+   two documented ABI boundaries.
+8. The feature level's capability reporting matches what is implemented.
+9. Documentation that the change makes wrong is fixed in the same change.
 
 ## Governance
 
@@ -166,5 +204,5 @@ this file, states the rationale, and bumps the version: MAJOR for removing or
 redefining a principle, MINOR for adding one or materially expanding guidance,
 PATCH for clarification.
 
-Principle III is not subject to schedule pressure. If a deadline and this
+Principles III and IV are not subject to schedule pressure. If a deadline and this
 document conflict, the deadline moves or the scope shrinks.

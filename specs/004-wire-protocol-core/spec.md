@@ -18,6 +18,28 @@ One header, two consumers, no divergence.
 
 Build it, test it to the constitution's standard, and report the capabilities it enables.
 
+### Design rules — binding on this feature
+
+Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here because it is checked at review, not assumed:
+
+- **Every unit of behaviour is a class that owns state.** No static member functions. No stateless class used as a namespace. No free function outside the two ABI boundaries (`DxgkDdi*` thunks in `src/km/`, and `extern "C"` entry points), each one line with no logic.
+- If functions thread the same handle, buffer, bounds or platform through their parameters, **that parameter is a member**. Make it a class and inject its dependencies at construction.
+- Name the classes this feature adds before writing them, and say which kind each is: an **object class** (one instance per real thing) or a **system class** (a long-lived service owning a collection).
+- Dependencies injected at construction. No global, no singleton, no file-scope state.
+- Data members private, trailing underscore. Classes `PascalCase`, methods and locals `snake_case`. No `Manager`, `Helper`, `Utils`, `Handler`, `Impl`, `process()`, `handle()`.
+- One class per header, named for it. A header declares; it does not define. One responsibility per class, statable without an "and".
+- Errors are `av::Status` values. No exceptions, no RTTI, no C++ standard library, no `new`/`delete`. Cleanup is RAII via `ScopeExit`, never repeated per branch.
+- Fallible construction is two-phase: trivial constructor, `initialize(...)` returning `Status`.
+- Every public method declares its IRQL ceiling via `platform_.require_irql_at_most(...)`.
+
+### Classes this feature introduces
+
+<!-- Fill this in during /speckit-plan, before writing code. One row per class; if a row has no state, it is not a class. -->
+
+| Class | Kind | State it owns | Responsibility (no "and") |
+|---|---|---|---|
+| | object / system | | |
+
 ### Test requirements
 
 Constitution Principle III applies in full. Concretely, this feature is not done until:

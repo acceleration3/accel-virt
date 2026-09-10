@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.24)
-project(accel_virt C)
+project(accel_virt CXX)
 
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   message(FATAL_ERROR "clang is required (constitution: Technology constraints)")
 endif()
 
@@ -16,20 +16,29 @@ option(AV_FUZZ     "build libFuzzer targets"        OFF)
 
 add_compile_options(
   -Wall -Wextra -Werror
-  -Wconversion -Wsign-conversion -Wshadow -Wstrict-prototypes
-  -Wmissing-prototypes -Wcast-qual -Wpointer-arith -Wvla
-  -Wno-unused-command-line-argument)
+  -Wconversion -Wsign-conversion -Wshadow -Wold-style-cast
+  -Wcast-qual -Wpointer-arith -Wvla -Wnon-virtual-dtor -Woverloaded-virtual
+  -Wno-unused-command-line-argument
+  # The kernel subset: no exceptions, no RTTI, no C++ standard library. The
+  # same flags the driver cross-build uses, so the native tests cannot rely on
+  # anything the guest kernel will not have.
+  -fno-exceptions -fno-rtti)
 
 # ---- portable core: no platform headers, compiled into every target --------
-add_library(av_core STATIC src/core/gpuva.c)
+add_library(av_core STATIC
+  src/core/alignment.cpp
+  src/core/byte_range.cpp
+  src/core/gpu_virtual_address_space.cpp)
 target_include_directories(av_core PUBLIC src/core)
 target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 
 # ---- test harness ----------------------------------------------------------
 add_library(av_harness STATIC
-  tests/harness/av_test.c
-  tests/harness/platform_mock.c
-  tests/harness/av_hostile.c)
+  tests/harness/test_registry.cpp
+  tests/harness/mock_platform.cpp
+  tests/harness/guarded_buffer.cpp
+  tests/harness/hostile_sweep.cpp
+  tests/harness/address_space_fixture.cpp)
 target_link_libraries(av_harness PUBLIC av_core)
 
 set(AV_TEST_FLAGS "")
@@ -49,7 +58,7 @@ endforeach()
 
 # ---- unit tests: one binary per module, so a crash isolates -----------------
 enable_testing()
-file(GLOB AV_UNIT_TESTS CONFIGURE_DEPENDS tests/unit/test_*.c)
+file(GLOB AV_UNIT_TESTS CONFIGURE_DEPENDS tests/unit/test_*.cpp)
 foreach(src ${AV_UNIT_TESTS})
   get_filename_component(name ${src} NAME_WE)
   add_executable(${name} ${src})
@@ -61,18 +70,22 @@ foreach(src ${AV_UNIT_TESTS})
 endforeach()
 
 # ---- the rule with teeth: no exported core symbol without a test ------------
-add_test(NAME symbol_test_coverage
+add_test(NAME design_rules
          COMMAND ${CMAKE_COMMAND} -E env python3
-                 ${CMAKE_SOURCE_DIR}/tools/check_symbol_tests.py
+                 ${CMAKE_SOURCE_DIR}/tools/check_design.py
                  ${CMAKE_SOURCE_DIR})
 
 # ---- fuzz targets ----------------------------------------------------------
 if(AV_FUZZ)
-  file(GLOB AV_FUZZ_SRCS CONFIGURE_DEPENDS tests/fuzz/fuzz_*.c)
+  file(GLOB AV_FUZZ_SRCS CONFIGURE_DEPENDS tests/fuzz/fuzz_*.cpp)
   foreach(src ${AV_FUZZ_SRCS})
     get_filename_component(name ${src} NAME_WE)
     add_executable(${name} ${src}
-      tests/harness/platform_mock.c src/core/gpuva.c)
+      tests/harness/mock_platform.cpp
+      tests/harness/test_registry.cpp
+      src/core/alignment.cpp
+      src/core/byte_range.cpp
+      src/core/gpu_virtual_address_space.cpp)
     target_include_directories(${name} PRIVATE src/core)
     target_compile_definitions(${name} PRIVATE AV_CHECKED=1)
     target_compile_options(${name} PRIVATE

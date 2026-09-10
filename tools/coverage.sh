@@ -5,8 +5,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 BUILD=${BUILD:-build}
 MIN=${AV_COVERAGE_MIN:-100}
+export AV_TEST_QUIET=1
 
-cmake -S . -B "$BUILD" -G Ninja -DCMAKE_C_COMPILER=clang -DAV_COVERAGE=ON >/dev/null
+cmake -S . -B "$BUILD" -G Ninja -DCMAKE_CXX_COMPILER=clang++ -DAV_COVERAGE=ON >/dev/null
 cmake --build "$BUILD" >/dev/null
 rm -rf "$BUILD/coverage"; mkdir -p "$BUILD/coverage"
 ctest --test-dir "$BUILD" --output-on-failure >/dev/null
@@ -28,17 +29,27 @@ for d in src/core src/device src/proto; do
 done
 
 llvm-cov report "$MAIN" "${OBJ[@]}" -instr-profile="$BUILD/coverage/all.profdata" \
-    -show-branch-summary "${SRCS[@]}" | tee "$BUILD/coverage/report.txt"
+    -show-branch-summary -ignore-filename-regex='.*/tests/.*' |
+    tee "$BUILD/coverage/report.txt"
 
+if [ "${AV_COVERAGE_HTML:-0}" = "1" ]; then
 llvm-cov show "$MAIN" "${OBJ[@]}" -instr-profile="$BUILD/coverage/all.profdata" \
     -show-branches=percent -format=html -output-dir="$BUILD/coverage/html" \
     "${SRCS[@]}" >/dev/null 2>&1 || true
+fi
 
-pct=$(llvm-cov export "$MAIN" "${OBJ[@]}" -instr-profile="$BUILD/coverage/all.profdata" \
-        "${SRCS[@]}" |
-      python3 -c 'import json,sys
-d = json.load(sys.stdin)["data"][0]["totals"]["branches"]
-print("%.2f" % d["percent"])')
+# Percentage over src/ only: llvm-cov's TOTAL row includes the test binaries
+# themselves, which would make the gate meaningless.
+pct=$(llvm-cov export "$MAIN" "${OBJ[@]}" -instr-profile="$BUILD/coverage/all.profdata" |
+      python3 -c 'import json, sys
+covered = total = 0
+for f in json.load(sys.stdin)["data"][0]["files"]:
+    if "/src/" not in f["filename"]:
+        continue
+    b = f["summary"]["branches"]
+    covered += b["covered"]
+    total += b["count"]
+print("%.2f" % (100.0 * covered / total if total else 100.0))')
 
 untestable=$(grep -ho 'AV_UNTESTABLE(' "${SRCS[@]}" 2>/dev/null | wc -l)
 

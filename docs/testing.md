@@ -22,32 +22,36 @@ fifth needs the VM and is the smallest.
 ## L1 — Unit tests on the portable core
 
 The whole point of splitting `src/core` from `src/km` is that `src/core`
-compiles as ordinary C11 on Linux. It has no `#include <ntddk.h>`, no
-`ExAllocatePool`, no `KeAcquireSpinLock`. It gets those through
-`src/core/platform.h`, which has two implementations: the kernel one in
-`src/km/`, and the test one in `tests/harness/platform_mock.c`.
+compiles as ordinary freestanding C++23 on Linux. It has no `#include <ntddk.h>`,
+no `ExAllocatePool`, no `KeAcquireSpinLock`. It reaches the platform only
+through an injected `av::Platform&`, which has two implementations: the kernel
+one in `src/km/`, and `MockPlatform` in `tests/harness/`.
 
 So the same object code paths that run in the guest kernel run in a Linux
 process, under ASan, UBSan and a coverage instrument.
 
-What lives in core, and is therefore unit-testable:
+The classes that live in core, and are therefore unit-testable. Each is either
+an **object class** (one instance per real thing) or a **system class** (a
+service owning a collection); nothing here is a namespace with static methods.
 
-| Module | What it decides |
-|---|---|
-| `gpuva` | GPU virtual address space: reserve, map, unmap, free, the handle encoding, overlap rules |
-| `alloc` | Allocation records, segment placement, residency state, refcounts, shared/NT-shared identity |
-| `segment` | Segment descriptors, what `QueryAdapterInfo` reports, placement legality |
-| `paging` | `BuildPagingBuffer` operation emission and the byte budget |
-| `ctx` | Contexts, nodes, engine affinity, priority |
-| `submit` | Descriptor construction, fence id assignment, queue depth, backpressure |
-| `fence` | Monitored/native fence bookkeeping, monotonicity, threshold wakeups |
-| `tdr` | Progress tracking, timeout decision, preempt/reset state machine |
-| `vidpn` | Topology validation, cofunctional modality enumeration, mode sets |
-| `edid` | EDID block synthesis and its checksum |
-| `virtq` | Split virtqueue rings: avail/used indices, descriptor chains, wrap |
-| `vpci` | virtio PCI capability walk, feature negotiation, device status FSM |
-| `ring` | The rvk submission ring: head/tail, wrap, full/empty, slot lifetime |
-| `proto` | Wire structs, encode/decode, version negotiation |
+| Class | Kind | What it decides |
+|---|---|---|
+| `Alignment` | object | Power-of-two alignment; rounding up without wrapping |
+| `ByteRange` | object | A `[base, base + size)` span and whether it is representable |
+| `VirtualRange` | object | One reserved-or-bound span and its binding |
+| `GpuVirtualAddressSpace` | system | Reserve, map, unmap, release, translate; overlap and ordering rules |
+| `Allocation` | object | One allocation: size, flags, residency state, refcount, shared identity |
+| `Segment` | object | One memory segment as reported to VidMm; placement legality |
+| `PagingEngine` | system | `BuildPagingBuffer` operation emission and the byte budget |
+| `Context` | object | One execution context: node, engine affinity, priority |
+| `Node` | object | One scheduling queue and its pending packets |
+| `SubmissionRing` | object | Head/tail, wrap, full/empty, slot lifetime |
+| `MonitoredFence` | object | Value, monotonicity, registered thresholds |
+| `TimeoutDetector` | system | Progress tracking, timeout decision, preempt/reset state machine |
+| `VidPnTopology` | object | Paths, cofunctional modality enumeration, mode sets |
+| `Edid` | object | EDID block synthesis and its checksum |
+| `VirtQueue` | object | Split ring: avail/used indices, descriptor chains, wrap |
+| `VirtioPciTransport` | system | Capability walk, feature negotiation, device status |
 
 What does **not** live in core, and is therefore not unit tested: mapping a
 BAR, creating a system thread, calling `DxgkCbNotifyInterrupt`, writing an MMIO
@@ -56,57 +60,59 @@ sequencing.
 
 ### The mock platform
 
-`tests/harness/platform_mock.c` is not a stub. It is an adversarial
-implementation:
+`Platform` is an abstract base with exactly two implementations — that is what
+keeps the abstraction from being speculative. `KernelPlatform` in `src/km/`
+wraps the real kernel; `MockPlatform` in `tests/harness/` is injected into every
+core class under test.
+
+`MockPlatform` is not a stub. It is adversarial:
 
 - **Simulated IRQL.** Raise and lower are tracked. Calling a function annotated
   `AV_AT_PASSIVE` while at DISPATCH aborts the test. Allocating at DISPATCH
   aborts. Blocking at DISPATCH aborts. This turns the most common class of
   driver bugcheck into a failing unit test.
-- **Failing allocator.** Every allocation site can be made to fail on the Nth
-  call, so error paths get covered rather than assumed. A test sweep runs the
-  whole suite once per allocation site, failing that site, and asserts no leak
-  and no crash — this is how out-of-memory paths reach 100% branch coverage.
+- **Failing allocator.** `fail_allocation_at(n)` makes the Nth allocation
+  fail, so error paths get covered rather than assumed. A sweep runs the same
+  scenario once per allocation site, failing that site, and asserts no leak and
+  no crash — this is how out-of-memory paths reach 100% branch coverage.
 - **Leak and balance tracking.** Allocation, lock acquire/release, and refcount
   operations are counted; a test that ends unbalanced fails.
-- **Lock order checking.** The declared order in `src/core/locks.h` is enforced
-  at runtime.
+- **Lock order checking.** The declared order in `src/core/lock_order.hpp` is
+  enforced at runtime.
 - **Deterministic time.** A test controls the clock, so TDR timeouts are exact
   and not flaky.
 
 ### The shape of a test file
 
-Every core module `x.c` has `tests/unit/test_x.c` with three sections:
+Every core class `X` has `tests/unit/test_x.cpp` with three sections:
 
-```c
+```cpp
 /* 1. branches — one test per decision, named for the decision */
-TEST(gpuva_map, rejects_zero_length)
-TEST(gpuva_map, rejects_range_crossing_object_boundary)
-TEST(gpuva_map, accepts_exact_fit_at_upper_bound)
-TEST(gpuva_map, rejects_overlap_with_existing)
-TEST(gpuva_map, returns_no_memory_when_node_alloc_fails)
+TEST(address_space_map, rejects_an_unreserved_base)
+TEST(address_space_map, rejects_object_zero_because_zero_means_unmapped)
+TEST(address_space_map, rejects_an_offset_that_overflows_with_the_size)
+TEST(address_space_map, rejects_a_double_map)
+TEST(address_space_reserve, propagates_allocation_failure)
 
 /* 2. invariants — asserted after every mutation, not once at the end */
-TEST(gpuva, invariants_hold_across_random_operation_sequence)
+TEST(address_space_invariants, hold_across_a_pseudorandom_operation_sequence)
 
-/* 3. garbage — the hostile-input table plus a fuzz entry point */
-TEST(gpuva_decode_handle, hostile_inputs)
+/* 3. garbage — the hostile sweep plus a fuzz entry point */
+TEST(address_space_translate, hostile_addresses_never_translate_out_of_bounds)
 ```
 
-The hostile-input table is a shared idiom, not per-test boilerplate:
+A fixture injects the mock and owns the leak check, so no test repeats it:
 
-```c
-static const struct av_hostile_case cases[] = {
-    AV_HOSTILE_EMPTY(),
-    AV_HOSTILE_TRUNCATED_AT_EACH_FIELD(struct rvk_submit_desc),
-    AV_HOSTILE_LEN_EXCEEDS_BUFFER(),
-    AV_HOSTILE_MISALIGNED(),
-    AV_HOSTILE_SCALAR_EXTREMES(struct rvk_submit_desc),
-    AV_HOSTILE_OFFSET_OVERFLOW(),
-    AV_HOSTILE_CYCLIC_CHAIN(),
-    AV_HOSTILE_BITFLIP_SWEEP(valid_desc, sizeof valid_desc),
-};
+```cpp
+AddressSpaceFixture fixture;
+const std::uint64_t reserved = fixture.reserve_page();
+MUTATE(fixture, fixture.space().map(reserved, kPage, 7u, 0u), Status::ok);
 ```
+
+`HostileSweep` is an object, not per-test boilerplate: given a parser and one
+valid input it feeds empty, every truncation, oversized length, all-zero,
+all-ones and a bit-flip sweep. `GuardedBuffer` surrounds the destination with
+poisoned bands so a write past the end is caught.
 
 Each case asserts the same contract: an error is returned, nothing outside the
 destination is written, the call terminates, and ASan/UBSan stay quiet.
@@ -115,11 +121,11 @@ destination is written, the call terminates, and ASan/UBSan stay quiet.
 
 ## L2 — The DDI conformance harness
 
-A unit test proves `gpuva_map` is correct. It does not prove the driver
+A unit test proves `GpuVirtualAddressSpace::map` is correct. It does not prove the driver
 survives the sequence `dxgkrnl` actually performs, at the IRQLs it actually
 uses, with the reentrancy it actually allows.
 
-So `tests/harness/fake_dxgk.c` is a fake `dxgkrnl`: it builds a
+So `tests/harness/fake_dxgkrnl.cpp` is a fake `dxgkrnl`: it builds a
 `DRIVER_INITIALIZATION_DATA`, calls `DriverEntry`, and then drives the DDI
 table through scripted scenarios — start the adapter, query every
 `DXGKQAITYPE`, create a device, create allocations, create a context, render,

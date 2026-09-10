@@ -1,0 +1,140 @@
+---
+description: Load all accel-virt context and start (or continue) development on a feature
+argument-hint: "[feature number, e.g. 005 — omit to pick the next unblocked one]"
+allowed-tools: Bash, Read, Glob, Grep, Edit, Write, Skill, TodoWrite
+---
+
+You are developing **accel-virt**: a paravirtual GPU for Windows guests on
+QEMU/KVM. Before writing anything, load the context below. Do not skim it — the
+rules in it are gates, not suggestions, and work that violates them gets
+rejected by the build.
+
+## 1. Load the context
+
+Read these, in this order:
+
+1. `CLAUDE.md` — the C++ standard for this repo (decrapify-cpp, adapted for
+   freestanding kernel-mode).
+2. `.specify/memory/constitution.md` — the nine principles. III (object-oriented
+   with state) and IV (test-first and exhaustive) are marked NON-NEGOTIABLE and
+   are enforced by build gates.
+3. `docs/testing.md` — the five test layers and why a display miniport can be
+   unit tested on Linux at all.
+4. `docs/roadmap.md` — the 35 features, their status and dependencies.
+5. `README.md` — layout and build commands.
+
+The design this implements lives in the knowledge base at
+`../claude-scratch/wddm-kb/`:
+
+- `kb/11-implementation-plan.md` — the architecture and milestones. Read this.
+- `kb/02-kmd-contract.md`, `kb/04-memory.md`, `kb/05-scheduling.md`,
+  `kb/06-display.md` — the WDDM mechanisms.
+- `kb/10-warp-kmd.md` — `basicrender.sys`, Microsoft's own hardware-free WDDM
+  miniport, reverse engineered. The closest existing thing to what we build.
+- `kb/12-re-cookbook.md` — how to answer a question by reverse engineering
+  instead of guessing.
+- `docs/ref/driver_init_table.md` — all 188 DDI slots and the WDDM level each
+  arrived in.
+
+Normative headers (these outrank everything above when they disagree):
+`../claude-scratch/wddm-kb/headers/wdk-26100/c/Include/10.0.26100.0` and
+`.../headers/sdk/c/Include/10.0.26100.0`.
+
+## 2. Check the environment
+
+```bash
+cd /home/accel/Coding/accel-virt
+git status --short && git log --oneline -3
+cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++ >/dev/null && cmake --build build 2>&1 | tail -3
+ctest --test-dir build 2>&1 | tail -3
+ls specs/ | head -40
+```
+
+Tools available, and what each is for:
+
+| | |
+|---|---|
+| `clang++` / `clang-cl` / `lld-link` | native tests, and the driver cross-build for Windows |
+| `cmake` + `ninja`, `ctest` | build and the single test entry point |
+| `llvm-cov`, `llvm-profdata` | `./tools/coverage.sh` — the 100% branch gate |
+| `llvm-pdbutil` | Microsoft PDBs, public symbols only, no type info |
+| Ghidra 12.1.2 at `/opt/ghidra` | needs `JAVA_HOME=/usr/lib/jvm/java-26-openjdk`; the system default JDK 17 is too old |
+| `ghidra` MCP (`pyghidra-mcp`) | if its tools are absent this session, drive Ghidra headless with `../claude-scratch/wddm-kb/tools/q.py` instead. Never run both against the project at once — Ghidra locks it. |
+| `qemu-system-x86_64` 11.1.1, `virsh` | the host side; `virtio-gpu-gl-pci` has `blob`, `hostmem`, `venus`, `drm_native_context` |
+
+Ghidra project, already imported and symbolized:
+`../claude-scratch/wddm-kb/ghidra-proj` — `dxgkrnl.sys` (9049 functions),
+`dxgmms2.sys`, `basicrender.sys`, `basicdisplay.sys`, `vkrnlintvsp.sys`,
+`vpci.sys`, `d3d12core.dll`, `dxcore.dll`.
+
+```bash
+export GHIDRA_INSTALL_DIR=/opt/ghidra JAVA_HOME=/usr/lib/jvm/java-26-openjdk
+PY=~/.local/share/uv/tools/pyghidra-mcp/bin/python
+cd ../claude-scratch/wddm-kb
+$PY tools/q.py ghidra-proj wddm dxgkrnl.sys funcs 'Doorbell'
+$PY tools/q.py ghidra-proj wddm basicrender.sys dec WarpKMSubmitCommandVirtual
+```
+
+## 3. Pick the work
+
+`$ARGUMENTS` names a feature number if given. If it is empty, read
+`docs/roadmap.md`, find the lowest-numbered feature whose dependencies are all
+complete and which is not yet implemented, and say which one you picked and
+why before starting.
+
+Then follow the spec-kit flow, using the skills, not by hand:
+
+```
+/speckit-specify    only if specs/NNN-*/spec.md still has an empty
+                    "User Scenarios" section
+/speckit-clarify    if anything in the spec is ambiguous — cheaper now than later
+/speckit-plan       MUST fill in the spec's "Classes this feature introduces"
+                    table before any code is written
+/speckit-tasks      break the plan down
+/speckit-implement  execute
+```
+
+## 4. The rules you will be judged against
+
+**Design (constitution III, `CLAUDE.md`).** Everything is a class that owns
+state. No static member functions. No stateless class used as a namespace. No
+free functions outside the two ABI boundaries — the `DxgkDdi*` thunks in
+`src/km/` and `extern "C"` entry points — and each of those is one line with no
+logic. If functions thread the same handle, buffer or platform through their
+parameters, that parameter is a member. Dependencies injected at construction;
+never reach for a global. Name each new class and say whether it is an **object
+class** (one per real thing) or a **system class** (a service owning a
+collection) before writing it.
+
+**Testing (constitution IV).** For every function: every branch covered,
+invariants asserted after every mutation, and hostile input fed to anything
+that reads bytes it did not write, plus a libFuzzer target with a committed
+corpus. Tests are written before the implementation and must fail first.
+
+**Both are build gates**, not review notes:
+
+```bash
+ctest --test-dir build          # unit tests under ASan+UBSan, plus design_rules
+./tools/coverage.sh             # 100% branch coverage of src/, or it fails
+python3 tools/check_design.py . # static methods, stateless classes, untested API
+```
+
+`src/core/gpu_virtual_address_space.cpp` with
+`tests/unit/test_gpu_virtual_address_space.cpp` is the worked example of the
+standard. Match it.
+
+**Two more things that are easy to get wrong:**
+
+- The driver always declares `DXGKDDI_INTERFACE_VERSION_WDDM3_2` (`0x11007`).
+  WDDM levels are implementation *phases*; capabilities gate what is live.
+  Never report a capability that is not implemented and tested.
+- When the question is "what does `dxgkrnl` do with this", read `dxgkrnl.sys`
+  in Ghidra. When it is "what is the minimum that works", read
+  `basicrender.sys`. When it is "what are the fields of this struct", read the
+  WDK header — do not disassemble for something that is written down.
+
+## 5. Report before you start
+
+State: which feature, why it is next, which classes you will add and of which
+kind, what the first failing test will be, and anything in the spec you had to
+interpret. Then begin.
