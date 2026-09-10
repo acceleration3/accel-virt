@@ -1,0 +1,14 @@
+build/
+build-*/
+.cache/
+compile_commands.json
+*.o
+*.obj
+*.sys
+*.pdb
+*.lib
+coverage/
+*.profraw
+*.profdata
+tests/corpus/*/crash-*
+tests/corpus/*/leak-*
