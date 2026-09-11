@@ -131,7 +131,7 @@ TEST(ddi_scenario, the_recorded_bring_up_and_teardown)
     CHECK(device.fdo().context() != nullptr);
     CHECK_EQ(device.fdo().start_device(), 0);
     CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-    CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2900);
+    CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3000);
     CHECK_EQ(device.fdo().dxgadapter().display_caps_extension(), 0u);
     CHECK_EQ(device.fdo().sources(), 1u);
     CHECK_EQ(device.fdo().children(), 1u);
@@ -355,6 +355,7 @@ public:
         if (status < 0) return status;
         info_.pPrivateDriverData = descriptor_;
         info_.PrivateDriverDataSize = describe.AllocationPrivateDriverDataSize;
+        info_.Flags2 = 0xFFFFFFFFu;   /* the driver answers every flag */
         av::DxgkargCreateAllocationRecord create = {};
         create.NumAllocations = 1u;
         create.pAllocationInfo = &info_;
@@ -363,6 +364,8 @@ public:
         if (status >= 0) kernel_handle_ = handles_.insert(info_.hAllocation);
         return status;
     }
+
+    std::uint32_t flags2() const { return info_.Flags2; }
 
     std::int32_t create_device()
     {
@@ -987,7 +990,7 @@ TEST(ddi_scenario, a_wddm_2_3_adapter_starts_and_scans_out_with_the_later_slots_
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2900);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3000);
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
   av::FakeDisplayModeManager dmm(driver.platform(), table, device.fdo().context());
   { av::FakeVidPn vidpn;
@@ -1022,7 +1025,7 @@ TEST(ddi_scenario, a_system_memory_primary_flips_immediately_and_gpu_va_presents
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2900);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3000);
   void *const adapter = device.fdo().context();
   av::FakeDisplayModeManager dmm(driver.platform(), table, adapter);
   { av::FakeVidPn vidpn;
@@ -1071,7 +1074,7 @@ TEST(ddi_scenario, a_wddm_2_9_adapter_flips_without_a_hardware_flip_queue)
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2900);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3000);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().MaxHwQueuedFlips, 0u);
   av::FakeDisplayModeManager dmm(driver.platform(), table, device.fdo().context());
   { av::FakeVidPn vidpn;
@@ -1085,4 +1088,25 @@ TEST(ddi_scenario, a_wddm_2_9_adapter_flips_without_a_hardware_flip_queue)
   CHECK_EQ(device.dxgkrnl().interrupts(), before + 1u);
   CHECK_EQ(dmm.control_vsync(false), 0);
   CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- WDDM 3.0 (feature 023) ----------------------------------------------------- */
+
+TEST(ddi_scenario, a_wddm_3_0_adapter_allocates_a_primary_with_the_later_slots_null)
+{ LoadedDriver driver;
+  const DdiTable &table = driver.table();
+  const DdiSlot skipped[] = {DdiSlot::DxgkDdiSetAllocationBackingStore, DdiSlot::DxgkDdiCreateCpuEvent,
+                             DdiSlot::DxgkDdiDestroyCpuEvent, DdiSlot::DxgkDdiCancelFlips};
+  for (const DdiSlot slot : skipped) CHECK(table.routine(slot) == nullptr);
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3000);
+  { Runtime runtime(table, device.fdo().context());
+    CHECK_EQ(runtime.create_primary(), 0);
+    CHECK_EQ(runtime.flags2(), 0u);   /* CreateDriverAllocations refuses Flags2 above 0x3f from 3.0 */
+    CHECK_EQ(runtime.destroy_primary(), 0); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }

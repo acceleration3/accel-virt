@@ -778,6 +778,21 @@ WDDM 1.2 (with GPU VA, feature 017): a 1.2 claim below `DXGKDDI_WDDMv1_2` fails
   `MapApertureCpuVisible` and honours `VirtualRefreshRateSupport`; nothing is
   mandatory. The driver reports 2.9 and leaves the four slots NULL.
 
+## 4o. WDDM 3.0 (feature 023)
+
+- Slots 158-160 are copied from DDI interface 0xF000, 161 from 0xF002.
+  `SetAllocationBackingStore` (NULL-checked) serves only allocations with
+  `Flags2.ShareBackingStoreWithKmd` (`VIDMM_GLOBAL::CommitGlobalBackingStore
+  @ 1400fdf14`); `CreateCpuEvent` (NULL-checked; NOT_SUPPORTED fails a SignalByKmd
+  CPU notification sync object) and `DestroyCpuEvent` (only for an event 159
+  created) serve `DXGADAPTERSYNCOBJECT @ 14035e218`; `CancelFlips` (NULL-checked,
+  device IRQL) is reached only with the hardware flip queue.
+- At 3.0 `DXGDEVICE::CreateDriverAllocations @ 1402f2220` refuses `Flags2` above
+  0x3f, and VidMm requires a CPU-visible allocation to include a segment with
+  flags 0x1001 - which the implicit system memory segment (0x1190) has, inferred
+  and to be confirmed in a VM. The driver reports 3.0, answers `Flags2` 0 and
+  leaves the four slots NULL.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the

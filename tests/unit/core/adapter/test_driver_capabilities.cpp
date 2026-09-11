@@ -28,7 +28,7 @@ using av::Violation;
 namespace {
 
 constexpr std::uint32_t driver_caps_bytes = 0x250u;   /* GetDriverCapsSizeFromDdiVersion(0x11007) */
-constexpr std::int32_t  wddm_v2 = 0x2900;             /* DXGKDDI_WDDMv2_9 */
+constexpr std::int32_t  wddm_version = 0x3000;             /* DXGKDDI_WDDMv3_0 */
 
 DxgkargQueryAdapterInfoRecord request(void *input, std::uint32_t input_size, void *output, std::uint32_t output_size)
 {
@@ -50,20 +50,20 @@ TEST(driver_capabilities_report_driver_caps, fills_exactly_the_wddm_3_2_block)
   CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, record)), Status::ok);
   CHECK(output.guards_intact()); }
 
-/* Constitution VI: nothing is claimed before it is implemented. WDDM 2.9 with a
+/* Constitution VI: nothing is claimed before it is implemented. WDDM 3.0 with a
  * GPU MMU, MultiEngineAware over one node and flips at device IRQL (017),
  * per-engine recovery (015), an unrestricted address range and the hardware
  * cursor (013) are the whole answer at this level. */
-TEST(driver_capabilities_report_driver_caps, claims_wddm_2_9_gpu_mmu_and_what_earlier_features_implement)
+TEST(driver_capabilities_report_driver_caps, claims_wddm_3_0_gpu_mmu_and_what_earlier_features_implement)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
   DxgkDriverCapsRecord caps;
   std::memset(&caps, 0xA5, sizeof caps);
   const DxgkargQueryAdapterInfoRecord record = request(nullptr, 0u, &caps, sizeof caps);
   CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, record)), Status::ok);
-  CHECK_EQ(caps.WDDMVersion, wddm_v2);
+  CHECK_EQ(caps.WDDMVersion, wddm_version);
   CHECK(caps.HighestAcceptableAddress == -1);
   DxgkDriverCapsRecord expected = {};
-  expected.WDDMVersion = wddm_v2;
+  expected.WDDMVersion = wddm_version;
   expected.SchedulingCaps = 0x1u;          /* MultiEngineAware */
   expected.MemoryManagementCaps = 0x60u;   /* VirtualAddressingSupported | GpuMmuSupported */
   expected.GpuEngineTopologyNbAsymetricProcessingNodes = 1u;
@@ -86,7 +86,7 @@ TEST(driver_capabilities_report_wddm_device_caps, answers_the_same_wddm_version)
   std::uint32_t interface_version = 0x11007u; DxgkWddmDeviceCapsRecord caps = {};
   const DxgkargQueryAdapterInfoRecord record = request(&interface_version, 4u, &caps, sizeof caps);
   CHECK_STATUS(capabilities.report_wddm_device_caps(AdapterInfoQuery(platform, record)), Status::ok);
-  CHECK_EQ(caps.WDDMVersion, wddm_v2); }
+  CHECK_EQ(caps.WDDMVersion, wddm_version); }
 
 TEST(driver_capabilities_report_wddm_device_caps, a_short_input_or_output_is_invalid)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
