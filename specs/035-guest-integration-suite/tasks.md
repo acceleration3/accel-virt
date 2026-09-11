@@ -40,3 +40,12 @@ Tests come first in every task and must fail before the code they cover exists.
 ## Phase 5: Polish
 
 - [X] T012 docs/testing.md (L5 as built, preparing an image), README, tools/gate.sh guest configuration; `tools/gate.sh`; merge; push
+
+## Phase 6: A debuggable test cycle on a real guest
+
+- [X] T013 Tests then `GuestAgent.pull`, `Qmp.drain`/`take_events`/`seen`, an abandonable `wait_for_agent` in tools/guest/guest_agent.py
+- [X] T014 Tests then provision.ps1 `prepare` and `collect` stages; runner `--prepare-image`, diagnostics collected after every run, bugchecks named from `hv-crash`, the kernel dump pulled after the reboot or from a rescue boot without the device, `--hold`, `--gdb`, `--vnc`, `--trace`, `--on-panic`; fake QEMU panics and boot loops
+- [X] T015 Tests then tools/guest/guest_shell.py
+- [ ] T016 Prepare the host's Windows image; run the suite live; docs/testing.md (preparing an image, debugging a run); `tools/gate.sh`; merge; push
+
+**Checkpoint**: commit.

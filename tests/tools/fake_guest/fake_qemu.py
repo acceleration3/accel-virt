@@ -2,22 +2,32 @@
 """A qemu-system-x86_64 with a scripted Windows guest behind it, for the runner's
 tests: it parses the command line tools/guest/run_guest_suite.py builds,
 serves QMP and a guest agent on the sockets it names, writes the debug-port
-log, and answers guest-exec from a script.
+log, and answers guest-exec and guest-file-read from a script.
 
 The script is JSON at $FAKE_GUEST_SCRIPT:
   stages     {"sign": [3010, 0], ...}: exit codes of successive calls of a stage
   outputs    {"check": "...", "rvktest": "..."}: standard output by stage
+  files      {"C:\\guest\\path": "content"}: what guest-file-read returns
   rvktest    exit code of rvktest.exe
+  panic      {"during": stage, "code": n, "loop": bool}: the guest bugchecks when
+             the stage runs, then reboots; with loop, it bugchecks on every boot
+             until QEMU is started again without virtio-gpu-rvk-pci
+  die_during stage: QEMU aborts with an assertion when the stage runs
   exit_at_boot, agent_silent, garbage, no_reset, hang: misbehaviours
 Everything the guest was asked is appended to $FAKE_GUEST_JOURNAL.
 """
 import base64
 import json
 import os
+import signal
 import socket
 import sys
 import threading
 import time
+
+REBOOT = 0.3
+ASSERTION = "qemu-system-x86_64: ../source/hw/pci/msix.c:122: msix_fire_vector_notifier: Assertion `ret >= 0' failed."
+LOOP_PERIOD = 0.5
 
 
 def option(argv, flag, kind=None):
@@ -35,10 +45,12 @@ def field(spec, name):
 
 
 class Guest:
-    def __init__(self, script, journal):
+    def __init__(self, script, journal, device):
         self.script = script
         self.journal = journal
+        self.device = device
         self.lock = threading.Lock()
+        self.send_lock = threading.Lock()
         self.calls = {}
         self.files = {}
         self.processes = {}
@@ -49,10 +61,32 @@ class Guest:
         with self.lock, open(self.journal, "a") as out:
             out.write(line + "\n")
 
-    def emit(self, event):
+    def emit(self, event, data=None):
+        message = {"event": event, "timestamp": {"seconds": 0, "microseconds": 0}}
+        if data is not None:
+            message["data"] = data
         if self.qmp is not None:
-            self.qmp.sendall(json.dumps({"event": event, "timestamp": {"seconds": 0, "microseconds": 0}}).encode()
-                             + b"\n")
+            with self.send_lock:
+                self.qmp.sendall(json.dumps(message).encode() + b"\n")
+
+    def bugcheck(self):
+        panic = self.script["panic"]
+        self.emit("GUEST_PANICKED", {"action": "run", "info": {
+            "type": "hyper-v", "arg1": panic.get("code", 0xD1), "arg2": 0x10, "arg3": 2, "arg4": 0, "arg5": 0xfffff80}})
+
+    def crash(self):
+        self.note("panic")
+        self.up = False
+        self.bugcheck()
+        time.sleep(REBOOT)
+        self.emit("RESET")
+        if not self.script["panic"].get("loop"):
+            self.up = True
+            return
+        while True:
+            time.sleep(LOOP_PERIOD)
+            self.bugcheck()
+            self.emit("RESET")
 
     def process(self, path, arguments):
         name = "rvktest" if path.endswith("rvktest.exe") else None
@@ -61,6 +95,14 @@ class Guest:
         self.note(f"exec {path} {' '.join(arguments)}")
         count = self.calls.get(name, 0)
         self.calls[name] = count + 1
+        if name is not None and name == self.script.get("die_during"):
+            sys.stderr.write(ASSERTION + "\n")
+            sys.stderr.flush()
+            os.kill(os.getpid(), signal.SIGKILL)
+        panic = self.script.get("panic")
+        if self.device and panic is not None and name == panic["during"] and count == 0:
+            threading.Thread(target=self.crash, daemon=True).start()
+            return {"exited": False}
         if name == "rvktest":
             code = self.script.get("rvktest", 0)
         else:
@@ -88,16 +130,24 @@ class Guest:
                 status = {"exited": False}
             return json.dumps({"return": status}).encode()
         if command == "guest-file-open":
+            path = arguments["path"]
+            if arguments["mode"] == "rb" and path not in self.script.get("files", {}):
+                return json.dumps({"error": {"class": "GenericError", "desc": f"no file {path}"}}).encode()
             handle = len(self.files) + 1000
-            self.files[handle] = [arguments["path"], b""]
+            self.files[handle] = [path, b"", self.script.get("files", {}).get(path, "").encode()]
             return json.dumps({"return": handle}).encode()
         if command == "guest-file-write":
             data = base64.b64decode(arguments["buf-b64"])
             self.files[arguments["handle"]][1] += data
             return json.dumps({"return": {"count": len(data), "eof": False}}).encode()
+        if command == "guest-file-read":
+            entry = self.files[arguments["handle"]]
+            data, entry[2] = entry[2][:arguments["count"]], entry[2][arguments["count"]:]
+            return json.dumps({"return": {"count": len(data), "buf-b64": base64.b64encode(data).decode(),
+                                          "eof": not entry[2]}}).encode()
         if command == "guest-file-close":
-            path, data = self.files[arguments["handle"]]
-            self.note(f"file {path} {len(data)}")
+            path, written, _ = self.files[arguments["handle"]]
+            self.note(f"file {path} {len(written)}" if written else f"pull {path}")
             return json.dumps({"return": {}}).encode()
         if command == "guest-shutdown":
             self.note(arguments["mode"])
@@ -108,7 +158,7 @@ class Guest:
             self.up = False
             if not self.script.get("no_reset"):
                 self.emit("RESET")
-            time.sleep(0.3)
+            time.sleep(REBOOT)
             self.up = True
             return None
         return json.dumps({"error": {"class": "CommandNotFound", "desc": command}}).encode()
@@ -140,7 +190,10 @@ class Guest:
                     return
                 if self.script.get("garbage"):
                     reply = b"}{ not json\n[1,2]\n" + reply
-                connection.sendall(reply + b"\n")
+                try:
+                    connection.sendall(reply + b"\n")
+                except OSError:
+                    return
 
     def serve_qmp(self, path):
         server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -150,36 +203,40 @@ class Guest:
         connection.sendall(json.dumps({"QMP": {"version": {}, "capabilities": []}}).encode() + b"\n")
         buffer = b""
         while True:
-            data = connection.recv(65536)
+            try:
+                data = connection.recv(65536)
+            except OSError:
+                data = b""
             if not data:
-                return
+                while True:
+                    time.sleep(1)
             buffer += data
             while b"\n" in buffer:
                 line, buffer = buffer.split(b"\n", 1)
                 json.loads(line)
                 self.qmp = connection
-                connection.sendall(b'{"return": {}}\n')
+                with self.send_lock:
+                    connection.sendall(b'{"return": {}}\n')
 
 
 def main():
     argv = sys.argv[1:]
     script = json.load(open(os.environ["FAKE_GUEST_SCRIPT"]))
-    guest = Guest(script, os.environ["FAKE_GUEST_JOURNAL"])
+    device = any(word.startswith("virtio-gpu-rvk-pci") for word in argv)
+    guest = Guest(script, os.environ["FAKE_GUEST_JOURNAL"], device)
     guest.note("argv " + " ".join(argv))
-    if script.get("exit_at_boot"):
+    if script.get("exit_at_boot") or (not device and os.environ.get("FAKE_QEMU_RESCUE_FAILS")):
         sys.exit(1)
     agent = field(option(argv, "-chardev", "socket,id=agent"), "path")
     debug = field(option(argv, "-chardev", "file,id=debugcon"), "path")
     qmp = option(argv, "-qmp").split(",")[0][len("unix:"):]
-    overlay = field(option(argv, "-drive", "if=none,id=disk"), "file")
-    if not os.path.isfile(overlay):
-        sys.exit(f"fake qemu: no overlay at {overlay}")
+    disk = field(option(argv, "-drive", "if=none,id=disk"), "file")
+    if not os.path.isfile(disk):
+        sys.exit(f"fake qemu: no disk at {disk}")
     with open(debug, "w") as log:
-        log.write("rvkgpu: DriverEntry\n")
+        log.write("rvkgpu: DriverEntry\n" if device else "")
     threading.Thread(target=guest.serve_agent, args=(agent,), daemon=True).start()
     guest.serve_qmp(qmp)
-    while True:
-        time.sleep(1)
 
 
 if __name__ == "__main__":

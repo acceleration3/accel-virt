@@ -379,10 +379,10 @@ can leave the guest with no display.
   `virtio-gpu-rvk-pci`, the agent channel, QMP and `isa-debugcon`; pushes the
   package, `rvktest.exe` and the script; signs, installs with Driver Verifier's
   standard checks on `rvkgpu.sys`, waits through each reboot on QMP's `RESET`;
-  checks the adapter started on `rvkgpu`; runs the suite; and leaves
-  `report.txt`, `device.txt`, `rvkgpu.log` and `verdict.txt` in its work
-  directory. Every wait names its step when it times out. Its tests run it
-  against a fake QEMU with a scripted guest (`tests/tools/fake_guest/`).
+  checks the adapter started on `rvkgpu`; runs the suite; collects the guest's
+  diagnostics whatever happened; and powers off. Every wait names its step when
+  it times out. Its tests run it against a fake QEMU with a scripted guest
+  (`tests/tools/fake_guest/`), bugchecks and boot loops included.
 - **The gate**: `tools/gate.sh` runs it when `AV_GUEST_IMAGE` names a prepared
   image, and says it skipped the guest otherwise.
 
@@ -392,15 +392,76 @@ A Windows installation, done once by hand; nothing in the repository installs
 Windows:
 
 1. Windows 11 24H2 (build 26100) or later, x64, installed into a qcow2 on
-   UEFI firmware without Secure Boot (`OVMF_CODE.4m.fd`, not the `secboot`
-   variant), on the q35 machine's AHCI disk.
+   UEFI firmware without enrolled Secure Boot keys, on the q35 machine's
+   AHCI (SATA) disk. BitLocker off. A libvirt domain's disk serves, once the
+   domain is shut off: `virsh shutdown` is not enough while fast startup is on,
+   so turn it off first (`powercfg /h off`) or shut down from the guest agent.
 2. The QEMU guest agent from the virtio-win guest tools, installed and set to
    start automatically; PowerShell 5 or later (inbox).
-3. Shut down cleanly, then run
-   `AV_GUEST_IMAGE=/path/to/windows.qcow2 tools/guest/run_guest_suite.py`.
+3. With the image not in use by anything else:
 
-The image needs about 25 GB. It is never modified by a run, so one image
-serves every run.
+   ```bash
+   tools/guest/run_guest_suite.py --image /path/to/windows.qcow2 --prepare-image
+   ```
+
+   This is the one run that writes the image. It boots the image itself and
+   runs `provision.ps1 -Stage prepare`: the test-signing certificate and test
+   signing (one reboot), kernel memory dumps with automatic reboot, verbose
+   `setupapi.dev.log`, and nothing that interrupts a run - no fast startup,
+   hibernation, sleep, automatic updates, automatic maintenance or boot
+   recovery environment, and a Defender exclusion for `C:\rvk`. It is
+   idempotent; run it again after the image's Windows changes.
+4. `AV_GUEST_IMAGE=/path/to/windows.qcow2 tools/guest/run_guest_suite.py`.
+
+The image needs about 25 GB. It is never modified by a suite run, so one image
+serves every run. Each run's overlay grows by the pagefile, the installed
+driver and any kernel dump - a few GB at most - and is deleted when it ends.
+
+### Debugging a run
+
+Everything a run leaves is in its work directory (`build-guest/` by default):
+
+| File | What it holds |
+|---|---|
+| `verdict.txt` | every step, `ok` or why it failed; bugchecks by name |
+| `rvkgpu.log` | the driver's `KernelPlatform::log` lines from `isa-debugcon`, across every reboot of the run |
+| `qemu.log` | QEMU and the device's own warnings, timestamped (`-msg timestamp=on`), guest errors, and any `--trace` events |
+| `report.txt`, `device.txt` | `rvktest.exe`'s report; the device's status, problem code and verifier settings |
+| `panic.txt` | each bugcheck: code, name, and its four parameters |
+| `diag/` | pulled from the guest after the run: `system.txt`, `dxgkrnl-admin.txt`, `dxgkrnl-operational.txt`, `kernel-pnp.txt` (the last events of each log), `setupapi.dev.log`, `device.txt` (every device property), `verifier.txt` (`verifier /query`) |
+| `diag/dumps/` | minidumps, `LiveKernelReports` (TDR live dumps), and after a bugcheck `MEMORY.DMP` |
+| `symbols/` | the `rvkgpu.sys` and `rvkgpu.pdb` the run installed, to open the dumps with |
+
+**Bugchecks.** QEMU runs Windows with `hv-crash`, so Windows reports its
+bugcheck code and parameters through the Hyper-V crash MSRs and QEMU emits
+`GUEST_PANICKED` - the runner names the bugcheck without reading a dump. The
+guest is left running (`-action panic=none`) to write its kernel dump and
+reboot; the runner then collects `MEMORY.DMP`. A driver that bugchecks on every
+boot never lets the agent answer: the runner notices the second panic, kills
+QEMU and boots the same overlay again without `virtio-gpu-rvk-pci`, so
+`rvkgpu.sys` never loads, and pulls the dumps from that. Open them with WinDbg
+and `symbols/` on any Windows machine: `!analyze -v`.
+
+**Options for a debugging run:**
+
+```bash
+tools/guest/run_guest_suite.py --hold             # on failure, keep the guest running until Enter
+tools/guest/run_guest_suite.py --vnc 1            # the guest's display on 127.0.0.1:5901
+tools/guest/run_guest_suite.py --gdb 1234         # QEMU's gdbstub: gdb -ex 'target remote :1234'
+tools/guest/run_guest_suite.py --on-panic pause   # stop at the bugcheck instead, for --gdb (no dump)
+tools/guest/run_guest_suite.py --trace 'virtio_gpu_*' --trace 'virtio_queue_*'   # QEMU trace events into qemu.log
+```
+
+A held guest is reached with `tools/guest/guest_shell.py`, over the agent
+socket the runner lets go of:
+
+```bash
+tools/guest/guest_shell.py ps 'Get-PnpDevice -Class Display | Format-List *'
+tools/guest/guest_shell.py exec 'C:\rvk\rvktest.exe'
+tools/guest/guest_shell.py push build/driver/rvkgpu.sys 'C:\rvk\package\rvkgpu.sys'
+tools/guest/guest_shell.py pull 'C:\Windows\INF\setupapi.dev.log' setupapi.dev.log
+socat - UNIX-CONNECT:build-guest/qmp.sock    # QMP: {"execute":"qmp_capabilities"} then e.g. cont
+```
 
 The application suite (vkd3d-proton, DXVK samples) joins once the Vulkan ICD
 (M4) and presentation (M5) exist.

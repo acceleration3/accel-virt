@@ -176,7 +176,7 @@ tests/qemu/                       the device under qtest: a virtio-gpu driver wi
 tests/loopback/                   L4: guest core ↔ device core in one process
 tests/tools/                      tests for the gate scripts themselves; fake_guest/: a fake QEMU with a scripted guest
 tools/                            gates, kit fetch, spec/roadmap generators
-  guest/                            L5: run the in-guest suite in a Windows image over the guest agent
+  guest/                            L5: prepare a Windows image, run the in-guest suite over the guest agent, debug a run
 tools/re/                         reverse-engineering scripts and pinned binaries
 tools/host/                       host-side tools: device captures, GPU discovery
 third_party/windows-kit/          fetched WDK/SDK subset (git-ignored)

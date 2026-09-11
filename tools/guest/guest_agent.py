@@ -13,6 +13,9 @@ import socket
 import time
 
 CHUNK = 48 * 1024
+# A crash dump is gigabytes; the agent caps one read at 48 MiB.
+PULL_CHUNK = 8 * 1024 * 1024
+RECEIVE = 1024 * 1024
 # One connection attempt while the guest boots: its agent may not listen yet.
 ATTEMPT = 5.0
 DELIMITER = b"\xff"
@@ -22,13 +25,17 @@ class AgentError(Exception):
     """The guest agent or QMP did not give the answer asked for."""
 
 
+class AgentTimeout(AgentError):
+    """Nothing arrived before the deadline."""
+
+
 class Channel:
     """One unix socket carrying JSON lines, read against a deadline."""
 
     def __init__(self, path, timeout):
         self.timeout = timeout
         self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.buffer = b""
+        self.buffer = bytearray()
         try:
             self.socket.settimeout(timeout)
             self.socket.connect(path)
@@ -50,12 +57,12 @@ class Channel:
     def fill(self, deadline):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise AgentError("timed out waiting for an answer")
+            raise AgentTimeout("timed out waiting for an answer")
         self.socket.settimeout(remaining)
         try:
-            data = self.socket.recv(65536)
+            data = self.socket.recv(RECEIVE)
         except socket.timeout as error:
-            raise AgentError("timed out waiting for an answer") from error
+            raise AgentTimeout("timed out waiting for an answer") from error
         except ConnectionResetError as error:
             raise AgentError("connection closed") from error
         except OSError as error:
@@ -66,14 +73,19 @@ class Channel:
 
     def discard_through_delimiter(self, deadline):
         while DELIMITER not in self.buffer:
-            self.buffer = b""
+            self.buffer = bytearray()
             self.fill(deadline)
-        self.buffer = self.buffer[self.buffer.index(DELIMITER) + 1:]
+        del self.buffer[:self.buffer.index(DELIMITER) + 1]
 
     def line(self, deadline):
-        while b"\n" not in self.buffer:
+        searched = 0
+        end = self.buffer.find(b"\n")
+        while end < 0:
+            searched = len(self.buffer)
             self.fill(deadline)
-        line, self.buffer = self.buffer.split(b"\n", 1)
+            end = self.buffer.find(b"\n", searched)
+        line = bytes(self.buffer[:end])
+        del self.buffer[:end + 1]
         return line.strip()
 
     def message(self, deadline):
@@ -158,6 +170,24 @@ class GuestAgent:
         finally:
             self.execute("guest-file-close", {"handle": handle})
 
+    def pull(self, guest_path, local_path, chunk=PULL_CHUNK):
+        """Copies a guest file to `local_path`: the number of bytes copied."""
+        handle = self.execute("guest-file-open", {"path": guest_path, "mode": "rb"})
+        copied = 0
+        try:
+            with open(local_path, "wb") as output:
+                while True:
+                    read = self.execute("guest-file-read", {"handle": handle, "count": chunk})
+                    if not isinstance(read, dict) or "buf-b64" not in read:
+                        raise AgentError(f"guest-file-read of {guest_path} answered {read}")
+                    data = decode(read["buf-b64"])
+                    output.write(data)
+                    copied += len(data)
+                    if read.get("eof") or not data:
+                        return copied
+        finally:
+            self.execute("guest-file-close", {"handle": handle})
+
 
 def decode(text):
     try:
@@ -172,11 +202,11 @@ class Qmp:
     def __init__(self, path, timeout):
         self.channel = Channel(path, timeout)
         self.timeout = timeout
+        self.pending = []
         deadline = time.monotonic() + timeout
         greeting = self.channel.message(deadline)
         if "QMP" not in greeting:
             raise AgentError(f"not a QMP greeting: {greeting}")
-        self.pending = []
         self.execute("qmp_capabilities")
 
     def close(self):
@@ -188,31 +218,55 @@ class Qmp:
         while True:
             message = self.channel.message(deadline)
             if "event" in message:
-                self.pending.append(message["event"])
+                self.pending.append(message)
                 continue
             return answer_of(message)
 
+    def take_events(self, name):
+        """Every event `name` seen so far, which are then no longer pending."""
+        taken = [message for message in self.pending if message["event"] == name]
+        self.pending = [message for message in self.pending if message["event"] != name]
+        return taken
+
+    def seen(self, name):
+        return any(message["event"] == name for message in self.pending)
+
     def wait_event(self, name, timeout):
-        """Waits for event `name`, counting ones already seen."""
-        if name in self.pending:
-            self.pending.remove(name)
-            return
+        """Waits for event `name`, counting ones already seen: the event."""
+        for index, message in enumerate(self.pending):
+            if message["event"] == name:
+                return self.pending.pop(index)
         deadline = time.monotonic() + timeout
         while True:
             message = self.channel.message(deadline)
             if message.get("event") == name:
+                return message
+            if "event" in message:
+                self.pending.append(message)
+
+    def drain(self, seconds):
+        """Reads the events QEMU sends for `seconds`: a guest in a bugcheck loop never goes quiet."""
+        deadline = time.monotonic() + seconds
+        while True:
+            try:
+                message = self.channel.message(deadline)
+            except AgentTimeout:
                 return
             if "event" in message:
-                self.pending.append(message["event"])
+                self.pending.append(message)
 
-    def forget_events(self):
-        self.pending = []
+    def forget_events(self, name):
+        self.take_events(name)
 
 
-def wait_for_agent(path, deadline, timeout, pause=1.0):
-    """Connects and syncs with the guest agent once it answers, or raises at the deadline."""
+def wait_for_agent(path, deadline, timeout, pause=1.0, abandoned=None):
+    """Connects and syncs with the guest agent once it answers, or raises at the
+    deadline, or as soon as `abandoned` names a reason it never will."""
     last = None
     while time.monotonic() < deadline:
+        reason = abandoned() if abandoned is not None else None
+        if reason is not None:
+            raise AgentError(reason)
         if os.path.exists(path):
             agent = None
             try:

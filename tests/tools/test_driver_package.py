@@ -73,7 +73,7 @@ class Provisioning(unittest.TestCase):
         script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
         offered = re.search(r"ValidateSet\(([^)]*)\)", script).group(1)
         runner = (ROOT / "tools" / "guest" / "run_guest_suite.py").read_text()
-        called = re.findall(r'self\.stage\("(\w+)"', runner)
+        called = set(re.findall(r'self\.(?:stage|provision)\("(\w+)"', runner))
         self.assertEqual(sorted(called), sorted(name.strip(" '") for name in offered.split(",")))
         self.assertIn("-CatalogFilePath \"$Package\\rvkgpu.cat\"", script)
         self.assertIn('PACKAGE_DIRECTORY = GUEST_DIRECTORY + "\\\\package"', runner)

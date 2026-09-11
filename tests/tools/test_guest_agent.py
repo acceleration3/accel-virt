@@ -15,7 +15,7 @@ import unittest
 from tool_run import ROOT
 
 sys.path.insert(0, str(ROOT / "tools" / "guest"))
-from guest_agent import AgentError, GuestAgent, Qmp, wait_for_agent  # noqa: E402
+from guest_agent import PULL_CHUNK, AgentError, GuestAgent, Qmp, wait_for_agent  # noqa: E402
 
 
 class ScriptedPeer:
@@ -174,6 +174,46 @@ class GuestAgentClient(unittest.TestCase):
         self.assertEqual(agent.timeout, 1.5)
         agent.close()
 
+    def test_waiting_for_the_agent_stops_as_soon_as_it_is_abandoned(self):
+        reasons = iter([None, "the guest panicked while booting"])
+        started = time.monotonic()
+        with self.assertRaises(AgentError) as raised:
+            wait_for_agent(self.path, started + 5.0, 0.2, pause=0.05, abandoned=lambda: next(reasons))
+        self.assertIn("the guest panicked while booting", str(raised.exception))
+        self.assertLess(time.monotonic() - started, 1.0)
+
+    def test_pulls_until_end_of_file_into_a_local_file_and_closes(self):
+        pieces = [answer({"count": 3, "buf-b64": base64.b64encode(b"abc").decode(), "eof": False}),
+                  answer({"count": 2, "buf-b64": base64.b64encode(b"de").decode(), "eof": True})]
+        peer = ScriptedPeer(self.path, [answer(5), *pieces, answer({})])
+        agent = GuestAgent(self.path, 2.0)
+        local = os.path.join(self.directory, "pulled.bin")
+        self.assertEqual(agent.pull("C:\\Windows\\MEMORY.DMP", local), 5)
+        self.assertEqual(pathlib.Path(local).read_bytes(), b"abcde")
+        self.assertEqual(peer.requests[0]["arguments"], {"path": "C:\\Windows\\MEMORY.DMP", "mode": "rb"})
+        self.assertEqual(peer.requests[1]["arguments"], {"handle": 5, "count": PULL_CHUNK})
+        self.assertEqual(peer.requests[-1], {"execute": "guest-file-close", "arguments": {"handle": 5}})
+        agent.close()
+        os.unlink(local)
+
+    def test_a_pull_that_reads_nothing_stops_and_a_bad_read_raises_but_still_closes(self):
+        ScriptedPeer(self.path, [answer(5), answer({"count": 0, "buf-b64": "", "eof": False}), answer({})])
+        agent = GuestAgent(self.path, 2.0)
+        local = os.path.join(self.directory, "empty.bin")
+        self.assertEqual(agent.pull("C:\\empty", local, chunk=16), 0)
+        agent.close()
+        os.unlink(local)
+        for index, reply in enumerate([answer("nope"), answer({"count": 1, "buf-b64": "@@@"})]):
+            path = os.path.join(self.directory, f"bad{index}.sock")
+            peer = ScriptedPeer(path, [answer(5), reply, answer({})])
+            agent = GuestAgent(path, 2.0)
+            with self.assertRaises(AgentError) as raised:
+                agent.pull("C:\\bad", os.path.join(self.directory, "bad.bin"))
+            self.assertIn("answered nope" if index == 0 else "undecodable", str(raised.exception))
+            self.assertEqual(peer.requests[-1]["execute"], "guest-file-close")
+            agent.close()
+        os.unlink(os.path.join(self.directory, "bad.bin"))
+
 
 class QmpClient(unittest.TestCase):
     def setUp(self):
@@ -193,13 +233,36 @@ class QmpClient(unittest.TestCase):
         qmp = Qmp(self.path, 1.0)
         qmp.wait_event("RESET", 1.0)   # seen during negotiation
         self.assertEqual(qmp.execute("cont"), {})
-        self.assertEqual(qmp.pending, ["STOP"])
-        qmp.forget_events()
+        self.assertEqual([message["event"] for message in qmp.pending], ["STOP"])
+        qmp.forget_events("STOP")
         qmp.execute("query-status")
-        qmp.wait_event("RESET", 1.0)   # read past a STOP
-        self.assertEqual(qmp.pending, ["STOP"])
+        self.assertEqual(qmp.wait_event("RESET", 1.0), {"event": "RESET"})   # read past a STOP
+        self.assertEqual([message["event"] for message in qmp.pending], ["STOP"])
         with self.assertRaises(AgentError):
             qmp.wait_event("SHUTDOWN", 0.2)
+        qmp.close()
+
+    def test_drains_queued_events_until_quiet_then_takes_them_by_name(self):
+        greeting = json.dumps({"QMP": {"version": {}}}).encode() + b"\n"
+        panic = {"event": "GUEST_PANICKED", "data": {"action": "run"}}
+        events = b"".join(json.dumps(event).encode() + b"\n" for event in (panic, {"event": "RESET"}))
+        ScriptedPeer(self.path, [answer({}) + events + b"garbage\n", b""], greeting=greeting)
+        qmp = Qmp(self.path, 1.0)
+        qmp.drain(0.2)
+        self.assertTrue(qmp.seen("GUEST_PANICKED"))
+        self.assertEqual(qmp.take_events("GUEST_PANICKED"), [panic])
+        self.assertFalse(qmp.seen("GUEST_PANICKED"))
+        self.assertEqual(qmp.take_events("GUEST_PANICKED"), [])
+        self.assertEqual(qmp.wait_event("RESET", 0.1), {"event": "RESET"})
+        qmp.close()
+
+    def test_draining_a_qemu_that_went_away_raises(self):
+        greeting = json.dumps({"QMP": {"version": {}}}).encode() + b"\n"
+        ScriptedPeer(self.path, [answer({})], greeting=greeting)
+        qmp = Qmp(self.path, 1.0)
+        with self.assertRaises(AgentError) as raised:
+            qmp.drain(1.0)
+        self.assertIn("connection closed", str(raised.exception))
         qmp.close()
 
     def test_refuses_a_peer_that_is_not_qmp(self):
