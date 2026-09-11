@@ -6,7 +6,7 @@ description: "Task list for feature 028: QEMU device blob resources and host-vis
 
 ## Phase 1: Protocol
 
-- [ ] T001 Tests then `CreateBlobRequest`, `BlobRequest`, `GpuResponseWriter`; fuzz_blob_request with corpus
+- [X] T001 Tests then `CreateBlobRequest`, `BlobRequest`, `GpuResponseWriter`; fuzz_blob_request with corpus
 
 **Checkpoint**: commit.
 
