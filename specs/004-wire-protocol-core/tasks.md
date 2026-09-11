@@ -14,10 +14,10 @@ description: "Task list for feature 004: wire protocol core"
 
 ## Phase 2: Structures (US1, US2, US4)
 
-- [ ] T004 [P] Tests for `ProtocolVersion` (compatibility, negotiation) and `GpuIdentity`/`CapsetInfo` (offsets of every field, round trip, each malformed rule including name NUL rules and unknown feature bits tolerated, atomic decode, hostile sweep) in `tests/unit/test_protocol_version.cpp`, `test_gpu_identity.cpp`, `test_capset_info.cpp`
-- [ ] T005 [P] Tests for `ContextSetup` (offsets, round trip, malformed rules, `validate_against(CapsetInfo)` not_supported cases, hostile sweep) in `tests/unit/test_context_setup.cpp`
-- [ ] T006 [P] Tests for `RingHeader`, `SubmissionDescriptor`, `FencePage` (offsets, round trip, malformed rules, order bounds 12/24, `SubmissionDescriptor::validate_against(RingHeader)`, hostile sweeps) in `tests/unit/test_ring_header.cpp`, `test_submission_descriptor.cpp`, `test_fence_page.cpp`
-- [ ] T007 Implement `src/proto/protocol_version`, `sub_api.hpp`, `gpu_identity`, `capset_info`, `context_setup`, `ring_header`, `submission_descriptor`, `fence_page`. T004-T006 pass
+- [X] T004 [P] Tests for `ProtocolVersion` (compatibility, negotiation) and `GpuIdentity`/`CapsetInfo` (offsets of every field, round trip, each malformed rule including name NUL rules and unknown feature bits tolerated, atomic decode, hostile sweep) in `tests/unit/test_protocol_version.cpp`, `test_gpu_identity.cpp`, `test_capset_info.cpp`
+- [X] T005 [P] Tests for `ContextSetup` (offsets, round trip, malformed rules, `validate_against(CapsetInfo)` not_supported cases, hostile sweep) in `tests/unit/test_context_setup.cpp`
+- [X] T006 [P] Tests for `RingHeader`, `SubmissionDescriptor`, `FencePage` (offsets, round trip, malformed rules, order bounds 12/24, `SubmissionDescriptor::validate_against(RingHeader)`, hostile sweeps) in `tests/unit/test_ring_header.cpp`, `test_submission_descriptor.cpp`, `test_fence_page.cpp`
+- [X] T007 Implement `src/proto/protocol_version`, `sub_api.hpp`, `gpu_identity`, `capset_info`, `context_setup`, `ring_header`, `submission_descriptor`, `fence_page`. T004-T006 pass
 
 **Checkpoint**: commit.
 
