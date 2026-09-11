@@ -61,7 +61,9 @@ target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 # No sanitizer or profile flags and hidden visibility: the archive exports only
 # rvk_device.h, and tools/build_qemu.sh links it into the virtio-gpu-rvk module
 # through the generated rvk_device.pc.
+# TextBuffer is the one core/support class with a body the device core uses.
 file(GLOB_RECURSE AV_DEVICE_SOURCES CONFIGURE_DEPENDS src/device/*.cpp src/proto/*.cpp)
+list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp)
 add_library(rvk_device STATIC ${AV_DEVICE_SOURCES})
 target_include_directories(rvk_device PRIVATE src)
 target_compile_options(rvk_device PRIVATE -O2 -ffreestanding)

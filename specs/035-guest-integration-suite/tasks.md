@@ -39,4 +39,4 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 5: Polish
 
-- [ ] T012 docs/testing.md (L5 as built, preparing an image), README, tools/gate.sh guest configuration; `tools/gate.sh`; merge; push
+- [X] T012 docs/testing.md (L5 as built, preparing an image), README, tools/gate.sh guest configuration; `tools/gate.sh`; merge; push

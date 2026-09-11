@@ -8,6 +8,8 @@
 #   coverage  build-coverage/  the above plus coverage_gate
 #   fuzz      build-fuzz/      the above plus fuzz_<target>_smoke
 #   qemu      build-qemu/      QEMU patched with the device, and qemu_smoke
+#   guest     build-guest/     the in-guest suite in the image $AV_GUEST_IMAGE names,
+#                              skipped when it names none
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -35,4 +37,13 @@ for entry in "${CONFIGURATIONS[@]}"; do
         exit 1
     fi
 done
+if [ -n "${AV_GUEST_IMAGE:-}" ]; then
+    echo "== gate: guest ($AV_GUEST_IMAGE)"
+    if ! python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" --work build-guest; then
+        echo "gate: guest failed" >&2
+        exit 1
+    fi
+else
+    echo "gate: guest skipped: AV_GUEST_IMAGE names no prepared image (docs/testing.md, L5)"
+fi
 echo "gate: every configuration passed"

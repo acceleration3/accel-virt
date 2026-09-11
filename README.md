@@ -147,7 +147,10 @@ src/core/                         portable driver logic — no platform headers
   vidpn/                            VidPn topology, mode sets, cofunctional modality, commit
   present/                          Present and how it addresses allocations
   rvk/                              rvk contexts as the driver drives them: capset, setup, ring, fences
-src/km/                           Windows kernel shim — translation only; builds rvkgpu.sys
+src/km/                           Windows kernel shim — translation only; builds rvkgpu.sys and holds rvkgpu.inf
+src/guest/                        the in-guest D3DKMT suite — portable, tested on Linux over MockKmt
+  kmt/  suite/                      the D3DKMT contract and PCI identity; scenarios, session, report
+src/um/                           Windows user-mode shim — translation only; builds rvktest.exe
 src/device/                       QEMU device core — freestanding C++23, librvk_device.a
   host/  abi/                       the Host contract; TableHost, rvk_device.h, the C entry points
   gpu/  threading/  context/        host GPU binding; per-context workers and doorbells; the context table
@@ -166,12 +169,14 @@ tests/harness/                    the adversarial platform mock, fake dxgkrnl
   device/                           fake virtio-gpu PCI function and virtqueue device
   host/  ring/  executor/           MockHost and request builders; the guest side of a ring; mock executors
   loopback/                         the rig holding guest core and device core together (L4)
+  guest/                            MockKmt, the scripted D3DKMT the in-guest suite is tested against
 tests/fuzz/ tests/corpus/         L3: libFuzzer targets and seed corpora
 tests/fixtures/                   bytes captured from real devices (tools/host/capture_pci_config.py)
 tests/qemu/                       the device under qtest: a virtio-gpu driver with no guest, the suites run on it
 tests/loopback/                   L4: guest core ↔ device core in one process
-tests/tools/                      tests for the gate scripts themselves
+tests/tools/                      tests for the gate scripts themselves; fake_guest/: a fake QEMU with a scripted guest
 tools/                            gates, kit fetch, spec/roadmap generators
+  guest/                            L5: run the in-guest suite in a Windows image over the guest agent
 tools/re/                         reverse-engineering scripts and pinned binaries
 tools/host/                       host-side tools: device captures, GPU discovery
 third_party/windows-kit/          fetched WDK/SDK subset (git-ignored)

@@ -340,19 +340,70 @@ The smallest layer, and the only one that needs Windows.
 
 - **Driver Verifier**, always on for `rvkgpu.sys` during development: special
   pool, IRQL checking, DMA verification, low-resource simulation. Not optional.
-- **D3DKMT integration tests**: a user-mode test program calling
-  `D3DKMTCreateAllocation2`, `MapGpuVirtualAddress`, `SubmitCommand`,
-  `WaitForSynchronizationObjectFromCpu` against the real driver. These mirror
-  the L4 loopback tests, so a divergence points at the shim.
+- **D3DKMT integration tests**: `rvktest.exe`, a user-mode program calling
+  `D3DKMTCreateAllocation2`, `MakeResident`, `MapGpuVirtualAddress`,
+  `SubmitCommand` and `WaitForSynchronizationObjectFromCpu` against the real
+  driver. These mirror the L4 loopback tests, so a divergence points at the
+  shim.
 - **The application suite**: vkd3d-proton and DXVK samples, then real
   applications.
 - **HLK / WHLK** graphics tests, only if the driver is ever to be signed for
   distribution. Out of scope until then, but the display tests are a useful
   correctness oracle even unsigned.
 
-Guest runs are driven from Linux over the QEMU guest agent, with a `virsh`
-snapshot before every driver install, because a miniport that fails in
-`StartDevice` can leave the guest with no display.
+Guest runs are driven from Linux over the QEMU guest agent, with a snapshot
+before every driver install, because a miniport that fails in `StartDevice`
+can leave the guest with no display.
+
+### As built
+
+- **The suite** is `src/guest/`: `GuestSuite` runs four scenarios - the adapter
+  (found by PCI identity `1af4:1050` subsystem `1af4:5256`, WDDM 3.2), an
+  allocation and a refused hostile descriptor, a GPU mapping through a paging
+  queue, and a submission awaited through a CPU notification - over the `Kmt`
+  contract. It is portable and held to the same gates as `src/core`: on Linux,
+  `MockKmt` (`tests/harness/guest/`) scripts every call's failure, zero handles
+  and hostile enumerations, at 100% branch coverage.
+- **The program** is `src/um/`: `GdiKmt` translates `Kmt` into gdi32's D3DKMT
+  functions with every wait bounded by an event and a timeout, and
+  `GuestProgram` writes one line per step, then `rvktest: P passed, F failed`,
+  and exits with the failure count. `cmake/windows_user_toolchain.cmake` builds
+  it with no C runtime; `guest_image` checks it imports only gdi32, kernel32
+  and ntdll.
+- **The package** is `src/km/rvkgpu.inf`, test-signed in the guest by
+  `tools/guest/provision.ps1` with PowerShell's own certificate, catalog and
+  Authenticode cmdlets.
+- **The runner** is `tools/guest/run_guest_suite.py`. The snapshot is a qcow2
+  overlay of the prepared image, created before QEMU starts and deleted after
+  it stops; the image is only ever a backing file. It boots the overlay with
+  `virtio-gpu-rvk-pci`, the agent channel, QMP and `isa-debugcon`; pushes the
+  package, `rvktest.exe` and the script; signs, installs with Driver Verifier's
+  standard checks on `rvkgpu.sys`, waits through each reboot on QMP's `RESET`;
+  checks the adapter started on `rvkgpu`; runs the suite; and leaves
+  `report.txt`, `device.txt`, `rvkgpu.log` and `verdict.txt` in its work
+  directory. Every wait names its step when it times out. Its tests run it
+  against a fake QEMU with a scripted guest (`tests/tools/fake_guest/`).
+- **The gate**: `tools/gate.sh` runs it when `AV_GUEST_IMAGE` names a prepared
+  image, and says it skipped the guest otherwise.
+
+### Preparing an image
+
+A Windows installation, done once by hand; nothing in the repository installs
+Windows:
+
+1. Windows 11 24H2 (build 26100) or later, x64, installed into a qcow2 on
+   UEFI firmware without Secure Boot (`OVMF_CODE.4m.fd`, not the `secboot`
+   variant), on the q35 machine's AHCI disk.
+2. The QEMU guest agent from the virtio-win guest tools, installed and set to
+   start automatically; PowerShell 5 or later (inbox).
+3. Shut down cleanly, then run
+   `AV_GUEST_IMAGE=/path/to/windows.qcow2 tools/guest/run_guest_suite.py`.
+
+The image needs about 25 GB. It is never modified by a run, so one image
+serves every run.
+
+The application suite (vkd3d-proton, DXVK samples) joins once the Vulkan ICD
+(M4) and presentation (M5) exist.
 
 ---
 
