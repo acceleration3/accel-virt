@@ -156,7 +156,7 @@ TEST(device_context_bind, a_bound_context_serves_its_ring_when_its_doorbell_ring
   CHECK(fixture.published(guest.tail()));
   for (std::uint32_t spins = 0u; spins < 50000000u && fixture.host().raised(3u) == 0u; spins++) sched_yield();
   CHECK_EQ(fixture.page().completed_fence(), 2u);
-  CHECK_EQ(fixture.page().progress(), 2u);
+  CHECK_EQ(fixture.page().progress(), 3u);   /* two batches and the command in the first */
   CHECK_EQ(fixture.host().raised(3u), 1u);
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::invalid_state);
   CHECK_EQ(fixture.host().live_doorbells(), 1u); }

@@ -1,6 +1,7 @@
 /* What one context executes with, over a mock executor: the library, the
  * context's executor configured for Vulkan, staging for a ring of `order`, and
- * the batch executor, without a reply slot. For tests of what sits above it. */
+ * the batch executor reporting to `fences`, without a reply slot. For tests of
+ * what sits above it. */
 #ifndef AV_MOCK_CONTEXT_EXECUTION_HPP
 #define AV_MOCK_CONTEXT_EXECUTION_HPP
 
@@ -14,11 +15,12 @@
 
 namespace av {
 
+class FenceReporter;
 class Host;
 
 class MockContextExecution {
 public:
-    MockContextExecution(Host &host, std::uint8_t order);
+    MockContextExecution(Host &host, FenceReporter &fences, std::uint8_t order);
     MockContextExecution(const MockContextExecution &) = delete;
     MockContextExecution &operator=(const MockContextExecution &) = delete;
 

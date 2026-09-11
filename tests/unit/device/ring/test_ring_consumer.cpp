@@ -13,6 +13,7 @@
 #include "harness/executor/mock_context_execution.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/ring/guest_ring.hpp"
+#include "proto/submission/fault_code.hpp"
 #include "proto/submission/fence_page.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/submission/ring_progress.hpp"
@@ -22,6 +23,7 @@
 
 using av::BlobWindow;
 using av::FenceInterrupts;
+using av::FaultCode;
 using av::FencePage;
 using av::FenceReporter;
 using av::FenceWindow;
@@ -77,7 +79,7 @@ class Fixture {
 public:
     Fixture()
         : page_{}, page_pointer_(page_), page_length_(sizeof page_), interrupts_(host_), fences_(host_, interrupts_),
-          execution_(host_, 12u), consumer_(host_, fences_, execution_.batches())
+          execution_(host_, fences_, 12u), consumer_(host_, fences_, execution_.batches())
     {
         static_cast<void>(interrupts_.initialize());
         static_cast<void>(interrupts_.connect());
@@ -158,13 +160,13 @@ TEST(ring_consumer_service, consumes_every_complete_batch_and_publishes_head)
   fixture.ring().write_batch(9u, 64u);
   fixture.ring().publish();
   fixture.serve();
-  CHECK(!fixture.consumer().stopped());
+  CHECK(!fixture.consumer().faulted());
   CHECK_EQ(fixture.consumer().batches(), 3u);
   CHECK_EQ(fixture.consumer().last_fence(), 9u);
   CHECK_EQ(fixture.consumer().head(), 16u + 32u + 80u);
   CHECK_EQ(fixture.ring().head(), fixture.ring().tail());
   CHECK_EQ(fixture.page().completed_fence(), 9u);
-  CHECK_EQ(fixture.page().progress(), 3u);
+  CHECK_EQ(fixture.page().progress(), 5u);   /* three batches, two of them with a command */
   CHECK_EQ(fixture.host().raised(0u), 1u);
   fixture.serve();
   CHECK_EQ(fixture.consumer().batches(), 3u);
@@ -187,7 +189,7 @@ TEST(ring_consumer_service, stops_at_a_batch_the_guest_has_not_finished)
   fixture.serve();
   CHECK_EQ(fixture.consumer().batches(), 2u);
   CHECK_EQ(fixture.ring().head(), fixture.ring().tail());
-  CHECK(!fixture.consumer().stopped());
+  CHECK(!fixture.consumer().faulted());
   CHECK_EQ(fixture.page().completed_fence(), 2u);
   CHECK_EQ(fixture.host().raised(0u), 2u); }
 
@@ -203,7 +205,7 @@ TEST(ring_consumer_service, reads_batches_across_the_end_of_the_data_area)
   }
   CHECK(fixture.ring().tail() > capacity);
   CHECK_EQ(fixture.consumer().batches(), 35u);
-  CHECK(!fixture.consumer().stopped()); }
+  CHECK(!fixture.consumer().faulted()); }
 
 TEST(ring_consumer_service, a_full_ring_is_consumed_whole)
 { Fixture fixture;
@@ -218,7 +220,7 @@ TEST(ring_consumer_service, a_full_ring_is_consumed_whole)
   fixture.ring().publish();
   fixture.serve();
   CHECK_EQ(fixture.consumer().head(), 2u * capacity);
-  CHECK(!fixture.consumer().stopped()); }
+  CHECK(!fixture.consumer().faulted()); }
 
 TEST(ring_consumer_service, executes_each_batch_before_it_completes)
 { Fixture fixture;
@@ -233,16 +235,17 @@ TEST(ring_consumer_service, executes_each_batch_before_it_completes)
   CHECK_EQ(fixture.ops().size_at(0u), 32u);
   CHECK_EQ(fixture.page().completed_fence(), 2u); }
 
-TEST(ring_consumer_service, a_batch_that_cannot_run_stops_the_context_before_it_completes)
+TEST(ring_consumer_service, a_batch_that_cannot_run_faults_the_context_before_it_completes)
 { struct Case {
       const char   *name;
       std::uint32_t length;
       std::uint32_t command;
+      FaultCode     code;
   };
   const Case cases[] = {
-      {"framing no producer writes", 5u, 0u},
-      {"undecodable", 8u, av::MockExecutorOps::undecodable_id},
-      {"device lost", 8u, av::MockExecutorOps::lost_id},
+      {"framing no producer writes", 5u, 0u, FaultCode::command_framing},
+      {"undecodable", 8u, av::MockExecutorOps::undecodable_id, FaultCode::undecodable},
+      {"device lost", 8u, av::MockExecutorOps::lost_id, FaultCode::device_lost},
   };
   for (const Case &c : cases) {
       Fixture fixture;
@@ -254,19 +257,25 @@ TEST(ring_consumer_service, a_batch_that_cannot_run_stops_the_context_before_it_
       if (c.command != 0u) std::memcpy(&fixture.ring().data(24u + 16u), &c.command, 4u);   /* the second batch's command */
       fixture.ring().publish();
       fixture.serve();
-      if (!fixture.consumer().stopped()) av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
+      if (fixture.page().fault_code() != static_cast<std::uint32_t>(c.code))
+          av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
+      CHECK(fixture.consumer().faulted());
       CHECK_EQ(fixture.page().completed_fence(), 1u);
+      CHECK_EQ(fixture.ops().live(), 0u);
       CHECK_EQ(fixture.consumer().head(), 24u);
       CHECK_EQ(fixture.host().logged(), 1u);
   } }
 
-TEST(ring_consumer_attach, a_context_whose_executor_cannot_be_created_stops)
+TEST(ring_consumer_attach, a_context_whose_executor_cannot_be_created_faults)
 { Fixture fixture;
   fixture.ops().fail_create_at(1u);
   fixture.ring().write_batch(1u, 8u);
   fixture.ring().publish();
   fixture.bind();
-  CHECK(fixture.consumer().stopped());
+  CHECK(fixture.consumer().faulted());
+  CHECK(fixture.page().faulted());
+  CHECK_EQ(fixture.page().fault_code(), static_cast<std::uint32_t>(FaultCode::no_executor));
+  CHECK_EQ(fixture.host().raised(0u), 1u);
   fixture.serve();
   CHECK_EQ(fixture.consumer().head(), 0u);
   CHECK_EQ(fixture.host().logged(), 1u); }
@@ -284,25 +293,28 @@ TEST(ring_consumer_service, the_head_the_guest_writes_is_ignored)
   fixture.ring().publish();
   fixture.serve();
   CHECK_EQ(fixture.ring().head(), 32u);
-  CHECK(!fixture.consumer().stopped()); }
+  CHECK(!fixture.consumer().faulted()); }
 
-TEST(ring_consumer_service, a_hostile_ring_stops_the_context_logs_once_and_ignores_later_doorbells)
+TEST(ring_consumer_service, a_hostile_ring_faults_the_context_logs_once_and_ignores_later_doorbells)
 { struct Case {
       const char *name;
       void      (*spoil)(GuestRing &ring);
+      FaultCode   code;
   };
   const Case cases[] = {
-      {"header magic", [](GuestRing &ring) { ring.bytes()[0] = 0u; }},
-      {"order changed", [](GuestRing &ring) { ring.bytes()[4] = 13u; }},
-      {"tail backwards", [](GuestRing &ring) { ring.publish(8u); }},
-      {"tail past a whole ring", [](GuestRing &ring) { ring.publish(16u + capacity + 1u); }},
-      {"tail far away", [](GuestRing &ring) { ring.publish(~std::uint64_t{0}); }},
-      {"batch magic", [](GuestRing &ring) { ring.write_batch(6u, 0u); ring.data(16u) = 0u; ring.publish(); }},
-      {"fence zero", [](GuestRing &ring) { ring.write_batch(6u, 0u); ring.data(16u + 8u) = 0u; ring.publish(); }},
-      {"fence repeated", [](GuestRing &ring) { ring.write_batch(5u, 0u); ring.publish(); }},
-      {"fence lower", [](GuestRing &ring) { ring.write_batch(4u, 0u); ring.publish(); }},
+      {"header magic", [](GuestRing &ring) { ring.bytes()[0] = 0u; }, FaultCode::ring_header},
+      {"order changed", [](GuestRing &ring) { ring.bytes()[4] = 13u; }, FaultCode::ring_header},
+      {"tail backwards", [](GuestRing &ring) { ring.publish(8u); }, FaultCode::ring_tail},
+      {"tail past a whole ring", [](GuestRing &ring) { ring.publish(16u + capacity + 1u); }, FaultCode::ring_tail},
+      {"tail far away", [](GuestRing &ring) { ring.publish(~std::uint64_t{0}); }, FaultCode::ring_tail},
+      {"batch magic", [](GuestRing &ring) { ring.write_batch(6u, 0u); ring.data(16u) = 0u; ring.publish(); },
+       FaultCode::batch_header},
+      {"fence zero", [](GuestRing &ring) { ring.write_batch(6u, 0u); ring.data(16u + 8u) = 0u; ring.publish(); },
+       FaultCode::batch_header},
+      {"fence repeated", [](GuestRing &ring) { ring.write_batch(5u, 0u); ring.publish(); }, FaultCode::batch_order},
+      {"fence lower", [](GuestRing &ring) { ring.write_batch(4u, 0u); ring.publish(); }, FaultCode::batch_order},
       {"batch longer than the ring", [](GuestRing &ring) { ring.write_batch(6u, 0u); ring.data(16u + 6u) = 1u;
-                                                           ring.publish(16u + capacity); }},
+                                                           ring.publish(16u + capacity); }, FaultCode::batch_header},
   };
   for (const Case &c : cases) {
       Fixture fixture;
@@ -313,20 +325,24 @@ TEST(ring_consumer_service, a_hostile_ring_stops_the_context_logs_once_and_ignor
       CHECK_EQ(fixture.consumer().head(), 16u);
       c.spoil(fixture.ring());
       fixture.serve();
-      if (!fixture.consumer().stopped()) av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
+      if (!fixture.consumer().faulted() || fixture.page().fault_code() != static_cast<std::uint32_t>(c.code))
+          av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
+      CHECK(fixture.page().faulted());
       CHECK_EQ(fixture.host().logged(), 1u);
       CHECK_EQ(fixture.consumer().head(), 16u);
       CHECK_EQ(fixture.page().completed_fence(), 5u);
       CHECK_EQ(fixture.page().progress(), 1u);
-      CHECK_EQ(fixture.host().raised(0u), 1u);
+      CHECK_EQ(fixture.host().raised(0u), 2u);   /* the completion's service, then the fault's */
+      CHECK_EQ(fixture.ops().live(), 0u);        /* the executor went with the fault */
       static_cast<void>(RingHeader(12u, 0u, 0u).encode(fixture.ring().bytes(), 32u));
       fixture.ring().store(head_offset, 16u);
       fixture.serve();
       CHECK_EQ(fixture.host().logged(), 1u);
       CHECK_EQ(fixture.consumer().head(), 16u);
+      CHECK_EQ(fixture.host().raised(0u), 2u);
   } }
 
-TEST(ring_consumer_service, a_ring_the_blob_cannot_hold_stops_without_reading_outside_it)
+TEST(ring_consumer_service, a_ring_the_blob_cannot_hold_faults_without_reading_outside_it)
 { Fixture unreadable_header;
   unreadable_header.bind();
   std::uint8_t  short_bytes[8] = {};
@@ -335,7 +351,8 @@ TEST(ring_consumer_service, a_ring_the_blob_cannot_hold_stops_without_reading_ou
   av::RingConsumerProbe::replace_ring(unreadable_header.consumer(),
                                       RingWindow(BlobWindow(&short_pointer, &short_length, 1u, 8u), 12u));
   unreadable_header.serve();
-  CHECK(unreadable_header.consumer().stopped());
+  CHECK(unreadable_header.consumer().faulted());
+  CHECK_EQ(unreadable_header.page().fault_code(), static_cast<std::uint32_t>(FaultCode::ring_header));
   Fixture unreadable_data;
   unreadable_data.bind();
   unreadable_data.ring().write_batch(1u, 0u);
@@ -345,7 +362,8 @@ TEST(ring_consumer_service, a_ring_the_blob_cannot_hold_stops_without_reading_ou
   std::uint64_t length = 32u + 20u;
   av::RingConsumerProbe::replace_ring(unreadable_data.consumer(), RingWindow(BlobWindow(&pointer, &length, 1u, length), 12u));
   unreadable_data.serve();
-  CHECK(unreadable_data.consumer().stopped());
+  CHECK(unreadable_data.consumer().faulted());
+  CHECK_EQ(unreadable_data.page().fault_code(), static_cast<std::uint32_t>(FaultCode::batch_header));
   CHECK_EQ(unreadable_data.consumer().batches(), 1u);
   CHECK_EQ(unreadable_data.host().logged(), 1u); }
 

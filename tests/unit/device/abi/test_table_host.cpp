@@ -32,7 +32,7 @@ TEST(table_host, a_worker_runs_over_the_c_table)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   av::FenceInterrupts interrupts(host);
   av::FenceReporter fences(host, interrupts);
-  av::MockContextExecution execution(host, 12u);
+  av::MockContextExecution execution(host, fences, 12u);
   av::RingConsumer ring(host, fences, execution.batches());
   Worker worker(host, ring);
   CHECK_STATUS(worker.start(), Status::ok);

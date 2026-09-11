@@ -10,6 +10,8 @@
 #include "device/execution/batch_staging.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
+#include "device/fence/fence_interrupts.hpp"
+#include "device/fence/fence_reporter.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/ring/ring_window.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -56,12 +58,15 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     executor.configure(av::SubApi::vulkan, uuid);
     av::BatchStaging staging(host);
     if (staging.allocate(capacity, with_reply ? reply_length - 32u : 0u) != av::Status::ok) __builtin_trap();
-    av::BatchExecutor batches(host, executor, staging);
+    av::FenceInterrupts interrupts(host);
+    av::FenceReporter   fences(host, interrupts);
+    av::BatchExecutor batches(host, executor, staging, fences);
     batches.prepare(with_reply ? av::BlobWindow(&reply_pointer, &reply_bytes, 1u, reply_bytes) : av::BlobWindow());
     if (batches.start() != av::Status::ok) __builtin_trap();
     const av::RingWindow ring_window(av::BlobWindow(&ring_pointer, &ring_length, 1u, ring_length), 12u);
-    static_cast<void>(batches.run(ring_window, 0u, av::BatchHeader(length, 1u)));
-    if (!batches.invariants_hold()) __builtin_trap();
+    const av::Status ran = batches.run(ring_window, 0u, av::BatchHeader(length, 1u));
+    if (!batches.invariants_hold() || (ran == av::Status::ok) != (batches.fault() == av::FaultCode::none))
+        __builtin_trap();
     av::ReplyHeader header;
     const bool      written = reply[0] != 0u;
     if (written && header.decode(reply, 32u) != av::Status::ok) __builtin_trap();

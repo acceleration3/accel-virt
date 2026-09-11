@@ -15,7 +15,7 @@ namespace av {
 DeviceContext::DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts,
                              const ExecutorLibrary &library, uint32_t id)
     : id_(id), binding_(host, blobs), fences_(host, interrupts), executor_(host, library), staging_(host),
-      batches_(host, executor_, staging_), ring_(host, fences_, batches_), worker_(host, ring_) {}
+      batches_(host, executor_, staging_, fences_), ring_(host, fences_, batches_), worker_(host, ring_) {}
 
 Status DeviceContext::start()
 {

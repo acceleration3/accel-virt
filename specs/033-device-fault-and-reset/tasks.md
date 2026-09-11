@@ -14,8 +14,8 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 2: Faulting contexts
 
-- [ ] T002 [US1] [US3] Tests then `BatchExecutor` taking the reporter: heartbeat per executed command, `fault()` naming the failure
-- [ ] T003 [US1] [US2] Tests then `RingConsumer` faults for every stop, executor destroyed, interrupt signalled; `MockContextExecution`, fuzz_ring, fuzz_command_stream, context and worker tests
+- [X] T002 [US1] [US3] Tests then `BatchExecutor` taking the reporter: heartbeat per executed command, `fault()` naming the failure
+- [X] T003 [US1] [US2] Tests then `RingConsumer` faults for every stop, executor destroyed, interrupt signalled; `MockContextExecution`, fuzz_ring, fuzz_command_stream, context and worker tests
 
 **Checkpoint**: commit.
 

@@ -5,13 +5,14 @@
 #include "device/host/host.hpp"
 #include "device/support/text_buffer.hpp"
 #include "proto/submission/batch_header.hpp"
+#include "proto/submission/fault_code.hpp"
 #include "proto/submission/ring_header.hpp"
 
 namespace av {
 
 RingConsumer::RingConsumer(Host &host, FenceReporter &fences, BatchExecutor &batches)
     : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), head_(0u), last_fence_(0u), batches_(0u), prepared_(false),
-      attached_(false), stopped_(false) {}
+      attached_(false), faulted_(false) {}
 
 Status RingConsumer::prepare(const RingWindow &ring)
 {
@@ -41,7 +42,9 @@ void RingConsumer::attach()
 {
     host_.require_worker("RingConsumer::attach");
     attached_ = prepared_;
-    if (attached_ && executor_.start() != Status::ok) stop("the context's executor could not be created", 0u);
+    if (!attached_ || executor_.start() == Status::ok) return;
+    fault(FaultCode::no_executor, "the context's executor could not be created", 0u);
+    fences_.signal();
 }
 
 void RingConsumer::detach()
@@ -55,14 +58,21 @@ void RingConsumer::detach()
 void RingConsumer::service()
 {
     host_.require_worker("RingConsumer::service");
-    if (!attached_ || stopped_) return;
-    RingHeader snapshot;
-    if (ring_.snapshot(snapshot) != Status::ok) return stop("ring header unreadable or malformed, order", ring_.order());
-    if (snapshot.order() != ring_.order()) return stop("ring order changed to", snapshot.order());
-    if (progress_.observe(RingHeader(snapshot.order(), snapshot.tail(), head_)) != Status::ok)
-        return stop("ring tail inconsistent with what was consumed:", snapshot.tail());
-    while (consume_next() == Status::ok) {}
+    if (!attached_ || faulted_) return;
+    serve();
     fences_.signal();
+}
+
+void RingConsumer::serve()
+{
+    RingHeader snapshot;
+    if (ring_.snapshot(snapshot) != Status::ok)
+        return fault(FaultCode::ring_header, "ring header unreadable or malformed, order", ring_.order());
+    if (snapshot.order() != ring_.order())
+        return fault(FaultCode::ring_header, "ring order changed to", snapshot.order());
+    if (progress_.observe(RingHeader(snapshot.order(), snapshot.tail(), head_)) != Status::ok)
+        return fault(FaultCode::ring_tail, "ring tail inconsistent with what was consumed:", snapshot.tail());
+    while (consume_next() == Status::ok) {}
 }
 
 Status RingConsumer::consume_next()
@@ -72,23 +82,21 @@ Status RingConsumer::consume_next()
     uint8_t     bytes[BatchHeader::encoded_size] = {};
     BatchHeader batch;
     if (ring_.copy(head_, bytes, sizeof bytes) != Status::ok || batch.decode(bytes, sizeof bytes) != Status::ok) {
-        stop("batch header unreadable or malformed at head", head_);
+        fault(FaultCode::batch_header, "batch header unreadable or malformed at head", head_);
         return Status::malformed;
     }
     if (!batch.fits(ring_.capacity())) {
-        stop("batch cannot fit the ring, payload bytes", batch.length());
+        fault(FaultCode::batch_header, "batch cannot fit the ring, payload bytes", batch.length());
         return Status::malformed;
     }
     if (batch.fence_id() <= last_fence_) {
-        stop("batch fence does not follow the last, fence", batch.fence_id());
+        fault(FaultCode::batch_order, "batch fence does not follow the last, fence", batch.fence_id());
         return Status::malformed;
     }
     if (published < batch.span()) return Status::no_space;
     const Status ran = executor_.run(ring_, head_, batch);
     if (ran != Status::ok) {
-        stop(ran == Status::malformed ? "batch commands malformed or undecodable, fence"
-                                      : "the host device was lost, fence",
-             batch.fence_id());
+        fault(executor_.fault(), "the batch could not run, fence", batch.fence_id());
         return ran;
     }
     head_ += batch.span();
@@ -100,20 +108,26 @@ Status RingConsumer::consume_next()
     return Status::ok;
 }
 
-void RingConsumer::stop(const char *reason, uint64_t value)
+/* The executor goes at once: the host API's objects are the device's to free,
+ * the context's binding the guest's. */
+void RingConsumer::fault(FaultCode code, const char *reason, uint64_t value)
 {
     char       bytes[160];
     TextBuffer message(bytes, sizeof bytes);
-    message.append("virtio-gpu-rvk: context ring stopped: ");
+    message.append("virtio-gpu-rvk: context faulted, code ");
+    message.append_decimal(static_cast<uint32_t>(code));
+    message.append(": ");
     message.append(reason);
     message.append(" ");
     message.append_decimal(value);
     host_.log(message.text());
-    stopped_ = true;
+    faulted_ = true;
+    executor_.stop();
+    fences_.fault(code);
 }
 
 bool     RingConsumer::attached() const   { return attached_; }
-bool     RingConsumer::stopped() const    { return stopped_; }
+bool     RingConsumer::faulted() const    { return faulted_; }
 uint64_t RingConsumer::head() const       { return head_; }
 uint64_t RingConsumer::last_fence() const { return last_fence_; }
 uint64_t RingConsumer::batches() const    { return batches_; }

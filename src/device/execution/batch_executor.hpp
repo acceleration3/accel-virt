@@ -2,12 +2,14 @@
  * payload copied once from the ring, walked command by command, the context's
  * API's commands run through its executor in order and the rest skipped, and
  * the answer of the last command that asked for one written to the reply slot
- * before the batch completes. */
+ * before the batch completes. Every command run moves the context's progress,
+ * so a long batch reads as busy rather than hung. */
 #ifndef AV_BATCH_EXECUTOR_HPP
 #define AV_BATCH_EXECUTOR_HPP
 
 #include "core/support/status.hpp"
 #include "device/memory/blob_window.hpp"
+#include "proto/submission/fault_code.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -18,13 +20,14 @@ class BatchHeader;
 class BatchStaging;
 class CommandHeader;
 class ContextExecutor;
+class FenceReporter;
 class Host;
 class RingWindow;
 struct BatchExecutorProbe;
 
 class BatchExecutor {
 public:
-    BatchExecutor(Host &host, ContextExecutor &executor, BatchStaging &staging);
+    BatchExecutor(Host &host, ContextExecutor &executor, BatchStaging &staging, FenceReporter &fences);
     BatchExecutor(const BatchExecutor &) = delete;
     BatchExecutor &operator=(const BatchExecutor &) = delete;
 
@@ -48,6 +51,8 @@ public:
     uint64_t batches() const;
     uint64_t commands() const;
     uint64_t skipped() const;
+    /* Why the last run that failed failed; none before one has. */
+    FaultCode fault() const;
 
     bool invariants_hold() const;
 
@@ -59,6 +64,8 @@ private:
     Host            &host_;
     ContextExecutor &executor_;
     BatchStaging    &staging_;
+    FenceReporter   &fences_;
+    FaultCode        fault_;
     BlobWindow       reply_;
     uint64_t         batches_;
     uint64_t         commands_;

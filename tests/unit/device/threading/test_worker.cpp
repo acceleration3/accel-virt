@@ -100,7 +100,7 @@ void attach(void *consumer) { static_cast<RingConsumer *>(consumer)->attach(); }
 class Fixture {
 public:
     Fixture()
-        : interrupts_(host_), fences_(host_, interrupts_), execution_(host_, 12u),
+        : interrupts_(host_), fences_(host_, interrupts_), execution_(host_, fences_, 12u),
           ring_(host_, fences_, execution_.batches()), worker_(host_, ring_)
     {
         journal_.host = &host_;
@@ -319,7 +319,7 @@ TEST(worker_invariants, a_queue_past_capacity_or_a_head_outside_it_is_detected)
 { MockHost host;
   av::FenceInterrupts interrupts(host);
   av::FenceReporter fences(host, interrupts);
-  av::MockContextExecution execution(host, 12u);
+  av::MockContextExecution execution(host, fences, 12u);
   RingConsumer ring(host, fences, execution.batches());
   Worker overfilled(host, ring);
   av::WorkerProbe::overfill(overfilled);

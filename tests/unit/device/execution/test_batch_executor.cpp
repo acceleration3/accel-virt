@@ -7,6 +7,9 @@
 #include "device/execution/batch_staging.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
+#include "device/fence/fence_interrupts.hpp"
+#include "device/fence/fence_reporter.hpp"
+#include "device/fence/fence_window.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/ring/ring_window.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -17,6 +20,8 @@
 #include "proto/context/sub_api.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/command_header.hpp"
+#include "proto/submission/fault_code.hpp"
+#include "proto/submission/fence_page.hpp"
 #include "proto/submission/reply_header.hpp"
 
 #include <cstdint>
@@ -29,6 +34,8 @@ using av::BlobWindow;
 using av::CommandHeader;
 using av::ContextExecutor;
 using av::ExecutorLibrary;
+using av::FaultCode;
+using av::FencePage;
 using av::GuestRing;
 using av::HostViolation;
 using av::MockExecutorOps;
@@ -87,11 +94,13 @@ class Fixture {
 public:
     explicit Fixture(std::uint32_t slot_bytes = 32u + reply_bytes)
         : ring_bytes_{}, ring_pointer_(ring_bytes_), ring_length_(sizeof ring_bytes_), guest_(ring_bytes_, 12u),
-          reply_{}, reply_pointer_(reply_), reply_length_(slot_bytes), ops_(RVK_EXECUTOR_SUB_API_VULKAN),
-          executor_(host_, library_), staging_(host_), batches_(host_, executor_, staging_)
+          reply_{}, reply_pointer_(reply_), reply_length_(slot_bytes), page_{}, page_pointer_(page_),
+          page_length_(sizeof page_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), executor_(host_, library_),
+          staging_(host_), interrupts_(host_), fences_(host_, interrupts_), batches_(host_, executor_, staging_, fences_)
     {
         std::memset(reply_, 0xEE, sizeof reply_);
         static_cast<void>(library_.accept(&ops_.table()));
+        static_cast<void>(fences_.prepare(av::FenceWindow(BlobWindow(&page_pointer_, &page_length_, 1u, page_length_)), 0u));
         executor_.configure(SubApi::vulkan, uuid);
         static_cast<void>(staging_.allocate(4096u, slot_bytes > 32u ? slot_bytes - 32u : 0u));
         batches_.prepare(slot_bytes != 0u ? BlobWindow(&reply_pointer_, &reply_length_, 1u, reply_length_)
@@ -99,6 +108,12 @@ public:
     }
 
     MockHost        &host() { return host_; }
+    std::uint64_t    progress() const
+    {
+        FencePage page;
+        static_cast<void>(page.decode(page_, sizeof page_));
+        return page.progress();
+    }
     MockExecutorOps &ops() { return ops_; }
     BatchExecutor   &batches() { return batches_; }
     GuestRing       &guest() { return guest_; }
@@ -152,11 +167,16 @@ private:
     std::uint8_t    reply_[32u + 4096u];
     void           *reply_pointer_;
     std::uint64_t   reply_length_;
+    std::uint8_t    page_[32];
+    void           *page_pointer_;
+    std::uint64_t   page_length_;
     MockHost        host_;
     MockExecutorOps ops_;
     ExecutorLibrary library_;
     ContextExecutor executor_;
     BatchStaging    staging_;
+    av::FenceInterrupts interrupts_;
+    av::FenceReporter   fences_;
     BatchExecutor   batches_;
 };
 
@@ -177,6 +197,8 @@ TEST(batch_executor_run, runs_the_context_api_commands_in_order_and_skips_the_re
   CHECK_EQ(fixture.ops().size_at(2u), 40u);
   CHECK_EQ(fixture.batches().commands(), 2u);
   CHECK_EQ(fixture.batches().skipped(), 3u);
+  CHECK_EQ(fixture.progress(), 2u);   /* a heartbeat for each command run, none for those skipped */
+  CHECK(fixture.batches().fault() == FaultCode::none);
   CHECK_EQ(fixture.reply()[0], 0xEEu);   /* nothing asked for an answer */
   CHECK_EQ(fixture.ops().misuses(), 0u); }
 
@@ -262,14 +284,19 @@ TEST(batch_executor_run, a_stream_no_producer_could_frame_or_an_executor_failure
       {"an answer no library gives", [](Commands &c) { c.add(MockExecutorOps::garbage_id, 0u); },
        Status::invalid_state},
   };
+  const FaultCode faults[] = {FaultCode::command_framing, FaultCode::command_framing, FaultCode::command_framing,
+                             FaultCode::command_framing, FaultCode::undecodable, FaultCode::device_lost,
+                             FaultCode::device_lost};
+  std::uint32_t index = 0u;
   for (const Case &c : cases) {
       Fixture fixture;
       Commands commands;
       commands.add(0x10001u, 2u);
       c.build(commands);
       commands.add(0x10005u, 0u);
-      if (fixture.run(1u, commands) != c.status)
+      if (fixture.run(1u, commands) != c.status || fixture.batches().fault() != faults[index++])
           av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
+      CHECK_EQ(fixture.progress(), 1u);
       CHECK_EQ(fixture.ops().id_at(1u) == 0x10005u, false);
   } }
 
@@ -281,6 +308,7 @@ TEST(batch_executor_run, an_answer_asked_for_without_a_reply_slot_is_refused)
   Commands asking;
   asking.add(0x10001u, 4u, CommandHeader::generate_reply);
   CHECK_STATUS(fixture.run(2u, asking), Status::malformed);
+  CHECK(fixture.batches().fault() == FaultCode::command_framing);
   CHECK_EQ(fixture.ops().executed(), 1u); }
 
 TEST(batch_executor_start, makes_the_executor_once_and_stop_releases_it)
@@ -295,6 +323,7 @@ TEST(batch_executor_start, makes_the_executor_once_and_stop_releases_it)
       f->ops().fail_create_at(1u);
       CHECK_STATUS(f->batches().start(), Status::no_memory);
       CHECK_STATUS(f->batches().run(RingWindow(), 0u, BatchHeader(0u, 1u)), Status::invalid_state);
+      CHECK(f->batches().fault() == FaultCode::no_executor);
   }, &fixture);
   CHECK_EQ(fixture.ops().created(), 1u);
   CHECK_EQ(fixture.ops().destroyed(), 1u); }
@@ -349,4 +378,5 @@ TEST(batch_executor_run, a_ring_the_blob_cannot_hold_is_refused_before_anything_
       c->status = c->fixture->batches().run(c->ring, 0u, BatchHeader(64u, 1u));
   }, &call);
   CHECK_STATUS(call.status, Status::malformed);
+  CHECK(fixture.batches().fault() == FaultCode::command_framing);
   CHECK_EQ(fixture.ops().executed(), 0u); }

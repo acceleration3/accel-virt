@@ -3,6 +3,7 @@
 #include "device/execution/batch_staging.hpp"
 #include "device/execution/command_stream.hpp"
 #include "device/execution/context_executor.hpp"
+#include "device/fence/fence_reporter.hpp"
 #include "device/host/host.hpp"
 #include "device/ring/ring_window.hpp"
 #include "proto/submission/batch_header.hpp"
@@ -11,8 +12,9 @@
 
 namespace av {
 
-BatchExecutor::BatchExecutor(Host &host, ContextExecutor &executor, BatchStaging &staging)
-    : host_(host), executor_(executor), staging_(staging), reply_(), batches_(0u), commands_(0u), skipped_(0u) {}
+BatchExecutor::BatchExecutor(Host &host, ContextExecutor &executor, BatchStaging &staging, FenceReporter &fences)
+    : host_(host), executor_(executor), staging_(staging), fences_(fences), fault_(FaultCode::none), reply_(),
+      batches_(0u), commands_(0u), skipped_(0u) {}
 
 void BatchExecutor::prepare(const BlobWindow &reply)
 {
@@ -47,10 +49,15 @@ bool BatchExecutor::started() const
 Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHeader &batch)
 {
     host_.require_worker("BatchExecutor::run");
-    if (!executor_.created()) return Status::invalid_state;
+    if (!executor_.created()) {
+        fault_ = FaultCode::no_executor;
+        return Status::invalid_state;
+    }
     const size_t length = batch.length();
-    if (length != 0u && ring.copy(head + BatchHeader::encoded_size, staging_.payload(), length) != Status::ok)
+    if (length != 0u && ring.copy(head + BatchHeader::encoded_size, staging_.payload(), length) != Status::ok) {
+        fault_ = FaultCode::command_framing;
         return Status::malformed;
+    }
     batches_++;
     CommandStream       stream(staging_.payload(), length);
     CommandHeader       header;
@@ -62,7 +69,10 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
         status = run_command(header, payload, answered, answer);
         if (status != Status::ok) return status;
     }
-    if (status != Status::no_space) return status;
+    if (status != Status::no_space) {
+        fault_ = FaultCode::command_framing;
+        return status;
+    }
     if (answered) write_reply(batch.fence_id(), answer);
     return Status::ok;
 }
@@ -71,7 +81,10 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
  * a later command cannot overwrite the answer kept. */
 Status BatchExecutor::run_command(const CommandHeader &header, const uint8_t *payload, bool &answered, size_t &answer)
 {
-    if (header.generates_reply() && reply_.length() == 0u) return Status::malformed;
+    if (header.generates_reply() && reply_.length() == 0u) {
+        fault_ = FaultCode::command_framing;
+        return Status::malformed;
+    }
     if (header.api() != executor_.command_api()) {
         skipped_++;
         return Status::ok;
@@ -85,7 +98,11 @@ Status BatchExecutor::run_command(const CommandHeader &header, const uint8_t *pa
         skipped_++;
         return Status::ok;
     }
-    if (status != Status::ok) return status;
+    if (status != Status::ok) {
+        fault_ = status == Status::malformed ? FaultCode::undecodable : FaultCode::device_lost;
+        return status;
+    }
+    fences_.heartbeat();
     commands_++;
     answered = answered || replying;
     answer = replying ? produced : answer;
@@ -106,7 +123,8 @@ void BatchExecutor::write_reply(uint64_t fence_id, size_t answer)
 
 uint64_t BatchExecutor::batches() const  { return batches_; }
 uint64_t BatchExecutor::commands() const { return commands_; }
-uint64_t BatchExecutor::skipped() const  { return skipped_; }
+uint64_t  BatchExecutor::skipped() const  { return skipped_; }
+FaultCode BatchExecutor::fault() const    { return fault_; }
 
 /* Every command run or skipped belongs to a batch that was run. */
 bool BatchExecutor::invariants_hold() const

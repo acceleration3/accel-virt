@@ -1,9 +1,10 @@
 /* Consumes one context's ring on its worker (docs/protocol.md): every complete
- * batch between the device's head and the tail the guest published, head
- * published after each. The guest can rewrite any byte at any moment, so each
- * header snapshot is judged against what the device has already seen, each
- * batch header is copied before it is read, and the first ring no valid
- * producer could write stops the context for good, logged once.
+ * batch between the device's head and the tail the guest published, executed,
+ * then head published and the fence completed. The guest can rewrite any byte
+ * at any moment, so each header snapshot is judged against what the device has
+ * already seen, each batch header is copied before it is read, and the first
+ * ring no valid producer could write, or batch that cannot run, faults the
+ * context for good: logged once, the executor destroyed, the fault reported.
  *
  * The setup prepares it on the main loop; attach runs on the worker, reached
  * through the work queue, so the worker only reads the ring the queue's lock
@@ -13,6 +14,7 @@
 
 #include "core/support/status.hpp"
 #include "device/ring/ring_window.hpp"
+#include "proto/submission/fault_code.hpp"
 #include "proto/submission/ring_progress.hpp"
 
 #include <stdint.h>
@@ -46,7 +48,7 @@ public:
     void                 service();
 
     bool     attached() const;
-    bool     stopped() const;
+    bool     faulted() const;
     uint64_t head() const;
     uint64_t last_fence() const;
     uint64_t batches() const;
@@ -55,9 +57,10 @@ public:
 
 private:
     /* ok for a consumed batch; no_space until the guest publishes the rest;
-     * anything else has stopped the context. */
+     * anything else has faulted the context. */
+    void                 serve();
     [[nodiscard]] Status consume_next();
-    void                 stop(const char *reason, uint64_t value);
+    void                 fault(FaultCode code, const char *reason, uint64_t value);
 
     Host          &host_;
     FenceReporter &fences_;
@@ -69,7 +72,7 @@ private:
     uint64_t     batches_;
     bool         prepared_;
     bool         attached_;
-    bool         stopped_;
+    bool         faulted_;
 
     friend struct RingConsumerProbe;
 };

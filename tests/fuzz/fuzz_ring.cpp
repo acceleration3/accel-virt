@@ -51,7 +51,9 @@ void serve(av::MockHost &host, av::RingConsumer &consumer, const std::uint8_t *p
     if (!consumer.invariants_hold()) __builtin_trap();
     av::FencePage page;
     if (page.decode(page_bytes, av::FencePage::encoded_size) != av::Status::ok) __builtin_trap();
-    if (page.completed_fence() != consumer.last_fence() || page.progress() != consumer.batches()) __builtin_trap();
+    if (page.completed_fence() != consumer.last_fence() || page.progress() < consumer.batches() ||
+        page.faulted() != consumer.faulted())
+        __builtin_trap();
 }
 
 }  // namespace
@@ -68,7 +70,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::MockHost        host;
     av::FenceInterrupts interrupts(host);
     av::FenceReporter   fences(host, interrupts);
-    av::MockContextExecution execution(host, 12u);
+    av::MockContextExecution execution(host, fences, 12u);
     av::RingConsumer    consumer(host, fences, execution.batches());
     if (fences.prepare(av::FenceWindow(av::BlobWindow(&page_pointer, &page_length, 1u, page_length)), 0u) !=
         av::Status::ok)
@@ -88,9 +90,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
             if (kind % 3u == 2u) ring.bytes()[(position + i) % 32u] = byte;
         }
         const std::uint64_t head = consumer.head();
-        const bool          stopped = consumer.stopped();
+        const bool          stopped = consumer.faulted();
         serve(host, consumer, page);
-        if (consumer.head() < head || (stopped && (!consumer.stopped() || consumer.head() != head))) __builtin_trap();
+        if (consumer.head() < head || (stopped && (!consumer.faulted() || consumer.head() != head))) __builtin_trap();
     }
     consumer.detach();
     while (host.claim(av::HostViolation::worker_required)) {}
