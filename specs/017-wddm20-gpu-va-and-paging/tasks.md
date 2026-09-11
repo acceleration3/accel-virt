@@ -26,8 +26,8 @@ description: "Task list for feature 017: WDDM 2.0 GPU virtual addressing"
 
 ## Phase 5: Paging
 
-- [ ] T005 Tests then `PageTableEntry`, `PageTableUpdate`
-- [ ] T006 Tests then `PagingCommand` (proto, documented) and the `PagingRequest` 2.0 operations; fuzz_paging
+- [X] T005 Tests then `PageTableEntry`, `PageTableUpdate`
+- [X] T006 Tests then `PagingCommandWriter` (proto, documented) and the `PagingRequest` 2.0 operations; fuzz_paging
 
 **Checkpoint**: commit.
 

@@ -167,6 +167,92 @@ When a DMA buffer cannot hold every sub-rectangle, the command carries as many
 as fit and dxgkrnl calls `DxgkDdiPresent` again with a fresh buffer for the
 rest; each buffer holds one complete command.
 
+## GPU page table entry (guest driver -> device, in guest memory)
+
+The GPU MMU is four levels of 512 entries each over 48-bit GPU virtual
+addresses, 4096-byte pages: bits 47..39, 38..30, 29..21 and 20..12 index the
+levels from the root. VidMm allocates each page table and hands the driver its
+entries; the driver writes them through VidMm's CPU mapping
+(`DXGK_OPERATION_UPDATE_PAGE_TABLE`) and the device walks them. A table is
+4096 bytes of little-endian u64 entries:
+
+| Bits | Field | Rule |
+|--:|---|---|
+| 0 | valid | 0: the whole entry is 0 and the address faults |
+| 1 | read_only | writes through the entry fault |
+| 2 | no_execute | |
+| 3 | cache_coherent | |
+| 4..8 | segment | the VidMm segment the frame is in; the implicit system memory segment is 2 |
+| 9..11 | reserved | 0 |
+| 12..63 | page_frame | the guest physical page (system memory segment) or the page within the segment |
+
+The root table is `GetRootPageTableSize` bytes for the entry count
+`SetRootPageTable` names, at the segment offset it names.
+
+## Paging commands (guest driver -> device, in a paging buffer)
+
+What `DxgkDdiBuildPagingBuffer` writes for the operations the device carries
+out; VidMm submits the buffer on the paging node. One command per call, each
+starting with an 8-byte header, all fields little-endian, reserved fields 0.
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | magic | `RVKM` = `0x4D4B5652` |
+| 4 | u32 | operation | 1 flush TLB, 2 fill, 3 transfer, 4 copy page table entries |
+
+**Flush TLB** (40 bytes): forget cached translations for one address space.
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 8 | u64 | root_segment_offset | where the root page table is |
+| 16 | u32 | root_segment_id | its segment |
+| 20 | u32 | reserved | |
+| 24 | u64 | start_address | first GPU virtual address |
+| 32 | u64 | end_address | one past the last |
+
+**Fill** (32 bytes): write a u32 pattern repeatedly across a range.
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 8 | u64 | destination_address | GPU virtual, in the paging process's address space |
+| 16 | u64 | size | bytes |
+| 24 | u32 | pattern | |
+| 28 | u32 | reserved | |
+
+**Transfer** (56 bytes): copy a range between two address spaces.
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 8 | u64 | source_address | GPU virtual |
+| 16 | u64 | destination_address | GPU virtual |
+| 24 | u64 | size | bytes |
+| 32 | u64 | source_page_table | root the source address is walked from |
+| 40 | u64 | destination_page_table | root the destination address is walked from |
+| 48 | u32 | direction | `DXGK_MEMORY_TRANSFER_DIRECTION`: 0 local to system, 1 system to local, 2 local to local |
+| 52 | u32 | flags | bit 0 source uses 64 KB pages, bit 1 destination does |
+
+**Copy page table entries** (16 bytes, then 32 per range): copy entries between
+page tables, each table named by its GPU virtual address.
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 8 | u32 | range_count | ranges following, at least 1 |
+| 12 | u32 | reserved | |
+
+Each range:
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u64 | source_page_table | |
+| 8 | u64 | destination_page_table | |
+| 16 | u32 | source_start | first entry index |
+| 20 | u32 | destination_start | first entry index |
+| 24 | u32 | count | `start + count <= 512` for both tables |
+| 28 | u32 | reserved | |
+
+When a paging buffer cannot hold every range, the command carries as many as
+fit and VidMm calls again with a fresh buffer for the rest.
+
 ## The driver's own virtio-gpu resources
 
 Besides rvk commands, the driver sends standard virtio-gpu requests (virtio 1.2

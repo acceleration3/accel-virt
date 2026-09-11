@@ -8,7 +8,7 @@ The adapter becomes a WDDM 2.0 GPU MMU adapter. `GpuMmuGeometry` answers the
 page table queries; `DriverCapabilities` claims 2.0, MultiEngineAware,
 VirtualAddressing and GpuMmu, FlipOnVSyncMmIo, and answers PHYSICALADAPTERCAPS.
 `PageTableEntry` and `PageTableUpdate` write VidMm's entries into CPU-mapped page
-tables; `PagingCommand` carries the GPU-VA paging operations to the device.
+tables; `PagingCommandWriter` carries the GPU-VA paging operations to the device.
 Contexts gain a `RootPageTable`; SubmitCommandVirtual joins the node. The
 scanout address becomes atomic so flips can arrive at device IRQL. The harness
 learns WDDM 2.0's rules (`FakeDxgadapter`, `FakeVidMm`, `FakeGpuMmu`). Monitored
@@ -22,7 +22,7 @@ fences arrive with hardware queues and are not part of WDDM 2.0's mandatory set.
 3. Platform atomics; `DisplaySources` scanout at device IRQL.
 4. `GpuMmuGeometry`, `DriverCapabilities` 2.0 claims, adapter info queries, node
    metadata, allocation segments.
-5. `PageTableEntry`, `PageTableUpdate`, `PagingCommand`, `PagingRequest` 2.0
+5. `PageTableEntry`, `PageTableUpdate`, `PagingCommandWriter`, `PagingRequest` 2.0
    operations; fuzz_paging.
 6. `RootPageTable`, contexts, processes, SubmitCommandVirtual, SetStablePowerState;
    slots; scenarios; docs; gate; merge; push.

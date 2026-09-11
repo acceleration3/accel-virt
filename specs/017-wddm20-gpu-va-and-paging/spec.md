@@ -62,7 +62,7 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 | `GpuMmuGeometry` | object | platform, virtual address bits, level count, index bits per level, PTE size | Describes the GPU page tables VidMm builds for this adapter |
 | `PageTableEntry` | object | one `DXGK_PTE` | Encodes one VidMm PTE in the device's page table format |
 | `PageTableUpdate` | object | platform, geometry, one `DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE` | Writes one UPDATE_PAGE_TABLE into a CPU-mapped page table |
-| `PagingCommand` (proto) | object | operation, addresses, sizes, pattern, ranges count | The wire form of one GPU-VA paging operation in a DMA buffer |
+| `PagingCommandWriter` (proto) | object | destination, capacity, length, ranges written | Writes one GPU-VA paging command into a paging buffer |
 | `PagingRequest` (extended) | object | + the WDDM 2.0 operations | Answers one DxgkDdiBuildPagingBuffer |
 | `RootPageTable` | object | segment id, segment offset, entries | The root page table one context runs on |
 | `Context` (extended) | object | + its `RootPageTable` | One scheduling context |
@@ -137,7 +137,7 @@ Normative headers: `third_party/windows-kit/include/` (fetched by `tools/fetch_w
   writes entries through the CPU mapping (`Repeat` writes the first entry to all);
   FLUSH_TLB, VIRTUAL_FILL, VIRTUAL_TRANSFER and COPY_PAGE_TABLE_ENTRIES (whose
   page tables are named by GPU virtual address in the paging process) become
-  `PagingCommand`s in the DMA buffer for the device (multipass over copy ranges);
+  paging commands in the DMA buffer for the device (multipass over copy ranges);
   NOTIFY_RESIDENCY, MAP_APERTURE_SEGMENT and UNMAP_APERTURE_SEGMENT need nothing.
   Context-allocation operations are refused: the driver requests none. Which
   operations VidMm actually issues in which order was not determined.
@@ -184,7 +184,7 @@ paging engine and residency, VidSch's virtual submission and flips.
    bytes 56..79 hold the three device PTEs; with `Repeat`, all three equal the
    first; an index range past 512, a null table or null entries is refused and
    nothing is written.
-2. FLUSH_TLB, VIRTUAL_FILL and VIRTUAL_TRANSFER each write one `PagingCommand`;
+2. FLUSH_TLB, VIRTUAL_FILL and VIRTUAL_TRANSFER each write one paging command;
    COPY_PAGE_TABLE_ENTRIES writes as many ranges as fit and answers
    `STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER` with MultipassOffset for the rest.
 

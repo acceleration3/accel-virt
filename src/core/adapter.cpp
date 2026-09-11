@@ -432,7 +432,7 @@ int32_t Adapter::build_paging_buffer(DxgkargBuildPagingBufferRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::build_paging_buffer");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(PagingRequest(platform_, *request).build()).value();
+    return PagingRequest(platform_, *request).build().value();
 }
 
 int32_t Adapter::reset_from_timeout()
