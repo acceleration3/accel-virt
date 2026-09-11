@@ -106,6 +106,7 @@ uint32_t ContextCommands::submit(ControlRequest &request)
     switch (context->bind(setup, capset_.info())) {
     case Status::ok: return GpuResponse::ok_nodata;
     case Status::not_found: return GpuResponse::err_invalid_resource_id;
+    case Status::no_memory: return GpuResponse::err_out_of_memory;
     default: return GpuResponse::err_invalid_parameter;
     }
 }

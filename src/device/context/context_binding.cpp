@@ -15,7 +15,7 @@ namespace av {
 
 ContextBinding::ContextBinding(Host &host, BlobTable &blobs)
     : host_(host), blobs_(blobs), version_(0u, 0u), sub_api_(SubApi::vulkan), ring_resource_(0u), ring_order_(0u),
-      fence_resource_(0u), doorbell_(0u), bound_(false) {}
+      fence_resource_(0u), doorbell_(0u), reply_resource_(0u), bound_(false) {}
 
 ContextBinding::~ContextBinding()
 {
@@ -33,6 +33,11 @@ Status ContextBinding::bind(const ContextSetup &setup, const CapsetInfo &capset)
     ScopeExit release_ring([this, &setup] { blobs_.unpin(setup.ring_resource()); });
     const Status fence = blobs_.pin(setup.fence_resource(), FencePage::encoded_size);
     if (fence != Status::ok) return fence;
+    ScopeExit    release_fence([this, &setup] { blobs_.unpin(setup.fence_resource()); });
+    const Status reply = setup.reply_resource() != 0u ? blobs_.pin(setup.reply_resource(), min_reply_bytes)
+                                                      : Status::ok;
+    if (reply != Status::ok) return reply;
+    release_fence.dismiss();
     release_ring.dismiss();
     version_ = capset.version().negotiated_with(setup.version());
     sub_api_ = setup.sub_api();
@@ -40,6 +45,7 @@ Status ContextBinding::bind(const ContextSetup &setup, const CapsetInfo &capset)
     ring_order_ = setup.ring_order();
     fence_resource_ = setup.fence_resource();
     doorbell_ = setup.doorbell();
+    reply_resource_ = setup.reply_resource();
     bound_ = true;
     return Status::ok;
 }
@@ -50,6 +56,7 @@ void ContextBinding::unbind()
     if (!bound_) return;
     blobs_.unpin(ring_resource_);
     blobs_.unpin(fence_resource_);
+    if (reply_resource_ != 0u) blobs_.unpin(reply_resource_);
     bound_ = false;
 }
 
@@ -96,6 +103,19 @@ RingWindow ContextBinding::ring_window()
     BlobWindow blob;
     if (bound_) static_cast<void>(blobs_.window(ring_resource_, blob));
     return RingWindow(blob, bound_ ? ring_order_ : uint8_t{0});
+}
+
+uint32_t ContextBinding::reply_resource() const
+{
+    return reply_resource_;
+}
+
+BlobWindow ContextBinding::reply_window()
+{
+    host_.require_main_loop("ContextBinding::reply_window");
+    BlobWindow blob;
+    if (bound_ && reply_resource_ != 0u) static_cast<void>(blobs_.window(reply_resource_, blob));
+    return blob;
 }
 
 FenceWindow ContextBinding::fence_window()

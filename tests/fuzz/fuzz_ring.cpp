@@ -14,6 +14,7 @@
 #include "device/memory/blob_window.hpp"
 #include "device/ring/ring_consumer.hpp"
 #include "device/ring/ring_window.hpp"
+#include "harness/executor/mock_context_execution.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
 #include "proto/submission/fence_page.hpp"
@@ -67,13 +68,14 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::MockHost        host;
     av::FenceInterrupts interrupts(host);
     av::FenceReporter   fences(host, interrupts);
-    av::RingConsumer    consumer(host, fences);
+    av::MockContextExecution execution(host, 12u);
+    av::RingConsumer    consumer(host, fences, execution.batches());
     if (fences.prepare(av::FenceWindow(av::BlobWindow(&page_pointer, &page_length, 1u, page_length)), 0u) !=
         av::Status::ok)
         __builtin_trap();
     if (consumer.prepare(ring.window()) != av::Status::ok) __builtin_trap();
     consumer.attach();
-    if (!host.claim(av::HostViolation::worker_required)) __builtin_trap();
+    while (host.claim(av::HostViolation::worker_required)) {}
     serve(host, consumer, page);
     while (reader.remaining() >= 4u) {
         const std::uint8_t  kind = reader.read_u8();
@@ -90,5 +92,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
         serve(host, consumer, page);
         if (consumer.head() < head || (stopped && (!consumer.stopped() || consumer.head() != head))) __builtin_trap();
     }
+    consumer.detach();
+    while (host.claim(av::HostViolation::worker_required)) {}
     return 0;
 }

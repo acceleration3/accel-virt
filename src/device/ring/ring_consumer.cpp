@@ -1,5 +1,6 @@
 #include "device/ring/ring_consumer.hpp"
 
+#include "device/execution/batch_executor.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/host/host.hpp"
 #include "device/support/text_buffer.hpp"
@@ -8,8 +9,8 @@
 
 namespace av {
 
-RingConsumer::RingConsumer(Host &host, FenceReporter &fences)
-    : host_(host), fences_(fences), ring_(), progress_(), head_(0u), last_fence_(0u), batches_(0u), prepared_(false),
+RingConsumer::RingConsumer(Host &host, FenceReporter &fences, BatchExecutor &batches)
+    : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), head_(0u), last_fence_(0u), batches_(0u), prepared_(false),
       attached_(false), stopped_(false) {}
 
 Status RingConsumer::prepare(const RingWindow &ring)
@@ -40,6 +41,13 @@ void RingConsumer::attach()
 {
     host_.require_worker("RingConsumer::attach");
     attached_ = prepared_;
+    if (attached_ && executor_.start() != Status::ok) stop("the context's executor could not be created", 0u);
+}
+
+void RingConsumer::detach()
+{
+    host_.require_worker("RingConsumer::detach");
+    executor_.stop();
 }
 
 /* The header's head field is the guest's to scribble on: only the device's own
@@ -76,6 +84,13 @@ Status RingConsumer::consume_next()
         return Status::malformed;
     }
     if (published < batch.span()) return Status::no_space;
+    const Status ran = executor_.run(ring_, head_, batch);
+    if (ran != Status::ok) {
+        stop(ran == Status::malformed ? "batch commands malformed or undecodable, fence"
+                                      : "the host device was lost, fence",
+             batch.fence_id());
+        return ran;
+    }
     head_ += batch.span();
     last_fence_ = batch.fence_id();
     batches_++;

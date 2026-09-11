@@ -33,7 +33,7 @@ using av::SubApi;
 
 namespace {
 
-constexpr std::uint32_t ring = 10u, fence = 11u, small_ring = 12u, tiny = 13u;
+constexpr std::uint32_t ring = 10u, fence = 11u, small_ring = 12u, tiny = 13u, reply = 14u, small_reply = 15u;
 constexpr std::uint8_t  uuid[GpuIdentity::uuid_bytes] = {1};
 
 CapsetInfo capset(std::uint16_t minor = 0u, std::uint8_t max_order = 24u)
@@ -44,9 +44,9 @@ CapsetInfo capset(std::uint16_t minor = 0u, std::uint8_t max_order = 24u)
 
 ContextSetup setup(std::uint32_t ring_id = ring, std::uint32_t fence_id = fence, std::uint8_t order = 12u,
                    ProtocolVersion version = ProtocolVersion(1u, 0u), SubApi api = SubApi::vulkan,
-                   std::uint32_t doorbell = 9u)
+                   std::uint32_t doorbell = 9u, std::uint32_t reply_id = 0u)
 {
-    return ContextSetup(version, api, ring_id, order, fence_id, doorbell, 0u);
+    return ContextSetup(version, api, ring_id, order, fence_id, doorbell, reply_id);
 }
 
 class Fixture {
@@ -57,6 +57,12 @@ public:
         static_cast<void>(blobs_.create_host(ring, 0x2000u));
         static_cast<void>(blobs_.create_host(fence, 0x1000u));
         static_cast<void>(blobs_.create_host(small_ring, 0x1000u));
+        static_cast<void>(blobs_.create_host(reply, 0x1000u));
+        GpuRequestBuilder entries(0u);
+        entries.u64(0x100000u).u32(48u).u32(0u);
+        MockRequest    mock(entries.bytes(), entries.size());
+        ControlRequest request(host_, &mock);
+        static_cast<void>(blobs_.create_guest(small_reply, 48u, request, 24u, 1u));
     }
 
     MockHost       &host() { return host_; }
@@ -126,6 +132,32 @@ TEST(context_binding_bind, a_fence_blob_smaller_than_the_fence_page_is_refused_a
   CHECK_STATUS(fixture.binding().bind(setup(ring, tiny), capset()), Status::invalid_parameter);
   CHECK_STATUS(fixture.blobs().release(ring), Status::ok);
   CHECK_STATUS(fixture.blobs().release(tiny), Status::ok); }
+
+TEST(context_binding_bind, a_reply_slot_is_pinned_with_the_ring_and_fence_and_let_go_with_them)
+{ Fixture fixture;
+  CHECK_EQ(fixture.binding().reply_window().length(), 0u);
+  const ContextSetup with_reply = setup(ring, fence, 12u, ProtocolVersion(1u, 0u), SubApi::vulkan, 9u, reply);
+  CHECK_STATUS(fixture.binding().bind(with_reply, capset()), Status::ok);
+  CHECK_EQ(fixture.binding().reply_resource(), reply);
+  CHECK_EQ(fixture.binding().reply_window().length(), 0x1000u);
+  CHECK_STATUS(fixture.blobs().release(reply), Status::invalid_state);
+  fixture.binding().unbind();
+  CHECK_EQ(fixture.binding().reply_window().length(), 0u);
+  CHECK_STATUS(fixture.blobs().release(reply), Status::ok);
+  CHECK_STATUS(fixture.binding().bind(setup(), capset()), Status::ok);
+  CHECK_EQ(fixture.binding().reply_resource(), 0u);
+  CHECK_EQ(fixture.binding().reply_window().length(), 0u); }
+
+TEST(context_binding_bind, a_missing_or_undersized_reply_slot_pins_nothing)
+{ Fixture fixture;
+  const ContextSetup missing = setup(ring, fence, 12u, ProtocolVersion(1u, 0u), SubApi::vulkan, 9u, 99u);
+  CHECK_STATUS(fixture.binding().bind(missing, capset()), Status::not_found);
+  const ContextSetup undersized = setup(ring, fence, 12u, ProtocolVersion(1u, 0u), SubApi::vulkan, 9u, small_reply);
+  CHECK_STATUS(fixture.binding().bind(undersized, capset()), Status::invalid_parameter);
+  CHECK(!fixture.binding().bound());
+  CHECK_STATUS(fixture.blobs().release(ring), Status::ok);
+  CHECK_STATUS(fixture.blobs().release(fence), Status::ok);
+  CHECK_STATUS(fixture.blobs().release(small_reply), Status::ok); }
 
 TEST(context_binding, lets_go_of_its_blobs_when_destroyed)
 { MockHost host;

@@ -13,12 +13,18 @@ class GuestRing {
 public:
     static constexpr std::uint64_t tail_offset = 8u;
     static constexpr std::uint64_t head_offset = 16u;
+    /* The command write_batch frames. */
+    static constexpr std::uint32_t filler_command = 0x10001u;
 
     /* Writes a header of `order` with tail and head 0 over `32 + 2^order` bytes. */
     GuestRing(std::uint8_t *bytes, std::uint8_t order);
 
-    /* Header, `length` payload bytes and padding at the unpublished tail. */
+    /* Header, a payload of `length` bytes and padding at the unpublished
+     * tail. A payload of 8 bytes or more is one Vulkan command filling it; a
+     * shorter one is bytes no producer frames. */
     void          write_batch(std::uint64_t fence, std::uint32_t length);
+    /* Header, these payload bytes and padding at the unpublished tail. */
+    void          write_batch(std::uint64_t fence, const std::uint8_t *payload, std::uint32_t length);
     void          publish();
     void          publish(std::uint64_t tail);
     void          store(std::uint64_t offset, std::uint64_t value);

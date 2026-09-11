@@ -10,6 +10,7 @@
 #include "device/threading/worker.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
+#include "harness/executor/mock_context_execution.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/ring/guest_ring.hpp"
 
@@ -98,7 +99,9 @@ void attach(void *consumer) { static_cast<RingConsumer *>(consumer)->attach(); }
 
 class Fixture {
 public:
-    Fixture() : interrupts_(host_), fences_(host_, interrupts_), ring_(host_, fences_), worker_(host_, ring_)
+    Fixture()
+        : interrupts_(host_), fences_(host_, interrupts_), execution_(host_, 12u),
+          ring_(host_, fences_, execution_.batches()), worker_(host_, ring_)
     {
         journal_.host = &host_;
     }
@@ -123,6 +126,7 @@ private:
     MockHost             host_;
     av::FenceInterrupts  interrupts_;
     av::FenceReporter    fences_;
+    av::MockContextExecution execution_;
     RingConsumer         ring_;
     Worker               worker_;
     Journal      journal_;
@@ -315,7 +319,8 @@ TEST(worker_invariants, a_queue_past_capacity_or_a_head_outside_it_is_detected)
 { MockHost host;
   av::FenceInterrupts interrupts(host);
   av::FenceReporter fences(host, interrupts);
-  RingConsumer ring(host, fences);
+  av::MockContextExecution execution(host, 12u);
+  RingConsumer ring(host, fences, execution.batches());
   Worker overfilled(host, ring);
   av::WorkerProbe::overfill(overfilled);
   CHECK(!overfilled.invariants_hold());

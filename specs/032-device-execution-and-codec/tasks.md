@@ -22,8 +22,8 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 3: Execution
 
-- [ ] T005 [US1] [US2] Tests then `CommandStream`, `BatchStaging`, `BatchExecutor`; fuzz_command_stream with corpus
-- [ ] T006 [US1] [US2] [US3] Tests then `RingConsumer` executing before completing, `Worker` detach, `ContextBinding` reply pin, `DeviceContext` staging and executor, `ContextCommands` reply errors
+- [X] T005 [US1] [US2] Tests then `CommandStream`, `BatchStaging`, `BatchExecutor`; fuzz_command_stream with corpus
+- [X] T006 [US1] [US2] [US3] Tests then `RingConsumer` executing before completing, `Worker` detach, `ContextBinding` reply pin, `DeviceContext` staging and executor, `ContextCommands` reply errors
 
 **Checkpoint**: commit.
 

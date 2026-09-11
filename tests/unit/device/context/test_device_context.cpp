@@ -2,7 +2,9 @@
  * doorbell connected and the ring attached on the worker - all of it, or none. */
 #include "core/support/status.hpp"
 #include "device/context/device_context.hpp"
+#include "device/execution/executor_library.hpp"
 #include "device/fence/fence_interrupts.hpp"
+#include "harness/executor/mock_executor_ops.hpp"
 #include "device/control/control_request.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/fence/fence_window.hpp"
@@ -20,6 +22,7 @@
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/submission/fence_page.hpp"
+#include "proto/submission/reply_header.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -66,16 +69,21 @@ CapsetInfo capset()
                       GpuIdentity(1u, 2u, GpuIdentity::discrete_gpu, uuid, 3u, 4u, "gpu"));
 }
 
-ContextSetup setup(std::uint32_t doorbell = 3u)
+constexpr std::uint32_t reply = 3u;
+
+ContextSetup setup(std::uint32_t doorbell = 3u, std::uint32_t reply_id = 0u)
 {
-    return ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, ring, 12u, fence, doorbell, 0u);
+    return ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, ring, 12u, fence, doorbell, reply_id);
 }
 
 /* A guest-backed ring the test writes as the guest, and a host fence blob. */
 class Fixture {
 public:
-    Fixture() : blobs_(host_), interrupts_(host_), context_(host_, blobs_, interrupts_, 5u)
+    Fixture()
+        : blobs_(host_), interrupts_(host_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(),
+          context_(host_, blobs_, interrupts_, library_, 5u)
     {
+        static_cast<void>(library_.accept(&ops_.table()));
         host_.add_guest_ram(ram, 0x2000u);
         GpuRequestBuilder entries(0u);
         entries.u64(ram).u32(0x2000u).u32(0u);
@@ -83,12 +91,14 @@ public:
         ControlRequest request(host_, &mock);
         static_cast<void>(blobs_.create_guest(ring, 0x2000u, request, 24u, 1u));
         static_cast<void>(blobs_.create_host(fence, 0x1000u));
+        static_cast<void>(blobs_.create_host(reply, 0x1000u));
         static_cast<void>(interrupts_.initialize());
         static_cast<void>(interrupts_.connect());
         static_cast<void>(context_.start());
     }
 
     MockHost      &host() { return host_; }
+    av::MockExecutorOps &ops() { return ops_; }
     BlobTable     &blobs() { return blobs_; }
     DeviceContext &context() { return context_; }
     GuestRing      guest() { return GuestRing(host_.guest_ram(ram), 12u); }
@@ -124,6 +134,8 @@ private:
     MockHost            host_;
     BlobTable           blobs_;
     av::FenceInterrupts interrupts_;
+    av::MockExecutorOps ops_;
+    av::ExecutorLibrary library_;
     DeviceContext       context_;
 };
 
@@ -148,6 +160,51 @@ TEST(device_context_bind, a_bound_context_serves_its_ring_when_its_doorbell_ring
   CHECK_EQ(fixture.host().raised(3u), 1u);
   CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::invalid_state);
   CHECK_EQ(fixture.host().live_doorbells(), 1u); }
+
+TEST(device_context_bind, a_context_with_a_reply_slot_answers_into_it)
+{ Fixture fixture;
+  GuestRing guest = fixture.guest();
+  CHECK_STATUS(fixture.context().bind(setup(3u, reply), capset()), Status::ok);
+  std::uint8_t batch[20] = {};
+  const std::uint32_t id = 0x10007u, size_word = 20u | (1u << 24);
+  std::memcpy(batch, &id, 4u);
+  std::memcpy(batch + 4, &size_word, 4u);
+  std::memset(batch + 8, 0x77, 12u);
+  guest.write_batch(1u, batch, sizeof batch);
+  guest.publish();
+  CHECK(fixture.host().ring_doorbell(3u));
+  CHECK(fixture.published(guest.tail()));
+  av::BlobWindow window;
+  CHECK_STATUS(fixture.blobs().window(reply, window), Status::ok);
+  std::uint8_t answer[32u + 12u] = {};
+  CHECK_STATUS(window.read(0u, answer, sizeof answer), Status::ok);
+  av::ReplyHeader header;
+  CHECK_STATUS(header.decode(answer, 32u), Status::ok);
+  CHECK_EQ(header.fence_id(), 1u);
+  CHECK_EQ(header.size(), 12u);
+  CHECK_EQ(answer[43], 0x77u); }
+
+TEST(device_context_bind, a_host_that_cannot_stage_the_batches_binds_nothing)
+{ Fixture fixture;
+  static_cast<void>(fixture.guest());
+  fixture.host().fail_allocation_at(1u);
+  CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::no_memory);
+  CHECK(!fixture.context().binding().bound());
+  CHECK_EQ(fixture.host().live_doorbells(), 0u);
+  CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::ok); }
+
+TEST(device_context, the_worker_releases_the_executor_it_made)
+{ Fixture fixture;
+  GuestRing guest = fixture.guest();
+  CHECK_STATUS(fixture.context().bind(setup(), capset()), Status::ok);
+  guest.write_batch(1u, 8u);
+  guest.publish();
+  CHECK(fixture.host().ring_doorbell(3u));
+  CHECK(fixture.published(guest.tail()));
+  CHECK_EQ(fixture.ops().created(), 1u);
+  av::DeviceContextProbe::worker(fixture.context()).stop();
+  CHECK_EQ(fixture.ops().destroyed(), 1u);
+  CHECK_EQ(fixture.ops().misuses(), 0u); }
 
 TEST(device_context_bind, a_ring_without_a_fresh_header_binds_nothing)
 { Fixture fixture;

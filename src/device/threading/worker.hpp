@@ -4,7 +4,8 @@
  * wakes - for posted work or a store to its doorbell - it drains the queue,
  * then serves its context's ring, so a doorbell that raced the ring's
  * attachment is served by it. Stopping disconnects the doorbell, drops work
- * not yet started, finishes the item running, and joins. */
+ * not yet started, finishes the item running, detaches the ring on the
+ * worker's own thread, and joins. */
 #ifndef AV_WORKER_HPP
 #define AV_WORKER_HPP
 

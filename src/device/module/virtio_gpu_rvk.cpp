@@ -9,7 +9,7 @@
 namespace av {
 
 VirtioGpuRvk::VirtioGpuRvk(Host &host)
-    : host_(host), binding_(host), library_(), capset_(host), blobs_(host), interrupts_(host), contexts_(host, blobs_, interrupts_) {}
+    : host_(host), binding_(host), library_(), capset_(host), blobs_(host), interrupts_(host), contexts_(host, blobs_, interrupts_, library_) {}
 
 Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExecutorOps *executor,
                              TextBuffer &message)

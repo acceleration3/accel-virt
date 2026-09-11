@@ -14,6 +14,7 @@
 namespace av {
 
 class BlobTable;
+class BlobWindow;
 class FenceWindow;
 class RingWindow;
 class CapsetInfo;
@@ -22,6 +23,9 @@ class Host;
 
 class ContextBinding {
 public:
+    /* A reply header and at least as many bytes of answer. */
+    static constexpr uint64_t min_reply_bytes = 64u;
+
     ContextBinding(Host &host, BlobTable &blobs);
     ~ContextBinding();
     ContextBinding(const ContextBinding &) = delete;
@@ -29,8 +33,8 @@ public:
 
     /* Main loop. invalid_state once bound; not_supported for a setup the
      * capset does not allow; not_found for a missing resource; invalid_parameter
-     * for a ring or fence blob too small for its role. Nothing is pinned
-     * unless ok. */
+     * for a ring, fence or reply blob too small for its role. Nothing is
+     * pinned unless ok. */
     [[nodiscard]] Status bind(const ContextSetup &setup, const CapsetInfo &capset);
     /* Main loop. */
     void                 unbind();
@@ -46,6 +50,10 @@ public:
     RingWindow             ring_window();
     /* Main loop. The bound fence blob; a window over nothing unbound. */
     FenceWindow            fence_window();
+    /* 0 when the context has no reply slot. */
+    uint32_t               reply_resource() const;
+    /* Main loop. The bound reply blob; an empty window without one. */
+    BlobWindow             reply_window();
 
 private:
     Host           &host_;
@@ -56,6 +64,7 @@ private:
     uint8_t         ring_order_;
     uint32_t        fence_resource_;
     uint32_t        doorbell_;
+    uint32_t        reply_resource_;
     bool            bound_;
 };
 

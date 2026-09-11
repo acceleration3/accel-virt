@@ -8,6 +8,9 @@
 
 #include "core/support/status.hpp"
 #include "device/context/context_binding.hpp"
+#include "device/execution/batch_executor.hpp"
+#include "device/execution/batch_staging.hpp"
+#include "device/execution/context_executor.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/ring/ring_consumer.hpp"
 #include "device/threading/worker.hpp"
@@ -18,6 +21,7 @@ namespace av {
 
 class BlobTable;
 class CapsetInfo;
+class ExecutorLibrary;
 class FenceInterrupts;
 class ContextSetup;
 class Host;
@@ -26,7 +30,8 @@ struct DeviceContextProbe;
 
 class DeviceContext {
 public:
-    DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts, uint32_t id);
+    DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts, const ExecutorLibrary &library,
+                  uint32_t id);
     DeviceContext(const DeviceContext &) = delete;
     DeviceContext &operator=(const DeviceContext &) = delete;
 
@@ -34,7 +39,8 @@ public:
     [[nodiscard]] Status start();
     [[nodiscard]] Status post(const WorkItem &item);
     /* Main loop. The binding's answer; invalid_parameter for a ring header that
-     * is not fresh or a fence page that cannot be prepared; the worker's answer when the doorbell cannot be connected
+     * is not fresh or a fence page that cannot be prepared; no_memory when the
+     * host cannot stage its batches; the worker's answer when the doorbell cannot be connected
      * or the ring handed over. Nothing stays pinned, connected or prepared
      * unless ok. */
     [[nodiscard]] Status  bind(const ContextSetup &setup, const CapsetInfo &capset);
@@ -45,8 +51,11 @@ public:
 private:
     uint32_t       id_;
     ContextBinding binding_;
-    FenceReporter  fences_;
-    RingConsumer   ring_;
+    FenceReporter   fences_;
+    ContextExecutor executor_;
+    BatchStaging    staging_;
+    BatchExecutor   batches_;
+    RingConsumer    ring_;
     Worker         worker_;
 
     friend struct DeviceContextProbe;

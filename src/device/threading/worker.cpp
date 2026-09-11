@@ -118,7 +118,7 @@ void Worker::run()
         host_.wait_event(wake_);
         WorkItem item;
         for (Step step = next(item); step != Step::idle; step = next(item)) {
-            if (step == Step::stop) return;
+            if (step == Step::stop) return ring_.detach();
             item.run();
             item.complete_on(host_);
         }

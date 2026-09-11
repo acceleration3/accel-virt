@@ -10,6 +10,7 @@
 #include "device/ring/ring_window.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
+#include "harness/executor/mock_context_execution.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/ring/guest_ring.hpp"
 #include "proto/submission/fence_page.hpp"
@@ -76,7 +77,7 @@ class Fixture {
 public:
     Fixture()
         : page_{}, page_pointer_(page_), page_length_(sizeof page_), interrupts_(host_), fences_(host_, interrupts_),
-          consumer_(host_, fences_)
+          execution_(host_, 12u), consumer_(host_, fences_, execution_.batches())
     {
         static_cast<void>(interrupts_.initialize());
         static_cast<void>(interrupts_.connect());
@@ -86,6 +87,13 @@ public:
     RingConsumer &consumer() { return consumer_; }
     RingWindow    window() const { return memory_.window(); }
     GuestRing    &ring() { return memory_.guest(); }
+
+    ~Fixture()
+    {
+        on_worker([](RingConsumer &consumer) { consumer.detach(); });
+    }
+
+    av::MockExecutorOps &ops() { return execution_.ops(); }
 
     /* The fence page as the guest would read it. */
     FencePage page() const
@@ -135,6 +143,7 @@ private:
     MockHost        host_;
     FenceInterrupts interrupts_;
     FenceReporter   fences_;
+    av::MockContextExecution execution_;
     RingConsumer    consumer_;
     RingMemory      memory_;
 };
@@ -187,7 +196,7 @@ TEST(ring_consumer_service, reads_batches_across_the_end_of_the_data_area)
   fixture.bind();
   std::uint64_t fence = 1u;
   for (std::uint32_t round = 0u; round < 5u; round++) {
-      for (std::uint32_t i = 0u; i < 7u; i++) fixture.ring().write_batch(fence++, 3u + round * 37u + i * 11u);
+      for (std::uint32_t i = 0u; i < 7u; i++) fixture.ring().write_batch(fence++, 8u + round * 37u + i * 11u);
       fixture.ring().publish();
       fixture.serve();
       CHECK_EQ(fixture.ring().head(), fixture.ring().tail());
@@ -210,6 +219,57 @@ TEST(ring_consumer_service, a_full_ring_is_consumed_whole)
   fixture.serve();
   CHECK_EQ(fixture.consumer().head(), 2u * capacity);
   CHECK(!fixture.consumer().stopped()); }
+
+TEST(ring_consumer_service, executes_each_batch_before_it_completes)
+{ Fixture fixture;
+  fixture.bind();
+  fixture.ring().write_batch(1u, 40u);
+  fixture.ring().write_batch(2u, 0u);
+  fixture.ring().publish();
+  fixture.serve();
+  CHECK_EQ(fixture.ops().created(), 1u);
+  CHECK_EQ(fixture.ops().executed(), 1u);
+  CHECK_EQ(fixture.ops().id_at(0u), GuestRing::filler_command);
+  CHECK_EQ(fixture.ops().size_at(0u), 32u);
+  CHECK_EQ(fixture.page().completed_fence(), 2u); }
+
+TEST(ring_consumer_service, a_batch_that_cannot_run_stops_the_context_before_it_completes)
+{ struct Case {
+      const char   *name;
+      std::uint32_t length;
+      std::uint32_t command;
+  };
+  const Case cases[] = {
+      {"framing no producer writes", 5u, 0u},
+      {"undecodable", 8u, av::MockExecutorOps::undecodable_id},
+      {"device lost", 8u, av::MockExecutorOps::lost_id},
+  };
+  for (const Case &c : cases) {
+      Fixture fixture;
+      fixture.bind();
+      fixture.ring().write_batch(1u, 8u);
+      fixture.ring().publish();
+      fixture.serve();
+      fixture.ring().write_batch(2u, c.length);
+      if (c.command != 0u) std::memcpy(&fixture.ring().data(24u + 16u), &c.command, 4u);   /* the second batch's command */
+      fixture.ring().publish();
+      fixture.serve();
+      if (!fixture.consumer().stopped()) av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
+      CHECK_EQ(fixture.page().completed_fence(), 1u);
+      CHECK_EQ(fixture.consumer().head(), 24u);
+      CHECK_EQ(fixture.host().logged(), 1u);
+  } }
+
+TEST(ring_consumer_attach, a_context_whose_executor_cannot_be_created_stops)
+{ Fixture fixture;
+  fixture.ops().fail_create_at(1u);
+  fixture.ring().write_batch(1u, 8u);
+  fixture.ring().publish();
+  fixture.bind();
+  CHECK(fixture.consumer().stopped());
+  fixture.serve();
+  CHECK_EQ(fixture.consumer().head(), 0u);
+  CHECK_EQ(fixture.host().logged(), 1u); }
 
 TEST(ring_consumer_service, the_head_the_guest_writes_is_ignored)
 { Fixture fixture;
@@ -354,8 +414,12 @@ TEST(ring_consumer, prepares_on_the_main_loop_and_serves_on_a_worker)
 { Fixture fixture;
   fixture.consumer().attach();
   fixture.consumer().service();
+  fixture.consumer().detach();
   CHECK(fixture.host().claim(HostViolation::worker_required));
   CHECK(fixture.host().claim(HostViolation::worker_required));
+  CHECK(fixture.host().claim(HostViolation::worker_required));   /* detach */
+  CHECK(fixture.host().claim(HostViolation::worker_required));   /* the batch executor's stop */
+  CHECK(fixture.host().claim(HostViolation::worker_required));   /* the executor's destroy */
   void *thread = nullptr;
   CHECK_STATUS(fixture.host().start_thread(
                    [](void *context) {

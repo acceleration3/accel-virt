@@ -6,7 +6,9 @@
 #include "device/context/device_context_table.hpp"
 #include "device/control/context_commands.hpp"
 #include "device/control/control_request.hpp"
+#include "device/execution/executor_library.hpp"
 #include "device/fence/fence_interrupts.hpp"
+#include "harness/executor/mock_executor_ops.hpp"
 #include "device/memory/blob_table.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
@@ -86,17 +88,18 @@ GpuRequestBuilder submit(std::uint32_t id, const ContextSetup &setup, std::uint3
 }
 
 ContextSetup setup(std::uint32_t ring_id = ring, std::uint8_t order = 12u, std::uint16_t major = 1u,
-                   std::uint32_t doorbell = 0u)
+                   std::uint32_t doorbell = 0u, std::uint32_t reply = 0u)
 {
-    return ContextSetup(ProtocolVersion(major, 0u), SubApi::vulkan, ring_id, order, fence, doorbell, 0u);
+    return ContextSetup(ProtocolVersion(major, 0u), SubApi::vulkan, ring_id, order, fence, doorbell, reply);
 }
 
 class Fixture {
 public:
     Fixture()
-        : blobs_(host_), interrupts_(host_), contexts_(host_, blobs_, interrupts_), capset_(host_),
-          commands_(host_, contexts_, capset_)
+        : blobs_(host_), interrupts_(host_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(),
+          contexts_(host_, blobs_, interrupts_, library_), capset_(host_), commands_(host_, contexts_, capset_)
     {
+        static_cast<void>(library_.accept(&ops_.table()));
         host_.add_gpu(uuid);
         host_.set_hostmem_size(0x10000u);
         capset_.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan));
@@ -133,6 +136,8 @@ private:
     MockHost            host_;
     BlobTable           blobs_;
     av::FenceInterrupts interrupts_;
+    av::MockExecutorOps ops_;
+    av::ExecutorLibrary library_;
     DeviceContextTable  contexts_;
     DeviceCapset       capset_;
     ContextCommands    commands_;
@@ -246,10 +251,18 @@ TEST(context_commands_submit, refuses_every_setup_it_cannot_bind)
       {submit(5u, setup(ring, 12u, 2u)), err_invalid_parameter},        /* another major */
       {submit(5u, setup(ring, 12u, 1u, 64u)), err_invalid_parameter},   /* no such doorbell */
       {submit(5u, setup(headless_ring)), err_invalid_parameter},        /* the guest wrote no ring header */
+      {submit(5u, setup(ring, 12u, 1u, 0u, 99u)), err_invalid_resource_id},   /* no such reply slot */
   };
   for (Case &c : cases) CHECK_EQ(fixture.send(c.request), c.answer);
   CHECK(!fixture.contexts().find(5u)->binding().bound());
   CHECK_EQ(fixture.send(submit(5u, setup())), ok_nodata); }
+
+TEST(context_commands_submit, a_host_that_cannot_stage_the_batches_is_out_of_memory)
+{ Fixture fixture;
+  CHECK_EQ(fixture.send(create(1u)), ok_nodata);
+  fixture.host().fail_allocation_at(1u);
+  CHECK_EQ(fixture.send(submit(1u, setup())), err_out_of_memory);
+  CHECK_EQ(fixture.send(submit(1u, setup())), ok_nodata); }
 
 TEST(context_commands_submit, a_doorbell_another_context_holds_is_refused)
 { Fixture fixture;
@@ -266,7 +279,8 @@ TEST(context_commands, a_device_without_a_capset_refuses_capset_queries_and_cont
   host.add_gpu(uuid);
   BlobTable blobs(host);
   av::FenceInterrupts interrupts(host);
-  DeviceContextTable contexts(host, blobs, interrupts);
+  av::ExecutorLibrary library;
+  DeviceContextTable contexts(host, blobs, interrupts, library);
   const GpuRequestBuilder requests[] = {capset_info(0u), capset(0x72u, 1u), create(1u)};
   DeviceCapset undescribed(host);
   undescribed.describe(0u, 0u);

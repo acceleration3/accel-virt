@@ -19,13 +19,14 @@
 
 namespace av {
 
+class BatchExecutor;
 class FenceReporter;
 class Host;
 struct RingConsumerProbe;
 
 class RingConsumer {
 public:
-    RingConsumer(Host &host, FenceReporter &fences);
+    RingConsumer(Host &host, FenceReporter &fences, BatchExecutor &batches);
     RingConsumer(const RingConsumer &) = delete;
     RingConsumer &operator=(const RingConsumer &) = delete;
 
@@ -35,9 +36,12 @@ public:
     [[nodiscard]] Status prepare(const RingWindow &ring);
     /* Main loop: forgets a prepared ring whose attachment was never posted. */
     void                 withdraw();
-    /* Worker: serving begins, if prepared. */
+    /* Worker: serving begins, if prepared, with the context's executor
+     * created; a context whose executor cannot be created stops. */
     void                 attach();
-    /* Worker: every complete batch the guest has published is consumed and
+    /* Worker, before it exits: the context's executor is destroyed. */
+    void                 detach();
+    /* Worker: every complete batch the guest has published is executed and
      * completed, and the guest interrupted once if any was. */
     void                 service();
 
@@ -57,6 +61,7 @@ private:
 
     Host          &host_;
     FenceReporter &fences_;
+    BatchExecutor &executor_;
     RingWindow     ring_;
     RingProgress progress_;
     uint64_t     head_;
