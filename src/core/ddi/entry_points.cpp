@@ -64,4 +64,13 @@ void AvDdiControlEtwLogging(uint8_t, uint32_t, uint8_t)
 int32_t AvDdiLinkDevice(void *physical_device_object, void *context, av::LinkedDeviceRecord *linked)
 { return static_cast<av::Adapter *>(context)->link_device(physical_device_object, linked); }
 
+int32_t AvDdiQueryAdapterInfo(void *context, const av::DxgkargQueryAdapterInfoRecord *query)
+{ return static_cast<av::Adapter *>(context)->query_adapter_info(query); }
+
+int32_t AvDdiEscape(void *context, const av::DxgkargEscapeRecord *escape)
+{ return static_cast<av::Adapter *>(context)->escape(escape); }
+
+int32_t AvDdiCollectDbgInfo(void *context, const av::DxgkargCollectDbgInfoRecord *collect)
+{ return static_cast<av::Adapter *>(context)->collect_dbg_info(collect); }
+
 }

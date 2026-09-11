@@ -2,7 +2,12 @@
 
 #include "ddi/dxgk_child_descriptor_record.hpp"
 #include "ddi/dxgk_child_status_record.hpp"
+#include "adapter_info_query.hpp"
 #include "ddi/dxgk_device_info_record.hpp"
+#include "ddi/dxgkarg_collect_dbg_info_record.hpp"
+#include "ddi/dxgkarg_escape_record.hpp"
+#include "ddi/dxgkarg_query_adapter_info_record.hpp"
+#include "debug_report.hpp"
 #include "ddi/linked_device_record.hpp"
 #include "invariant_scope.hpp"
 #include "nt_status.hpp"
@@ -28,7 +33,7 @@ enum : int32_t {
 
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
-      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), started_(false) {}
+      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), started_(false) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
 
@@ -195,6 +200,43 @@ int32_t Adapter::link_device(void *, LinkedDeviceRecord *linked)
     linked->ChainUid = 0u;
     linked->NumberOfLinksInChain = 1u;
     linked->LeadLink = 1u;
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::query_adapter_info");
+    if (query == nullptr) return NtStatus(Status::invalid_parameter).value();
+    const AdapterInfoQuery request(platform_, *query);
+    switch (request.type()) {
+    case query_driver_caps:
+        return NtStatus(capabilities_.report_driver_caps(request)).value();
+    case query_wddm_device_caps:
+        return NtStatus(capabilities_.report_wddm_device_caps(request)).value();
+    default:
+        return NtStatus(NtStatus::not_implemented).value();
+    }
+}
+
+/* No escape is defined until a user-mode component needs one; basicrender
+ * answers an escape it does not know the same way. */
+int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::escape");
+    if (escape == nullptr || escape->pPrivateDriverData == nullptr || escape->PrivateDriverDataSize == 0u)
+        return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(Status::not_supported).value();
+}
+
+int32_t Adapter::collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::collect_dbg_info");
+    if (collect == nullptr || (collect->pBuffer == nullptr && collect->BufferSize != 0u))
+        return NtStatus(Status::invalid_parameter).value();
+    if (collect->pExtension != nullptr) platform_.zero(collect->pExtension, sizeof *collect->pExtension);
+    const bool powered = device_.constructed();
+    const DebugReport report(platform_, started_, powered, powered ? device_.object().features() : 0u);
+    static_cast<void>(report.write(collect->pBuffer, collect->BufferSize));
     return NtStatus(Status::ok).value();
 }
 

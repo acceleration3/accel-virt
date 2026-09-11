@@ -4,6 +4,7 @@
 #define AV_ADAPTER_HPP
 
 #include "bar_mappings.hpp"
+#include "driver_capabilities.hpp"
 #include "dxgkrnl_interface.hpp"
 #include "object_storage.hpp"
 #include "platform.hpp"
@@ -19,6 +20,9 @@ namespace av {
 struct DxgkChildDescriptorRecord;
 struct DxgkChildStatusRecord;
 struct DxgkrnlInterfaceRecord;
+struct DxgkargCollectDbgInfoRecord;
+struct DxgkargEscapeRecord;
+struct DxgkargQueryAdapterInfoRecord;
 struct LinkedDeviceRecord;
 struct AdapterProbe;
 
@@ -46,6 +50,10 @@ public:
     void    reset_device();
     int32_t query_interface(void *query);
     int32_t link_device(void *physical_device_object, LinkedDeviceRecord *linked);
+    /* Answers at any adapter state: capabilities describe the driver. */
+    int32_t query_adapter_info(const DxgkargQueryAdapterInfoRecord *query);
+    int32_t escape(const DxgkargEscapeRecord *escape);
+    int32_t collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect);
 
     bool invariants_hold() const;
 
@@ -53,6 +61,7 @@ private:
     static constexpr uint32_t config_space_bytes = 256u;
     static constexpr uint32_t adapter_device_uid = 0xFFFFFFFFu;  /* DISPLAY_ADAPTER_HW_ID */
     enum : int32_t { power_unspecified = 0, power_d0 = 1, power_d3 = 4 };
+    enum : int32_t { query_driver_caps = 1, query_wddm_device_caps = 29 };   /* DXGKQAITYPE_* */
 
     [[nodiscard]] Status discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface);
     [[nodiscard]] Status power_up();
@@ -65,6 +74,7 @@ private:
     BarMappings                    mappings_;
     VirtioPciLayout                layout_;
     ObjectStorage<VirtioGpuDevice> device_;
+    DriverCapabilities             capabilities_;
     bool                           started_;
 
     friend struct AdapterProbe;

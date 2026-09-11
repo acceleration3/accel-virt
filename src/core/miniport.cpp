@@ -28,6 +28,9 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiUnload, reinterpret_cast<DdiRoutine>(&AvDdiUnload)},
         {DdiSlot::DxgkDdiQueryInterface, reinterpret_cast<DdiRoutine>(&AvDdiQueryInterface)},
         {DdiSlot::DxgkDdiControlEtwLogging, reinterpret_cast<DdiRoutine>(&AvDdiControlEtwLogging)},
+        {DdiSlot::DxgkDdiQueryAdapterInfo, reinterpret_cast<DdiRoutine>(&AvDdiQueryAdapterInfo)},
+        {DdiSlot::DxgkDdiEscape, reinterpret_cast<DdiRoutine>(&AvDdiEscape)},
+        {DdiSlot::DxgkDdiCollectDbgInfo, reinterpret_cast<DdiRoutine>(&AvDdiCollectDbgInfo)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

@@ -30,6 +30,11 @@ TEST(nt_status, carries_a_graphics_status_core_has_no_name_for)
   CHECK(!status.succeeded());
   CHECK(NtStatus(Status::ok).succeeded()); }
 
+/* One of the four statuses DXGADAPTER::DdiQueryAdapterInfo accepts. */
+TEST(nt_status, not_implemented_is_status_not_implemented)
+{ CHECK_EQ(NtStatus::not_implemented, 0xC0000002u);
+  CHECK(!NtStatus(NtStatus::not_implemented).succeeded()); }
+
 TEST(nt_status_status, maps_a_callback_answer_back_to_the_core_status)
 { struct Case { std::uint32_t value; Status status; };
   const Case cases[] = {

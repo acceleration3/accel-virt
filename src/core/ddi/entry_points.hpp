@@ -9,6 +9,9 @@
 #include "../miniport_binding.hpp"
 #include "dxgk_child_descriptor_record.hpp"
 #include "dxgk_child_status_record.hpp"
+#include "dxgkarg_collect_dbg_info_record.hpp"
+#include "dxgkarg_escape_record.hpp"
+#include "dxgkarg_query_adapter_info_record.hpp"
 #include "dxgkrnl_interface_record.hpp"
 #include "linked_device_record.hpp"
 
@@ -41,6 +44,9 @@ void    AvDdiUnload(void);
 int32_t AvDdiQueryInterface(void *context, void *query);
 void    AvDdiControlEtwLogging(uint8_t enable, uint32_t flags, uint8_t level);
 int32_t AvDdiLinkDevice(void *physical_device_object, void *context, av::LinkedDeviceRecord *linked);
+int32_t AvDdiQueryAdapterInfo(void *context, const av::DxgkargQueryAdapterInfoRecord *query);
+int32_t AvDdiEscape(void *context, const av::DxgkargEscapeRecord *escape);
+int32_t AvDdiCollectDbgInfo(void *context, const av::DxgkargCollectDbgInfoRecord *collect);
 
 }
 

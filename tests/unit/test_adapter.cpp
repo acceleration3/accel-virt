@@ -1,7 +1,13 @@
 #include "../../src/core/adapter.hpp"
 #include "../../src/core/ddi/dxgk_child_descriptor_record.hpp"
 #include "../../src/core/ddi/dxgk_child_status_record.hpp"
+#include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
+#include "../../src/core/ddi/dxgkarg_collect_dbg_info_record.hpp"
+#include "../../src/core/ddi/dxgkarg_escape_record.hpp"
+#include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
 #include "../../src/core/ddi/linked_device_record.hpp"
+#include "../../src/core/debug_report.hpp"
+#include "../harness/guarded_buffer.hpp"
 #include "../harness/fake_dxgkrnl_adapter.hpp"
 #include "../harness/fake_virtio_gpu_function.hpp"
 #include "../harness/mock_platform.hpp"
@@ -25,6 +31,12 @@ using av::Adapter;
 using av::AdapterProbe;
 using av::DxgkChildDescriptorRecord;
 using av::DxgkChildStatusRecord;
+using av::DxgkDriverCapsRecord;
+using av::DxgkargCollectDbgInfoExtRecord;
+using av::DxgkargCollectDbgInfoRecord;
+using av::DxgkargEscapeRecord;
+using av::DxgkargQueryAdapterInfoRecord;
+using av::GuardedBuffer;
 using av::FakeDxgkrnlAdapter;
 using av::FakeVirtioGpuFunction;
 using av::Irql;
@@ -43,6 +55,10 @@ constexpr std::uint32_t not_supported = 0xC00000BBu;
 constexpr std::uint32_t invalid_device_state = 0xC0000184u;
 constexpr std::uint32_t buffer_too_small = 0xC0000023u;
 constexpr std::uint32_t child_descriptor_not_supported = 0xC01E0401u;
+constexpr std::uint32_t not_implemented = 0xC0000002u;
+constexpr std::int32_t  query_driver_caps = 1;          /* DXGKQAITYPE_DRIVERCAPS */
+constexpr std::int32_t  query_wddm_device_caps = 29;    /* DXGKQAITYPE_WDDMDEVICECAPS */
+constexpr std::int32_t  last_query_type = 48;           /* DXGKQAITYPE_PAGINGPROCESSGPUVASIZE */
 
 constexpr std::uint32_t adapter_uid = 0xFFFFFFFFu;   /* DISPLAY_ADAPTER_HW_ID */
 constexpr std::int32_t  power_d0 = 1;
@@ -412,3 +428,214 @@ TEST(adapter_invariants, a_powered_or_mapped_adapter_that_is_not_started_is_dete
   probe.set_started(false);
   CHECK(!fixture.adapter().invariants_hold());
   probe.set_started(true); }
+
+/* ---- QueryAdapterInfo ------------------------------------------------------ */
+
+namespace {
+
+/* What DXGADAPTER::DdiQueryAdapterInfo accepts without logging an invalid status. */
+bool accepted_by_dxgkrnl(std::uint32_t status)
+{
+    return status == success || status == not_implemented || status == invalid_parameter || status == no_memory;
+}
+
+std::uint32_t query_driver_caps_of(Adapter &adapter, DxgkDriverCapsRecord &caps)
+{
+    DxgkargQueryAdapterInfoRecord query = {};
+    query.Type = query_driver_caps;
+    query.pOutputData = &caps;
+    query.OutputDataSize = sizeof caps;
+    return nt(adapter.query_adapter_info(&query));
+}
+
+}  // namespace
+
+TEST(adapter_query_adapter_info, answers_driver_caps_with_wddm_1_0)
+{ Fixture fixture; DxgkDriverCapsRecord caps = {};
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(query_driver_caps_of(fixture.adapter(), caps), success);
+  CHECK_EQ(caps.WDDMVersion, 0x1000); }
+
+TEST(adapter_query_adapter_info, driver_caps_do_not_depend_on_the_device_state)
+{ Fixture fixture; DxgkDriverCapsRecord before = {}, started = {}, d3 = {}, stopped = {};
+  CHECK_EQ(query_driver_caps_of(fixture.adapter(), before), success);
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(query_driver_caps_of(fixture.adapter(), started), success);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  CHECK_EQ(query_driver_caps_of(fixture.adapter(), d3), success);
+  CHECK_EQ(nt(fixture.adapter().stop_device()), success);
+  CHECK_EQ(query_driver_caps_of(fixture.adapter(), stopped), success);
+  CHECK(std::memcmp(&before, &started, sizeof before) == 0);
+  CHECK(std::memcmp(&before, &d3, sizeof before) == 0);
+  CHECK(std::memcmp(&before, &stopped, sizeof before) == 0);
+  CHECK(fixture.adapter().invariants_hold()); }
+
+TEST(adapter_query_adapter_info, answers_wddm_device_caps_before_start)
+{ Fixture fixture; std::uint32_t interface_version = 0x11007u; std::int32_t caps = 0;
+  DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = query_wddm_device_caps;
+  query.pInputData = &interface_version;
+  query.InputDataSize = sizeof interface_version;
+  query.pOutputData = &caps;
+  query.OutputDataSize = sizeof caps;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(caps, 0x1000); }
+
+TEST(adapter_query_adapter_info, declines_every_other_type_without_touching_either_buffer)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  const std::int32_t out_of_range[] = {-1, last_query_type + 1, 0x7FFFFFFF, static_cast<std::int32_t>(0x80000000u)};
+  for (std::int32_t type = 0; type <= last_query_type + 4; type++) {
+      const std::int32_t requested = type <= last_query_type ? type : out_of_range[type - last_query_type - 1];
+      if (requested == query_driver_caps || requested == query_wddm_device_caps) continue;
+      GuardedBuffer input(64u), output(64u);
+      std::memset(input.data(), 0xEE, 64u);
+      std::memset(output.data(), 0xEE, 64u);
+      DxgkargQueryAdapterInfoRecord query = {};
+      query.Type = requested;
+      query.pInputData = input.data();
+      query.InputDataSize = 64u;
+      query.pOutputData = output.data();
+      query.OutputDataSize = 64u;
+      CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), not_implemented);
+      bool untouched = true;
+      for (std::uint32_t byte = 0u; byte < 64u; byte++)
+          untouched = untouched && input.data()[byte] == 0xEEu && output.data()[byte] == 0xEEu;
+      CHECK(untouched);
+  } }
+
+TEST(adapter_query_adapter_info, every_answer_is_a_status_dxgkrnl_accepts)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  for (std::int32_t type = -1; type <= last_query_type + 1; type++) {
+      const std::uint32_t sizes[] = {0u, 3u, 4u, 0x24Fu, 0x250u};
+      for (std::uint32_t size : sizes) {
+          std::uint8_t input[0x250] = {}, output[0x250] = {};
+          DxgkargQueryAdapterInfoRecord query = {};
+          query.Type = type;
+          query.pInputData = input;
+          query.InputDataSize = size;
+          query.pOutputData = output;
+          query.OutputDataSize = size;
+          CHECK(accepted_by_dxgkrnl(nt(fixture.adapter().query_adapter_info(&query))));
+      }
+  }
+  CHECK(accepted_by_dxgkrnl(nt(fixture.adapter().query_adapter_info(nullptr)))); }
+
+TEST(adapter_query_adapter_info, a_null_argument_block_or_short_driver_caps_is_invalid)
+{ Fixture fixture; std::uint8_t output[0x250] = {};
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(nullptr)), invalid_parameter);
+  DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = query_driver_caps;
+  query.pOutputData = output;
+  query.OutputDataSize = 0x24Fu;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), invalid_parameter);
+  query.pOutputData = nullptr;
+  query.OutputDataSize = 0x250u;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), invalid_parameter); }
+
+TEST(adapter_query_adapter_info, is_passive_only)
+{ Fixture fixture; DxgkDriverCapsRecord caps = {};
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(query_driver_caps_of(fixture.adapter(), caps));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  while (fixture.platform().claim(Violation::irql_ceiling)) {} }
+
+/* ---- Escape ---------------------------------------------------------------- */
+
+TEST(adapter_escape, no_escape_is_defined_so_every_escape_is_not_supported)
+{ Fixture fixture; std::uint8_t data[64] = {};
+  DxgkargEscapeRecord escape = {};
+  escape.pPrivateDriverData = data;
+  const std::uint32_t sizes[] = {1u, 4u, 64u};
+  for (std::uint32_t size : sizes) {
+      escape.PrivateDriverDataSize = size;
+      CHECK_EQ(nt(fixture.adapter().escape(&escape)), not_supported);
+  } }
+
+TEST(adapter_escape, missing_or_empty_private_data_is_invalid)
+{ Fixture fixture; std::uint8_t data[4] = {};
+  CHECK_EQ(nt(fixture.adapter().escape(nullptr)), invalid_parameter);
+  DxgkargEscapeRecord escape = {};
+  escape.PrivateDriverDataSize = 4u;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  escape.pPrivateDriverData = data;
+  escape.PrivateDriverDataSize = 0u;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter); }
+
+TEST(adapter_escape, is_passive_only)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.adapter().escape(nullptr));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
+
+/* ---- CollectDbgInfo -------------------------------------------------------- */
+
+namespace {
+
+std::uint32_t collect(Adapter &adapter, std::uint8_t *buffer, std::uint64_t size, DxgkargCollectDbgInfoExtRecord *ext)
+{
+    DxgkargCollectDbgInfoRecord record = {};
+    record.pBuffer = buffer;
+    record.BufferSize = size;
+    record.pExtension = ext;
+    return nt(adapter.collect_dbg_info(&record));
+}
+
+}  // namespace
+
+TEST(adapter_collect_dbg_info, writes_the_started_and_powered_state)
+{ Fixture fixture; GuardedBuffer buffer(av::DebugReport::report_bytes);
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(collect(fixture.adapter(), buffer.data(), av::DebugReport::report_bytes, nullptr), success);
+  CHECK_EQ(buffer.data()[0], 0x52u);   /* 'R' */
+  CHECK_EQ(buffer.data()[6], 1u);      /* started */
+  CHECK_EQ(buffer.data()[7], 1u);      /* powered */
+  CHECK(buffer.data()[8] != 0u || buffer.data()[12] != 0u);   /* VERSION_1 negotiated */
+  CHECK(buffer.guards_intact()); }
+
+TEST(adapter_collect_dbg_info, a_stopped_adapter_reports_stopped)
+{ Fixture fixture; std::uint8_t buffer[av::DebugReport::report_bytes] = {};
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().stop_device()), success);
+  CHECK_EQ(collect(fixture.adapter(), buffer, sizeof buffer, nullptr), success);
+  CHECK_EQ(buffer[6], 0u);
+  CHECK_EQ(buffer[7], 0u);
+  CHECK_EQ(buffer[8], 0u); }
+
+TEST(adapter_collect_dbg_info, a_short_buffer_gets_whole_fields_only_and_nothing_past_it)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  for (std::uint64_t size = 0u; size < av::DebugReport::report_bytes; size++) {
+      GuardedBuffer buffer(av::DebugReport::report_bytes);
+      std::memset(buffer.data(), 0xEE, av::DebugReport::report_bytes);
+      CHECK_EQ(collect(fixture.adapter(), buffer.data(), size, nullptr), success);
+      CHECK_EQ(buffer.data()[av::DebugReport::report_bytes - 1u], 0xEEu);
+      CHECK(buffer.guards_intact());
+  } }
+
+TEST(adapter_collect_dbg_info, zeroes_the_extension_and_rejects_a_missing_buffer)
+{ Fixture fixture; DxgkargCollectDbgInfoExtRecord ext;
+  std::memset(&ext, 0xEE, sizeof ext);
+  CHECK_EQ(collect(fixture.adapter(), nullptr, 0u, &ext), success);
+  CHECK_EQ(ext.BucketingKey, 0u);
+  CHECK_EQ(ext.Reserved7, 0u);
+  CHECK_EQ(collect(fixture.adapter(), nullptr, 16u, nullptr), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().collect_dbg_info(nullptr)), invalid_parameter); }
+
+TEST(adapter_collect_dbg_info, allocates_nothing)
+{ Fixture fixture; std::uint8_t buffer[64] = {};
+  CHECK_EQ(fixture.start(), success);
+  const std::uint32_t allocations = fixture.platform().allocations_made();
+  CHECK_EQ(collect(fixture.adapter(), buffer, sizeof buffer, nullptr), success);
+  CHECK_EQ(fixture.platform().allocations_made(), allocations);
+  CHECK_EQ(fixture.platform().locks_held(), 0u); }
+
+TEST(adapter_collect_dbg_info, is_passive_only)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.adapter().collect_dbg_info(nullptr));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling)); }

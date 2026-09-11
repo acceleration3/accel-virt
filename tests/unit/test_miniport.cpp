@@ -42,7 +42,8 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiSetPowerState,       DdiSlot::DxgkDdiNotifyAcpiEvent,
     DdiSlot::DxgkDdiResetDevice,         DdiSlot::DxgkDdiUnload,
     DdiSlot::DxgkDdiQueryInterface,      DdiSlot::DxgkDdiControlEtwLogging,
-    DdiSlot::DxgkDdiLinkDevice,
+    DdiSlot::DxgkDdiLinkDevice,          DdiSlot::DxgkDdiQueryAdapterInfo,
+    DdiSlot::DxgkDdiEscape,              DdiSlot::DxgkDdiCollectDbgInfo,
 };
 
 bool is_implemented(std::uint16_t index)
