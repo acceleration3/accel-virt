@@ -20,7 +20,7 @@ Read these, in this order:
    are enforced by build gates.
 3. `docs/testing.md` — the five test layers and why a display miniport can be
    unit tested on Linux at all.
-4. `docs/roadmap.md` — the 35 features, their status and dependencies.
+4. `docs/roadmap.md` — the 62 features, their status and dependencies.
 5. `README.md` — layout and build commands.
 
 The design this implements lives in the knowledge base in `docs/kb/`:

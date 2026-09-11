@@ -23,7 +23,7 @@ WDK headers and from reverse engineering Microsoft's shipping binaries.
 |---|---|
 | [`.specify/memory/constitution.md`](.specify/memory/constitution.md) | The rules. Principle III is the testing standard and it is not negotiable. |
 | [`docs/testing.md`](docs/testing.md) | How you unit test a display miniport. Five layers, four of which run on Linux in seconds. |
-| [`docs/roadmap.md`](docs/roadmap.md) | 35 features, WDDM 1.0 → 3.2, each with a spec. |
+| [`docs/roadmap.md`](docs/roadmap.md) | 62 features - WDDM 1.0 → 3.2, the QEMU device, live bring-up, then Vulkan, OpenGL, OpenCL and Direct3D - each with a spec. |
 | [`specs/`](specs/) | One directory per feature. |
 
 ## Why the WDDM version history is the plan

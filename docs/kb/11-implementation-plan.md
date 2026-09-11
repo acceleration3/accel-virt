@@ -388,13 +388,34 @@ is measured lower.
 capset sub-API and codec. **Done when** each API's existing test suite passes
 in the guest.
 
-**M8 — a UMD for the desktop.** `rvkumd.dll` implementing enough of the D3D
-UMD DDI that DWM composites on `rvkgpu`; switch scanout to dmabuf. **Done
-when** DWM no longer falls back to WARP and desktop frames reach QEMU's
-display without a guest copy.
+**M8 — a UMD for the desktop, and for Direct3D.** `rvkumd.dll` implementing the
+D3D10/11 and D3D12 UMD DDIs over the same Vulkan remoting path, so DWM
+composites on `rvkgpu` and applications using the Microsoft runtime - not only
+those shipping vkd3d-proton or DXVK beside them - run on the host GPU; switch
+scanout to dmabuf. **Done when** DWM no longer falls back to WARP, desktop
+frames reach QEMU's display without a guest copy, and the system `d3d11.dll`
+and `d3d12.dll` run their conformance subsets on the adapter.
 
 TDR is not a milestone. It is paid for at M3 and revisited at every milestone
 after.
+
+### Milestones as features
+
+`docs/roadmap.md` is the executable form of these milestones; each row there
+has a spec. A milestone is done when its features are.
+
+| Milestone | Features |
+|---|---|
+| M0 — a stub miniport loads | 001–007; live: 035, 037 |
+| M1 — transport and display | 005, 011–013, 027; live: 038 |
+| M2 — the patched QEMU and a skeleton device | 026, 028–031, 034; live: 036, 039 |
+| M3 — memory and execution | 008–010, 014–023, 032, 033; live: 040–044 |
+| M4 — Vulkan end to end | 045, 047, 048 |
+| M5 — presentation | 046 |
+| M6 — user-mode submission | 024, 025, 049 |
+| M7 — OpenGL and OpenCL | 050–054 |
+| M8 — the UMD, the desktop and Direct3D | 055–059 |
+| After M8 — a product | 060–062 |
 
 ## Build, signing, and the development loop
 

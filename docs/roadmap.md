@@ -42,5 +42,34 @@ spec under `specs/`.
 | [033](../specs/033-device-fault-and-reset/spec.md) | QEMU device: fault, reset and recovery | — | `implement` | — | 032 |
 | [034](../specs/034-loopback-protocol-suite/spec.md) | Loopback protocol test suite | — | `implement` | — | 030, 031 |
 | [035](../specs/035-guest-integration-suite/spec.md) | In-guest integration suite | — | `implement` | — | 034 |
+| [036](../specs/036-device-interrupt-lifetime/spec.md) | QEMU device: fence interrupts that follow the driver's lifetime | — | `implement` | — | 031, 035 |
+| [037](../specs/037-guest-bring-up/spec.md) | Real-guest bring-up: the in-guest suite passes | — | `implement` | — | 036 |
+| [038](../specs/038-guest-desktop/spec.md) | Real-guest desktop: DWM on rvkgpu at a chosen mode | — | `implement` | — | 037 |
+| [039](../specs/039-host-memory-feasibility/spec.md) | Host memory and interrupt feasibility on real host GPUs | — | `implement` | — | 028, 031, 036 |
+| [040](../specs/040-guest-power-and-recovery/spec.md) | Real-guest power, restart and recovery | — | `implement` | — | 038, 033 |
+| [041](../specs/041-kmd-host-visible-memory/spec.md) | KMD: host-visible memory a process can map | — | `implement` | — | 037, 039 |
+| [042](../specs/042-host-executor-library/spec.md) | Host executor: render-server's backends behind rvk_executor.h | — | `implement` | — | 032, 039, 063 |
+| [043](../specs/043-guest-kmt-transport/spec.md) | Guest transport: render-server's drivers over D3DKMT and the rvk ring | — | `implement` | — | 041, 024, 034, 063 |
+| [044](../specs/044-rvk-context-live/spec.md) | End to end: rvk contexts in a real guest | — | `implement` | — | 037, 042, 043 |
+| [045](../specs/045-vulkan-icd/spec.md) | Vulkan: the ICD on rvkgpu | — | `implement` | — | 044 |
+| [046](../specs/046-vulkan-present/spec.md) | Vulkan: presentation through the KMD | — | `implement` | — | 045, 038, 041 |
+| [047](../specs/047-vulkan-for-d3d-translation/spec.md) | Vulkan: the feature set DXVK and vkd3d-proton need | — | `implement` | — | 046 |
+| [048](../specs/048-vulkan-conformance/spec.md) | Vulkan: conformance and the application suite in the guest | — | `implement` | — | 047 |
+| [049](../specs/049-user-mode-submission-live/spec.md) | User-mode submission in the guest: doorbells and native fences | — | `implement` | — | 045, 024 |
+| [050](../specs/050-opengl-icd/spec.md) | OpenGL: an installable client driver | — | `implement` | — | 044 |
+| [051](../specs/051-opengl-compatibility-and-present/spec.md) | OpenGL: compatibility profile and presentation | — | `implement` | — | 050, 046 |
+| [052](../specs/052-opencl-icd/spec.md) | OpenCL: the ICD on rvkgpu | — | `implement` | — | 044 |
+| [053](../specs/053-cross-api-sharing/spec.md) | Sharing across APIs and processes | — | `implement` | — | 047, 051, 052 |
+| [054](../specs/054-opengl-opencl-conformance/spec.md) | OpenGL and OpenCL: conformance in the guest | — | `implement` | — | 051, 052, 053 |
+| [055](../specs/055-umd-foundation/spec.md) | rvkumd.dll: the user-mode driver and DXGI | — | `implement` | — | 049, 053 |
+| [056](../specs/056-d3d11-umd/spec.md) | Direct3D 10 and 11: the user-mode driver | — | `implement` | — | 055 |
+| [057](../specs/057-d3d12-umd/spec.md) | Direct3D 12: the user-mode driver | — | `implement` | — | 056 |
+| [058](../specs/058-host-composition-scanout/spec.md) | The desktop on the host GPU: zero-copy composition and scanout | — | `implement` | — | 056, 046, 038 |
+| [059](../specs/059-d3d-conformance/spec.md) | Direct3D: conformance and the application suite | — | `implement` | — | 057, 058, 064 |
+| [060](../specs/060-multi-gpu-live/spec.md) | One adapter per host GPU in the guest | — | `implement` | — | 048 |
+| [061](../specs/061-driver-package/spec.md) | One installable driver package | — | `implement` | — | 047, 054, 055, 057, 060, 064 |
+| [062](../specs/062-performance-and-soak/spec.md) | Performance, stability and soak | — | `implement` | — | 040, 042, 059, 061 |
+| [063](../specs/063-render-server-integration/spec.md) | render-server as a pinned build input | — | `implement` | — | 001, 032 |
+| [064](../specs/064-d3d9-umd/spec.md) | Direct3D 9: the user-mode driver | — | `implement` | — | 055 |
 
-35 features. The `DRIVER_INITIALIZATION_DATA` table has 193 fields at WDDM 3.2 (187 DDIs, 5 reserved); see `docs/ref/driver_init_table.md`.
+64 features. The `DRIVER_INITIALIZATION_DATA` table has 193 fields at WDDM 3.2 (187 DDIs, 5 reserved); see `docs/ref/driver_init_table.md`.

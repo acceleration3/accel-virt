@@ -463,8 +463,9 @@ tools/guest/guest_shell.py pull 'C:\Windows\INF\setupapi.dev.log' setupapi.dev.l
 socat - UNIX-CONNECT:build-guest/qmp.sock    # QMP: {"execute":"qmp_capabilities"} then e.g. cont
 ```
 
-The application suite (vkd3d-proton, DXVK samples) joins once the Vulkan ICD
-(M4) and presentation (M5) exist.
+The application suites join with the drivers they test: Vulkan with the CTS,
+vkd3d-proton and DXVK samples in feature 048, OpenGL and OpenCL conformance in
+054, and Direct3D through the Microsoft runtime in 059.
 
 ---
 
