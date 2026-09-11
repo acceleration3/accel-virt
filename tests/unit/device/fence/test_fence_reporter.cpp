@@ -30,6 +30,7 @@ namespace av {
 struct FenceReporterProbe {
     static void pend_unprepared(FenceReporter &reporter) { reporter.pending_ = true; }
     static void lose_progress(FenceReporter &reporter) { reporter.completed_ = 5u; reporter.progress_ = 0u; }
+    static void lose_page(FenceReporter &reporter) { reporter.page_ = FenceWindow(); }
 };
 
 }  // namespace av
@@ -172,4 +173,8 @@ TEST(fence_reporter_invariants, pending_before_preparing_or_a_completion_without
   Fixture lost;
   CHECK_STATUS(lost.reporter().prepare(lost.window(), line), Status::ok);
   av::FenceReporterProbe::lose_progress(lost.reporter());
-  CHECK(!lost.reporter().invariants_hold()); }
+  CHECK(!lost.reporter().invariants_hold());
+  Fixture pageless;
+  CHECK_STATUS(pageless.reporter().prepare(pageless.window(), line), Status::ok);
+  av::FenceReporterProbe::lose_page(pageless.reporter());
+  CHECK(!pageless.reporter().invariants_hold()); }

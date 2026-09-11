@@ -19,12 +19,13 @@
 
 namespace av {
 
+class FenceReporter;
 class Host;
 struct RingConsumerProbe;
 
 class RingConsumer {
 public:
-    explicit RingConsumer(Host &host);
+    RingConsumer(Host &host, FenceReporter &fences);
     RingConsumer(const RingConsumer &) = delete;
     RingConsumer &operator=(const RingConsumer &) = delete;
 
@@ -36,7 +37,8 @@ public:
     void                 withdraw();
     /* Worker: serving begins, if prepared. */
     void                 attach();
-    /* Worker: every complete batch the guest has published is consumed. */
+    /* Worker: every complete batch the guest has published is consumed and
+     * completed, and the guest interrupted once if any was. */
     void                 service();
 
     bool     attached() const;
@@ -53,8 +55,9 @@ private:
     [[nodiscard]] Status consume_next();
     void                 stop(const char *reason, uint64_t value);
 
-    Host        &host_;
-    RingWindow   ring_;
+    Host          &host_;
+    FenceReporter &fences_;
+    RingWindow     ring_;
     RingProgress progress_;
     uint64_t     head_;
     uint64_t     last_fence_;

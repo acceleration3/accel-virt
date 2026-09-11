@@ -14,6 +14,7 @@
 namespace av {
 
 class BlobTable;
+class FenceWindow;
 class RingWindow;
 class CapsetInfo;
 class ContextSetup;
@@ -43,6 +44,8 @@ public:
     uint32_t               doorbell() const;
     /* Main loop. The bound ring blob as a ring; a window over no ring unbound. */
     RingWindow             ring_window();
+    /* Main loop. The bound fence blob; a window over nothing unbound. */
+    FenceWindow            fence_window();
 
 private:
     Host           &host_;

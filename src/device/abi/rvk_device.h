@@ -99,7 +99,10 @@ int rvk_device_control(RvkDevice *device, void *request, uint32_t type);
 /* How many capsets the device offers; the glue offers VIRTIO_GPU_F_CONTEXT_INIT
  * when there is one. Main loop. */
 uint32_t rvk_device_capsets(RvkDevice *device);
-/* A virtio reset: every context is destroyed, then every blob released. Main loop. */
+/* The status the driver wrote (virtio_set_status). Main loop. */
+void rvk_device_status(RvkDevice *device, uint8_t status);
+/* A virtio reset: every context is destroyed, the fence interrupts released,
+ * then every blob. Main loop. */
 void rvk_device_reset(RvkDevice *device);
 /* Nonzero for a device this module never created. Main loop. */
 int rvk_device_destroy(RvkDevice *device);

@@ -1,4 +1,6 @@
 #include "core/support/status.hpp"
+#include "device/fence/fence_interrupts.hpp"
+#include "device/fence/fence_reporter.hpp"
 #include "device/host/host.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/ring/ring_consumer.hpp"
@@ -96,7 +98,10 @@ void attach(void *consumer) { static_cast<RingConsumer *>(consumer)->attach(); }
 
 class Fixture {
 public:
-    Fixture() : ring_(host_), worker_(host_, ring_) { journal_.host = &host_; }
+    Fixture() : interrupts_(host_), fences_(host_, interrupts_), ring_(host_, fences_), worker_(host_, ring_)
+    {
+        journal_.host = &host_;
+    }
     ~Fixture() { worker_.stop(); }
 
     MockHost     &host() { return host_; }
@@ -115,9 +120,11 @@ public:
     }
 
 private:
-    MockHost     host_;
-    RingConsumer ring_;
-    Worker       worker_;
+    MockHost             host_;
+    av::FenceInterrupts  interrupts_;
+    av::FenceReporter    fences_;
+    RingConsumer         ring_;
+    Worker               worker_;
     Journal      journal_;
     RingMemory   memory_;
 };
@@ -306,7 +313,9 @@ TEST(worker_connect_doorbell, a_page_past_the_region_is_refused)
 
 TEST(worker_invariants, a_queue_past_capacity_or_a_head_outside_it_is_detected)
 { MockHost host;
-  RingConsumer ring(host);
+  av::FenceInterrupts interrupts(host);
+  av::FenceReporter fences(host, interrupts);
+  RingConsumer ring(host, fences);
   Worker overfilled(host, ring);
   av::WorkerProbe::overfill(overfilled);
   CHECK(!overfilled.invariants_hold());

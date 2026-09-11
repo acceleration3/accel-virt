@@ -34,7 +34,7 @@ struct DeviceContextTableProbe {
     {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
-                static_cast<void>(slot.construct(table.host_, table.blobs_, id));
+                static_cast<void>(slot.construct(table.host_, table.blobs_, table.interrupts_, id));
                 static_cast<void>(slot.object().start());
                 return;
             }
@@ -50,7 +50,15 @@ struct BlobTableProbe {
     }
 };
 
+struct FenceInterruptsProbe {
+    static void connect_without_lock(FenceInterrupts &interrupts) { interrupts.connected_ = true; }
+    static void repair(FenceInterrupts &interrupts) { interrupts.connected_ = false; }
+};
+
 struct VirtioGpuRvkProbe {
+    /* Interrupts connected with no lock to hold them apart. */
+    static void break_interrupts(VirtioGpuRvk &device) { FenceInterruptsProbe::connect_without_lock(device.interrupts_); }
+    static void repair_interrupts(VirtioGpuRvk &device) { FenceInterruptsProbe::repair(device.interrupts_); }
     /* The ring header a guest writes before its setup. */
     static void write_ring_header(VirtioGpuRvk &device, std::uint32_t id)
     {
@@ -204,6 +212,47 @@ TEST(virtio_gpu_rvk_control, answers_context_requests_and_reset_destroys_context
   CHECK_EQ(device.blobs(), 0u);
   CHECK(device.invariants_hold()); }
 
+TEST(virtio_gpu_rvk_status, driver_ok_connects_the_fence_interrupts_until_reset)
+{ MockHost host;
+  host.add_gpu(first);
+  VirtioGpuRvk device(host);
+  device.status(VirtioGpuRvk::driver_ok);   /* unrealized: nothing */
+  CHECK(!host.fence_interrupts_connected());
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, message), Status::ok);
+  device.status(0x0Bu);                     /* acknowledge, driver, features ok */
+  CHECK(!host.fence_interrupts_connected());
+  device.status(0x0Fu);
+  CHECK(host.fence_interrupts_connected());
+  CHECK(device.invariants_hold());
+  device.status(0x0Fu);
+  device.status(0u);                        /* status 0 comes before the reset: nothing */
+  CHECK(host.fence_interrupts_connected());
+  device.reset();
+  CHECK(!host.fence_interrupts_connected());
+  host.fail_fence_connect_at(1u);
+  device.status(VirtioGpuRvk::driver_ok);
+  CHECK(!host.fence_interrupts_connected());
+  CHECK_EQ(host.logged(), 1u);
+  device.status(VirtioGpuRvk::driver_ok);
+  CHECK(host.fence_interrupts_connected());
+  device.reset(); }
+
+TEST(virtio_gpu_rvk_realize, a_host_without_a_mutex_for_fence_interrupts_is_refused)
+{ MockHost host;
+  host.add_gpu(first);
+  VirtioGpuRvk device(host);
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  host.fail_mutex_at(1u);
+  CHECK_STATUS(device.realize("auto", false, message), Status::no_memory);
+  CHECK(std::strstr(message.text(), "no mutex for fence interrupts") != nullptr);
+  CHECK(!device.realized());
+  TextBuffer again(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, again), Status::ok);
+  CHECK_EQ(host.logged(), 1u); }
+
 TEST(virtio_gpu_rvk, lifecycle_is_main_loop_only)
 { MockHost host;
   host.add_gpu(first);
@@ -223,9 +272,10 @@ TEST(virtio_gpu_rvk, lifecycle_is_main_loop_only)
                    &device, thread),
                Status::ok);
   host.join_thread(thread);
-  /* realize and its binding, reset and both tables, create, destroy and its
-   * table, and control, which an unrealized device answers no further */
-  for (int violation = 0; violation < 9; violation++) CHECK(host.claim(HostViolation::main_loop_required));
+  /* realize, its fence interrupts and its binding, reset, both tables and the
+   * interrupts, create, destroy and its table, and control, which an
+   * unrealized device answers no further */
+  for (int violation = 0; violation < 11; violation++) CHECK(host.claim(HostViolation::main_loop_required));
   CHECK_EQ(host.unclaimed_violations(), 0u);
   CHECK_EQ(host.logged(), 1u); }
 
@@ -246,4 +296,8 @@ TEST(virtio_gpu_rvk_invariants, a_context_on_an_unrealized_device_or_a_broken_ta
   VirtioGpuRvk broken_blobs(host);
   av::VirtioGpuRvkProbe::duplicate_blob(broken_blobs, 9u);
   CHECK(!broken_blobs.invariants_hold());
-  broken_blobs.reset(); }
+  broken_blobs.reset();
+  VirtioGpuRvk broken_interrupts(host);
+  av::VirtioGpuRvkProbe::break_interrupts(broken_interrupts);
+  CHECK(!broken_interrupts.invariants_hold());
+  av::VirtioGpuRvkProbe::repair_interrupts(broken_interrupts); }

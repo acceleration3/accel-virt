@@ -2,6 +2,7 @@
 
 #include "core/support/scope_exit.hpp"
 #include "device/host/host.hpp"
+#include "device/fence/fence_window.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/ring/ring_window.hpp"
@@ -95,6 +96,14 @@ RingWindow ContextBinding::ring_window()
     BlobWindow blob;
     if (bound_) static_cast<void>(blobs_.window(ring_resource_, blob));
     return RingWindow(blob, bound_ ? ring_order_ : uint8_t{0});
+}
+
+FenceWindow ContextBinding::fence_window()
+{
+    host_.require_main_loop("ContextBinding::fence_window");
+    BlobWindow blob;
+    if (bound_) static_cast<void>(blobs_.window(fence_resource_, blob));
+    return FenceWindow(blob);
 }
 
 }  // namespace av

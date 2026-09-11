@@ -87,7 +87,10 @@ TEST(rvk_device_abi, create_reset_and_destroy_through_the_c_entry_points)
   CHECK(device != nullptr);
   auto *const instance = reinterpret_cast<DeviceInstance *>(device);
   CHECK_STATUS(instance->device().create_context(1u), Status::ok);
+  rvk_device_status(device, 0x0Fu);
+  CHECK(host.fence_interrupts_connected());
   rvk_device_reset(device);
+  CHECK(!host.fence_interrupts_connected());
   CHECK_EQ(instance->device().contexts(), 0u);
   CHECK_EQ(av::device_module.live(), 1u);
   CHECK_EQ(rvk_device_destroy(device), 0);

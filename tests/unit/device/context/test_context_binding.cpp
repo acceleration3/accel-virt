@@ -1,6 +1,7 @@
 #include "core/support/status.hpp"
 #include "device/context/context_binding.hpp"
 #include "device/control/control_request.hpp"
+#include "device/fence/fence_window.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/ring/ring_window.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -84,12 +85,14 @@ TEST(context_binding_bind, records_the_setup_at_the_negotiated_version_and_pins_
   CHECK_EQ(fixture.binding().doorbell(), 9u);
   CHECK_EQ(fixture.binding().ring_window().capacity(), 0x1000u);
   CHECK(fixture.binding().ring_window().invariants_hold());
+  CHECK(fixture.binding().fence_window().invariants_hold());
   CHECK_STATUS(fixture.blobs().release(ring), Status::invalid_state);
   CHECK_STATUS(fixture.blobs().release(fence), Status::invalid_state);
   CHECK_STATUS(fixture.binding().bind(setup(), capset()), Status::invalid_state);
   fixture.binding().unbind();
   CHECK(!fixture.binding().bound());
   CHECK_EQ(fixture.binding().ring_window().capacity(), 0u);
+  CHECK(!fixture.binding().fence_window().invariants_hold());
   fixture.binding().unbind();
   CHECK_STATUS(fixture.blobs().release(ring), Status::ok);
   CHECK_STATUS(fixture.blobs().release(fence), Status::ok); }

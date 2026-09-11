@@ -3,6 +3,8 @@
  * are proven with real threads. */
 #include "core/support/status.hpp"
 #include "device/abi/table_host.hpp"
+#include "device/fence/fence_interrupts.hpp"
+#include "device/fence/fence_reporter.hpp"
 #include "device/ring/ring_consumer.hpp"
 #include "device/host/host.hpp"
 #include "device/threading/work_item.hpp"
@@ -27,7 +29,9 @@ using av::Worker;
 
 TEST(table_host, a_worker_runs_over_the_c_table)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
-  av::RingConsumer ring(host);
+  av::FenceInterrupts interrupts(host);
+  av::FenceReporter fences(host, interrupts);
+  av::RingConsumer ring(host, fences);
   Worker worker(host, ring);
   CHECK_STATUS(worker.start(), Status::ok);
   std::uint32_t ran = 0u;

@@ -1,5 +1,6 @@
 #include "device/ring/ring_consumer.hpp"
 
+#include "device/fence/fence_reporter.hpp"
 #include "device/host/host.hpp"
 #include "device/support/text_buffer.hpp"
 #include "proto/submission/batch_header.hpp"
@@ -7,8 +8,8 @@
 
 namespace av {
 
-RingConsumer::RingConsumer(Host &host)
-    : host_(host), ring_(), progress_(), head_(0u), last_fence_(0u), batches_(0u), prepared_(false),
+RingConsumer::RingConsumer(Host &host, FenceReporter &fences)
+    : host_(host), fences_(fences), ring_(), progress_(), head_(0u), last_fence_(0u), batches_(0u), prepared_(false),
       attached_(false), stopped_(false) {}
 
 Status RingConsumer::prepare(const RingWindow &ring)
@@ -53,6 +54,7 @@ void RingConsumer::service()
     if (progress_.observe(RingHeader(snapshot.order(), snapshot.tail(), head_)) != Status::ok)
         return stop("ring tail inconsistent with what was consumed:", snapshot.tail());
     while (consume_next() == Status::ok) {}
+    fences_.signal();
 }
 
 Status RingConsumer::consume_next()
@@ -79,6 +81,7 @@ Status RingConsumer::consume_next()
     batches_++;
     /* The header was just read, so its head field is inside the blob. */
     static_cast<void>(ring_.publish_head(head_));
+    fences_.complete(last_fence_);
     return Status::ok;
 }
 

@@ -2,6 +2,9 @@
  * head published after each, and any ring no valid producer could write
  * stopping the context for good. Service runs on a mock worker thread. */
 #include "core/support/status.hpp"
+#include "device/fence/fence_interrupts.hpp"
+#include "device/fence/fence_reporter.hpp"
+#include "device/fence/fence_window.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/ring/ring_consumer.hpp"
 #include "device/ring/ring_window.hpp"
@@ -9,6 +12,7 @@
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/ring/guest_ring.hpp"
+#include "proto/submission/fence_page.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/submission/ring_progress.hpp"
 
@@ -16,6 +20,10 @@
 #include <cstring>
 
 using av::BlobWindow;
+using av::FenceInterrupts;
+using av::FencePage;
+using av::FenceReporter;
+using av::FenceWindow;
 using av::GuestRing;
 using av::HostViolation;
 using av::MockHost;
@@ -66,16 +74,32 @@ private:
 
 class Fixture {
 public:
-    Fixture() : consumer_(host_) {}
+    Fixture()
+        : page_{}, page_pointer_(page_), page_length_(sizeof page_), interrupts_(host_), fences_(host_, interrupts_),
+          consumer_(host_, fences_)
+    {
+        static_cast<void>(interrupts_.initialize());
+        static_cast<void>(interrupts_.connect());
+    }
 
     MockHost     &host() { return host_; }
     RingConsumer &consumer() { return consumer_; }
     RingWindow    window() const { return memory_.window(); }
     GuestRing    &ring() { return memory_.guest(); }
 
+    /* The fence page as the guest would read it. */
+    FencePage page() const
+    {
+        FencePage decoded;
+        static_cast<void>(decoded.decode(page_, sizeof page_));
+        return decoded;
+    }
+
     /* Prepared on the main loop, attached on a worker. */
     void bind()
     {
+        CHECK_STATUS(fences_.prepare(FenceWindow(BlobWindow(&page_pointer_, &page_length_, 1u, page_length_)), 0u),
+                     Status::ok);
         CHECK_STATUS(consumer_.prepare(memory_.window()), Status::ok);
         CHECK(consumer_.invariants_hold());
         on_worker([](RingConsumer &consumer) { consumer.attach(); });
@@ -105,9 +129,14 @@ private:
         host_.join_thread(thread);
     }
 
-    MockHost     host_;
-    RingConsumer consumer_;
-    RingMemory   memory_;
+    std::uint8_t    page_[FencePage::encoded_size];
+    void           *page_pointer_;
+    std::uint64_t   page_length_;
+    MockHost        host_;
+    FenceInterrupts interrupts_;
+    FenceReporter   fences_;
+    RingConsumer    consumer_;
+    RingMemory      memory_;
 };
 
 }  // namespace
@@ -125,8 +154,12 @@ TEST(ring_consumer_service, consumes_every_complete_batch_and_publishes_head)
   CHECK_EQ(fixture.consumer().last_fence(), 9u);
   CHECK_EQ(fixture.consumer().head(), 16u + 32u + 80u);
   CHECK_EQ(fixture.ring().head(), fixture.ring().tail());
+  CHECK_EQ(fixture.page().completed_fence(), 9u);
+  CHECK_EQ(fixture.page().progress(), 3u);
+  CHECK_EQ(fixture.host().raised(0u), 1u);
   fixture.serve();
   CHECK_EQ(fixture.consumer().batches(), 3u);
+  CHECK_EQ(fixture.host().raised(0u), 1u);
   CHECK_EQ(fixture.host().logged(), 0u); }
 
 TEST(ring_consumer_service, stops_at_a_batch_the_guest_has_not_finished)
@@ -145,7 +178,9 @@ TEST(ring_consumer_service, stops_at_a_batch_the_guest_has_not_finished)
   fixture.serve();
   CHECK_EQ(fixture.consumer().batches(), 2u);
   CHECK_EQ(fixture.ring().head(), fixture.ring().tail());
-  CHECK(!fixture.consumer().stopped()); }
+  CHECK(!fixture.consumer().stopped());
+  CHECK_EQ(fixture.page().completed_fence(), 2u);
+  CHECK_EQ(fixture.host().raised(0u), 2u); }
 
 TEST(ring_consumer_service, reads_batches_across_the_end_of_the_data_area)
 { Fixture fixture;
@@ -221,6 +256,9 @@ TEST(ring_consumer_service, a_hostile_ring_stops_the_context_logs_once_and_ignor
       if (!fixture.consumer().stopped()) av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
       CHECK_EQ(fixture.host().logged(), 1u);
       CHECK_EQ(fixture.consumer().head(), 16u);
+      CHECK_EQ(fixture.page().completed_fence(), 5u);
+      CHECK_EQ(fixture.page().progress(), 1u);
+      CHECK_EQ(fixture.host().raised(0u), 1u);
       static_cast<void>(RingHeader(12u, 0u, 0u).encode(fixture.ring().bytes(), 32u));
       fixture.ring().store(head_offset, 16u);
       fixture.serve();

@@ -6,6 +6,7 @@
 #include "device/context/device_context_table.hpp"
 #include "device/control/context_commands.hpp"
 #include "device/control/control_request.hpp"
+#include "device/fence/fence_interrupts.hpp"
 #include "device/memory/blob_table.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
@@ -92,7 +93,9 @@ ContextSetup setup(std::uint32_t ring_id = ring, std::uint8_t order = 12u, std::
 
 class Fixture {
 public:
-    Fixture() : blobs_(host_), contexts_(host_, blobs_), capset_(host_), commands_(host_, contexts_, capset_)
+    Fixture()
+        : blobs_(host_), interrupts_(host_), contexts_(host_, blobs_, interrupts_), capset_(host_),
+          commands_(host_, contexts_, capset_)
     {
         host_.add_gpu(uuid);
         host_.set_hostmem_size(0x10000u);
@@ -127,9 +130,10 @@ public:
     DeviceContextTable &contexts() { return contexts_; }
 
 private:
-    MockHost           host_;
-    BlobTable          blobs_;
-    DeviceContextTable contexts_;
+    MockHost            host_;
+    BlobTable           blobs_;
+    av::FenceInterrupts interrupts_;
+    DeviceContextTable  contexts_;
     DeviceCapset       capset_;
     ContextCommands    commands_;
     std::uint8_t       last_[256] = {};

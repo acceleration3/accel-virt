@@ -8,7 +8,8 @@
 
 namespace av {
 
-VirtioGpuRvk::VirtioGpuRvk(Host &host) : host_(host), binding_(host), capset_(host), blobs_(host), contexts_(host, blobs_) {}
+VirtioGpuRvk::VirtioGpuRvk(Host &host)
+    : host_(host), binding_(host), capset_(host), blobs_(host), interrupts_(host), contexts_(host, blobs_, interrupts_) {}
 
 Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, TextBuffer &message)
 {
@@ -19,6 +20,12 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, TextBuffer &
         host_.log(message.text());
         return Status::invalid_parameter;
     }
+    /* A realize that failed before may already have the lock. */
+    if (interrupts_.initialize() == Status::no_memory) {
+        message.append("virtio-gpu-rvk: the host has no mutex for fence interrupts");
+        host_.log(message.text());
+        return Status::no_memory;
+    }
     const Status status = binding_.bind(host_gpu, message);
     if (status == Status::ok) capset_.describe(binding_.index());
     return status;
@@ -28,7 +35,15 @@ void VirtioGpuRvk::reset()
 {
     host_.require_main_loop("VirtioGpuRvk::reset");
     contexts_.destroy_all();
+    interrupts_.disconnect();
     blobs_.release_all();
+}
+
+void VirtioGpuRvk::status(uint8_t status)
+{
+    host_.require_main_loop("VirtioGpuRvk::status");
+    if ((status & driver_ok) == 0u || !binding_.bound()) return;
+    if (interrupts_.connect() != Status::ok) host_.log("virtio-gpu-rvk: the fence interrupts could not be connected");
 }
 
 bool VirtioGpuRvk::control(void *request, uint32_t type)
@@ -81,7 +96,8 @@ uint32_t VirtioGpuRvk::gpu_index() const
 /* Contexts exist only on a realized device. */
 bool VirtioGpuRvk::invariants_hold() const
 {
-    return contexts_.invariants_hold() && blobs_.invariants_hold() && (binding_.bound() || contexts_.live() == 0u);
+    return contexts_.invariants_hold() && blobs_.invariants_hold() && interrupts_.invariants_hold() &&
+           (binding_.bound() || contexts_.live() == 0u);
 }
 
 }  // namespace av

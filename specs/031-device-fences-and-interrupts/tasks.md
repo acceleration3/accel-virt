@@ -16,8 +16,8 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 2: Completion
 
-- [ ] T004 [US1] [US2] Tests then `RingConsumer` completing each batch through its reporter and signalling once per service; fuzz_ring checks the page
-- [ ] T005 [US1] [US2] Tests then `ContextBinding::fence_window`, `DeviceContext` bind order and withdrawal, `DeviceContextTable` and `VirtioGpuRvk` owning `FenceInterrupts`, `status`, reset order, realize failure; `rvk_device_status`
+- [X] T004 [US1] [US2] Tests then `RingConsumer` completing each batch through its reporter and signalling once per service; fuzz_ring checks the page
+- [X] T005 [US1] [US2] Tests then `ContextBinding::fence_window`, `DeviceContext` bind order and withdrawal, `DeviceContextTable` and `VirtioGpuRvk` owning `FenceInterrupts`, `status`, reset order, realize failure; `rvk_device_status`
 
 **Checkpoint**: commit.
 
