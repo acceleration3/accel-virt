@@ -64,8 +64,10 @@ add_library(av_harness STATIC
   tests/harness/address_space_fixture.cpp
   tests/harness/ddi_table_probe.cpp
   tests/harness/fake_dxgkrnl.cpp
-  tests/harness/byte_layout.cpp)
+  tests/harness/byte_layout.cpp
+  tests/harness/fixture_file.cpp)
 target_link_libraries(av_harness PUBLIC av_core)
+target_compile_definitions(av_harness PUBLIC AV_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures")
 
 # Sanitizers, profile instrumentation and libFuzzer each need every object built
 # their way, which is why they are separate build configurations (tools/gate.sh).

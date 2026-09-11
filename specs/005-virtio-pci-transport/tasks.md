@@ -13,8 +13,8 @@ description: "Task list for feature 005: virtio-pci transport"
 
 ## Phase 2: Capability walk (US1)
 
-- [ ] T003 Commit fixtures and `tools/host/capture_pci_config.py`; tests in `tests/unit/test_virtio_capability_walk.cpp`: both QEMU fixtures parse to research.md R2; first-instance wins; reserved cfg_type and bar ignored; loops, pointer < 0x40, capability past 0xFF, short cap_len (16/20/24 by type), capability status bit clear -> results per spec; missing required -> not_supported; bad multiplier -> malformed; hostile sweep over the fixture. Must fail
-- [ ] T004 Implement `virtio_region`, `virtio_pci_layout`, `virtio_capability_walk`; `tests/fuzz/fuzz_virtio_capabilities.cpp` with both fixtures as seeds
+- [X] T003 Commit fixtures and `tools/host/capture_pci_config.py`; tests in `tests/unit/test_virtio_capability_walk.cpp`: both QEMU fixtures parse to research.md R2; first-instance wins; reserved cfg_type and bar ignored; loops, pointer < 0x40, capability past 0xFF, short cap_len (16/20/24 by type), capability status bit clear -> results per spec; missing required -> not_supported; bad multiplier -> malformed; hostile sweep over the fixture. Must fail
+- [X] T004 Implement `virtio_region`, `virtio_pci_layout`, `virtio_capability_walk`; `tests/fuzz/fuzz_virtio_capabilities.cpp` with both fixtures as seeds
 
 **Checkpoint**: commit.
 
