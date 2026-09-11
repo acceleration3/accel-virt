@@ -660,6 +660,47 @@ WDDM 1.2 (with GPU VA, feature 017): a 1.2 claim below `DXGKDDI_WDDMv1_2` fails
   `NtGdiDdDDIUpdateAllocationProperty` answers `STATUS_NOT_IMPLEMENTED` for a NULL
   `ValidateUpdateAllocationProperty`; all four stay NULL.
 
+## 4k. WDDM 2.2 and hardware queues (feature 019)
+
+- `WDDMVersion` 0x2200 makes nothing mandatory. `ADAPTER_DISPLAY::Initialize
+  @ 1403abf44` asks `DXGKQAITYPE_DISPLAY_DRIVERCAPS_EXTENSION` (16) and, from
+  2.2, assumes `VirtualModeSupport` when it fails; the driver answers 0.
+- `DpiGetAdapterInfo @ 14024eb50` never copies `CreateHwContext`,
+  `DestroyHwContext` or `SwitchToHwContextList`. The display slots of 2.2 are
+  opt-in or NULL-checked: `CreatePeriodicFrameNotification` (VidSch falls back to
+  a timer), `SetTimingsFromVidPn` with `DisplayDetectControl` and
+  `QueryConnectionChange` (needs slot 105), `SetTargetGamma` (needs
+  `GammaRampCaps`), `SetTargetContentType` and `SetTargetAnalogCopyProtection`
+  (a NOT_SUPPORTED default), `SetTargetAdjustedColorimetry`,
+  `ExchangePreStartInfo` (NULL is success), and the overlay caps queries.
+- Hardware scheduling: the driver calls `DxgkCbQueryFeatureSupport` for
+  `DXGK_FEATURE_HWSCH` during StartDevice (`DpQueryFeatureSupport @ 14024def0`,
+  honouring `HwSchMode`), and a node reports
+  `DXGK_NODEMETADATA.Flags.ContextSchedulingSupported` only when enabled (read
+  from DDI interface 0x9000 by `ADAPTER_RENDER::Initialize @ 1401b3d4c`; without
+  GPU VA or the OS's permission start fails). Every context on such a node has
+  `HwQueueSupported`, which `DXGCONTEXT::Initialize @ 1402dc810` refuses below
+  driver version 2500, and never sees `SubmitCommandVirtual`.
+- `DXGHWQUEUE::Initialize @ 14035be70` creates the progress fence, then calls
+  `CreateHwQueue` on the context with the fence's handle and addresses; the
+  driver answers `hHwQueue`. `DestroyCoreState @ 1403954f8` terminates the VidSch
+  queue, calls `DestroyHwQueue`, then frees the fence; `DXGCONTEXT::DestroyContext`
+  destroys queues before the context.
+- `SubmitRenderToHwQueue @ 14001ae10` (DISPATCH) and `SubmitPagingToHwQueue
+  @ 1400494c0` pass the fence id and CPU address; a failure other than
+  NOT_IMPLEMENTED puts the device in error. Completion: write the id into the
+  fence, report `MONITORED_FENCE_SIGNALED` (11) with the node and engine, notify
+  the DPC; `VidSchiUnwaitNodeHwQueueProgress @ 140008b00` completes each packet at
+  or below the fence.
+- `ResetHwEngine` (no NULL check, `VidSchiResetHwEngine @ 140053e38`) carries
+  the node and engine; the driver invalidates lost contexts with
+  `DxgkCbInvalidateHwContext` inside the call, and `ResumeHwEngine` follows.
+  `SetupPriorityBands` and `SetSchedulingLogBuffer` may answer NOT_IMPLEMENTED.
+- The driver implements `CreateHwQueue`, `DestroyHwQueue`,
+  `SubmitCommandToHwQueue` and `ResetHwEngine` (dropping in-flight work) without
+  enabling hardware scheduling; enablement, invalidation and `ResumeHwEngine`
+  arrive with driver version 2.5.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the
@@ -736,3 +777,7 @@ shipping stack. Scheduler/paging DDIs live in `dxgmms2.sys` (same project).
 - What `DXGADAPTER+0x1bc` bit 9 (which with WDDM 2.1 enables the MPO3 flip
   path) means, and how callers of `DXGMONITOR::_UpdateLinkInfo` handle its
   failure at driver version 2400 and above.
+- What `VirtualModeSupport` changes in mode enumeration; how dxgkrnl handles
+  `DMA_COMPLETED` on a hardware-scheduled node; what `HwQueuePacketCap` and
+  `MaxInFlightHwQueueBuffers` limit; the input `hHwQueue` of the paging queue;
+  whether VidSch holds its scheduler lock across `SubmitPagingToHwQueue`.

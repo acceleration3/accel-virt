@@ -19,4 +19,4 @@ description: "Task list for feature 019: WDDM 2.2 hardware contexts and queues"
 
 ## Phase 3: Scenario
 
-- [ ] T004 Scenario through the table; docs; gate; merge; push
+- [X] T004 Scenario through the table; docs; gate; merge; push

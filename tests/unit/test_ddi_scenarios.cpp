@@ -30,6 +30,7 @@
 #include "../../src/core/ddi/dxgk_pte_record.hpp"
 #include "../../src/core/ddi/dxgkarg_build_paging_buffer_record.hpp"
 #include "../../src/core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
+#include "../../src/core/ddi/dxgkarg_reset_hw_engine_record.hpp"
 #include "../../src/core/ddi_slot.hpp"
 #include "../../src/core/ddi_table.hpp"
 #include "../../src/core/driver_image.hpp"
@@ -41,6 +42,7 @@
 #include "../harness/fake_dxgkrnl_fdo.hpp"
 #include "../harness/fake_dxgmonitor.hpp"
 #include "../harness/fake_gpu_mmu.hpp"
+#include "../harness/fake_hw_queue.hpp"
 #include "../harness/gpu_mmu_rule.hpp"
 #include "../harness/fake_handle_table.hpp"
 #include "../harness/fake_vidmm.hpp"
@@ -921,6 +923,47 @@ TEST(ddi_scenario, start_declines_hdr_priority_and_the_monitor_link_is_plain)
   av::FakeDxgmonitor stricter(driver.platform(), table, device.fdo().context(), 2400u);
   CHECK_EQ(stricter.update_link_info(0u, 0u), 0);
   CHECK_EQ(stricter.update_link_info(1u, 0u), static_cast<std::int32_t>(0xC000000Du));
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- WDDM 2.2 (feature 019) ----------------------------------------------------- */
+
+TEST(ddi_scenario, hardware_queues_submit_complete_through_progress_fences_and_reset)
+{ LoadedDriver driver;
+  const DdiTable &table = driver.table();
+  const DdiSlot skipped[] = {
+      DdiSlot::DxgkDdiCreateHwContext, DdiSlot::DxgkDdiDestroyHwContext, DdiSlot::DxgkDdiSwitchToHwContextList,
+      DdiSlot::DxgkDdiCreatePeriodicFrameNotification, DdiSlot::DxgkDdiDestroyPeriodicFrameNotification,
+      DdiSlot::DxgkDdiSetTimingsFromVidPn, DdiSlot::DxgkDdiSetTargetGamma, DdiSlot::DxgkDdiSetTargetContentType,
+      DdiSlot::DxgkDdiSetTargetAnalogCopyProtection, DdiSlot::DxgkDdiSetTargetAdjustedColorimetry,
+      DdiSlot::DxgkDdiDisplayDetectControl, DdiSlot::DxgkDdiQueryConnectionChange,
+      DdiSlot::DxgkDdiExchangePreStartInfo, DdiSlot::DxgkDdiGetMultiPlaneOverlayCaps,
+      DdiSlot::DxgkDdiGetPostCompositionCaps,
+  };
+  for (const DdiSlot slot : skipped) CHECK(table.routine(slot) == nullptr);
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.fdo().dxgadapter().display_caps_extension(), 0u);
+  void *const adapter = device.fdo().context();
+  { av::FakeVidSch vidsch(driver.platform(), table, device.dxgkrnl(), adapter);
+    CHECK_EQ(vidsch.create_context(0x14u), 0);   /* VirtualAddressing | HwQueueSupported */
+    av::FakeHwQueue queue(driver.platform(), table, adapter, vidsch.context());
+    CHECK_EQ(queue.create(0x1u), 0);
+    for (int packet = 0; packet < 3; packet++) CHECK_EQ(queue.submit(0x10000u, 0u), 0);
+    CHECK_EQ(queue.completed(), 0u);
+    vidsch.run_dpc();
+    CHECK_EQ(vidsch.fence_signals(), 1u);
+    queue.observe_progress();
+    CHECK_EQ(queue.completed(), 3u);
+    CHECK_EQ(queue.submit(0x20000u, 0x1u), 0);   /* a paging buffer */
+    const av::DxgkargResetHwEngineRecord reset = {0u, 0u};
+    CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargResetHwEngineRecord *)>(
+                 table.routine(DdiSlot::DxgkDdiResetHwEngine))(adapter, &reset), 0);
+    vidsch.run_dpc();
+    CHECK_EQ(vidsch.fence_signals(), 1u);
+    CHECK_EQ(queue.submit(0x10000u, 0u), 0); }
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), 0u);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
