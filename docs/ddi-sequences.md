@@ -793,6 +793,31 @@ WDDM 1.2 (with GPU VA, feature 017): a 1.2 claim below `DXGKDDI_WDDMv1_2` fails
   and to be confirmed in a VM. The driver reports 3.0, answers `Flags2` 0 and
   leaves the four slots NULL.
 
+## 4p. WDDM 3.1: native fences and doorbells (feature 024)
+
+- Slots 162-165 are copied from DDI interface 0x11000, 166-170 from 0x10002.
+- Native GPU fences: `SchedulingCaps.NativeGpuFence` (0x800) requires
+  `DXGK_FEATURE_NATIVE_FENCE` (37) granted by `DxgkCbQueryFeatureSupport` and
+  `NATIVE_FENCE_CAPS` (37; 0x38 bytes: stride, MapToGpuSystemProcess, minimum and
+  maximum address) answered, or start fails. `CreateNativeFence` (0x88 bytes,
+  `DXGADAPTERSYNCOBJECT::InitializeAdapterObject @ 14035e218`) gets the VidSch
+  object and 64 bytes of private data and answers the driver's handle; VidMm
+  owns the value pages. `UpdateMonitoredValues` and `UpdateCurrentValuesFromCpu`
+  (`@ 14004976c`, `@ 1400493b4`) run inside `DpSynchronizeExecution`, take arrays
+  of handles, values and kernel CPU addresses and no adapter, and bugcheck 0x119
+  on failure. `DXGK_INTERRUPT_NATIVE_FENCE_SIGNALED` (19) names up to 8 signalled
+  fences or a hardware queue.
+- Doorbells: a node with the user-mode submission flag needs driver version
+  3100, `ContextSchedulingSupported`, `NativeGpuFence`,
+  `DXGK_FEATURE_USER_MODE_SUBMISSION` (4), slots 166-170 and
+  `USERMODESUBMISSION_CAPS` (38; doorbell size 1..0x4000). `ConnectDoorbell`
+  answers a kernel address whose physical pages are contiguous
+  (`DXGDOORBELL::Connect @ 1401f3180` builds the MDL from `MmGetPhysicalAddress`
+  and rotates it into the process); `NotifyWorkSubmission` comes from user mode.
+- 3.1 makes nothing mandatory for this driver. It reports 3.1 and leaves the nine
+  slots NULL until hardware scheduling, which needs a user-mode driver, and the
+  device's doorbell BAR (030) exist.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the
@@ -881,3 +906,7 @@ shipping stack. Scheduler/paging DDIs live in `dxgmms2.sys` (same project).
   are allowed on a GPU MMU adapter.
 - Whether dxgkrnl enables the hardware flip queue on an adapter without
   hardware scheduling; what flip queue field +0x50 means.
+- Whether the driver or the OS writes native fence values through the CPU
+  addresses of `UpdateMonitoredValues`; whether the native fence grant requires
+  hardware scheduling; what device flag `+0x188 & 0x20` (which skips the doorbell
+  DDIs) means.
