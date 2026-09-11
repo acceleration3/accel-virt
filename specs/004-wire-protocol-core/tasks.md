@@ -23,10 +23,10 @@ description: "Task list for feature 004: wire protocol core"
 
 ## Phase 3: Trackers (US3)
 
-- [ ] T008 Tests for `RingProgress` and `FenceProgress` in `tests/unit/test_ring_progress.cpp`, `test_fence_progress.cpp`: every acceptance scenario of US3, counters near 2^64, last good observation kept on rejection, invariants after every call
-- [ ] T009 Implement `src/proto/ring_progress.{hpp,cpp}`, `src/proto/fence_progress.{hpp,cpp}`. T008 passes
+- [X] T008 Tests for `RingProgress` and `FenceProgress` in `tests/unit/test_ring_progress.cpp`, `test_fence_progress.cpp`: every acceptance scenario of US3, counters near 2^64, last good observation kept on rejection, invariants after every call
+- [X] T009 Implement `src/proto/ring_progress.{hpp,cpp}`, `src/proto/fence_progress.{hpp,cpp}`. T008 passes
 
 ## Phase 4: Fuzzing and polish
 
-- [ ] T010 `tests/fuzz/fuzz_proto.cpp` (selector byte, decode, round-trip trap) with seed corpus `tests/corpus/fuzz_proto/` holding one valid encoding per structure
-- [ ] T011 `tools/gate.sh`; merge to `master`
+- [X] T010 `tests/fuzz/fuzz_proto.cpp` (selector byte, decode, round-trip trap) with seed corpus `tests/corpus/fuzz_proto/` holding one valid encoding per structure
+- [X] T011 `tools/gate.sh`; merge to `master`
