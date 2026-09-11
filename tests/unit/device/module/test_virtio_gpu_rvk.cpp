@@ -4,7 +4,7 @@
 #include "device/memory/blob_resource.hpp"
 #include "device/memory/blob_table.hpp"
 #include "device/module/virtio_gpu_rvk.hpp"
-#include "device/support/text_buffer.hpp"
+#include "core/support/text_buffer.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"

@@ -1,4 +1,4 @@
-#include "device/support/text_buffer.hpp"
+#include "core/support/text_buffer.hpp"
 
 namespace av {
 
@@ -23,6 +23,19 @@ void TextBuffer::append_decimal(uint64_t value)
         value /= 10u;
     } while (value != 0u);
     append(digits + first);
+}
+
+void TextBuffer::append_hex(uint64_t value, uint32_t digits)
+{
+    constexpr uint32_t widest = 16u;
+    constexpr char     symbols[] = "0123456789ABCDEF";
+    char               text[widest + 1u] = {};
+    const uint32_t     width = digits < widest ? digits : widest;
+    for (uint32_t index = width; index != 0u; index--) {
+        text[index - 1u] = symbols[value & 0xFu];
+        value >>= 4u;
+    }
+    append(text);
 }
 
 const char *TextBuffer::text() const

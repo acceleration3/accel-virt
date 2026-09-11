@@ -134,7 +134,7 @@ CLAUDE.md                         the C++ standard (decrapify-cpp, adapted)
 .claude/commands/dev.md           /dev — loads all context and starts a feature
 cmake/                            the Windows kernel toolchain
 src/core/                         portable driver logic — no platform headers
-  support/                          Status, NtStatus, ObjectPool/Storage, ScopeExit, Alignment, ByteRange
+  support/                          Status, NtStatus, ObjectPool/Storage, ScopeExit, Alignment, ByteRange, TextBuffer
   platform/                         the Platform contract, locks and lock ranks, timers
   miniport/                         registration, the DDI table, dxgkrnl's callbacks, interrupt reports
   ddi/                              DDI records (dxgkrnl-owned memory, layout-proven) and entry points
@@ -153,7 +153,7 @@ src/device/                       QEMU device core — freestanding C++23, librv
   gpu/  threading/  context/        host GPU binding; per-context workers and doorbells; the context table
   capset/  memory/  ring/  control/ the capset; blobs and their windows; ring consumption; control answers
   fence/  execution/                fence pages and interrupts; executors, command streams, replies
-  module/  support/                 the device object and the module holding every device
+  module/                           the device object and the module holding every device
   qemu/                             the C glue and meson patch built into QEMU (translation only)
 src/proto/                        the wire protocol, shared by both sides
   wire/  context/  submission/      codecs; context setup and capsets; rings and fences

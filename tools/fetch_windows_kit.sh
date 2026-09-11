@@ -14,11 +14,22 @@ SDK_SHA256=475269434dcd808a67853773272f972c3229c0e10c3ddc821290e70cc0f6904d
 KIT_INCLUDE=c/Include/10.0.26100.0
 KIT_LIB=c/Lib/10.0.26100.0/km/x64
 LIBRARIES=(ntoskrnl.lib hal.lib displib.lib BufferOverflowK.lib)
+# The user-mode headers rvktest.exe reaches through a lean windows.h and
+# d3dkmthk.h (src/guest/win32), and nothing else: the um directory is 120 MB.
+UM_HEADERS=(apiquery2.h consoleapi.h consoleapi2.h consoleapi3.h datetimeapi.h debugapi.h enclaveapi.h
+            errhandlingapi.h fibersapi.h fileapi.h fileapifromapp.h handleapi.h heapapi.h ime_cmodes.h imm.h
+            interlockedapi.h ioapiset.h jobapi.h jobapi2.h libloaderapi.h mcx.h memoryapi.h minwinbase.h
+            namedpipeapi.h namespaceapi.h processenv.h processthreadsapi.h processtopologyapi.h profileapi.h
+            realtimeapiset.h reason.h securityappcontainer.h securitybaseapi.h stringapiset.h synchapi.h
+            sysinfoapi.h systemtopologyapi.h threadpoolapiset.h threadpoollegacyapiset.h timezoneapi.h
+            utilapiset.h verrsrc.h WinBase.h wincon.h wincontypes.h Windows.h wingdi.h winnetwk.h WinNls.h
+            winnt.h winreg.h winsvc.h WinUser.h winver.h wow64apiset.h)
 
 KIT=third_party/windows-kit
 CACHE=third_party/.cache
 PINNED="$WDK_ID $WDK_VERSION
-$SDK_ID $SDK_VERSION"
+$SDK_ID $SDK_VERSION
+headers km shared um-closure-1"
 
 if [ -f "$KIT/VERSION" ] && [ "$(cat "$KIT/VERSION")" = "$PINNED" ]; then
     echo "windows kit: $KIT already at pinned versions"
@@ -58,12 +69,13 @@ trap 'rm -rf "$staging"' EXIT
 
 unzip -q "$wdk" "$KIT_INCLUDE/km/*" "$KIT_INCLUDE/shared/*" LICENSE.txt \
       "${LIBRARIES[@]/#/$KIT_LIB/}" -d "$staging/wdk"
-unzip -q "$sdk" "$KIT_INCLUDE/shared/*" -d "$staging/sdk"
+unzip -q "$sdk" "$KIT_INCLUDE/shared/*" "${UM_HEADERS[@]/#/$KIT_INCLUDE/um/}" -d "$staging/sdk"
 
 mkdir -p "$staging/kit/include" "$staging/kit/lib"
 mv "$staging/wdk/$KIT_INCLUDE/km"     "$staging/kit/include/km"
 mv "$staging/wdk/$KIT_INCLUDE/shared" "$staging/kit/include/wdk-shared"
 mv "$staging/sdk/$KIT_INCLUDE/shared" "$staging/kit/include/sdk-shared"
+mv "$staging/sdk/$KIT_INCLUDE/um"     "$staging/kit/include/um"
 mv "$staging/wdk/$KIT_LIB"            "$staging/kit/lib/x64"
 mv "$staging/wdk/LICENSE.txt"         "$staging/kit/LICENSE.txt"
 python3 -B tools/windows_kit_overlay.py "$staging/kit"

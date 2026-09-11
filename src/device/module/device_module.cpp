@@ -1,6 +1,6 @@
 #include "device/module/device_module.hpp"
 
-#include "device/support/text_buffer.hpp"
+#include "core/support/text_buffer.hpp"
 
 namespace av {
 

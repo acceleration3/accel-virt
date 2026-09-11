@@ -1,6 +1,6 @@
 #include "core/support/status.hpp"
 #include "device/gpu/gpu_binding.hpp"
-#include "device/support/text_buffer.hpp"
+#include "core/support/text_buffer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"

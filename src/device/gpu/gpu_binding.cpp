@@ -2,7 +2,7 @@
 
 #include "device/gpu/device_uuid.hpp"
 #include "device/host/host.hpp"
-#include "device/support/text_buffer.hpp"
+#include "core/support/text_buffer.hpp"
 #include "proto/context/gpu_identity.hpp"
 
 namespace av {

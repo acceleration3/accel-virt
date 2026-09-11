@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Gate for constitution Principle IV.5: no class or public method in
-src/core, src/device or src/proto without a test that names it.
+src/core, src/device, src/proto or src/guest without a test that names it.
 
 Private methods are covered through the public surface; requiring a test to
 name them would test the shape of the implementation instead of its behaviour.
@@ -23,6 +23,8 @@ EXCLUDE = {
     "src/core/platform/register_window.hpp": "a device register region, implemented by src/km over a "
                                     "mapped BAR and by the fake device in tests/harness, and "
                                     "exercised through every transport test",
+    "src/guest/kmt/kmt.hpp": "the D3DKMT contract, implemented by src/um over gdi32 and by MockKmt "
+                             "in tests/harness, and exercised through every guest suite test",
 }
 
 

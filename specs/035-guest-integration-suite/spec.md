@@ -40,19 +40,19 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 |---|---|---|---|
 | `TextBuffer` (moved to core/support, extended) | object | destination, capacity, length | Builds one line of text in a fixed buffer, now with hexadecimal |
 | `Kmt` | interface | - | The D3DKMT calls the in-guest suite makes, in core's types: `GdiKmt` in the guest, `MockKmt` in tests |
-| `KmtAdapter` | object | handle, LUID | One adapter D3DKMT enumerated |
 | `PciIdentity` | object | vendor, device, subsystem vendor, subsystem | The PCI identity an adapter reports |
 | `AdapterSearch` | object | kmt, adapters enumerated, the one chosen | Finds the virtio-gpu-rvk adapter among those enumerated |
-| `GuestSession` | object | kmt, adapter, device, allocations, paging queue, context, mappings | Holds the kernel objects one scenario creates, destroying them in reverse |
+| `GuestSession` | object | kmt, adapter, device, allocations, paging queue, context, mappings, first teardown failure | Holds the kernel objects one scenario creates, destroying them in reverse |
 | `GuestReport` | object | text, passed, failed | Records each step's outcome as a line the host parses |
-| `Scenario` | interface | - | One named scenario of the suite: four implementations |
+| `ClientDescriptor` | object | encoded descriptor bytes, page count | Encodes the descriptor of one client allocation the suite asks for |
+| `ScenarioSteps` | object | kmt, report, scenario name | Records one scenario's steps with the NTSTATUS behind each |
 | `AdapterScenario` | object | kmt, search | The adapter is found and reports WDDM 3.2 |
 | `AllocationScenario` | object | kmt, session | Allocations are made from a valid descriptor and refused from a hostile one |
 | `GpuMappingScenario` | object | kmt, session | An allocation is made resident and mapped at a GPU virtual address |
 | `SubmissionScenario` | object | kmt, session | A command buffer is submitted on a context and its completion awaited |
 | `GuestSuite` | system | kmt, report, the scenarios | Runs every scenario in order against one adapter |
-| `GdiKmt` (src/guest/win32, guest only) | object | the last NTSTATUS, the completion event | Translates `Kmt` calls into gdi32's D3DKMT functions |
-| `GuestProgram` (src/guest/win32, guest only) | object | kmt, report, suite, console handle | Runs the suite and writes its report to standard output |
+| `GdiKmt` (src/um, guest only) | object | the last NTSTATUS, the completion event | Translates `Kmt` calls into gdi32's D3DKMT functions |
+| `GuestProgram` (src/um, guest only) | object | kmt, report, suite, console handle | Runs the suite and writes its report to standard output |
 | `MockKmt` (harness) | object | scripted handles, failures, hostile answers, journal | A D3DKMT that answers what a test scripts |
 
 ### Test requirements
@@ -151,7 +151,7 @@ the build produces, matches the device's hardware id and asks for MSI.
   per-run overlay; the overlay is deleted at the end of every run.
 - **FR-002**: The runner's every wait has a timeout and kills QEMU on expiry.
 - **FR-003**: `src/guest` follows constitution III and IV like `src/core`: it
-  joins the design, symbol, coverage and self-containment gates. `src/guest/win32`
+  joins the design, symbol, coverage and self-containment gates. `src/um`
   is translation only and, like `src/km`, is built only for the guest.
 - **FR-004**: The live suite runs in `tools/gate.sh` when `AV_GUEST_IMAGE` names
   a prepared image; without it the gate says it skipped the guest.

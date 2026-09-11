@@ -3,7 +3,7 @@
 #include "device/execution/batch_executor.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/host/host.hpp"
-#include "device/support/text_buffer.hpp"
+#include "core/support/text_buffer.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/fault_code.hpp"
 #include "proto/submission/ring_header.hpp"

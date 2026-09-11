@@ -4,7 +4,7 @@
 #include "device/control/context_commands.hpp"
 #include "device/control/control_request.hpp"
 #include "device/host/host.hpp"
-#include "device/support/text_buffer.hpp"
+#include "core/support/text_buffer.hpp"
 
 namespace av {
 

@@ -14,7 +14,7 @@ import json
 import os
 import sys
 
-ROOTS = ("km", "wdk-shared", "sdk-shared")
+ROOTS = ("km", "wdk-shared", "sdk-shared", "um")
 
 
 def entries(kit, relative):

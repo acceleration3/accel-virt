@@ -29,8 +29,8 @@ add_compile_options(
 set(AV_WINDOWS_KIT_DIR ${CMAKE_SOURCE_DIR}/third_party/windows-kit CACHE PATH
     "Windows kit subset written by tools/fetch_windows_kit.sh")
 set(AV_WINDOWS_KIT_VERSION
-    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169")
-foreach(required VERSION overlay.yaml include/km/ntddk.h lib/x64/ntoskrnl.lib)
+    "Microsoft.Windows.WDK.x64 10.0.26100.6584\nMicrosoft.Windows.SDK.CPP 10.0.26100.9169\nheaders km shared um-closure-1")
+foreach(required VERSION overlay.yaml include/km/ntddk.h include/um/Windows.h lib/x64/ntoskrnl.lib)
   if(NOT EXISTS ${AV_WINDOWS_KIT_DIR}/${required})
     message(FATAL_ERROR "Windows kit: ${AV_WINDOWS_KIT_DIR}/${required} is missing; "
                         "run tools/fetch_windows_kit.sh or set AV_WINDOWS_KIT_DIR")
@@ -52,7 +52,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DI
 # src/device and src/proto join the same gates the moment they hold a source.
 # Includes name a path from src/ ("core/display/edid.hpp"), from any file.
 file(GLOB_RECURSE AV_PORTABLE_SOURCES CONFIGURE_DEPENDS
-  src/core/*.cpp src/proto/*.cpp src/device/*.cpp)
+  src/core/*.cpp src/proto/*.cpp src/device/*.cpp src/guest/*.cpp)
 add_library(av_core STATIC ${AV_PORTABLE_SOURCES})
 target_include_directories(av_core PUBLIC src)
 target_compile_definitions(av_core PUBLIC AV_CHECKED=1)

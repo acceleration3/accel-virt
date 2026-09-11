@@ -1,5 +1,5 @@
 /* One NUL-terminated message built in memory the caller owns - the error a
- * realize failure hands back to QEMU. Text that does not fit is cut, never
+ * realize failure hands back to QEMU, a line of the in-guest report. Text that does not fit is cut, never
  * overrun; a buffer with no room answers the empty string. */
 #ifndef AV_TEXT_BUFFER_HPP
 #define AV_TEXT_BUFFER_HPP
@@ -17,6 +17,8 @@ public:
 
     void        append(const char *text);
     void        append_decimal(uint64_t value);
+    /* The low `digits` hexadecimal digits of `value`, uppercase, at most 16. */
+    void        append_hex(uint64_t value, uint32_t digits);
     const char *text() const;
     size_t      length() const;
 

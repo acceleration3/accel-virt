@@ -6,7 +6,7 @@
 
 `src/guest/` is the in-guest D3DKMT suite: portable scenario objects over a
 `Kmt` interface, unit tested on Linux against `MockKmt`, and a Windows layer
-(`src/guest/win32/`) translating `Kmt` into gdi32's D3DKMT functions, built
+(`src/um/`) translating `Kmt` into gdi32's D3DKMT functions, built
 into `rvktest.exe` by a user-mode cross toolchain. `src/km/rvkgpu.inf` is the
 driver package. `tools/guest/` boots a per-run overlay of a prepared image on
 the patched QEMU, drives the guest over the QEMU guest agent, test-signs and
@@ -47,7 +47,7 @@ verdict.
 2. `src/guest`: `KmtAdapter`, `PciIdentity`, `Kmt`, `MockKmt`, `GuestReport`,
    `AdapterSearch`, `GuestSession`, scenarios, `GuestSuite`; gates cover
    `src/guest`.
-3. `src/guest/win32`: `GdiKmt`, `GuestProgram`, entry point; `rvkgpu.inf`.
+3. `src/um`: `GdiKmt`, `GuestProgram`, entry point; `rvkgpu.inf`.
 4. `tools/guest`: agent client, runner, provisioning script; tests with fakes.
 5. Docs, gate's guest configuration, merge, push.
 
@@ -55,7 +55,7 @@ verdict.
 
 | Principle | Status |
 |---|---|
-| II | Pass - scenario logic portable; Windows calls only in `src/guest/win32` |
-| III | Pass - every class owns state; `Kmt` and `Scenario` each have more than one implementation |
-| IV | Pass - `MockKmt` drives every branch; no byte decoding added, so no fuzz target |
+| II | Pass - scenario logic portable; Windows calls only in `src/um` |
+| III | Pass - every class owns state; `Kmt` has two implementations; scenarios run without a shared base |
+| IV | Pass - `MockKmt` drives every branch; no byte decoding added, so no fuzz target; no IRQL in user mode |
 | VIII | Pass - no capability reported; the suite observes what the driver already declares |

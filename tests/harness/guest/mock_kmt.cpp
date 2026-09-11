@@ -1,0 +1,315 @@
+#include "harness/guest/mock_kmt.hpp"
+
+#include "core/support/nt_status.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
+
+namespace av {
+
+namespace {
+
+constexpr std::uint32_t first_handle = 0x40000000u;
+constexpr std::uint32_t handle_step = 4u;
+/* What a wait on a fence no one will reach ends in. */
+constexpr std::uint32_t io_timeout = 0xC00000B5u;
+
+}  // namespace
+
+MockKmt::MockKmt()
+    : identities_{}, versions_{}, adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{},
+      zeroing_{}, calls_{}, objects_{}, next_handle_(first_handle), next_address_(first_address), next_fence_(0u),
+      success_code_(0u), last_code_(0u), misuses_(0u) {}
+
+bool MockKmt::begin(Call call)
+{
+    const unsigned index = static_cast<unsigned>(call);
+    calls_[index]++;
+    success_code_ = 0u;
+    if (countdown_[index] == 0u || --countdown_[index] != 0u) return true;
+    last_code_ = failures_[index];
+    if (!NtStatus(failures_[index]).succeeded()) return false;
+    success_code_ = failures_[index];
+    return true;
+}
+
+Status MockKmt::refuse(std::uint32_t code)
+{
+    last_code_ = code;
+    return NtStatus(code).status();
+}
+
+Status MockKmt::succeed()
+{
+    last_code_ = success_code_;
+    return Status::ok;
+}
+
+Status MockKmt::misuse()
+{
+    misuses_++;
+    return refuse(invalid_parameter);
+}
+
+bool MockKmt::zeroed(Call call)
+{
+    const bool zero = zeroing_[static_cast<unsigned>(call)];
+    zeroing_[static_cast<unsigned>(call)] = false;
+    return zero;
+}
+
+std::uint32_t MockKmt::open(Kind kind, std::uint32_t owner, std::uint64_t address, std::uint64_t pages)
+{
+    for (Object &object : objects_) {
+        if (object.kind != Kind::none) continue;
+        object = Object{kind, next_handle_, owner, address, pages};
+        next_handle_ += handle_step;
+        return object.handle;
+    }
+    return 0u;
+}
+
+MockKmt::Object *MockKmt::find(Kind kind, std::uint32_t handle)
+{
+    for (Object &object : objects_)
+        if (object.kind == kind && object.handle == handle) return &object;
+    return nullptr;
+}
+
+MockKmt::Object *MockKmt::find_mapping(std::uint64_t address)
+{
+    for (Object &object : objects_)
+        if (object.kind == Kind::mapping && address >= object.address &&
+            address - object.address < object.pages * page_bytes)
+            return &object;
+    return nullptr;
+}
+
+Status MockKmt::close(Kind kind, std::uint32_t handle)
+{
+    Object *const object = find(kind, handle);
+    if (object == nullptr) return misuse();
+    object->kind = Kind::none;
+    return succeed();
+}
+
+Status MockKmt::enumerate_adapters(std::uint32_t *adapters, std::uint32_t capacity, std::uint32_t &count)
+{
+    count = 0u;
+    if (!begin(Call::enumerate_adapters)) return refuse(last_code_);
+    const std::uint32_t claimed = claim_ ? claimed_ : adapter_count_;
+    claim_ = false;
+    const bool zero = zeroed(Call::enumerate_adapters);
+    for (std::uint32_t index = 0u; index < claimed && index < capacity; index++)
+        adapters[index] = zero && index == 0u ? 0u : open(Kind::adapter, index, 0u, 0u);
+    count = claimed;
+    return succeed();
+}
+
+Status MockKmt::query_identity(std::uint32_t adapter, PciIdentity &identity)
+{
+    if (!begin(Call::query_identity)) return refuse(last_code_);
+    const Object *const object = find(Kind::adapter, adapter);
+    if (object == nullptr) return misuse();
+    identity = object->owner < adapter_count_ ? identities_[object->owner] : PciIdentity();
+    return succeed();
+}
+
+Status MockKmt::query_driver_version(std::uint32_t adapter, std::uint32_t &version)
+{
+    if (!begin(Call::query_driver_version)) return refuse(last_code_);
+    const Object *const object = find(Kind::adapter, adapter);
+    if (object == nullptr) return misuse();
+    version = object->owner < adapter_count_ ? versions_[object->owner] : 0u;
+    return succeed();
+}
+
+Status MockKmt::close_adapter(std::uint32_t adapter)
+{
+    if (!begin(Call::close_adapter)) return refuse(last_code_);
+    return close(Kind::adapter, adapter);
+}
+
+Status MockKmt::create_device(std::uint32_t adapter, std::uint32_t &device)
+{
+    device = 0u;
+    if (!begin(Call::create_device)) return refuse(last_code_);
+    if (find(Kind::adapter, adapter) == nullptr) return misuse();
+    if (!zeroed(Call::create_device)) device = open(Kind::device, adapter, 0u, 0u);
+    return succeed();
+}
+
+Status MockKmt::destroy_device(std::uint32_t device)
+{
+    if (!begin(Call::destroy_device)) return refuse(last_code_);
+    for (const Object &object : objects_)
+        if (object.kind != Kind::none && object.kind != Kind::mapping && object.owner == device) return misuse();
+    return close(Kind::device, device);
+}
+
+Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *descriptor, std::uint32_t size,
+                                  std::uint32_t &allocation)
+{
+    allocation = 0u;
+    if (!begin(Call::create_allocation)) return refuse(last_code_);
+    if (find(Kind::device, device) == nullptr) return misuse();
+    AllocationDescriptor decoded;
+    if (size != AllocationDescriptor::encoded_size || decoded.decode(descriptor, size) != Status::ok)
+        return refuse(invalid_parameter);
+    if (!zeroed(Call::create_allocation))
+        allocation = open(Kind::allocation, device, 0u, (decoded.size() + page_bytes - 1u) / page_bytes);
+    return succeed();
+}
+
+Status MockKmt::destroy_allocation(std::uint32_t device, std::uint32_t allocation)
+{
+    if (!begin(Call::destroy_allocation)) return refuse(last_code_);
+    const Object *const object = find(Kind::allocation, allocation);
+    if (object == nullptr || object->owner != device) return misuse();
+    for (const Object &mapping : objects_)
+        if (mapping.kind == Kind::mapping && mapping.owner == allocation) return misuse();
+    return close(Kind::allocation, allocation);
+}
+
+Status MockKmt::create_paging_queue(std::uint32_t device, std::uint32_t &queue, std::uint32_t &fence_object)
+{
+    queue = 0u;
+    fence_object = 0u;
+    if (!begin(Call::create_paging_queue)) return refuse(last_code_);
+    if (find(Kind::device, device) == nullptr) return misuse();
+    if (!zeroed(Call::create_paging_queue)) {
+        fence_object = next_handle_;
+        next_handle_ += handle_step;
+    }
+    queue = open(Kind::queue, device, fence_object, 0u);
+    return succeed();
+}
+
+Status MockKmt::destroy_paging_queue(std::uint32_t queue)
+{
+    if (!begin(Call::destroy_paging_queue)) return refuse(last_code_);
+    return close(Kind::queue, queue);
+}
+
+Status MockKmt::make_resident(std::uint32_t queue, std::uint32_t allocation, std::uint64_t &paging_fence)
+{
+    paging_fence = 0u;
+    if (!begin(Call::make_resident)) return refuse(last_code_);
+    const Object *const paging = find(Kind::queue, queue);
+    const Object *const object = find(Kind::allocation, allocation);
+    if (paging == nullptr || object == nullptr || object->owner != paging->owner) return misuse();
+    paging_fence = ++next_fence_;
+    return succeed();
+}
+
+Status MockKmt::map_gpu_virtual_address(std::uint32_t queue, std::uint32_t allocation, std::uint64_t pages,
+                                        std::uint64_t &address, std::uint64_t &paging_fence)
+{
+    address = 0u;
+    paging_fence = 0u;
+    if (!begin(Call::map_gpu_virtual_address)) return refuse(last_code_);
+    const Object *const paging = find(Kind::queue, queue);
+    const Object *const object = find(Kind::allocation, allocation);
+    if (paging == nullptr || object == nullptr || object->owner != paging->owner) return misuse();
+    if (pages == 0u) return refuse(invalid_parameter);
+    if (zeroed(Call::map_gpu_virtual_address)) return succeed();
+    address = next_address_;
+    next_address_ += pages * page_bytes;
+    static_cast<void>(open(Kind::mapping, allocation, address, pages));
+    paging_fence = ++next_fence_;
+    return succeed();
+}
+
+Status MockKmt::free_gpu_virtual_address(std::uint32_t adapter, std::uint64_t address, std::uint64_t pages)
+{
+    if (!begin(Call::free_gpu_virtual_address)) return refuse(last_code_);
+    Object *const mapping = find_mapping(address);
+    if (find(Kind::adapter, adapter) == nullptr || mapping == nullptr || mapping->address != address ||
+        mapping->pages != pages)
+        return misuse();
+    mapping->kind = Kind::none;
+    return succeed();
+}
+
+Status MockKmt::wait_for_fence(std::uint32_t device, std::uint32_t fence_object, std::uint64_t fence)
+{
+    if (!begin(Call::wait_for_fence)) return refuse(last_code_);
+    if (find(Kind::device, device) == nullptr) return misuse();
+    bool owned = false;
+    for (const Object &object : objects_)
+        owned = owned || (object.kind == Kind::queue && object.owner == device && object.address == fence_object);
+    if (!owned) return misuse();
+    if (fence > next_fence_) return refuse(io_timeout);
+    return succeed();
+}
+
+Status MockKmt::create_context(std::uint32_t device, std::uint32_t &context)
+{
+    context = 0u;
+    if (!begin(Call::create_context)) return refuse(last_code_);
+    if (find(Kind::device, device) == nullptr) return misuse();
+    if (!zeroed(Call::create_context)) context = open(Kind::context, device, 0u, 0u);
+    return succeed();
+}
+
+Status MockKmt::destroy_context(std::uint32_t context)
+{
+    if (!begin(Call::destroy_context)) return refuse(last_code_);
+    return close(Kind::context, context);
+}
+
+Status MockKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length)
+{
+    if (!begin(Call::submit)) return refuse(last_code_);
+    const Object *const submitting = find(Kind::context, context);
+    if (submitting == nullptr) return misuse();
+    const Object *const mapping = find_mapping(commands);
+    const Object *const allocation = mapping != nullptr ? find(Kind::allocation, mapping->owner) : nullptr;
+    if (length == 0u || allocation == nullptr || allocation->owner != submitting->owner ||
+        commands - mapping->address + length > mapping->pages * page_bytes)
+        return refuse(invalid_parameter);
+    return succeed();
+}
+
+Status MockKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
+{
+    if (!begin(Call::wait_for_context)) return refuse(last_code_);
+    const Object *const object = find(Kind::context, context);
+    if (find(Kind::device, device) == nullptr || object == nullptr || object->owner != device) return misuse();
+    return succeed();
+}
+
+std::uint32_t MockKmt::last_code() const { return last_code_; }
+
+void MockKmt::add_adapter(const PciIdentity &identity, std::uint32_t driver_version)
+{
+    if (adapter_count_ == max_adapters) return;
+    identities_[adapter_count_] = identity;
+    versions_[adapter_count_] = driver_version;
+    adapter_count_++;
+}
+
+void MockKmt::claim_adapters(std::uint32_t count)
+{
+    claimed_ = count;
+    claim_ = true;
+}
+
+void MockKmt::fail_at(Call call, std::uint32_t nth, std::uint32_t code)
+{
+    countdown_[static_cast<unsigned>(call)] = nth;
+    failures_[static_cast<unsigned>(call)] = code;
+}
+
+void MockKmt::zero_next(Call call) { zeroing_[static_cast<unsigned>(call)] = true; }
+
+std::uint32_t MockKmt::calls(Call call) const { return calls_[static_cast<unsigned>(call)]; }
+
+std::uint32_t MockKmt::open_objects() const
+{
+    std::uint32_t open = 0u;
+    for (const Object &object : objects_) open += object.kind != Kind::none ? 1u : 0u;
+    return open;
+}
+
+std::uint32_t MockKmt::misuses() const { return misuses_; }
+
+}  // namespace av

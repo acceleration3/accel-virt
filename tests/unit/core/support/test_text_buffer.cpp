@@ -1,4 +1,4 @@
-#include "device/support/text_buffer.hpp"
+#include "core/support/text_buffer.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstring>
@@ -55,3 +55,20 @@ TEST(text_buffer_append_decimal, writes_every_digit_and_truncates_like_text)
   TextBuffer cut(small, sizeof small);
   cut.append_decimal(98765u);
   CHECK(std::strcmp(cut.text(), "987") == 0); }
+
+TEST(text_buffer_append_hex, writes_a_fixed_width_of_uppercase_digits_and_truncates_like_text)
+{ char bytes[48];
+  TextBuffer text(bytes, sizeof bytes);
+  text.append_hex(0xC0000001u, 8u);
+  text.append(" ");
+  text.append_hex(0xAu, 4u);
+  text.append(" ");
+  text.append_hex(0x123u, 2u);   /* too narrow: the low digits */
+  text.append(" ");
+  text.append_hex(0xFFu, 0u);    /* no digits asked for */
+  text.append_hex(0x0123456789ABCDEFull, 20u);   /* wider than a u64: 16 */
+  CHECK(std::strcmp(text.text(), "C0000001 000A 23 0123456789ABCDEF") == 0);
+  char small[4];
+  TextBuffer cut(small, sizeof small);
+  cut.append_hex(0xBEEFu, 4u);
+  CHECK(std::strcmp(cut.text(), "BEE") == 0); }

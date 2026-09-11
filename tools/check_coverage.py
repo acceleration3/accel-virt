@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Gate for constitution Principle IV.1: 100% branch coverage of src/core,
-src/device and src/proto - headers included - and an AV_UNTESTABLE mark count
+src/device, src/proto and src/guest - headers included - and an AV_UNTESTABLE mark count
 that only moves down.
 
 Run by the coverage_gate ctest after every unit test has written its profile.
@@ -14,7 +14,7 @@ import re
 import subprocess
 import sys
 
-SOURCE_DIRECTORIES = ("src/core/", "src/device/", "src/proto/")
+SOURCE_DIRECTORIES = ("src/core/", "src/device/", "src/proto/", "src/guest/")
 BASELINE = "tests/untestable_baseline.txt"
 MARK_RE = re.compile(r'AV_UNTESTABLE\(\s*"([^"]*)"')
 

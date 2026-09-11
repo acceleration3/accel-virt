@@ -1,6 +1,6 @@
 #include "harness/loopback/loopback_device.hpp"
 
-#include "device/support/text_buffer.hpp"
+#include "core/support/text_buffer.hpp"
 #include "harness/host/mock_request.hpp"
 #include "harness/platform/mock_platform.hpp"
 

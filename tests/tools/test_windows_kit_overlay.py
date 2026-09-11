@@ -22,6 +22,9 @@ class WindowsKitOverlay(unittest.TestCase):
         (self.kit / "include" / "km" / "Main.h").write_text('#include "driverSPECS.h"\n')
         (km / "stddef.h").write_text("#define KIT_CRT 1\n")
         (shared / "driverspecs.h").write_text("#define KIT_MARK 42\n")
+        um = self.kit / "include" / "um"
+        um.mkdir(parents=True)
+        (um / "Windows.h").write_text("#define KIT_USER 1\n")
 
     def generate(self):
         result = run(OVERLAY, self.kit)
@@ -36,7 +39,7 @@ class WindowsKitOverlay(unittest.TestCase):
 
     def test_skips_a_missing_root_instead_of_failing(self):
         names = [root["name"] for root in self.generate()["roots"]]
-        self.assertEqual(names, ["/windows-kit/km", "/windows-kit/sdk-shared"])
+        self.assertEqual(names, ["/windows-kit/km", "/windows-kit/sdk-shared", "/windows-kit/um"])
 
     def test_lists_every_file_explicitly_with_a_relative_path(self):
         files = []
@@ -51,7 +54,8 @@ class WindowsKitOverlay(unittest.TestCase):
         walk(self.generate()["roots"])
         self.assertEqual(sorted(files), ["include/km/Main.h",
                                          "include/km/crt/stddef.h",
-                                         "include/sdk-shared/driverspecs.h"])
+                                         "include/sdk-shared/driverspecs.h",
+                                         "include/um/Windows.h"])
 
     def test_resolves_an_include_written_in_the_wrong_case(self):
         self.generate()

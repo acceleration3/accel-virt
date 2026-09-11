@@ -9,7 +9,7 @@ import os
 import re
 from dataclasses import dataclass, field
 
-SOURCE_DIRECTORIES = ("src/core", "src/device", "src/proto")
+SOURCE_DIRECTORIES = ("src/core", "src/device", "src/proto", "src/guest")
 
 CLASS_RE = re.compile(r"^\s*(?:class|struct)\s+([A-Z]\w*)\s*(?:final\s*)?(?:[:{]|$)")
 METHOD_RE = re.compile(
