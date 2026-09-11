@@ -1,6 +1,6 @@
 # accel-virt Constitution
 
-**Version**: 2.1.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-11
+**Version**: 2.2.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-11
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
 display miniport (`rvkgpu.sys`), a custom in-process QEMU device
@@ -66,8 +66,11 @@ alternative, and nothing else may: `DxgkDdiAddDevice` and `DxgkDdiUnload`
 receive no context, so they reach the driver's root through the single pointer
 `MiniportBinding` holds; and the kernel runs no global constructors, so
 `DriverEntry` constructs that root in the shim's static storage. An object whose
-lifetime cannot be a scope is held in `ObjectStorage<T>`, which is the only place
-a placement-new expression may appear; `tools/check_design.py` enforces it.
+lifetime cannot be a scope is held in `ObjectStorage<T>`; an object whose count
+has no fixed bound - a device, an allocation - lives in an `ObjectPool<T>`,
+which constructs it in platform-allocated chunks at an address that stays valid
+until it is destroyed. These two templates are the only places a placement-new
+expression may appear; `tools/check_design.py` enforces it.
 
 The full standard, including naming, ownership, error handling and the
 freestanding-kernel adaptations, is in [`CLAUDE.md`](../../CLAUDE.md) and is
@@ -175,7 +178,7 @@ device exists.
 
 - **Language: C++23**, freestanding subset — `-fno-exceptions -fno-rtti`, no
   C++ standard library, no heap `new`/`delete` (in-place construction only in
-  `ObjectStorage`). `basicrender.sys`, Microsoft's own
+  `ObjectStorage` and `ObjectPool`). `basicrender.sys`, Microsoft's own
   WDDM miniport, is C++ classes with virtuals, so this is the supported way to
   write one. RAII is not a style preference here: it removes cleanup branches,
   which is what makes Principle IV's 100% branch coverage affordable.

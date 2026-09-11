@@ -2,7 +2,7 @@
 """Gate for constitution Principle III: every unit of behaviour is a class that
 owns state. Reports static member functions and classes with no data members,
 and any new or delete expression - objects are constructed in place only by
-ObjectStorage - in src/core, src/device and src/proto.
+ObjectStorage and ObjectPool - in src/core, src/device and src/proto.
 
   check_design.py [repository root]
 """
@@ -12,7 +12,7 @@ import sys
 
 from header_scan import SOURCE_DIRECTORIES, declared_classes
 
-OBJECT_STORAGE = "src/core/object_storage.hpp"
+IN_PLACE_CONSTRUCTORS = ("src/core/object_storage.hpp", "src/core/object_pool.hpp")
 COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
 NEW_EXPRESSION = re.compile(r"(?<![\w.])new\s*[\(\w:]")
 
@@ -33,8 +33,8 @@ def allocation_expressions(root):
         with open(path) as source:
             code = COMMENT.sub(lambda m: "\n" * m.group(0).count("\n"), source.read())
         for number, line in enumerate(code.split("\n"), 1):
-            if NEW_EXPRESSION.search(line) and relative != OBJECT_STORAGE:
-                found.append(f"{relative}:{number}: new expression outside {OBJECT_STORAGE}")
+            if NEW_EXPRESSION.search(line) and relative not in IN_PLACE_CONSTRUCTORS:
+                found.append(f"{relative}:{number}: new expression outside {' and '.join(IN_PLACE_CONSTRUCTORS)}")
             if re.search(r"\bdelete\b", line) and not re.search(r"=\s*delete\b", line):
                 found.append(f"{relative}:{number}: delete expression")
     return found

@@ -125,7 +125,7 @@ free functions outside the two ABI boundaries — the `DxgkDdi*` entry points in
 `src/core/ddi/` and `extern "C"` entry points — and each of those is one line
 with no logic. The only process-lifetime state is `MiniportBinding`'s pointer
 and the shim's static storage for the root; placement new only in
-`ObjectStorage`. If functions thread the same handle, buffer or platform through their
+`ObjectStorage` and `ObjectPool`. If functions thread the same handle, buffer or platform through their
 parameters, that parameter is a member. Dependencies injected at construction;
 never reach for a global. Name each new class and say whether it is an **object
 class** (one per real thing) or a **system class** (a service owning a

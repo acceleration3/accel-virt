@@ -105,7 +105,9 @@ in `initialize`, not spread across both.
 `std::string`, `std::map`, `std::function`, no `new`/`delete`. Memory comes
 from `Platform::allocate` with an explicit `Pool`, and the caller owns
 releasing it. An object whose lifetime is not a scope lives in
-`ObjectStorage<T>`, the one place a placement-new expression is allowed. A fixed maximum means a fixed-size member array, not a heap
+`ObjectStorage<T>`; an object with no fixed bound on its count (a device,
+an allocation) lives in `ObjectPool<T>`. Those two are the only places a
+placement-new expression is allowed. A fixed maximum means a fixed-size member array, not a heap
 allocation. Nothing allocates on the submission path.
 
 **IRQL is part of the signature.** Every public method calls
