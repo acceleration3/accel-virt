@@ -18,6 +18,8 @@
 #include "dxgkarg_get_scan_line_record.hpp"
 #include "dxgkarg_is_supported_vidpn_record.hpp"
 #include "dxgkarg_present_record.hpp"
+#include "dxgkarg_set_pointer_position_record.hpp"
+#include "dxgkarg_set_pointer_shape_record.hpp"
 #include "dxgkarg_set_vidpn_source_address_record.hpp"
 #include "dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "dxgkarg_recommend_functional_vidpn_record.hpp"
@@ -110,6 +112,17 @@ int32_t AvDdiControlInterrupt(void *context, int32_t type, uint8_t enable);
 int32_t AvDdiSetVidPnSourceAddress(void *context, const av::DxgkargSetVidPnSourceAddressRecord *request);
 int32_t AvDdiSetVidPnSourceVisibility(void *context, const av::DxgkargSetVidPnSourceVisibilityRecord *request);
 int32_t AvDdiPresent(void *context, av::DxgkargPresentRecord *request);
+int32_t AvDdiSetPointerShape(void *context, const av::DxgkargSetPointerShapeRecord *request);
+int32_t AvDdiSetPointerPosition(void *context, const av::DxgkargSetPointerPositionRecord *request);
+int32_t AvDdiAcquireSwizzlingRange(void *context, void *request);
+int32_t AvDdiReleaseSwizzlingRange(void *context, const void *request);
+int32_t AvDdiSetPalette(void *context, const void *request);
+int32_t AvDdiStopCapture(void *context, const void *request);
+int32_t AvDdiCreateOverlay(void *context, void *request);
+/* An overlay handle this driver never creates: nothing behind it to reach. */
+int32_t AvDdiUpdateOverlay(void *overlay, const void *request);
+int32_t AvDdiFlipOverlay(void *overlay, const void *request);
+int32_t AvDdiDestroyOverlay(void *overlay);
 /* The KSYNCHRONIZE_ROUTINE DxgkCbSynchronizeExecution runs at device IRQL. */
 uint8_t AvSynchronizedNotify(void *notification);
 /* The platform timer's EXT_CALLBACK, at DISPATCH. */

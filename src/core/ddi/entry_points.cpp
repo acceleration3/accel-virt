@@ -166,6 +166,36 @@ int32_t AvDdiSetVidPnSourceVisibility(void *context, const av::DxgkargSetVidPnSo
 int32_t AvDdiPresent(void *context, av::DxgkargPresentRecord *request)
 { return static_cast<av::Context *>(context)->device().adapter().present(context, request); }
 
+int32_t AvDdiSetPointerShape(void *context, const av::DxgkargSetPointerShapeRecord *request)
+{ return static_cast<av::Adapter *>(context)->set_pointer_shape(request); }
+
+int32_t AvDdiSetPointerPosition(void *context, const av::DxgkargSetPointerPositionRecord *request)
+{ return static_cast<av::Adapter *>(context)->set_pointer_position(request); }
+
+int32_t AvDdiAcquireSwizzlingRange(void *context, void *request)
+{ return static_cast<av::Adapter *>(context)->acquire_swizzling_range(request); }
+
+int32_t AvDdiReleaseSwizzlingRange(void *context, const void *request)
+{ return static_cast<av::Adapter *>(context)->release_swizzling_range(request); }
+
+int32_t AvDdiSetPalette(void *context, const void *request)
+{ return static_cast<av::Adapter *>(context)->set_palette(request); }
+
+int32_t AvDdiStopCapture(void *context, const void *request)
+{ return static_cast<av::Adapter *>(context)->stop_capture(request); }
+
+int32_t AvDdiCreateOverlay(void *context, void *request)
+{ return static_cast<av::Adapter *>(context)->create_overlay(request); }
+
+int32_t AvDdiUpdateOverlay(void *, const void *)
+{ return av::NtStatus(av::Status::not_supported).value(); }
+
+int32_t AvDdiFlipOverlay(void *, const void *)
+{ return av::NtStatus(av::Status::not_supported).value(); }
+
+int32_t AvDdiDestroyOverlay(void *)
+{ return av::NtStatus(av::Status::not_supported).value(); }
+
 uint8_t AvSynchronizedNotify(void *notification)
 { return static_cast<av::InterruptNotification *>(notification)->notify(); }
 

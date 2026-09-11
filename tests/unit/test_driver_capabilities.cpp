@@ -48,9 +48,10 @@ TEST(driver_capabilities_report_driver_caps, fills_exactly_the_wddm_3_2_block)
   CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, record)), Status::ok);
   CHECK(output.guards_intact()); }
 
-/* Constitution VI: nothing is claimed before it is implemented. WDDM 1.0 and an
- * unrestricted address range are the whole answer at this level. */
-TEST(driver_capabilities_report_driver_caps, claims_wddm_1_0_and_no_capability)
+/* Constitution VI: nothing is claimed before it is implemented. WDDM 1.0, an
+ * unrestricted address range and the hardware cursor (feature 013) are the
+ * whole answer at this level. */
+TEST(driver_capabilities_report_driver_caps, claims_wddm_1_0_and_the_hardware_cursor)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
   DxgkDriverCapsRecord caps;
   std::memset(&caps, 0xA5, sizeof caps);
@@ -61,6 +62,9 @@ TEST(driver_capabilities_report_driver_caps, claims_wddm_1_0_and_no_capability)
   DxgkDriverCapsRecord expected = {};
   expected.WDDMVersion = wddm_v1;
   expected.HighestAcceptableAddress = -1;
+  expected.MaxPointerWidth = 64u;
+  expected.MaxPointerHeight = 64u;
+  expected.PointerCaps = 0x7u;   /* Monochrome | Color | MaskedColor */
   CHECK(std::memcmp(&caps, &expected, sizeof caps) == 0); }
 
 TEST(driver_capabilities_report_driver_caps, a_short_output_is_invalid)

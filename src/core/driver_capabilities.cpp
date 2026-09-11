@@ -3,6 +3,7 @@
 #include "adapter_info_query.hpp"
 #include "ddi/dxgk_driver_caps_record.hpp"
 #include "ddi/dxgk_wddm_device_caps_record.hpp"
+#include "hardware_cursor.hpp"
 
 namespace av {
 
@@ -15,6 +16,9 @@ Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) con
     DxgkDriverCapsRecord caps = {};
     caps.HighestAcceptableAddress = highest_acceptable_address_;
     caps.WDDMVersion = wddm_version_;
+    caps.MaxPointerWidth = HardwareCursor::max_side;
+    caps.MaxPointerHeight = HardwareCursor::max_side;
+    caps.PointerCaps = pointer_caps;
     return query.write_output(&caps, sizeof caps);
 }
 

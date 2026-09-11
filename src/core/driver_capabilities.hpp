@@ -30,6 +30,8 @@ private:
     /* The virtio device addresses all of guest physical memory. */
     static constexpr int64_t any_address = -1;
     static constexpr uint32_t interface_version_bytes = 4u;   /* DXGK_WDDMDEVICECAPSIN */
+    /* HardwareCursor draws every pointer type up to its 64x64 image. */
+    static constexpr uint32_t pointer_caps = 0x7u;   /* Monochrome | Color | MaskedColor */
 
     Platform &platform_;
     int32_t   wddm_version_;

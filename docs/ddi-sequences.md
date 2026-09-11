@@ -486,6 +486,30 @@ never races the DPC's completion reports. `FALSE` stops the timer.
 With Present in the table, `DXGADAPTER::CreateRenderCore`'s required DDI set is
 complete: the adapter becomes a render adapter.
 
+## 4e. Pointer and the legacy surface (feature 013)
+
+`DXGK_DRIVERCAPS` reports `PointerCaps` Monochrome | Color | MaskedColor with
+`MaxPointerWidth` and `MaxPointerHeight` 64. `DxgkDdiSetPointerShape` (PASSIVE)
+draws the shape into the cursor resource's 64x64 `B8G8R8A8` backing; the first
+shape after a device start sends `RESOURCE_CREATE_2D` and
+`RESOURCE_ATTACH_BACKING` for resource 1, every shape `TRANSFER_TO_HOST_2D` on
+the control queue, and a visible cursor `UPDATE_CURSOR` on the cursor queue.
+`DxgkDdiSetPointerPosition` sends `MOVE_CURSOR` while visible, `UPDATE_CURSOR`
+with the resource when it becomes visible, and with resource 0 to hide it.
+Nothing waits for the device: the DPC reclaims both queues and logs a response
+other than `VIRTIO_GPU_RESP_OK_NODATA`. A power-up forgets the resource and the
+shape, so the next shape creates it again.
+
+For a null slot `ADAPTER_RENDER` installs `DefaultDdiAcquireSwizzlingRange`,
+`DefaultDdiReleaseSwizzlingRange`, `DefaultDdiStopCapture`,
+`DefaultDdiCreateOverlay`, `DefaultDdiUpdateOverlay`, `DefaultDdiFlipOverlay`
+and `DefaultDdiDestroyOverlay`, each logging and answering `STATUS_NOT_SUPPORTED`
+(0xC00000BB). This driver registers those slots and SetPalette with routines
+that answer the same without reading their arguments; the overlay routines
+receive a handle the driver never creates and touch nothing. The render core
+is still created: with `NumberOfSwizzlingRanges` and `MaxOverlays` zero, nothing
+calls them.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the

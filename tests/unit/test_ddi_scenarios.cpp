@@ -12,6 +12,8 @@
 #include "../../src/core/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
 #include "../../src/core/ddi/dxgkarg_open_allocation_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_display_private_driver_format_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_pointer_position_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_pointer_shape_record.hpp"
 #include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
 #include "../../src/proto/allocation_descriptor.hpp"
 #include "../../src/proto/present_command.hpp"
@@ -31,6 +33,7 @@
 #include "../harness/fake_vidmm.hpp"
 #include "../harness/fake_vidpn.hpp"
 #include "../harness/fake_vidsch.hpp"
+#include "../harness/fake_virtqueue_device.hpp"
 #include "../harness/fake_virtio_gpu_function.hpp"
 #include "../harness/mock_platform.hpp"
 #include "../harness/test_registry.hpp"
@@ -648,6 +651,67 @@ TEST(ddi_scenario, a_primary_scans_out_at_vsync_while_presents_complete)
   CHECK_EQ(device.fdo().stop_device(), 0);
   driver.platform().run_timers(frame * 4u);
   CHECK_EQ(device.dxgkrnl().interrupts(), reported);
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- Cursor and the legacy surface (feature 013) ------------------------------ */
+
+TEST(ddi_scenario, the_pointer_reaches_the_cursor_queue_and_the_legacy_surface_declines)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().PointerCaps, 7u);
+  const std::uint32_t logged = driver.platform().logged();
+  CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
+  void *const adapter = device.fdo().context();
+  const DdiTable &table = driver.table();
+  std::uint8_t arrow[16u * 16u * 4u];
+  std::memset(arrow, 0x40, sizeof arrow);
+  const av::DxgkargSetPointerShapeRecord shape = {2u, 16u, 16u, 64u, 0u, 0u, arrow, 1u, 1u};
+  const auto set_shape = reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSetPointerShapeRecord *)>(
+      table.routine(DdiSlot::DxgkDdiSetPointerShape));
+  const auto set_position = reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSetPointerPositionRecord *)>(
+      table.routine(DdiSlot::DxgkDdiSetPointerPosition));
+  driver.platform().set_irql(av::Irql::passive);
+  CHECK_EQ(set_shape(adapter, &shape), 0);
+  for (std::int32_t step = 0; step < 3; step++) {
+      const av::DxgkargSetPointerPositionRecord position = {0u, 100 + step, 100, 1u};
+      CHECK_EQ(set_position(adapter, &position), 0);
+  }
+  const av::DxgkargSetPointerPositionRecord hidden = {0u, 0, 0, 0u};
+  CHECK_EQ(set_position(adapter, &hidden), 0);
+  const av::FakeCommonConfig::Queue &cursor_queue = device.function().common().queue(1u);
+  av::FakeVirtqueueDevice cursor(driver.platform(), cursor_queue.desc, cursor_queue.driver, cursor_queue.device,
+                                 cursor_queue.size);
+  CHECK_EQ(cursor.respond_all(0x1100u), 4u);
+  CHECK_EQ(cursor.request_type(0u), 0x0300u);
+  CHECK_EQ(cursor.request_type(1u), 0x0301u);
+  CHECK_EQ(cursor.request_type(2u), 0x0301u);
+  CHECK_EQ(cursor.request_type(3u), 0x0300u);
+  const av::FakeCommonConfig::Queue &control_queue = device.function().common().queue(0u);
+  av::FakeVirtqueueDevice control(driver.platform(), control_queue.desc, control_queue.driver, control_queue.device,
+                                  control_queue.size);
+  CHECK_EQ(control.respond_all(0x1100u), 3u);
+  CHECK_EQ(device.fdo().interrupt(2u), 1u);
+  CHECK_EQ(driver.platform().logged(), logged);
+  int request = 0;
+  const DdiSlot inout_slots[] = {DdiSlot::DxgkDdiAcquireSwizzlingRange, DdiSlot::DxgkDdiCreateOverlay};
+  for (DdiSlot slot : inout_slots)
+      CHECK_EQ(nt(reinterpret_cast<std::int32_t (*)(void *, void *)>(table.routine(slot))(adapter, &request)),
+               not_supported);
+  const DdiSlot in_slots[] = {DdiSlot::DxgkDdiReleaseSwizzlingRange, DdiSlot::DxgkDdiSetPalette,
+                              DdiSlot::DxgkDdiStopCapture};
+  for (DdiSlot slot : in_slots)
+      CHECK_EQ(nt(reinterpret_cast<std::int32_t (*)(void *, const void *)>(table.routine(slot))(adapter, &request)),
+               not_supported);
+  const DdiSlot overlay_slots[] = {DdiSlot::DxgkDdiUpdateOverlay, DdiSlot::DxgkDdiFlipOverlay};
+  for (DdiSlot slot : overlay_slots)
+      CHECK_EQ(nt(reinterpret_cast<std::int32_t (*)(void *, const void *)>(table.routine(slot))(nullptr, &request)),
+               not_supported);
+  CHECK_EQ(nt(reinterpret_cast<std::int32_t (*)(void *)>(table.routine(DdiSlot::DxgkDdiDestroyOverlay))(nullptr)),
+           not_supported);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), 0u);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }

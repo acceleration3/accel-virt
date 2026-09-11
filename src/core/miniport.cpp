@@ -64,6 +64,16 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiSetVidPnSourceAddress, reinterpret_cast<DdiRoutine>(&AvDdiSetVidPnSourceAddress)},
         {DdiSlot::DxgkDdiSetVidPnSourceVisibility, reinterpret_cast<DdiRoutine>(&AvDdiSetVidPnSourceVisibility)},
         {DdiSlot::DxgkDdiPresent, reinterpret_cast<DdiRoutine>(&AvDdiPresent)},
+        {DdiSlot::DxgkDdiSetPointerShape, reinterpret_cast<DdiRoutine>(&AvDdiSetPointerShape)},
+        {DdiSlot::DxgkDdiSetPointerPosition, reinterpret_cast<DdiRoutine>(&AvDdiSetPointerPosition)},
+        {DdiSlot::DxgkDdiAcquireSwizzlingRange, reinterpret_cast<DdiRoutine>(&AvDdiAcquireSwizzlingRange)},
+        {DdiSlot::DxgkDdiReleaseSwizzlingRange, reinterpret_cast<DdiRoutine>(&AvDdiReleaseSwizzlingRange)},
+        {DdiSlot::DxgkDdiSetPalette, reinterpret_cast<DdiRoutine>(&AvDdiSetPalette)},
+        {DdiSlot::DxgkDdiStopCapture, reinterpret_cast<DdiRoutine>(&AvDdiStopCapture)},
+        {DdiSlot::DxgkDdiCreateOverlay, reinterpret_cast<DdiRoutine>(&AvDdiCreateOverlay)},
+        {DdiSlot::DxgkDdiUpdateOverlay, reinterpret_cast<DdiRoutine>(&AvDdiUpdateOverlay)},
+        {DdiSlot::DxgkDdiFlipOverlay, reinterpret_cast<DdiRoutine>(&AvDdiFlipOverlay)},
+        {DdiSlot::DxgkDdiDestroyOverlay, reinterpret_cast<DdiRoutine>(&AvDdiDestroyOverlay)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

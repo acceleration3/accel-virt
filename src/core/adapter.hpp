@@ -13,6 +13,7 @@
 #include "driver_capabilities.hpp"
 #include "edid.hpp"
 #include "execution_node.hpp"
+#include "hardware_cursor.hpp"
 #include "interrupt_notification.hpp"
 #include "dxgkrnl_interface.hpp"
 #include "object_storage.hpp"
@@ -52,6 +53,8 @@ struct DxgkargOpenAllocationRecord;
 struct DxgkargPatchRecord;
 struct DxgkargPreemptCommandRecord;
 struct DxgkargPresentRecord;
+struct DxgkargSetPointerPositionRecord;
+struct DxgkargSetPointerShapeRecord;
 struct DxgkargSetVidPnSourceAddressRecord;
 struct DxgkargSetVidPnSourceVisibilityRecord;
 struct DxgkargQueryCurrentFenceRecord;
@@ -129,6 +132,15 @@ public:
     int32_t set_vidpn_source_address(const DxgkargSetVidPnSourceAddressRecord *request);
     int32_t set_vidpn_source_visibility(const DxgkargSetVidPnSourceVisibilityRecord *request);
     int32_t present(void *context, DxgkargPresentRecord *request);
+    int32_t set_pointer_shape(const DxgkargSetPointerShapeRecord *request);
+    int32_t set_pointer_position(const DxgkargSetPointerPositionRecord *request);
+    /* The legacy surface answers as dxgkrnl's own defaults for an empty slot:
+     * no swizzling range, palette, capture or overlay exists to act on. */
+    int32_t acquire_swizzling_range(void *request);
+    int32_t release_swizzling_range(const void *request);
+    int32_t set_palette(const void *request);
+    int32_t stop_capture(const void *request);
+    int32_t create_overlay(void *request);
 
     bool invariants_hold() const;
 
@@ -162,6 +174,7 @@ private:
     ExecutionNode                  node_;
     InterruptNotification          notification_;
     SyntheticVsync                 vsync_;
+    HardwareCursor                 cursor_;
     bool                           started_;
 
     friend struct AdapterProbe;

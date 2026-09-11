@@ -60,6 +60,11 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiRecommendVidPnTopology, DdiSlot::DxgkDdiGetScanLine,
     DdiSlot::DxgkDdiControlInterrupt,    DdiSlot::DxgkDdiSetVidPnSourceAddress,
     DdiSlot::DxgkDdiSetVidPnSourceVisibility, DdiSlot::DxgkDdiPresent,
+    DdiSlot::DxgkDdiSetPointerShape,     DdiSlot::DxgkDdiSetPointerPosition,
+    DdiSlot::DxgkDdiAcquireSwizzlingRange, DdiSlot::DxgkDdiReleaseSwizzlingRange,
+    DdiSlot::DxgkDdiSetPalette,          DdiSlot::DxgkDdiStopCapture,
+    DdiSlot::DxgkDdiCreateOverlay,       DdiSlot::DxgkDdiUpdateOverlay,
+    DdiSlot::DxgkDdiFlipOverlay,         DdiSlot::DxgkDdiDestroyOverlay,
 };
 
 bool is_implemented(std::uint16_t index)
@@ -200,6 +205,10 @@ TEST(ddi_entry_points, each_forwards_to_the_adapter_behind_the_context)
   CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryInterface(context, nullptr)), 0xC00000BBu);
   AvDdiControlEtwLogging(1u, 0u, 0u);
   CHECK_EQ(static_cast<std::uint32_t>(AvDdiLinkDevice(&pdo, context, nullptr)), 0xC000000Du);
+  CHECK_EQ(static_cast<std::uint32_t>(AvDdiUpdateOverlay(nullptr, nullptr)), 0xC00000BBu);
+  CHECK_EQ(static_cast<std::uint32_t>(AvDdiFlipOverlay(nullptr, nullptr)), 0xC00000BBu);
+  CHECK_EQ(static_cast<std::uint32_t>(AvDdiDestroyOverlay(nullptr)), 0xC00000BBu);
+  CHECK_EQ(static_cast<std::uint32_t>(AvDdiSetPalette(context, nullptr)), 0xC00000BBu);
   CHECK_EQ(AvDdiRemoveDevice(context), 0); }
 
 TEST(miniport_remove_device, finds_an_adapter_behind_another)

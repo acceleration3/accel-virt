@@ -28,6 +28,8 @@
 #include "ddi/dxgkarg_get_scan_line_record.hpp"
 #include "debug_report.hpp"
 #include "ddi/dxgkarg_present_record.hpp"
+#include "ddi/dxgkarg_set_pointer_position_record.hpp"
+#include "ddi/dxgkarg_set_pointer_shape_record.hpp"
 #include "ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "monitor_modes.hpp"
@@ -66,7 +68,8 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), segment_(platform),
       modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_),
-      node_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_), started_(false) {}
+      node_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
+      cursor_(platform, device_), started_(false) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
 
@@ -97,6 +100,7 @@ Status Adapter::power_up()
     if (device_.construct(platform_, mappings_, layout_) != Status::ok) return Status::ok;
     const Status status = device_.object().start(resources_.message_interrupts());
     if (status != Status::ok) device_.destroy();
+    cursor_.forget_device();
     return status;
 }
 
@@ -117,11 +121,13 @@ int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_inte
     if (dxgkrnl_interface == nullptr || sources == nullptr || children == nullptr)
         return NtStatus(Status::invalid_parameter).value();
     ScopeExit undo([this] {
+        cursor_.release();
         vsync_.destroy();
         mappings_.unmap_all();
     });
     Status status = discover_and_map(dxgkrnl_interface);
     if (status == Status::ok) status = vsync_.initialize();
+    if (status == Status::ok) status = cursor_.initialize();
     if (status == Status::ok) status = power_up();
     if (status != Status::ok) return NtStatus(status).value();
     undo.dismiss();
@@ -137,6 +143,7 @@ int32_t Adapter::stop_device()
     InvariantScope<Adapter> guard(platform_, *this, "stop_device");
     vsync_.destroy();
     const Status status = power_down();
+    cursor_.release();
     mappings_.unmap_all();
     started_ = false;
     return NtStatus(status).value();
@@ -525,6 +532,50 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::present");
     if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
     return PresentRequest(platform_, *request).present().value();
+}
+
+int32_t Adapter::set_pointer_shape(const DxgkargSetPointerShapeRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::set_pointer_shape");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(cursor_.set_shape(*request)).value();
+}
+
+int32_t Adapter::set_pointer_position(const DxgkargSetPointerPositionRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::set_pointer_position");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(cursor_.set_position(*request)).value();
+}
+
+int32_t Adapter::acquire_swizzling_range(void *)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::acquire_swizzling_range");
+    return NtStatus(Status::not_supported).value();
+}
+
+int32_t Adapter::release_swizzling_range(const void *)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::release_swizzling_range");
+    return NtStatus(Status::not_supported).value();
+}
+
+int32_t Adapter::set_palette(const void *)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::set_palette");
+    return NtStatus(Status::not_supported).value();
+}
+
+int32_t Adapter::stop_capture(const void *)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::stop_capture");
+    return NtStatus(Status::not_supported).value();
+}
+
+int32_t Adapter::create_overlay(void *)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::create_overlay");
+    return NtStatus(Status::not_supported).value();
 }
 
 bool Adapter::invariants_hold() const

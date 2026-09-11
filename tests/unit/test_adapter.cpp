@@ -7,6 +7,8 @@
 #include "../../src/core/ddi/dxgkarg_get_scan_line_record.hpp"
 #include "../../src/core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
 #include "../../src/core/ddi/dxgkarg_present_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_pointer_position_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_pointer_shape_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "../../src/core/ddi/dxgkarg_recommend_functional_vidpn_record.hpp"
@@ -14,6 +16,7 @@
 #include "../../src/core/ddi/dxgkarg_recommend_vidpn_topology_record.hpp"
 #include "../../src/core/display_mode.hpp"
 #include "../harness/fake_vidpn.hpp"
+#include "../harness/fake_virtqueue_device.hpp"
 #include "../../src/core/ddi/d3dkmdt_shadow_surface_data_record.hpp"
 #include "../../src/core/ddi/dxgk_allocation_info_record.hpp"
 #include "../../src/core/ddi/dxgk_open_allocation_info_record.hpp"
@@ -308,7 +311,7 @@ TEST(adapter_set_power_state, a_device_that_will_not_come_back_is_reported)
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
   fixture.function().common().set_queues(1u, 256u);
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), not_found);
-  CHECK_EQ(fixture.platform().live_allocations(), 0u); }
+  CHECK_EQ(fixture.platform().live_allocations(), 1u);   /* the cursor's backing, held while started */ }
 
 /* ---- ResetDevice ----------------------------------------------------------- */
 
@@ -681,6 +684,62 @@ TEST(adapter, the_display_ddis_are_passive_only)
   static_cast<void>(fixture.adapter().set_vidpn_source_address(nullptr));
   fixture.platform().set_irql(Irql::passive);
   for (int call = 0; call < 12; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
+
+/* ---- Cursor and the legacy surface (feature 013) ---------------------------- */
+
+TEST(adapter_set_pointer_shape, reaches_the_device_once_started)
+{ Fixture fixture;
+  const std::uint8_t pixels[4] = {1, 2, 3, 0xFF};
+  const av::DxgkargSetPointerShapeRecord shape = {2u, 1u, 1u, 4u, 0u, 0u, pixels, 0u, 0u};
+  const av::DxgkargSetPointerPositionRecord position = {0u, 10, 20, 1u};
+  CHECK_EQ(nt(fixture.adapter().set_pointer_shape(&shape)), invalid_device_state);
+  CHECK_EQ(nt(fixture.adapter().set_pointer_position(&position)), invalid_device_state);
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().set_pointer_shape(&shape)), success);
+  CHECK_EQ(nt(fixture.adapter().set_pointer_position(&position)), success);
+  CHECK_EQ(nt(fixture.adapter().set_pointer_shape(nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().set_pointer_position(nullptr)), invalid_parameter);
+  const av::FakeCommonConfig::Queue &control = fixture.function().common().queue(0u);
+  av::FakeVirtqueueDevice device(fixture.platform(), control.desc, control.driver, control.device, control.size);
+  CHECK_EQ(device.respond_all(0x1100u), 3u);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.platform().logged(), 0u); }
+
+TEST(adapter_set_pointer_shape, a_power_cycle_creates_the_cursor_resource_again)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  const std::uint8_t pixels[4] = {1, 2, 3, 0xFF};
+  const av::DxgkargSetPointerShapeRecord shape = {2u, 1u, 1u, 4u, 0u, 0u, pixels, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().set_pointer_shape(&shape)), success);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  CHECK_EQ(nt(fixture.adapter().set_pointer_shape(&shape)), invalid_device_state);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  CHECK_EQ(nt(fixture.adapter().set_pointer_shape(&shape)), success);
+  const av::FakeCommonConfig::Queue &control = fixture.function().common().queue(0u);
+  av::FakeVirtqueueDevice device(fixture.platform(), control.desc, control.driver, control.device, control.size);
+  CHECK_EQ(device.respond_all(0x1100u), 3u);
+  CHECK_EQ(device.request_type(0u), 0x0101u); }
+
+TEST(adapter, the_legacy_surface_answers_not_supported)
+{ Fixture fixture;
+  int request = 0;
+  CHECK_EQ(nt(fixture.adapter().acquire_swizzling_range(&request)), not_supported);
+  CHECK_EQ(nt(fixture.adapter().release_swizzling_range(&request)), not_supported);
+  CHECK_EQ(nt(fixture.adapter().set_palette(&request)), not_supported);
+  CHECK_EQ(nt(fixture.adapter().stop_capture(&request)), not_supported);
+  CHECK_EQ(nt(fixture.adapter().create_overlay(&request)), not_supported);
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.adapter().acquire_swizzling_range(nullptr));
+  static_cast<void>(fixture.adapter().release_swizzling_range(nullptr));
+  static_cast<void>(fixture.adapter().set_palette(nullptr));
+  static_cast<void>(fixture.adapter().stop_capture(nullptr));
+  static_cast<void>(fixture.adapter().create_overlay(nullptr));
+  static_cast<void>(fixture.adapter().set_pointer_shape(nullptr));
+  static_cast<void>(fixture.adapter().set_pointer_position(nullptr));
+  fixture.platform().set_irql(Irql::passive);
+  for (int call = 0; call < 7; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
 
 /* ---- The rest of the slot list --------------------------------------------- */
 
@@ -1231,4 +1290,4 @@ TEST(adapter_restart_from_timeout, a_device_that_will_not_come_back_is_reported_
   fixture.platform().set_irql(Irql::dispatch);
   CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), invalid_device_state);
   fixture.platform().set_irql(Irql::passive);
-  CHECK_EQ(fixture.platform().live_allocations(), 0u); }
+  CHECK_EQ(fixture.platform().live_allocations(), 1u);   /* the cursor's backing, held while started */ }
