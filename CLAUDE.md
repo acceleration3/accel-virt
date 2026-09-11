@@ -141,6 +141,15 @@ Changed, because the kernel has no heap operators:
   kernel, so the driver fails to link. No object here is ever destroyed through
   a base pointer, and `protected` makes trying a compile error.
 
+Changed, because the DDI boundary is C structures:
+
+- **Private data members** do not apply to DDI records: the structs in
+  `src/core/ddi/` named `*Record` that overlay memory dxgkrnl owns
+  (`DXGKRNL_INTERFACE`, `DXGK_CHILD_DESCRIPTOR`, ...). Their fields are public,
+  keep the WDK's names so they grep to the header, and every offset is proven in
+  `src/km/ddi_record_layout.cpp`. A record declares no member functions;
+  `tools/check_design.py` enforces both.
+
 Tightened, at the project's request:
 
 - **No static methods at all**, and no stateless classes. The standard rules

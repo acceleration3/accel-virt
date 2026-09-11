@@ -13,10 +13,10 @@ constexpr std::int32_t invalid_parameter = static_cast<std::int32_t>(0xC000000Du
 
 }  // namespace
 
-FakeDxgkrnlAdapter::FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunction &function)
+FakeDxgkrnlAdapter::FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunction &function, std::uint8_t index)
     : platform_(platform), function_(function), record_(), device_information_status_(0u),
       config_read_status_(0u), short_config_read_(false), map_refusal_countdown_(0u),
-      map_refusal_status_(0u), unmap_status_(0u), mappings_{}, mapping_count_(0u), maps_(0u), dpcs_(0u)
+      map_refusal_status_(0u), unmap_status_(0u), mappings_{}, mapping_count_(0u), maps_(0u), dpcs_(0u), index_(index)
 {
     record_.Size = sizeof record_;
     record_.Version = 0x11007u;
@@ -101,7 +101,7 @@ std::int32_t FakeDxgkrnlAdapter::map_memory(std::int64_t address, std::uint32_t 
                                                 static_cast<unsigned long long>(address));
         return invalid_parameter;
     }
-    const auto base = reinterpret_cast<std::uint8_t *>(virtual_base + (std::uintptr_t{maps_} << 32u));
+    const auto base = reinterpret_cast<std::uint8_t *>(virtual_base + (std::uintptr_t{index_} << 40u) + (std::uintptr_t{maps_} << 32u));
     for (std::uint64_t offset = 0u; offset < length; offset += region_step) {
         RegisterWindow *window = function_.region(static_cast<std::uint8_t>(bar), offset);
         if (window != nullptr) platform_.attach_register_window(base + offset, *window);

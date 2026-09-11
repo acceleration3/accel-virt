@@ -38,5 +38,5 @@ description: "Task list for feature 006: WDDM 1.0 PnP, power and adapter lifetim
 
 ## Phase 5: Scenarios
 
-- [ ] T013 Fake dxgkrnl scenario runner: recorded bring-up/teardown order, abusive variants
-- [ ] T014 `tools/gate.sh`; docs (`docs/ddi-sequences.md` LinkDevice at AddDevice); merge
+- [X] T013 Fake dxgkrnl scenario runner: recorded bring-up/teardown order, abusive variants
+- [X] T014 `tools/gate.sh`; docs (`docs/ddi-sequences.md` LinkDevice at AddDevice); merge

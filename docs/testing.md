@@ -82,6 +82,11 @@ core class under test.
   fail, so error paths get covered rather than assumed. A sweep runs the same
   scenario once per allocation site, failing that site, and asserts no leak and
   no crash — this is how out-of-memory paths reach 100% branch coverage.
+- **Register access through a mapping only.** `read_register_*` and
+  `write_register_*` reach a fake device region only inside a window the test
+  (or the fake dxgkrnl's `DxgkCbMapMemory`) attached; any other address is an
+  `unmapped_register` violation, so a driver touching a BAR it unmapped, or
+  reading past a structure, fails the test.
 - **Leak and balance tracking.** Live allocations and held locks are counted;
   a test that ends with either fails. Releasing null is a violation (the kernel
   bugchecks on it). Refcount balance arrives with the objects that own
@@ -141,14 +146,33 @@ driver's DDI table - applying the checks `DpiInitializeInternal` applies - and
 then drives the table through scripted scenarios: start the adapter, query
 every `DXGKQAITYPE`, create a device, create allocations, create a context,
 render, submit, complete a fence, preempt, time out, reset, stop, remove.
-Registration exists now; each scenario arrives with the DDIs it calls,
-starting with adapter bring-up in feature 006.
+Each scenario arrives with the DDIs it calls. Since feature 006:
+
+- `FakeDxgkrnl` applies the registration checks.
+- `FakeDxgkrnlFdo` drives one adapter's entry points in `DpiAddDevice` and
+  `DpiFdoStartAdapter` order - AddDevice then LinkDevice, StartDevice with the
+  interrupt already connected, QueryChildRelations, child enumeration, the ISR
+  at device IRQL with its DPC at DISPATCH, power, ResetDevice, StopDevice,
+  RemoveDevice (stopping a started device first) - including dxgkrnl's
+  unwinding when a step fails.
+- `FakeDxgkrnlAdapter` is the `DXGKRNL_INTERFACE` callback table over
+  `FakeVirtioGpuFunction`, QEMU's virtio-gpu-pci with its captured config
+  space, resource list and register regions; mapping a BAR attaches the
+  regions to the mock, unmapping detaches them, and a mapping left at the end
+  fails the test.
+
+`tests/unit/test_ddi_scenarios.cpp` runs the bring-up and teardown plus stop
+twice, remove without stop, an interrupt before start, a failed start, reset at
+bugcheck, two adapters, and the adapter ceiling - all through the registered
+table, with no core class called directly.
 
 This runs natively on Linux because the table is core's `DdiTable`, a mirror of
 `DRIVER_INITIALIZATION_DATA` built from fixed-width types. The driver build
 proves, per slot, that its layout is byte-for-byte the WDK's
 (`src/km/ddi_table_layout.cpp`, generated), so the table the harness drives is
-the table `dxgkrnl` reads.
+the table `dxgkrnl` reads. The structures the DDIs exchange are DDI records in
+`src/core/ddi/` whose every field offset `src/km/ddi_record_layout.cpp` proves
+the same way.
 
 **The scenarios are derived from reverse engineering, not from guesswork.**
 `dxgkrnl.sys` 10.0.26100.9444 is imported into Ghidra with 106k symbols in

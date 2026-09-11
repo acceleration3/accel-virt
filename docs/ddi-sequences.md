@@ -89,8 +89,13 @@ system threads — none legal above passive.
 The driver-extension `AddDevice` builds the FDO and calls the miniport:
 
 1. `DpiDxgkDdiAddDevice` (slot 1, `miniport+0x90`) at `DpiAddDevice+...` (call
-   site line ~786). If the adapter is part of a linked-display chain,
-   `DpiDxgkDdiLinkDevice @ 1400925cc` (slot 60) follows.
+   site line ~786). Then, whenever slot 60 is non-NULL (`miniport+0x268`),
+   `DpiDxgkDdiLinkDevice @ 1400925cc` is called for every adapter, not only
+   chained ones. A failure status fails the AddDevice; `NumberOfLinksInChain`
+   above 0x100 fails it with `STATUS_QUOTA_EXCEEDED`; a non-zero count with
+   `LeadLink` FALSE makes the adapter a secondary link. A NULL slot 60 skips
+   all of this. So a registered LinkDevice must succeed with a chain of one led
+   by the adapter (feature 006).
 2. `DpiDxgkDdiExchangePreStartInfo @ 14026a338` (slot 126) is called here, at
    AddDevice time (call site ~1469) — before any StartDevice.
 3. The FDO's PnP/Power dispatch and the DPC-for-ISR are wired up:
@@ -186,6 +191,15 @@ directly; it is driven by child (PDO) enumeration:
 `DpiDxgkDdiQueryDeviceDescriptor @ 1403c4580`, `miniport+0xd8`) is likewise the
 child-descriptor path. These run after start, when the PDOs raised by
 `QueryChildRelations` are enumerated by the PnP manager (`IRP_MN_QUERY_DEVICE_RELATIONS`).
+
+What a miniport answers, from `basicdisplay.sys` (the same image set): its
+`QueryChildRelations` fills `TypeVideoOutput`, `D3DKMDT_VOT_OTHER` (or
+`D3DKMDT_VOT_INTERNAL` for an integrated panel), `D3DKMDT_MOA_NONE`, no SDTV,
+`HpdAwarenessInterruptible`, `ChildUid` = index, for `ChildRelationsSize / 28
+- 1` children; `QueryChildStatus` answers `StatusConnection` with
+`HotPlug.Connected`, `StatusRotation` with `STATUS_INVALID_PARAMETER`, anything
+else `STATUS_NOT_SUPPORTED`; `QueryDeviceDescriptor` without an EDID answers
+`STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED` (0xC01E0401).
 
 ### 2.6 Failure and cleanup within start
 

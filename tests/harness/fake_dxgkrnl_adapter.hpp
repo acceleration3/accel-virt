@@ -21,7 +21,8 @@ public:
     static constexpr std::uint32_t max_mappings = 6u;
     static constexpr std::uint32_t max_config_bytes = FakeVirtioGpuFunction::config_bytes;
 
-    FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunction &function);
+    /* `index` separates the fake kernel addresses of adapters sharing a platform. */
+    FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunction &function, std::uint8_t index = 0u);
     ~FakeDxgkrnlAdapter();
     FakeDxgkrnlAdapter(const FakeDxgkrnlAdapter &) = delete;
     FakeDxgkrnlAdapter &operator=(const FakeDxgkrnlAdapter &) = delete;
@@ -72,6 +73,7 @@ private:
     std::uint32_t          mapping_count_;
     std::uint32_t          maps_;
     std::uint32_t          dpcs_;
+    std::uint8_t           index_;
 };
 
 }  // namespace av
