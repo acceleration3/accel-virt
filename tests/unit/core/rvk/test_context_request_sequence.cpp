@@ -40,6 +40,7 @@ namespace av {
 
 struct ContextRequestSequenceProbe {
     static void overcreate(ContextRequestSequence &sequence) { sequence.blobs_created_ = 4u; }
+    static void blob_without_context(ContextRequestSequence &sequence) { sequence.blobs_created_ = 1u; }
 };
 
 }  // namespace av
@@ -220,6 +221,40 @@ TEST(context_request_sequence_teardown, a_refused_release_is_reported_and_the_re
   CHECK(fixture.sequence().refused());
   CHECK_EQ(fixture.sequence().refusal(), GpuResponse::err_invalid_context_id); }
 
+TEST(context_request_sequence_abandon, a_device_reset_forgets_every_created_resource)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), fixture.memory()), Status::ok);
+  Sent sent;
+  for (std::uint32_t step = 0u; step < 3u; step++) {
+      CHECK_STATUS(fixture.next(sent), Status::ok);
+      CHECK_STATUS(fixture.answer(GpuResponse::ok_nodata), Status::ok);
+  }
+  CHECK_STATUS(fixture.next(sent), Status::ok);   /* an answer outstanding */
+  fixture.sequence().abandon();
+  CHECK(fixture.sequence().finished());
+  CHECK(fixture.sequence().invariants_hold());
+  CHECK_STATUS(fixture.sequence().begin_teardown(), Status::invalid_state);
+  CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), fixture.memory()), Status::ok); }
+
+TEST(context_request_sequence_teardown, an_unreadable_answer_keeps_the_teardown_going)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), fixture.memory()), Status::ok);
+  Sent sent;
+  for (std::uint32_t step = 0u; step < 5u; step++) {
+      CHECK_STATUS(fixture.next(sent), Status::ok);
+      CHECK_STATUS(fixture.answer(GpuResponse::ok_nodata), Status::ok);
+  }
+  CHECK_STATUS(fixture.sequence().begin_teardown(), Status::ok);
+  CHECK_STATUS(fixture.next(sent), Status::ok);
+  const std::uint8_t bytes[4] = {};
+  CHECK_STATUS(fixture.sequence().accept(bytes, sizeof bytes), Status::malformed);
+  std::uint32_t releases = 0u;
+  while (fixture.next(sent) == Status::ok) {
+      releases++;
+      CHECK_STATUS(fixture.answer(GpuResponse::ok_nodata), Status::ok);
+  }
+  CHECK_EQ(releases, 3u); }
+
 TEST(context_request_sequence_accept, a_short_answer_is_malformed_and_ends_the_sequence)
 { Fixture fixture;
   CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), fixture.memory()), Status::ok);
@@ -261,4 +296,24 @@ TEST(context_request_sequence, runs_at_dispatch_at_most)
 TEST(context_request_sequence_invariants, more_blobs_created_than_a_context_has_is_detected)
 { Fixture fixture;
   av::ContextRequestSequenceProbe::overcreate(fixture.sequence());
-  CHECK(!fixture.sequence().invariants_hold()); }
+  CHECK(!fixture.sequence().invariants_hold());
+  Fixture orphan;
+  av::ContextRequestSequenceProbe::blob_without_context(orphan.sequence());
+  CHECK(!orphan.sequence().invariants_hold()); }
+
+TEST(context_request_sequence_begin_teardown, waits_for_a_running_sequence)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.sequence().begin_setup(context_id, setup(), fixture.memory()), Status::ok);
+  Sent sent;
+  CHECK_STATUS(fixture.next(sent), Status::ok);
+  CHECK(!fixture.sequence().finished());   /* an answer is awaited */
+  CHECK_STATUS(fixture.answer(GpuResponse::ok_nodata), Status::ok);
+  CHECK_STATUS(fixture.sequence().begin_teardown(), Status::invalid_state);   /* still setting up */
+  while (fixture.next(sent) == Status::ok) CHECK_STATUS(fixture.answer(GpuResponse::ok_nodata), Status::ok);
+  CHECK_STATUS(fixture.sequence().begin_teardown(), Status::ok);
+  CHECK_STATUS(fixture.sequence().begin_teardown(), Status::invalid_state);   /* already tearing down */
+  CHECK_STATUS(fixture.next(sent), Status::ok);
+  CHECK_STATUS(fixture.answer(GpuResponse::err_invalid_context_id), Status::not_supported);
+  CHECK_STATUS(fixture.next(sent), Status::ok);
+  CHECK_STATUS(fixture.answer(GpuResponse::err_invalid_resource_id), Status::not_supported);
+  CHECK_EQ(fixture.sequence().refusal(), GpuResponse::err_invalid_context_id);   /* the first one kept */ }

@@ -24,7 +24,7 @@ class ContextRequestSequence {
 public:
     explicit ContextRequestSequence(Platform &platform);
 
-    /* invalid_state while a sequence runs or once set up; invalid_parameter
+    /* invalid_state unless idle - nothing set up, or all of it torn down; invalid_parameter
      * for memory not held. */
     [[nodiscard]] Status begin_setup(uint32_t context_id, const ContextSetup &setup, const ContextMemory &memory);
     /* invalid_state while a sequence runs or when nothing was created. */
@@ -35,6 +35,8 @@ public:
     /* ok for OK_NODATA; not_supported for a refusal; malformed for an answer
      * too short to read, which ends a setup; invalid_state when none is awaited. */
     [[nodiscard]] Status accept(const uint8_t *bytes, size_t length);
+    /* DISPATCH. The device reset: it holds nothing any request created. */
+    void                 abandon();
     bool                 finished() const;
     /* Whether any answer was not OK_NODATA, and the first such answer's type. */
     bool                 refused() const;
@@ -54,7 +56,6 @@ private:
     [[nodiscard]] Status write_setup_request(uint8_t *bytes, size_t capacity, size_t &length);
     [[nodiscard]] Status write_teardown_request(uint8_t *bytes, size_t capacity, size_t &length);
     void                 finish_setup_step(bool done);
-    void                 forget();
     void                 refuse(uint32_t type);
     uint32_t             teardown_steps() const;
 

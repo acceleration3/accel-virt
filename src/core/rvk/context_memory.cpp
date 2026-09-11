@@ -62,9 +62,8 @@ uint64_t ContextMemory::reply_address() const { return platform_.physical_addres
 /* All three blocks are held, or none is. */
 bool ContextMemory::invariants_hold() const
 {
-    const bool none = ring_ == nullptr && fence_ == nullptr && reply_ == nullptr && ring_bytes_ == 0u;
-    const bool all = ring_ != nullptr && fence_ != nullptr && reply_ != nullptr && ring_bytes_ != 0u;
-    return none || all;
+    const bool ring = ring_ != nullptr;
+    return (fence_ != nullptr) == ring && (reply_ != nullptr) == ring && (ring_bytes_ != 0u) == ring;
 }
 
 }  // namespace av

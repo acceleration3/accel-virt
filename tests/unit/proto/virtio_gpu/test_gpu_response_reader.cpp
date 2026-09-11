@@ -47,7 +47,10 @@ TEST(gpu_response_reader_decode, reads_a_header_only_answer)
   CHECK(!reader.ok());
   response.set(GpuResponse::ok_nodata);
   CHECK_STATUS(reader.decode(response.bytes(), response.length()), Status::ok);
-  CHECK(reader.ok()); }
+  CHECK(reader.ok());
+  response.set(0x0100u);   /* a request type, not an answer */
+  CHECK_STATUS(reader.decode(response.bytes(), response.length()), Status::ok);
+  CHECK(!reader.ok()); }
 
 TEST(gpu_response_reader_decode, reads_capset_info)
 { GpuResponse response;

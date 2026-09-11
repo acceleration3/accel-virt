@@ -18,6 +18,7 @@ enum class LockRank : uint16_t {
     hw_queue_submissions = 210u, /* spin lock: SubmitCommandToHwQueue, DestroyHwQueue, ResetHwEngine and the DPC */
     control_queue = 220u,      /* spin lock: virtio-gpu control requests and the DPC's harvest */
     cursor_queue = 230u,       /* spin lock: virtio-gpu cursor requests and the DPC's harvest */
+    rvk_context = 240u,        /* spin lock: an rvk context's submission, answers and the DPC's serve */
 };
 
 }  // namespace av

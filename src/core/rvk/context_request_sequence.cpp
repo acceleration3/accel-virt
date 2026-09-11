@@ -15,7 +15,7 @@ ContextRequestSequence::ContextRequestSequence(Platform &platform)
 Status ContextRequestSequence::begin_setup(uint32_t context_id, const ContextSetup &setup, const ContextMemory &memory)
 {
     platform_.require_irql_at_most(Irql::dispatch, "ContextRequestSequence::begin_setup");
-    if (phase_ != Phase::idle || context_created_) return Status::invalid_state;
+    if (phase_ != Phase::idle) return Status::invalid_state;
     if (!memory.allocated()) return Status::invalid_parameter;
     setup_ = setup;
     context_id_ = context_id;
@@ -85,7 +85,7 @@ Status ContextRequestSequence::accept(const uint8_t *bytes, size_t length)
     const bool done = readable && answer.type() == GpuResponse::ok_nodata;
     if (phase_ == Phase::setting_up) finish_setup_step(done || !readable);
     else step_++;
-    if (phase_ == Phase::tearing_down && step_ > blobs_created_) forget();
+    if (phase_ == Phase::tearing_down && step_ > blobs_created_) abandon();
     if (!readable) {
         refuse(unreadable);
         phase_ = phase_ == Phase::setting_up ? Phase::set_up : phase_;
@@ -106,9 +106,10 @@ void ContextRequestSequence::finish_setup_step(bool done)
     if (!done || step_ == setup_steps) phase_ = Phase::set_up;
 }
 
-/* Everything the setup created has been released. */
-void ContextRequestSequence::forget()
+void ContextRequestSequence::abandon()
 {
+    platform_.require_irql_at_most(Irql::dispatch, "ContextRequestSequence::abandon");
+    awaiting_ = false;
     phase_ = Phase::idle;
     context_created_ = false;
     blobs_created_ = 0u;

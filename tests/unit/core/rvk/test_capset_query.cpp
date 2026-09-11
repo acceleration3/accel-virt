@@ -183,9 +183,16 @@ TEST(capset_query_accept, an_answer_no_device_gives_is_malformed)
       if (status != Status::malformed || !fixture.query().failed())
           av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
   }
-  Fixture truncated;
+  Fixture truncated_capset;
   CapsetRequest decoded;
   bool is_info = false;
+  CHECK_STATUS(truncated_capset.next(decoded, is_info), Status::ok);
+  CHECK_STATUS(truncated_capset.answer(info()), Status::ok);
+  CHECK_STATUS(truncated_capset.next(decoded, is_info), Status::ok);
+  const GpuResponse capset_answer = whole();
+  CHECK_STATUS(truncated_capset.query().accept(capset_answer.bytes(), capset_answer.length() - 1u), Status::malformed);
+  CHECK(truncated_capset.query().failed());
+  Fixture truncated;
   CHECK_STATUS(truncated.next(decoded, is_info), Status::ok);
   CHECK_STATUS(truncated.query().accept(short_bytes, sizeof short_bytes), Status::malformed);
   CHECK(truncated.query().failed()); }

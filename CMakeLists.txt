@@ -119,7 +119,9 @@ if(AV_SANITIZE)
                             -fno-sanitize-recover=all)
 endif()
 if(AV_COVERAGE)
-  list(APPEND AV_TEST_FLAGS -fprofile-instr-generate -fcoverage-mapping)
+  # Atomic counters: the device core's tests run real worker threads, and a lost
+  # increment corrupts the branch counts derived from it.
+  list(APPEND AV_TEST_FLAGS -fprofile-instr-generate -fcoverage-mapping -fprofile-update=atomic)
 endif()
 if(AV_FUZZ)
   list(APPEND AV_TEST_FLAGS -fsanitize=fuzzer-no-link)
