@@ -71,6 +71,7 @@
 #include "ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "ddi/dxgkarg_reset_hw_engine_record.hpp"
+#include "ddi/dxgkarg_resume_hw_engine_record.hpp"
 #include "ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "ddi/dxgkarg_set_root_page_table_record.hpp"
@@ -801,6 +802,10 @@ AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, HwQueueProgressFenceCpuVa, D
 AV_SAME_SIZE(DxgkargResetHwEngineRecord, DXGKARG_RESETHWENGINE);
 AV_SAME_OFFSET(DxgkargResetHwEngineRecord, NodeOrdinal, DXGKARG_RESETHWENGINE, NodeOrdinal);
 AV_SAME_OFFSET(DxgkargResetHwEngineRecord, EngineOrdinal, DXGKARG_RESETHWENGINE, EngineOrdinal);
+
+AV_SAME_SIZE(DxgkargResumeHwEngineRecord, DXGKARG_RESUMEHWENGINE);
+AV_SAME_OFFSET(DxgkargResumeHwEngineRecord, NodeOrdinal, DXGKARG_RESUMEHWENGINE, NodeOrdinal);
+AV_SAME_OFFSET(DxgkargResumeHwEngineRecord, EngineOrdinal, DXGKARG_RESUMEHWENGINE, EngineOrdinal);
 
 /* The operation records overlay DXGKARG_BUILDPAGINGBUFFER's union, which they copy from. */
 AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, Reserved, DXGKARG_BUILDPAGINGBUFFER, UpdatePageTable);

@@ -80,6 +80,7 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiControlModeBehavior, DdiSlot::DxgkDdiUpdateMonitorLinkInfo,
     DdiSlot::DxgkDdiCreateHwQueue,       DdiSlot::DxgkDdiDestroyHwQueue,
     DdiSlot::DxgkDdiSubmitCommandToHwQueue, DdiSlot::DxgkDdiResetHwEngine,
+    DdiSlot::DxgkDdiResumeHwEngine,
 };
 
 bool is_implemented(std::uint16_t index)

@@ -55,6 +55,7 @@
 #include "../../src/core/ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "../../src/core/ddi/dxgkarg_reset_hw_engine_record.hpp"
+#include "../../src/core/ddi/dxgkarg_resume_hw_engine_record.hpp"
 #include "../../src/core/ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "../../src/core/ddi/dxgkarg_render_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_display_private_driver_format_record.hpp"
@@ -647,6 +648,23 @@ TEST(adapter_set_vidpn_source_address, the_vsync_reports_the_primary_it_names)
   fixture.platform().run_timers(10000000u / 60u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(1u).Argument3, 0u); }
 
+TEST(adapter_set_vidpn_source_address, an_immediate_flip_is_not_reported_and_shows_at_the_next_vsync)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
+  int primary = 0;
+  av::DxgkargSetVidPnSourceAddressRecord request = {};
+  request.PrimarySegment = 1u;
+  request.PrimaryAddress = 0x5000000000ll;
+  request.hAllocation = &primary;
+  request.Flags = 0x2u;   /* FlipImmediate */
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&request)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  fixture.platform().run_timers(10000000u / 60u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument3, 0x50u); }
+
 TEST(adapter_set_vidpn_source_address, another_segment_or_source_is_invalid)
 { Fixture fixture;
   int primary = 0;
@@ -1057,11 +1075,11 @@ std::uint32_t query_driver_caps_of(Adapter &adapter, DxgkDriverCapsRecord &caps)
 
 }  // namespace
 
-TEST(adapter_query_adapter_info, answers_driver_caps_with_wddm_2_3)
+TEST(adapter_query_adapter_info, answers_driver_caps_with_wddm_2_4)
 { Fixture fixture; DxgkDriverCapsRecord caps = {};
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(query_driver_caps_of(fixture.adapter(), caps), success);
-  CHECK_EQ(caps.WDDMVersion, 0x2300); }
+  CHECK_EQ(caps.WDDMVersion, 0x2400); }
 
 TEST(adapter_query_adapter_info, answers_the_gpu_mmu_and_physical_adapter_queries)
 { Fixture fixture;
@@ -1118,7 +1136,7 @@ TEST(adapter_query_adapter_info, answers_wddm_device_caps_before_start)
   query.pOutputData = &caps;
   query.OutputDataSize = sizeof caps;
   CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
-  CHECK_EQ(caps, 0x2300); }
+  CHECK_EQ(caps, 0x2400); }
 
 TEST(adapter_query_adapter_info, answers_the_display_caps_extension)
 { Fixture fixture; std::uint32_t extension = 0xEEu;
@@ -1662,6 +1680,20 @@ TEST(adapter_hw_queue, submissions_complete_through_the_dpc_and_a_reset_drops_th
   CHECK_EQ(nt(fixture.adapter().destroy_hw_queue(queue.hHwQueue)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_resume_hw_engine, resumes_the_one_engine)
+{ Fixture fixture;
+  const av::DxgkargResumeHwEngineRecord engine = {0u, 0u};
+  const av::DxgkargResumeHwEngineRecord other_node = {1u, 0u};
+  const av::DxgkargResumeHwEngineRecord other_engine = {0u, 1u};
+  CHECK_EQ(nt(fixture.adapter().resume_hw_engine(&engine)), success);
+  CHECK_EQ(nt(fixture.adapter().resume_hw_engine(&other_node)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().resume_hw_engine(&other_engine)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().resume_hw_engine(nullptr)), invalid_parameter);
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.adapter().resume_hw_engine(nullptr));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
 
 TEST(adapter_dpc_routine, a_refused_progress_fence_signal_is_logged)
 { Fixture fixture;

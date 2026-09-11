@@ -281,6 +281,9 @@ int32_t AvDdiSubmitCommandToHwQueue(void *context, const av::DxgkargSubmitComman
 int32_t AvDdiResetHwEngine(void *context, const av::DxgkargResetHwEngineRecord *request)
 { return static_cast<av::Adapter *>(context)->reset_hw_engine(request); }
 
+int32_t AvDdiResumeHwEngine(void *context, const av::DxgkargResumeHwEngineRecord *request)
+{ return static_cast<av::Adapter *>(context)->resume_hw_engine(request); }
+
 int32_t AvDdiUpdateOverlay(void *, const void *)
 { return av::NtStatus(av::Status::not_supported).value(); }
 

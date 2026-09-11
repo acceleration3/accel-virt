@@ -85,6 +85,7 @@ struct DxgkargUpdateMonitorLinkInfoRecord;
 struct DxgkargCreateHwQueueRecord;
 struct DxgkargSubmitCommandToHwQueueRecord;
 struct DxgkargResetHwEngineRecord;
+struct DxgkargResumeHwEngineRecord;
 struct DxgkargEscapeRecord;
 struct DxgkargQueryAdapterInfoRecord;
 struct LinkedDeviceRecord;
@@ -214,6 +215,8 @@ public:
     /* In flight until the DPC writes its progress fence. */
     int32_t submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueRecord *request);
     int32_t reset_hw_engine(const DxgkargResetHwEngineRecord *request);
+    /* After a successful reset; submissions were never refused in between. */
+    int32_t resume_hw_engine(const DxgkargResumeHwEngineRecord *request);
 
     bool invariants_hold() const;
 

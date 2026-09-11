@@ -130,7 +130,7 @@ TEST(ddi_scenario, the_recorded_bring_up_and_teardown)
     CHECK(device.fdo().context() != nullptr);
     CHECK_EQ(device.fdo().start_device(), 0);
     CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-    CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2300);
+    CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2400);
     CHECK_EQ(device.fdo().dxgadapter().display_caps_extension(), 0u);
     CHECK_EQ(device.fdo().sources(), 1u);
     CHECK_EQ(device.fdo().children(), 1u);
@@ -986,7 +986,7 @@ TEST(ddi_scenario, a_wddm_2_3_adapter_starts_and_scans_out_with_the_later_slots_
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2300);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2400);
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
   av::FakeDisplayModeManager dmm(driver.platform(), table, device.fdo().context());
   { av::FakeVidPn vidpn;

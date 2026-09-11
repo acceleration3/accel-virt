@@ -42,6 +42,7 @@
 #include "../../src/core/ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "../../src/core/ddi/dxgkarg_reset_hw_engine_record.hpp"
+#include "../../src/core/ddi/dxgkarg_resume_hw_engine_record.hpp"
 #include "../../src/core/ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "../../src/core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_root_page_table_record.hpp"
@@ -328,4 +329,5 @@ TEST(ddi_records, wddm_2_2_records_match_the_x64_layout)
   CHECK_EQ(offsetof(av::DxgkargCreateHwQueueRecord, HwQueueProgressFenceCPUVirtualAddress), 0x20u);
   CHECK_EQ(sizeof(av::DxgkargSubmitCommandToHwQueueRecord), 0x40u);
   CHECK_EQ(offsetof(av::DxgkargSubmitCommandToHwQueueRecord, HwQueueProgressFenceCpuVa), 0x38u);
-  CHECK_EQ(sizeof(av::DxgkargResetHwEngineRecord), 0x08u); }
+  CHECK_EQ(sizeof(av::DxgkargResetHwEngineRecord), 0x08u);
+  CHECK_EQ(sizeof(av::DxgkargResumeHwEngineRecord), 0x08u); }

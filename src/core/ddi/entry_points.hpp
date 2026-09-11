@@ -21,6 +21,7 @@
 #include "dxgkarg_update_monitor_link_info_record.hpp"
 #include "dxgkarg_create_hw_queue_record.hpp"
 #include "dxgkarg_reset_hw_engine_record.hpp"
+#include "dxgkarg_resume_hw_engine_record.hpp"
 #include "dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "dxgkarg_create_process_record.hpp"
 #include "dxgkarg_get_root_page_table_size_record.hpp"
@@ -173,6 +174,7 @@ int32_t AvDdiCreateHwQueue(void *context, av::DxgkargCreateHwQueueRecord *reques
 int32_t AvDdiDestroyHwQueue(void *queue);
 int32_t AvDdiSubmitCommandToHwQueue(void *context, const av::DxgkargSubmitCommandToHwQueueRecord *request);
 int32_t AvDdiResetHwEngine(void *context, const av::DxgkargResetHwEngineRecord *request);
+int32_t AvDdiResumeHwEngine(void *context, const av::DxgkargResumeHwEngineRecord *request);
 /* An overlay handle this driver never creates: nothing behind it to reach. */
 int32_t AvDdiUpdateOverlay(void *overlay, const void *request);
 int32_t AvDdiFlipOverlay(void *overlay, const void *request);

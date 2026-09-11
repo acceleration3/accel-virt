@@ -105,6 +105,7 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiDestroyHwQueue, reinterpret_cast<DdiRoutine>(&AvDdiDestroyHwQueue)},
         {DdiSlot::DxgkDdiSubmitCommandToHwQueue, reinterpret_cast<DdiRoutine>(&AvDdiSubmitCommandToHwQueue)},
         {DdiSlot::DxgkDdiResetHwEngine, reinterpret_cast<DdiRoutine>(&AvDdiResetHwEngine)},
+        {DdiSlot::DxgkDdiResumeHwEngine, reinterpret_cast<DdiRoutine>(&AvDdiResumeHwEngine)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

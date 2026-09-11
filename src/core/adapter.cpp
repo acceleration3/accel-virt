@@ -29,6 +29,7 @@
 #include "ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "ddi/dxgkarg_reset_hw_engine_record.hpp"
+#include "ddi/dxgkarg_resume_hw_engine_record.hpp"
 #include "ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
@@ -547,6 +548,8 @@ int32_t Adapter::control_interrupt(int32_t type, uint8_t enable)
 }
 
 /* A null allocation leaves the source showing nothing. */
+/* Every flip, FlipOnNextVSync or FlipImmediate, shows from the next scanout:
+ * VidSch completes an immediate flip on return and expects no report. */
 int32_t Adapter::set_vidpn_source_address(const DxgkargSetVidPnSourceAddressRecord *request)
 {
     platform_.require_irql_at_most(Irql::isr, "Adapter::set_vidpn_source_address");
@@ -846,6 +849,14 @@ int32_t Adapter::reset_hw_engine(const DxgkargResetHwEngineRecord *request)
     if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
     hw_submissions_.abandon();
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::resume_hw_engine(const DxgkargResumeHwEngineRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::resume_hw_engine");
+    if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
+        return NtStatus(Status::invalid_parameter).value();
     return NtStatus(Status::ok).value();
 }
 
