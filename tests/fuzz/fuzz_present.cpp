@@ -3,11 +3,11 @@
  * claim; without a patch list, over the three allocations a GPU VA present
  * names. Whatever is refused, nothing may be written outside them, the
  * pointers may only advance within them, and no IRQL rule may break. */
-#include "../../src/core/ddi/dxgk_present_allocation_info_record.hpp"
-#include "../../src/core/ddi/dxgkarg_present_record.hpp"
-#include "../../src/core/present_request.hpp"
-#include "../../src/proto/wire_reader.hpp"
-#include "../harness/mock_platform.hpp"
+#include "core/ddi/dxgk_present_allocation_info_record.hpp"
+#include "core/ddi/dxgkarg_present_record.hpp"
+#include "core/present/present_request.hpp"
+#include "harness/platform/mock_platform.hpp"
+#include "proto/wire/wire_reader.hpp"
 
 #include <cstddef>
 #include <cstdint>

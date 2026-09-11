@@ -3,21 +3,21 @@
  * pivot, one dxgkrnl callback refused, and any descriptor window. Whatever is
  * refused, every path, mode set and mode info must be released, nothing written
  * past the descriptor buffer, and no IRQL rule broken. */
-#include "../../src/core/cofunc_modality.hpp"
-#include "../../src/core/ddi/dxgk_device_descriptor_record.hpp"
-#include "../../src/core/ddi/dxgkarg_commit_vidpn_record.hpp"
-#include "../../src/core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
-#include "../../src/core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
-#include "../../src/core/ddi/dxgkarg_recommend_monitor_modes_record.hpp"
-#include "../../src/core/display_mode_list.hpp"
-#include "../../src/core/display_sources.hpp"
-#include "../../src/core/edid.hpp"
-#include "../../src/core/monitor_modes.hpp"
-#include "../../src/core/vidpn_commit.hpp"
-#include "../../src/core/vidpn_support_check.hpp"
-#include "../../src/proto/wire_reader.hpp"
-#include "../harness/test_registry.hpp"
-#include "../harness/vidpn_fixture.hpp"
+#include "core/ddi/dxgk_device_descriptor_record.hpp"
+#include "core/ddi/dxgkarg_commit_vidpn_record.hpp"
+#include "core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
+#include "core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
+#include "core/ddi/dxgkarg_recommend_monitor_modes_record.hpp"
+#include "core/display/display_mode_list.hpp"
+#include "core/display/display_sources.hpp"
+#include "core/display/edid.hpp"
+#include "core/display/monitor_modes.hpp"
+#include "core/vidpn/cofunc_modality.hpp"
+#include "core/vidpn/vidpn_commit.hpp"
+#include "core/vidpn/vidpn_support_check.hpp"
+#include "harness/framework/test_registry.hpp"
+#include "harness/vidpn/vidpn_fixture.hpp"
+#include "proto/wire/wire_reader.hpp"
 
 #include <cstddef>
 #include <cstdint>

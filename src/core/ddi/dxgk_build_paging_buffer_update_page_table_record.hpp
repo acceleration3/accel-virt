@@ -5,7 +5,7 @@
  * proves each offset. */
 #ifndef AV_DXGK_BUILD_PAGING_BUFFER_UPDATE_PAGE_TABLE_RECORD_HPP
 #define AV_DXGK_BUILD_PAGING_BUFFER_UPDATE_PAGE_TABLE_RECORD_HPP
-#include "dxgk_pte_record.hpp"
+#include "core/ddi/dxgk_pte_record.hpp"
 
 #include <stdint.h>
 

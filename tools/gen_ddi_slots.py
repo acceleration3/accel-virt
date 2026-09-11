@@ -13,7 +13,7 @@ import re
 import sys
 
 ROW = re.compile(r"^\| *(\d+) \| `(\w+)` \| `([^`]+)` \|")
-HEADER = "src/core/ddi_slot.hpp"
+HEADER = "src/core/miniport/ddi_slot.hpp"
 LAYOUT = "src/km/ddi_table_layout.cpp"
 
 
@@ -52,7 +52,7 @@ def layout_text(rows):
         "#include <ntddk.h>",
         "#include <dispmprt.h>",
         "",
-        "#include \"ddi_table.hpp\"",
+        "#include \"core/miniport/ddi_table.hpp\"",
         "",
         "static_assert(sizeof(av::DdiTable) == sizeof(DRIVER_INITIALIZATION_DATA),",
         "              \"DdiTable size differs from DRIVER_INITIALIZATION_DATA\");",

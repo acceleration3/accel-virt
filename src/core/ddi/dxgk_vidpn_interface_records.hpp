@@ -7,10 +7,10 @@
 #ifndef AV_DXGK_VIDPN_INTERFACE_RECORDS_HPP
 #define AV_DXGK_VIDPN_INTERFACE_RECORDS_HPP
 
-#include "d3dkmdt_monitor_source_mode_record.hpp"
-#include "d3dkmdt_vidpn_present_path_record.hpp"
-#include "d3dkmdt_vidpn_source_mode_record.hpp"
-#include "d3dkmdt_vidpn_target_mode_record.hpp"
+#include "core/ddi/d3dkmdt_monitor_source_mode_record.hpp"
+#include "core/ddi/d3dkmdt_vidpn_present_path_record.hpp"
+#include "core/ddi/d3dkmdt_vidpn_source_mode_record.hpp"
+#include "core/ddi/d3dkmdt_vidpn_target_mode_record.hpp"
 
 #include <stdint.h>
 

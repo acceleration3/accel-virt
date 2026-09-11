@@ -24,7 +24,7 @@ class CoverageGate(unittest.TestCase):
     def setUp(self):
         self.tree = SourceTree()
         self.addCleanup(self.tree.remove)
-        self.tree.write("src/core/platform.hpp", "#define AV_UNTESTABLE(reason) /* reason */\n")
+        self.tree.write("src/core/platform/platform.hpp", "#define AV_UNTESTABLE(reason) /* reason */\n")
         self.tree.write("tests/untestable_baseline.txt", "0\n")
         self.profiles = self.tree.root / "build" / "coverage"
         self.profiles.mkdir(parents=True)

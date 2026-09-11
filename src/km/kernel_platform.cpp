@@ -1,4 +1,4 @@
-#include "kernel_platform.hpp"
+#include "km/kernel_platform.hpp"
 
 #include <intrin.h>
 
@@ -7,8 +7,8 @@ extern "C" {
 #include <dispmprt.h>
 }
 
-#include "ddi_table.hpp"
-#include "mutex.hpp"
+#include "core/miniport/ddi_table.hpp"
+#include "core/platform/mutex.hpp"
 
 namespace av {
 

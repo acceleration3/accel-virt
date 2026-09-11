@@ -25,10 +25,10 @@ knobs, so every path runs on Linux. The kernel side is translation only.
 ## Structure
 
 ```text
-src/core/platform.hpp            + allocate_contiguous/release_contiguous, stall
+src/core/platform/platform.hpp            + allocate_contiguous/release_contiguous, stall
 src/core/dma_buffer.{hpp,cpp}
 src/core/virtio_region.{hpp,cpp}  virtio_pci_layout.{hpp,cpp}  virtio_capability_walk.{hpp,cpp}
-src/core/register_window.hpp
+src/core/platform/register_window.hpp
 src/core/virtio_pci_transport.{hpp,cpp}  virtq_segment.{hpp,cpp}  virt_queue.{hpp,cpp}
 src/km/kernel_platform.cpp       additions;  src/km/mmio_register_window.{hpp,cpp}
 tests/harness/mock_platform      contiguous blocks with fake physical addresses, translation

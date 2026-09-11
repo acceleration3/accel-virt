@@ -26,7 +26,7 @@ description: "Task list for feature 007: WDDM 1.0 capability reporting"
 
 ## Phase 4: Harness and scenarios (US3)
 
-- [X] T010 `tests/harness/capability_rule.hpp`, `FakeDxgadapter`; tests in `test_fake_dxgadapter.cpp` that a crafted `DRIVERCAPS` breaking each rule is refused, and that a status outside the accepted four fails the test. Found: a WDDMv2 answer meets MultiEngineAware (after PHYSICALADAPTERCAPS) before any static check, so crafted v2 answers set it
+- [X] T010 `tests/harness/dxgkrnl/capability_rule.hpp`, `FakeDxgadapter`; tests in `test_fake_dxgadapter.cpp` that a crafted `DRIVERCAPS` breaking each rule is refused, and that a status outside the accepted four fails the test. Found: a WDDMv2 answer meets MultiEngineAware (after PHYSICALADAPTERCAPS) before any static check, so crafted v2 answers set it
 - [X] T011 `FakeDxgkrnlFdo::start_device` runs `FakeDxgadapter` after QueryChildRelations and stops on refusal; scenarios: bring-up validates capabilities, every query type through the table, a refused capability stops the device
 - [X] T012 Docs: `docs/testing.md` and `docs/ddi-sequences.md` §2.4/§5 (accepted statuses, DRIVERCAPS rules, FDO step); `tools/gate.sh`; merge
 

@@ -3,7 +3,7 @@
 #ifndef AV_D3DKMDT_MONITOR_SOURCE_MODE_RECORD_HPP
 #define AV_D3DKMDT_MONITOR_SOURCE_MODE_RECORD_HPP
 
-#include "d3dkmdt_video_signal_info_record.hpp"
+#include "core/ddi/d3dkmdt_video_signal_info_record.hpp"
 
 #include <stdint.h>
 

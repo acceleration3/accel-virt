@@ -6,10 +6,10 @@ description: "Task list for feature 006: WDDM 1.0 PnP, power and adapter lifetim
 
 ## Phase 1: Skeleton (US1)
 
-- [X] T001 Constitution 2.1.0 (III exception: core entry points, one binding pointer, `ObjectStorage`); `CLAUDE.md` and `.claude/commands/dev.md` wording; `tools/check_design.py` rule: placement new only in `src/core/object_storage.hpp` (test-first in `tests/tools/test_check_design.py`)
+- [X] T001 Constitution 2.1.0 (III exception: core entry points, one binding pointer, `ObjectStorage`); `CLAUDE.md` and `.claude/commands/dev.md` wording; `tools/check_design.py` rule: placement new only in `src/core/support/object_storage.hpp` (test-first in `tests/tools/test_check_design.py`)
 - [X] T002 Tests `test_object_storage.cpp`, `test_nt_status.cpp`, `test_miniport.cpp` (table has exactly the 006 slots set; add/remove adapter slots up to 8; unbound entry points fail safely) - must fail
 - [X] T003 Implement `object_storage.hpp`, `nt_status`, `miniport_binding`, `miniport`, `src/core/ddi/entry_points.{hpp,cpp}` (stubs), `FakeDxgkrnl::register_miniport`
-- [X] T004 `src/core/driver_image.hpp` (`DriverImage<PlatformType>`: platform and miniport in `ObjectStorage`, bind, `Platform::register_miniport`, unwind on refusal; tested over MockPlatform) + one-line `DriverEntry` over `DriverImage<KernelPlatform>`; `KernelPlatform::register_miniport` calls `DxgkInitialize`; `KernelPlatform::log` also writes the debug port 0x402; `driver_image` test requires the `IoGetDeviceObjectPointer` import displib's `DxgkInitialize` brings. Found: `dispmprt.h` has no C linkage guard; clang-cl lacks `__outbytestring`
+- [X] T004 `src/core/miniport/driver_image.hpp` (`DriverImage<PlatformType>`: platform and miniport in `ObjectStorage`, bind, `Platform::register_miniport`, unwind on refusal; tested over MockPlatform) + one-line `DriverEntry` over `DriverImage<KernelPlatform>`; `KernelPlatform::register_miniport` calls `DxgkInitialize`; `KernelPlatform::log` also writes the debug port 0x402; `driver_image` test requires the `IoGetDeviceObjectPointer` import displib's `DxgkInitialize` brings. Found: `dispmprt.h` has no C linkage guard; clang-cl lacks `__outbytestring`
 
 **Checkpoint**: commit.
 

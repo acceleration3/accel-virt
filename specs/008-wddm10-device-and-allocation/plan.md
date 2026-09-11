@@ -13,7 +13,7 @@ queries and `CreateRenderCore`'s DDI rule.
 
 ## Design
 
-- **`ObjectPool<T>`** (`src/core/object_pool.hpp`): chunks of 64 slots from
+- **`ObjectPool<T>`** (`src/core/support/object_pool.hpp`): chunks of 64 slots from
   `Platform::allocate(non_paged)`, a free bitmap per chunk, `create` /
   `destroy` / `find(void *)` (null unless the address is a live object of this
   pool) / `destroy_all`. The pool holds no lock; its owner does.

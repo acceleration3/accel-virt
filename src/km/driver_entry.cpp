@@ -1,7 +1,7 @@
 #include <ntddk.h>
 
-#include "driver_image.hpp"
-#include "kernel_platform.hpp"
+#include "core/miniport/driver_image.hpp"
+#include "km/kernel_platform.hpp"
 
 namespace {
 

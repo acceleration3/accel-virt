@@ -4,7 +4,7 @@
 #ifndef AV_DXGKARG_SET_VIDPN_SOURCE_ADDRESS_RECORD_HPP
 #define AV_DXGKARG_SET_VIDPN_SOURCE_ADDRESS_RECORD_HPP
 
-#include "dxgk_primary_data_record.hpp"
+#include "core/ddi/dxgk_primary_data_record.hpp"
 
 #include <stdint.h>
 

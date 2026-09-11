@@ -61,11 +61,11 @@ class KernelBuildRejectsWhatTheKernelLacks(unittest.TestCase):
 
 
 KERNEL_PLATFORM_ROUND_TRIP = """#include <ntddk.h>
-#include "kernel_platform.hpp"
-#include "mutex.hpp"
-#include "mutex_guard.hpp"
-#include "spin_lock.hpp"
-#include "spin_lock_guard.hpp"
+#include "km/kernel_platform.hpp"
+#include "core/platform/mutex.hpp"
+#include "core/platform/mutex_guard.hpp"
+#include "core/platform/spin_lock.hpp"
+#include "core/platform/spin_lock_guard.hpp"
 
 extern "C" DRIVER_INITIALIZE DriverEntry;
 
@@ -98,10 +98,10 @@ class KernelPlatformLinks(unittest.TestCase):
     def test_a_driver_using_the_kernel_platform_imports_only_the_kernel(self):
         project = KernelProbeProject(
             {"platform": KERNEL_PLATFORM_ROUND_TRIP},
-            sources=("src/km/kernel_platform.cpp", "src/core/spin_lock.cpp",
-                     "src/core/spin_lock_guard.cpp", "src/core/mutex.cpp",
-                     "src/core/mutex_guard.cpp"),
-            include_directories=("src/core", "src/km"))
+            sources=("src/km/kernel_platform.cpp", "src/core/platform/spin_lock.cpp",
+                     "src/core/platform/spin_lock_guard.cpp", "src/core/platform/mutex.cpp",
+                     "src/core/platform/mutex_guard.cpp"),
+            include_directories=("src",))
         self.addCleanup(project.remove)
         configured = project.configure()
         self.assertEqual(configured.returncode, 0, configured.stdout + configured.stderr)

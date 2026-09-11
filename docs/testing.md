@@ -76,7 +76,7 @@ core class under test.
   mutex taken at DISPATCH are each recorded as a violation. This turns the most
   common class of driver bugcheck into a failing unit test.
 - **Violations fail the test unless claimed.** Every rule break is printed once
-  with its cause and counted by kind (`tests/harness/violation.hpp`). A test
+  with its cause and counted by kind (`tests/harness/platform/violation.hpp`). A test
   that means to break a rule claims it with `platform.claim(Violation::...)`;
   anything left unclaimed when the mock is destroyed fails the test. Recording
   instead of aborting is what lets a test prove the violation is detected. Fuzz
@@ -94,7 +94,7 @@ core class under test.
   a test that ends with either fails. Releasing null is a violation (the kernel
   bugchecks on it). Refcount balance arrives with the objects that own
   refcounts (feature 008).
-- **Lock order checking.** Ranks are declared once in `src/core/lock_rank.hpp`.
+- **Lock order checking.** Ranks are declared once in `src/core/platform/lock_rank.hpp`.
   Acquisition must strictly increase the rank, release must be LIFO, and both
   are checked on every acquire and release. This runs in the native test build;
   in the guest, Driver Verifier's deadlock detection covers it.
@@ -144,7 +144,7 @@ A unit test proves `GpuVirtualAddressSpace::map` is correct. It does not prove t
 survives the sequence `dxgkrnl` actually performs, at the IRQLs it actually
 uses, with the reentrancy it actually allows.
 
-So `tests/harness/fake_dxgkrnl.cpp` is a fake `dxgkrnl`. It registers the
+So `tests/harness/dxgkrnl/fake_dxgkrnl.cpp` is a fake `dxgkrnl`. It registers the
 driver's DDI table - applying the checks `DpiInitializeInternal` applies - and
 then drives the table through scripted scenarios: start the adapter, query
 every `DXGKQAITYPE`, create a device, create allocations, create a context,
@@ -177,7 +177,7 @@ Each scenario arrives with the DDIs it calls. Since feature 006:
   and `FakeHandleTable` dxgkrnl's allocation handles behind
   `DxgkCbGetHandleData`.
 
-`tests/unit/test_ddi_scenarios.cpp` runs the bring-up and teardown plus stop
+`tests/unit/scenarios/test_ddi_scenarios.cpp` runs the bring-up and teardown plus stop
 twice, remove without stop, an interrupt before start, a failed start, reset at
 bugcheck, two adapters, and the adapter ceiling - all through the registered
 table, with no core class called directly.

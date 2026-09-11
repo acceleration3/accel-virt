@@ -177,7 +177,7 @@ is under `src/core`, `src/device` or `src/proto` - `.cpp` and `.hpp` both. The
 old script's `find -name "*.c"` matched nothing, so its `AV_UNTESTABLE` count
 was always 0. Uncovered branches are printed as `file:line:col`.
 
-**Fuzz linking**: `main` moves out of the harness into `tests/harness/test_main.cpp`, linked only into unit tests. While it lived in `test_registry.cpp` the fuzz build failed to link (`multiple definition of 'main'` against libFuzzer's), so the fuzz command in the README had never worked. Smoke runs write new units to `build-fuzz/corpus/<target>/` and read the committed corpus, which stays unchanged. In the fuzz configuration `av_core` and `av_harness` are
+**Fuzz linking**: `main` moves out of the harness into `tests/harness/framework/test_main.cpp`, linked only into unit tests. While it lived in `test_registry.cpp` the fuzz build failed to link (`multiple definition of 'main'` against libFuzzer's), so the fuzz command in the README had never worked. Smoke runs write new units to `build-fuzz/corpus/<target>/` and read the committed corpus, which stays unchanged. In the fuzz configuration `av_core` and `av_harness` are
 compiled with `-fsanitize=fuzzer-no-link,address,undefined`; each fuzz target
 links them. The hand-copied source list goes away.
 

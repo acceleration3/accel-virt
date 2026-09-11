@@ -6,7 +6,7 @@ description: "Task list for feature 008: WDDM 1.0 devices, allocations and segme
 
 ## Phase 1: Pool
 
-- [X] T001 Constitution 2.2.0 (III: `ObjectPool<T>`); `CLAUDE.md`, `.claude/commands/dev.md`, `docs/testing.md` wording; `tools/check_design.py` allows placement new in `src/core/object_pool.hpp` (test-first in `tests/tools/test_check_design.py`)
+- [X] T001 Constitution 2.2.0 (III: `ObjectPool<T>`); `CLAUDE.md`, `.claude/commands/dev.md`, `docs/testing.md` wording; `tools/check_design.py` allows placement new in `src/core/support/object_pool.hpp` (test-first in `tests/tools/test_check_design.py`)
 - [X] T002 Tests `test_object_pool.cpp` (create across chunks, destroy, find rejects foreign/interior/destroyed addresses, destroy_all, allocation failure, invariants after every mutation) - must fail
 - [X] T003 Implement `ObjectPool<T>`
 

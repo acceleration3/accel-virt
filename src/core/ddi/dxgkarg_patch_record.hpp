@@ -3,8 +3,8 @@
 #ifndef AV_DXGKARG_PATCH_RECORD_HPP
 #define AV_DXGKARG_PATCH_RECORD_HPP
 
-#include "dxgk_allocation_list_record.hpp"
-#include "d3dddi_patch_location_list_record.hpp"
+#include "core/ddi/d3dddi_patch_location_list_record.hpp"
+#include "core/ddi/dxgk_allocation_list_record.hpp"
 
 #include <stdint.h>
 

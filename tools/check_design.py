@@ -12,7 +12,7 @@ import sys
 
 from header_scan import SOURCE_DIRECTORIES, declared_classes
 
-IN_PLACE_CONSTRUCTORS = ("src/core/object_storage.hpp", "src/core/object_pool.hpp")
+IN_PLACE_CONSTRUCTORS = ("src/core/support/object_storage.hpp", "src/core/support/object_pool.hpp")
 COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
 NEW_EXPRESSION = re.compile(r"(?<![\w.])new\s*[\(\w:]")
 

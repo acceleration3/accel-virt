@@ -18,9 +18,9 @@ from header_scan import declared_classes
 # platform provides - rather than a provided one. Testing these would test the
 # mock. Every entry needs a reason; the list is short on purpose.
 EXCLUDE = {
-    "src/core/platform.hpp": "the platform contract, implemented by src/km and "
+    "src/core/platform/platform.hpp": "the platform contract, implemented by src/km and "
                              "tests/harness and exercised through every core test",
-    "src/core/register_window.hpp": "a device register region, implemented by src/km over a "
+    "src/core/platform/register_window.hpp": "a device register region, implemented by src/km over a "
                                     "mapped BAR and by the fake device in tests/harness, and "
                                     "exercised through every transport test",
 }

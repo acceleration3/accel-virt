@@ -6,8 +6,8 @@
 #ifndef AV_DXGKARG_PRESENT_RECORD_HPP
 #define AV_DXGKARG_PRESENT_RECORD_HPP
 
-#include "d3dddi_patch_location_list_record.hpp"
-#include "rect_record.hpp"
+#include "core/ddi/d3dddi_patch_location_list_record.hpp"
+#include "core/ddi/rect_record.hpp"
 
 #include <stdint.h>
 

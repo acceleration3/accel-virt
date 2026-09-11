@@ -3,7 +3,7 @@
 #ifndef AV_DXGKARG_COLLECT_DBG_INFO_RECORD_HPP
 #define AV_DXGKARG_COLLECT_DBG_INFO_RECORD_HPP
 
-#include "dxgkarg_collect_dbg_info_ext_record.hpp"
+#include "core/ddi/dxgkarg_collect_dbg_info_ext_record.hpp"
 
 #include <stdint.h>
 

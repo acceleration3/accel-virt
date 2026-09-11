@@ -2,12 +2,12 @@
  * driver adding and harvesting. Nothing the device writes may corrupt the
  * driver's shadow: invariants hold, free descriptors never exceed the size,
  * and a harvested head was always one the driver published. */
-#include "../../src/core/status.hpp"
-#include "../../src/core/virt_queue.hpp"
-#include "../../src/core/virtq_segment.hpp"
-#include "../../src/proto/wire_reader.hpp"
-#include "../harness/fake_virtqueue_device.hpp"
-#include "../harness/mock_platform.hpp"
+#include "core/support/status.hpp"
+#include "core/virtio/virt_queue.hpp"
+#include "core/virtio/virtq_segment.hpp"
+#include "harness/device/fake_virtqueue_device.hpp"
+#include "harness/platform/mock_platform.hpp"
+#include "proto/wire/wire_reader.hpp"
 
 #include <cstddef>
 #include <cstdint>

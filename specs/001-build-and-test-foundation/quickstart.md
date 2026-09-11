@@ -34,13 +34,13 @@ Run each on a scratch branch, observe the named failure, revert.
 
 | Change | Expected failure |
 |---|---|
-| add `#include <vector>` to `src/core/alignment.hpp` | `cmake --build build`: `'vector' file not found` from the kernel build |
+| add `#include <vector>` to `src/core/support/alignment.hpp` | `cmake --build build`: `'vector' file not found` from the kernel build |
 | call `fopen` (declared by hand) from a core function | `cmake --build build`: lld-link `undefined symbol: fopen` |
 | add `static int f();` to a core class | `design_rules`: names the method |
 | add a public method no test names | `symbol_tests`: names class and method |
 | add a `../<sibling checkout>/x` link to `README.md` | `self_contained`: names file and line |
 | link `kernel32.lib` into the driver | `driver_image`: names `KERNEL32.dll` |
-| delete `TEST(alignment_divides, is_false_for_an_invalid_alignment)` | `coverage_gate`: `src/core/alignment.cpp:16:12: false branch never taken` |
+| delete `TEST(alignment_divides, is_false_for_an_invalid_alignment)` | `coverage_gate`: `src/core/support/alignment.cpp:16:12: false branch never taken` |
 | add `AV_UNTESTABLE("x")` to a core file | `coverage_gate`: `AV_UNTESTABLE marks 1 > baseline 0`, lists the mark |
 | make `fuzz_address_space` trap on an input byte | `fuzz_address_space_smoke`: `deadly signal`, reproducer written under `build-fuzz/corpus/` |
 | remove `tests/corpus/fuzz_address_space/` | configure: names the target |

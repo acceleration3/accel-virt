@@ -305,5 +305,5 @@ large enough and aligned for the kernel's mutex at compile time.
 - Lock-order checking inside the kernel build.
 - The DDI conformance harness (003).
 - (Done in constitution 2.0.1.) Follow-up constitution PATCH amendment, adding to 001's list: VII names
-  `src/core/locks.h`; the declaration is `src/core/lock_rank.hpp`, and "checked
+  `src/core/locks.h`; the declaration is `src/core/platform/lock_rank.hpp`, and "checked
   at runtime in debug builds" means the native test build.

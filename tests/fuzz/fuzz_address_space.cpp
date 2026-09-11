@@ -1,8 +1,8 @@
 /* Drive the address space with an attacker-chosen sequence of operations and
  * addresses. No input may crash, leak, translate out of bounds, or break an
  * invariant. */
-#include "../../src/core/gpu_virtual_address_space.hpp"
-#include "../harness/mock_platform.hpp"
+#include "core/memory/gpu_virtual_address_space.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <cstddef>
 #include <cstdint>

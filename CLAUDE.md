@@ -41,7 +41,11 @@ a collection and is injected where it is needed - `GpuVirtualAddressSpace`,
 `Scheduler`, `PagingEngine`, `DisplayEngine`, `TimeoutDetector`. Both hold
 state. A class with no members is a mistake being written down.
 
-**Files.** One class per header, named after the class in snake_case; nested and
+**Files.** Each class lives in the semantic folder for its area (`src/core/memory/`,
+`src/core/display/`, ... - README.md lists them), and its test mirrors that path under
+`tests/unit/`. Includes name the path from `src/` or `tests/` -
+`"core/display/edid.hpp"`, `"harness/vidsch/fake_vidsch.hpp"` - never a relative
+one. One class per header, named after the class in snake_case; nested and
 private helper types stay with their owner. A header declares, it does not
 define - no function bodies inside a class declaration, not one-line getters,
 not constructors. Templates go in the header because they must. Every header

@@ -2,10 +2,10 @@
  * bitmap exactly as large as that shape claims. Nothing may be read past the
  * bitmap, nothing written past the 64x64 image, and a refused shape leaves the
  * image untouched. */
-#include "../../src/core/cursor_image.hpp"
-#include "../../src/core/ddi/dxgkarg_set_pointer_shape_record.hpp"
-#include "../../src/proto/wire_reader.hpp"
-#include "../harness/mock_platform.hpp"
+#include "core/ddi/dxgkarg_set_pointer_shape_record.hpp"
+#include "core/display/cursor_image.hpp"
+#include "harness/platform/mock_platform.hpp"
+#include "proto/wire/wire_reader.hpp"
 
 #include <cstddef>
 #include <cstdint>

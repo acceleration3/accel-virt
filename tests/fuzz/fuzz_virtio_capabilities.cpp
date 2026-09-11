@@ -1,10 +1,10 @@
 /* A hostile device's PCI configuration space. The walk and the BAR decoder may
  * refuse anything; neither may loop, read outside the bytes, report a region
  * that wraps, or decode an address of zero. */
-#include "../../src/core/pci_base_addresses.hpp"
-#include "../../src/core/status.hpp"
-#include "../../src/core/virtio_capability_walk.hpp"
-#include "../../src/core/virtio_pci_layout.hpp"
+#include "core/pci/pci_base_addresses.hpp"
+#include "core/support/status.hpp"
+#include "core/virtio/virtio_capability_walk.hpp"
+#include "core/virtio/virtio_pci_layout.hpp"
 
 #include <cstddef>
 #include <cstdint>

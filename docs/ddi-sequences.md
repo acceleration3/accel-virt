@@ -1,6 +1,6 @@
 # DDI call sequences in dxgkrnl.sys
 
-Evidence for the L2 DDI conformance harness (`tests/harness/fake_dxgkrnl.cpp`,
+Evidence for the L2 DDI conformance harness (`tests/harness/dxgkrnl/fake_dxgkrnl.cpp`,
 see `docs/testing.md`). Every claim below is derived from Microsoft's
 `dxgkrnl.sys` 10.0.26100.9444 (and `dxgmms2.sys` from the same package) as
 imported into `re/ghidra-proj`, rebuilt by `tools/re/build_workspace.sh` from
@@ -172,7 +172,7 @@ with `DXGKARG_QUERYADAPTERINFO.Type` at offset 0. Types and enum values from
 | 5 | 47   | `64BITONLYCAPS`       | always | non-fatal; cap simply not set |
 | 6 | 37   | `NATIVE_FENCE_CAPS`   | cap bit `adapter+0x9b8 & 0x800` (NativeGpuFence) | fatal (`"Failed to get DXGK_NATIVE_FENCE_CAPS"`) |
 
-`FakeDxgadapter` (`tests/harness/fake_dxgadapter.cpp`) reproduces this table
+`FakeDxgadapter` (`tests/harness/dxgkrnl/fake_dxgadapter.cpp`) reproduces this table
 and the checks below; `CapabilityRule` names each one. The `DRIVERCAPS` output
 is `GetDriverCapsSizeFromDdiVersion(0x11007)` = 0x250 bytes, copied to
 `DXGADAPTER+0x978`, so a field at `DXGADAPTER+X` is `DXGK_DRIVERCAPS+(X-0x978)`.

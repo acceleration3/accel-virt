@@ -155,7 +155,7 @@ second place to add sources - both builds glob the same `src/core`.
 `README.md` (build commands, layout, KB and codec links), `CLAUDE.md` (gate
 names, codec path), `docs/testing.md` (Ghidra path, `lock_order.hpp` is left
 as is - constitution amendment), `.claude/commands/dev.md` (every KB path,
-`coverage.sh`, Ghidra commands), `src/core/gpu_virtual_address_space.hpp`
+`coverage.sh`, Ghidra commands), `src/core/memory/gpu_virtual_address_space.hpp`
 (KB comment), `tools/gen_specs.py` output in all 35 specs.
 
 ## Complexity Tracking

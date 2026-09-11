@@ -79,14 +79,14 @@ class DesignRules(unittest.TestCase):
         self.tree.write("src/device/heap.cpp", "int *g() { return new int; }\nvoid h(int *p) { delete p; }\n")
         result = run(CHECK, self.tree.root)
         self.assertEqual(result.returncode, 1)
-        self.assertIn("src/core/pool.cpp:1: new expression outside src/core/object_storage.hpp "
-                      "and src/core/object_pool.hpp", result.stderr)
-        self.assertIn("src/device/heap.cpp:1: new expression outside src/core/object_storage.hpp "
-                      "and src/core/object_pool.hpp", result.stderr)
+        self.assertIn("src/core/pool.cpp:1: new expression outside src/core/support/object_storage.hpp "
+                      "and src/core/support/object_pool.hpp", result.stderr)
+        self.assertIn("src/device/heap.cpp:1: new expression outside src/core/support/object_storage.hpp "
+                      "and src/core/support/object_pool.hpp", result.stderr)
         self.assertIn("src/device/heap.cpp:2: delete expression", result.stderr)
 
     def test_object_storage_may_construct_in_place_and_comments_do_not_count(self):
-        self.tree.write("src/core/object_storage.hpp",
+        self.tree.write("src/core/support/object_storage.hpp",
                         "class ObjectStorage {\n    int v_;\n};\ninline void c(void *p) { ::new (p) int(1); }\n")
         self.tree.write("src/core/other.hpp",
                         "/* no new or delete here */\nclass Other {\n    Other(const Other &) = delete;\n    int v_; // new ideas\n};\n")
@@ -94,7 +94,7 @@ class DesignRules(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_object_pool_may_construct_in_place(self):
-        self.tree.write("src/core/object_pool.hpp",
+        self.tree.write("src/core/support/object_pool.hpp",
                         "class ObjectPool {\n    int v_;\n};\ninline void c(void *p) { ::new (p) int(1); }\n")
         result = run(CHECK, self.tree.root)
         self.assertEqual(result.returncode, 0, result.stderr)

@@ -6,7 +6,7 @@
 
 #include <ntddk.h>
 
-#include "platform.hpp"
+#include "core/platform/platform.hpp"
 
 namespace av {
 

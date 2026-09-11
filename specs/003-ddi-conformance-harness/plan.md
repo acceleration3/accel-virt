@@ -35,12 +35,12 @@ this is the one naming exception, confined to generated WDK mirrors.
 
 ```text
 tools/gen_ddi_slots.py            docs/ref/driver_init_table.md -> the two generated files
-src/core/ddi_slot.hpp             generated: enum class DdiSlot (193)
+src/core/miniport/ddi_slot.hpp             generated: enum class DdiSlot (193)
 src/core/ddi_table.{hpp,cpp}      DdiTable
 src/km/ddi_table_layout.cpp       generated: size + 187 offset static_asserts
-tests/unit/test_ddi_table.cpp
-tests/harness/fake_dxgkrnl.{hpp,cpp}, tests/harness/registration_rule.hpp
-tests/unit/test_fake_dxgkrnl.cpp
+tests/unit/core/miniport/test_ddi_table.cpp
+tests/harness/fake_dxgkrnl.{hpp,cpp}, tests/harness/dxgkrnl/registration_rule.hpp
+tests/unit/harness/dxgkrnl/test_fake_dxgkrnl.cpp
 tests/tools/test_gen_ddi_slots.py staleness
 docs/ddi-sequences.md             evidence
 ```

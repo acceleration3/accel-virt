@@ -1,8 +1,8 @@
 /* A hostile translated resource list. The parser may refuse anything; it must
  * never read past the bytes, and what it accepts must satisfy its invariants. */
-#include "../../src/core/resource_list.hpp"
-#include "../../src/core/status.hpp"
-#include "../harness/mock_platform.hpp"
+#include "core/pci/resource_list.hpp"
+#include "core/support/status.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <cstddef>
 #include <cstdint>

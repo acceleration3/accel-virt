@@ -3,14 +3,14 @@
  * points at exactly as large as they claim. Whatever is refused, nothing may be
  * written outside the DMA buffer or the one page table, the DMA pointer may
  * only advance within the buffer, and no IRQL rule may break. */
-#include "../../src/core/ddi/dxgk_build_paging_buffer_copy_page_table_entries_record.hpp"
-#include "../../src/core/ddi/dxgk_build_paging_buffer_copy_range_record.hpp"
-#include "../../src/core/ddi/dxgk_build_paging_buffer_update_page_table_record.hpp"
-#include "../../src/core/ddi/dxgk_pte_record.hpp"
-#include "../../src/core/ddi/dxgkarg_build_paging_buffer_record.hpp"
-#include "../../src/core/paging_request.hpp"
-#include "../../src/proto/wire_reader.hpp"
-#include "../harness/mock_platform.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_copy_page_table_entries_record.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_copy_range_record.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_update_page_table_record.hpp"
+#include "core/ddi/dxgk_pte_record.hpp"
+#include "core/ddi/dxgkarg_build_paging_buffer_record.hpp"
+#include "core/memory/paging_request.hpp"
+#include "harness/platform/mock_platform.hpp"
+#include "proto/wire/wire_reader.hpp"
 
 #include <cstddef>
 #include <cstdint>

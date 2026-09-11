@@ -22,7 +22,7 @@ class GenDdiSlots(unittest.TestCase):
     def test_generates_one_enumerator_and_one_offset_proof_per_routine(self):
         result = run(GENERATOR, "--root", self.tree.root)
         self.assertEqual(result.returncode, 0, result.stderr)
-        header = (self.tree.root / "src/core/ddi_slot.hpp").read_text()
+        header = (self.tree.root / "src/core/miniport/ddi_slot.hpp").read_text()
         layout = (self.tree.root / "src/km/ddi_table_layout.cpp").read_text()
         self.assertIn("Version = 0,", header)
         self.assertIn("DxgkDdiAddDevice = 1,", header)
@@ -33,11 +33,11 @@ class GenDdiSlots(unittest.TestCase):
 
     def test_check_fails_naming_a_stale_file(self):
         run(GENERATOR, "--root", self.tree.root)
-        header = self.tree.root / "src/core/ddi_slot.hpp"
+        header = self.tree.root / "src/core/miniport/ddi_slot.hpp"
         header.write_text(header.read_text() + "// edited\n")
         result = run(GENERATOR, "--root", self.tree.root, "--check")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("src/core/ddi_slot.hpp", result.stderr)
+        self.assertIn("src/core/miniport/ddi_slot.hpp", result.stderr)
 
     def test_the_committed_files_are_current(self):
         result = run(GENERATOR, "--root", ROOT, "--check")

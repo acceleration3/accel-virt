@@ -98,7 +98,7 @@ Normative headers: `third_party/windows-kit/include/` (fetched by `tools/fetch_w
 - Q (agent -> user): Devices and allocations have no fixed bound, and
   `ObjectStorage<T>` holds one object in memory that already exists. How are
   unbounded objects constructed? -> A (user): `ObjectPool<T>` in
-  `src/core/object_pool.hpp`, a second placement-new site: fixed-size
+  `src/core/support/object_pool.hpp`, a second placement-new site: fixed-size
   non-paged chunks from `Platform`, objects constructed and destroyed in place
   at stable addresses usable as dxgkrnl handles. Constitution 2.2.0 (MINOR);
   `tools/check_design.py` allows placement new in exactly the two headers.

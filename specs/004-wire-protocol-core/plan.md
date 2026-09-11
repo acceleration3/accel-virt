@@ -35,9 +35,9 @@ platform dependency (usable at DISPATCH and in QEMU worker threads).
 ## Structure
 
 ```text
-src/core/status.hpp            + malformed
+src/core/support/status.hpp            + malformed
 src/proto/wire_reader.{hpp,cpp}  wire_writer.{hpp,cpp}  protocol_version.{hpp,cpp}
-src/proto/sub_api.hpp           gpu_identity.{hpp,cpp}  capset_info.{hpp,cpp}
+src/proto/context/sub_api.hpp           gpu_identity.{hpp,cpp}  capset_info.{hpp,cpp}
 src/proto/context_setup.{hpp,cpp}  ring_header.{hpp,cpp}  ring_progress.{hpp,cpp}
 src/proto/submission_descriptor.{hpp,cpp}  fence_page.{hpp,cpp}  fence_progress.{hpp,cpp}
 tests/unit/test_<each>.cpp      tests/fuzz/fuzz_proto.cpp  tests/corpus/fuzz_proto/

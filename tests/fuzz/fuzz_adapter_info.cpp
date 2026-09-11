@@ -4,11 +4,11 @@
  * breach no driver can detect, so sizes are clamped to what exists. Any answer
  * outside dxgkrnl's accepted statuses, a write past a buffer, or a violation
  * traps. */
-#include "../../src/core/adapter.hpp"
-#include "../../src/core/ddi/dxgkarg_collect_dbg_info_record.hpp"
-#include "../../src/core/ddi/dxgkarg_escape_record.hpp"
-#include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
-#include "../harness/mock_platform.hpp"
+#include "core/adapter/adapter.hpp"
+#include "core/ddi/dxgkarg_collect_dbg_info_record.hpp"
+#include "core/ddi/dxgkarg_escape_record.hpp"
+#include "core/ddi/dxgkarg_query_adapter_info_record.hpp"
+#include "harness/platform/mock_platform.hpp"
 
 #include <cstddef>
 #include <cstdint>

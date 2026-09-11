@@ -49,42 +49,19 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DI
 
 # ---- portable code: no platform headers, compiled into every target --------
 # src/device and src/proto join the same gates the moment they hold a source.
-file(GLOB AV_PORTABLE_SOURCES CONFIGURE_DEPENDS
-  src/core/*.cpp src/core/ddi/*.cpp src/proto/*.cpp src/device/*.cpp)
+# Includes name a path from src/ ("core/display/edid.hpp"), from any file.
+file(GLOB_RECURSE AV_PORTABLE_SOURCES CONFIGURE_DEPENDS
+  src/core/*.cpp src/proto/*.cpp src/device/*.cpp)
 add_library(av_core STATIC ${AV_PORTABLE_SOURCES})
-target_include_directories(av_core PUBLIC src/core src/proto src/device)
+target_include_directories(av_core PUBLIC src)
 target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 
 # ---- test harness ----------------------------------------------------------
-add_library(av_harness STATIC
-  tests/harness/test_registry.cpp
-  tests/harness/mock_platform.cpp
-  tests/harness/guarded_buffer.cpp
-  tests/harness/hostile_sweep.cpp
-  tests/harness/address_space_fixture.cpp
-  tests/harness/ddi_table_probe.cpp
-  tests/harness/fake_dxgkrnl.cpp
-  tests/harness/byte_layout.cpp
-  tests/harness/fixture_file.cpp
-  tests/harness/fake_common_config.cpp
-  tests/harness/fake_register_bytes.cpp
-  tests/harness/fake_isr_register.cpp
-  tests/harness/fake_virtqueue_device.cpp
-  tests/harness/fake_resource_list.cpp
-  tests/harness/fake_virtio_gpu_function.cpp
-  tests/harness/fake_dxgkrnl_adapter.cpp
-  tests/harness/fake_dxgkrnl_fdo.cpp
-  tests/harness/fake_dxgadapter.cpp
-  tests/harness/fake_vidmm.cpp
-  tests/harness/fake_handle_table.cpp
-  tests/harness/fake_vidsch.cpp
-  tests/harness/fake_vidpn.cpp
-  tests/harness/vidpn_fixture.cpp
-  tests/harness/fake_display_mode_manager.cpp
-  tests/harness/mapped_virtio_function.cpp
-  tests/harness/fake_gpu_mmu.cpp
-  tests/harness/fake_dxgmonitor.cpp
-  tests/harness/fake_hw_queue.cpp)
+# Harness includes name a path from tests/ ("harness/vidsch/fake_vidsch.hpp").
+file(GLOB_RECURSE AV_HARNESS_SOURCES CONFIGURE_DEPENDS tests/harness/*.cpp)
+list(FILTER AV_HARNESS_SOURCES EXCLUDE REGEX "/test_main\\.cpp$")
+add_library(av_harness STATIC ${AV_HARNESS_SOURCES})
+target_include_directories(av_harness PUBLIC tests)
 target_link_libraries(av_harness PUBLIC av_core)
 target_compile_definitions(av_harness PUBLIC AV_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures")
 
@@ -120,10 +97,10 @@ if(AV_COVERAGE)
            COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_BINARY_DIR}/coverage)
   set_tests_properties(coverage_clean PROPERTIES FIXTURES_SETUP coverage_clean)
 endif()
-file(GLOB AV_UNIT_TESTS CONFIGURE_DEPENDS tests/unit/test_*.cpp)
+file(GLOB_RECURSE AV_UNIT_TESTS CONFIGURE_DEPENDS tests/unit/test_*.cpp)
 foreach(src ${AV_UNIT_TESTS})
   get_filename_component(name ${src} NAME_WE)
-  add_executable(${name} ${src} tests/harness/test_main.cpp)
+  add_executable(${name} ${src} tests/harness/framework/test_main.cpp)
   target_link_libraries(${name} PRIVATE av_harness)
   target_compile_options(${name} PRIVATE ${AV_TEST_FLAGS})
   add_test(NAME ${name} COMMAND ${name})

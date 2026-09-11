@@ -1,6 +1,6 @@
-#include "entry_points.hpp"
+#include "core/ddi/entry_points.hpp"
 
-#include "../adapter.hpp"
+#include "core/adapter/adapter.hpp"
 
 namespace av {
 

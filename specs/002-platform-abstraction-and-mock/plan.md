@@ -53,7 +53,7 @@ tests/harness/
 ├── violation.hpp         Violation
 ├── mock_platform.{hpp,cpp}   extended
 └── test_registry.{hpp,cpp}   take_current_failure()
-tests/unit/test_mock_platform.cpp, test_spin_lock.cpp, test_spin_lock_guard.cpp,
+tests/unit/harness/platform/test_mock_platform.cpp, test_spin_lock.cpp, test_spin_lock_guard.cpp,
           test_mutex.cpp, test_mutex_guard.cpp, test_gpu_virtual_address_space.cpp (claims)
 tests/fuzz/fuzz_address_space.cpp   trap on unclaimed violations
 CLAUDE.md, docs/testing.md          destructor adaptation; lock_rank.hpp; record-and-claim

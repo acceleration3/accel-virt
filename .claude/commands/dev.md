@@ -150,8 +150,8 @@ tools/gate.sh            # the full verdict: the above, plus coverage_gate
 `tools/check_symbol_tests.py` (public API no test names) run inside `ctest`;
 run either directly for a faster answer.
 
-`src/core/gpu_virtual_address_space.cpp` with
-`tests/unit/test_gpu_virtual_address_space.cpp` is the worked example of the
+`src/core/memory/gpu_virtual_address_space.cpp` with
+`tests/unit/core/memory/test_gpu_virtual_address_space.cpp` is the worked example of the
 standard. Match it.
 
 **Two more things that are easy to get wrong:**

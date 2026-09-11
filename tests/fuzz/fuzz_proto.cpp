@@ -2,16 +2,16 @@
  * the target. A decoder may reject anything; what it accepts must re-encode to
  * exactly the bytes it read, and the trackers must stay consistent whatever
  * sequence of snapshots they see. */
-#include "../../src/core/status.hpp"
-#include "../../src/proto/allocation_descriptor.hpp"
-#include "../../src/proto/capset_info.hpp"
-#include "../../src/proto/context_setup.hpp"
-#include "../../src/proto/fence_page.hpp"
-#include "../../src/proto/fence_progress.hpp"
-#include "../../src/proto/ring_header.hpp"
-#include "../../src/proto/ring_progress.hpp"
-#include "../../src/proto/submission_descriptor.hpp"
-#include "../../src/proto/wire_reader.hpp"
+#include "core/support/status.hpp"
+#include "proto/context/capset_info.hpp"
+#include "proto/context/context_setup.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/submission/fence_page.hpp"
+#include "proto/submission/fence_progress.hpp"
+#include "proto/submission/ring_header.hpp"
+#include "proto/submission/ring_progress.hpp"
+#include "proto/submission/submission_descriptor.hpp"
+#include "proto/wire/wire_reader.hpp"
 
 #include <cstddef>
 #include <cstdint>

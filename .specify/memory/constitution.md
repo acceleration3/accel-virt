@@ -153,7 +153,7 @@ Every public core function declares its maximum IRQL on entry with
 IRQL, and the mock records a violation - failing the test unless the test
 claims it - when a function is called above its ceiling, allocates at
 DISPATCH, or blocks at DISPATCH. Lock ranks are declared once in
-`src/core/lock_rank.hpp`; acquisition order and LIFO release are checked at
+`src/core/platform/lock_rank.hpp`; acquisition order and LIFO release are checked at
 runtime in the native test build, and by Driver Verifier in the guest.
 
 The submission path never blocks, never allocates and never takes a mutex.

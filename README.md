@@ -94,7 +94,7 @@ tools/gate.sh                   # the full verdict, three configurations
 change that would not build in the guest kernel - a hosted header, a C runtime
 call, `new`, `throw`, `typeid` - fails the build.
 
-`src/core/gpu_virtual_address_space.cpp` with its `Alignment` and `ByteRange`
+`src/core/memory/gpu_virtual_address_space.cpp` with its `Alignment` and `ByteRange`
 value classes is the worked example of the standard the constitution demands:
 **100% region, function, line and branch coverage**, invariants asserted after
 every mutation, an allocation-failure sweep, IRQL ceilings enforced by the
@@ -119,11 +119,29 @@ CLAUDE.md                         the C++ standard (decrapify-cpp, adapted)
 .claude/commands/dev.md           /dev — loads all context and starts a feature
 cmake/                            the Windows kernel toolchain
 src/core/                         portable driver logic — no platform headers
+  support/                          Status, NtStatus, ObjectPool/Storage, ScopeExit, Alignment, ByteRange
+  platform/                         the Platform contract, locks and lock ranks, timers
+  miniport/                         registration, the DDI table, dxgkrnl's callbacks, interrupt reports
+  ddi/                              DDI records (dxgkrnl-owned memory, layout-proven) and entry points
+  adapter/                          the Adapter, its capabilities and debug report
+  pci/                              configuration space, resources, BAR mappings
+  virtio/                           virtio-pci transport, virtqueues, the virtio-gpu device
+  memory/                           segments, allocations, GPU virtual addresses, page tables, paging
+  scheduling/                       devices, contexts, the execution node, hardware queues, render/patch
+  display/                          modes, EDID, scanout sources, vsync, the hardware cursor
+  vidpn/                            VidPn topology, mode sets, cofunctional modality, commit
+  present/                          Present and how it addresses allocations
 src/km/                           Windows kernel shim — translation only; builds rvkgpu.sys
 src/device/                       QEMU device core
 src/proto/                        the wire protocol, shared by both sides
-tests/unit/                       L1: every branch, invariants, garbage
+  wire/  context/  submission/      codecs; context setup and capsets; rings and fences
+  resources/  commands/  virtio_gpu/ allocation descriptors; present and paging commands; virtio-gpu requests
+tests/unit/                       L1: every branch, invariants, garbage — mirrors src/ and tests/harness/
+  scenarios/                        the driver image driven through its DDI table
 tests/harness/                    the adversarial platform mock, fake dxgkrnl
+  framework/  platform/             test registry and buffers; MockPlatform and violations
+  dxgkrnl/  vidmm/  vidsch/  vidpn/ fake dxgkrnl, VidMm, VidSch and the VidPn/DMM objects
+  device/                           fake virtio-gpu PCI function and virtqueue device
 tests/fuzz/ tests/corpus/         L3: libFuzzer targets and seed corpora
 tests/fixtures/                   bytes captured from real devices (tools/host/capture_pci_config.py)
 tests/loopback/                   L4: guest core ↔ device core in one process

@@ -8,10 +8,10 @@
 #ifndef AV_DXGKRNL_INTERFACE_RECORD_HPP
 #define AV_DXGKRNL_INTERFACE_RECORD_HPP
 
-#include "dxgk_device_info_record.hpp"
-#include "dxgkargcb_get_handle_data_record.hpp"
-#include "dxgkargcb_notify_interrupt_data_record.hpp"
-#include "dxgk_vidpn_interface_records.hpp"
+#include "core/ddi/dxgk_device_info_record.hpp"
+#include "core/ddi/dxgk_vidpn_interface_records.hpp"
+#include "core/ddi/dxgkargcb_get_handle_data_record.hpp"
+#include "core/ddi/dxgkargcb_notify_interrupt_data_record.hpp"
 
 #include <stdint.h>
 
