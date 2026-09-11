@@ -10,8 +10,8 @@
 namespace av {
 
 DriverCapabilities::DriverCapabilities(Platform &platform)
-    : platform_(platform), wddm_version_(wddm_2_1), highest_acceptable_address_(any_address),
-      mode_behaviors_(0u) {}
+    : platform_(platform), wddm_version_(wddm_2_2), highest_acceptable_address_(any_address),
+      mode_behaviors_(0u), display_extension_(0u) {}
 
 Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) const
 {
@@ -53,6 +53,12 @@ Status DriverCapabilities::report_physical_adapter_caps(const AdapterInfoQuery &
     caps.DxgkPhysicalAdapterHandle = device_handle;
     caps.Flags = physical_gpu_mmu;
     return query.write_output(&caps, sizeof caps);
+}
+
+Status DriverCapabilities::report_display_caps_extension(const AdapterInfoQuery &query) const
+{
+    platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::report_display_caps_extension");
+    return query.write_output(&display_extension_, sizeof display_extension_);
 }
 
 void DriverCapabilities::answer_mode_behavior(DxgkargControlModeBehaviorRecord &request) const

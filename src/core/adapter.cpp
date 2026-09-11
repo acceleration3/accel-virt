@@ -291,6 +291,8 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
         return NtStatus(geometry_.report_level(request)).value();
     case query_physical_adapter_caps:
         return NtStatus(capabilities_.report_physical_adapter_caps(request, dxgkrnl_.device_handle())).value();
+    case query_display_driver_caps_extension:
+        return NtStatus(capabilities_.report_display_caps_extension(request)).value();
     default:
         return NtStatus(NtStatus::not_implemented).value();
     }

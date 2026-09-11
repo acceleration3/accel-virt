@@ -140,6 +140,28 @@ TEST(fake_dxgadapter_initialize, an_adapter_with_outputs_is_asked_to_prioritize_
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
   CHECK(av::TestRegistry::instance().take_current_failure()); }
 
+TEST(fake_dxgadapter_initialize, a_wddm_2_display_adapter_is_asked_for_its_caps_extension)
+{ MockPlatform platform; CraftedMiniport miniport;
+  miniport.caps().WDDMVersion = 0x2000;
+  miniport.caps().SchedulingCaps = 0x1u;
+  miniport.fail_query(16, invalid_parameter);
+  FakeDxgadapter adapter(platform, miniport.table());
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(adapter.display_caps_extension(), 0u);
+  const std::uint32_t asked = adapter.queries();
+  miniport.caps().WDDMVersion = 0x2200;
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(adapter.display_caps_extension(), 0x2u);   /* VirtualModeSupport by default */
+  miniport.fail_query(16, 0);
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(adapter.display_caps_extension(), 0u);
+  CHECK_EQ(adapter.initialize(&miniport, 0u), 0);
+  CHECK_EQ(adapter.queries(), asked - 1u);           /* no outputs: not asked */
+  miniport.caps().WDDMVersion = 0x1000;
+  miniport.caps().SchedulingCaps = 0u;
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(adapter.queries(), asked - 2u); }
+
 TEST(fake_dxgadapter_query, a_status_dxgkrnl_logs_as_invalid_fails_the_test)
 { MockPlatform platform; CraftedMiniport miniport;
   miniport.fail_query(13, not_supported);
@@ -276,7 +298,7 @@ TEST(fake_dxgadapter_initialize, a_wddm_2_driver_is_asked_for_physical_adapter_c
   CHECK(adapter.failed_rule() == CapabilityRule::too_many_nodes);
   miniport.caps().WDDMVersion = 0x2500;
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
-  CHECK_EQ(adapter.queries(), 3u);   /* DRIVERCAPS, PHYSICALADAPTERCAPS, 64BITONLYCAPS */ }
+  CHECK_EQ(adapter.queries(), 4u);   /* DRIVERCAPS, PHYSICALADAPTERCAPS, DISPLAY_DRIVERCAPS_EXTENSION, 64BITONLYCAPS */ }
 
 TEST(fake_dxgadapter_initialize, a_failed_physical_adapter_query_keeps_defaults)
 { MockPlatform platform; CraftedMiniport miniport;
@@ -331,7 +353,7 @@ TEST(fake_dxgadapter_initialize, native_gpu_fence_requires_its_caps_and_wddm_3_2
   miniport.caps().SchedulingCaps = 0x801u;
   FakeDxgadapter adapter(platform, miniport.table());
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
-  CHECK_EQ(adapter.queries(), 5u);   /* DRIVERCAPS, PHYSICAL, DIRTYBIT, 64BITONLY, NATIVE_FENCE */
+  CHECK_EQ(adapter.queries(), 6u);   /* DRIVERCAPS, PHYSICAL, DISPLAY EXTENSION, DIRTYBIT, 64BITONLY, NATIVE_FENCE */
   miniport.fail_query(37, no_memory);
   CHECK_EQ(adapter.initialize(&miniport, 1u), no_memory);
   CHECK(adapter.failed_rule() == CapabilityRule::native_fence_caps_query_failed); }

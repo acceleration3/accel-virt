@@ -65,6 +65,10 @@ public:
     /* The last ControlModeBehavior answer; zero when the slot is NULL and the
      * default answered STATUS_NOT_SUPPORTED. */
     const DxgkargControlModeBehaviorRecord &mode_behavior() const;
+    /* DXGK_DISPLAY_DRIVERCAPS_EXTENSION as ADAPTER_DISPLAY::Initialize @ 1403abf44
+     * keeps it for a WDDM 2.0 adapter with outputs: the answer, or when the query
+     * fails, VirtualModeSupport from 2.2 and nothing before. */
+    std::uint32_t display_caps_extension() const;
     CapabilityRule              failed_rule() const;
     const DxgkDriverCapsRecord &driver_caps() const;
     /* Since the last initialize. */
@@ -77,7 +81,7 @@ private:
     std::int32_t   refuse(CapabilityRule rule, std::int32_t status);
     void           set_mode_behavior(void *context);
     std::int32_t   query_physical_adapter(void *context);
-    std::int32_t   query_after_validation(void *context);
+    std::int32_t   query_after_validation(void *context, std::uint32_t children);
     CapabilityRule validate_version(const DxgkDriverCapsRecord &caps) const;
     CapabilityRule validate_levels(const DxgkDriverCapsRecord &caps) const;
     CapabilityRule validate_hybrid(const DxgkDriverCapsRecord &caps, std::uint32_t children) const;
@@ -94,6 +98,7 @@ private:
     DxgkDriverCapsRecord  caps_;
     DxgkPhysicalAdapterCapsRecord physical_;
     DxgkargControlModeBehaviorRecord mode_behavior_;
+    std::uint32_t         display_caps_extension_;
     bool                  validate_wddm_caps_;
     CapabilityRule        failed_;
     std::uint32_t         queries_;

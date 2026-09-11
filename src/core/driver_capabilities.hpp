@@ -28,12 +28,16 @@ public:
     /* DXGKQAITYPE_PHYSICALADAPTERCAPS for physical adapter 0, named by dxgkrnl's
      * device handle. */
     [[nodiscard]] Status report_physical_adapter_caps(const AdapterInfoQuery &query, void *device_handle) const;
+    /* DXGKQAITYPE_DISPLAY_DRIVERCAPS_EXTENSION: no secure display, virtual modes
+     * or HDR scanout. From 2.2 dxgkrnl assumes VirtualModeSupport when this is
+     * not answered. */
+    [[nodiscard]] Status report_display_caps_extension(const AdapterInfoQuery &query) const;
     /* DxgkDdiControlModeBehavior: each requested behavior satisfied only if
      * this driver implements it. */
     void                 answer_mode_behavior(DxgkargControlModeBehaviorRecord &request) const;
 
 private:
-    static constexpr int32_t wddm_2_1 = 0x2100;   /* DXGKDDI_WDDMv2_1 */
+    static constexpr int32_t wddm_2_2 = 0x2200;   /* DXGKDDI_WDDMv2_2 */
     enum : uint32_t {
         scheduling_multi_engine_aware = 0x1u,      /* DXGK_VIDSCHCAPS */
         memory_virtual_addressing = 0x20u,         /* DXGK_VIDMMCAPS: VidMm keys on it */
@@ -53,6 +57,8 @@ private:
     int64_t   highest_acceptable_address_;
     /* DXGK_MODE_BEHAVIOR_FLAGS: neither HDR nor colorimetric control. */
     uint32_t  mode_behaviors_;
+    /* DXGK_DISPLAY_DRIVERCAPS_EXTENSION */
+    uint32_t  display_extension_;
 };
 
 }  // namespace av

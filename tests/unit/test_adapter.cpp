@@ -1054,11 +1054,11 @@ std::uint32_t query_driver_caps_of(Adapter &adapter, DxgkDriverCapsRecord &caps)
 
 }  // namespace
 
-TEST(adapter_query_adapter_info, answers_driver_caps_with_wddm_2_1)
+TEST(adapter_query_adapter_info, answers_driver_caps_with_wddm_2_2)
 { Fixture fixture; DxgkDriverCapsRecord caps = {};
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(query_driver_caps_of(fixture.adapter(), caps), success);
-  CHECK_EQ(caps.WDDMVersion, 0x2100); }
+  CHECK_EQ(caps.WDDMVersion, 0x2200); }
 
 TEST(adapter_query_adapter_info, answers_the_gpu_mmu_and_physical_adapter_queries)
 { Fixture fixture;
@@ -1115,7 +1115,16 @@ TEST(adapter_query_adapter_info, answers_wddm_device_caps_before_start)
   query.pOutputData = &caps;
   query.OutputDataSize = sizeof caps;
   CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
-  CHECK_EQ(caps, 0x2100); }
+  CHECK_EQ(caps, 0x2200); }
+
+TEST(adapter_query_adapter_info, answers_the_display_caps_extension)
+{ Fixture fixture; std::uint32_t extension = 0xEEu;
+  DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = 16;   /* DXGKQAITYPE_DISPLAY_DRIVERCAPS_EXTENSION */
+  query.pOutputData = &extension;
+  query.OutputDataSize = sizeof extension;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(extension, 0u); }
 
 TEST(adapter_query_adapter_info, answers_the_segment_query_once_started)
 { Fixture fixture; std::uint32_t physical_adapter = 0u; av::DxgkQuerySegmentOut4Record out = {};
@@ -1137,7 +1146,7 @@ TEST(adapter_query_adapter_info, declines_every_other_type_without_touching_eith
   for (std::int32_t type = 0; type <= last_query_type + 4; type++) {
       const std::int32_t requested = type <= last_query_type ? type : out_of_range[type - last_query_type - 1];
       if (requested == query_driver_caps || requested == query_wddm_device_caps || requested == 11 ||
-          (requested >= 13 && requested <= 15))
+          (requested >= 13 && requested <= 16))
           continue;
       GuardedBuffer input(64u), output(64u);
       std::memset(input.data(), 0xEE, 64u);

@@ -216,6 +216,7 @@ private:
         query_gpu_mmu_caps = 13,
         query_page_table_level_desc = 14,
         query_physical_adapter_caps = 15,
+        query_display_driver_caps_extension = 16,
         query_wddm_device_caps = 29,
     };
     enum : int32_t { removal_hibernation = 0, removal_pnp_notify = 1 };   /* DXGK_SURPRISE_REMOVAL_TYPE */

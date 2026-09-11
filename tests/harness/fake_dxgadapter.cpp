@@ -20,6 +20,7 @@ constexpr std::uint32_t mode_behavior_prioritize_hdr = 0x1u;   /* DXGK_MODE_BEHA
 enum : std::int32_t {
     query_driver_caps = 1,
     query_physical_adapter_caps = 15,
+    query_display_driver_caps_extension = 16,
     query_frame_buffer_save_size = 21,
     query_native_fence_caps = 37,
     query_dirty_bit_tracking_caps = 39,
@@ -38,6 +39,7 @@ constexpr std::int32_t known_versions[] = {0x1000, 0x1200, 0x1300, 0x2000, 0x210
 constexpr std::uint32_t scheduling_multi_engine_aware = 0x1u;
 constexpr std::uint32_t scheduling_wddm_1_2_bits = 0x14u;   /* PreemptionAware | CancelCommandAware */
 constexpr std::uint32_t scheduling_native_gpu_fence = 0x800u;
+constexpr std::uint32_t display_virtual_mode_support = 0x2u;   /* DXGK_DISPLAY_DRIVERCAPS_EXTENSION */
 constexpr std::uint32_t memory_cross_adapter_resource = 0x10u;
 constexpr std::uint32_t memory_io_mmu_secure_mode_supported = 0x800u;
 constexpr std::uint32_t memory_cross_adapter_texture = 0x8000u;
@@ -68,7 +70,7 @@ bool bit(std::uint32_t word, std::uint32_t mask) { return (word & mask) != 0u; }
 }  // namespace
 
 FakeDxgadapter::FakeDxgadapter(MockPlatform &platform, const DdiTable &table)
-    : platform_(platform), table_(table), caps_{}, physical_{}, mode_behavior_{}, validate_wddm_caps_(false), failed_(CapabilityRule::none),
+    : platform_(platform), table_(table), caps_{}, physical_{}, mode_behavior_{}, display_caps_extension_(0u), validate_wddm_caps_(false), failed_(CapabilityRule::none),
       queries_(0u),
       render_adapter_(false), missing_render_slot_(DdiSlot::Version) {}
 
@@ -132,9 +134,14 @@ std::int32_t FakeDxgadapter::query_physical_adapter(void *context)
     return 0;
 }
 
-std::int32_t FakeDxgadapter::query_after_validation(void *context)
+std::int32_t FakeDxgadapter::query_after_validation(void *context, std::uint32_t children)
 {
     std::uint32_t answer = 0u;
+    display_caps_extension_ = 0u;
+    if (children != 0u && caps_.WDDMVersion >= wddm_2_0 &&
+        query(context, query_display_driver_caps_extension, nullptr, 0u, &display_caps_extension_,
+              sizeof display_caps_extension_) < 0)
+        display_caps_extension_ = caps_.WDDMVersion >= wddm_2_2 ? display_virtual_mode_support : 0u;
     if (caps_.WDDMVersion >= wddm_3_2)
         static_cast<void>(query(context, query_dirty_bit_tracking_caps, nullptr, 0u, &answer, sizeof answer));
     static_cast<void>(query(context, query_64_bit_only_caps, nullptr, 0u, &answer, sizeof answer));
@@ -172,7 +179,7 @@ std::int32_t FakeDxgadapter::initialize(void *context, std::uint32_t children)
     const CapabilityRule rule = validate(caps_, children);
     if (rule == CapabilityRule::unknown_wddm_version) return refuse(rule, status_revision_mismatch);
     if (rule != CapabilityRule::none) return refuse(rule, status_invalid_parameter);
-    return query_after_validation(context);
+    return query_after_validation(context, children);
 }
 
 void FakeDxgadapter::set_mode_behavior(void *context)
@@ -194,6 +201,8 @@ void FakeDxgadapter::set_mode_behavior(void *context)
 }
 
 const DxgkargControlModeBehaviorRecord &FakeDxgadapter::mode_behavior() const { return mode_behavior_; }
+
+std::uint32_t FakeDxgadapter::display_caps_extension() const { return display_caps_extension_; }
 
 CapabilityRule FakeDxgadapter::validate(const DxgkDriverCapsRecord &caps, std::uint32_t children) const
 {

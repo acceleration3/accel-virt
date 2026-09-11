@@ -28,7 +28,7 @@ using av::Violation;
 namespace {
 
 constexpr std::uint32_t driver_caps_bytes = 0x250u;   /* GetDriverCapsSizeFromDdiVersion(0x11007) */
-constexpr std::int32_t  wddm_v2 = 0x2100;             /* DXGKDDI_WDDMv2_1 */
+constexpr std::int32_t  wddm_v2 = 0x2200;             /* DXGKDDI_WDDMv2_2 */
 
 DxgkargQueryAdapterInfoRecord request(void *input, std::uint32_t input_size, void *output, std::uint32_t output_size)
 {
@@ -50,11 +50,11 @@ TEST(driver_capabilities_report_driver_caps, fills_exactly_the_wddm_3_2_block)
   CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, record)), Status::ok);
   CHECK(output.guards_intact()); }
 
-/* Constitution VI: nothing is claimed before it is implemented. WDDM 2.0 with a
+/* Constitution VI: nothing is claimed before it is implemented. WDDM 2.2 with a
  * GPU MMU, MultiEngineAware over one node and flips at device IRQL (017),
  * per-engine recovery (015), an unrestricted address range and the hardware
  * cursor (013) are the whole answer at this level. */
-TEST(driver_capabilities_report_driver_caps, claims_wddm_2_1_gpu_mmu_and_what_earlier_features_implement)
+TEST(driver_capabilities_report_driver_caps, claims_wddm_2_2_gpu_mmu_and_what_earlier_features_implement)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
   DxgkDriverCapsRecord caps;
   std::memset(&caps, 0xA5, sizeof caps);
@@ -108,6 +108,21 @@ TEST(driver_capabilities_answer_mode_behavior, satisfies_no_behavior)
   capabilities.answer_mode_behavior(request);
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling)); }
+
+TEST(driver_capabilities_report_display_caps_extension, claims_no_display_extension)
+{ MockPlatform platform; const DriverCapabilities capabilities(platform);
+  std::uint32_t extension = 0xFFFFFFFFu;
+  CHECK_STATUS(capabilities.report_display_caps_extension(
+                   AdapterInfoQuery(platform, request(nullptr, 0u, &extension, sizeof extension))), Status::ok);
+  CHECK_EQ(extension, 0u);
+  CHECK_STATUS(capabilities.report_display_caps_extension(
+                   AdapterInfoQuery(platform, request(nullptr, 0u, &extension, 3u))), Status::invalid_parameter);
+  platform.set_irql(Irql::dispatch);
+  static_cast<void>(capabilities.report_display_caps_extension(
+      AdapterInfoQuery(platform, request(nullptr, 0u, &extension, sizeof extension))));
+  platform.set_irql(Irql::passive);
+  CHECK(platform.claim(Violation::irql_ceiling));
+  while (platform.claim(Violation::irql_ceiling)) {} }
 
 TEST(driver_capabilities, is_passive_only)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
