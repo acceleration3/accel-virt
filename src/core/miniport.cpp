@@ -31,6 +31,16 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiQueryAdapterInfo, reinterpret_cast<DdiRoutine>(&AvDdiQueryAdapterInfo)},
         {DdiSlot::DxgkDdiEscape, reinterpret_cast<DdiRoutine>(&AvDdiEscape)},
         {DdiSlot::DxgkDdiCollectDbgInfo, reinterpret_cast<DdiRoutine>(&AvDdiCollectDbgInfo)},
+        {DdiSlot::DxgkDdiCreateDevice, reinterpret_cast<DdiRoutine>(&AvDdiCreateDevice)},
+        {DdiSlot::DxgkDdiDestroyDevice, reinterpret_cast<DdiRoutine>(&AvDdiDestroyDevice)},
+        {DdiSlot::DxgkDdiCreateAllocation, reinterpret_cast<DdiRoutine>(&AvDdiCreateAllocation)},
+        {DdiSlot::DxgkDdiDestroyAllocation, reinterpret_cast<DdiRoutine>(&AvDdiDestroyAllocation)},
+        {DdiSlot::DxgkDdiDescribeAllocation, reinterpret_cast<DdiRoutine>(&AvDdiDescribeAllocation)},
+        {DdiSlot::DxgkDdiGetStandardAllocationDriverData,
+         reinterpret_cast<DdiRoutine>(&AvDdiGetStandardAllocationDriverData)},
+        {DdiSlot::DxgkDdiOpenAllocation, reinterpret_cast<DdiRoutine>(&AvDdiOpenAllocation)},
+        {DdiSlot::DxgkDdiCloseAllocation, reinterpret_cast<DdiRoutine>(&AvDdiCloseAllocation)},
+        {DdiSlot::DxgkDdiSetDisplayPrivateDriverFormat, reinterpret_cast<DdiRoutine>(&AvDdiSetDisplayPrivateDriverFormat)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

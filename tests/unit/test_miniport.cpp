@@ -44,6 +44,11 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiQueryInterface,      DdiSlot::DxgkDdiControlEtwLogging,
     DdiSlot::DxgkDdiLinkDevice,          DdiSlot::DxgkDdiQueryAdapterInfo,
     DdiSlot::DxgkDdiEscape,              DdiSlot::DxgkDdiCollectDbgInfo,
+    DdiSlot::DxgkDdiCreateDevice,        DdiSlot::DxgkDdiDestroyDevice,
+    DdiSlot::DxgkDdiCreateAllocation,    DdiSlot::DxgkDdiDestroyAllocation,
+    DdiSlot::DxgkDdiDescribeAllocation,  DdiSlot::DxgkDdiGetStandardAllocationDriverData,
+    DdiSlot::DxgkDdiOpenAllocation,      DdiSlot::DxgkDdiCloseAllocation,
+    DdiSlot::DxgkDdiSetDisplayPrivateDriverFormat,
 };
 
 bool is_implemented(std::uint16_t index)

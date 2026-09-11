@@ -9,7 +9,10 @@
 
 namespace av {
 
-enum class LockRank : uint16_t {};
+enum class LockRank : uint16_t {
+    device_table = 100u,       /* DeviceTable, which calls into AllocationTable */
+    allocation_table = 110u,
+};
 
 }  // namespace av
 

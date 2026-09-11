@@ -1,7 +1,19 @@
 #include "../../src/core/adapter.hpp"
 #include "../../src/core/ddi/dxgk_child_descriptor_record.hpp"
 #include "../../src/core/ddi/dxgk_child_status_record.hpp"
+#include "../../src/core/ddi/d3dkmdt_shadow_surface_data_record.hpp"
+#include "../../src/core/ddi/dxgk_allocation_info_record.hpp"
+#include "../../src/core/ddi/dxgk_open_allocation_info_record.hpp"
+#include "../../src/core/ddi/dxgkarg_close_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_create_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_create_device_record.hpp"
+#include "../../src/core/ddi/dxgkarg_describe_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_destroy_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
+#include "../../src/core/ddi/dxgkarg_open_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
+#include "../../src/proto/allocation_descriptor.hpp"
 #include "../../src/core/ddi/dxgk_query_segment_out4_record.hpp"
 #include "../../src/core/ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_escape_record.hpp"
@@ -10,6 +22,7 @@
 #include "../../src/core/debug_report.hpp"
 #include "../harness/guarded_buffer.hpp"
 #include "../harness/fake_dxgkrnl_adapter.hpp"
+#include "../harness/fake_handle_table.hpp"
 #include "../harness/fake_virtio_gpu_function.hpp"
 #include "../harness/mock_platform.hpp"
 #include "../harness/test_registry.hpp"
@@ -655,3 +668,138 @@ TEST(adapter_collect_dbg_info, is_passive_only)
   static_cast<void>(fixture.adapter().collect_dbg_info(nullptr));
   fixture.platform().set_irql(Irql::passive);
   CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
+
+/* ---- Devices and allocations (feature 008) ---------------------------------- */
+
+namespace {
+
+/* The runtime's shadow surface, created the way dxgkrnl creates one: the
+ * driver describes it, then allocates it. */
+class ShadowSurface {
+public:
+    explicit ShadowSurface(Adapter &adapter) : adapter_(adapter), surface_{64u, 32u, 21, 0u}, descriptor_{}, info_{}
+    {
+        av::DxgkargGetStandardAllocationDriverDataRecord describe = {};
+        describe.StandardAllocationType = 2;   /* D3DKMDT_STANDARDALLOCATION_SHADOWSURFACE */
+        describe.pCreateSurfaceData = &surface_;
+        describe.pAllocationPrivateDriverData = descriptor_;
+        described_ = nt(adapter_.get_standard_allocation_driver_data(&describe));
+        info_.pPrivateDriverData = descriptor_;
+        info_.PrivateDriverDataSize = describe.AllocationPrivateDriverDataSize;
+    }
+
+    std::uint32_t described() const { return described_; }
+
+    std::uint32_t create()
+    {
+        av::DxgkargCreateAllocationRecord create = {};
+        create.NumAllocations = 1u;
+        create.pAllocationInfo = &info_;
+        return nt(adapter_.create_allocation(&create));
+    }
+
+    std::uint32_t destroy()
+    {
+        void *handle = info_.hAllocation;
+        av::DxgkargDestroyAllocationRecord destroy = {};
+        destroy.NumAllocations = 1u;
+        destroy.pAllocationList = &handle;
+        return nt(adapter_.destroy_allocation(&destroy));
+    }
+
+    void *handle() const { return info_.hAllocation; }
+    std::uint32_t pitch() const { return surface_.Pitch; }
+
+private:
+    Adapter                             &adapter_;
+    av::D3dkmdtShadowSurfaceDataRecord   surface_;
+    std::uint8_t                         descriptor_[av::AllocationDescriptor::encoded_size];
+    av::DxgkAllocationInfoRecord         info_;
+    std::uint32_t                        described_ = 0u;
+};
+
+}  // namespace
+
+TEST(adapter_create_device, answers_a_device_that_leads_back_to_the_adapter)
+{ Fixture fixture;
+  av::DxgkargCreateDeviceRecord request = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&request)), success);
+  CHECK(&static_cast<av::Device *>(request.hDevice)->adapter() == &fixture.adapter());
+  CHECK_EQ(nt(fixture.adapter().destroy_device(request.hDevice)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(request.hDevice)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().create_device(nullptr)), invalid_parameter); }
+
+TEST(adapter_create_allocation, a_standard_surface_lives_through_open_describe_close_and_destroy)
+{ Fixture fixture; av::FakeHandleTable handles;
+  CHECK_EQ(fixture.start(), success);
+  ShadowSurface shadow(fixture.adapter());
+  CHECK_EQ(shadow.described(), success);
+  CHECK_EQ(shadow.pitch(), 256u);
+  CHECK_EQ(shadow.create(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkOpenAllocationInfoRecord open_info = {};
+  open_info.hAllocation = handles.insert(shadow.handle());
+  av::DxgkargOpenAllocationRecord open = {};
+  open.NumAllocations = 1u;
+  open.pOpenAllocation = &open_info;
+  CHECK_EQ(nt(fixture.adapter().open_allocation(device.hDevice, &open)), success);
+  CHECK_EQ(open.Pitch, 256u);
+  av::DxgkargDescribeAllocationRecord describe = {};
+  describe.hAllocation = shadow.handle();
+  CHECK_EQ(nt(fixture.adapter().describe_allocation(&describe)), success);
+  CHECK_EQ(describe.Width, 64u);
+  CHECK_EQ(shadow.destroy(), invalid_device_state);   /* still open */
+  void *open_handle = open_info.hDeviceSpecificAllocation;
+  av::DxgkargCloseAllocationRecord close = {};
+  close.NumAllocations = 1u;
+  close.pOpenHandleList = &open_handle;
+  CHECK_EQ(nt(fixture.adapter().close_allocation(device.hDevice, &close)), success);
+  CHECK_EQ(shadow.destroy(), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success);
+  CHECK(fixture.adapter().invariants_hold()); }
+
+TEST(adapter_create_allocation, every_allocation_ddi_refuses_a_missing_argument_block)
+{ Fixture fixture;
+  CHECK_EQ(nt(fixture.adapter().create_allocation(nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_allocation(nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().describe_allocation(nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().get_standard_allocation_driver_data(nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().open_allocation(nullptr, nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().close_allocation(nullptr, nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().set_display_private_driver_format(nullptr)), invalid_parameter); }
+
+TEST(adapter_create_allocation, before_start_there_is_no_segment_to_place_it_in)
+{ Fixture fixture;
+  ShadowSurface shadow(fixture.adapter());
+  CHECK_EQ(shadow.create(), invalid_parameter); }
+
+TEST(adapter_set_display_private_driver_format, takes_no_primary_or_one_of_ours)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  ShadowSurface shadow(fixture.adapter());
+  CHECK_EQ(shadow.create(), success);
+  av::DxgkargSetDisplayPrivateDriverFormatRecord request = {};
+  request.PrivateDriverFormatAttribute = 5u;
+  CHECK_EQ(nt(fixture.adapter().set_display_private_driver_format(&request)), success);
+  request.PrimaryAllocation = shadow.handle();
+  CHECK_EQ(nt(fixture.adapter().set_display_private_driver_format(&request)), success);
+  request.PrimaryAllocation = &request;
+  CHECK_EQ(nt(fixture.adapter().set_display_private_driver_format(&request)), invalid_parameter);
+  request.PrimaryAllocation = nullptr;
+  request.VidPnSourceId = 1u;
+  CHECK_EQ(nt(fixture.adapter().set_display_private_driver_format(&request)), invalid_parameter);
+  CHECK_EQ(shadow.destroy(), success); }
+
+TEST(adapter, removal_with_devices_and_allocations_outstanding_releases_them)
+{ MockPlatform platform; FakeVirtioGpuFunction function;
+  { FakeDxgkrnlAdapter dxgkrnl(platform, function);
+    Adapter adapter(platform, &function);
+    std::uint32_t sources = 0u, children = 0u;
+    CHECK_EQ(nt(adapter.start_device(nullptr, &dxgkrnl.record(), &sources, &children)), success);
+    ShadowSurface shadow(adapter);
+    CHECK_EQ(shadow.create(), success);
+    av::DxgkargCreateDeviceRecord device = {};
+    CHECK_EQ(nt(adapter.create_device(&device)), success);
+    CHECK_EQ(nt(adapter.stop_device()), success); }
+  CHECK_EQ(platform.live_allocations(), 0u); }

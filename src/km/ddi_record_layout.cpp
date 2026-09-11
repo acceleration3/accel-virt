@@ -22,6 +22,7 @@
 #include "ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
 #include "ddi/dxgkarg_open_allocation_record.hpp"
 #include "ddi/dxgkarg_set_display_private_driver_format_record.hpp"
+#include "ddi/dxgkargcb_get_handle_data_record.hpp"
 #include "ddi/dxgk_child_descriptor_record.hpp"
 #include "ddi/dxgk_child_status_record.hpp"
 #include "ddi/dxgk_device_info_record.hpp"
@@ -324,6 +325,11 @@ static_assert(D3DKMDT_STANDARDALLOCATION_SHAREDPRIMARYSURFACE == 1 && D3DKMDT_ST
                   D3DKMDT_GDISURFACE_TEXTURE_CPUVISIBLE == 6 && DXGKQAITYPE_QUERYSEGMENT4 == 11 &&
                   DXGK_HANDLE_ALLOCATION == 1 && D3DDDIFMT_A8R8G8B8 == 21 && D3DDDIFMT_X8B8G8R8 == 33,
               "standard allocation, GDI surface, query and format values");
+
+AV_SAME_SIZE(DxgkargcbGetHandleDataRecord, DXGKARGCB_GETHANDLEDATA);
+AV_SAME_OFFSET(DxgkargcbGetHandleDataRecord, hObject, DXGKARGCB_GETHANDLEDATA, hObject);
+AV_SAME_OFFSET(DxgkargcbGetHandleDataRecord, Type, DXGKARGCB_GETHANDLEDATA, Type);
+AV_SAME_OFFSET(DxgkargcbGetHandleDataRecord, Flags, DXGKARGCB_GETHANDLEDATA, Flags);
 
 /* ResourceList reads CM_RESOURCE_LIST as bytes; these pin the offsets it reads at. */
 static_assert(offsetof(CM_RESOURCE_LIST, List) == av::ResourceList::list_header_bytes, "CM_RESOURCE_LIST::List");

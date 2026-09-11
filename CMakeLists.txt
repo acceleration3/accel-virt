@@ -75,7 +75,8 @@ add_library(av_harness STATIC
   tests/harness/fake_dxgkrnl_adapter.cpp
   tests/harness/fake_dxgkrnl_fdo.cpp
   tests/harness/fake_dxgadapter.cpp
-  tests/harness/fake_vidmm.cpp)
+  tests/harness/fake_vidmm.cpp
+  tests/harness/fake_handle_table.cpp)
 target_link_libraries(av_harness PUBLIC av_core)
 target_compile_definitions(av_harness PUBLIC AV_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures")
 

@@ -73,4 +73,31 @@ int32_t AvDdiEscape(void *context, const av::DxgkargEscapeRecord *escape)
 int32_t AvDdiCollectDbgInfo(void *context, const av::DxgkargCollectDbgInfoRecord *collect)
 { return static_cast<av::Adapter *>(context)->collect_dbg_info(collect); }
 
+int32_t AvDdiCreateDevice(void *context, av::DxgkargCreateDeviceRecord *request)
+{ return static_cast<av::Adapter *>(context)->create_device(request); }
+
+int32_t AvDdiDestroyDevice(void *device)
+{ return static_cast<av::Device *>(device)->adapter().destroy_device(device); }
+
+int32_t AvDdiCreateAllocation(void *context, av::DxgkargCreateAllocationRecord *request)
+{ return static_cast<av::Adapter *>(context)->create_allocation(request); }
+
+int32_t AvDdiDestroyAllocation(void *context, const av::DxgkargDestroyAllocationRecord *request)
+{ return static_cast<av::Adapter *>(context)->destroy_allocation(request); }
+
+int32_t AvDdiDescribeAllocation(void *context, av::DxgkargDescribeAllocationRecord *request)
+{ return static_cast<av::Adapter *>(context)->describe_allocation(request); }
+
+int32_t AvDdiGetStandardAllocationDriverData(void *context, av::DxgkargGetStandardAllocationDriverDataRecord *request)
+{ return static_cast<av::Adapter *>(context)->get_standard_allocation_driver_data(request); }
+
+int32_t AvDdiOpenAllocation(void *device, av::DxgkargOpenAllocationRecord *request)
+{ return static_cast<av::Device *>(device)->adapter().open_allocation(device, request); }
+
+int32_t AvDdiCloseAllocation(void *device, const av::DxgkargCloseAllocationRecord *request)
+{ return static_cast<av::Device *>(device)->adapter().close_allocation(device, request); }
+
+int32_t AvDdiSetDisplayPrivateDriverFormat(void *context, const av::DxgkargSetDisplayPrivateDriverFormatRecord *request)
+{ return static_cast<av::Adapter *>(context)->set_display_private_driver_format(request); }
+
 }

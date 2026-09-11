@@ -3,8 +3,11 @@
 #ifndef AV_ADAPTER_HPP
 #define AV_ADAPTER_HPP
 
+#include "allocation_table.hpp"
 #include "aperture_segment.hpp"
 #include "bar_mappings.hpp"
+#include "device_table.hpp"
+#include "display_sources.hpp"
 #include "driver_capabilities.hpp"
 #include "dxgkrnl_interface.hpp"
 #include "object_storage.hpp"
@@ -21,7 +24,15 @@ namespace av {
 struct DxgkChildDescriptorRecord;
 struct DxgkChildStatusRecord;
 struct DxgkrnlInterfaceRecord;
+struct DxgkargCloseAllocationRecord;
 struct DxgkargCollectDbgInfoRecord;
+struct DxgkargCreateAllocationRecord;
+struct DxgkargCreateDeviceRecord;
+struct DxgkargDescribeAllocationRecord;
+struct DxgkargDestroyAllocationRecord;
+struct DxgkargGetStandardAllocationDriverDataRecord;
+struct DxgkargOpenAllocationRecord;
+struct DxgkargSetDisplayPrivateDriverFormatRecord;
 struct DxgkargEscapeRecord;
 struct DxgkargQueryAdapterInfoRecord;
 struct LinkedDeviceRecord;
@@ -55,6 +66,15 @@ public:
     int32_t query_adapter_info(const DxgkargQueryAdapterInfoRecord *query);
     int32_t escape(const DxgkargEscapeRecord *escape);
     int32_t collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect);
+    int32_t create_device(DxgkargCreateDeviceRecord *request);
+    int32_t destroy_device(void *device);
+    int32_t create_allocation(DxgkargCreateAllocationRecord *request);
+    int32_t destroy_allocation(const DxgkargDestroyAllocationRecord *request);
+    int32_t describe_allocation(DxgkargDescribeAllocationRecord *request);
+    int32_t get_standard_allocation_driver_data(DxgkargGetStandardAllocationDriverDataRecord *request);
+    int32_t open_allocation(void *device, DxgkargOpenAllocationRecord *request);
+    int32_t close_allocation(void *device, const DxgkargCloseAllocationRecord *request);
+    int32_t set_display_private_driver_format(const DxgkargSetDisplayPrivateDriverFormatRecord *request);
 
     bool invariants_hold() const;
 
@@ -77,6 +97,9 @@ private:
     ObjectStorage<VirtioGpuDevice> device_;
     DriverCapabilities             capabilities_;
     ApertureSegment                segment_;
+    DisplaySources                 sources_;
+    AllocationTable                allocations_;
+    DeviceTable                    devices_;
     bool                           started_;
 
     friend struct AdapterProbe;

@@ -1,5 +1,6 @@
 #include "fake_dxgkrnl_adapter.hpp"
 
+#include "fake_handle_table.hpp"
 #include "test_registry.hpp"
 
 #include <cstring>
@@ -37,6 +38,7 @@ FakeDxgkrnlAdapter::FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunc
     record_.DxgkCbUnmapMemory = +[](void *handle, void *mapped) {
         return static_cast<FakeDxgkrnlAdapter *>(handle)->unmap_memory(mapped);
     };
+    record_.DxgkCbGetHandleData = &AvFakeGetHandleData;
     record_.DxgkCbQueueDpc = +[](void *handle) {
         return static_cast<FakeDxgkrnlAdapter *>(handle)->queue_dpc();
     };

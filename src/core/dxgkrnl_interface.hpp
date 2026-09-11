@@ -32,6 +32,9 @@ public:
     [[nodiscard]] Status map_memory(uint64_t translated_address, uint32_t length, void *&mapped);
     [[nodiscard]] Status unmap_memory(void *mapped);
     bool                 queue_dpc();
+    /* DxgkCbGetHandleData for an allocation, legal only inside the DDI dxgkrnl
+     * is calling; not_found when dxgkrnl knows no such handle. */
+    [[nodiscard]] Status get_handle_data(uint32_t allocation_handle, void *&data);
 
     bool initialized() const;
     bool invariants_hold() const;
@@ -39,6 +42,7 @@ public:
 private:
     static constexpr uint32_t config_space = 0u;  /* DXGK_WHICHSPACE_CONFIG */
     static constexpr int32_t  non_cached   = 0;   /* MmNonCached */
+    static constexpr int32_t  handle_allocation = 1;   /* DXGK_HANDLE_ALLOCATION */
 
     bool has_callbacks(const DxgkrnlInterfaceRecord &table) const;
 

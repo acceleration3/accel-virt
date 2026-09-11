@@ -4,6 +4,14 @@
 #include "ddi/dxgk_child_status_record.hpp"
 #include "adapter_info_query.hpp"
 #include "ddi/dxgk_device_info_record.hpp"
+#include "ddi/dxgkarg_close_allocation_record.hpp"
+#include "ddi/dxgkarg_create_allocation_record.hpp"
+#include "ddi/dxgkarg_create_device_record.hpp"
+#include "ddi/dxgkarg_describe_allocation_record.hpp"
+#include "ddi/dxgkarg_destroy_allocation_record.hpp"
+#include "ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
+#include "ddi/dxgkarg_open_allocation_record.hpp"
+#include "ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
 #include "ddi/dxgkarg_query_adapter_info_record.hpp"
@@ -13,6 +21,7 @@
 #include "nt_status.hpp"
 #include "pci_base_addresses.hpp"
 #include "scope_exit.hpp"
+#include "standard_allocation.hpp"
 #include "virtio_capability_walk.hpp"
 
 namespace av {
@@ -33,7 +42,8 @@ enum : int32_t {
 
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
-      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), segment_(platform), started_(false) {}
+      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), segment_(platform), sources_(platform),
+      allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), started_(false) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
 
@@ -241,6 +251,70 @@ int32_t Adapter::collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect)
     const DebugReport report(platform_, started_, powered, powered ? device_.object().features() : 0u);
     static_cast<void>(report.write(collect->pBuffer, collect->BufferSize));
     return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::create_device(DxgkargCreateDeviceRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::create_device");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(devices_.create(*this, *request)).value();
+}
+
+int32_t Adapter::destroy_device(void *device)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_device");
+    return NtStatus(devices_.destroy(device)).value();
+}
+
+int32_t Adapter::create_allocation(DxgkargCreateAllocationRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::create_allocation");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(allocations_.create(*request)).value();
+}
+
+int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_allocation");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(allocations_.destroy(*request)).value();
+}
+
+int32_t Adapter::describe_allocation(DxgkargDescribeAllocationRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::describe_allocation");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(allocations_.describe(*request, sources_)).value();
+}
+
+int32_t Adapter::get_standard_allocation_driver_data(DxgkargGetStandardAllocationDriverDataRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::get_standard_allocation_driver_data");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(StandardAllocation(platform_, *request).describe()).value();
+}
+
+int32_t Adapter::open_allocation(void *device, DxgkargOpenAllocationRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::open_allocation");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(devices_.open(device, *request)).value();
+}
+
+int32_t Adapter::close_allocation(void *device, const DxgkargCloseAllocationRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::close_allocation");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(devices_.close(device, *request)).value();
+}
+
+int32_t Adapter::set_display_private_driver_format(const DxgkargSetDisplayPrivateDriverFormatRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::set_display_private_driver_format");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    if (request->PrimaryAllocation != nullptr && allocations_.find(request->PrimaryAllocation) == nullptr)
+        return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(sources_.set_private_format(request->VidPnSourceId, request->PrivateDriverFormatAttribute)).value();
 }
 
 bool Adapter::invariants_hold() const

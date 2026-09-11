@@ -6,10 +6,19 @@
 #ifndef AV_DDI_ENTRY_POINTS_HPP
 #define AV_DDI_ENTRY_POINTS_HPP
 
+#include "../device.hpp"
 #include "../miniport_binding.hpp"
 #include "dxgk_child_descriptor_record.hpp"
 #include "dxgk_child_status_record.hpp"
+#include "dxgkarg_close_allocation_record.hpp"
 #include "dxgkarg_collect_dbg_info_record.hpp"
+#include "dxgkarg_create_allocation_record.hpp"
+#include "dxgkarg_create_device_record.hpp"
+#include "dxgkarg_describe_allocation_record.hpp"
+#include "dxgkarg_destroy_allocation_record.hpp"
+#include "dxgkarg_get_standard_allocation_driver_data_record.hpp"
+#include "dxgkarg_open_allocation_record.hpp"
+#include "dxgkarg_set_display_private_driver_format_record.hpp"
 #include "dxgkarg_escape_record.hpp"
 #include "dxgkarg_query_adapter_info_record.hpp"
 #include "dxgkrnl_interface_record.hpp"
@@ -47,6 +56,16 @@ int32_t AvDdiLinkDevice(void *physical_device_object, void *context, av::LinkedD
 int32_t AvDdiQueryAdapterInfo(void *context, const av::DxgkargQueryAdapterInfoRecord *query);
 int32_t AvDdiEscape(void *context, const av::DxgkargEscapeRecord *escape);
 int32_t AvDdiCollectDbgInfo(void *context, const av::DxgkargCollectDbgInfoRecord *collect);
+int32_t AvDdiCreateDevice(void *context, av::DxgkargCreateDeviceRecord *request);
+int32_t AvDdiDestroyDevice(void *device);
+int32_t AvDdiCreateAllocation(void *context, av::DxgkargCreateAllocationRecord *request);
+int32_t AvDdiDestroyAllocation(void *context, const av::DxgkargDestroyAllocationRecord *request);
+int32_t AvDdiDescribeAllocation(void *context, av::DxgkargDescribeAllocationRecord *request);
+int32_t AvDdiGetStandardAllocationDriverData(void *context, av::DxgkargGetStandardAllocationDriverDataRecord *request);
+/* The WDK passes the argument block as const; the driver answers in it. */
+int32_t AvDdiOpenAllocation(void *device, av::DxgkargOpenAllocationRecord *request);
+int32_t AvDdiCloseAllocation(void *device, const av::DxgkargCloseAllocationRecord *request);
+int32_t AvDdiSetDisplayPrivateDriverFormat(void *context, const av::DxgkargSetDisplayPrivateDriverFormatRecord *request);
 
 }
 

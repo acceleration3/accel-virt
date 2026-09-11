@@ -12,7 +12,7 @@ bool DxgkrnlInterface::has_callbacks(const DxgkrnlInterfaceRecord &table) const
 {
     return table.DxgkCbGetDeviceInformation != nullptr && table.DxgkCbMapMemory != nullptr &&
            table.DxgkCbQueueDpc != nullptr && table.DxgkCbReadDeviceSpace != nullptr &&
-           table.DxgkCbUnmapMemory != nullptr;
+           table.DxgkCbUnmapMemory != nullptr && table.DxgkCbGetHandleData != nullptr;
 }
 
 Status DxgkrnlInterface::initialize(const DxgkrnlInterfaceRecord *table)
@@ -76,6 +76,18 @@ bool DxgkrnlInterface::queue_dpc()
     platform_.require_irql_at_most(Irql::isr, "DxgkrnlInterface::queue_dpc");
     if (!initialized_) return false;
     return record_.DxgkCbQueueDpc(record_.DeviceHandle) != 0u;
+}
+
+Status DxgkrnlInterface::get_handle_data(uint32_t allocation_handle, void *&data)
+{
+    platform_.require_irql_at_most(Irql::passive, "DxgkrnlInterface::get_handle_data");
+    data = nullptr;
+    if (!initialized_) return Status::invalid_state;
+    DxgkargcbGetHandleDataRecord arguments = {};
+    arguments.hObject = allocation_handle;
+    arguments.Type = handle_allocation;
+    data = record_.DxgkCbGetHandleData(&arguments);
+    return data != nullptr ? Status::ok : Status::not_found;
 }
 
 bool DxgkrnlInterface::initialized() const { return initialized_; }

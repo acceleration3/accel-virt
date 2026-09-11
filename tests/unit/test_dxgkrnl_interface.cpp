@@ -30,6 +30,8 @@ using av::Violation;
 
 namespace {
 
+int handle_data_marker = 0;
+
 /* The dxgkrnl side of each callback: records its arguments, answers what the
  * test configured. */
 class Callbacks {
@@ -60,6 +62,10 @@ public:
         };
         record_.DxgkCbUnmapMemory = +[](void *handle, void *mapped) {
             return static_cast<Callbacks *>(handle)->unmap_memory(mapped);
+        };
+        record_.DxgkCbGetHandleData = +[](const av::DxgkargcbGetHandleDataRecord *arguments) -> void * {
+            const bool known = arguments->hObject == 0x40000042u && arguments->Type == 1 && arguments->Flags == 0u;
+            return known ? &handle_data_marker : nullptr;
         };
     }
 
@@ -154,8 +160,9 @@ TEST(dxgkrnl_interface_initialize, refuses_a_table_missing_a_callback_core_calls
       if (which == 2) record.DxgkCbQueueDpc = nullptr;
       if (which == 3) record.DxgkCbReadDeviceSpace = nullptr;
       if (which == 4) record.DxgkCbUnmapMemory = nullptr;
+      if (which == 5) record.DxgkCbGetHandleData = nullptr;
   };
-  for (int which = 0; which < 5; which++) {
+  for (int which = 0; which < 6; which++) {
       Callbacks callbacks;
       clear(callbacks.record(), which);
       CHECK_STATUS(interface.initialize(&callbacks.record()), Status::invalid_parameter);
@@ -245,3 +252,23 @@ TEST(dxgkrnl_interface_invariants, an_initialized_table_missing_a_callback_is_de
   CHECK_STATUS(interface.initialize(&callbacks.record()), Status::ok);
   DxgkrnlInterfaceProbe(interface).clear_callback();
   CHECK(!interface.invariants_hold()); }
+
+TEST(dxgkrnl_interface_get_handle_data, resolves_an_allocation_handle_to_the_driver_data)
+{ MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;
+  void *data = &callbacks;
+  CHECK_STATUS(interface.get_handle_data(0x40000042u, data), Status::invalid_state);
+  CHECK(data == nullptr);
+  CHECK_STATUS(interface.initialize(&callbacks.record()), Status::ok);
+  CHECK_STATUS(interface.get_handle_data(0x40000042u, data), Status::ok);
+  CHECK(data == &handle_data_marker);
+  CHECK_STATUS(interface.get_handle_data(0x40000043u, data), Status::not_found);
+  CHECK(data == nullptr); }
+
+TEST(dxgkrnl_interface_get_handle_data, is_passive_only)
+{ MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;
+  CHECK_STATUS(interface.initialize(&callbacks.record()), Status::ok);
+  void *data = nullptr;
+  platform.set_irql(Irql::dispatch);
+  static_cast<void>(interface.get_handle_data(1u, data));
+  platform.set_irql(Irql::passive);
+  CHECK(platform.claim(Violation::irql_ceiling)); }

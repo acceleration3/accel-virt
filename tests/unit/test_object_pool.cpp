@@ -89,7 +89,7 @@ TEST(object_pool_create, propagates_allocation_failure_and_changes_nothing)
   CHECK_EQ(pool.live(), 0u);
   CHECK(pool.invariants_hold()); }
 
-TEST(object_pool_create, is_passive_only)
+TEST(object_pool_create, is_legal_up_to_apc)
 { MockPlatform platform; int destroyed = 0;
   ObjectPool<Tracked> pool(platform);
   Tracked *object = nullptr;
@@ -192,6 +192,17 @@ TEST(object_pool_destroy_if, destroys_exactly_the_matching_objects)
   pool.destroy_if([](const Tracked &) { return true; });
   CHECK_EQ(pool.live(), 0u);
   CHECK_EQ(platform.live_allocations(), 0u); }
+
+TEST(object_pool_all_of, checks_every_live_object_and_nothing_else)
+{ MockPlatform platform; int destroyed = 0;
+  ObjectPool<Tracked> pool(platform);
+  CHECK(pool.all_of([](const Tracked &) { return false; }));
+  Tracked *objects[70] = {};
+  for (std::uint32_t i = 0u; i < 70u; i++) CHECK_STATUS(pool.create(objects[i], destroyed, i), Status::ok);
+  CHECK(pool.all_of([](const Tracked &tracked) { return tracked.value() < 70u; }));
+  CHECK(!pool.all_of([](const Tracked &tracked) { return tracked.value() != 69u; }));
+  CHECK_STATUS(pool.destroy(objects[3]), Status::ok);
+  CHECK(pool.all_of([](const Tracked &tracked) { return tracked.value() != 3u; })); }
 
 TEST(object_pool_destroy_all, empties_the_pool_and_releases_every_chunk)
 { MockPlatform platform; int destroyed = 0;

@@ -9,6 +9,7 @@
 #define AV_DXGKRNL_INTERFACE_RECORD_HPP
 
 #include "dxgk_device_info_record.hpp"
+#include "dxgkargcb_get_handle_data_record.hpp"
 
 #include <stdint.h>
 
@@ -22,6 +23,8 @@ using DxgkCbQueueDpc = uint8_t (*)(void *device_handle);
 using DxgkCbReadDeviceSpace = int32_t (*)(void *device_handle, uint32_t data_type, void *buffer,
                                           uint32_t offset, uint32_t length, uint32_t *bytes_read);
 using DxgkCbUnmapMemory = int32_t (*)(void *device_handle, void *virtual_address);
+/* No device handle: dxgkrnl resolves the handle in the calling thread's DDI. */
+using DxgkCbGetHandleData = void *(*)(const DxgkargcbGetHandleDataRecord *arguments);
 
 struct DxgkrnlInterfaceRecord {
     uint32_t                   Size;
@@ -38,7 +41,7 @@ struct DxgkrnlInterfaceRecord {
     DxgkCbUnmapMemory          DxgkCbUnmapMemory;
     void                      *DxgkCbWriteDeviceSpace;
     void                      *DxgkCbIsDevicePresent;
-    void                      *DxgkCbGetHandleData;
+    DxgkCbGetHandleData        DxgkCbGetHandleData;
     void                      *DxgkCbGetHandleParent;
     void                      *DxgkCbEnumHandleChildren;
     void                      *DxgkCbNotifyInterrupt;

@@ -6,7 +6,8 @@
  *
  * find accepts any address and answers null unless it is a live object of this
  * pool: a handle from outside is checked before it is trusted. The pool takes
- * no lock; its owner serializes it. */
+ * no lock; its owner serializes it, usually under a mutex, so creating and
+ * destroying are legal up to APC. */
 #ifndef AV_OBJECT_POOL_HPP
 #define AV_OBJECT_POOL_HPP
 
@@ -34,7 +35,7 @@ public:
     template <typename... Arguments>
     [[nodiscard]] Status create(T *&object, Arguments &&...arguments)
     {
-        platform_.require_irql_at_most(Irql::passive, "ObjectPool::create");
+        platform_.require_irql_at_most(Irql::apc, "ObjectPool::create");
         object = nullptr;
         Chunk *chunk = chunk_with_room();
         if (chunk == nullptr) return Status::no_memory;
@@ -47,7 +48,7 @@ public:
 
     [[nodiscard]] Status destroy(T *object)
     {
-        platform_.require_irql_at_most(Irql::passive, "ObjectPool::destroy");
+        platform_.require_irql_at_most(Irql::apc, "ObjectPool::destroy");
         Chunk   *previous = nullptr;
         uint32_t slot = 0u;
         Chunk   *chunk = locate(object, previous, slot);
@@ -68,7 +69,7 @@ public:
     template <typename Predicate>
     void destroy_if(Predicate matches)
     {
-        platform_.require_irql_at_most(Irql::passive, "ObjectPool::destroy_if");
+        platform_.require_irql_at_most(Irql::apc, "ObjectPool::destroy_if");
         Chunk *previous = nullptr;
         Chunk *chunk = chunks_;
         while (chunk != nullptr) {
@@ -88,6 +89,19 @@ public:
     void destroy_all()
     {
         destroy_if([](const T &) { return true; });
+    }
+
+    /* Whether every live object satisfies `holds`; for invariants, so legal at DISPATCH. */
+    template <typename Predicate>
+    bool all_of(Predicate holds) const
+    {
+        platform_.require_irql_at_most(Irql::dispatch, "ObjectPool::all_of");
+        for (Chunk *chunk = chunks_; chunk != nullptr; chunk = chunk->next_)
+            for (uint32_t slot = 0u; slot < chunk_slots; slot++)
+                if ((chunk->used_ & (uint64_t{1} << slot)) != 0u &&
+                    !holds(static_cast<const T &>(*object_at(*chunk, slot))))
+                    return false;
+        return true;
     }
 
     uint32_t live() const { return live_; }

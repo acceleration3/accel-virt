@@ -32,10 +32,10 @@ description: "Task list for feature 008: WDDM 1.0 devices, allocations and segme
 
 ## Phase 5: Devices and allocations (US3, US4)
 
-- [ ] T009 Tests then `DxgkrnlInterface::get_handle_data`; fake adapter handle table and callback
-- [ ] T010 Tests then `Allocation`, `AllocationTable`
-- [ ] T011 Tests then `Device`, `DeviceAllocation`, `DeviceTable`, `DisplaySources`
-- [ ] T012 Adapter DDIs, entry points, nine slots, `test_miniport`; allocation-failure sweeps; `fuzz_allocation_ddis` with corpus
+- [X] T009 Tests then `DxgkrnlInterface::get_handle_data`; fake adapter handle table and callback
+- [X] T010 Tests then `Allocation`, `AllocationTable`
+- [X] T011 Tests then `Device`, `DeviceAllocation`, `DeviceTable`, `DisplaySources`
+- [X] T012 Adapter DDIs, entry points, nine slots, `test_miniport`; allocation-failure sweeps; `fuzz_allocation_ddis` with corpus
 
 **Checkpoint**: commit.
 
