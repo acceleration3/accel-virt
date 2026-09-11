@@ -62,6 +62,9 @@ file(GLOB_RECURSE AV_HARNESS_SOURCES CONFIGURE_DEPENDS tests/harness/*.cpp)
 list(FILTER AV_HARNESS_SOURCES EXCLUDE REGEX "/test_main\\.cpp$")
 add_library(av_harness STATIC ${AV_HARNESS_SOURCES})
 target_include_directories(av_harness PUBLIC tests)
+# MockHost runs the device core's workers on real threads.
+find_package(Threads REQUIRED)
+target_link_libraries(av_harness PUBLIC Threads::Threads)
 target_link_libraries(av_harness PUBLIC av_core)
 target_compile_definitions(av_harness PUBLIC AV_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures")
 

@@ -6,8 +6,8 @@ description: "Task list for feature 026: QEMU device skeleton, object model and 
 
 ## Phase 1: Host and binding
 
-- [ ] T001 Tests then `Host` and `MockHost` (threads, events, mutexes, main loop queue, catalog, violations, failure injection)
-- [ ] T002 Tests then `DeviceUuid`, `TextBuffer`, `GpuBinding`
+- [X] T001 Tests then `Host` and `MockHost` (threads, events, mutexes, main loop queue, catalog, violations, failure injection)
+- [X] T002 Tests then `DeviceUuid`, `TextBuffer`, `GpuBinding`
 
 **Checkpoint**: commit.
 

@@ -1,0 +1,44 @@
+#include "device/support/text_buffer.hpp"
+#include "harness/framework/test_registry.hpp"
+
+#include <cstring>
+
+using av::TextBuffer;
+
+TEST(text_buffer_append, builds_one_terminated_message)
+{ char bytes[32];
+  std::memset(bytes, 'x', sizeof bytes);
+  TextBuffer text(bytes, sizeof bytes);
+  CHECK_EQ(text.length(), 0u);
+  CHECK(std::strcmp(text.text(), "") == 0);
+  text.append("host-gpu '");
+  text.append("auto");
+  text.append("'");
+  CHECK(std::strcmp(text.text(), "host-gpu 'auto'") == 0);
+  CHECK_EQ(text.length(), 15u); }
+
+TEST(text_buffer_append, truncates_at_capacity_and_stays_terminated)
+{ char bytes[8];
+  std::memset(bytes, 'x', sizeof bytes);
+  TextBuffer text(bytes, 6u);
+  text.append("abc");
+  text.append("defgh");
+  CHECK(std::strcmp(text.text(), "abcde") == 0);
+  CHECK_EQ(text.length(), 5u);
+  CHECK_EQ(bytes[6], 'x');
+  text.append("more");
+  CHECK_EQ(text.length(), 5u); }
+
+TEST(text_buffer, without_room_writes_nothing)
+{ char bytes[1] = {'x'};
+  TextBuffer none(nullptr, 16u);
+  none.append("ignored");
+  CHECK(std::strcmp(none.text(), "") == 0);
+  TextBuffer empty(bytes, 0u);
+  empty.append("ignored");
+  CHECK_EQ(bytes[0], 'x');
+  CHECK_EQ(empty.length(), 0u);
+  CHECK(std::strcmp(empty.text(), "") == 0);
+  TextBuffer only_terminator(bytes, 1u);
+  only_terminator.append("ignored");
+  CHECK_EQ(bytes[0], '\0'); }
