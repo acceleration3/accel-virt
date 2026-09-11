@@ -165,15 +165,24 @@ endif()
 
 # ---- the driver: the same core, compiled for the Windows kernel ------------
 include(ExternalProject)
+# A toolchain's flags reach a build tree only through its first configure: CMake
+# caches the *_INIT variables. Each external project therefore configures again,
+# from an empty cache, whenever its toolchain or flags file changes; otherwise a
+# changed flag silently never reaches an existing tree.
 ExternalProject_Add(rvkgpu
   SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/km
   BINARY_DIR ${CMAKE_BINARY_DIR}/driver
-  CMAKE_ARGS -G Ninja
-             -DCMAKE_TOOLCHAIN_FILE=${CMAKE_SOURCE_DIR}/cmake/windows_kernel_toolchain.cmake
-             -DAV_WINDOWS_KIT_DIR=${AV_WINDOWS_KIT_DIR}
+  CONFIGURE_COMMAND ${CMAKE_COMMAND} -E rm -f <BINARY_DIR>/CMakeCache.txt
+  COMMAND ${CMAKE_COMMAND} -G Ninja -S <SOURCE_DIR> -B <BINARY_DIR>
+          -DCMAKE_TOOLCHAIN_FILE=${CMAKE_SOURCE_DIR}/cmake/windows_kernel_toolchain.cmake
+          -DAV_WINDOWS_KIT_DIR=${AV_WINDOWS_KIT_DIR}
+  BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
   BUILD_ALWAYS ON
   INSTALL_COMMAND ""
   BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/driver/rvkgpu.sys)
+ExternalProject_Add_StepDependencies(rvkgpu configure
+  ${CMAKE_SOURCE_DIR}/cmake/windows_kernel_toolchain.cmake
+  ${CMAKE_SOURCE_DIR}/cmake/windows_kernel_flags.cmake)
 add_test(NAME driver_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_driver_image.py
                  ${CMAKE_BINARY_DIR}/driver/rvkgpu.sys
@@ -184,12 +193,17 @@ add_test(NAME driver_image
 ExternalProject_Add(rvktest
   SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/um
   BINARY_DIR ${CMAKE_BINARY_DIR}/guest
-  CMAKE_ARGS -G Ninja
-             -DCMAKE_TOOLCHAIN_FILE=${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
-             -DAV_WINDOWS_KIT_DIR=${AV_WINDOWS_KIT_DIR}
+  CONFIGURE_COMMAND ${CMAKE_COMMAND} -E rm -f <BINARY_DIR>/CMakeCache.txt
+  COMMAND ${CMAKE_COMMAND} -G Ninja -S <SOURCE_DIR> -B <BINARY_DIR>
+          -DCMAKE_TOOLCHAIN_FILE=${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
+          -DAV_WINDOWS_KIT_DIR=${AV_WINDOWS_KIT_DIR}
+  BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
   BUILD_ALWAYS ON
   INSTALL_COMMAND ""
   BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/rvktest.exe)
+ExternalProject_Add_StepDependencies(rvktest configure
+  ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
+  ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake)
 add_test(NAME guest_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest/rvktest.exe
