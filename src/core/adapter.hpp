@@ -8,6 +8,7 @@
 #include "bar_mappings.hpp"
 #include "context_table.hpp"
 #include "device_table.hpp"
+#include "ddi/dxgkarg_control_interrupt2_record.hpp"
 #include "display_mode_list.hpp"
 #include "display_sources.hpp"
 #include "driver_capabilities.hpp"
@@ -33,6 +34,8 @@ struct D3dkmdtVidPnPresentPathRecord;
 struct DxgkChildContainerIdRecord;
 struct DxgkChildDescriptorRecord;
 struct DxgkDisplayInformationRecord;
+struct DxgkGpuClockDataRecord;
+struct DxgkNodeMetadataRecord;
 struct DxgkChildStatusRecord;
 struct DxgkDeviceDescriptorRecord;
 struct DxgkrnlInterfaceRecord;
@@ -172,6 +175,13 @@ public:
     int32_t power_runtime_control_request(const void *control_code, const void *input, size_t input_size,
                                           void *output, size_t output_size, size_t *returned);
     int32_t set_vidpn_source_address_with_multi_plane_overlay(const void *request);
+    /* As basicrender.sys: one 3D node named 3DNode00. */
+    int32_t get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRecord *metadata);
+    int32_t set_power_pstate(uint32_t component, uint32_t pstate);
+    /* ControlInterrupt with a vsync state; a timer has no phase to keep. */
+    int32_t control_interrupt2(DxgkargControlInterrupt2Record control);
+    /* The GPU clock is the CPU performance counter. */
+    int32_t calibrate_gpu_clock(uint32_t node, uint32_t engine, DxgkGpuClockDataRecord *clock);
 
     bool invariants_hold() const;
 
@@ -181,6 +191,8 @@ private:
     enum : int32_t { power_unspecified = 0, power_d0 = 1, power_d3 = 4 };
     enum : int32_t { query_driver_caps = 1, query_segment4 = 11, query_wddm_device_caps = 29 };   /* DXGKQAITYPE_* */
     enum : int32_t { removal_hibernation = 0, removal_pnp_notify = 1 };   /* DXGK_SURPRISE_REMOVAL_TYPE */
+    enum : int32_t { vsync_enable = 0, vsync_disable_no_phase = 2 };      /* DXGK_CRTC_VSYNC_STATE */
+    enum : int32_t { engine_type_3d = 1 };                                /* DXGK_ENGINE_TYPE_3D */
     enum : int32_t { interrupt_crtc_vsync = 3 };                          /* DXGK_INTERRUPT_CRTC_VSYNC */
     static constexpr uint32_t engine_responsive = 1u;   /* DXGK_ENGINESTATUS.Responsive */
     enum : int32_t { transformation_identity = 1 };   /* D3DKMDT_VPPS_IDENTITY, D3DKMDT_VPPR_IDENTITY */

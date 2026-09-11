@@ -31,6 +31,7 @@ public:
     void     acquire_mutex(void *storage, LockRank rank) override;
     void     release_mutex(void *storage, LockRank rank) override;
     uint64_t interrupt_time() const override;
+    uint64_t performance_counter(uint64_t &frequency) const override;
     void    *create_timer(TimerCallback callback, void *context) override;
     void     start_timer(void *timer, uint64_t period) override;
     void     stop_timer(void *timer) override;

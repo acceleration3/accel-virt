@@ -89,6 +89,10 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay,
          reinterpret_cast<DdiRoutine>(&AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay)},
         {DdiSlot::DxgkDdiNotifySurpriseRemoval, reinterpret_cast<DdiRoutine>(&AvDdiNotifySurpriseRemoval)},
+        {DdiSlot::DxgkDdiGetNodeMetadata, reinterpret_cast<DdiRoutine>(&AvDdiGetNodeMetadata)},
+        {DdiSlot::DxgkDdiSetPowerPState, reinterpret_cast<DdiRoutine>(&AvDdiSetPowerPState)},
+        {DdiSlot::DxgkDdiControlInterrupt2, reinterpret_cast<DdiRoutine>(&AvDdiControlInterrupt2)},
+        {DdiSlot::DxgkDdiCalibrateGpuClock, reinterpret_cast<DdiRoutine>(&AvDdiCalibrateGpuClock)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

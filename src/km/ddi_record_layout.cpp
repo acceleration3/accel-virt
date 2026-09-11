@@ -55,6 +55,9 @@
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
 #include "ddi/dxgk_child_container_id_record.hpp"
+#include "ddi/dxgk_gpu_clock_data_record.hpp"
+#include "ddi/dxgk_node_metadata_record.hpp"
+#include "ddi/dxgkarg_control_interrupt2_record.hpp"
 #include "ddi/dxgk_display_information_record.hpp"
 #include "ddi/dxgkarg_cancel_command_record.hpp"
 #include "ddi/dxgkarg_present_record.hpp"
@@ -604,6 +607,24 @@ AV_SAME_OFFSET(DxgkDisplayInformationRecord, ColorFormat, DXGK_DISPLAY_INFORMATI
 AV_SAME_OFFSET(DxgkDisplayInformationRecord, PhysicAddress, DXGK_DISPLAY_INFORMATION, PhysicAddress);
 AV_SAME_OFFSET(DxgkDisplayInformationRecord, TargetId, DXGK_DISPLAY_INFORMATION, TargetId);
 AV_SAME_OFFSET(DxgkDisplayInformationRecord, AcpiId, DXGK_DISPLAY_INFORMATION, AcpiId);
+
+AV_SAME_SIZE(DxgkNodeMetadataRecord, DXGK_NODEMETADATA);
+AV_SAME_OFFSET(DxgkNodeMetadataRecord, EngineType, DXGK_NODEMETADATA, EngineType);
+AV_SAME_OFFSET(DxgkNodeMetadataRecord, FriendlyName, DXGK_NODEMETADATA, FriendlyName);
+AV_SAME_OFFSET(DxgkNodeMetadataRecord, Flags, DXGK_NODEMETADATA, Flags);
+AV_SAME_OFFSET(DxgkNodeMetadataRecord, GpuMmuSupported, DXGK_NODEMETADATA, GpuMmuSupported);
+AV_SAME_OFFSET(DxgkNodeMetadataRecord, IoMmuSupported, DXGK_NODEMETADATA, IoMmuSupported);
+static_assert(DXGK_MAX_METADATA_NAME_LENGTH == 32 && sizeof(WCHAR) == sizeof(uint16_t), "FriendlyName is 32 UTF-16 units");
+
+AV_SAME_SIZE(DxgkGpuClockDataRecord, DXGK_GPUCLOCKDATA);
+AV_SAME_OFFSET(DxgkGpuClockDataRecord, GpuFrequency, DXGK_GPUCLOCKDATA, GpuFrequency);
+AV_SAME_OFFSET(DxgkGpuClockDataRecord, GpuClockCounter, DXGK_GPUCLOCKDATA, GpuClockCounter);
+AV_SAME_OFFSET(DxgkGpuClockDataRecord, CpuClockCounter, DXGK_GPUCLOCKDATA, CpuClockCounter);
+AV_SAME_OFFSET(DxgkGpuClockDataRecord, Flags, DXGK_GPUCLOCKDATA, Flags);
+
+AV_SAME_SIZE(DxgkargControlInterrupt2Record, DXGKARG_CONTROLINTERRUPT2);
+AV_SAME_OFFSET(DxgkargControlInterrupt2Record, InterruptType, DXGKARG_CONTROLINTERRUPT2, InterruptType);
+AV_SAME_OFFSET(DxgkargControlInterrupt2Record, CrtcVsyncState, DXGKARG_CONTROLINTERRUPT2, CrtcVsyncState);
 
 AV_SAME_SIZE(DxgkargSetPointerShapeRecord, DXGKARG_SETPOINTERSHAPE);
 AV_SAME_OFFSET(DxgkargSetPointerShapeRecord, Flags, DXGKARG_SETPOINTERSHAPE, Flags);

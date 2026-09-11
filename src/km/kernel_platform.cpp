@@ -108,6 +108,14 @@ void KernelPlatform::release_mutex(void *storage, LockRank)
 
 uint64_t KernelPlatform::interrupt_time() const { return KeQueryInterruptTime(); }
 
+uint64_t KernelPlatform::performance_counter(uint64_t &frequency) const
+{
+    LARGE_INTEGER ticks_per_second = {};
+    const LARGE_INTEGER count = KeQueryPerformanceCounter(&ticks_per_second);
+    frequency = static_cast<uint64_t>(ticks_per_second.QuadPart);
+    return static_cast<uint64_t>(count.QuadPart);
+}
+
 void KernelPlatform::stall(uint32_t microseconds) { KeStallExecutionProcessor(microseconds); }
 
 uint8_t KernelPlatform::read_register_u8(void *address)

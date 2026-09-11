@@ -26,6 +26,9 @@
 #include "../../src/core/ddi/dxgkarg_query_current_fence_record.hpp"
 #include "../../src/core/ddi/dxgkarg_render_record.hpp"
 #include "../../src/core/ddi/dxgk_child_container_id_record.hpp"
+#include "../../src/core/ddi/dxgk_gpu_clock_data_record.hpp"
+#include "../../src/core/ddi/dxgk_node_metadata_record.hpp"
+#include "../../src/core/ddi/dxgkarg_control_interrupt2_record.hpp"
 #include "../../src/core/ddi/dxgk_display_information_record.hpp"
 #include "../../src/core/ddi/dxgkarg_cancel_command_record.hpp"
 #include "../../src/core/ddi/dxgkarg_present_record.hpp"
@@ -261,3 +264,11 @@ TEST(ddi_records, win8_records_match_the_x64_layout)
   CHECK_EQ(offsetof(av::DxgkChildContainerIdRecord, EldInfoManufacturerName), 0x18u);
   CHECK_EQ(sizeof(av::DxgkDisplayInformationRecord), 0x20u);
   CHECK_EQ(offsetof(av::DxgkDisplayInformationRecord, TargetId), 0x18u); }
+
+/* WDDM 1.3 (feature 016). */
+TEST(ddi_records, wddm_1_3_records_match_the_x64_layout)
+{ CHECK_EQ(sizeof(av::DxgkNodeMetadataRecord), 0x4Au);   /* pack(1): basicrender.sys zeroes 0x4a bytes */
+  CHECK_EQ(offsetof(av::DxgkNodeMetadataRecord, Flags), 0x44u);
+  CHECK_EQ(offsetof(av::DxgkNodeMetadataRecord, IoMmuSupported), 0x49u);
+  CHECK_EQ(sizeof(av::DxgkGpuClockDataRecord), 0x1Cu);
+  CHECK_EQ(sizeof(av::DxgkargControlInterrupt2Record), 0x08u); }

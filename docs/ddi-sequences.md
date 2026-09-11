@@ -551,6 +551,19 @@ WDDM 1.2 (with GPU VA, feature 017): a 1.2 claim below `DXGKDDI_WDDMv1_2` fails
   reported); `PowerRuntimeControlRequest` and
   `SetVidPnSourceAddressWithMultiPlaneOverlay` answer `STATUS_NOT_SUPPORTED`.
 
+## 4h. WDDM 1.3 (feature 016)
+
+- `GetNodeMetadata`, as `basicrender.sys`: the whole `DXGK_NODEMETADATA`
+  (declared under `pack(1)`, 0x4a bytes) zeroed, `EngineType` 3D, name
+  `3DNode00`. Node 0 of physical adapter 0 only.
+- `CalibrateGpuClock` (up to DISPATCH), as `basicrender.sys`: the GPU clock is
+  the CPU performance counter, both counters one `KeQueryPerformanceCounter`
+  reading and `GpuFrequency` its frequency.
+- `ControlInterrupt2` drives the same synthetic vsync as ControlInterrupt:
+  `DXGK_VSYNC_ENABLE` starts it, both disable states stop it.
+- `SetPowerPState` refuses every component; `CheckMultiPlaneOverlaySupport` and
+  `FormatHistoryBuffer` stay NULL.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the

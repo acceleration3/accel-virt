@@ -60,6 +60,8 @@ public:
 
     /* Monotonic, in 100 ns units. */
     virtual uint64_t interrupt_time() const = 0;
+    /* KeQueryPerformanceCounter: the count, and its ticks per second. Any IRQL. */
+    virtual uint64_t performance_counter(uint64_t &frequency) const = 0;
     /* Busy-waits; legal at any IRQL, so keep it short. */
     virtual void     stall(uint32_t microseconds) = 0;
 

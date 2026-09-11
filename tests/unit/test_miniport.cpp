@@ -72,6 +72,8 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiSystemDisplayWrite,  DdiSlot::DxgkDdiCancelCommand,
     DdiSlot::DxgkDdiGetChildContainerId, DdiSlot::DxgkDdiPowerRuntimeControlRequest,
     DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay, DdiSlot::DxgkDdiNotifySurpriseRemoval,
+    DdiSlot::DxgkDdiGetNodeMetadata,     DdiSlot::DxgkDdiSetPowerPState,
+    DdiSlot::DxgkDdiControlInterrupt2,   DdiSlot::DxgkDdiCalibrateGpuClock,
 };
 
 bool is_implemented(std::uint16_t index)

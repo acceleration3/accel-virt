@@ -14,6 +14,9 @@
 #include "d3dkmdt_vidpn_present_path_record.hpp"
 #include "dxgk_child_container_id_record.hpp"
 #include "dxgk_child_descriptor_record.hpp"
+#include "dxgk_gpu_clock_data_record.hpp"
+#include "dxgk_node_metadata_record.hpp"
+#include "dxgkarg_control_interrupt2_record.hpp"
 #include "dxgk_display_information_record.hpp"
 #include "dxgkarg_cancel_command_record.hpp"
 #include "dxgkarg_query_dependent_engine_group_record.hpp"
@@ -144,6 +147,10 @@ int32_t AvDdiPowerRuntimeControlRequest(void *context, const void *control_code,
                                         void *output, size_t output_size, size_t *returned);
 int32_t AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay(void *context, const void *request);
 int32_t AvDdiNotifySurpriseRemoval(void *context, int32_t removal_type);
+int32_t AvDdiGetNodeMetadata(void *context, uint32_t node_and_adapter, av::DxgkNodeMetadataRecord *metadata);
+int32_t AvDdiSetPowerPState(void *context, uint32_t component, uint32_t pstate);
+int32_t AvDdiControlInterrupt2(void *context, av::DxgkargControlInterrupt2Record control);
+int32_t AvDdiCalibrateGpuClock(void *context, uint32_t node, uint32_t engine, av::DxgkGpuClockDataRecord *clock);
 /* An overlay handle this driver never creates: nothing behind it to reach. */
 int32_t AvDdiUpdateOverlay(void *overlay, const void *request);
 int32_t AvDdiFlipOverlay(void *overlay, const void *request);

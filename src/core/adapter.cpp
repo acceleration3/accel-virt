@@ -28,6 +28,8 @@
 #include "ddi/dxgkarg_get_scan_line_record.hpp"
 #include "debug_report.hpp"
 #include "ddi/dxgk_child_container_id_record.hpp"
+#include "ddi/dxgk_gpu_clock_data_record.hpp"
+#include "ddi/dxgk_node_metadata_record.hpp"
 #include "ddi/dxgk_display_information_record.hpp"
 #include "ddi/dxgkarg_cancel_command_record.hpp"
 #include "ddi/dxgkarg_present_record.hpp"
@@ -685,6 +687,46 @@ int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay(const void *)
 {
     platform_.require_irql_at_most(Irql::isr, "Adapter::set_vidpn_source_address_with_multi_plane_overlay");
     return NtStatus(Status::not_supported).value();
+}
+
+int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRecord *metadata)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::get_node_metadata");
+    if (metadata == nullptr || node_and_adapter != 0u) return NtStatus(Status::invalid_parameter).value();
+    static constexpr char name[] = "3DNode00";
+    *metadata = DxgkNodeMetadataRecord{};
+    metadata->EngineType = engine_type_3d;
+    for (uint32_t index = 0u; index + 1u < sizeof name; index++)
+        metadata->FriendlyName[index] = static_cast<uint16_t>(name[index]);
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::set_power_pstate(uint32_t, uint32_t)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::set_power_pstate");
+    return NtStatus(Status::invalid_parameter).value();
+}
+
+int32_t Adapter::control_interrupt2(DxgkargControlInterrupt2Record control)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::control_interrupt2");
+    if (control.InterruptType != interrupt_crtc_vsync) return NtStatus(Status::not_supported).value();
+    if (control.CrtcVsyncState < vsync_enable || control.CrtcVsyncState > vsync_disable_no_phase)
+        return NtStatus(Status::invalid_parameter).value();
+    return control_interrupt(control.InterruptType, control.CrtcVsyncState == vsync_enable ? 1u : 0u);
+}
+
+int32_t Adapter::calibrate_gpu_clock(uint32_t node, uint32_t engine, DxgkGpuClockDataRecord *clock)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "Adapter::calibrate_gpu_clock");
+    if (clock == nullptr || node != 0u || engine != 0u) return NtStatus(Status::invalid_parameter).value();
+    uint64_t frequency = 0u;
+    const uint64_t counter = platform_.performance_counter(frequency);
+    clock->GpuFrequency = frequency;
+    clock->GpuClockCounter = counter;
+    clock->CpuClockCounter = counter;
+    clock->Flags = 0u;
+    return NtStatus(Status::ok).value();
 }
 
 bool Adapter::invariants_hold() const

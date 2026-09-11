@@ -19,6 +19,9 @@
 #include "../../src/proto/present_command.hpp"
 #include "../../src/core/ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_escape_record.hpp"
+#include "../../src/core/ddi/dxgk_gpu_clock_data_record.hpp"
+#include "../../src/core/ddi/dxgk_node_metadata_record.hpp"
+#include "../../src/core/ddi/dxgkarg_control_interrupt2_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_reset_engine_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_vidpn_hw_capability_record.hpp"
@@ -774,4 +777,36 @@ TEST(ddi_scenario, an_engine_reset_then_the_device_disappears)
   CHECK_EQ(device.fdo().interrupt(1u), 0u);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- WDDM 1.3 (feature 016) ---------------------------------------------------- */
+
+TEST(ddi_scenario, node_metadata_clock_calibration_and_vsync_state_through_the_table)
+{ LoadedDriver driver;
+  CHECK(driver.table().routine(DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport) == nullptr);
+  CHECK(driver.table().routine(DdiSlot::DxgkDdiFormatHistoryBuffer) == nullptr);
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  void *const adapter = device.fdo().context();
+  const DdiTable &table = driver.table();
+  av::DxgkNodeMetadataRecord metadata = {};
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, std::uint32_t, av::DxgkNodeMetadataRecord *)>(
+               table.routine(DdiSlot::DxgkDdiGetNodeMetadata))(adapter, 0u, &metadata), 0);
+  CHECK_EQ(metadata.FriendlyName[0], static_cast<unsigned>('3'));
+  av::DxgkGpuClockDataRecord clock = {};
+  driver.platform().set_irql(av::Irql::dispatch);
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, std::uint32_t, std::uint32_t, av::DxgkGpuClockDataRecord *)>(
+               table.routine(DdiSlot::DxgkDdiCalibrateGpuClock))(adapter, 0u, 0u, &clock), 0);
+  driver.platform().set_irql(av::Irql::passive);
+  CHECK(clock.GpuFrequency != 0u);
+  const auto control = reinterpret_cast<std::int32_t (*)(void *, av::DxgkargControlInterrupt2Record)>(
+      table.routine(DdiSlot::DxgkDdiControlInterrupt2));
+  CHECK_EQ(control(adapter, {3, 0}), 0);
+  driver.platform().run_timers(10000000u / 60u);
+  CHECK_EQ(device.dxgkrnl().interrupts(), 1u);
+  CHECK_EQ(control(adapter, {3, 1}), 0);
+  driver.platform().run_timers(10000000u);
+  CHECK_EQ(device.dxgkrnl().interrupts(), 1u);
+  CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }

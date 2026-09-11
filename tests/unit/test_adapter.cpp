@@ -7,6 +7,8 @@
 #include "../../src/core/ddi/dxgkarg_get_scan_line_record.hpp"
 #include "../../src/core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
 #include "../../src/core/ddi/dxgk_child_container_id_record.hpp"
+#include "../../src/core/ddi/dxgk_gpu_clock_data_record.hpp"
+#include "../../src/core/ddi/dxgk_node_metadata_record.hpp"
 #include "../../src/core/ddi/dxgk_display_information_record.hpp"
 #include "../../src/core/ddi/dxgkarg_cancel_command_record.hpp"
 #include "../../src/core/ddi/dxgkarg_present_record.hpp"
@@ -691,6 +693,67 @@ TEST(adapter, the_display_ddis_are_passive_only)
   static_cast<void>(fixture.adapter().set_vidpn_source_address(nullptr));
   fixture.platform().set_irql(Irql::passive);
   for (int call = 0; call < 12; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
+
+/* ---- WDDM 1.3 (feature 016) -------------------------------------------------- */
+
+TEST(adapter_get_node_metadata, one_3d_node_named_as_basicrender_names_it)
+{ Fixture fixture;
+  av::DxgkNodeMetadataRecord metadata;
+  std::memset(&metadata, 0xEE, sizeof metadata);
+  CHECK_EQ(nt(fixture.adapter().get_node_metadata(0u, &metadata)), success);
+  CHECK_EQ(metadata.EngineType, 1);
+  const char expected[] = "3DNode00";
+  for (unsigned index = 0u; index < sizeof expected; index++)
+      CHECK_EQ(metadata.FriendlyName[index], static_cast<unsigned>(expected[index]));
+  CHECK_EQ(metadata.FriendlyName[31], 0u);
+  CHECK_EQ(metadata.Flags, 0u);
+  CHECK_EQ(metadata.GpuMmuSupported, 0u);
+  CHECK_EQ(nt(fixture.adapter().get_node_metadata(1u, &metadata)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().get_node_metadata(0x10000u, &metadata)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().get_node_metadata(0u, nullptr)), invalid_parameter); }
+
+TEST(adapter_control_interrupt2, enables_and_disables_the_synthetic_vsync)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  const std::uint64_t frame = 10000000u / 60u;
+  CHECK_EQ(nt(fixture.adapter().control_interrupt2({interrupt_crtc_vsync, 0})), success);
+  fixture.platform().run_timers(frame);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt2({interrupt_crtc_vsync, 1})), success);
+  fixture.platform().run_timers(frame * 3u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt2({interrupt_crtc_vsync, 2})), success);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt2({interrupt_crtc_vsync, 3})), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt2({interrupt_crtc_vsync, -1})), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt2({interrupt_dpc_log, 0})), not_supported); }
+
+TEST(adapter_calibrate_gpu_clock, the_gpu_clock_is_the_performance_counter)
+{ Fixture fixture;
+  fixture.platform().advance_time(4242u);
+  av::DxgkGpuClockDataRecord clock;
+  std::memset(&clock, 0xEE, sizeof clock);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().calibrate_gpu_clock(0u, 0u, &clock)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(clock.GpuFrequency, 10000000u);
+  CHECK_EQ(clock.GpuClockCounter, fixture.platform().interrupt_time());
+  CHECK_EQ(clock.CpuClockCounter, clock.GpuClockCounter);
+  CHECK_EQ(clock.Flags, 0u);
+  CHECK_EQ(nt(fixture.adapter().calibrate_gpu_clock(1u, 0u, &clock)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().calibrate_gpu_clock(0u, 1u, &clock)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().calibrate_gpu_clock(0u, 0u, nullptr)), invalid_parameter); }
+
+TEST(adapter, the_wddm_1_3_ddis_declare_their_ceilings)
+{ Fixture fixture;
+  CHECK_EQ(nt(fixture.adapter().set_power_pstate(0u, 0u)), invalid_parameter);
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.adapter().get_node_metadata(0u, nullptr));
+  static_cast<void>(fixture.adapter().set_power_pstate(0u, 0u));
+  static_cast<void>(fixture.adapter().control_interrupt2({interrupt_dpc_log, 0}));
+  fixture.platform().set_irql(Irql::isr);
+  static_cast<void>(fixture.adapter().calibrate_gpu_clock(0u, 0u, nullptr));
+  fixture.platform().set_irql(Irql::passive);
+  for (int call = 0; call < 4; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
 
 /* ---- WDDM 1.2 (feature 015) -------------------------------------------------- */
 

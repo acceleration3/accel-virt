@@ -233,6 +233,18 @@ int32_t AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay(void *context, const voi
 int32_t AvDdiNotifySurpriseRemoval(void *context, int32_t removal_type)
 { return static_cast<av::Adapter *>(context)->notify_surprise_removal(removal_type); }
 
+int32_t AvDdiGetNodeMetadata(void *context, uint32_t node_and_adapter, av::DxgkNodeMetadataRecord *metadata)
+{ return static_cast<av::Adapter *>(context)->get_node_metadata(node_and_adapter, metadata); }
+
+int32_t AvDdiSetPowerPState(void *context, uint32_t component, uint32_t pstate)
+{ return static_cast<av::Adapter *>(context)->set_power_pstate(component, pstate); }
+
+int32_t AvDdiControlInterrupt2(void *context, av::DxgkargControlInterrupt2Record control)
+{ return static_cast<av::Adapter *>(context)->control_interrupt2(control); }
+
+int32_t AvDdiCalibrateGpuClock(void *context, uint32_t node, uint32_t engine, av::DxgkGpuClockDataRecord *clock)
+{ return static_cast<av::Adapter *>(context)->calibrate_gpu_clock(node, engine, clock); }
+
 int32_t AvDdiUpdateOverlay(void *, const void *)
 { return av::NtStatus(av::Status::not_supported).value(); }
 

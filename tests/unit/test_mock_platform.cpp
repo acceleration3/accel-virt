@@ -202,6 +202,13 @@ TEST(mock_platform_time, advances_by_exactly_the_requested_ticks)
   platform.advance_time(20000000u);
   CHECK(platform.interrupt_time() - before == 20000000u); }
 
+TEST(mock_platform_time, the_performance_counter_is_the_test_clock)
+{ MockPlatform platform;
+  platform.advance_time(1234u);
+  std::uint64_t frequency = 0u;
+  CHECK_EQ(platform.performance_counter(frequency), 1234u);
+  CHECK_EQ(frequency, 10000000u); }
+
 TEST(mock_platform_time, saturates_instead_of_wrapping)
 { MockPlatform platform;
   platform.advance_time(~std::uint64_t{0});

@@ -16,6 +16,7 @@ column: the one kernel call. `MockPlatform` column: what it checks.
 | `void acquire_mutex(void *storage, LockRank)` | `ExAcquireFastMutex` | `blocking_at_dispatch`, `lock_order`, `lock_stack_overflow`; raises to APC |
 | `void release_mutex(void *storage, LockRank)` | `ExReleaseFastMutex` | `release_order`; restores saved IRQL |
 | `uint64_t interrupt_time() const` | `KeQueryInterruptTime` | test-controlled clock |
+| `uint64_t performance_counter(uint64_t &frequency) const` | `KeQueryPerformanceCounter` | the test clock at 10 000 000 per second |
 | `void *create_timer(TimerCallback, void *context)` | `ExAllocateTimer(EX_TIMER_HIGH_RESOLUTION)` | `allocation_at_dispatch` (returns null); honours `fail_allocation_at`; null past `max_timers` |
 | `void start_timer(void *timer, uint64_t period)` | `ExSetTimer`, relative due time, periodic | `irql_ceiling` above DISPATCH; `timer_misuse` for an unknown timer or a zero period |
 | `void stop_timer(void *timer)` | `ExCancelTimer` | `irql_ceiling` above DISPATCH; `timer_misuse` |
