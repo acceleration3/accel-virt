@@ -99,6 +99,24 @@ Then follow the spec-kit flow, using the skills, not by hand:
 /speckit-implement  execute
 ```
 
+### Git
+
+There is no remote; `master` is the only long-lived branch and holds only
+features that passed every gate.
+
+1. Start each feature from an up-to-date `master` on a branch named for its
+   spec directory: `git switch -c NNN-short-name`.
+2. Commit at each `**Checkpoint**` in `tasks.md` without waiting to be asked,
+   once `ctest --test-dir build` passes at that point. Conventional-commit
+   subject (`feat(scope): ... (NNN)`), a body saying what changed and why.
+3. When every task is `[X]` and `tools/gate.sh` passes, fast-forward it in:
+   `git switch master && git merge --ff-only NNN-short-name && git branch -d NNN-short-name`.
+4. Never commit kit files, `re/`, build directories, or anything the gates
+   reject; never rewrite `master` history.
+
+A feature counts as complete for "pick the work" when its `tasks.md` is all
+`[X]` and it is merged into `master`.
+
 ## 4. The rules you will be judged against
 
 **Design (constitution III, `CLAUDE.md`).** Everything is a class that owns
