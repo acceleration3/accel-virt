@@ -71,6 +71,13 @@ private:
         result = run(CHECK, self.tree.root)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_the_register_window_contract_is_excluded(self):
+        self.tree.write("src/core/register_window.hpp",
+                        "class RegisterWindow {\npublic:\n    virtual int read_u8() = 0;\n};\n")
+        self.tree.write("tests/unit/test_widget.cpp", "Widget w; w.named(); w.unnamed();\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_the_repository_passes(self):
         result = run(CHECK, ROOT)
         self.assertEqual(result.returncode, 0, result.stderr)

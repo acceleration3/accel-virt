@@ -20,9 +20,9 @@ description: "Task list for feature 005: virtio-pci transport"
 
 ## Phase 3: Transport (US2)
 
-- [ ] T005 `tests/harness/fake_virtio_device.{hpp,cpp}`: `RegisterWindow` implementations for common, notify, ISR and device regions with virtio 1.2 semantics and knobs (refuse FEATURES_OK, slow reset, needs-reset, refuse MSI-X vector, queue sizes, bad queue size)
-- [ ] T006 Tests `tests/unit/test_virtio_pci_transport.cpp` for every US2 scenario, status-sequence recording, IRQL ceilings. Must fail
-- [ ] T007 Implement `src/core/register_window.hpp`, `src/core/virtio_pci_transport.{hpp,cpp}`, `src/km/mmio_register_window.{hpp,cpp}`
+- [X] T005 `tests/harness/fake_virtio_device.{hpp,cpp}`: `RegisterWindow` implementations for common, notify, ISR and device regions with virtio 1.2 semantics and knobs (refuse FEATURES_OK, slow reset, needs-reset, refuse MSI-X vector, queue sizes, bad queue size)
+- [X] T006 Tests `tests/unit/test_virtio_pci_transport.cpp` for every US2 scenario, status-sequence recording, IRQL ceilings. Must fail
+- [X] T007 Implement `src/core/register_window.hpp`, `src/core/virtio_pci_transport.{hpp,cpp}`, `src/km/mmio_register_window.{hpp,cpp}`
 
 **Checkpoint**: commit.
 

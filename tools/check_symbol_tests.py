@@ -20,6 +20,9 @@ from header_scan import declared_classes
 EXCLUDE = {
     "src/core/platform.hpp": "the platform contract, implemented by src/km and "
                              "tests/harness and exercised through every core test",
+    "src/core/register_window.hpp": "a device register region, implemented by src/km over a "
+                                    "mapped BAR and by the fake device in tests/harness, and "
+                                    "exercised through every transport test",
 }
 
 

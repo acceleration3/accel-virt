@@ -65,7 +65,10 @@ add_library(av_harness STATIC
   tests/harness/ddi_table_probe.cpp
   tests/harness/fake_dxgkrnl.cpp
   tests/harness/byte_layout.cpp
-  tests/harness/fixture_file.cpp)
+  tests/harness/fixture_file.cpp
+  tests/harness/fake_common_config.cpp
+  tests/harness/fake_register_bytes.cpp
+  tests/harness/fake_isr_register.cpp)
 target_link_libraries(av_harness PUBLIC av_core)
 target_compile_definitions(av_harness PUBLIC AV_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures")
 
