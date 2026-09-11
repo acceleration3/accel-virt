@@ -67,6 +67,8 @@
 #include "ddi/dxgk_query_page_table_level_desc_in_record.hpp"
 #include "ddi/dxgkarg_create_process_record.hpp"
 #include "ddi/dxgkarg_set_stable_power_state_record.hpp"
+#include "ddi/dxgkarg_control_mode_behavior_record.hpp"
+#include "ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "ddi/dxgkarg_set_root_page_table_record.hpp"
 #include "ddi/dxgkarg_submit_command_virtual_record.hpp"
@@ -761,6 +763,17 @@ AV_SAME_OFFSET(DxgkargCreateProcessRecord, pProcessName, DXGKARG_CREATEPROCESS, 
 
 AV_SAME_SIZE(DxgkargSetStablePowerStateRecord, DXGKARG_SETSTABLEPOWERSTATE);
 AV_SAME_OFFSET(DxgkargSetStablePowerStateRecord, Enabled, DXGKARG_SETSTABLEPOWERSTATE, Enabled);
+
+AV_SAME_SIZE(DxgkargControlModeBehaviorRecord, DXGKARG_CONTROLMODEBEHAVIOR);
+AV_SAME_OFFSET(DxgkargControlModeBehaviorRecord, Request, DXGKARG_CONTROLMODEBEHAVIOR, Request);
+AV_SAME_OFFSET(DxgkargControlModeBehaviorRecord, Satisfied, DXGKARG_CONTROLMODEBEHAVIOR, Satisfied);
+AV_SAME_OFFSET(DxgkargControlModeBehaviorRecord, NotSatisfied, DXGKARG_CONTROLMODEBEHAVIOR, NotSatisfied);
+
+AV_SAME_SIZE(DxgkargUpdateMonitorLinkInfoRecord, DXGKARG_UPDATEMONITORLINKINFO);
+AV_SAME_OFFSET(DxgkargUpdateMonitorLinkInfoRecord, VideoPresentTargetId, DXGKARG_UPDATEMONITORLINKINFO, VideoPresentTargetId);
+AV_SAME_OFFSET(DxgkargUpdateMonitorLinkInfoRecord, MonitorLinkInfoUsageHints, DXGKARG_UPDATEMONITORLINKINFO, MonitorLinkInfo.UsageHints);
+AV_SAME_OFFSET(DxgkargUpdateMonitorLinkInfoRecord, MonitorLinkInfoCapabilities, DXGKARG_UPDATEMONITORLINKINFO, MonitorLinkInfo.Capabilities);
+AV_SAME_OFFSET(DxgkargUpdateMonitorLinkInfoRecord, MonitorLinkInfoDitheringSupport, DXGKARG_UPDATEMONITORLINKINFO, MonitorLinkInfo.DitheringSupport);
 
 /* The operation records overlay DXGKARG_BUILDPAGINGBUFFER's union, which they copy from. */
 AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, Reserved, DXGKARG_BUILDPAGINGBUFFER, UpdatePageTable);

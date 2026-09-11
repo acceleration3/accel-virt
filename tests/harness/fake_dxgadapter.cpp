@@ -13,6 +13,8 @@ using QueryAdapterInfo = std::int32_t (*)(void *, const DxgkargQueryAdapterInfoR
 
 constexpr std::int32_t status_not_implemented = static_cast<std::int32_t>(0xC0000002u);
 constexpr std::int32_t status_no_memory = static_cast<std::int32_t>(0xC0000017u);
+constexpr std::int32_t status_not_supported = static_cast<std::int32_t>(0xC00000BBu);
+constexpr std::uint32_t mode_behavior_prioritize_hdr = 0x1u;   /* DXGK_MODE_BEHAVIOR_FLAGS */
 
 /* DXGK_QUERYADAPTERINFOTYPE */
 enum : std::int32_t {
@@ -66,7 +68,7 @@ bool bit(std::uint32_t word, std::uint32_t mask) { return (word & mask) != 0u; }
 }  // namespace
 
 FakeDxgadapter::FakeDxgadapter(MockPlatform &platform, const DdiTable &table)
-    : platform_(platform), table_(table), caps_{}, physical_{}, validate_wddm_caps_(false), failed_(CapabilityRule::none),
+    : platform_(platform), table_(table), caps_{}, physical_{}, mode_behavior_{}, validate_wddm_caps_(false), failed_(CapabilityRule::none),
       queries_(0u),
       render_adapter_(false), missing_render_slot_(DdiSlot::Version) {}
 
@@ -162,6 +164,7 @@ std::int32_t FakeDxgadapter::initialize(void *context, std::uint32_t children)
     failed_ = CapabilityRule::none;
     queries_ = 0u;
     std::memset(&caps_, 0, sizeof caps_);
+    if (children != 0u) set_mode_behavior(context);
     std::int32_t status = query(context, query_driver_caps, nullptr, 0u, &caps_, driver_caps_bytes);
     if (status < 0) return refuse(CapabilityRule::driver_caps_query_failed, status);
     status = query_physical_adapter(context);
@@ -171,6 +174,26 @@ std::int32_t FakeDxgadapter::initialize(void *context, std::uint32_t children)
     if (rule != CapabilityRule::none) return refuse(rule, status_invalid_parameter);
     return query_after_validation(context);
 }
+
+void FakeDxgadapter::set_mode_behavior(void *context)
+{
+    using ControlModeBehavior = std::int32_t (*)(void *, DxgkargControlModeBehaviorRecord *);
+    const auto routine = reinterpret_cast<ControlModeBehavior>(table_.routine(DdiSlot::DxgkDdiControlModeBehavior));
+    if (routine == nullptr) {
+        mode_behavior_ = {};
+        return;
+    }
+    mode_behavior_ = {mode_behavior_prioritize_hdr, 0u, 0u};
+    platform_.set_irql(Irql::passive);
+    const std::int32_t status = routine(context, &mode_behavior_);
+    if (status != 0 && status != status_no_memory && status != status_not_supported)
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "ControlModeBehavior: invalid NTSTATUS 0x%08X",
+                                                static_cast<unsigned>(status));
+    if ((mode_behavior_.Satisfied & mode_behavior_.NotSatisfied) != 0u)
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "ControlModeBehavior: a behavior both satisfied and not");
+}
+
+const DxgkargControlModeBehaviorRecord &FakeDxgadapter::mode_behavior() const { return mode_behavior_; }
 
 CapabilityRule FakeDxgadapter::validate(const DxgkDriverCapsRecord &caps, std::uint32_t children) const
 {

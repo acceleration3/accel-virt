@@ -2,6 +2,7 @@
  * a later feature that claims a capability without its DDIs fails for the
  * reason dxgkrnl would give. */
 #include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
+#include "../../src/core/ddi/dxgkarg_control_mode_behavior_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
 #include "../../src/core/ddi_slot.hpp"
 #include "../../src/core/ddi_table.hpp"
@@ -95,6 +96,49 @@ TEST(fake_dxgadapter_initialize, no_query_adapter_info_is_a_revision_mismatch)
   FakeDxgadapter adapter(platform, table);
   CHECK_EQ(adapter.initialize(nullptr, 1u), revision_mismatch);
   CHECK(adapter.failed_rule() == CapabilityRule::driver_caps_query_failed); }
+
+namespace {
+
+/* ControlModeBehavior answers: the status, then what it writes. */
+std::int32_t mode_status = 0;
+std::uint32_t mode_satisfied = 0u;
+std::uint32_t mode_not_satisfied = 0u;
+std::uint32_t mode_requests = 0u;
+
+std::int32_t control_mode_behavior(void *, av::DxgkargControlModeBehaviorRecord *request)
+{
+    mode_requests = request->Request;
+    request->Satisfied = mode_satisfied;
+    request->NotSatisfied = mode_not_satisfied;
+    return mode_status;
+}
+
+}  // namespace
+
+TEST(fake_dxgadapter_initialize, an_adapter_with_outputs_is_asked_to_prioritize_hdr_first)
+{ MockPlatform platform; CraftedMiniport miniport;
+  FakeDxgadapter adapter(platform, miniport.table());
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(adapter.mode_behavior().Request, 0u);   /* NULL: the default declines */
+  miniport.set(DdiSlot::DxgkDdiControlModeBehavior, reinterpret_cast<DdiRoutine>(&control_mode_behavior));
+  mode_status = 0; mode_satisfied = 0u; mode_not_satisfied = 1u; mode_requests = 0u;
+  CHECK_EQ(adapter.initialize(&miniport, 0u), 0);
+  CHECK_EQ(mode_requests, 0u);                     /* no outputs: not asked */
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(mode_requests, 1u);
+  CHECK_EQ(adapter.mode_behavior().NotSatisfied, 1u);
+  CHECK(!av::TestRegistry::instance().take_current_failure());
+  mode_status = no_memory;
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  mode_status = not_supported;
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK(!av::TestRegistry::instance().take_current_failure());
+  mode_status = invalid_parameter;
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);  /* logged, start goes on */
+  CHECK(av::TestRegistry::instance().take_current_failure());
+  mode_status = 0; mode_satisfied = 1u;
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK(av::TestRegistry::instance().take_current_failure()); }
 
 TEST(fake_dxgadapter_query, a_status_dxgkrnl_logs_as_invalid_fails_the_test)
 { MockPlatform platform; CraftedMiniport miniport;

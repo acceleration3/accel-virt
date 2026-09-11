@@ -6,7 +6,7 @@ description: "Task list for feature 018: WDDM 2.1 additions"
 
 ## Phase 1: Records and harness
 
-- [ ] T001 Records and km proofs; `FakeDxgadapter` mode behavior at initialize; `FakeDxgmonitor` with tests
+- [X] T001 Records and km proofs; `FakeDxgadapter` mode behavior at initialize; `FakeDxgmonitor` with tests
 
 **Checkpoint**: commit.
 
