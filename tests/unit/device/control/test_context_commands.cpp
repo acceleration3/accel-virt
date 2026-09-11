@@ -99,7 +99,7 @@ public:
     {
         host_.add_gpu(uuid);
         host_.set_hostmem_size(0x10000u);
-        capset_.describe(0u);
+        capset_.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan));
         static_cast<void>(blobs_.create_host(ring, 0x2000u));
         static_cast<void>(blobs_.create_host(fence, 0x1000u));
         static_cast<void>(blobs_.create_host(small_ring, 0x1000u));
@@ -260,6 +260,26 @@ TEST(context_commands_submit, a_doorbell_another_context_holds_is_refused)
   CHECK(!fixture.contexts().find(2u)->binding().bound());
   CHECK_EQ(fixture.send(destroy(1u)), ok_nodata);
   CHECK_EQ(fixture.send(submit(2u, setup(second_ring, 12u, 1u, 7u))), ok_nodata); }
+
+TEST(context_commands, a_device_without_a_capset_refuses_capset_queries_and_contexts)
+{ MockHost host;
+  host.add_gpu(uuid);
+  BlobTable blobs(host);
+  av::FenceInterrupts interrupts(host);
+  DeviceContextTable contexts(host, blobs, interrupts);
+  const GpuRequestBuilder requests[] = {capset_info(0u), capset(0x72u, 1u), create(1u)};
+  DeviceCapset undescribed(host);
+  undescribed.describe(0u, 0u);
+  ContextCommands commands(host, contexts, undescribed);
+  for (const GpuRequestBuilder &builder : requests) {
+      MockRequest mock(builder.bytes(), builder.size());
+      ControlRequest request(host, &mock);
+      std::uint32_t type = 0u;
+      std::memcpy(&type, builder.bytes(), sizeof type);
+      CHECK(commands.answer(request, type));
+      CHECK_EQ(mock.response_type(), err_invalid_parameter);
+  }
+  CHECK_EQ(contexts.live(), 0u); }
 
 TEST(context_commands, leaves_every_other_request_to_the_base_class)
 { Fixture fixture;

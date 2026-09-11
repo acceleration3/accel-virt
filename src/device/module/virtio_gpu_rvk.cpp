@@ -9,14 +9,20 @@
 namespace av {
 
 VirtioGpuRvk::VirtioGpuRvk(Host &host)
-    : host_(host), binding_(host), capset_(host), blobs_(host), interrupts_(host), contexts_(host, blobs_, interrupts_) {}
+    : host_(host), binding_(host), library_(), capset_(host), blobs_(host), interrupts_(host), contexts_(host, blobs_, interrupts_) {}
 
-Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, TextBuffer &message)
+Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExecutorOps *executor,
+                             TextBuffer &message)
 {
     host_.require_main_loop("VirtioGpuRvk::realize");
     if (binding_.bound()) return Status::invalid_state;
     if (base_blobs) {
         message.append("virtio-gpu-rvk: blob=on is not supported; the device answers blob requests itself");
+        host_.log(message.text());
+        return Status::invalid_parameter;
+    }
+    if (library_.accept(executor) == Status::invalid_parameter) {
+        message.append("virtio-gpu-rvk: the executor library's table is not ABI version 1 or lacks an operation");
         host_.log(message.text());
         return Status::invalid_parameter;
     }
@@ -27,7 +33,7 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, TextBuffer &
         return Status::no_memory;
     }
     const Status status = binding_.bind(host_gpu, message);
-    if (status == Status::ok) capset_.describe(binding_.index());
+    if (status == Status::ok) capset_.describe(binding_.index(), library_.sub_apis());
     return status;
 }
 

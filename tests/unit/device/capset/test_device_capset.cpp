@@ -31,7 +31,7 @@ TEST(device_capset_describe, offers_vulkan_every_ring_order_and_the_bound_gpu)
   host.add_gpu(GpuIdentity(0x1002u, 0x744Cu, GpuIdentity::integrated_gpu, second, 1u << 30, 2u << 30, "radeon"));
   DeviceCapset capset(host);
   CHECK(!capset.described());
-  capset.describe(1u);
+  capset.describe(1u, static_cast<std::uint32_t>(SubApi::vulkan));
   CHECK(capset.described());
   const CapsetInfo &info = capset.info();
   CHECK_EQ(info.version().major_version(), 1u);
@@ -59,14 +59,25 @@ TEST(device_capset_describe, a_hostmem_region_offers_host_visible_memory)
   host.add_gpu(first);
   host.set_hostmem_size(0x10000u);
   DeviceCapset capset(host);
-  capset.describe(0u);
+  capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan));
   CHECK(capset.info().has_feature(CapsetInfo::feature_host_visible_memory)); }
+
+TEST(device_capset_describe, offers_exactly_the_sub_apis_the_executor_offers)
+{ MockHost host;
+  host.add_gpu(first);
+  DeviceCapset both(host);
+  both.describe(0u, static_cast<std::uint32_t>(SubApi::opengl) | static_cast<std::uint32_t>(SubApi::opencl));
+  CHECK(!both.info().offers(SubApi::vulkan));
+  CHECK(both.info().offers(SubApi::opengl) && both.info().offers(SubApi::opencl));
+  DeviceCapset none(host);
+  none.describe(0u, 0u);
+  CHECK(!none.described()); }
 
 TEST(device_capset_describe, a_device_type_vulkan_does_not_define_is_reported_as_other)
 { MockHost host;
   host.add_gpu(GpuIdentity(1u, 2u, 7u, first, 0u, 0u, "odd"));
   DeviceCapset capset(host);
-  capset.describe(0u);
+  capset.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan));
   CHECK_EQ(capset.info().gpu().device_type(), GpuIdentity::other_gpu);
   std::uint8_t bytes[CapsetInfo::encoded_size] = {};
   CHECK_STATUS(capset.info().encode(bytes, sizeof bytes), Status::ok);
@@ -78,7 +89,7 @@ TEST(device_capset, describe_is_main_loop_only)
   host.add_gpu(first);
   DeviceCapset capset(host);
   void *thread = nullptr;
-  CHECK_STATUS(host.start_thread([](void *context) { static_cast<DeviceCapset *>(context)->describe(0u); }, &capset,
+  CHECK_STATUS(host.start_thread([](void *context) { static_cast<DeviceCapset *>(context)->describe(0u, 1u); }, &capset,
                                  thread),
                Status::ok);
   host.join_thread(thread);

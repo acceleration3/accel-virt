@@ -39,7 +39,7 @@ void ContextCommands::capset_info(ControlRequest &request, GpuResponse &response
     uint8_t       bytes[CapsetRequest::encoded_size] = {};
     WireReader    reader(bytes, request.read(0u, bytes, sizeof bytes));
     CapsetRequest info;
-    if (info.decode_info(reader) != Status::ok || info.index() != 0u) {
+    if (!capset_.described() || info.decode_info(reader) != Status::ok || info.index() != 0u) {
         response.set(GpuResponse::err_invalid_parameter);
         return;
     }
@@ -51,7 +51,8 @@ void ContextCommands::capset(ControlRequest &request, GpuResponse &response)
     uint8_t       bytes[CapsetRequest::encoded_size] = {};
     WireReader    reader(bytes, request.read(0u, bytes, sizeof bytes));
     CapsetRequest wanted;
-    if (wanted.decode_capset(reader) != Status::ok || wanted.capset_id() != CapsetInfo::capset_id ||
+    if (!capset_.described() || wanted.decode_capset(reader) != Status::ok ||
+        wanted.capset_id() != CapsetInfo::capset_id ||
         wanted.capset_version() != DeviceCapset::capset_version) {
         response.set(GpuResponse::err_invalid_parameter);
         return;
@@ -65,7 +66,8 @@ uint32_t ContextCommands::create(ControlRequest &request)
     uint8_t        bytes[ContextRequest::create_size] = {};
     WireReader     reader(bytes, request.read(0u, bytes, sizeof bytes));
     ContextRequest create;
-    if (create.decode_create(reader) != Status::ok || create.context_init() != CapsetInfo::capset_id ||
+    if (!capset_.described() || create.decode_create(reader) != Status::ok ||
+        create.context_init() != CapsetInfo::capset_id ||
         create.name_length() > ContextRequest::name_capacity)
         return GpuResponse::err_invalid_parameter;
     switch (contexts_.create(create.context_id())) {

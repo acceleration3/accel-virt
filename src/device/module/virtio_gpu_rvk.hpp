@@ -7,6 +7,7 @@
 #include "core/support/status.hpp"
 #include "device/capset/device_capset.hpp"
 #include "device/context/device_context_table.hpp"
+#include "device/execution/executor_library.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/gpu/gpu_binding.hpp"
 #include "device/memory/blob_table.hpp"
@@ -30,8 +31,11 @@ public:
 
     /* Main loop. invalid_state once realized; invalid_parameter, named in
      * `message`, when the base class's own blob support was switched on (the
-     * core answers blob requests); otherwise the binding's answer. */
-    [[nodiscard]] Status realize(const char *host_gpu, bool base_blobs, TextBuffer &message);
+     * core answers blob requests) or the executor table is not one this ABI
+     * accepts; otherwise the binding's answer. Without an executor there is
+     * no capset. */
+    [[nodiscard]] Status realize(const char *host_gpu, bool base_blobs, const RvkExecutorOps *executor,
+                                 TextBuffer &message);
     /* Main loop: a virtio reset destroys every context, releases the fence
      * interrupts, then every blob. */
     void                 reset();
@@ -55,6 +59,7 @@ public:
 private:
     Host              &host_;
     GpuBinding         binding_;
+    ExecutorLibrary    library_;
     DeviceCapset       capset_;
     /* Before the contexts, which unpin blobs and stop raising interrupts as
      * they are destroyed. */

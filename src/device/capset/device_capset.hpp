@@ -1,5 +1,5 @@
 /* What one device instance offers the guest as the rvk capset (docs/protocol.md):
- * this protocol version, the sub-APIs contexts may select, a context per table
+ * this protocol version, the sub-APIs its executor library runs, a context per table
  * slot, every ring order the protocol allows, host-visible memory when a
  * hostmem region exists, and the host GPU the device is bound to. Described
  * once, at realize. */
@@ -22,8 +22,8 @@ public:
     DeviceCapset(const DeviceCapset &) = delete;
     DeviceCapset &operator=(const DeviceCapset &) = delete;
 
-    /* Main loop. */
-    void              describe(uint32_t gpu_index);
+    /* Main loop. With no sub-API to offer there is no capset. */
+    void              describe(uint32_t gpu_index, uint32_t sub_apis);
     bool              described() const;
     const CapsetInfo &info() const;
 

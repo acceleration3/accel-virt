@@ -11,6 +11,7 @@
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "device/abi/rvk_device.h"
+#include "device/abi/rvk_executor.h"
 #include "device/module/device_instance.hpp"
 
 #include <stddef.h>
@@ -29,8 +30,8 @@ public:
     DeviceModule &operator=(const DeviceModule &) = delete;
 
     /* A realized device, or null with the reason in `error`. */
-    DeviceInstance      *create(const RvkHostOps *ops, const char *host_gpu, bool base_blobs, char *error,
-                                size_t error_size);
+    DeviceInstance      *create(const RvkHostOps *ops, const RvkExecutorOps *executor, const char *host_gpu,
+                                bool base_blobs, char *error, size_t error_size);
     [[nodiscard]] Status destroy(DeviceInstance *instance);
     uint32_t             live() const;
 

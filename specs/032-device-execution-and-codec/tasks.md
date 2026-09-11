@@ -15,8 +15,8 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 2: Executors
 
-- [ ] T003 [US1] `src/device/abi/rvk_executor.h`; tests then `MockExecutorOps` (harness), `ExecutorLibrary`, `ContextExecutor` in src/device/execution/
-- [ ] T004 [US1] Tests then `DeviceCapset` from the library, `VirtioGpuRvk`/`DeviceModule`/`rvk_device_create` taking the table, no capset without one
+- [X] T003 [US1] `src/device/abi/rvk_executor.h`; tests then `MockExecutorOps` (harness), `ExecutorLibrary`, `ContextExecutor` in src/device/execution/
+- [X] T004 [US1] Tests then `DeviceCapset` from the library, `VirtioGpuRvk`/`DeviceModule`/`rvk_device_create` taking the table, no capset without one
 
 **Checkpoint**: commit.
 

@@ -1,0 +1,77 @@
+/* The executor C table for tests: every command runs and echoes its payload as
+ * its answer, except the ids a test scripts to be unknown, undecodable, lose
+ * the device, answer more than the capacity, or answer a value no library may.
+ * It records every executor created and destroyed, every command executed, and
+ * calls that leave the thread their executor was created on. */
+#ifndef AV_MOCK_EXECUTOR_OPS_HPP
+#define AV_MOCK_EXECUTOR_OPS_HPP
+
+#include "device/abi/rvk_executor.h"
+
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <pthread.h>
+
+namespace av {
+
+class MockExecutorOps {
+public:
+    static constexpr std::uint32_t unknown_id = 0x1FFF0u;
+    static constexpr std::uint32_t undecodable_id = 0x1FFF1u;
+    static constexpr std::uint32_t lost_id = 0x1FFF2u;
+    static constexpr std::uint32_t oversized_id = 0x1FFF3u;
+    static constexpr std::uint32_t garbage_id = 0x1FFF4u;
+    static constexpr std::uint32_t max_executors = 8u;
+    static constexpr std::uint32_t journal_capacity = 256u;
+
+    explicit MockExecutorOps(std::uint32_t sub_apis);
+    ~MockExecutorOps();
+    MockExecutorOps(const MockExecutorOps &) = delete;
+    MockExecutorOps &operator=(const MockExecutorOps &) = delete;
+
+    const RvkExecutorOps &table() const;
+    RvkExecutorOps       &editable();
+
+    /* The Nth create from now answers NULL. */
+    void          fail_create_at(std::uint32_t nth);
+    std::uint32_t created();
+    std::uint32_t destroyed();
+    std::uint32_t live();
+    std::uint32_t executed();
+    /* Commands executed, in order, across executors. */
+    std::uint32_t id_at(std::uint32_t index);
+    std::uint32_t size_at(std::uint32_t index);
+    /* The sub-API and GPU UUID's first byte of the last create. */
+    std::uint32_t last_sub_api();
+    std::uint8_t  last_uuid_byte();
+    /* Calls on an executor this table never made or already destroyed, and
+     * calls from another thread than the one that created it. */
+    std::uint32_t misuses();
+
+private:
+    struct Executor {
+        pthread_t thread;
+        bool      live;
+    };
+
+    Executor *executor_of(RvkExecutor *executor);
+
+    RvkExecutorOps             table_;
+    std::uint32_t              sub_apis_;
+    pthread_mutex_t            lock_;
+    Executor                   executors_[max_executors];
+    std::uint32_t              fail_create_;
+    std::uint32_t              created_;
+    std::uint32_t              destroyed_;
+    std::uint32_t              executed_;
+    std::uint32_t              ids_[journal_capacity];
+    std::uint32_t              sizes_[journal_capacity];
+    std::uint32_t              last_sub_api_;
+    std::uint8_t               last_uuid_byte_;
+    std::atomic<std::uint32_t> misuses_;
+};
+
+}  // namespace av
+
+#endif  // AV_MOCK_EXECUTOR_OPS_HPP
