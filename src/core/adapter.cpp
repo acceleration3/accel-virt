@@ -27,6 +27,8 @@
 #include "ddi/d3dkmdt_vidpn_present_path_record.hpp"
 #include "ddi/dxgkarg_get_scan_line_record.hpp"
 #include "debug_report.hpp"
+#include "ddi/dxgk_child_container_id_record.hpp"
+#include "ddi/dxgk_display_information_record.hpp"
 #include "ddi/dxgkarg_cancel_command_record.hpp"
 #include "ddi/dxgkarg_present_record.hpp"
 #include "ddi/dxgkarg_query_dependent_engine_group_record.hpp"
@@ -74,7 +76,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_),
       node_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
-      cursor_(platform, device_), started_(false) {}
+      cursor_(platform, device_), started_(false), present_(true) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
 
@@ -109,10 +111,11 @@ Status Adapter::power_up()
     return status;
 }
 
+/* A removed device cannot acknowledge a reset; destruction still abandons it. */
 Status Adapter::power_down()
 {
     if (!device_.constructed()) return Status::ok;
-    const Status status = device_.object().stop();
+    const Status status = present_ ? device_.object().stop() : Status::ok;
     device_.destroy();
     return status;
 }
@@ -125,6 +128,7 @@ int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_inte
     if (started_) return NtStatus(Status::invalid_state).value();
     if (dxgkrnl_interface == nullptr || sources == nullptr || children == nullptr)
         return NtStatus(Status::invalid_parameter).value();
+    present_ = true;
     ScopeExit undo([this] {
         cursor_.release();
         vsync_.destroy();
@@ -165,7 +169,7 @@ int32_t Adapter::dispatch_io_request(uint32_t, void *)
 uint8_t Adapter::interrupt_routine(uint32_t)
 {
     platform_.require_irql_at_most(Irql::isr, "Adapter::interrupt_routine");
-    if (!device_.constructed()) return 0u;
+    if (!device_.constructed() || !present_) return 0u;
     if (resources_.message_interrupts() == 0u && device_.object().read_isr() == 0u) return 0u;
     static_cast<void>(dxgkrnl_.queue_dpc());
     return 1u;
@@ -175,9 +179,10 @@ void Adapter::dpc_routine()
 {
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::dpc_routine");
     uint32_t completed = 0u;
-    if (device_.constructed() && device_.object().harvest_control(completed) != Status::ok)
+    const bool harvest = device_.constructed() && present_;
+    if (harvest && device_.object().harvest_control(completed) != Status::ok)
         platform_.log("rvkgpu: control queue harvest failed in the DPC");
-    if (device_.constructed() && device_.object().harvest_cursor(completed) != Status::ok)
+    if (harvest && device_.object().harvest_cursor(completed) != Status::ok)
         platform_.log("rvkgpu: cursor queue harvest failed in the DPC");
     if (node_.complete(notification_) != Status::ok) platform_.log("rvkgpu: a completion was refused in the DPC");
     dxgkrnl_.notify_dpc();
@@ -626,6 +631,60 @@ int32_t Adapter::cancel_command(const DxgkargCancelCommandRecord *request)
     if (request == nullptr || contexts_.find(request->hContext) == nullptr)
         return NtStatus(Status::invalid_parameter).value();
     return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::notify_surprise_removal(int32_t removal_type)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::notify_surprise_removal");
+    if (removal_type != removal_hibernation && removal_type != removal_pnp_notify)
+        return NtStatus(Status::invalid_parameter).value();
+    present_ = false;
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::stop_device_and_release_post_display_ownership(uint32_t target, DxgkDisplayInformationRecord *display)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::stop_device_and_release_post_display_ownership");
+    if (display == nullptr || target >= DisplaySources::target_count) return NtStatus(Status::invalid_parameter).value();
+    *display = DxgkDisplayInformationRecord{};
+    return stop_device();
+}
+
+int32_t Adapter::get_child_container_id(uint32_t child, DxgkChildContainerIdRecord *container)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::get_child_container_id");
+    if (container == nullptr || child >= DisplaySources::target_count) return NtStatus(Status::invalid_parameter).value();
+    edid_.describe(*container);
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::system_display_enable(uint32_t, void *, uint32_t *, uint32_t *, int32_t *)
+{
+    platform_.require_irql_at_most(Irql::isr, "Adapter::system_display_enable");
+    return NtStatus(Status::not_supported).value();
+}
+
+void Adapter::system_display_write(const void *, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t)
+{
+    platform_.require_irql_at_most(Irql::isr, "Adapter::system_display_write");
+}
+
+int32_t Adapter::set_power_component_fstate(uint32_t, uint32_t)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "Adapter::set_power_component_fstate");
+    return NtStatus(Status::invalid_parameter).value();
+}
+
+int32_t Adapter::power_runtime_control_request(const void *, const void *, size_t, void *, size_t, size_t *)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "Adapter::power_runtime_control_request");
+    return NtStatus(Status::not_supported).value();
+}
+
+int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay(const void *)
+{
+    platform_.require_irql_at_most(Irql::isr, "Adapter::set_vidpn_source_address_with_multi_plane_overlay");
+    return NtStatus(Status::not_supported).value();
 }
 
 bool Adapter::invariants_hold() const

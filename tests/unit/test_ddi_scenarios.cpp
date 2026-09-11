@@ -20,6 +20,7 @@
 #include "../../src/core/ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_escape_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
+#include "../../src/core/ddi/dxgkarg_reset_engine_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_vidpn_hw_capability_record.hpp"
 #include "../../src/core/ddi_slot.hpp"
 #include "../../src/core/ddi_table.hpp"
@@ -741,4 +742,36 @@ TEST(ddi_scenario, the_committed_path_reports_no_driver_transformation_and_the_p
     CHECK_EQ(query.VidPnHWCaps, 0u); }
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
   CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- WDDM 1.2 (feature 015) ---------------------------------------------------- */
+
+TEST(ddi_scenario, an_engine_reset_then_the_device_disappears)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().SupportPerEngineTDR, 0u);
+  { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
+    CHECK_EQ(vidsch.create_context(), 0);
+    std::uint8_t command[16] = {};
+    CHECK_EQ(vidsch.render(command, sizeof command, 0u, 0), 0);
+    CHECK_EQ(vidsch.submit(), 0);
+    av::DxgkargResetEngineRecord reset = {0u, 0u, 0u};
+    const auto reset_engine = reinterpret_cast<std::int32_t (*)(void *, av::DxgkargResetEngineRecord *)>(
+        driver.table().routine(DdiSlot::DxgkDdiResetEngine));
+    CHECK_EQ(reset_engine(device.fdo().context(), &reset), 0);
+    CHECK_EQ(reset.LastAbortedFenceId, 1u);
+    vidsch.run_dpc();
+    CHECK_EQ(vidsch.completed(), 0u);
+    CHECK_EQ(vidsch.render(command, sizeof command, 0u, 0), 0);
+    CHECK_EQ(vidsch.submit(), 0);
+    vidsch.run_dpc();
+    CHECK_EQ(vidsch.completed(), vidsch.submitted()); }
+  device.function().common().delay_reset(100000u);
+  CHECK_EQ(device.fdo().surprise_removal(), 0);
+  CHECK_EQ(device.fdo().interrupt(1u), 0u);
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }

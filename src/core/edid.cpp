@@ -1,6 +1,7 @@
 #include "edid.hpp"
 
 #include "../proto/wire_writer.hpp"
+#include "ddi/dxgk_child_container_id_record.hpp"
 #include "ddi/dxgk_device_descriptor_record.hpp"
 #include "display_mode.hpp"
 
@@ -63,6 +64,15 @@ NtStatus Edid::copy(DxgkDeviceDescriptorRecord &descriptor) const
 }
 
 /* Every field is 8 bits plus a high nibble packed with its neighbour's. */
+void Edid::describe(DxgkChildContainerIdRecord &container) const
+{
+    platform_.require_irql_at_most(Irql::passive, "Edid::describe");
+    container.EldInfoPortId = 0u;
+    container.EldInfoManufacturerName =
+        static_cast<uint16_t>(bytes_[manufacturer_offset] | bytes_[manufacturer_offset + 1u] << 8u);
+    container.EldInfoProductCode = static_cast<uint16_t>(bytes_[product_offset] | bytes_[product_offset + 1u] << 8u);
+}
+
 void Edid::write_preferred_timing(const DisplayMode &mode, uint32_t width_mm, uint32_t height_mm)
 {
     const auto low_byte = [](uint32_t value) { return static_cast<uint8_t>(value & 0xFFu); };

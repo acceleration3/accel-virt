@@ -66,6 +66,12 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiCreateOverlay,       DdiSlot::DxgkDdiUpdateOverlay,
     DdiSlot::DxgkDdiFlipOverlay,         DdiSlot::DxgkDdiDestroyOverlay,
     DdiSlot::DxgkDdiQueryVidPnHWCapability,
+    DdiSlot::DxgkDdiSetPowerComponentFState, DdiSlot::DxgkDdiQueryDependentEngineGroup,
+    DdiSlot::DxgkDdiQueryEngineStatus,   DdiSlot::DxgkDdiResetEngine,
+    DdiSlot::DxgkDdiStopDeviceAndReleasePostDisplayOwnership, DdiSlot::DxgkDdiSystemDisplayEnable,
+    DdiSlot::DxgkDdiSystemDisplayWrite,  DdiSlot::DxgkDdiCancelCommand,
+    DdiSlot::DxgkDdiGetChildContainerId, DdiSlot::DxgkDdiPowerRuntimeControlRequest,
+    DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay, DdiSlot::DxgkDdiNotifySurpriseRemoval,
 };
 
 bool is_implemented(std::uint16_t index)

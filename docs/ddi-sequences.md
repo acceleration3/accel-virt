@@ -522,6 +522,35 @@ with no contract and stay NULL, as does `RenderKm`, which `DXGCONTEXT::Render`
 calls only for a GDI context - created only for a driver reporting
 `PresentationCaps.SupportKernelModeCommandBuffer`.
 
+## 4g. WDDM 1.2 (feature 015)
+
+Registered and tested, claimed by no capability until the adapter reports
+WDDM 1.2 (with GPU VA, feature 017): a 1.2 claim below `DXGKDDI_WDDMv1_2` fails
+`DXGADAPTER::Initialize`, and a full 1.2 adapter must also set
+`SupportDirectFlip`.
+
+- Per-engine recovery, as `basicrender.sys`: `QueryDependentEngineGroup` answers
+  `1 << NodeOrdinal`; `QueryEngineStatus` sets `Responsive`; `ResetEngine`
+  abandons the node's queue without a report, answers the fence that was
+  executing (the last completed one when idle) in `LastAbortedFenceId`, and
+  leaves the node accepting submissions; `CancelCommand` has nothing to free.
+  Only node 0, engine 0.
+- `NotifySurpriseRemoval` (called by `DpiFdoHandleSurpriseRemoval` when the
+  device is gone, before StopDevice): the ISR claims nothing, the DPC harvests
+  nothing, and stopping skips the transport reset a gone device cannot
+  acknowledge; the next StartDevice finds the device present again.
+- `StopDeviceAndReleasePostDisplayOwnership` (instead of StopDevice for a POST
+  display owner) stops the device and answers a zero `DXGK_DISPLAY_INFORMATION`,
+  which `DpiFdoStopDeviceAndReleasePostDisplayOwnership` accepts as no frame
+  buffer handed to the basic display driver: the scan-out is guest pages behind a
+  GPU address.
+- `GetChildContainerId` fills the ELD of child 0 from the synthetic EDID.
+- `SystemDisplayEnable` answers `STATUS_NOT_SUPPORTED`, so `DpiEnterSystemDisplay`
+  falls back to the POST adapter; `SystemDisplayWrite` is never reached.
+- `SetPowerComponentFState` refuses every index (no power component is
+  reported); `PowerRuntimeControlRequest` and
+  `SetVidPnSourceAddressWithMultiPlaneOverlay` answer `STATUS_NOT_SUPPORTED`.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the

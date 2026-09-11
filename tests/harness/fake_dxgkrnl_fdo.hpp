@@ -34,6 +34,9 @@ public:
     std::int32_t set_power_state(std::int32_t device_power_state);
     void         reset_device();
     std::int32_t stop_device();
+    /* DpiFdoHandleSurpriseRemoval with the device gone: NotifySurpriseRemoval
+     * (DxgkRemovalPnPNotify), then StopDevice if started. */
+    std::int32_t surprise_removal();
     /* DpiFdoHandleRemoveDevice: a started device is stopped first. */
     std::int32_t remove_device();
 

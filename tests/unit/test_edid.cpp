@@ -1,5 +1,6 @@
 #include "../../src/core/edid.hpp"
 #include "../../src/core/display_mode.hpp"
+#include "../../src/core/ddi/dxgk_child_container_id_record.hpp"
 #include "../../src/core/ddi/dxgk_device_descriptor_record.hpp"
 #include "../../src/core/nt_status.hpp"
 #include "../harness/mock_platform.hpp"
@@ -102,6 +103,21 @@ TEST(edid_copy, a_null_buffer_is_invalid)
   const Edid edid(platform, DisplayMode(1280u, 800u));
   DxgkDeviceDescriptorRecord descriptor = {0u, 1u, nullptr};
   CHECK_EQ(static_cast<std::uint32_t>(edid.copy(descriptor).value()), invalid_parameter); }
+
+TEST(edid_describe, fills_the_eld_from_the_block)
+{ MockPlatform platform;
+  const Edid edid(platform, DisplayMode(1280u, 800u));
+  av::DxgkChildContainerIdRecord container = {};
+  std::memset(&container, 0xEE, sizeof container);
+  edid.describe(container);
+  CHECK_EQ(container.EldInfoPortId, 0u);
+  CHECK_EQ(container.EldInfoManufacturerName, 0xCB4Au);
+  CHECK_EQ(container.EldInfoProductCode, 1u);
+  CHECK_EQ(container.ContainerId[0], 0xEEu);
+  platform.set_irql(Irql::dispatch);
+  edid.describe(container);
+  platform.set_irql(Irql::passive);
+  CHECK(platform.claim(Violation::irql_ceiling)); }
 
 TEST(edid_copy, is_passive_only)
 { MockPlatform platform;

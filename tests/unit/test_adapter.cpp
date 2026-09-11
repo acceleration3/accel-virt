@@ -6,6 +6,8 @@
 #include "../../src/core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
 #include "../../src/core/ddi/dxgkarg_get_scan_line_record.hpp"
 #include "../../src/core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
+#include "../../src/core/ddi/dxgk_child_container_id_record.hpp"
+#include "../../src/core/ddi/dxgk_display_information_record.hpp"
 #include "../../src/core/ddi/dxgkarg_cancel_command_record.hpp"
 #include "../../src/core/ddi/dxgkarg_present_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_dependent_engine_group_record.hpp"
@@ -755,6 +757,82 @@ TEST(adapter_cancel_command, succeeds_for_a_live_context_only)
   CHECK_EQ(nt(fixture.adapter().cancel_command(nullptr)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_notify_surprise_removal, nothing_touches_the_device_afterwards)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().notify_surprise_removal(1)), success);
+  fixture.function().common().delay_reset(100000u);   /* a gone device never acknowledges */
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(fixture.adapter().interrupt_routine(0u), 0u);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  const std::uint64_t before = fixture.platform().interrupt_time();
+  CHECK_EQ(nt(fixture.adapter().stop_device()), success);
+  CHECK_EQ(fixture.platform().interrupt_time(), before);
+  CHECK_EQ(fixture.platform().live_allocations(), 0u);
+  CHECK_EQ(fixture.dxgkrnl().live_mappings(), 0u); }
+
+TEST(adapter_notify_surprise_removal, a_new_start_finds_the_device_present_again)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().notify_surprise_removal(0)), success);
+  CHECK_EQ(nt(fixture.adapter().stop_device()), success);
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  CHECK_EQ(fixture.function().common().status(), 0u);
+  CHECK_EQ(nt(fixture.adapter().notify_surprise_removal(2)), invalid_parameter); }
+
+TEST(adapter_stop_device_and_release_post_display_ownership, stops_and_hands_over_no_frame_buffer)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkDisplayInformationRecord display;
+  std::memset(&display, 0xEE, sizeof display);
+  CHECK_EQ(nt(fixture.adapter().stop_device_and_release_post_display_ownership(1u, &display)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().stop_device_and_release_post_display_ownership(0u, nullptr)), invalid_parameter);
+  CHECK_EQ(fixture.function().common().status(), driver_ok_status);
+  CHECK_EQ(nt(fixture.adapter().stop_device_and_release_post_display_ownership(0u, &display)), success);
+  CHECK_EQ(display.Width, 0u);
+  CHECK(display.PhysicAddress == 0);
+  CHECK_EQ(fixture.function().common().status(), 0u);
+  CHECK_EQ(fixture.dxgkrnl().live_mappings(), 0u); }
+
+TEST(adapter_get_child_container_id, describes_the_synthetic_monitor)
+{ Fixture fixture;
+  av::DxgkChildContainerIdRecord container = {};
+  CHECK_EQ(nt(fixture.adapter().get_child_container_id(0u, &container)), success);
+  CHECK_EQ(container.EldInfoProductCode, 1u);
+  CHECK_EQ(nt(fixture.adapter().get_child_container_id(1u, &container)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().get_child_container_id(0u, nullptr)), invalid_parameter); }
+
+TEST(adapter, system_display_power_components_and_overlays_decline)
+{ Fixture fixture;
+  std::uint32_t width = 7u, height = 7u;
+  std::int32_t format = 7;
+  CHECK_EQ(nt(fixture.adapter().system_display_enable(0u, nullptr, &width, &height, &format)), not_supported);
+  CHECK_EQ(width, 7u);
+  fixture.adapter().system_display_write(nullptr, 1u, 1u, 4u, 0u, 0u);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().set_power_component_fstate(0u, 1u)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().power_runtime_control_request(nullptr, nullptr, 0u, nullptr, 0u, nullptr)),
+           not_supported);
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address_with_multi_plane_overlay(nullptr)), not_supported);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.platform().unclaimed_violations(), 0u); }
+
+TEST(adapter, the_win8_ddis_declare_their_ceilings)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.adapter().notify_surprise_removal(9));
+  static_cast<void>(fixture.adapter().stop_device_and_release_post_display_ownership(9u, nullptr));
+  static_cast<void>(fixture.adapter().get_child_container_id(9u, nullptr));
+  fixture.platform().set_irql(Irql::isr);
+  static_cast<void>(fixture.adapter().set_power_component_fstate(0u, 0u));
+  static_cast<void>(fixture.adapter().power_runtime_control_request(nullptr, nullptr, 0u, nullptr, 0u, nullptr));
+  fixture.platform().set_irql(Irql::passive);
+  for (int call = 0; call < 5; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
 
 TEST(adapter, the_engine_ddis_are_passive_only)
 { Fixture fixture;

@@ -12,7 +12,13 @@
 #include "../miniport_binding.hpp"
 #include "../synthetic_vsync.hpp"
 #include "d3dkmdt_vidpn_present_path_record.hpp"
+#include "dxgk_child_container_id_record.hpp"
 #include "dxgk_child_descriptor_record.hpp"
+#include "dxgk_display_information_record.hpp"
+#include "dxgkarg_cancel_command_record.hpp"
+#include "dxgkarg_query_dependent_engine_group_record.hpp"
+#include "dxgkarg_query_engine_status_record.hpp"
+#include "dxgkarg_reset_engine_record.hpp"
 #include "dxgkarg_commit_vidpn_record.hpp"
 #include "dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
 #include "dxgkarg_get_scan_line_record.hpp"
@@ -49,6 +55,7 @@
 #include "dxgkrnl_interface_record.hpp"
 #include "linked_device_record.hpp"
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace av {
@@ -121,6 +128,22 @@ int32_t AvDdiSetPalette(void *context, const void *request);
 int32_t AvDdiStopCapture(void *context, const void *request);
 int32_t AvDdiCreateOverlay(void *context, void *request);
 int32_t AvDdiQueryVidPnHWCapability(void *context, av::DxgkargQueryVidPnHwCapabilityRecord *request);
+int32_t AvDdiSetPowerComponentFState(void *context, uint32_t component, uint32_t fstate);
+int32_t AvDdiQueryDependentEngineGroup(void *context, av::DxgkargQueryDependentEngineGroupRecord *request);
+int32_t AvDdiQueryEngineStatus(void *context, av::DxgkargQueryEngineStatusRecord *request);
+int32_t AvDdiResetEngine(void *context, av::DxgkargResetEngineRecord *request);
+int32_t AvDdiStopDeviceAndReleasePostDisplayOwnership(void *context, uint32_t target,
+                                                      av::DxgkDisplayInformationRecord *display);
+int32_t AvDdiSystemDisplayEnable(void *context, uint32_t target, void *flags, uint32_t *width, uint32_t *height,
+                                 int32_t *format);
+void    AvDdiSystemDisplayWrite(void *context, const void *source, uint32_t width, uint32_t height, uint32_t stride,
+                                uint32_t x, uint32_t y);
+int32_t AvDdiCancelCommand(void *context, const av::DxgkargCancelCommandRecord *request);
+int32_t AvDdiGetChildContainerId(void *context, uint32_t child, av::DxgkChildContainerIdRecord *container);
+int32_t AvDdiPowerRuntimeControlRequest(void *context, const void *control_code, const void *input, size_t input_size,
+                                        void *output, size_t output_size, size_t *returned);
+int32_t AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay(void *context, const void *request);
+int32_t AvDdiNotifySurpriseRemoval(void *context, int32_t removal_type);
 /* An overlay handle this driver never creates: nothing behind it to reach. */
 int32_t AvDdiUpdateOverlay(void *overlay, const void *request);
 int32_t AvDdiFlipOverlay(void *overlay, const void *request);

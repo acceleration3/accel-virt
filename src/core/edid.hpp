@@ -12,6 +12,7 @@
 namespace av {
 
 class DisplayMode;
+struct DxgkChildContainerIdRecord;
 struct DxgkDeviceDescriptorRecord;
 
 class Edid {
@@ -25,9 +26,14 @@ public:
     /* Copies from DescriptorOffset up to DescriptorLength bytes, no further than
      * the end of the block, and answers the count copied in DescriptorLength. */
     NtStatus copy(DxgkDeviceDescriptorRecord &descriptor) const;
+    /* The ELD fields: the manufacturer id in the EDID's byte order, the product
+     * code, port 0. The container GUID is left as it is. */
+    void     describe(DxgkChildContainerIdRecord &container) const;
 
 private:
     static constexpr uint32_t timing_offset = 54u;
+    static constexpr uint32_t manufacturer_offset = 8u;
+    static constexpr uint32_t product_offset = 10u;
     static constexpr uint32_t descriptor_bytes = 18u;
     /* STATUS_MONITOR_NO_MORE_DESCRIPTOR_DATA */
     static constexpr uint32_t no_more_descriptor_data = 0xC01D0008u;

@@ -24,12 +24,15 @@
 #include "virtio_gpu_device.hpp"
 #include "virtio_pci_layout.hpp"
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace av {
 
 struct D3dkmdtVidPnPresentPathRecord;
+struct DxgkChildContainerIdRecord;
 struct DxgkChildDescriptorRecord;
+struct DxgkDisplayInformationRecord;
 struct DxgkChildStatusRecord;
 struct DxgkDeviceDescriptorRecord;
 struct DxgkrnlInterfaceRecord;
@@ -154,6 +157,21 @@ public:
     int32_t reset_engine(DxgkargResetEngineRecord *request);
     /* A buffer rendered but never submitted holds nothing of the driver's. */
     int32_t cancel_command(const DxgkargCancelCommandRecord *request);
+    /* The device is gone: nothing touches it again, and stopping does not wait on it. */
+    int32_t notify_surprise_removal(int32_t removal_type);
+    /* Stops the device; the scan-out is guest pages behind a GPU address, so no
+     * frame buffer is handed to the basic display driver. */
+    int32_t stop_device_and_release_post_display_ownership(uint32_t target, DxgkDisplayInformationRecord *display);
+    int32_t get_child_container_id(uint32_t child, DxgkChildContainerIdRecord *container);
+    /* No frame buffer to write at HIGH_LEVEL: dxgkrnl falls back to the POST adapter. */
+    int32_t system_display_enable(uint32_t target, void *flags, uint32_t *width, uint32_t *height, int32_t *format);
+    void    system_display_write(const void *source, uint32_t width, uint32_t height, uint32_t stride, uint32_t x,
+                                 uint32_t y);
+    /* No power component is reported. */
+    int32_t set_power_component_fstate(uint32_t component, uint32_t fstate);
+    int32_t power_runtime_control_request(const void *control_code, const void *input, size_t input_size,
+                                          void *output, size_t output_size, size_t *returned);
+    int32_t set_vidpn_source_address_with_multi_plane_overlay(const void *request);
 
     bool invariants_hold() const;
 
@@ -162,6 +180,7 @@ private:
     static constexpr uint32_t adapter_device_uid = 0xFFFFFFFFu;  /* DISPLAY_ADAPTER_HW_ID */
     enum : int32_t { power_unspecified = 0, power_d0 = 1, power_d3 = 4 };
     enum : int32_t { query_driver_caps = 1, query_segment4 = 11, query_wddm_device_caps = 29 };   /* DXGKQAITYPE_* */
+    enum : int32_t { removal_hibernation = 0, removal_pnp_notify = 1 };   /* DXGK_SURPRISE_REMOVAL_TYPE */
     enum : int32_t { interrupt_crtc_vsync = 3 };                          /* DXGK_INTERRUPT_CRTC_VSYNC */
     static constexpr uint32_t engine_responsive = 1u;   /* DXGK_ENGINESTATUS.Responsive */
     enum : int32_t { transformation_identity = 1 };   /* D3DKMDT_VPPS_IDENTITY, D3DKMDT_VPPR_IDENTITY */
@@ -190,6 +209,7 @@ private:
     SyntheticVsync                 vsync_;
     HardwareCursor                 cursor_;
     bool                           started_;
+    bool                           present_;
 
     friend struct AdapterProbe;
 };

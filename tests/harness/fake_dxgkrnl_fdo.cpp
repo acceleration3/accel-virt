@@ -141,6 +141,16 @@ std::int32_t FakeDxgkrnlFdo::stop_device()
     return reinterpret_cast<ContextOnly>(table_.routine(DdiSlot::DxgkDdiStopDevice))(context_);
 }
 
+std::int32_t FakeDxgkrnlFdo::surprise_removal()
+{
+    constexpr std::int32_t pnp_notify = 1;
+    platform_.set_irql(Irql::passive);
+    const std::int32_t status = reinterpret_cast<std::int32_t (*)(void *, std::int32_t)>(
+        table_.routine(DdiSlot::DxgkDdiNotifySurpriseRemoval))(context_, pnp_notify);
+    if (status < 0 || !started_) return status;
+    return stop_device();
+}
+
 std::int32_t FakeDxgkrnlFdo::remove_device()
 {
     platform_.set_irql(Irql::passive);

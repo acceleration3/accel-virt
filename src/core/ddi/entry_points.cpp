@@ -190,6 +190,49 @@ int32_t AvDdiCreateOverlay(void *context, void *request)
 int32_t AvDdiQueryVidPnHWCapability(void *context, av::DxgkargQueryVidPnHwCapabilityRecord *request)
 { return static_cast<av::Adapter *>(context)->query_vidpn_hw_capability(request); }
 
+int32_t AvDdiSetPowerComponentFState(void *context, uint32_t component, uint32_t fstate)
+{ return static_cast<av::Adapter *>(context)->set_power_component_fstate(component, fstate); }
+
+int32_t AvDdiQueryDependentEngineGroup(void *context, av::DxgkargQueryDependentEngineGroupRecord *request)
+{ return static_cast<av::Adapter *>(context)->query_dependent_engine_group(request); }
+
+int32_t AvDdiQueryEngineStatus(void *context, av::DxgkargQueryEngineStatusRecord *request)
+{ return static_cast<av::Adapter *>(context)->query_engine_status(request); }
+
+int32_t AvDdiResetEngine(void *context, av::DxgkargResetEngineRecord *request)
+{ return static_cast<av::Adapter *>(context)->reset_engine(request); }
+
+int32_t AvDdiStopDeviceAndReleasePostDisplayOwnership(void *context, uint32_t target,
+                                                      av::DxgkDisplayInformationRecord *display)
+{ return static_cast<av::Adapter *>(context)->stop_device_and_release_post_display_ownership(target, display); }
+
+int32_t AvDdiSystemDisplayEnable(void *context, uint32_t target, void *flags, uint32_t *width, uint32_t *height,
+                                 int32_t *format)
+{ return static_cast<av::Adapter *>(context)->system_display_enable(target, flags, width, height, format); }
+
+void AvDdiSystemDisplayWrite(void *context, const void *source, uint32_t width, uint32_t height, uint32_t stride,
+                             uint32_t x, uint32_t y)
+{ static_cast<av::Adapter *>(context)->system_display_write(source, width, height, stride, x, y); }
+
+int32_t AvDdiCancelCommand(void *context, const av::DxgkargCancelCommandRecord *request)
+{ return static_cast<av::Adapter *>(context)->cancel_command(request); }
+
+int32_t AvDdiGetChildContainerId(void *context, uint32_t child, av::DxgkChildContainerIdRecord *container)
+{ return static_cast<av::Adapter *>(context)->get_child_container_id(child, container); }
+
+int32_t AvDdiPowerRuntimeControlRequest(void *context, const void *control_code, const void *input, size_t input_size,
+                                        void *output, size_t output_size, size_t *returned)
+{
+    return static_cast<av::Adapter *>(context)->power_runtime_control_request(control_code, input, input_size, output,
+                                                                             output_size, returned);
+}
+
+int32_t AvDdiSetVidPnSourceAddressWithMultiPlaneOverlay(void *context, const void *request)
+{ return static_cast<av::Adapter *>(context)->set_vidpn_source_address_with_multi_plane_overlay(request); }
+
+int32_t AvDdiNotifySurpriseRemoval(void *context, int32_t removal_type)
+{ return static_cast<av::Adapter *>(context)->notify_surprise_removal(removal_type); }
+
 int32_t AvDdiUpdateOverlay(void *, const void *)
 { return av::NtStatus(av::Status::not_supported).value(); }
 
