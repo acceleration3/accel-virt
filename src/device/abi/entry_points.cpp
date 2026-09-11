@@ -22,6 +22,10 @@ int rvk_device_control(RvkDevice *device, void *request, uint32_t type)
 { return reinterpret_cast<av::DeviceInstance *>(device)->device().control(request, type) ? 1 : 0; }
 
 __attribute__((visibility("default")))
+uint32_t rvk_device_capsets(RvkDevice *device)
+{ return reinterpret_cast<av::DeviceInstance *>(device)->device().capsets(); }
+
+__attribute__((visibility("default")))
 void rvk_device_reset(RvkDevice *device)
 { reinterpret_cast<av::DeviceInstance *>(device)->device().reset(); }
 

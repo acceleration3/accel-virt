@@ -10,6 +10,9 @@
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
+#include "proto/context/context_setup.hpp"
+#include "proto/context/protocol_version.hpp"
+#include "proto/context/sub_api.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -144,6 +147,56 @@ TEST(virtio_gpu_rvk_control, answers_blob_requests_and_reset_releases_every_blob
   CHECK_EQ(host.live_host_memory(), 0u);
   CHECK(device.invariants_hold()); }
 
+TEST(virtio_gpu_rvk_control, an_unrealized_device_answers_nothing_and_offers_no_capset)
+{ MockHost host;
+  VirtioGpuRvk device(host);
+  CHECK_EQ(device.capsets(), 0u);
+  GpuRequestBuilder info(0x0108u);
+  info.u32(0u).u32(0u);
+  MockRequest request(info.bytes(), info.size());
+  CHECK(!device.control(&request, 0x0108u));
+  CHECK(!request.answered()); }
+
+TEST(virtio_gpu_rvk_control, answers_context_requests_and_reset_destroys_contexts_before_their_blobs)
+{ MockHost host;
+  host.add_gpu(first);
+  host.set_hostmem_size(0x10000u);
+  VirtioGpuRvk device(host);
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, message), Status::ok);
+  CHECK_EQ(device.capsets(), 1u);
+  GpuRequestBuilder info(0x0108u);
+  info.u32(0u).u32(0u);
+  MockRequest info_request(info.bytes(), info.size());
+  CHECK(device.control(&info_request, 0x0108u));
+  CHECK_EQ(info_request.response_type(), 0x1102u);
+  for (std::uint32_t id = 1u; id <= 2u; id++) {
+      GpuRequestBuilder blob(0x010Cu);
+      blob.u32(id).u32(2u).u32(1u).u32(0u).u64(0u).u64(0x2000u);
+      MockRequest blob_request(blob.bytes(), blob.size());
+      CHECK(device.control(&blob_request, 0x010Cu));
+  }
+  GpuRequestBuilder create(0x0200u);
+  create.context(7u).u32(0u).u32(0x72u).zeros(64u);
+  MockRequest create_request(create.bytes(), create.size());
+  CHECK(device.control(&create_request, 0x0200u));
+  CHECK_EQ(create_request.response_type(), 0x1100u);
+  std::uint8_t setup_bytes[av::ContextSetup::encoded_size] = {};
+  CHECK_STATUS(av::ContextSetup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 1u, 12u, 2u)
+                   .encode(setup_bytes, sizeof setup_bytes),
+               Status::ok);
+  GpuRequestBuilder submit(0x0207u);
+  submit.context(7u).u32(32u).u32(0u).append(setup_bytes, sizeof setup_bytes);
+  MockRequest submit_request(submit.bytes(), submit.size());
+  CHECK(device.control(&submit_request, 0x0207u));
+  CHECK_EQ(submit_request.response_type(), 0x1100u);
+  CHECK(device.invariants_hold());
+  device.reset();
+  CHECK_EQ(device.contexts(), 0u);
+  CHECK_EQ(device.blobs(), 0u);
+  CHECK(device.invariants_hold()); }
+
 TEST(virtio_gpu_rvk, lifecycle_is_main_loop_only)
 { MockHost host;
   host.add_gpu(first);
@@ -164,8 +217,8 @@ TEST(virtio_gpu_rvk, lifecycle_is_main_loop_only)
                Status::ok);
   host.join_thread(thread);
   /* realize and its binding, reset and both tables, create, destroy and its
-   * table, control and its commands */
-  for (int violation = 0; violation < 10; violation++) CHECK(host.claim(HostViolation::main_loop_required));
+   * table, and control, which an unrealized device answers no further */
+  for (int violation = 0; violation < 9; violation++) CHECK(host.claim(HostViolation::main_loop_required));
   CHECK_EQ(host.unclaimed_violations(), 0u);
   CHECK_EQ(host.logged(), 1u); }
 

@@ -95,13 +95,14 @@ TEST(rvk_device_abi, create_reset_and_destroy_through_the_c_entry_points)
   CHECK(rvk_device_create(&ops.table(), "gpu0", 0, error, sizeof error) == nullptr);
   CHECK_EQ(av::device_module.live(), 0u); }
 
-TEST(rvk_device_abi, rvk_device_control_answers_blob_requests_and_leaves_the_rest_to_the_base_class)
+TEST(rvk_device_abi, rvk_device_control_answers_blob_requests_and_leaves_the_rest_to_the_base_class_and_rvk_device_capsets_offers_one)
 { MockHost host; MockHostOps ops(host);
   host.add_gpu(gpu);
   host.set_hostmem_size(0x10000u);
   char error[96] = {};
   RvkDevice *const device = rvk_device_create(&ops.table(), "auto", 0, error, sizeof error);
   CHECK(device != nullptr);
+  CHECK_EQ(rvk_device_capsets(device), 1u);
   GpuRequestBuilder create(0x010Cu);
   create.u32(1u).u32(2u).u32(1u).u32(0u).u64(0u).u64(0x1000u);
   MockRequest blob(create.bytes(), create.size());

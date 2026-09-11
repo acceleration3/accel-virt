@@ -17,6 +17,10 @@ public:
 
     GpuRequestBuilder &u32(std::uint32_t value);
     GpuRequestBuilder &u64(std::uint64_t value);
+    GpuRequestBuilder &append(const std::uint8_t *bytes, std::size_t size);
+    GpuRequestBuilder &zeros(std::size_t size);
+    /* The header's context id. */
+    GpuRequestBuilder &context(std::uint32_t id);
     /* Cuts the request to its first `size` bytes. */
     GpuRequestBuilder &truncate(std::size_t size);
 

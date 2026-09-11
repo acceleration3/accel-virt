@@ -1,10 +1,11 @@
-/* One virtio-gpu-rvk device instance: the host GPU it is bound to and the
- * contexts the guest has created on it. The base virtio-gpu device in QEMU
+/* One virtio-gpu-rvk device instance: the host GPU it is bound to, the capset
+ * it offers, and the contexts and blobs the guest has created on it. The base virtio-gpu device in QEMU
  * handles the 2D protocol; this object owns what the base class does not. */
 #ifndef AV_VIRTIO_GPU_RVK_HPP
 #define AV_VIRTIO_GPU_RVK_HPP
 
 #include "core/support/status.hpp"
+#include "device/capset/device_capset.hpp"
 #include "device/context/device_context_table.hpp"
 #include "device/gpu/gpu_binding.hpp"
 #include "device/memory/blob_table.hpp"
@@ -30,8 +31,10 @@ public:
     /* Main loop: a virtio reset destroys every context and releases every blob. */
     void                 reset();
     /* Main loop. Whether the core answered the control request; false leaves it
-     * to the base class. */
+     * to the base class, as does every request to an unrealized device. */
     bool                 control(void *request, uint32_t type);
+    /* How many capsets the device offers: one once realized. */
+    uint32_t             capsets() const;
     uint32_t             blobs() const;
     [[nodiscard]] Status create_context(uint32_t id);
     [[nodiscard]] Status destroy_context(uint32_t id);
@@ -44,6 +47,7 @@ public:
 private:
     Host              &host_;
     GpuBinding         binding_;
+    DeviceCapset       capset_;
     /* Before the contexts, which unpin blobs as they are destroyed. */
     BlobTable          blobs_;
     DeviceContextTable contexts_;

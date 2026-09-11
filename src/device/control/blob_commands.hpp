@@ -33,7 +33,7 @@ public:
     BlobCommands &operator=(const BlobCommands &) = delete;
 
     /* Whether the core answered `request`; false leaves it to the base class. */
-    bool handle(ControlRequest &request, uint32_t type);
+    bool answer(ControlRequest &request, uint32_t type);
 
 private:
     static constexpr uint64_t no_context_object = 0u;
@@ -45,6 +45,8 @@ private:
     uint32_t create_host(uint32_t id, uint32_t flags, uint32_t entries, uint64_t size);
     void     map(ControlRequest &request, GpuResponse &response);
     uint32_t unmap(ControlRequest &request);
+    /* Whether the request named a blob: a pinned one is refused, not released. */
+    bool     unref(ControlRequest &request, GpuResponse &response);
     /* The resource a 32-byte request names, or 0 for a shorter one. */
     uint32_t named_resource(ControlRequest &request);
 

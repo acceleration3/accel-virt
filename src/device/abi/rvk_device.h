@@ -79,7 +79,10 @@ RvkDevice *rvk_device_create(const RvkHostOps *ops, const char *host_gpu, int ba
 /* Nonzero when the core answered the control request (a
  * struct virtio_gpu_ctrl_command *); zero leaves it to the base class. Main loop. */
 int rvk_device_control(RvkDevice *device, void *request, uint32_t type);
-/* A virtio reset: every context is destroyed. Main loop. */
+/* How many capsets the device offers; the glue offers VIRTIO_GPU_F_CONTEXT_INIT
+ * when there is one. Main loop. */
+uint32_t rvk_device_capsets(RvkDevice *device);
+/* A virtio reset: every context is destroyed, then every blob released. Main loop. */
 void rvk_device_reset(RvkDevice *device);
 /* Nonzero for a device this module never created. Main loop. */
 int rvk_device_destroy(RvkDevice *device);

@@ -23,11 +23,12 @@ public:
     std::uint32_t response_type() const;
     std::uint32_t response_u32(std::size_t offset) const;
     std::size_t   response_size() const;
+    const std::uint8_t *response_bytes() const;
 
 private:
     std::uint8_t *bytes_;
     std::size_t   size_;
-    std::uint8_t  response_[64];
+    std::uint8_t  response_[256];
     std::size_t   response_size_;
     bool          answered_;
 };

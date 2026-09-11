@@ -18,6 +18,7 @@ using av::ControlRequest;
 using av::GpuRequestBuilder;
 using av::MockHost;
 using av::MockRequest;
+using av::Status;
 
 namespace {
 
@@ -52,7 +53,7 @@ public:
         ControlRequest request(host_, &mock);
         std::uint32_t type = 0u;
         std::memcpy(&type, builder.bytes(), sizeof type);
-        if (!commands_.handle(request, type)) return mock.answered() ? 0xDEADu : 0u;
+        if (!commands_.answer(request, type)) return mock.answered() ? 0xDEADu : 0u;
         if (map_info != nullptr) *map_info = mock.response_u32(24u);
         return mock.response_type();
     }
@@ -60,7 +61,7 @@ public:
     {
         MockRequest mock(builder.bytes(), builder.size());
         ControlRequest request(host_, &mock);
-        return commands_.handle(request, type) ? mock.response_type() : 0u;
+        return commands_.answer(request, type) ? mock.response_type() : 0u;
     }
     MockHost  &host() { return host_; }
     BlobTable &blobs() { return blobs_; }
@@ -195,6 +196,17 @@ TEST(blob_commands_unref, releases_a_blob_mapped_or_not_and_leaves_other_resourc
   CHECK_EQ(fixture.host().live_host_memory(), 0u);
   CHECK_EQ(fixture.send(unref), 0u);                                          /* base class answers */
   CHECK_EQ(fixture.send(GpuRequestBuilder(BlobCommands::resource_unref).u32(2u)), 0u); }
+
+TEST(blob_commands_unref, a_blob_a_context_is_bound_to_is_refused_and_kept)
+{ Fixture fixture;
+  CHECK_EQ(fixture.send(create_blob(2u, host3d, mappable, 0u, 0u, 0x1000u)), ok_nodata);
+  CHECK_STATUS(fixture.blobs().pin(2u, 0u), Status::ok);
+  GpuRequestBuilder unref(BlobCommands::resource_unref);
+  unref.u32(2u).u32(0u);
+  CHECK_EQ(fixture.send(unref), err_invalid_parameter);
+  CHECK(fixture.blobs().contains(2u));
+  fixture.blobs().unpin(2u);
+  CHECK_EQ(fixture.send(unref), ok_nodata); }
 
 TEST(blob_commands, create_2d_on_a_blob_id_is_refused_and_everything_else_is_the_base_class_s)
 { Fixture fixture;

@@ -1,0 +1,264 @@
+/* The context commands the core answers, request byte by request byte: the
+ * capset queries, context creation and destruction, and context setup. */
+#include "core/support/status.hpp"
+#include "device/capset/device_capset.hpp"
+#include "device/context/device_context.hpp"
+#include "device/context/device_context_table.hpp"
+#include "device/control/context_commands.hpp"
+#include "device/control/control_request.hpp"
+#include "device/memory/blob_table.hpp"
+#include "harness/framework/test_registry.hpp"
+#include "harness/host/gpu_request_builder.hpp"
+#include "harness/host/host_violation.hpp"
+#include "harness/host/mock_host.hpp"
+#include "harness/host/mock_request.hpp"
+#include "proto/context/capset_info.hpp"
+#include "proto/context/context_setup.hpp"
+#include "proto/context/protocol_version.hpp"
+#include "proto/context/sub_api.hpp"
+#include "proto/virtio_gpu/context_request.hpp"
+
+#include <cstdint>
+#include <cstring>
+
+using av::BlobTable;
+using av::CapsetInfo;
+using av::ContextCommands;
+using av::ContextSetup;
+using av::ControlRequest;
+using av::DeviceCapset;
+using av::DeviceContext;
+using av::DeviceContextTable;
+using av::GpuRequestBuilder;
+using av::HostViolation;
+using av::MockHost;
+using av::MockRequest;
+using av::ProtocolVersion;
+using av::Status;
+using av::SubApi;
+
+namespace {
+
+constexpr std::uint32_t ok_nodata = 0x1100u, ok_capset_info = 0x1102u, ok_capset = 0x1103u,
+                        err_unanswered = 0u, err_out_of_memory = 0x1201u, err_invalid_resource_id = 0x1203u,
+                        err_invalid_context_id = 0x1204u, err_invalid_parameter = 0x1205u;
+constexpr std::uint32_t ring = 20u, fence = 21u, small_ring = 22u;
+constexpr std::uint8_t  uuid[16] = {0x7b, 0x7a};
+
+GpuRequestBuilder capset_info(std::uint32_t index)
+{
+    GpuRequestBuilder request(ContextCommands::get_capset_info);
+    request.u32(index).u32(0u);
+    return request;
+}
+
+GpuRequestBuilder capset(std::uint32_t id, std::uint32_t version)
+{
+    GpuRequestBuilder request(ContextCommands::get_capset);
+    request.u32(id).u32(version);
+    return request;
+}
+
+GpuRequestBuilder create(std::uint32_t id, std::uint32_t context_init = CapsetInfo::capset_id,
+                         std::uint32_t name_length = 6u)
+{
+    GpuRequestBuilder request(ContextCommands::ctx_create);
+    request.context(id).u32(name_length).u32(context_init).zeros(64u);
+    return request;
+}
+
+GpuRequestBuilder destroy(std::uint32_t id)
+{
+    GpuRequestBuilder request(ContextCommands::ctx_destroy);
+    request.context(id);
+    return request;
+}
+
+GpuRequestBuilder submit(std::uint32_t id, const ContextSetup &setup, std::uint32_t size = ContextSetup::encoded_size)
+{
+    std::uint8_t bytes[ContextSetup::encoded_size] = {};
+    static_cast<void>(setup.encode(bytes, sizeof bytes));
+    GpuRequestBuilder request(ContextCommands::submit_3d);
+    request.context(id).u32(size).u32(0u).append(bytes, sizeof bytes);
+    return request;
+}
+
+ContextSetup setup(std::uint32_t ring_id = ring, std::uint8_t order = 12u, std::uint16_t major = 1u)
+{
+    return ContextSetup(ProtocolVersion(major, 0u), SubApi::vulkan, ring_id, order, fence);
+}
+
+class Fixture {
+public:
+    Fixture() : blobs_(host_), contexts_(host_, blobs_), capset_(host_), commands_(host_, contexts_, capset_)
+    {
+        host_.add_gpu(uuid);
+        host_.set_hostmem_size(0x10000u);
+        capset_.describe(0u);
+        static_cast<void>(blobs_.create_host(ring, 0x2000u));
+        static_cast<void>(blobs_.create_host(fence, 0x1000u));
+        static_cast<void>(blobs_.create_host(small_ring, 0x1000u));
+    }
+
+    /* The response type, or 0 when the core left the request to the base class. */
+    std::uint32_t send(const GpuRequestBuilder &builder)
+    {
+        MockRequest mock(builder.bytes(), builder.size());
+        ControlRequest request(host_, &mock);
+        std::uint32_t type = 0u;
+        std::memcpy(&type, builder.bytes(), sizeof type);
+        if (!commands_.answer(request, type)) return err_unanswered;
+        std::memcpy(last_, mock.response_bytes(), mock.response_size());
+        last_size_ = mock.response_size();
+        return mock.response_type();
+    }
+    const std::uint8_t *last() const { return last_; }
+    std::size_t         last_size() const { return last_size_; }
+    MockHost           &host() { return host_; }
+    BlobTable          &blobs() { return blobs_; }
+    DeviceContextTable &contexts() { return contexts_; }
+
+private:
+    MockHost           host_;
+    BlobTable          blobs_;
+    DeviceContextTable contexts_;
+    DeviceCapset       capset_;
+    ContextCommands    commands_;
+    std::uint8_t       last_[256] = {};
+    std::size_t        last_size_ = 0u;
+};
+
+std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
+{
+    std::uint32_t value = 0u;
+    std::memcpy(&value, bytes + offset, sizeof value);
+    return value;
+}
+
+}  // namespace
+
+TEST(context_commands_capset_info, names_one_capset_at_index_zero)
+{ Fixture fixture;
+  CHECK_EQ(fixture.send(capset_info(0u)), ok_capset_info);
+  CHECK_EQ(fixture.last_size(), 40u);
+  CHECK_EQ(u32(fixture.last(), 24u), 0x72u);
+  CHECK_EQ(u32(fixture.last(), 28u), 1u);
+  CHECK_EQ(u32(fixture.last(), 32u), 128u);
+  CHECK_EQ(fixture.send(capset_info(1u)), err_invalid_parameter);
+  CHECK_EQ(fixture.send(capset_info(0u).truncate(31u)), err_invalid_parameter); }
+
+TEST(context_commands_capset, answers_the_described_capset_for_its_id_and_version_only)
+{ Fixture fixture;
+  CHECK_EQ(fixture.send(capset(0x72u, 1u)), ok_capset);
+  CHECK_EQ(fixture.last_size(), 152u);
+  CapsetInfo decoded;
+  CHECK_STATUS(decoded.decode(fixture.last() + 24u, CapsetInfo::encoded_size), Status::ok);
+  CHECK(decoded.offers(SubApi::vulkan));
+  CHECK(decoded.has_feature(CapsetInfo::feature_host_visible_memory));
+  CHECK(std::memcmp(decoded.gpu().uuid(), uuid, sizeof uuid) == 0);
+  CHECK_EQ(fixture.send(capset(0x04u, 1u)), err_invalid_parameter);
+  CHECK_EQ(fixture.send(capset(0x72u, 2u)), err_invalid_parameter);
+  CHECK_EQ(fixture.send(capset(0x72u, 1u).truncate(31u)), err_invalid_parameter); }
+
+TEST(context_commands_create, creates_a_context_on_the_rvk_capset)
+{ Fixture fixture;
+  CHECK_EQ(fixture.send(create(1u)), ok_nodata);
+  CHECK_EQ(fixture.send(create(2u, CapsetInfo::capset_id, av::ContextRequest::name_capacity)), ok_nodata);
+  CHECK_EQ(fixture.contexts().live(), 2u);
+  CHECK(fixture.contexts().invariants_hold()); }
+
+TEST(context_commands_create, refuses_other_capsets_long_names_and_ids_it_cannot_take)
+{ Fixture fixture;
+  CHECK_EQ(fixture.send(create(1u)), ok_nodata);
+  CHECK_EQ(fixture.send(create(1u)), err_invalid_context_id);
+  CHECK_EQ(fixture.send(create(0u)), err_invalid_context_id);
+  CHECK_EQ(fixture.send(create(2u, 0u)), err_invalid_parameter);              /* virgl's default */
+  CHECK_EQ(fixture.send(create(2u, 0x04u)), err_invalid_parameter);           /* venus */
+  CHECK_EQ(fixture.send(create(2u, 0x172u)), err_invalid_parameter);          /* reserved bits */
+  CHECK_EQ(fixture.send(create(2u, CapsetInfo::capset_id, 65u)), err_invalid_parameter);
+  CHECK_EQ(fixture.send(create(2u).truncate(95u)), err_invalid_parameter);
+  CHECK_EQ(fixture.contexts().live(), 1u);
+  fixture.host().fail_thread_start_at(1u);
+  CHECK_EQ(fixture.send(create(2u)), err_out_of_memory);
+  CHECK_EQ(fixture.contexts().live(), 1u); }
+
+TEST(context_commands_create, a_full_table_is_out_of_memory)
+{ Fixture fixture;
+  for (std::uint32_t id = 1u; id <= DeviceContextTable::max_contexts; id++) CHECK_EQ(fixture.send(create(id)), ok_nodata);
+  CHECK_EQ(fixture.send(create(1000u)), err_out_of_memory);
+  fixture.contexts().destroy_all(); }
+
+TEST(context_commands_destroy, destroys_a_live_context_only)
+{ Fixture fixture;
+  CHECK_EQ(fixture.send(create(3u)), ok_nodata);
+  CHECK_EQ(fixture.send(destroy(3u)), ok_nodata);
+  CHECK_EQ(fixture.send(destroy(3u)), err_invalid_context_id);
+  CHECK_EQ(fixture.send(destroy(0u)), err_invalid_context_id);
+  CHECK_EQ(fixture.send(destroy(3u).truncate(23u)), err_invalid_parameter);
+  CHECK_EQ(fixture.contexts().live(), 0u); }
+
+TEST(context_commands_submit, a_setup_binds_the_context_until_it_is_destroyed)
+{ Fixture fixture;
+  CHECK_EQ(fixture.send(create(4u)), ok_nodata);
+  CHECK_EQ(fixture.send(submit(4u, setup())), ok_nodata);
+  const DeviceContext *const context = fixture.contexts().find(4u);
+  CHECK(context != nullptr && context->binding().bound());
+  CHECK_EQ(context->binding().ring_resource(), ring);
+  CHECK_EQ(context->binding().fence_resource(), fence);
+  CHECK_EQ(context->binding().version().major_version(), 1u);
+  CHECK_STATUS(fixture.blobs().release(ring), Status::invalid_state);
+  CHECK_EQ(fixture.send(submit(4u, setup())), err_invalid_parameter);   /* already set up */
+  CHECK_EQ(fixture.send(destroy(4u)), ok_nodata);
+  CHECK_STATUS(fixture.blobs().release(ring), Status::ok);
+  CHECK_STATUS(fixture.blobs().release(fence), Status::ok); }
+
+TEST(context_commands_submit, refuses_every_setup_it_cannot_bind)
+{ Fixture fixture;
+  CHECK_EQ(fixture.send(create(5u)), ok_nodata);
+  std::uint8_t bad_magic[ContextSetup::encoded_size] = {};
+  static_cast<void>(setup().encode(bad_magic, sizeof bad_magic));
+  bad_magic[0] ^= 0xFFu;
+  GpuRequestBuilder malformed(ContextCommands::submit_3d);
+  malformed.context(5u).u32(ContextSetup::encoded_size).u32(0u).append(bad_magic, sizeof bad_magic);
+  struct Case {
+      GpuRequestBuilder request;
+      std::uint32_t     answer;
+  } cases[] = {
+      {submit(6u, setup()), err_invalid_context_id},
+      {submit(5u, setup()).truncate(31u), err_invalid_parameter},
+      {submit(5u, setup(), 31u), err_invalid_parameter},
+      {submit(5u, setup()).truncate(48u), err_invalid_parameter},        /* the buffer is not all there */
+      {malformed, err_invalid_parameter},
+      {submit(5u, setup(99u)), err_invalid_resource_id},
+      {submit(5u, setup(small_ring)), err_invalid_parameter},
+      {submit(5u, setup(ring, 12u, 2u)), err_invalid_parameter},        /* another major */
+  };
+  for (Case &c : cases) CHECK_EQ(fixture.send(c.request), c.answer);
+  CHECK(!fixture.contexts().find(5u)->binding().bound());
+  CHECK_EQ(fixture.send(submit(5u, setup())), ok_nodata); }
+
+TEST(context_commands, leaves_every_other_request_to_the_base_class)
+{ Fixture fixture;
+  CHECK_EQ(fixture.send(GpuRequestBuilder(0x0100u)), err_unanswered);
+  CHECK_EQ(fixture.send(GpuRequestBuilder(0x0202u).u32(1u).u32(0u)), err_unanswered); }
+
+TEST(context_commands, answer_is_main_loop_only)
+{ Fixture fixture;
+  struct Call {
+      MockHost        *host;
+      ContextCommands *commands;
+  };
+  DeviceCapset capset(fixture.host());
+  ContextCommands commands(fixture.host(), fixture.contexts(), capset);
+  Call call = {&fixture.host(), &commands};
+  void *thread = nullptr;
+  CHECK_STATUS(fixture.host().start_thread(
+                   [](void *context) {
+                       auto *const c = static_cast<Call *>(context);
+                       ControlRequest request(*c->host, nullptr);
+                       static_cast<void>(c->commands->answer(request, 0u));
+                   },
+                   &call, thread),
+               Status::ok);
+  fixture.host().join_thread(thread);
+  CHECK(fixture.host().claim(HostViolation::main_loop_required)); }

@@ -18,7 +18,7 @@ description: "Task list for feature 029: rvk capset and context lifetime"
 
 ## Phase 3: Commands
 
-- [ ] T003 Tests then `ContextCommands`, `VirtioGpuRvk` dispatch, `BlobCommands::answer`, `rvk_device_capsets`
+- [X] T003 Tests then `ContextCommands`, `VirtioGpuRvk` dispatch, `BlobCommands::answer`, `rvk_device_capsets`
 
 **Checkpoint**: commit.
 

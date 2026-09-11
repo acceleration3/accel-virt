@@ -13,18 +13,17 @@ namespace av {
 
 BlobCommands::BlobCommands(Host &host, BlobTable &blobs) : host_(host), blobs_(blobs) {}
 
-bool BlobCommands::handle(ControlRequest &request, uint32_t type)
+bool BlobCommands::answer(ControlRequest &request, uint32_t type)
 {
-    host_.require_main_loop("BlobCommands::handle");
+    host_.require_main_loop("BlobCommands::answer");
     GpuResponse response;
     switch (type) {
     case resource_create_blob: response.set(create(request)); break;
     case resource_map_blob: map(request, response); break;
     case resource_unmap_blob: response.set(unmap(request)); break;
     case set_scanout_blob: response.set(GpuResponse::err_invalid_parameter); break;
-    /* A base-class resource, or a short request the base class refuses, is not ours. */
     case resource_unref:
-        if (blobs_.release(named_resource(request)) != Status::ok) return false;
+        if (!unref(request, response)) return false;
         break;
     case resource_create_2d:
         if (!blobs_.contains(named_resource(request))) return false;
@@ -34,6 +33,16 @@ bool BlobCommands::handle(ControlRequest &request, uint32_t type)
     }
     request.respond(response);
     return true;
+}
+
+/* A base-class resource, or a short request the base class refuses, is not ours. */
+bool BlobCommands::unref(ControlRequest &request, GpuResponse &response)
+{
+    switch (blobs_.release(named_resource(request))) {
+    case Status::ok: return true;
+    case Status::invalid_state: response.set(GpuResponse::err_invalid_parameter); return true;
+    default: return false;
+    }
 }
 
 uint32_t BlobCommands::named_resource(ControlRequest &request)
