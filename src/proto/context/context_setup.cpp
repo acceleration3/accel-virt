@@ -7,12 +7,14 @@
 namespace av {
 
 ContextSetup::ContextSetup()
-    : version_(0u, 0u), sub_api_(0u), ring_resource_(0u), ring_order_(0u), fence_resource_(0u), doorbell_(0u) {}
+    : version_(0u, 0u), sub_api_(0u), ring_resource_(0u), ring_order_(0u), fence_resource_(0u), doorbell_(0u), reply_resource_(0u) {}
 
 ContextSetup::ContextSetup(const ProtocolVersion &version, SubApi sub_api, uint32_t ring_resource,
-                           uint8_t ring_order, uint32_t fence_resource, uint32_t doorbell)
+                           uint8_t ring_order, uint32_t fence_resource, uint32_t doorbell,
+                           uint32_t reply_resource)
     : version_(version), sub_api_(static_cast<uint32_t>(sub_api)), ring_resource_(ring_resource),
-      ring_order_(ring_order), fence_resource_(fence_resource), doorbell_(doorbell) {}
+      ring_order_(ring_order), fence_resource_(fence_resource), doorbell_(doorbell),
+      reply_resource_(reply_resource) {}
 
 const ProtocolVersion &ContextSetup::version() const        { return version_; }
 SubApi                 ContextSetup::sub_api() const        { return static_cast<SubApi>(sub_api_); }
@@ -20,6 +22,7 @@ uint32_t               ContextSetup::ring_resource() const  { return ring_resour
 uint8_t                ContextSetup::ring_order() const     { return ring_order_; }
 uint32_t               ContextSetup::fence_resource() const { return fence_resource_; }
 uint32_t               ContextSetup::doorbell() const       { return doorbell_; }
+uint32_t               ContextSetup::reply_resource() const { return reply_resource_; }
 
 Status ContextSetup::encode(uint8_t *bytes, size_t capacity) const
 {
@@ -34,7 +37,7 @@ Status ContextSetup::encode(uint8_t *bytes, size_t capacity) const
     writer.write_zeros(3u);
     writer.write_u32(fence_resource_);
     writer.write_u32(doorbell_);
-    writer.write_zeros(4u);
+    writer.write_u32(reply_resource_);
     return writer.status();
 }
 
@@ -43,8 +46,10 @@ bool ContextSetup::fields_valid() const
     const bool one_known_api = sub_api_ == static_cast<uint32_t>(SubApi::vulkan) ||
                                sub_api_ == static_cast<uint32_t>(SubApi::opengl) ||
                                sub_api_ == static_cast<uint32_t>(SubApi::opencl);
+    const bool distinct_reply = reply_resource_ == 0u ||
+                                (reply_resource_ != ring_resource_ && reply_resource_ != fence_resource_);
     return one_known_api && ring_resource_ != 0u && fence_resource_ != 0u &&
-           fence_resource_ != ring_resource_ && ring_order_ >= lowest_order &&
+           fence_resource_ != ring_resource_ && distinct_reply && ring_order_ >= lowest_order &&
            ring_order_ <= highest_order;
 }
 
@@ -62,7 +67,7 @@ Status ContextSetup::decode(const uint8_t *bytes, size_t length)
     reader.expect_zero(3u);
     candidate.fence_resource_ = reader.read_u32();
     candidate.doorbell_       = reader.read_u32();
-    reader.expect_zero(4u);
+    candidate.reply_resource_ = reader.read_u32();
     if (reader.status() != Status::ok) return reader.status();
     if (found_magic != magic || !candidate.fields_valid()) return Status::malformed;
     *this = candidate;

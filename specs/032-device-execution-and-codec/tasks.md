@@ -8,8 +8,8 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 1: Protocol
 
-- [ ] T001 [US3] Tests then the reply resource in `ContextSetup` (offset 28; 0 or distinct from ring and fence)
-- [ ] T002 [P] [US1] Tests then `CommandHeader` (8 bytes; size >= 8 in the low 24 bits, flags top 8 with bit 0 known; api = id >> 16) and `ReplyHeader` (32 bytes: `RVKY`, status, fence, size, required) in src/proto/submission/; fuzz_proto seeds
+- [X] T001 [US3] Tests then the reply resource in `ContextSetup` (offset 28; 0 or distinct from ring and fence)
+- [X] T002 [P] [US1] Tests then `CommandHeader` (8 bytes; size >= 8 in the low 24 bits, flags top 8 with bit 0 known; api = id >> 16) and `ReplyHeader` (32 bytes: `RVKY`, status, fence, size, required) in src/proto/submission/; fuzz_proto seeds
 
 **Checkpoint**: commit.
 

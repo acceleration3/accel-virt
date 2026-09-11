@@ -88,7 +88,7 @@ GpuRequestBuilder submit(std::uint32_t id, const ContextSetup &setup, std::uint3
 ContextSetup setup(std::uint32_t ring_id = ring, std::uint8_t order = 12u, std::uint16_t major = 1u,
                    std::uint32_t doorbell = 0u)
 {
-    return ContextSetup(ProtocolVersion(major, 0u), SubApi::vulkan, ring_id, order, fence, doorbell);
+    return ContextSetup(ProtocolVersion(major, 0u), SubApi::vulkan, ring_id, order, fence, doorbell, 0u);
 }
 
 class Fixture {

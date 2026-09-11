@@ -26,7 +26,7 @@ namespace {
 
 ContextSetup sample()
 {
-    return ContextSetup(ProtocolVersion(1u, 0u), SubApi::opengl, 17u, 16u, 18u, 5u);
+    return ContextSetup(ProtocolVersion(1u, 0u), SubApi::opengl, 17u, 16u, 18u, 5u, 19u);
 }
 
 CapsetInfo offering(std::uint32_t sub_apis)
@@ -72,7 +72,7 @@ TEST(context_setup_encode, places_every_field_at_its_offset)
   CHECK(layout.at(17u, 3u) == 0u);
   CHECK(layout.at(20u, 4u) == 18u);
   CHECK(layout.at(24u, 4u) == 5u);
-  CHECK(layout.at(28u, 4u) == 0u); }
+  CHECK(layout.at(28u, 4u) == 19u); }
 
 TEST(context_setup, round_trips_through_its_encoding)
 { Encoded encoded(sample());
@@ -83,6 +83,7 @@ TEST(context_setup, round_trips_through_its_encoding)
   CHECK_EQ(decoded.ring_order(), 16u);
   CHECK_EQ(decoded.fence_resource(), 18u);
   CHECK_EQ(decoded.doorbell(), 5u);
+  CHECK_EQ(decoded.reply_resource(), 19u);
   CHECK_EQ(decoded.version().major_version(), 1u);
   Encoded again(decoded);
   CHECK(std::memcmp(again.bytes(), encoded.bytes(), ContextSetup::encoded_size) == 0); }
@@ -99,8 +100,8 @@ TEST(context_setup_decode, rejects_each_malformed_field)
       {16u, 25u},    /* order above 24 */
       {18u, 1u},     /* reserved */
       {20u, 17u},    /* fence resource equals ring resource */
-      {28u, 1u},     /* reserved u32 */
-      {31u, 0x80u},  /* reserved u32, top byte */
+      {28u, 17u},    /* reply resource equals ring resource */
+      {28u, 18u},    /* reply resource equals fence resource */
   };
   for (const Case &c : cases) {
       Encoded encoded(sample());
@@ -110,9 +111,15 @@ TEST(context_setup_decode, rejects_each_malformed_field)
   } }
 
 TEST(context_setup_decode, a_zero_fence_resource_is_malformed)
-{ Encoded encoded(ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, 5u, 12u, 0u, 0u));
+{ Encoded encoded(ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, 5u, 12u, 0u, 0u, 0u));
   ContextSetup decoded;
   CHECK_STATUS(decoded.decode(encoded.bytes(), ContextSetup::encoded_size), Status::malformed); }
+
+TEST(context_setup_decode, no_reply_resource_is_accepted)
+{ Encoded encoded(ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, 5u, 12u, 6u, 0u, 0u));
+  ContextSetup decoded;
+  CHECK_STATUS(decoded.decode(encoded.bytes(), ContextSetup::encoded_size), Status::ok);
+  CHECK_EQ(decoded.reply_resource(), 0u); }
 
 TEST(context_setup_decode, a_rejected_setup_leaves_the_destination_unchanged)
 { Encoded encoded(sample());
@@ -126,24 +133,24 @@ TEST(context_setup_validate_against, accepts_what_the_capset_offers)
 { CHECK_STATUS(sample().validate_against(offering(0x2u)), Status::ok); }
 
 TEST(context_setup_validate_against, rejects_a_different_major)
-{ const ContextSetup setup(ProtocolVersion(2u, 0u), SubApi::opengl, 17u, 16u, 18u, 0u);
+{ const ContextSetup setup(ProtocolVersion(2u, 0u), SubApi::opengl, 17u, 16u, 18u, 0u, 0u);
   CHECK_STATUS(setup.validate_against(offering(0x7u)), Status::not_supported); }
 
 TEST(context_setup_validate_against, rejects_a_sub_api_the_capset_lacks)
 { CHECK_STATUS(sample().validate_against(offering(0x5u)), Status::not_supported); }
 
 TEST(context_setup_validate_against, rejects_a_ring_order_outside_the_capset_range)
-{ const ContextSetup setup(ProtocolVersion(1u, 0u), SubApi::opengl, 17u, 22u, 18u, 0u);
+{ const ContextSetup setup(ProtocolVersion(1u, 0u), SubApi::opengl, 17u, 22u, 18u, 0u, 0u);
   CHECK_STATUS(setup.validate_against(offering(0x7u)), Status::not_supported); }
 
 /* One doorbell page per context the capset allows: offering() allows 8. */
 TEST(context_setup_validate_against, accepts_the_last_doorbell_the_capset_allows)
-{ const ContextSetup setup(ProtocolVersion(1u, 0u), SubApi::opengl, 17u, 16u, 18u, 7u);
+{ const ContextSetup setup(ProtocolVersion(1u, 0u), SubApi::opengl, 17u, 16u, 18u, 7u, 0u);
   CHECK_STATUS(setup.validate_against(offering(0x2u)), Status::ok); }
 
 TEST(context_setup_validate_against, rejects_a_doorbell_past_the_capset_contexts)
-{ const ContextSetup at_count(ProtocolVersion(1u, 0u), SubApi::opengl, 17u, 16u, 18u, 8u);
-  const ContextSetup far(ProtocolVersion(1u, 0u), SubApi::opengl, 17u, 16u, 18u, 0xFFFFFFFFu);
+{ const ContextSetup at_count(ProtocolVersion(1u, 0u), SubApi::opengl, 17u, 16u, 18u, 8u, 0u);
+  const ContextSetup far(ProtocolVersion(1u, 0u), SubApi::opengl, 17u, 16u, 18u, 0xFFFFFFFFu, 0u);
   CHECK_STATUS(at_count.validate_against(offering(0x2u)), Status::not_supported);
   CHECK_STATUS(far.validate_against(offering(0x2u)), Status::not_supported); }
 
@@ -162,7 +169,7 @@ TEST(context_setup_decode, survives_the_hostile_sweep)
 TEST(context_setup_decode, accepts_each_sub_api)
 { const SubApi apis[] = {SubApi::vulkan, SubApi::opengl, SubApi::opencl};
   for (const SubApi api : apis) {
-      Encoded encoded(ContextSetup(ProtocolVersion(1u, 0u), api, 3u, 12u, 4u, 63u));
+      Encoded encoded(ContextSetup(ProtocolVersion(1u, 0u), api, 3u, 12u, 4u, 63u, 9u));
       ContextSetup decoded;
       CHECK_STATUS(decoded.decode(encoded.bytes(), ContextSetup::encoded_size), Status::ok);
       CHECK(decoded.sub_api() == api);

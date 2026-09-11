@@ -104,7 +104,7 @@ TEST(device_context_table_holds_doorbell, only_a_bound_context_holds_its_doorbel
   const std::uint8_t uuid[av::GpuIdentity::uuid_bytes] = {};
   const av::CapsetInfo capset(av::ProtocolVersion(1u, 0u), 1u, 64u, 12u, 24u, 0u,
                               av::GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, ""));
-  const av::ContextSetup setup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 1u, 12u, 2u, 5u);
+  const av::ContextSetup setup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 1u, 12u, 2u, 5u, 0u);
   CHECK_STATUS(table.find(2u)->bind(setup, capset), Status::ok);
   CHECK(table.holds_doorbell(5u));
   CHECK(!table.holds_doorbell(0u));

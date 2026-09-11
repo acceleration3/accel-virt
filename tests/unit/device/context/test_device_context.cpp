@@ -68,7 +68,7 @@ CapsetInfo capset()
 
 ContextSetup setup(std::uint32_t doorbell = 3u)
 {
-    return ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, ring, 12u, fence, doorbell);
+    return ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, ring, 12u, fence, doorbell, 0u);
 }
 
 /* A guest-backed ring the test writes as the guest, and a host fence blob. */

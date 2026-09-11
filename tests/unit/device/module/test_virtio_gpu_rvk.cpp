@@ -198,7 +198,7 @@ TEST(virtio_gpu_rvk_control, answers_context_requests_and_reset_destroys_context
   CHECK(device.control(&create_request, 0x0200u));
   CHECK_EQ(create_request.response_type(), 0x1100u);
   std::uint8_t setup_bytes[av::ContextSetup::encoded_size] = {};
-  CHECK_STATUS(av::ContextSetup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 1u, 12u, 2u, 0u)
+  CHECK_STATUS(av::ContextSetup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 1u, 12u, 2u, 0u, 0u)
                    .encode(setup_bytes, sizeof setup_bytes),
                Status::ok);
   GpuRequestBuilder submit(0x0207u);

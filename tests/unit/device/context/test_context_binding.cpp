@@ -46,7 +46,7 @@ ContextSetup setup(std::uint32_t ring_id = ring, std::uint32_t fence_id = fence,
                    ProtocolVersion version = ProtocolVersion(1u, 0u), SubApi api = SubApi::vulkan,
                    std::uint32_t doorbell = 9u)
 {
-    return ContextSetup(version, api, ring_id, order, fence_id, doorbell);
+    return ContextSetup(version, api, ring_id, order, fence_id, doorbell, 0u);
 }
 
 class Fixture {

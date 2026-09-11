@@ -7,6 +7,8 @@
 #include "proto/context/context_setup.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/submission/batch_header.hpp"
+#include "proto/submission/command_header.hpp"
+#include "proto/submission/reply_header.hpp"
 #include "proto/submission/fence_page.hpp"
 #include "proto/submission/fence_progress.hpp"
 #include "proto/submission/ring_header.hpp"
@@ -71,7 +73,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     if (size == 0u) return 0;
     const std::uint8_t *payload = data + 1;
     const std::size_t length = size - 1u;
-    switch (data[0] % 9u) {
+    switch (data[0] % 11u) {
     case 0: round_trip<av::CapsetInfo>(payload, length); break;
     case 1: round_trip<av::ContextSetup>(payload, length); break;
     case 2: round_trip<av::RingHeader>(payload, length); break;
@@ -80,6 +82,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     case 5: ring_sequence(payload, length); break;
     case 6: fence_sequence(payload, length); break;
     case 8: round_trip<av::BatchHeader>(payload, length); break;
+    case 9: round_trip<av::CommandHeader>(payload, length); break;
+    case 10: round_trip<av::ReplyHeader>(payload, length); break;
     default: round_trip<av::AllocationDescriptor>(payload, length); break;
     }
     return 0;

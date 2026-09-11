@@ -1,4 +1,4 @@
-/* Binds a new context to its ring, fence page and doorbell (docs/protocol.md). */
+/* Binds a new context to its ring, fence page, doorbell and reply slot (docs/protocol.md). */
 #ifndef AV_CONTEXT_SETUP_HPP
 #define AV_CONTEXT_SETUP_HPP
 
@@ -19,7 +19,7 @@ public:
 
     ContextSetup();
     ContextSetup(const ProtocolVersion &version, SubApi sub_api, uint32_t ring_resource,
-                 uint8_t ring_order, uint32_t fence_resource, uint32_t doorbell);
+                 uint8_t ring_order, uint32_t fence_resource, uint32_t doorbell, uint32_t reply_resource);
 
     const ProtocolVersion &version() const;
     SubApi                 sub_api() const;
@@ -27,6 +27,8 @@ public:
     uint8_t                ring_order() const;
     uint32_t               fence_resource() const;
     uint32_t               doorbell() const;
+    /* 0 when the context sends no command that generates a reply. */
+    uint32_t               reply_resource() const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
     /* Checks what the bytes alone can prove; unchanged unless ok. */
@@ -48,6 +50,7 @@ private:
     uint8_t         ring_order_;
     uint32_t        fence_resource_;
     uint32_t        doorbell_;
+    uint32_t        reply_resource_;
 };
 
 }  // namespace av
