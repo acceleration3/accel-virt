@@ -65,6 +65,7 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiSetPalette,          DdiSlot::DxgkDdiStopCapture,
     DdiSlot::DxgkDdiCreateOverlay,       DdiSlot::DxgkDdiUpdateOverlay,
     DdiSlot::DxgkDdiFlipOverlay,         DdiSlot::DxgkDdiDestroyOverlay,
+    DdiSlot::DxgkDdiQueryVidPnHWCapability,
 };
 
 bool is_implemented(std::uint16_t index)

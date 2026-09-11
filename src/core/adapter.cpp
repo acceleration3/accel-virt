@@ -28,6 +28,7 @@
 #include "ddi/dxgkarg_get_scan_line_record.hpp"
 #include "debug_report.hpp"
 #include "ddi/dxgkarg_present_record.hpp"
+#include "ddi/dxgkarg_query_vidpn_hw_capability_record.hpp"
 #include "ddi/dxgkarg_set_pointer_position_record.hpp"
 #include "ddi/dxgkarg_set_pointer_shape_record.hpp"
 #include "ddi/dxgkarg_set_vidpn_source_address_record.hpp"
@@ -576,6 +577,16 @@ int32_t Adapter::create_overlay(void *)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_overlay");
     return NtStatus(Status::not_supported).value();
+}
+
+int32_t Adapter::query_vidpn_hw_capability(DxgkargQueryVidPnHwCapabilityRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::query_vidpn_hw_capability");
+    if (request == nullptr || request->hFunctionalVidPn == nullptr ||
+        request->SourceId >= DisplaySources::source_count || request->TargetId >= DisplaySources::target_count)
+        return NtStatus(Status::invalid_parameter).value();
+    request->VidPnHWCaps = 0u;
+    return NtStatus(Status::ok).value();
 }
 
 bool Adapter::invariants_hold() const

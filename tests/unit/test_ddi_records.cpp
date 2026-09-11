@@ -26,6 +26,7 @@
 #include "../../src/core/ddi/dxgkarg_query_current_fence_record.hpp"
 #include "../../src/core/ddi/dxgkarg_render_record.hpp"
 #include "../../src/core/ddi/dxgkarg_present_record.hpp"
+#include "../../src/core/ddi/dxgkarg_query_vidpn_hw_capability_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_pointer_position_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_pointer_shape_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
@@ -233,3 +234,9 @@ TEST(ddi_records, pointer_records_match_the_x64_layout)
   CHECK_EQ(offsetof(av::DxgkargSetPointerShapeRecord, YHot), 0x24u);
   CHECK_EQ(sizeof(av::DxgkargSetPointerPositionRecord), 0x10u);
   CHECK_EQ(offsetof(av::DxgkargSetPointerPositionRecord, Flags), 0x0Cu); }
+
+/* WDDM 1.1 (feature 014). */
+TEST(ddi_records, query_vidpn_hw_capability_record_matches_the_x64_layout)
+{ CHECK_EQ(sizeof(av::DxgkargQueryVidPnHwCapabilityRecord), 0x18u);
+  CHECK_EQ(offsetof(av::DxgkargQueryVidPnHwCapabilityRecord, TargetId), 0x0Cu);
+  CHECK_EQ(offsetof(av::DxgkargQueryVidPnHwCapabilityRecord, VidPnHWCaps), 0x10u); }

@@ -55,6 +55,7 @@
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
 #include "ddi/dxgkarg_present_record.hpp"
+#include "ddi/dxgkarg_query_vidpn_hw_capability_record.hpp"
 #include "ddi/dxgkarg_set_pointer_position_record.hpp"
 #include "ddi/dxgkarg_set_pointer_shape_record.hpp"
 #include "ddi/dxgkarg_set_vidpn_source_address_record.hpp"
@@ -533,6 +534,13 @@ AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, DriverPrivateDataSize, DXGKAR
                DriverPrivateDataSize);
 AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, pDriverPrivateData, DXGKARG_SETVIDPNSOURCEADDRESS,
                pDriverPrivateData);
+
+AV_SAME_SIZE(DxgkargQueryVidPnHwCapabilityRecord, DXGKARG_QUERYVIDPNHWCAPABILITY);
+AV_SAME_OFFSET(DxgkargQueryVidPnHwCapabilityRecord, hFunctionalVidPn, DXGKARG_QUERYVIDPNHWCAPABILITY, hFunctionalVidPn);
+AV_SAME_OFFSET(DxgkargQueryVidPnHwCapabilityRecord, SourceId, DXGKARG_QUERYVIDPNHWCAPABILITY, SourceId);
+AV_SAME_OFFSET(DxgkargQueryVidPnHwCapabilityRecord, TargetId, DXGKARG_QUERYVIDPNHWCAPABILITY, TargetId);
+AV_SAME_OFFSET(DxgkargQueryVidPnHwCapabilityRecord, VidPnHWCaps, DXGKARG_QUERYVIDPNHWCAPABILITY, VidPnHWCaps);
+static_assert(sizeof(D3DKMDT_VIDPN_HW_CAPABILITY) == sizeof(uint32_t), "VidPnHWCaps is one UINT");
 
 AV_SAME_SIZE(DxgkargSetPointerShapeRecord, DXGKARG_SETPOINTERSHAPE);
 AV_SAME_OFFSET(DxgkargSetPointerShapeRecord, Flags, DXGKARG_SETPOINTERSHAPE, Flags);

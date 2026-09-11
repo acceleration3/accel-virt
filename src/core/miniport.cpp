@@ -74,6 +74,7 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiUpdateOverlay, reinterpret_cast<DdiRoutine>(&AvDdiUpdateOverlay)},
         {DdiSlot::DxgkDdiFlipOverlay, reinterpret_cast<DdiRoutine>(&AvDdiFlipOverlay)},
         {DdiSlot::DxgkDdiDestroyOverlay, reinterpret_cast<DdiRoutine>(&AvDdiDestroyOverlay)},
+        {DdiSlot::DxgkDdiQueryVidPnHWCapability, reinterpret_cast<DdiRoutine>(&AvDdiQueryVidPnHWCapability)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

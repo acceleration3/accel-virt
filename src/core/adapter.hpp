@@ -58,6 +58,7 @@ struct DxgkargSetPointerShapeRecord;
 struct DxgkargSetVidPnSourceAddressRecord;
 struct DxgkargSetVidPnSourceVisibilityRecord;
 struct DxgkargQueryCurrentFenceRecord;
+struct DxgkargQueryVidPnHwCapabilityRecord;
 struct DxgkargRenderRecord;
 struct DxgkargSetDisplayPrivateDriverFormatRecord;
 struct DxgkargSubmitCommandRecord;
@@ -141,6 +142,8 @@ public:
     int32_t set_palette(const void *request);
     int32_t stop_capture(const void *request);
     int32_t create_overlay(void *request);
+    /* The driver itself rotates, scales, clones and converts nothing. */
+    int32_t query_vidpn_hw_capability(DxgkargQueryVidPnHwCapabilityRecord *request);
 
     bool invariants_hold() const;
 

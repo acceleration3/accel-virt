@@ -187,6 +187,9 @@ int32_t AvDdiStopCapture(void *context, const void *request)
 int32_t AvDdiCreateOverlay(void *context, void *request)
 { return static_cast<av::Adapter *>(context)->create_overlay(request); }
 
+int32_t AvDdiQueryVidPnHWCapability(void *context, av::DxgkargQueryVidPnHwCapabilityRecord *request)
+{ return static_cast<av::Adapter *>(context)->query_vidpn_hw_capability(request); }
+
 int32_t AvDdiUpdateOverlay(void *, const void *)
 { return av::NtStatus(av::Status::not_supported).value(); }
 

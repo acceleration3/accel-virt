@@ -510,6 +510,18 @@ receive a handle the driver never creates and touch nothing. The render core
 is still created: with `NumberOfSwizzlingRanges` and `MaxOverlays` zero, nothing
 calls them.
 
+## 4f. WDDM 1.1 (feature 014)
+
+`DxgkDdiQueryVidPnHWCapability` (PASSIVE) answers a `D3DKMDT_VIDPN_HW_CAPABILITY`
+of 0 for source 0 and target 0 of a non-null functional VidPn: the driver
+performs no rotation, scaling, cloning, colour conversion, linked-adapter or
+remote output itself. `DescribePageTable`, `UpdatePageTable`,
+`UpdatePageDirectory`, `MovePageDirectory`, `SubmitRender` and
+`CreateAllocation2` are `PVOID` placeholders in `DRIVER_INITIALIZATION_DATA`
+with no contract and stay NULL, as does `RenderKm`, which `DXGCONTEXT::Render`
+calls only for a GDI context - created only for a driver reporting
+`PresentationCaps.SupportKernelModeCommandBuffer`.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the

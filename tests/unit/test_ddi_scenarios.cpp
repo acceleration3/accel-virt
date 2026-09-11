@@ -20,6 +20,7 @@
 #include "../../src/core/ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_escape_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
+#include "../../src/core/ddi/dxgkarg_query_vidpn_hw_capability_record.hpp"
 #include "../../src/core/ddi_slot.hpp"
 #include "../../src/core/ddi_table.hpp"
 #include "../../src/core/driver_image.hpp"
@@ -714,4 +715,30 @@ TEST(ddi_scenario, the_pointer_reaches_the_cursor_queue_and_the_legacy_surface_d
            not_supported);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- WDDM 1.1 (feature 014) ---------------------------------------------------- */
+
+TEST(ddi_scenario, the_committed_path_reports_no_driver_transformation_and_the_placeholders_stay_empty)
+{ LoadedDriver driver;
+  FakeDxgkrnl dxgkrnl;
+  CHECK_STATUS(dxgkrnl.initialize(&driver.table()), Status::ok);
+  const DdiSlot skipped[] = {DdiSlot::DxgkDdiDescribePageTable, DdiSlot::DxgkDdiUpdatePageTable,
+                             DdiSlot::DxgkDdiUpdatePageDirectory, DdiSlot::DxgkDdiMovePageDirectory,
+                             DdiSlot::DxgkDdiSubmitRender, DdiSlot::DxgkDdiCreateAllocation2,
+                             DdiSlot::DxgkDdiRenderKm};
+  for (DdiSlot slot : skipped) CHECK(driver.table().routine(slot) == nullptr);
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  av::FakeDisplayModeManager dmm(driver.platform(), driver.table(), device.fdo().context());
+  { av::FakeVidPn vidpn;
+    CHECK_EQ(dmm.set_mode(vidpn, 800u, 600u), 0);
+    av::DxgkargQueryVidPnHwCapabilityRecord query = {&vidpn, 0u, 0u, 0xFFu, 0u};
+    const auto routine = reinterpret_cast<std::int32_t (*)(void *, av::DxgkargQueryVidPnHwCapabilityRecord *)>(
+        driver.table().routine(DdiSlot::DxgkDdiQueryVidPnHWCapability));
+    CHECK_EQ(routine(device.fdo().context(), &query), 0);
+    CHECK_EQ(query.VidPnHWCaps, 0u); }
+  CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
+  CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }

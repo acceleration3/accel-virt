@@ -18,6 +18,7 @@
 #include "dxgkarg_get_scan_line_record.hpp"
 #include "dxgkarg_is_supported_vidpn_record.hpp"
 #include "dxgkarg_present_record.hpp"
+#include "dxgkarg_query_vidpn_hw_capability_record.hpp"
 #include "dxgkarg_set_pointer_position_record.hpp"
 #include "dxgkarg_set_pointer_shape_record.hpp"
 #include "dxgkarg_set_vidpn_source_address_record.hpp"
@@ -119,6 +120,7 @@ int32_t AvDdiReleaseSwizzlingRange(void *context, const void *request);
 int32_t AvDdiSetPalette(void *context, const void *request);
 int32_t AvDdiStopCapture(void *context, const void *request);
 int32_t AvDdiCreateOverlay(void *context, void *request);
+int32_t AvDdiQueryVidPnHWCapability(void *context, av::DxgkargQueryVidPnHwCapabilityRecord *request);
 /* An overlay handle this driver never creates: nothing behind it to reach. */
 int32_t AvDdiUpdateOverlay(void *overlay, const void *request);
 int32_t AvDdiFlipOverlay(void *overlay, const void *request);

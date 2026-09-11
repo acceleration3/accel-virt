@@ -7,6 +7,7 @@
 #include "../../src/core/ddi/dxgkarg_get_scan_line_record.hpp"
 #include "../../src/core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
 #include "../../src/core/ddi/dxgkarg_present_record.hpp"
+#include "../../src/core/ddi/dxgkarg_query_vidpn_hw_capability_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_pointer_position_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_pointer_shape_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
@@ -684,6 +685,31 @@ TEST(adapter, the_display_ddis_are_passive_only)
   static_cast<void>(fixture.adapter().set_vidpn_source_address(nullptr));
   fixture.platform().set_irql(Irql::passive);
   for (int call = 0; call < 12; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
+
+/* ---- WDDM 1.1 (feature 014) -------------------------------------------------- */
+
+TEST(adapter_query_vidpn_hw_capability, the_driver_transforms_nothing_on_the_one_path)
+{ Fixture fixture;
+  int vidpn = 0;
+  av::DxgkargQueryVidPnHwCapabilityRecord query = {&vidpn, 0u, 0u, 0xFFFFFFFFu, 0u};
+  CHECK_EQ(nt(fixture.adapter().query_vidpn_hw_capability(&query)), success);
+  CHECK_EQ(query.VidPnHWCaps, 0u); }
+
+TEST(adapter_query_vidpn_hw_capability, another_path_or_no_vidpn_is_invalid)
+{ Fixture fixture;
+  int vidpn = 0;
+  const av::DxgkargQueryVidPnHwCapabilityRecord refused[] = {
+      {nullptr, 0u, 0u, 7u, 0u}, {&vidpn, 1u, 0u, 7u, 0u}, {&vidpn, 0u, 1u, 7u, 0u}};
+  for (const av::DxgkargQueryVidPnHwCapabilityRecord &query : refused) {
+      av::DxgkargQueryVidPnHwCapabilityRecord copy = query;
+      CHECK_EQ(nt(fixture.adapter().query_vidpn_hw_capability(&copy)), invalid_parameter);
+      CHECK_EQ(copy.VidPnHWCaps, 7u);
+  }
+  CHECK_EQ(nt(fixture.adapter().query_vidpn_hw_capability(nullptr)), invalid_parameter);
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.adapter().query_vidpn_hw_capability(nullptr));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
 
 /* ---- Cursor and the legacy surface (feature 013) ---------------------------- */
 
