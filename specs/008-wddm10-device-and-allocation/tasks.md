@@ -14,12 +14,12 @@ description: "Task list for feature 008: WDDM 1.0 devices, allocations and segme
 
 ## Phase 2: Records
 
-- [ ] T004 Records for CREATEDEVICE, ALLOCATIONINFO, CREATEALLOCATION, DESTROYALLOCATION, DESCRIBEALLOCATION, GETSTANDARDALLOCATIONDRIVERDATA, OPENALLOCATIONINFO, OPENALLOCATION, CLOSEALLOCATION, SETDISPLAYPRIVATEDRIVERFORMAT, QUERYSEGMENTOUT4, SEGMENTDESCRIPTOR4, and the four standard surface data structures; km proofs; Linux size tests
+- [X] T004 Records for CREATEDEVICE, ALLOCATIONINFO, CREATEALLOCATION, DESTROYALLOCATION, DESCRIBEALLOCATION, GETSTANDARDALLOCATIONDRIVERDATA, OPENALLOCATIONINFO, OPENALLOCATION, CLOSEALLOCATION, SETDISPLAYPRIVATEDRIVERFORMAT, QUERYSEGMENTOUT4, SEGMENTDESCRIPTOR4, and the four standard surface data structures; km proofs; Linux size tests
 
 ## Phase 3: Descriptor and standard allocations (US2)
 
-- [ ] T005 Tests then `AllocationDescriptor` (encode/decode, hostile sweep, round trip) in `src/proto`; `docs/protocol.md`; `fuzz_proto` case
-- [ ] T006 Tests then `StandardAllocation` (each type and GDI surface type, unsupported formats and types, overflow, size-only query)
+- [X] T005 Tests then `AllocationDescriptor` (encode/decode, hostile sweep, round trip) in `src/proto`; `docs/protocol.md`; `fuzz_proto` case
+- [X] T006 Tests then `StandardAllocation` (each type and GDI surface type, unsupported formats and types, overflow, size-only query)
 
 **Checkpoint**: commit.
 

@@ -1,6 +1,22 @@
 /* The kernel build proves each record against the WDK. These prove the Linux
  * harness lays the same records out the same way, so a test that fills a
  * record fills the bytes dxgkrnl would read. */
+#include "../../src/core/ddi/d3dkmdt_gdi_surface_data_record.hpp"
+#include "../../src/core/ddi/d3dkmdt_shadow_surface_data_record.hpp"
+#include "../../src/core/ddi/d3dkmdt_shared_primary_surface_data_record.hpp"
+#include "../../src/core/ddi/d3dkmdt_staging_surface_data_record.hpp"
+#include "../../src/core/ddi/dxgk_allocation_info_record.hpp"
+#include "../../src/core/ddi/dxgk_open_allocation_info_record.hpp"
+#include "../../src/core/ddi/dxgk_query_segment_out4_record.hpp"
+#include "../../src/core/ddi/dxgk_segment_descriptor4_record.hpp"
+#include "../../src/core/ddi/dxgkarg_close_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_create_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_create_device_record.hpp"
+#include "../../src/core/ddi/dxgkarg_describe_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_destroy_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
+#include "../../src/core/ddi/dxgkarg_open_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "../../src/core/ddi/dxgk_child_descriptor_record.hpp"
 #include "../../src/core/ddi/dxgk_child_status_record.hpp"
 #include "../../src/core/ddi/dxgk_device_info_record.hpp"
@@ -83,3 +99,33 @@ TEST(ddi_records, dxgkarg_escape_and_collect_dbg_info_records)
   CHECK_EQ(offsetof(DxgkargCollectDbgInfoRecord, BufferSize), 0x10u);
   CHECK_EQ(offsetof(DxgkargCollectDbgInfoRecord, pExtension), 0x18u);
   CHECK_EQ(sizeof(DxgkargCollectDbgInfoExtRecord), 0x20u); }
+
+/* The device and allocation records (feature 008). WARP's OpenAllocation steps
+ * DXGK_OPENALLOCATIONINFO by 0x20 and writes hDeviceSpecificAllocation at 0x18;
+ * VidMm's stride for DXGK_SEGMENTDESCRIPTOR4 is 0x68, wider than the 0x60 a
+ * WDDM 3.2 driver writes. */
+TEST(ddi_records, device_and_allocation_records_match_the_x64_layout)
+{ CHECK_EQ(sizeof(av::DxgkargCreateDeviceRecord), 0x20u);
+  CHECK_EQ(offsetof(av::DxgkargCreateDeviceRecord, hKmdProcess), 0x18u);
+  CHECK_EQ(sizeof(av::DxgkAllocationInfoRecord), 0x58u);
+  CHECK_EQ(offsetof(av::DxgkAllocationInfoRecord, hAllocation), 0x38u);
+  CHECK_EQ(offsetof(av::DxgkAllocationInfoRecord, Flags2), 0x54u);
+  CHECK_EQ(sizeof(av::DxgkargCreateAllocationRecord), 0x28u);
+  CHECK_EQ(offsetof(av::DxgkargCreateAllocationRecord, pAllocationInfo), 0x10u);
+  CHECK_EQ(sizeof(av::DxgkargDestroyAllocationRecord), 0x20u);
+  CHECK_EQ(sizeof(av::DxgkargDescribeAllocationRecord), 0x30u);
+  CHECK_EQ(offsetof(av::DxgkargDescribeAllocationRecord, Rotation), 0x2Cu);
+  CHECK_EQ(sizeof(av::DxgkargGetStandardAllocationDriverDataRecord), 0x30u);
+  CHECK_EQ(sizeof(av::DxgkOpenAllocationInfoRecord), 0x20u);
+  CHECK_EQ(offsetof(av::DxgkOpenAllocationInfoRecord, hDeviceSpecificAllocation), 0x18u);
+  CHECK_EQ(sizeof(av::DxgkargOpenAllocationRecord), 0x38u);
+  CHECK_EQ(offsetof(av::DxgkargOpenAllocationRecord, Pitch), 0x30u);
+  CHECK_EQ(sizeof(av::DxgkargCloseAllocationRecord), 0x10u);
+  CHECK_EQ(sizeof(av::DxgkargSetDisplayPrivateDriverFormatRecord), 0x18u);
+  CHECK_EQ(sizeof(av::DxgkQuerySegmentOut4Record), 0x28u);
+  CHECK_EQ(sizeof(av::DxgkSegmentDescriptor4Record), 0x60u);
+  CHECK_EQ(offsetof(av::DxgkSegmentDescriptor4Record, NumUEFIFrameBufferRanges), 0x5Cu);
+  CHECK_EQ(sizeof(av::D3dkmdtSharedPrimarySurfaceDataRecord), 0x18u);
+  CHECK_EQ(sizeof(av::D3dkmdtShadowSurfaceDataRecord), 0x10u);
+  CHECK_EQ(sizeof(av::D3dkmdtStagingSurfaceDataRecord), 0x0Cu);
+  CHECK_EQ(sizeof(av::D3dkmdtGdiSurfaceDataRecord), 0x18u); }

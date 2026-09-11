@@ -118,6 +118,30 @@ buffer of a submission. 32 bytes.
 
 Against the ring: `end - begin <= 2^order`.
 
+## Allocation descriptor (user mode -> guest driver)
+
+The private driver data of one allocation. `DxgkDdiGetStandardAllocationDriverData`
+writes it for the runtime's standard allocations; a user-mode driver writes it
+for its own; `DxgkDdiCreateAllocation` decodes it. It never reaches the device.
+48 bytes.
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | magic | `RVKA` = `0x414B5652` |
+| 4 | u16 | kind | 1 shared primary, 2 shadow, 3 staging, 4 GDI surface (the `D3DKMDT_STANDARDALLOCATION_TYPE` values), 16 client |
+| 6 | u16 | flags | bit 0 CPU visible; others 0 |
+| 8 | u32 | width | pixels |
+| 12 | u32 | height | pixels |
+| 16 | u32 | format | `D3DDDIFORMAT` |
+| 20 | u32 | pitch | bytes per row; `pitch >= width` |
+| 24 | u64 | size | bytes, >= 1; `pitch * height <= size` |
+| 32 | u32 | refresh_numerator | shared primary only, else 0 |
+| 36 | u32 | refresh_denominator | shared primary only, else 0 |
+| 40 | u32 | source | VidPn source; shared primary only, else 0 |
+| 44 | u32 | reserved | 0 |
+
+Every kind but client is a surface: width, height and pitch are non-zero.
+
 ## Fence page (device -> guest)
 
 Offset 0 of the fence resource. The device updates it from its worker thread;

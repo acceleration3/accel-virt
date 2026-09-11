@@ -13,6 +13,13 @@ struct ObjectPoolProbe {
     static void corrupt_live_count(ObjectPool<T> &pool) { pool.live_ += 1u; }
 
     template <typename T>
+    static void empty_the_first_chunk(ObjectPool<T> &pool)
+    {
+        pool.live_ -= static_cast<std::uint32_t>(__builtin_popcountll(pool.chunks_->used_));
+        pool.chunks_->used_ = 0u;
+    }
+
+    template <typename T>
     static std::uint32_t chunks(const ObjectPool<T> &pool)
     {
         std::uint32_t count = 0u;
@@ -135,6 +142,19 @@ TEST(object_pool_destroy, refuses_what_is_not_a_live_object_of_this_pool)
   CHECK_EQ(destroyed, 1);
   CHECK(pool.invariants_hold()); }
 
+TEST(object_pool_destroy, releases_an_emptied_chunk_behind_another)
+{ MockPlatform platform; int destroyed = 0;
+  ObjectPool<Tracked> pool(platform);
+  Tracked *objects[ObjectPool<Tracked>::chunk_slots + 1u] = {};
+  for (std::uint32_t i = 0u; i <= ObjectPool<Tracked>::chunk_slots; i++)
+      CHECK_STATUS(pool.create(objects[i], destroyed, i), Status::ok);
+  for (std::uint32_t i = 0u; i < ObjectPool<Tracked>::chunk_slots; i++) {
+      CHECK_STATUS(pool.destroy(objects[i]), Status::ok);
+      CHECK(pool.invariants_hold());
+  }
+  CHECK_EQ(ObjectPoolProbe::chunks(pool), 1u);
+  CHECK(pool.find(objects[ObjectPool<Tracked>::chunk_slots]) == objects[ObjectPool<Tracked>::chunk_slots]); }
+
 TEST(object_pool_find, rejects_an_address_inside_an_object_or_between_slots)
 { MockPlatform platform; int destroyed = 0;
   ObjectPool<Tracked> pool(platform);
@@ -191,3 +211,15 @@ TEST(object_pool_invariants, a_live_count_that_disagrees_with_the_slots_is_detec
   CHECK_STATUS(pool.create(object, destroyed, 1u), Status::ok);
   ObjectPoolProbe::corrupt_live_count(pool);
   CHECK(!pool.invariants_hold()); }
+
+TEST(object_pool_invariants, a_retained_empty_chunk_is_detected)
+{ MockPlatform platform; int destroyed = 0;
+  ObjectPool<Tracked> pool(platform);
+  Tracked *object = nullptr;
+  for (std::uint32_t i = 0u; i <= ObjectPool<Tracked>::chunk_slots; i++)
+      CHECK_STATUS(pool.create(object, destroyed, i), Status::ok);
+  ObjectPoolProbe::empty_the_first_chunk(pool);
+  CHECK(!pool.invariants_hold());
+  pool.destroy_all();
+  CHECK_STATUS(pool.create(object, destroyed, 2u), Status::ok);
+  CHECK(pool.invariants_hold()); }

@@ -6,6 +6,22 @@
 
 #include <stddef.h>
 
+#include "ddi/d3dkmdt_gdi_surface_data_record.hpp"
+#include "ddi/d3dkmdt_shadow_surface_data_record.hpp"
+#include "ddi/d3dkmdt_shared_primary_surface_data_record.hpp"
+#include "ddi/d3dkmdt_staging_surface_data_record.hpp"
+#include "ddi/dxgk_allocation_info_record.hpp"
+#include "ddi/dxgk_open_allocation_info_record.hpp"
+#include "ddi/dxgk_query_segment_out4_record.hpp"
+#include "ddi/dxgk_segment_descriptor4_record.hpp"
+#include "ddi/dxgkarg_close_allocation_record.hpp"
+#include "ddi/dxgkarg_create_allocation_record.hpp"
+#include "ddi/dxgkarg_create_device_record.hpp"
+#include "ddi/dxgkarg_describe_allocation_record.hpp"
+#include "ddi/dxgkarg_destroy_allocation_record.hpp"
+#include "ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
+#include "ddi/dxgkarg_open_allocation_record.hpp"
+#include "ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "ddi/dxgk_child_descriptor_record.hpp"
 #include "ddi/dxgk_child_status_record.hpp"
 #include "ddi/dxgk_device_info_record.hpp"
@@ -167,6 +183,147 @@ AV_SAME_SIZE(DxgkargCollectDbgInfoExtRecord, DXGKARG_COLLECTDBGINFO_EXT);
 AV_SAME_OFFSET(DxgkargCollectDbgInfoExtRecord, BucketingKey, DXGKARG_COLLECTDBGINFO_EXT, BucketingKey);
 AV_SAME_OFFSET(DxgkargCollectDbgInfoExtRecord, CurrentDmaBufferOffset, DXGKARG_COLLECTDBGINFO_EXT, CurrentDmaBufferOffset);
 AV_SAME_OFFSET(DxgkargCollectDbgInfoExtRecord, Reserved7, DXGKARG_COLLECTDBGINFO_EXT, Reserved7);
+
+AV_SAME_SIZE(DxgkargCreateDeviceRecord, DXGKARG_CREATEDEVICE);
+AV_SAME_OFFSET(DxgkargCreateDeviceRecord, hDevice, DXGKARG_CREATEDEVICE, hDevice);
+AV_SAME_OFFSET(DxgkargCreateDeviceRecord, Flags, DXGKARG_CREATEDEVICE, Flags);
+AV_SAME_OFFSET(DxgkargCreateDeviceRecord, Pasid, DXGKARG_CREATEDEVICE, Pasid);
+AV_SAME_OFFSET(DxgkargCreateDeviceRecord, hKmdProcess, DXGKARG_CREATEDEVICE, hKmdProcess);
+
+AV_SAME_SIZE(DxgkAllocationInfoRecord, DXGK_ALLOCATIONINFO);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, pPrivateDriverData, DXGK_ALLOCATIONINFO, pPrivateDriverData);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, PrivateDriverDataSize, DXGK_ALLOCATIONINFO, PrivateDriverDataSize);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, Alignment, DXGK_ALLOCATIONINFO, Alignment);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, Size, DXGK_ALLOCATIONINFO, Size);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, PitchAlignedSize, DXGK_ALLOCATIONINFO, PitchAlignedSize);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, HintedBank, DXGK_ALLOCATIONINFO, HintedBank);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, PreferredSegment, DXGK_ALLOCATIONINFO, PreferredSegment);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, SupportedReadSegmentSet, DXGK_ALLOCATIONINFO, SupportedReadSegmentSet);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, SupportedWriteSegmentSet, DXGK_ALLOCATIONINFO, SupportedWriteSegmentSet);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, EvictionSegmentSet, DXGK_ALLOCATIONINFO, EvictionSegmentSet);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, MaximumRenamingListLength, DXGK_ALLOCATIONINFO, MaximumRenamingListLength);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, hAllocation, DXGK_ALLOCATIONINFO, hAllocation);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, Flags, DXGK_ALLOCATIONINFO, Flags);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, pAllocationUsageHint, DXGK_ALLOCATIONINFO, pAllocationUsageHint);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, AllocationPriority, DXGK_ALLOCATIONINFO, AllocationPriority);
+AV_SAME_OFFSET(DxgkAllocationInfoRecord, Flags2, DXGK_ALLOCATIONINFO, Flags2);
+
+AV_SAME_SIZE(DxgkargCreateAllocationRecord, DXGKARG_CREATEALLOCATION);
+AV_SAME_OFFSET(DxgkargCreateAllocationRecord, pPrivateDriverData, DXGKARG_CREATEALLOCATION, pPrivateDriverData);
+AV_SAME_OFFSET(DxgkargCreateAllocationRecord, PrivateDriverDataSize, DXGKARG_CREATEALLOCATION, PrivateDriverDataSize);
+AV_SAME_OFFSET(DxgkargCreateAllocationRecord, NumAllocations, DXGKARG_CREATEALLOCATION, NumAllocations);
+AV_SAME_OFFSET(DxgkargCreateAllocationRecord, pAllocationInfo, DXGKARG_CREATEALLOCATION, pAllocationInfo);
+AV_SAME_OFFSET(DxgkargCreateAllocationRecord, hResource, DXGKARG_CREATEALLOCATION, hResource);
+AV_SAME_OFFSET(DxgkargCreateAllocationRecord, Flags, DXGKARG_CREATEALLOCATION, Flags);
+
+AV_SAME_SIZE(DxgkargDestroyAllocationRecord, DXGKARG_DESTROYALLOCATION);
+AV_SAME_OFFSET(DxgkargDestroyAllocationRecord, NumAllocations, DXGKARG_DESTROYALLOCATION, NumAllocations);
+AV_SAME_OFFSET(DxgkargDestroyAllocationRecord, pAllocationList, DXGKARG_DESTROYALLOCATION, pAllocationList);
+AV_SAME_OFFSET(DxgkargDestroyAllocationRecord, hResource, DXGKARG_DESTROYALLOCATION, hResource);
+AV_SAME_OFFSET(DxgkargDestroyAllocationRecord, Flags, DXGKARG_DESTROYALLOCATION, Flags);
+
+AV_SAME_SIZE(DxgkargDescribeAllocationRecord, DXGKARG_DESCRIBEALLOCATION);
+AV_SAME_OFFSET(DxgkargDescribeAllocationRecord, hAllocation, DXGKARG_DESCRIBEALLOCATION, hAllocation);
+AV_SAME_OFFSET(DxgkargDescribeAllocationRecord, Width, DXGKARG_DESCRIBEALLOCATION, Width);
+AV_SAME_OFFSET(DxgkargDescribeAllocationRecord, Height, DXGKARG_DESCRIBEALLOCATION, Height);
+AV_SAME_OFFSET(DxgkargDescribeAllocationRecord, Format, DXGKARG_DESCRIBEALLOCATION, Format);
+AV_SAME_OFFSET(DxgkargDescribeAllocationRecord, MultisampleMethodType, DXGKARG_DESCRIBEALLOCATION, MultisampleMethod.NumSamples);
+AV_SAME_OFFSET(DxgkargDescribeAllocationRecord, MultisampleMethodQuality, DXGKARG_DESCRIBEALLOCATION, MultisampleMethod.NumQualityLevels);
+AV_SAME_OFFSET(DxgkargDescribeAllocationRecord, RefreshRateNumerator, DXGKARG_DESCRIBEALLOCATION, RefreshRate.Numerator);
+AV_SAME_OFFSET(DxgkargDescribeAllocationRecord, RefreshRateDenominator, DXGKARG_DESCRIBEALLOCATION, RefreshRate.Denominator);
+AV_SAME_OFFSET(DxgkargDescribeAllocationRecord, PrivateDriverFormatAttribute, DXGKARG_DESCRIBEALLOCATION, PrivateDriverFormatAttribute);
+AV_SAME_OFFSET(DxgkargDescribeAllocationRecord, Flags, DXGKARG_DESCRIBEALLOCATION, Flags);
+AV_SAME_OFFSET(DxgkargDescribeAllocationRecord, Rotation, DXGKARG_DESCRIBEALLOCATION, Rotation);
+
+AV_SAME_SIZE(DxgkargGetStandardAllocationDriverDataRecord, DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA);
+AV_SAME_OFFSET(DxgkargGetStandardAllocationDriverDataRecord, StandardAllocationType, DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA, StandardAllocationType);
+AV_SAME_OFFSET(DxgkargGetStandardAllocationDriverDataRecord, pCreateSurfaceData, DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA, pCreateSharedPrimarySurfaceData);
+AV_SAME_OFFSET(DxgkargGetStandardAllocationDriverDataRecord, pAllocationPrivateDriverData, DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA, pAllocationPrivateDriverData);
+AV_SAME_OFFSET(DxgkargGetStandardAllocationDriverDataRecord, AllocationPrivateDriverDataSize, DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA, AllocationPrivateDriverDataSize);
+AV_SAME_OFFSET(DxgkargGetStandardAllocationDriverDataRecord, pResourcePrivateDriverData, DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA, pResourcePrivateDriverData);
+AV_SAME_OFFSET(DxgkargGetStandardAllocationDriverDataRecord, ResourcePrivateDriverDataSize, DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA, ResourcePrivateDriverDataSize);
+AV_SAME_OFFSET(DxgkargGetStandardAllocationDriverDataRecord, PhysicalAdapterIndex, DXGKARG_GETSTANDARDALLOCATIONDRIVERDATA, PhysicalAdapterIndex);
+
+AV_SAME_SIZE(DxgkOpenAllocationInfoRecord, DXGK_OPENALLOCATIONINFO);
+AV_SAME_OFFSET(DxgkOpenAllocationInfoRecord, hAllocation, DXGK_OPENALLOCATIONINFO, hAllocation);
+AV_SAME_OFFSET(DxgkOpenAllocationInfoRecord, pPrivateDriverData, DXGK_OPENALLOCATIONINFO, pPrivateDriverData);
+AV_SAME_OFFSET(DxgkOpenAllocationInfoRecord, PrivateDriverDataSize, DXGK_OPENALLOCATIONINFO, PrivateDriverDataSize);
+AV_SAME_OFFSET(DxgkOpenAllocationInfoRecord, hDeviceSpecificAllocation, DXGK_OPENALLOCATIONINFO, hDeviceSpecificAllocation);
+
+AV_SAME_SIZE(DxgkargOpenAllocationRecord, DXGKARG_OPENALLOCATION);
+AV_SAME_OFFSET(DxgkargOpenAllocationRecord, NumAllocations, DXGKARG_OPENALLOCATION, NumAllocations);
+AV_SAME_OFFSET(DxgkargOpenAllocationRecord, pOpenAllocation, DXGKARG_OPENALLOCATION, pOpenAllocation);
+AV_SAME_OFFSET(DxgkargOpenAllocationRecord, pPrivateDriverData, DXGKARG_OPENALLOCATION, pPrivateDriverData);
+AV_SAME_OFFSET(DxgkargOpenAllocationRecord, PrivateDriverSize, DXGKARG_OPENALLOCATION, PrivateDriverSize);
+AV_SAME_OFFSET(DxgkargOpenAllocationRecord, Flags, DXGKARG_OPENALLOCATION, Flags);
+AV_SAME_OFFSET(DxgkargOpenAllocationRecord, SubresourceIndex, DXGKARG_OPENALLOCATION, SubresourceIndex);
+AV_SAME_OFFSET(DxgkargOpenAllocationRecord, SubresourceOffset, DXGKARG_OPENALLOCATION, SubresourceOffset);
+AV_SAME_OFFSET(DxgkargOpenAllocationRecord, Pitch, DXGKARG_OPENALLOCATION, Pitch);
+
+AV_SAME_SIZE(DxgkargCloseAllocationRecord, DXGKARG_CLOSEALLOCATION);
+AV_SAME_OFFSET(DxgkargCloseAllocationRecord, NumAllocations, DXGKARG_CLOSEALLOCATION, NumAllocations);
+AV_SAME_OFFSET(DxgkargCloseAllocationRecord, pOpenHandleList, DXGKARG_CLOSEALLOCATION, pOpenHandleList);
+
+AV_SAME_SIZE(DxgkargSetDisplayPrivateDriverFormatRecord, DXGKARG_SETDISPLAYPRIVATEDRIVERFORMAT);
+AV_SAME_OFFSET(DxgkargSetDisplayPrivateDriverFormatRecord, VidPnSourceId, DXGKARG_SETDISPLAYPRIVATEDRIVERFORMAT, VidPnSourceId);
+AV_SAME_OFFSET(DxgkargSetDisplayPrivateDriverFormatRecord, PrimaryAllocation, DXGKARG_SETDISPLAYPRIVATEDRIVERFORMAT, PrimaryAllocation);
+AV_SAME_OFFSET(DxgkargSetDisplayPrivateDriverFormatRecord, PrivateDriverFormatAttribute, DXGKARG_SETDISPLAYPRIVATEDRIVERFORMAT, PrivateDriverFormatAttribute);
+
+AV_SAME_SIZE(DxgkQuerySegmentOut4Record, DXGK_QUERYSEGMENTOUT4);
+AV_SAME_OFFSET(DxgkQuerySegmentOut4Record, NbSegment, DXGK_QUERYSEGMENTOUT4, NbSegment);
+AV_SAME_OFFSET(DxgkQuerySegmentOut4Record, pSegmentDescriptor, DXGK_QUERYSEGMENTOUT4, pSegmentDescriptor);
+AV_SAME_OFFSET(DxgkQuerySegmentOut4Record, PagingBufferSegmentId, DXGK_QUERYSEGMENTOUT4, PagingBufferSegmentId);
+AV_SAME_OFFSET(DxgkQuerySegmentOut4Record, PagingBufferSize, DXGK_QUERYSEGMENTOUT4, PagingBufferSize);
+AV_SAME_OFFSET(DxgkQuerySegmentOut4Record, PagingBufferPrivateDataSize, DXGK_QUERYSEGMENTOUT4, PagingBufferPrivateDataSize);
+AV_SAME_OFFSET(DxgkQuerySegmentOut4Record, SegmentDescriptorStride, DXGK_QUERYSEGMENTOUT4, SegmentDescriptorStride);
+
+AV_SAME_SIZE(DxgkSegmentDescriptor4Record, DXGK_SEGMENTDESCRIPTOR4);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, Flags, DXGK_SEGMENTDESCRIPTOR4, Flags);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, BaseAddress, DXGK_SEGMENTDESCRIPTOR4, BaseAddress);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, Size, DXGK_SEGMENTDESCRIPTOR4, Size);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, CommitLimit, DXGK_SEGMENTDESCRIPTOR4, CommitLimit);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, SystemMemoryEndAddress, DXGK_SEGMENTDESCRIPTOR4, SystemMemoryEndAddress);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, CpuTranslatedAddress, DXGK_SEGMENTDESCRIPTOR4, CpuTranslatedAddress);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, CpuHostApertureSizeInPages, DXGK_SEGMENTDESCRIPTOR4, CpuHostAperture.SizeInPages);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, NumInvalidMemoryRanges, DXGK_SEGMENTDESCRIPTOR4, NumInvalidMemoryRanges);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, VprRangeStartOffset, DXGK_SEGMENTDESCRIPTOR4, VprRangeStartOffset);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, VprRangeSize, DXGK_SEGMENTDESCRIPTOR4, VprRangeSize);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, VprAlignment, DXGK_SEGMENTDESCRIPTOR4, VprAlignment);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, NumVprSupported, DXGK_SEGMENTDESCRIPTOR4, NumVprSupported);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, VprReserveSize, DXGK_SEGMENTDESCRIPTOR4, VprReserveSize);
+AV_SAME_OFFSET(DxgkSegmentDescriptor4Record, NumUEFIFrameBufferRanges, DXGK_SEGMENTDESCRIPTOR4, NumUEFIFrameBufferRanges);
+
+AV_SAME_SIZE(D3dkmdtSharedPrimarySurfaceDataRecord, D3DKMDT_SHAREDPRIMARYSURFACEDATA);
+AV_SAME_OFFSET(D3dkmdtSharedPrimarySurfaceDataRecord, Width, D3DKMDT_SHAREDPRIMARYSURFACEDATA, Width);
+AV_SAME_OFFSET(D3dkmdtSharedPrimarySurfaceDataRecord, Height, D3DKMDT_SHAREDPRIMARYSURFACEDATA, Height);
+AV_SAME_OFFSET(D3dkmdtSharedPrimarySurfaceDataRecord, Format, D3DKMDT_SHAREDPRIMARYSURFACEDATA, Format);
+AV_SAME_OFFSET(D3dkmdtSharedPrimarySurfaceDataRecord, RefreshRateNumerator, D3DKMDT_SHAREDPRIMARYSURFACEDATA, RefreshRate.Numerator);
+AV_SAME_OFFSET(D3dkmdtSharedPrimarySurfaceDataRecord, RefreshRateDenominator, D3DKMDT_SHAREDPRIMARYSURFACEDATA, RefreshRate.Denominator);
+AV_SAME_OFFSET(D3dkmdtSharedPrimarySurfaceDataRecord, VidPnSourceId, D3DKMDT_SHAREDPRIMARYSURFACEDATA, VidPnSourceId);
+
+AV_SAME_SIZE(D3dkmdtShadowSurfaceDataRecord, D3DKMDT_SHADOWSURFACEDATA);
+AV_SAME_OFFSET(D3dkmdtShadowSurfaceDataRecord, Width, D3DKMDT_SHADOWSURFACEDATA, Width);
+AV_SAME_OFFSET(D3dkmdtShadowSurfaceDataRecord, Height, D3DKMDT_SHADOWSURFACEDATA, Height);
+AV_SAME_OFFSET(D3dkmdtShadowSurfaceDataRecord, Format, D3DKMDT_SHADOWSURFACEDATA, Format);
+AV_SAME_OFFSET(D3dkmdtShadowSurfaceDataRecord, Pitch, D3DKMDT_SHADOWSURFACEDATA, Pitch);
+
+AV_SAME_SIZE(D3dkmdtStagingSurfaceDataRecord, D3DKMDT_STAGINGSURFACEDATA);
+AV_SAME_OFFSET(D3dkmdtStagingSurfaceDataRecord, Width, D3DKMDT_STAGINGSURFACEDATA, Width);
+AV_SAME_OFFSET(D3dkmdtStagingSurfaceDataRecord, Height, D3DKMDT_STAGINGSURFACEDATA, Height);
+AV_SAME_OFFSET(D3dkmdtStagingSurfaceDataRecord, Pitch, D3DKMDT_STAGINGSURFACEDATA, Pitch);
+
+AV_SAME_SIZE(D3dkmdtGdiSurfaceDataRecord, D3DKMDT_GDISURFACEDATA);
+AV_SAME_OFFSET(D3dkmdtGdiSurfaceDataRecord, Width, D3DKMDT_GDISURFACEDATA, Width);
+AV_SAME_OFFSET(D3dkmdtGdiSurfaceDataRecord, Height, D3DKMDT_GDISURFACEDATA, Height);
+AV_SAME_OFFSET(D3dkmdtGdiSurfaceDataRecord, Format, D3DKMDT_GDISURFACEDATA, Format);
+AV_SAME_OFFSET(D3dkmdtGdiSurfaceDataRecord, Type, D3DKMDT_GDISURFACEDATA, Type);
+AV_SAME_OFFSET(D3dkmdtGdiSurfaceDataRecord, Flags, D3DKMDT_GDISURFACEDATA, Flags);
+AV_SAME_OFFSET(D3dkmdtGdiSurfaceDataRecord, Pitch, D3DKMDT_GDISURFACEDATA, Pitch);
+
+static_assert(D3DKMDT_STANDARDALLOCATION_SHAREDPRIMARYSURFACE == 1 && D3DKMDT_STANDARDALLOCATION_GDISURFACE == 4 &&
+                  D3DKMDT_GDISURFACE_TEXTURE_CPUVISIBLE == 6 && DXGKQAITYPE_QUERYSEGMENT4 == 11 &&
+                  DXGK_HANDLE_ALLOCATION == 1 && D3DDDIFMT_A8R8G8B8 == 21 && D3DDDIFMT_X8B8G8R8 == 33,
+              "standard allocation, GDI surface, query and format values");
 
 /* ResourceList reads CM_RESOURCE_LIST as bytes; these pin the offsets it reads at. */
 static_assert(offsetof(CM_RESOURCE_LIST, List) == av::ResourceList::list_header_bytes, "CM_RESOURCE_LIST::List");

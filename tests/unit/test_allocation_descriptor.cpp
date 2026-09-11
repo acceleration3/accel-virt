@@ -1,0 +1,140 @@
+#include "../../src/core/status.hpp"
+#include "../../src/proto/allocation_descriptor.hpp"
+#include "../../src/proto/allocation_kind.hpp"
+#include "../../src/proto/scanout_target.hpp"
+#include "../../src/proto/surface_layout.hpp"
+#include "../harness/byte_layout.hpp"
+#include "../harness/guarded_buffer.hpp"
+#include "../harness/hostile_sweep.hpp"
+#include "../harness/test_registry.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+
+using av::AllocationDescriptor;
+using av::AllocationKind;
+using av::ByteLayout;
+using av::GuardedBuffer;
+using av::HostileSweep;
+using av::ScanoutTarget;
+using av::Status;
+using av::SurfaceLayout;
+
+namespace {
+
+const AllocationDescriptor primary(AllocationKind::shared_primary, true, SurfaceLayout(1024u, 768u, 21u, 4096u),
+                                   4096u * 768u, ScanoutTarget(0u, 60u, 1u));
+
+bool rejects(const std::uint8_t *bytes, std::size_t length)
+{
+    AllocationDescriptor descriptor;
+    const Status status = descriptor.decode(bytes, length);
+    if (status == Status::ok) {
+        std::uint8_t again[AllocationDescriptor::encoded_size] = {};
+        if (descriptor.encode(again, sizeof again) != Status::ok || std::memcmp(again, bytes, sizeof again) != 0)
+            av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "accepted input did not round trip");
+    }
+    return status != Status::ok;
+}
+
+std::uint8_t *encoded(const AllocationDescriptor &descriptor, std::uint8_t *bytes)
+{
+    if (descriptor.encode(bytes, AllocationDescriptor::encoded_size) != Status::ok)
+        av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "encode failed");
+    return bytes;
+}
+
+}  // namespace
+
+TEST(allocation_descriptor_encode, places_every_field_at_its_offset)
+{ GuardedBuffer bytes(AllocationDescriptor::encoded_size);
+  CHECK_STATUS(primary.encode(bytes.data(), AllocationDescriptor::encoded_size), Status::ok);
+  const ByteLayout layout(bytes.data(), AllocationDescriptor::encoded_size);
+  CHECK(layout.at(0u, 4u) == 0x414B5652u);
+  CHECK(layout.at(4u, 2u) == 1u);
+  CHECK(layout.at(6u, 2u) == 1u);
+  CHECK(layout.at(8u, 4u) == 1024u);
+  CHECK(layout.at(12u, 4u) == 768u);
+  CHECK(layout.at(16u, 4u) == 21u);
+  CHECK(layout.at(20u, 4u) == 4096u);
+  CHECK(layout.at(24u, 8u) == 4096u * 768u);
+  CHECK(layout.at(32u, 4u) == 60u);
+  CHECK(layout.at(36u, 4u) == 1u);
+  CHECK(layout.at(40u, 4u) == 0u);
+  CHECK(layout.at(44u, 4u) == 0u);
+  CHECK(bytes.guards_intact()); }
+
+TEST(allocation_descriptor_encode, refuses_a_short_destination)
+{ std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
+  CHECK_STATUS(primary.encode(bytes, sizeof bytes - 1u), Status::too_large);
+  CHECK_EQ(bytes[0], 0u); }
+
+TEST(allocation_descriptor_decode, round_trips_every_kind)
+{ const AllocationDescriptor descriptors[] = {
+      primary,
+      AllocationDescriptor(AllocationKind::shadow, true, SurfaceLayout(8u, 8u, 22u, 32u), 256u, ScanoutTarget()),
+      AllocationDescriptor(AllocationKind::staging, true, SurfaceLayout(8u, 8u, 21u, 32u), 256u, ScanoutTarget()),
+      AllocationDescriptor(AllocationKind::gdi, false, SurfaceLayout(8u, 8u, 21u, 32u), 256u, ScanoutTarget()),
+      AllocationDescriptor(AllocationKind::client, false, SurfaceLayout(), 1u, ScanoutTarget()),
+  };
+  for (const AllocationDescriptor &descriptor : descriptors) {
+      std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
+      AllocationDescriptor decoded;
+      CHECK_STATUS(decoded.decode(encoded(descriptor, bytes), sizeof bytes), Status::ok);
+      CHECK(decoded.kind() == descriptor.kind());
+      CHECK(decoded.cpu_visible() == descriptor.cpu_visible());
+      CHECK_EQ(decoded.layout().pitch(), descriptor.layout().pitch());
+      CHECK(decoded.size() == descriptor.size());
+      CHECK_EQ(decoded.scanout().refresh_numerator(), descriptor.scanout().refresh_numerator());
+  } }
+
+TEST(allocation_descriptor_decode, rejects_each_invalid_field_and_stays_unchanged)
+{ struct Case { std::size_t offset; std::size_t width; std::uint64_t value; };
+  const Case cases[] = {
+      {0u, 4u, 0x414B5653u},       /* magic */
+      {4u, 2u, 0u},                /* no kind */
+      {4u, 2u, 5u},                /* unknown kind */
+      {6u, 2u, 2u},                /* reserved flag */
+      {8u, 4u, 4097u},             /* pitch below width */
+      {12u, 4u, 769u},             /* rows past the size */
+      {20u, 4u, 0u},               /* surface without pitch */
+      {24u, 8u, 0u},               /* empty */
+      {44u, 4u, 1u},               /* reserved */
+  };
+  for (const Case &c : cases) {
+      std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
+      encoded(primary, bytes);
+      for (std::size_t i = 0u; i < c.width; i++) bytes[c.offset + i] = static_cast<std::uint8_t>(c.value >> (8u * i));
+      AllocationDescriptor decoded;
+      CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::malformed);
+      CHECK(decoded.kind() == AllocationKind::client);
+      CHECK(decoded.size() == 0u);
+  } }
+
+TEST(allocation_descriptor_decode, only_a_primary_names_a_scanout)
+{ std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
+  const AllocationDescriptor shadow(AllocationKind::shadow, true, SurfaceLayout(8u, 8u, 21u, 32u), 256u,
+                                    ScanoutTarget(0u, 60u, 1u));
+  AllocationDescriptor decoded;
+  CHECK_STATUS(decoded.decode(encoded(shadow, bytes), sizeof bytes), Status::malformed); }
+
+TEST(allocation_descriptor_decode, a_client_buffer_may_have_no_layout_but_a_surface_may_not)
+{ std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
+  AllocationDescriptor decoded;
+  const AllocationDescriptor gdi(AllocationKind::gdi, false, SurfaceLayout(), 256u, ScanoutTarget());
+  CHECK_STATUS(decoded.decode(encoded(gdi, bytes), sizeof bytes), Status::malformed);
+  const AllocationDescriptor client(AllocationKind::client, true, SurfaceLayout(4u, 4u, 21u, 16u), 64u, ScanoutTarget());
+  CHECK_STATUS(decoded.decode(encoded(client, bytes), sizeof bytes), Status::ok); }
+
+TEST(allocation_descriptor_decode, short_input_is_malformed)
+{ std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
+  AllocationDescriptor decoded;
+  CHECK_STATUS(decoded.decode(encoded(primary, bytes), sizeof bytes - 1u), Status::malformed);
+  CHECK_STATUS(decoded.decode(nullptr, sizeof bytes), Status::malformed); }
+
+TEST(allocation_descriptor_decode, hostile_sweep_never_accepts_what_does_not_round_trip)
+{ std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
+  const HostileSweep sweep(rejects, encoded(primary, bytes), sizeof bytes);
+  sweep.run();
+  CHECK(sweep.cases_run() > 8u * AllocationDescriptor::encoded_size); }
