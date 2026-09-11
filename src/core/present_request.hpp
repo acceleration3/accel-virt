@@ -1,7 +1,7 @@
 /* One DxgkDdiPresent: a PresentCommand and as many of its sub-rectangles as the
- * DMA buffer holds, with patch locations for the allocations the operation
- * reads or writes. dxgkrnl passes the start of a fresh DMA buffer, so patch
- * offsets are the command's own. Every field is checked before a byte moves. */
+ * DMA buffer holds, addressing the allocations the operation reads or writes
+ * through patch locations or, for a context with GPU virtual addressing, by
+ * their GPU virtual addresses. Every field is checked before a byte moves. */
 #ifndef AV_PRESENT_REQUEST_HPP
 #define AV_PRESENT_REQUEST_HPP
 
@@ -13,6 +13,7 @@
 
 namespace av {
 
+class PresentAddressing;
 struct DxgkargPresentRecord;
 
 class PresentRequest {
@@ -21,7 +22,7 @@ public:
     PresentRequest(const PresentRequest &) = delete;
     PresentRequest &operator=(const PresentRequest &) = delete;
 
-    /* Advances pDmaBuffer and pPatchLocationListOut past what it wrote. When
+    /* Advances pDmaBuffer, and pPatchLocationListOut when patching, past what it wrote. When
      * only some sub-rectangles fit, answers STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER
      * with MultipassOffset naming the first one left. */
     NtStatus present();
@@ -38,8 +39,7 @@ private:
 
     /* invalid_parameter unless the flags name one operation this driver presents. */
     [[nodiscard]] Status operation(PresentOperation &operation) const;
-    [[nodiscard]] Status validate(PresentOperation operation) const;
-    void                 write_patch(uint32_t allocation_index, uint32_t offset);
+    [[nodiscard]] Status validate(PresentOperation operation, const PresentAddressing &addressing) const;
 
     Platform             &platform_;
     DxgkargPresentRecord &request_;

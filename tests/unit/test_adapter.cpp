@@ -665,6 +665,20 @@ TEST(adapter_set_vidpn_source_address, an_immediate_flip_is_not_reported_and_sho
   fixture.platform().run_timers(10000000u / 60u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument3, 0x50u); }
 
+TEST(adapter_set_vidpn_source_address, a_primary_in_system_memory_names_segment_zero)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
+  int primary = 0;
+  av::DxgkargSetVidPnSourceAddressRecord request = {};
+  request.hAllocation = &primary;   /* VIDMM_SEGMENT::DriverId answers 0 for the implicit segment, address 0 */
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&request)), success);
+  fixture.platform().set_irql(Irql::passive);
+  fixture.platform().run_timers(10000000u / 60u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument2, 0u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument3, 0u); }
+
 TEST(adapter_set_vidpn_source_address, another_segment_or_source_is_invalid)
 { Fixture fixture;
   int primary = 0;

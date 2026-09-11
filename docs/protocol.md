@@ -158,10 +158,14 @@ buffer is submitted. 72 bytes, then 16 per sub-rectangle. A rectangle is
 | 12 | u32 | sub_rect_count | rectangles following the header |
 | 16 | rect | source | in the source allocation, as dxgkrnl gave it; read for blt |
 | 32 | rect | destination | in the destination allocation |
-| 48 | u64 | source_address | patched: allocation-list entry 1; blt and flip |
-| 56 | u64 | destination_address | patched: allocation-list entry 2; blt and colour fill |
+| 48 | u64 | source_address | allocation 1; blt and flip |
+| 56 | u64 | destination_address | allocation 2; blt and colour fill |
 | 64 | u32 | flip_interval | `D3DDDI_FLIPINTERVAL_TYPE`, flip only |
-| 68 | u32 | reserved | 0 |
+| 68 | u32 | address_space | 0: the addresses are physical, patched by `DxgkDdiPatch`; 1: they are GPU virtual addresses in the submitting context's address space, written by `DxgkDdiPresent` |
+
+A context with GPU virtual addressing gets no patch list: dxgkrnl passes each
+allocation's GPU virtual address instead (`DXGK_PRESENTALLOCATIONINFO`), and
+`DxgkDdiPatch` is never called for it.
 
 When a DMA buffer cannot hold every sub-rectangle, the command carries as many
 as fit and dxgkrnl calls `DxgkDdiPresent` again with a fresh buffer for the

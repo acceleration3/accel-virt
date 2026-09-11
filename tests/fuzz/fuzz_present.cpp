@@ -1,7 +1,9 @@
 /* Present over attacker-chosen flags, rectangles, counts, multipass offsets and
  * buffer sizes, with the DMA buffer and patch list exactly as large as they
- * claim. Whatever is refused, nothing may be written outside them, the
+ * claim; without a patch list, over the three allocations a GPU VA present
+ * names. Whatever is refused, nothing may be written outside them, the
  * pointers may only advance within them, and no IRQL rule may break. */
+#include "../../src/core/ddi/dxgk_present_allocation_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_present_record.hpp"
 #include "../../src/core/present_request.hpp"
 #include "../../src/proto/wire_reader.hpp"
@@ -38,6 +40,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     std::uint8_t dma[max_bytes + guard];
     av::D3dddiPatchLocationListRecord patches[max_patches + 1u];
     av::RectRecord rects[max_rects] = {};
+    av::DxgkPresentAllocationInfoRecord allocations[3] = {};
     std::memset(dma, poison, sizeof dma);
     std::memset(static_cast<void *>(patches), poison, sizeof patches);
 
@@ -53,9 +56,11 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     request.SrcRect = read_rect(reader);
     request.DstRect = read_rect(reader);
     for (av::RectRecord &rect : rects) rect = read_rect(reader);
+    for (av::DxgkPresentAllocationInfoRecord &allocation : allocations) allocation.AllocationVirtualAddress = reader.read_u64();
     request.pDmaBuffer = (nulls & 1u) != 0u ? nullptr : dma;
     request.pPatchLocationListOut = (nulls & 2u) != 0u ? nullptr : patches;
     request.pDstSubRects = (nulls & 4u) != 0u ? nullptr : rects;
+    request.pAllocationList = (nulls & 8u) != 0u ? nullptr : allocations;
     const std::uint32_t patch_capacity = request.PatchLocationListOutSize;
     const std::uint32_t dma_capacity = request.DmaSize;
 

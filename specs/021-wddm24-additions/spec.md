@@ -55,7 +55,10 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
 | `DriverCapabilities` (extended) | object | WDDM 2.4 | Reports what the driver implements |
-| DDI record | DDI record | `DXGKARG_RESUMEHWENGINE` | Overlays memory dxgkrnl owns, layout-proven |
+| DDI records | DDI record | `DXGKARG_RESUMEHWENGINE`, `DXGK_PRESENTALLOCATIONINFO` | Overlays memory dxgkrnl owns, layout-proven |
+| `PresentAddressing` | interface | - | How a present command refers to its allocations |
+| `PatchedPresentAddresses` | object | platform, the present request | Refers to allocations through patch locations |
+| `VirtualPresentAddresses` | object | platform, the present request | Refers to allocations by their GPU virtual addresses |
 
 ### Test requirements
 
@@ -108,6 +111,20 @@ Normative headers: `third_party/windows-kit/include/` (fetched by `tools/fetch_w
   D3DKMTRender is refused on such a node. It gets its own feature once a user
   mode driver exists.
 - Q (agent): WDDMVersion? -> A: 2.4.
+- Q (agent, RE): Found while tracing immediate flips - does a GPU MMU adapter
+  flip and present at all? -> A: Not before this feature, since 017. A primary
+  in the implicit system memory segment reaches SetVidPnSourceAddress as segment
+  0, address 0 (`VIDMM_SEGMENT::DriverId @ 1400397a8` answers 0 for it;
+  `VidSchiBindFlipPhysicalAddress @ 14003ba00`), which the driver refused, and
+  VidSch matches the vsync address exactly against it
+  (`VidSchiIsExpectedVSyncCookie @ 14003a0d4`), so 0 is reported back. A context
+  with GPU virtual addressing presents with no patch list and a
+  `DXGK_PRESENTALLOCATIONINFO` array whose source (1) and destination (2) carry
+  `AllocationVirtualAddress` (`DXGCONTEXT::SubmitPresentWithDmaBuffer
+  @ 14031b804`); `DxgkDdiPatch` is never called for it; the driver refused
+  those presents. Both are fixed here: segment 0 is accepted, and a present
+  without a patch list writes the GPU virtual addresses into the command, whose
+  `address_space` field (formerly reserved) says which kind it carries.
 
 ## User Scenarios & Testing *(mandatory)*
 

@@ -549,13 +549,16 @@ int32_t Adapter::control_interrupt(int32_t type, uint8_t enable)
 
 /* A null allocation leaves the source showing nothing. */
 /* Every flip, FlipOnNextVSync or FlipImmediate, shows from the next scanout:
- * VidSch completes an immediate flip on return and expects no report. */
+ * VidSch completes an immediate flip on return and expects no report. A primary
+ * in the implicit system memory segment arrives as segment 0, address 0
+ * (VIDMM_SEGMENT::DriverId); VidSch matches the vsync against that address. */
 int32_t Adapter::set_vidpn_source_address(const DxgkargSetVidPnSourceAddressRecord *request)
 {
     platform_.require_irql_at_most(Irql::isr, "Adapter::set_vidpn_source_address");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (request->hAllocation == nullptr) return NtStatus(sources_.set_scanout(request->VidPnSourceId, 0)).value();
-    if (request->PrimarySegment != ApertureSegment::segment_id) return NtStatus(Status::invalid_parameter).value();
+    if (request->PrimarySegment != ApertureSegment::segment_id && request->PrimarySegment != system_memory_driver_segment)
+        return NtStatus(Status::invalid_parameter).value();
     return NtStatus(sources_.set_scanout(request->VidPnSourceId, request->PrimaryAddress)).value();
 }
 

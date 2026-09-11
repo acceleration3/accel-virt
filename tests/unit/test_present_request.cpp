@@ -1,3 +1,4 @@
+#include "../../src/core/ddi/dxgk_present_allocation_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_present_record.hpp"
 #include "../../src/core/nt_status.hpp"
 #include "../../src/core/present_request.hpp"
@@ -34,11 +35,17 @@ std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
            std::uint32_t{bytes[offset + 2u]} << 16u | std::uint32_t{bytes[offset + 3u]} << 24u;
 }
 
+std::uint64_t u64(const std::uint8_t *bytes, std::size_t offset)
+{
+    return std::uint64_t{u32(bytes, offset)} | std::uint64_t{u32(bytes, offset + 4u)} << 32u;
+}
+
 /* One Present as dxgkrnl builds it: a DMA buffer of `dma_size` inside a larger
  * poisoned one, a three-entry patch list, and three sub-rectangles. */
 class Present {
 public:
-    explicit Present(std::uint32_t flags, std::uint32_t dma_size = 512u) : dma_{}, patches_{}, rects_{}, request_{}
+    explicit Present(std::uint32_t flags, std::uint32_t dma_size = 512u)
+        : dma_{}, patches_{}, rects_{}, allocations_{}, request_{}
     {
         std::memset(dma_, poison, sizeof dma_);
         std::memset(static_cast<void *>(patches_), poison, sizeof patches_);
@@ -54,6 +61,16 @@ public:
         request_.pDstSubRects = rects_;
         request_.FlipInterval = 1;
         request_.Flags = flags;
+        allocations_[1].AllocationVirtualAddress = 0x0000123400001000ull;
+        allocations_[2].AllocationVirtualAddress = 0x0000567800002000ull;
+    }
+
+    /* As dxgkrnl presents for a context with GPU virtual addressing. */
+    void on_gpu_virtual_addresses()
+    {
+        request_.pPatchLocationListOut = nullptr;
+        request_.PatchLocationListOutSize = 0u;
+        request_.pAllocationList = allocations_;
     }
 
     std::uint32_t run()
@@ -85,6 +102,7 @@ private:
     std::uint8_t                  dma_[1024];
     D3dddiPatchLocationListRecord patches_[4];
     RectRecord                    rects_[3];
+    av::DxgkPresentAllocationInfoRecord allocations_[3];
     DxgkargPresentRecord          request_;
 };
 
@@ -203,6 +221,36 @@ TEST(present_request_present, hostile_buffers_and_rectangles_are_refused_untouch
   Present fill_one_patch(color_fill);
   fill_one_patch.request().PatchLocationListOutSize = 1u;
   CHECK_EQ(fill_one_patch.run(), 0u); }
+
+TEST(present_request_present, a_gpu_va_blt_carries_both_virtual_addresses_and_no_patches)
+{ Present present(blt);
+  present.on_gpu_virtual_addresses();
+  CHECK_EQ(present.run(), 0u);
+  CHECK_EQ(present.written(), 72u + 3u * 16u);
+  CHECK_EQ(u64(present.dma(), PresentCommand::source_address_offset), 0x0000123400001000ull);
+  CHECK_EQ(u64(present.dma(), PresentCommand::destination_address_offset), 0x0000567800002000ull);
+  CHECK_EQ(u32(present.dma(), 68u), 1u);
+  CHECK(present.request().pPatchLocationListOut == nullptr);
+  CHECK(present.patches_untouched_from(0u)); }
+
+TEST(present_request_present, a_gpu_va_fill_or_flip_writes_only_its_allocation)
+{ Present fill(color_fill);
+  fill.on_gpu_virtual_addresses();
+  CHECK_EQ(fill.run(), 0u);
+  CHECK_EQ(u64(fill.dma(), PresentCommand::source_address_offset), 0u);
+  CHECK_EQ(u64(fill.dma(), PresentCommand::destination_address_offset), 0x0000567800002000ull);
+  Present shown(flip);
+  shown.on_gpu_virtual_addresses();
+  CHECK_EQ(shown.run(), 0u);
+  CHECK_EQ(u64(shown.dma(), PresentCommand::source_address_offset), 0x0000123400001000ull);
+  CHECK_EQ(u64(shown.dma(), PresentCommand::destination_address_offset), 0u); }
+
+TEST(present_request_present, a_gpu_va_present_without_allocations_is_refused_untouched)
+{ Present present(blt);
+  present.on_gpu_virtual_addresses();
+  present.request().pAllocationList = nullptr;
+  CHECK_EQ(present.run(), invalid_parameter);
+  CHECK(present.untouched_from(0u)); }
 
 TEST(present_request_present, an_inverted_rectangle_already_presented_is_not_read_again)
 { Present present(blt);

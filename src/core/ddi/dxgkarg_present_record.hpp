@@ -1,12 +1,12 @@
 /* DXGKARG_PRESENT, as DxgkDdiPresent receives and answers it. A DDI record:
- * the allocation union is the DXGK_ALLOCATIONLIST pointer a driver that is not
- * WDDM 2.0 receives, Flags is the DXGK_PRESENTFLAGS Value;
+ * the allocation union is a DXGK_ALLOCATIONLIST array when a patch list comes
+ * with it, and a DXGK_PRESENTALLOCATIONINFO array for a context with GPU
+ * virtual addressing, which gets none; Flags is the DXGK_PRESENTFLAGS Value;
  * src/km/ddi_record_layout.cpp proves each offset. */
 #ifndef AV_DXGKARG_PRESENT_RECORD_HPP
 #define AV_DXGKARG_PRESENT_RECORD_HPP
 
 #include "d3dddi_patch_location_list_record.hpp"
-#include "dxgk_allocation_list_record.hpp"
 #include "rect_record.hpp"
 
 #include <stdint.h>
@@ -20,7 +20,7 @@ struct DxgkargPresentRecord {
     void                          *pDmaBufferPrivateData;
     uint32_t                      DmaBufferPrivateDataSize;
     uint32_t                      DmaBufferPrivateDataSizePadding;
-    const DxgkAllocationListRecord *pAllocationList;
+    const void                    *pAllocationList;
     D3dddiPatchLocationListRecord *pPatchLocationListOut;
     uint32_t                      PatchLocationListOutSize;
     uint32_t                      MultipassOffset;

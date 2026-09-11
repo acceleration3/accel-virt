@@ -72,6 +72,7 @@
 #include "ddi/dxgkarg_create_hw_queue_record.hpp"
 #include "ddi/dxgkarg_reset_hw_engine_record.hpp"
 #include "ddi/dxgkarg_resume_hw_engine_record.hpp"
+#include "ddi/dxgk_present_allocation_info_record.hpp"
 #include "ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "ddi/dxgkarg_set_root_page_table_record.hpp"
@@ -806,6 +807,13 @@ AV_SAME_OFFSET(DxgkargResetHwEngineRecord, EngineOrdinal, DXGKARG_RESETHWENGINE,
 AV_SAME_SIZE(DxgkargResumeHwEngineRecord, DXGKARG_RESUMEHWENGINE);
 AV_SAME_OFFSET(DxgkargResumeHwEngineRecord, NodeOrdinal, DXGKARG_RESUMEHWENGINE, NodeOrdinal);
 AV_SAME_OFFSET(DxgkargResumeHwEngineRecord, EngineOrdinal, DXGKARG_RESUMEHWENGINE, EngineOrdinal);
+
+AV_SAME_SIZE(DxgkPresentAllocationInfoRecord, DXGK_PRESENTALLOCATIONINFO);
+AV_SAME_OFFSET(DxgkPresentAllocationInfoRecord, hDeviceSpecificAllocation, DXGK_PRESENTALLOCATIONINFO, hDeviceSpecificAllocation);
+AV_SAME_OFFSET(DxgkPresentAllocationInfoRecord, AllocationVirtualAddress, DXGK_PRESENTALLOCATIONINFO, AllocationVirtualAddress);
+AV_SAME_OFFSET(DxgkPresentAllocationInfoRecord, PhysicalAddress, DXGK_PRESENTALLOCATIONINFO, PhysicalAddress);
+AV_SAME_OFFSET(DxgkPresentAllocationInfoRecord, SegmentId, DXGK_PRESENTALLOCATIONINFO, SegmentId);
+AV_SAME_OFFSET(DxgkPresentAllocationInfoRecord, PhysicalAdapterIndex, DXGK_PRESENTALLOCATIONINFO, PhysicalAdapterIndex);
 
 /* The operation records overlay DXGKARG_BUILDPAGINGBUFFER's union, which they copy from. */
 AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, Reserved, DXGKARG_BUILDPAGINGBUFFER, UpdatePageTable);

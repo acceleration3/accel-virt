@@ -238,6 +238,7 @@ private:
     enum : int32_t { engine_type_3d = 1 };                                /* DXGK_ENGINE_TYPE_3D */
     enum : int32_t { interrupt_crtc_vsync = 3 };                          /* DXGK_INTERRUPT_CRTC_VSYNC */
     static constexpr uint32_t engine_responsive = 1u;   /* DXGK_ENGINESTATUS.Responsive */
+    static constexpr uint32_t system_memory_driver_segment = 0u;
     enum : int32_t { transformation_identity = 1 };   /* D3DKMDT_VPPS_IDENTITY, D3DKMDT_VPPR_IDENTITY */
 
     [[nodiscard]] Status discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface);

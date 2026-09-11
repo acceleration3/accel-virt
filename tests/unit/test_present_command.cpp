@@ -26,7 +26,7 @@ std::uint32_t u32(const std::uint8_t *bytes, unsigned offset)
 
 TEST(present_command_write, lays_out_the_documented_header)
 { const PresentCommand command(PresentOperation::color_fill, 0x00FF8040u, Rectangle(0, 0, 8, 8),
-                               Rectangle(1, 2, 3, 4), 1u, 5u);
+                               Rectangle(1, 2, 3, 4), 1u, 5u, av::PresentAddressSpace::physical);
   std::uint8_t bytes[PresentCommand::header_size + 1u];
   std::memset(bytes, 0xEE, sizeof bytes);
   WireWriter writer(bytes, PresentCommand::header_size);
@@ -45,6 +45,14 @@ TEST(present_command_write, lays_out_the_documented_header)
   CHECK_EQ(u32(bytes, 64u), 1u);
   CHECK_EQ(u32(bytes, 68u), 0u);
   CHECK_EQ(bytes[PresentCommand::header_size], 0xEEu); }
+
+TEST(present_command_write, names_gpu_virtual_addresses)
+{ const PresentCommand command(PresentOperation::blt, 0u, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), 0u, 0u,
+                               av::PresentAddressSpace::gpu_virtual);
+  std::uint8_t bytes[PresentCommand::header_size] = {};
+  WireWriter writer(bytes, sizeof bytes);
+  command.write(writer);
+  CHECK_EQ(u32(bytes, 68u), 1u); }
 
 TEST(present_command, operations_are_the_documented_values)
 { CHECK_EQ(static_cast<unsigned>(PresentOperation::blt), 1u);
