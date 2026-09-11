@@ -19,7 +19,7 @@ namespace av {
 
 namespace {
 
-constexpr std::int32_t dma_completed = 1, dma_preempted = 2;
+constexpr std::int32_t dma_completed = 1, dma_preempted = 2, monitored_fence_signaled = 11;
 
 }  // namespace
 
@@ -27,7 +27,7 @@ FakeVidSch::FakeVidSch(MockPlatform &platform, const DdiTable &table, FakeDxgkrn
     : platform_(platform), table_(table), dxgkrnl_(dxgkrnl), adapter_(adapter), device_(nullptr), context_(nullptr),
       dma_{}, rendered_(0u), allocation_{}, patch_in_{}, patch_out_{}, present_allocations_{}, present_patches_{},
       submitted_(0u), completed_(0u),
-      preemption_fence_(0x80000000u), preemptions_(0u), seen_(dxgkrnl.interrupts()) {}
+      preemption_fence_(0x80000000u), preemptions_(0u), seen_(dxgkrnl.interrupts()), fence_signals_(0u) {}
 
 FakeVidSch::~FakeVidSch()
 {
@@ -188,6 +188,14 @@ void FakeVidSch::check_notification(const DxgkargcbNotifyInterruptDataRecord &da
         preemptions_++;
         return;
     }
+    if (data.InterruptType == monitored_fence_signaled) {
+        /* MonitoredFenceSignaled's NodeOrdinal and EngineOrdinal overlay FenceId and Argument1. */
+        if (data.FenceId != 0u || data.Argument1 != 0u)
+            TestRegistry::instance().record_failure(__FILE__, __LINE__, "fence signalled for node %u engine %u",
+                                                    data.FenceId, data.Argument1);
+        fence_signals_++;
+        return;
+    }
     TestRegistry::instance().record_failure(__FILE__, __LINE__, "unexpected interrupt type %d", data.InterruptType);
 }
 
@@ -223,6 +231,10 @@ std::int32_t FakeVidSch::query_current_fence(std::uint32_t &fence)
     fence = query.CurrentFence;
     return status;
 }
+
+void *FakeVidSch::context() const { return context_; }
+
+std::uint32_t FakeVidSch::fence_signals() const { return fence_signals_; }
 
 const std::uint8_t *FakeVidSch::dma() const { return dma_; }
 std::uint32_t       FakeVidSch::submitted() const { return submitted_; }

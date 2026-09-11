@@ -27,6 +27,9 @@
 #include "ddi/dxgkarg_set_stable_power_state_record.hpp"
 #include "ddi/dxgkarg_control_mode_behavior_record.hpp"
 #include "ddi/dxgkarg_update_monitor_link_info_record.hpp"
+#include "ddi/dxgkarg_create_hw_queue_record.hpp"
+#include "ddi/dxgkarg_reset_hw_engine_record.hpp"
+#include "ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
 #include "ddi/dxgkarg_query_adapter_info_record.hpp"
@@ -85,7 +88,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       segment_(platform),
       modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
-      node_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
+      hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, device_), started_(false), present_(true) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
@@ -195,6 +198,8 @@ void Adapter::dpc_routine()
     if (harvest && device_.object().harvest_cursor(completed) != Status::ok)
         platform_.log("rvkgpu: cursor queue harvest failed in the DPC");
     if (node_.complete(notification_) != Status::ok) platform_.log("rvkgpu: a completion was refused in the DPC");
+    if (hw_submissions_.complete(notification_) != Status::ok)
+        platform_.log("rvkgpu: a progress fence signal was refused in the DPC");
     dxgkrnl_.notify_dpc();
 }
 
@@ -394,6 +399,8 @@ int32_t Adapter::create_context(void *device, DxgkargCreateContextRecord *reques
 int32_t Adapter::destroy_context(void *context)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_context");
+    /* DXGCONTEXT::DestroyContext destroys a context's queues first. */
+    if (hw_queues_.serves(context)) return NtStatus(Status::invalid_parameter).value();
     return NtStatus(contexts_.destroy(context)).value();
 }
 
@@ -449,6 +456,7 @@ int32_t Adapter::reset_from_timeout()
     platform_.require_irql_at_most(Irql::passive, "Adapter::reset_from_timeout");
     InvariantScope<Adapter> guard(platform_, *this, "reset_from_timeout");
     node_.reset();
+    hw_submissions_.abandon();
     return NtStatus(power_down()).value();
 }
 
@@ -805,6 +813,39 @@ int32_t Adapter::update_monitor_link_info(DxgkargUpdateMonitorLinkInfoRecord *re
     if (request == nullptr || request->VideoPresentTargetId >= DisplaySources::target_count)
         return NtStatus(Status::invalid_parameter).value();
     edid_.describe_link(*request);
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::create_hw_queue(void *context, DxgkargCreateHwQueueRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::create_hw_queue");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(hw_queues_.create(context, *request)).value();
+}
+
+int32_t Adapter::destroy_hw_queue(void *queue)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_hw_queue");
+    hw_submissions_.forget(queue);
+    return NtStatus(hw_queues_.destroy(queue)).value();
+}
+
+int32_t Adapter::submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueRecord *request)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "Adapter::submit_command_to_hw_queue");
+    if (request == nullptr || request->DmaBufferPrivateDataSize != 0u) return NtStatus(Status::invalid_parameter).value();
+    const Status status = hw_submissions_.submit(request->hHwQueue, request->HwQueueProgressFenceId,
+                                                 static_cast<uint64_t *>(request->HwQueueProgressFenceCpuVa));
+    if (status == Status::ok) static_cast<void>(dxgkrnl_.queue_dpc());
+    return NtStatus(status).value();
+}
+
+int32_t Adapter::reset_hw_engine(const DxgkargResetHwEngineRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::reset_hw_engine");
+    if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
+        return NtStatus(Status::invalid_parameter).value();
+    hw_submissions_.abandon();
     return NtStatus(Status::ok).value();
 }
 

@@ -53,6 +53,9 @@
 #include "../../src/core/ddi/dxgkarg_set_stable_power_state_record.hpp"
 #include "../../src/core/ddi/dxgkarg_control_mode_behavior_record.hpp"
 #include "../../src/core/ddi/dxgkarg_update_monitor_link_info_record.hpp"
+#include "../../src/core/ddi/dxgkarg_create_hw_queue_record.hpp"
+#include "../../src/core/ddi/dxgkarg_reset_hw_engine_record.hpp"
+#include "../../src/core/ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "../../src/core/ddi/dxgkarg_render_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
@@ -1603,6 +1606,89 @@ TEST(adapter_update_monitor_link_info, describes_the_monitor_on_the_one_target)
   fixture.platform().set_irql(Irql::passive);
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   while (fixture.platform().claim(Violation::irql_ceiling)) {} }
+
+TEST(adapter_hw_queue, submissions_complete_through_the_dpc_and_a_reset_drops_them)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x14u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  std::uint64_t fence = 0u;
+  av::DxgkargCreateHwQueueRecord queue = {};
+  queue.HwQueueProgressFenceCPUVirtualAddress = &fence;
+  CHECK_EQ(nt(fixture.adapter().create_hw_queue(context.hContext, &queue)), success);
+  CHECK_EQ(nt(fixture.adapter().create_hw_queue(context.hContext, nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), invalid_parameter);   /* a queue still runs on it */
+  av::DxgkargSubmitCommandToHwQueueRecord submit = {};
+  submit.hHwQueue = queue.hHwQueue;
+  submit.HwQueueProgressFenceId = 1u;
+  submit.HwQueueProgressFenceCpuVa = &fence;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(&submit)), success);
+  submit.HwQueueProgressFenceId = 2u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(&submit)), success);
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), 2u);
+  submit.DmaBufferPrivateDataSize = 4u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(&submit)), invalid_parameter);
+  submit.DmaBufferPrivateDataSize = 0u;
+  submit.HwQueueProgressFenceCpuVa = nullptr;
+  CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(&submit)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(nullptr)), invalid_parameter);
+  const std::uint32_t reported = fixture.dxgkrnl().interrupts();
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fence, 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), reported + 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(reported).InterruptType, 11);
+  submit.HwQueueProgressFenceId = 3u;
+  submit.HwQueueProgressFenceCpuVa = &fence;
+  CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(&submit)), success);
+  const av::DxgkargResetHwEngineRecord reset = {0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().reset_hw_engine(&reset)), success);
+  const av::DxgkargResetHwEngineRecord other_node = {1u, 0u};
+  const av::DxgkargResetHwEngineRecord other_engine = {0u, 1u};
+  CHECK_EQ(nt(fixture.adapter().reset_hw_engine(&other_node)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().reset_hw_engine(&other_engine)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().reset_hw_engine(nullptr)), invalid_parameter);
+  submit.HwQueueProgressFenceId = 4u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(&submit)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_hw_queue(queue.hHwQueue)), success);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fence, 2u);   /* neither the reset's nor the destroyed queue's work is written */
+  CHECK_EQ(nt(fixture.adapter().destroy_hw_queue(queue.hHwQueue)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_dpc_routine, a_refused_progress_fence_signal_is_logged)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  std::uint64_t fence = 0u;
+  av::DxgkargSubmitCommandToHwQueueRecord submit = {};
+  submit.hHwQueue = &fixture;
+  submit.HwQueueProgressFenceId = 1u;
+  submit.HwQueueProgressFenceCpuVa = &fence;
+  CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(&submit)), success);
+  fixture.dxgkrnl().refuse_synchronize(no_memory);
+  const std::uint32_t logged = fixture.platform().logged();
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.platform().logged(), logged + 1u);
+  const av::DxgkargResetHwEngineRecord reset = {0u, 0u};
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.adapter().reset_hw_engine(&reset));
+  static_cast<void>(fixture.adapter().create_hw_queue(nullptr, nullptr));
+  static_cast<void>(fixture.adapter().destroy_hw_queue(nullptr));
+  fixture.platform().set_irql(Irql::isr);
+  static_cast<void>(fixture.adapter().submit_command_to_hw_queue(nullptr));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  while (fixture.platform().claim(Violation::irql_ceiling)) {}
+  while (fixture.platform().claim(Violation::blocking_at_dispatch)) {} }
 
 TEST(adapter_submit_command, queues_and_asks_for_the_dpc_that_completes_it)
 { Fixture fixture;

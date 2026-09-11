@@ -91,16 +91,16 @@ TEST(context_table_create, answers_a_context_on_the_device_for_node_zero)
   CHECK(static_cast<void *>(&context->device()) == fixture.device());
   CHECK_EQ(request.ContextInfoDmaBufferSize, 0x10000u); }
 
-TEST(context_table_create, accepts_a_context_with_gpu_virtual_addressing)
+TEST(context_table_create, accepts_a_context_with_gpu_virtual_addressing_and_hardware_queues)
 { Fixture fixture;
   DxgkargCreateContextRecord request = {};
-  request.Flags = 0x5u;
+  request.Flags = 0x15u;
   CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
   CHECK(fixture.contexts().invariants_hold());
-  CHECK_EQ(fixture.contexts().find(request.hContext)->flags(), 0x5u); }
+  CHECK_EQ(fixture.contexts().find(request.hContext)->flags(), 0x15u); }
 
 TEST(context_table_create, refuses_what_this_adapter_cannot_run)
-{ for (int knob = 0; knob < 6; knob++) {
+{ for (int knob = 0; knob < 7; knob++) {
       Fixture fixture;
       DxgkargCreateContextRecord request = {};
       void *device = fixture.device();
@@ -110,6 +110,7 @@ TEST(context_table_create, refuses_what_this_adapter_cannot_run)
       if (knob == 3) request.Flags = 0x8u;                 /* SystemProtectedContext: WDDM 2.1 */
       if (knob == 4) request.PrivateDriverDataSize = 4u;   /* no private data defined */
       if (knob == 5) fixture.platform().fail_allocation_at(1u);
+      if (knob == 6) request.Flags = 0x10u;               /* HwQueueSupported needs VirtualAddressing */
       const Status status = fixture.contexts().create(device, request);
       CHECK(status == (knob == 5 ? Status::no_memory : Status::invalid_parameter));
       CHECK_EQ(fixture.contexts().live(), 0u);

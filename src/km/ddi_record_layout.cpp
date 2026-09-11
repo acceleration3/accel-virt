@@ -69,6 +69,9 @@
 #include "ddi/dxgkarg_set_stable_power_state_record.hpp"
 #include "ddi/dxgkarg_control_mode_behavior_record.hpp"
 #include "ddi/dxgkarg_update_monitor_link_info_record.hpp"
+#include "ddi/dxgkarg_create_hw_queue_record.hpp"
+#include "ddi/dxgkarg_reset_hw_engine_record.hpp"
+#include "ddi/dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "ddi/dxgkarg_set_root_page_table_record.hpp"
 #include "ddi/dxgkarg_submit_command_virtual_record.hpp"
@@ -774,6 +777,30 @@ AV_SAME_OFFSET(DxgkargUpdateMonitorLinkInfoRecord, VideoPresentTargetId, DXGKARG
 AV_SAME_OFFSET(DxgkargUpdateMonitorLinkInfoRecord, MonitorLinkInfoUsageHints, DXGKARG_UPDATEMONITORLINKINFO, MonitorLinkInfo.UsageHints);
 AV_SAME_OFFSET(DxgkargUpdateMonitorLinkInfoRecord, MonitorLinkInfoCapabilities, DXGKARG_UPDATEMONITORLINKINFO, MonitorLinkInfo.Capabilities);
 AV_SAME_OFFSET(DxgkargUpdateMonitorLinkInfoRecord, MonitorLinkInfoDitheringSupport, DXGKARG_UPDATEMONITORLINKINFO, MonitorLinkInfo.DitheringSupport);
+
+AV_SAME_SIZE(DxgkargCreateHwQueueRecord, DXGKARG_CREATEHWQUEUE);
+AV_SAME_OFFSET(DxgkargCreateHwQueueRecord, hHwQueue, DXGKARG_CREATEHWQUEUE, hHwQueue);
+AV_SAME_OFFSET(DxgkargCreateHwQueueRecord, Flags, DXGKARG_CREATEHWQUEUE, Flags);
+AV_SAME_OFFSET(DxgkargCreateHwQueueRecord, PrivateDriverDataSize, DXGKARG_CREATEHWQUEUE, PrivateDriverDataSize);
+AV_SAME_OFFSET(DxgkargCreateHwQueueRecord, pPrivateDriverData, DXGKARG_CREATEHWQUEUE, pPrivateDriverData);
+AV_SAME_OFFSET(DxgkargCreateHwQueueRecord, hHwQueueProgressFence, DXGKARG_CREATEHWQUEUE, hHwQueueProgressFence);
+AV_SAME_OFFSET(DxgkargCreateHwQueueRecord, HwQueueProgressFenceCPUVirtualAddress, DXGKARG_CREATEHWQUEUE, HwQueueProgressFenceCPUVirtualAddress);
+AV_SAME_OFFSET(DxgkargCreateHwQueueRecord, HwQueueProgressFenceGPUVirtualAddress, DXGKARG_CREATEHWQUEUE, HwQueueProgressFenceGPUVirtualAddress);
+
+AV_SAME_SIZE(DxgkargSubmitCommandToHwQueueRecord, DXGKARG_SUBMITCOMMANDTOHWQUEUE);
+AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, hHwQueue, DXGKARG_SUBMITCOMMANDTOHWQUEUE, hHwQueue);
+AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, HwQueueProgressFenceId, DXGKARG_SUBMITCOMMANDTOHWQUEUE, HwQueueProgressFenceId);
+AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, DmaBufferVirtualAddress, DXGKARG_SUBMITCOMMANDTOHWQUEUE, DmaBufferVirtualAddress);
+AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, DmaBufferSize, DXGKARG_SUBMITCOMMANDTOHWQUEUE, DmaBufferSize);
+AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, DmaBufferPrivateDataSize, DXGKARG_SUBMITCOMMANDTOHWQUEUE, DmaBufferPrivateDataSize);
+AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, pDmaBufferPrivateData, DXGKARG_SUBMITCOMMANDTOHWQUEUE, pDmaBufferPrivateData);
+AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, Flags, DXGKARG_SUBMITCOMMANDTOHWQUEUE, Flags);
+AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, HwQueueProgressFenceGpuVa, DXGKARG_SUBMITCOMMANDTOHWQUEUE, HwQueueProgressFenceGpuVa);
+AV_SAME_OFFSET(DxgkargSubmitCommandToHwQueueRecord, HwQueueProgressFenceCpuVa, DXGKARG_SUBMITCOMMANDTOHWQUEUE, HwQueueProgressFenceCpuVa);
+
+AV_SAME_SIZE(DxgkargResetHwEngineRecord, DXGKARG_RESETHWENGINE);
+AV_SAME_OFFSET(DxgkargResetHwEngineRecord, NodeOrdinal, DXGKARG_RESETHWENGINE, NodeOrdinal);
+AV_SAME_OFFSET(DxgkargResetHwEngineRecord, EngineOrdinal, DXGKARG_RESETHWENGINE, EngineOrdinal);
 
 /* The operation records overlay DXGKARG_BUILDPAGINGBUFFER's union, which they copy from. */
 AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, Reserved, DXGKARG_BUILDPAGINGBUFFER, UpdatePageTable);

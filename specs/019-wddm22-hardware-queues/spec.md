@@ -64,7 +64,14 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `HwQueue` | object | platform, the context it runs on, its creation flags | One hardware queue dxgkrnl created on a context |
+| `HwQueueTable` | system | platform, contexts, mutex, `ObjectPool<HwQueue>` | Creates and destroys the adapter's hardware queues |
+| `HwQueueSubmissions` | system | platform, spin lock, a ring of in-flight {queue, progress fence id, fence address} | Carries hardware queue submissions until their progress fences are written |
+| `InterruptNotification` (extended) | object | + MONITORED_FENCE_SIGNALED | Reports to dxgkrnl from outside the ISR |
+| `ContextTable` (extended) | system | + HwQueueSupported | The adapter's execution contexts |
+| `DriverCapabilities` (extended) | object | + WDDM 2.2, the display caps extension | Reports what the driver implements |
+| DDI records | DDI record | `DXGKARG_CREATEHWQUEUE`, `DXGKARG_SUBMITCOMMANDTOHWQUEUE`, `DXGKARG_RESETHWENGINE` | Overlays memory dxgkrnl owns, layout-proven |
+| `FakeHwQueue` (harness) | object | table, dxgkrnl fake, context, progress fence storage, packets | `DXGHWQUEUE`'s create, submit, progress and destroy as dxgkrnl and VidSch drive them |
 
 ### Test requirements
 
@@ -108,6 +115,28 @@ Normative headers: `third_party/windows-kit/include/` (fetched by `tools/fetch_w
   queue objects, but not enabled: no node claims context scheduling and the
   feature callback is not called. Enabling it arrives with the driver version
   that permits it (feature 020). Doorbells (024) build on these queues.
+- Q (agent, RE): The hardware queue contract? -> A: dxgkrnl creates the
+  progress fence before `CreateHwQueue` (`DXGHWQUEUE::Initialize @ 14035be70`)
+  and passes the context handle, the flags, private data and the fence's handle,
+  CPU and GPU addresses; the driver answers `hHwQueue`. Every submission
+  (`SubmitRenderToHwQueue @ 14001ae10` at DISPATCH, paging from
+  `SubmitPagingToHwQueue @ 1400494c0`) carries its progress fence id and the
+  fence's CPU address, and stays in flight on success; a failure other than
+  NOT_IMPLEMENTED puts the device in error. Completion: write the finished
+  fence id to the fence, report `DXGK_INTERRUPT_MONITORED_FENCE_SIGNALED` (11)
+  for the node and engine, and let the DPC notify; VidSch then reads every
+  queue's progress fence (`VidSchiUnwaitNodeHwQueueProgress @ 140008b00`).
+  Queues are destroyed after VidSch terminates them and before their context
+  (`DXGCONTEXT::DestroyContext @ 1402de2f0`). `ResetHwEngine` carries only the
+  node and engine; the driver drops what was in flight. Invalidating the lost
+  contexts (`DxgkCbInvalidateHwContext`) and `ResumeHwEngine` arrive with
+  enablement.
+- Q (agent): Which queue flags and contexts? -> A: A queue only on a context
+  created with `HwQueueSupported` (which needs `VirtualAddressing`); flags
+  `DisableGpuTimeout`, `NoBroadcastSignal` and `NoBroadcastWait` only - no
+  user-mode submission, native fence or queue without kernel access to its fence
+  - and no private data. Submissions carry no private data (the context reports
+  none) and a fence address; at most 64 are in flight.
 - Q (agent, RE): The display slots? -> A: Left NULL, each safe:
   `CreatePeriodicFrameNotification` (NULL-checked; VidSch falls back to a
   software timer) with `DestroyPeriodicFrameNotification` (only for

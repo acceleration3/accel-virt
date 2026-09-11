@@ -16,6 +16,8 @@
 #include "execution_node.hpp"
 #include "gpu_mmu_geometry.hpp"
 #include "hardware_cursor.hpp"
+#include "hw_queue_submissions.hpp"
+#include "hw_queue_table.hpp"
 #include "interrupt_notification.hpp"
 #include "dxgkrnl_interface.hpp"
 #include "object_storage.hpp"
@@ -80,6 +82,9 @@ struct DxgkargCreateProcessRecord;
 struct DxgkargSetStablePowerStateRecord;
 struct DxgkargControlModeBehaviorRecord;
 struct DxgkargUpdateMonitorLinkInfoRecord;
+struct DxgkargCreateHwQueueRecord;
+struct DxgkargSubmitCommandToHwQueueRecord;
+struct DxgkargResetHwEngineRecord;
 struct DxgkargEscapeRecord;
 struct DxgkargQueryAdapterInfoRecord;
 struct LinkedDeviceRecord;
@@ -203,6 +208,12 @@ public:
     /* dxgkrnl asks on every start, before any capability query. */
     int32_t control_mode_behavior(DxgkargControlModeBehaviorRecord *request);
     int32_t update_monitor_link_info(DxgkargUpdateMonitorLinkInfoRecord *request);
+    /* Hardware queues: reached only once hardware scheduling is on. */
+    int32_t create_hw_queue(void *context, DxgkargCreateHwQueueRecord *request);
+    int32_t destroy_hw_queue(void *queue);
+    /* In flight until the DPC writes its progress fence. */
+    int32_t submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueRecord *request);
+    int32_t reset_hw_engine(const DxgkargResetHwEngineRecord *request);
 
     bool invariants_hold() const;
 
@@ -246,6 +257,8 @@ private:
     AllocationTable                allocations_;
     DeviceTable                    devices_;
     ContextTable                   contexts_;
+    HwQueueTable                   hw_queues_;
+    HwQueueSubmissions             hw_submissions_;
     ExecutionNode                  node_;
     InterruptNotification          notification_;
     SyntheticVsync                 vsync_;

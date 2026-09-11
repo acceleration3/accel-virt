@@ -269,6 +269,18 @@ int32_t AvDdiControlModeBehavior(void *context, av::DxgkargControlModeBehaviorRe
 int32_t AvDdiUpdateMonitorLinkInfo(void *context, av::DxgkargUpdateMonitorLinkInfoRecord *request)
 { return static_cast<av::Adapter *>(context)->update_monitor_link_info(request); }
 
+int32_t AvDdiCreateHwQueue(void *context, av::DxgkargCreateHwQueueRecord *request)
+{ return static_cast<av::Context *>(context)->device().adapter().create_hw_queue(context, request); }
+
+int32_t AvDdiDestroyHwQueue(void *queue)
+{ return static_cast<av::HwQueue *>(queue)->context().device().adapter().destroy_hw_queue(queue); }
+
+int32_t AvDdiSubmitCommandToHwQueue(void *context, const av::DxgkargSubmitCommandToHwQueueRecord *request)
+{ return static_cast<av::Adapter *>(context)->submit_command_to_hw_queue(request); }
+
+int32_t AvDdiResetHwEngine(void *context, const av::DxgkargResetHwEngineRecord *request)
+{ return static_cast<av::Adapter *>(context)->reset_hw_engine(request); }
+
 int32_t AvDdiUpdateOverlay(void *, const void *)
 { return av::NtStatus(av::Status::not_supported).value(); }
 

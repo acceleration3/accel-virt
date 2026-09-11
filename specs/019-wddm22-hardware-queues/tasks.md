@@ -12,8 +12,8 @@ description: "Task list for feature 019: WDDM 2.2 hardware contexts and queues"
 
 ## Phase 2: Hardware queue model
 
-- [ ] T002 Records and km proofs; harness model of dxgkrnl's hardware queue objects, with tests
-- [ ] T003 Tests then the hardware queue classes; CreateHwQueue, DestroyHwQueue, SubmitCommandToHwQueue, ResetHwEngine; entry points; slots
+- [X] T002 Records and km proofs; `FakeHwQueue`
+- [X] T003 Tests then `HwQueue`, `HwQueueTable`, `HwQueueSubmissions`, MONITORED_FENCE_SIGNALED, HwQueueSupported contexts; CreateHwQueue, DestroyHwQueue, SubmitCommandToHwQueue, ResetHwEngine; entry points; slots
 
 **Checkpoint**: commit.
 

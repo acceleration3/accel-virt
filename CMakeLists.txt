@@ -83,7 +83,8 @@ add_library(av_harness STATIC
   tests/harness/fake_display_mode_manager.cpp
   tests/harness/mapped_virtio_function.cpp
   tests/harness/fake_gpu_mmu.cpp
-  tests/harness/fake_dxgmonitor.cpp)
+  tests/harness/fake_dxgmonitor.cpp
+  tests/harness/fake_hw_queue.cpp)
 target_link_libraries(av_harness PUBLIC av_core)
 target_compile_definitions(av_harness PUBLIC AV_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures")
 

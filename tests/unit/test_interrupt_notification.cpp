@@ -55,6 +55,23 @@ TEST(interrupt_notification_report_completed, notifies_dma_completed_at_device_i
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument1, 0u);   /* node */
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument2, 0u);   /* engine */ }
 
+TEST(interrupt_notification_report_monitored_fence_signaled, names_the_node_and_engine)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.notification().report_monitored_fence_signaled(0u, 0u), Status::ok);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).InterruptType, 11);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).FenceId, 0u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument1, 0u);
+  {
+      fixture.platform().set_irql(Irql::isr);
+      static_cast<void>(fixture.notification().report_monitored_fence_signaled(0u, 0u));
+      fixture.platform().set_irql(Irql::passive);
+      CHECK(fixture.platform().claim(Violation::irql_ceiling));
+      while (fixture.platform().claim(Violation::irql_ceiling)) {}
+  } }
+
 TEST(interrupt_notification_report_preempted, notifies_the_preemption_and_last_completed_fences)
 { Fixture fixture;
   CHECK_STATUS(fixture.notification().report_preempted(9u, 5u), Status::ok);

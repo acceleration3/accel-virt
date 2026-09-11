@@ -32,6 +32,17 @@ Status InterruptNotification::report_preempted(uint32_t preemption_fence, uint32
     return report();
 }
 
+/* MonitoredFenceSignaled's NodeOrdinal and EngineOrdinal are the first two UINTs. */
+Status InterruptNotification::report_monitored_fence_signaled(uint32_t node, uint32_t engine)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "InterruptNotification::report_monitored_fence_signaled");
+    data_ = DxgkargcbNotifyInterruptDataRecord{};
+    data_.InterruptType = monitored_fence_signaled;
+    data_.FenceId = node;
+    data_.Argument1 = engine;
+    return report();
+}
+
 /* CRTC_VSYNC's PhysicalAddress spans the two UINTs after the target. */
 Status InterruptNotification::report_vsync(uint32_t target, uint64_t address)
 {

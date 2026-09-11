@@ -10,10 +10,12 @@
 namespace av {
 
 enum class LockRank : uint16_t {
+    hw_queue_table = 80u,     /* HwQueueTable, which looks contexts up in ContextTable */
     context_table = 90u,      /* ContextTable, which looks devices up in DeviceTable */
     device_table = 100u,       /* DeviceTable, which calls into AllocationTable */
     allocation_table = 110u,
     execution_node = 200u,     /* spin lock: SubmitCommand, PreemptCommand and the DPC */
+    hw_queue_submissions = 210u, /* spin lock: SubmitCommandToHwQueue, DestroyHwQueue, ResetHwEngine and the DPC */
     control_queue = 220u,      /* spin lock: virtio-gpu control requests and the DPC's harvest */
     cursor_queue = 230u,       /* spin lock: virtio-gpu cursor requests and the DPC's harvest */
 };

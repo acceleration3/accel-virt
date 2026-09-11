@@ -1,0 +1,150 @@
+#include "../../src/core/adapter.hpp"
+#include "../../src/core/allocation_table.hpp"
+#include "../../src/core/aperture_segment.hpp"
+#include "../../src/core/context.hpp"
+#include "../../src/core/context_table.hpp"
+#include "../../src/core/ddi/dxgkarg_create_context_record.hpp"
+#include "../../src/core/ddi/dxgkarg_create_device_record.hpp"
+#include "../../src/core/ddi/dxgkarg_create_hw_queue_record.hpp"
+#include "../../src/core/device_table.hpp"
+#include "../../src/core/dxgkrnl_interface.hpp"
+#include "../../src/core/gpu_mmu_geometry.hpp"
+#include "../../src/core/hw_queue.hpp"
+#include "../../src/core/hw_queue_table.hpp"
+#include "../../src/core/object_pool.hpp"
+#include "../../src/core/status.hpp"
+#include "../harness/mock_platform.hpp"
+#include "../harness/test_registry.hpp"
+#include "../harness/violation.hpp"
+
+#include <cstdint>
+
+using av::Adapter;
+using av::AllocationTable;
+using av::ApertureSegment;
+using av::ContextTable;
+using av::DeviceTable;
+using av::DxgkargCreateContextRecord;
+using av::DxgkargCreateDeviceRecord;
+using av::DxgkargCreateHwQueueRecord;
+using av::DxgkrnlInterface;
+using av::GpuMmuGeometry;
+using av::HwQueue;
+using av::HwQueueTable;
+using av::Irql;
+using av::MockPlatform;
+using av::Status;
+using av::Violation;
+
+namespace av {
+
+struct ObjectPoolProbe {
+    template <typename T>
+    static void corrupt_live_count(ObjectPool<T> &pool) { pool.live_ += 1u; }
+};
+
+struct HwQueueTableProbe {
+    static void corrupt_pool(HwQueueTable &table) { ObjectPoolProbe::corrupt_live_count(table.queues_); }
+};
+
+}  // namespace av
+
+namespace {
+
+class Fixture {
+public:
+    Fixture()
+        : interface_(platform_), adapter_(platform_, &pdo_), segment_(platform_), allocations_(platform_, segment_),
+          devices_(platform_, allocations_, interface_), geometry_(platform_), contexts_(platform_, devices_, geometry_),
+          queues_(platform_, contexts_), fence_(0u), hw_context_(context_with(0x14u)), plain_context_(context_with(0x4u))
+    {
+    }
+
+    MockPlatform &platform() { return platform_; }
+    HwQueueTable &queues() { return queues_; }
+    void         *hw_context() const { return hw_context_; }
+    void         *plain_context() const { return plain_context_; }
+    DxgkargCreateHwQueueRecord request()
+    {
+        DxgkargCreateHwQueueRecord record = {};
+        record.hHwQueue = &fence_;
+        record.Flags = 0x7u;
+        record.HwQueueProgressFenceCPUVirtualAddress = &fence_;
+        return record;
+    }
+
+private:
+    void *context_with(std::uint32_t flags)
+    {
+        DxgkargCreateDeviceRecord device = {};
+        DxgkargCreateContextRecord context = {};
+        context.Flags = flags;
+        if (devices_.create(adapter_, device) != Status::ok || contexts_.create(device.hDevice, context) != Status::ok)
+            av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "context");
+        return context.hContext;
+    }
+
+    MockPlatform     platform_;
+    DxgkrnlInterface interface_;
+    int              pdo_ = 0;
+    Adapter          adapter_;
+    ApertureSegment  segment_;
+    AllocationTable  allocations_;
+    DeviceTable      devices_;
+    GpuMmuGeometry   geometry_;
+    ContextTable     contexts_;
+    HwQueueTable     queues_;
+    std::uint64_t    fence_;
+    void            *hw_context_;
+    void            *plain_context_;
+};
+
+}  // namespace
+
+TEST(hw_queue_table_create, answers_a_queue_on_a_hardware_queue_context)
+{ Fixture fixture;
+  DxgkargCreateHwQueueRecord request = fixture.request();
+  CHECK_STATUS(fixture.queues().create(fixture.hw_context(), request), Status::ok);
+  CHECK(fixture.queues().invariants_hold());
+  CHECK_EQ(fixture.queues().live(), 1u);
+  CHECK(static_cast<void *>(&static_cast<HwQueue *>(request.hHwQueue)->context()) == fixture.hw_context());
+  CHECK(fixture.queues().serves(fixture.hw_context()));
+  CHECK(!fixture.queues().serves(fixture.plain_context()));
+  CHECK_STATUS(fixture.queues().destroy(request.hHwQueue), Status::ok);
+  CHECK(fixture.queues().invariants_hold());
+  CHECK(!fixture.queues().serves(fixture.hw_context()));
+  CHECK_STATUS(fixture.queues().destroy(request.hHwQueue), Status::invalid_parameter); }
+
+TEST(hw_queue_table_create, refuses_what_this_driver_cannot_run)
+{ for (int knob = 0; knob < 6; knob++) {
+      Fixture fixture;
+      DxgkargCreateHwQueueRecord request = fixture.request();
+      void *context = fixture.hw_context();
+      if (knob == 0) context = &fixture;                                    /* not a context */
+      if (knob == 1) context = fixture.plain_context();                     /* no HwQueueSupported */
+      if (knob == 2) request.Flags = 0x8u;                                  /* NoKmdAccess */
+      if (knob == 3) request.PrivateDriverDataSize = 4u;                    /* no private data defined */
+      if (knob == 4) request.HwQueueProgressFenceCPUVirtualAddress = nullptr;
+      if (knob == 5) fixture.platform().fail_allocation_at(1u);
+      const Status status = fixture.queues().create(context, request);
+      CHECK(status == (knob == 5 ? Status::no_memory : Status::invalid_parameter));
+      CHECK_EQ(fixture.queues().live(), 0u);
+  } }
+
+TEST(hw_queue_table_invariants, a_broken_pool_is_detected)
+{ Fixture fixture;
+  av::HwQueueTableProbe::corrupt_pool(fixture.queues());
+  CHECK(!fixture.queues().invariants_hold()); }
+
+TEST(hw_queue_table, is_passive_only)
+{ Fixture fixture;
+  DxgkargCreateHwQueueRecord request = fixture.request();
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.queues().create(fixture.hw_context(), request));
+  static_cast<void>(fixture.queues().destroy(nullptr));
+  static_cast<void>(fixture.queues().serves(nullptr));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  while (fixture.platform().claim(Violation::irql_ceiling)) {}
+  while (fixture.platform().claim(Violation::blocking_at_dispatch)) {}
+  while (fixture.platform().claim(Violation::allocation_at_dispatch)) {} }

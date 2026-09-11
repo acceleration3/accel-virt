@@ -18,7 +18,8 @@ Status ContextTable::create(void *device, DxgkargCreateContextRecord &request)
     request.hContext = nullptr;
     Device *owner = devices_.find(device);
     if (owner == nullptr || request.NodeOrdinal != 0u || (request.EngineAffinity & ~known_engines) != 0u ||
-        (request.Flags & ~known_flags) != 0u || request.PrivateDriverDataSize != 0u)
+        (request.Flags & ~known_flags) != 0u || request.PrivateDriverDataSize != 0u ||
+        (request.Flags & (hw_queue_supported | virtual_addressing)) == hw_queue_supported)
         return Status::invalid_parameter;
     Context *context = nullptr;
     const Status status = contexts_.create(context, platform_, *owner, geometry_, request.NodeOrdinal, request.Flags);

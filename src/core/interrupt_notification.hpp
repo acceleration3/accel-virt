@@ -25,13 +25,15 @@ public:
 
     [[nodiscard]] Status report_completed(uint32_t fence);
     [[nodiscard]] Status report_preempted(uint32_t preemption_fence, uint32_t last_completed_fence);
+    /* Hardware queue progress fences of the node's engine were written. */
+    [[nodiscard]] Status report_monitored_fence_signaled(uint32_t node, uint32_t engine);
     /* The address is the primary the target shows at this vsync. */
     [[nodiscard]] Status report_vsync(uint32_t target, uint64_t address);
     /* The synchronized routine: runs at device IRQL. */
     uint8_t              notify();
 
 private:
-    enum : int32_t { dma_completed = 1, dma_preempted = 2, crtc_vsync = 3 };   /* DXGK_INTERRUPT_TYPE */
+    enum : int32_t { dma_completed = 1, dma_preempted = 2, crtc_vsync = 3, monitored_fence_signaled = 11 };   /* DXGK_INTERRUPT_TYPE */
     /* One adapter, not linked: physical adapter 0. */
     static constexpr uint32_t physical_adapter_mask = 1u;
 

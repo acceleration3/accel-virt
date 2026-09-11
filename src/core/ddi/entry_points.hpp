@@ -19,6 +19,9 @@
 #include "dxgkarg_control_interrupt2_record.hpp"
 #include "dxgkarg_control_mode_behavior_record.hpp"
 #include "dxgkarg_update_monitor_link_info_record.hpp"
+#include "dxgkarg_create_hw_queue_record.hpp"
+#include "dxgkarg_reset_hw_engine_record.hpp"
+#include "dxgkarg_submit_command_to_hw_queue_record.hpp"
 #include "dxgkarg_create_process_record.hpp"
 #include "dxgkarg_get_root_page_table_size_record.hpp"
 #include "dxgkarg_set_root_page_table_record.hpp"
@@ -166,6 +169,10 @@ int32_t AvDdiDestroyProcess(void *context, void *process);
 void    AvDdiSetStablePowerState(void *context, const av::DxgkargSetStablePowerStateRecord *request);
 int32_t AvDdiControlModeBehavior(void *context, av::DxgkargControlModeBehaviorRecord *request);
 int32_t AvDdiUpdateMonitorLinkInfo(void *context, av::DxgkargUpdateMonitorLinkInfoRecord *request);
+int32_t AvDdiCreateHwQueue(void *context, av::DxgkargCreateHwQueueRecord *request);
+int32_t AvDdiDestroyHwQueue(void *queue);
+int32_t AvDdiSubmitCommandToHwQueue(void *context, const av::DxgkargSubmitCommandToHwQueueRecord *request);
+int32_t AvDdiResetHwEngine(void *context, const av::DxgkargResetHwEngineRecord *request);
 /* An overlay handle this driver never creates: nothing behind it to reach. */
 int32_t AvDdiUpdateOverlay(void *overlay, const void *request);
 int32_t AvDdiFlipOverlay(void *overlay, const void *request);

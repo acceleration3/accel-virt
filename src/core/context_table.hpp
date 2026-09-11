@@ -32,7 +32,10 @@ public:
     bool invariants_hold() const;
 
 private:
-    static constexpr uint32_t known_flags = 0x7u;       /* SystemContext | GdiContext | VirtualAddressing */
+    /* SystemContext | GdiContext | VirtualAddressing | HwQueueSupported */
+    static constexpr uint32_t known_flags = 0x17u;
+    static constexpr uint32_t virtual_addressing = 0x4u;
+    static constexpr uint32_t hw_queue_supported = 0x10u;
     static constexpr uint32_t known_engines = 0x1u;
 
     Platform            &platform_;

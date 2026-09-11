@@ -101,6 +101,10 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiSetStablePowerState, reinterpret_cast<DdiRoutine>(&AvDdiSetStablePowerState)},
         {DdiSlot::DxgkDdiControlModeBehavior, reinterpret_cast<DdiRoutine>(&AvDdiControlModeBehavior)},
         {DdiSlot::DxgkDdiUpdateMonitorLinkInfo, reinterpret_cast<DdiRoutine>(&AvDdiUpdateMonitorLinkInfo)},
+        {DdiSlot::DxgkDdiCreateHwQueue, reinterpret_cast<DdiRoutine>(&AvDdiCreateHwQueue)},
+        {DdiSlot::DxgkDdiDestroyHwQueue, reinterpret_cast<DdiRoutine>(&AvDdiDestroyHwQueue)},
+        {DdiSlot::DxgkDdiSubmitCommandToHwQueue, reinterpret_cast<DdiRoutine>(&AvDdiSubmitCommandToHwQueue)},
+        {DdiSlot::DxgkDdiResetHwEngine, reinterpret_cast<DdiRoutine>(&AvDdiResetHwEngine)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

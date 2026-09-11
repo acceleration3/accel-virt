@@ -52,6 +52,10 @@ public:
     std::int32_t restart_from_timeout();
     std::int32_t query_current_fence(std::uint32_t &fence);
 
+    /* The driver's handle for the context create_context made. */
+    void               *context() const;
+    /* MONITORED_FENCE_SIGNALED reports seen, each for node 0 engine 0. */
+    std::uint32_t       fence_signals() const;
     const std::uint8_t *dma() const;
     std::uint32_t       submitted() const;
     std::uint32_t       completed() const;
@@ -78,6 +82,7 @@ private:
     std::uint32_t                  preemption_fence_;
     std::uint32_t                  preemptions_;
     std::uint32_t                  seen_;
+    std::uint32_t                  fence_signals_;
 };
 
 }  // namespace av
