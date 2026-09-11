@@ -1,10 +1,15 @@
 /* The driver image, registered and driven through its DDI table the way
  * dxgkrnl drives it (docs/ddi-sequences.md), against fake virtio-gpu
  * functions. Nothing here calls a core class directly. */
+#include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
+#include "../../src/core/ddi/dxgkarg_collect_dbg_info_record.hpp"
+#include "../../src/core/ddi/dxgkarg_escape_record.hpp"
+#include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
 #include "../../src/core/ddi_slot.hpp"
 #include "../../src/core/ddi_table.hpp"
 #include "../../src/core/driver_image.hpp"
 #include "../../src/core/status.hpp"
+#include "../harness/capability_rule.hpp"
 #include "../harness/fake_dxgkrnl.hpp"
 #include "../harness/fake_dxgkrnl_adapter.hpp"
 #include "../harness/fake_dxgkrnl_fdo.hpp"
@@ -13,7 +18,10 @@
 #include "../harness/test_registry.hpp"
 
 #include <cstdint>
+#include <cstring>
 
+using av::CapabilityRule;
+using av::DdiRoutine;
 using av::DdiSlot;
 using av::DdiTable;
 using av::DriverImage;
@@ -84,6 +92,8 @@ TEST(ddi_scenario, the_recorded_bring_up_and_teardown)
     CHECK_EQ(device.fdo().add_device(), 0);
     CHECK(device.fdo().context() != nullptr);
     CHECK_EQ(device.fdo().start_device(), 0);
+    CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
+    CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x1000);
     CHECK_EQ(device.fdo().sources(), 1u);
     CHECK_EQ(device.fdo().children(), 1u);
     CHECK_EQ(device.function().common().status(), driver_ok_status);
@@ -182,3 +192,76 @@ TEST(ddi_scenario, add_device_past_the_adapter_ceiling_is_no_memory)
   CHECK_EQ(nt(fdos[8].add_device()), no_memory);
   CHECK(fdos[8].context() == nullptr);
   CHECK_EQ(driver.platform().logged(), 2u);   /* DriverEntry, and the refusal */ }
+
+/* ---- Capability reporting (feature 007) ------------------------------------ */
+
+namespace {
+
+constexpr std::int32_t revision_mismatch = static_cast<std::int32_t>(0xC0000059u);
+
+/* The driver's own table with QueryAdapterInfo answering an unknown WDDM
+ * version, as a later feature's mistake would. */
+std::int32_t answers_an_unknown_wddm_version(void *, const av::DxgkargQueryAdapterInfoRecord *query)
+{
+    if (query->Type != 1) return static_cast<std::int32_t>(0xC0000002u);
+    av::DxgkDriverCapsRecord caps = {};
+    caps.WDDMVersion = 0x1234;
+    std::memcpy(query->pOutputData, &caps, sizeof caps);
+    return 0;
+}
+
+}  // namespace
+
+TEST(ddi_scenario, every_query_adapter_info_type_answers_a_status_dxgkrnl_accepts)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  std::uint8_t input[0x250] = {}, output[0x250] = {};
+  for (std::int32_t type = -1; type <= 49; type++)
+      static_cast<void>(device.fdo().dxgadapter().query(device.fdo().context(), type, input, sizeof input,
+                                                        output, sizeof output));
+  CHECK_EQ(device.fdo().start_device(), 0);
+  for (std::int32_t type = -1; type <= 49; type++)
+      static_cast<void>(device.fdo().dxgadapter().query(device.fdo().context(), type, input, 0u, output, 0u));
+  CHECK_EQ(device.fdo().remove_device(), 0); }
+
+TEST(ddi_scenario, a_refused_capability_fails_start_and_stops_the_device)
+{ LoadedDriver driver;
+  DdiTable table;
+  for (std::uint16_t index = 1u; index < DdiTable::slot_count; index++)
+      CHECK_STATUS(table.set(DdiSlot{index}, driver.table().routine(DdiSlot{index})), Status::ok);
+  CHECK_STATUS(table.set(DdiSlot::DxgkDdiQueryAdapterInfo,
+                         reinterpret_cast<DdiRoutine>(&answers_an_unknown_wddm_version)), Status::ok);
+  FakeVirtioGpuFunction function;
+  FakeDxgkrnlAdapter dxgkrnl(driver.platform(), function);
+  FakeDxgkrnlFdo fdo(driver.platform(), table, dxgkrnl);
+  CHECK_EQ(fdo.add_device(), 0);
+  CHECK_EQ(fdo.start_device(), revision_mismatch);
+  CHECK(fdo.dxgadapter().failed_rule() == CapabilityRule::unknown_wddm_version);
+  CHECK(!fdo.started());
+  CHECK_EQ(function.common().status(), 0u);
+  CHECK_EQ(dxgkrnl.live_mappings(), 0u);
+  CHECK_EQ(fdo.remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u); }
+
+TEST(ddi_scenario, escape_and_debug_collection_through_the_table)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  std::uint8_t data[16] = {};
+  av::DxgkargEscapeRecord escape = {};
+  escape.pPrivateDriverData = data;
+  escape.PrivateDriverDataSize = sizeof data;
+  const auto escape_routine = reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargEscapeRecord *)>(
+      driver.table().routine(DdiSlot::DxgkDdiEscape));
+  CHECK_EQ(nt(escape_routine(device.fdo().context(), &escape)), not_supported);
+  std::uint8_t report[16] = {};
+  av::DxgkargCollectDbgInfoRecord collect = {};
+  collect.pBuffer = report;
+  collect.BufferSize = sizeof report;
+  const auto collect_routine = reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargCollectDbgInfoRecord *)>(
+      driver.table().routine(DdiSlot::DxgkDdiCollectDbgInfo));
+  CHECK_EQ(collect_routine(device.fdo().context(), &collect), 0);
+  CHECK_EQ(report[6], 1u);
+  CHECK_EQ(device.fdo().remove_device(), 0); }

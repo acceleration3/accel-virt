@@ -161,6 +161,13 @@ Each scenario arrives with the DDIs it calls. Since feature 006:
   regions to the mock, unmapping detaches them, and a mapping left at the end
   fails the test.
 
+- `FakeDxgadapter` is `DXGADAPTER::Initialize` (feature 007): the
+  `DRIVERCAPS` query and the ones it gates (`PHYSICALADAPTERCAPS`,
+  `FRAMEBUFFERSAVESIZE`, `DIRTYBITTRACKINGCAPS`, `64BITONLYCAPS`,
+  `NATIVE_FENCE_CAPS`), run by `FakeDxgkrnlFdo` after QueryChildRelations, with
+  one `CapabilityRule` per check dxgkrnl applies - so a capability claimed
+  without the DDIs it needs fails start in a test, as it would in the guest.
+
 `tests/unit/test_ddi_scenarios.cpp` runs the bring-up and teardown plus stop
 twice, remove without stop, an interrupt before start, a failed start, reset at
 bugcheck, two adapters, and the adapter ceiling - all through the registered
@@ -185,8 +192,11 @@ scenario can be re-derived when it is questioned.
 The harness also injects what a well-behaved `dxgkrnl` is allowed to do and a
 naive driver forgets to handle:
 
-- `QueryAdapterInfo` for a type the driver does not support — must return
-  `STATUS_NOT_SUPPORTED`, not garbage.
+- `QueryAdapterInfo` for a type the driver does not answer — must return
+  `STATUS_NOT_IMPLEMENTED` and touch neither buffer.
+  `DXGADAPTER::DdiQueryAdapterInfo` logs any status other than success,
+  `STATUS_NOT_IMPLEMENTED`, `STATUS_INVALID_PARAMETER` or `STATUS_NO_MEMORY`
+  as invalid, and `FakeDxgadapter` fails the test on one.
 - `StopDevice` while packets are in flight.
 - `PreemptCommand` for a fence id that already completed.
 - `DestroyAllocation` for an allocation still referenced by a submitted packet.

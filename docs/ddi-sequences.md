@@ -172,15 +172,45 @@ with `DXGKARG_QUERYADAPTERINFO.Type` at offset 0. Types and enum values from
 | 5 | 47   | `64BITONLYCAPS`       | always | non-fatal; cap simply not set |
 | 6 | 37   | `NATIVE_FENCE_CAPS`   | cap bit `adapter+0x9b8 & 0x800` (NativeGpuFence) | fatal (`"Failed to get DXGK_NATIVE_FENCE_CAPS"`) |
 
+`FakeDxgadapter` (`tests/harness/fake_dxgadapter.cpp`) reproduces this table
+and the checks below; `CapabilityRule` names each one. The `DRIVERCAPS` output
+is `GetDriverCapsSizeFromDdiVersion(0x11007)` = 0x250 bytes, copied to
+`DXGADAPTER+0x978`, so a field at `DXGADAPTER+X` is `DXGK_DRIVERCAPS+(X-0x978)`.
+`PHYSICALADAPTERCAPS` is asked only when `WDDMVersion` >= 2.0 (and a failure
+there keeps defaults); `FRAMEBUFFERSAVESIZE` only when
+`MemoryManagementCaps.IoMmuSecureModeSupported` (bit 11) is set. A
+`DXGKDDI_WDDMv1` answer with no capability passes every check.
+
 The `DRIVERCAPS` reply is validated hard: e.g. a WDDMv2+ driver that does not
 set `SchedulingCaps.MultiEngineAware` fails start; setting
 `IndependentVidPnVSyncControl` without exposing `DxgkDdiControlInterrupt3`
 (slot 153, read at `DXGADAPTER+0x578`) fails start; an unknown `WDDMVersion`
-(`adapter+0xac8`) value fails start. `DdiQueryAdapterInfo` also validates that
-the driver returns a *known* NTSTATUS and logs
-`"Driver returned an invalid NTSTATUS code"` otherwise, but it does **not**
-filter the `Type` — every requested type is forwarded verbatim to slot 17
-(relevant to §5).
+(`adapter+0xac8`) value fails start. Further checks, in order:
+`MiscCaps.Reserved` bits (WDDM >= 2.4); `IndependentVidPnVSyncControl` without
+`DxgkDdiControlInterrupt3`; `WDDMVersion` outside `DXGK_WDDMVERSION` (0x2105 and
+0x2106 are not accepted) fails with `STATUS_REVISION_MISMATCH`; a version below
+1.2 with any 1.2 capability (preemption caps, `SupportNonVGA`,
+`SupportSmoothRotation`, `SupportPerEngineTDR`,
+`PresentationCaps.SupportSoftwareDeviceBitmaps`, `PreemptionAware` or
+`CancelCommandAware`, `SupportDirectFlip`, `SupportRuntimePowerManagement`,
+`SupportSurpriseRemovalInHibernation`), below 1.3 with any 1.3 capability
+(`FlipIndependent`, `CrossAdapterResource`, `HybridDiscrete`,
+`MaxOverlayPlanes`), below 2.0 with `HybridIntegrated`; cross-adapter resource
+tiers out of order; hybrid flags without `CrossAdapterResource`, both hybrid
+flags, `HybridIntegrated` without outputs; `SupportPerEngineTDR`,
+`SupportKernelModeCommandBuffer`, `SupportRuntimePowerManagement` and
+`SupportMultiPlaneOverlay` without their DDIs (overlays also need planes, at
+most 8 before 2.0 or 10 from 2.2, and `SupportDirectFlip`); colour transform
+levels out of order or without `DxgkDdiSetTargetGamma` (WDDM >= 2.3); exactly
+one of the two diagnostic DDIs (WDDM >= 2.4). Each of these returns
+`STATUS_INVALID_PARAMETER` from start. After the cores are created, a full
+adapter at 1.2 must set `SupportDirectFlip` and at 1.3 `FlipIndependent`.
+
+`DdiQueryAdapterInfo @ 1402f4e90` does **not** filter the `Type` — every
+requested type is forwarded verbatim to slot 17 (relevant to §5) — and logs
+`"Driver returned an invalid NTSTATUS code"` for any answer other than
+`STATUS_SUCCESS`, `STATUS_NOT_IMPLEMENTED` (0xC0000002),
+`STATUS_INVALID_PARAMETER` (0xC000000D) or `STATUS_NO_MEMORY` (0xC0000017).
 
 ### 2.5 QueryChildStatus / QueryDeviceDescriptor
 
@@ -325,10 +355,11 @@ shipping stack. Scheduler/paging DDIs live in `dxgmms2.sys` (same project).
 
 - **QueryAdapterInfo for an unsupported type — confirmed possible.**
   `DdiQueryAdapterInfo @ 1402f4e90` forwards `Type` unchanged to slot 17 and
-  only validates the *returned* NTSTATUS (it logs an *invalid* NTSTATUS but
-  accepts `STATUS_NOT_SUPPORTED`/`STATUS_INVALID_PARAMETER`/`STATUS_NO_MEMORY`
-  and success). Nothing filters the type, so the driver must answer an unknown
-  type with a defined status rather than touching the output buffer.
+  only validates the *returned* NTSTATUS: it accepts success,
+  `STATUS_NOT_IMPLEMENTED`, `STATUS_INVALID_PARAMETER` and `STATUS_NO_MEMORY`,
+  and logs anything else - including `STATUS_NOT_SUPPORTED` - as invalid.
+  Nothing filters the type, so the driver answers a type it does not implement
+  with `STATUS_NOT_IMPLEMENTED` rather than touching either buffer.
 
 - **StopDevice while packets are in flight — confirmed possible.**
   `DpiFdoStopAdapter @ 14025d310` performs a bounded wait
@@ -370,6 +401,11 @@ shipping stack. Scheduler/paging DDIs live in `dxgmms2.sys` (same project).
 ---
 
 ## Not determined
+
+- Where dxgkrnl issues `DXGKQAITYPE_WDDMDEVICECAPS`. `d3dkmddi.h` says it is
+  "queried by the OS during device initialization after DxgkDdiAddDevice
+  returns and before DxgkDdiStartDevice is called"; the call site was not
+  traced, so the FDO does not issue it, and the driver answers it at any state.
 
 - The exact set of `DXGKQAITYPE` values queried on the *child/PDO* enumeration
   and power paths (only the `DXGADAPTER::Initialize` set in §2.4 was traced;

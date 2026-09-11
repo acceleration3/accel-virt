@@ -6,6 +6,7 @@
 #define AV_FAKE_DXGKRNL_FDO_HPP
 
 #include "../../src/core/ddi_table.hpp"
+#include "fake_dxgadapter.hpp"
 #include "fake_dxgkrnl_adapter.hpp"
 #include "mock_platform.hpp"
 
@@ -22,8 +23,9 @@ public:
 
     /* DpiAddDevice: AddDevice, then LinkDevice; a failed LinkDevice removes. */
     std::int32_t add_device();
-    /* DpiFdoStartAdapter: the interrupt is already connected, then StartDevice
-     * and QueryChildRelations; a failure after StartDevice stops the device. */
+    /* DpiFdoStartAdapter: the interrupt is already connected, then StartDevice,
+     * QueryChildRelations and DXGADAPTER::Initialize's capability queries; a
+     * failure after StartDevice stops the device. */
     std::int32_t start_device();
     /* PnP enumeration of each child: QueryChildStatus, QueryDeviceDescriptor. */
     std::int32_t enumerate_children();
@@ -35,6 +37,7 @@ public:
     /* DpiFdoHandleRemoveDevice: a started device is stopped first. */
     std::int32_t remove_device();
 
+    FakeDxgadapter &dxgadapter();
     void        *context() const;
     bool         started() const;
     std::uint32_t sources() const;
@@ -45,6 +48,7 @@ private:
     MockPlatform       &platform_;
     const DdiTable     &table_;
     FakeDxgkrnlAdapter &adapter_;
+    FakeDxgadapter      dxgadapter_;
     void               *context_;
     bool                started_;
     std::uint32_t       sources_;

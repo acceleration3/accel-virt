@@ -38,7 +38,7 @@ struct StartInfo {
 }  // namespace
 
 FakeDxgkrnlFdo::FakeDxgkrnlFdo(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlAdapter &adapter)
-    : platform_(platform), table_(table), adapter_(adapter), context_(nullptr), started_(false), sources_(0u),
+    : platform_(platform), table_(table), adapter_(adapter), dxgadapter_(platform, table), context_(nullptr), started_(false), sources_(0u),
       children_(0u), connected_(0u) {}
 
 std::int32_t FakeDxgkrnlFdo::add_device()
@@ -75,6 +75,7 @@ std::int32_t FakeDxgkrnlFdo::start_device()
         const auto query = reinterpret_cast<QueryChildRelations>(table_.routine(DdiSlot::DxgkDdiQueryChildRelations));
         status = query(context_, relations, (children_ + 1u) * sizeof relations[0]);
     }
+    if (status >= 0) status = dxgadapter_.initialize(context_, children_);
     if (status < 0) {
         reinterpret_cast<ContextOnly>(table_.routine(DdiSlot::DxgkDdiStopDevice))(context_);
         return status;
@@ -148,6 +149,7 @@ std::int32_t FakeDxgkrnlFdo::remove_device()
     return status;
 }
 
+FakeDxgadapter &FakeDxgkrnlFdo::dxgadapter() { return dxgadapter_; }
 void         *FakeDxgkrnlFdo::context() const { return context_; }
 bool          FakeDxgkrnlFdo::started() const { return started_; }
 std::uint32_t FakeDxgkrnlFdo::sources() const { return sources_; }
