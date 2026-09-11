@@ -185,7 +185,7 @@ TEST(ddi_entry_points, each_forwards_to_the_adapter_behind_the_context)
   AvDdiDpcRoutine(context);
   CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryChildRelations(context, nullptr, 0u)), 0xC000000Du);
   CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryChildStatus(context, nullptr, 0u)), 0xC000000Du);
-  CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryDeviceDescriptor(context, 0u, nullptr)), 0xC01E0401u);
+  CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryDeviceDescriptor(context, 0u, nullptr)), 0xC000000Du);
   CHECK_EQ(AvDdiSetPowerState(context, 0u, 1, 0), 0);
   std::uint32_t acpi_flags = 5u;
   CHECK_EQ(AvDdiNotifyAcpiEvent(context, 0, 0u, nullptr, &acpi_flags), 0);

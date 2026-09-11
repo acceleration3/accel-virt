@@ -14,7 +14,7 @@ bool DxgkrnlInterface::has_callbacks(const DxgkrnlInterfaceRecord &table) const
            table.DxgkCbQueueDpc != nullptr && table.DxgkCbReadDeviceSpace != nullptr &&
            table.DxgkCbUnmapMemory != nullptr && table.DxgkCbGetHandleData != nullptr &&
            table.DxgkCbSynchronizeExecution != nullptr && table.DxgkCbNotifyInterrupt != nullptr &&
-           table.DxgkCbNotifyDpc != nullptr;
+           table.DxgkCbNotifyDpc != nullptr && table.DxgkCbQueryVidPnInterface != nullptr;
 }
 
 Status DxgkrnlInterface::initialize(const DxgkrnlInterfaceRecord *table)
@@ -112,6 +112,18 @@ void DxgkrnlInterface::notify_dpc()
 {
     platform_.require_irql_at_most(Irql::dispatch, "DxgkrnlInterface::notify_dpc");
     if (initialized_) record_.DxgkCbNotifyDpc(record_.DeviceHandle);
+}
+
+Status DxgkrnlInterface::query_vidpn_interface(void *vidpn, const DxgkVidPnInterfaceRecord *&vidpn_interface)
+{
+    platform_.require_irql_at_most(Irql::apc, "DxgkrnlInterface::query_vidpn_interface");
+    vidpn_interface = nullptr;
+    if (!initialized_) return Status::invalid_state;
+    const Status status = NtStatus(static_cast<uint32_t>(
+                                       record_.DxgkCbQueryVidPnInterface(vidpn, vidpn_interface_v1, &vidpn_interface)))
+                              .status();
+    if (status == Status::ok && vidpn_interface == nullptr) return Status::malformed;
+    return status;
 }
 
 bool DxgkrnlInterface::initialized() const { return initialized_; }

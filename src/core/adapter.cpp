@@ -2,6 +2,7 @@
 
 #include "ddi/dxgk_child_descriptor_record.hpp"
 #include "ddi/dxgk_child_status_record.hpp"
+#include "ddi/dxgk_device_descriptor_record.hpp"
 #include "adapter_info_query.hpp"
 #include "ddi/dxgk_device_info_record.hpp"
 #include "ddi/dxgkarg_build_paging_buffer_record.hpp"
@@ -52,7 +53,8 @@ enum : int32_t {
 
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
-      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), segment_(platform), sources_(platform),
+      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), segment_(platform),
+      modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_),
       node_(platform), notification_(platform, dxgkrnl_), started_(false) {}
 
@@ -177,10 +179,11 @@ int32_t Adapter::query_child_status(DxgkChildStatusRecord *status, uint8_t)
     return NtStatus(Status::ok).value();
 }
 
-int32_t Adapter::query_device_descriptor(uint32_t, void *)
+int32_t Adapter::query_device_descriptor(uint32_t child, DxgkDeviceDescriptorRecord *descriptor)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_device_descriptor");
-    return NtStatus(NtStatus::child_descriptor_not_supported).value();
+    if (child != 0u || descriptor == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return edid_.copy(*descriptor).value();
 }
 
 int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)

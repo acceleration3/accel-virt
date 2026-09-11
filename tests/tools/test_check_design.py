@@ -54,6 +54,19 @@ class DesignRules(unittest.TestCase):
         self.assertIn("src/core/loose.hpp: class LooseRecord has no data members", result.stderr)
         self.assertIn("src/core/ddi/loose.hpp: class Loose has no data members", result.stderr)
 
+    def test_a_record_of_lowercase_wdk_field_names_has_state(self):
+        self.tree.write("src/core/ddi/table_record.hpp",
+                        "using GetTopology = int (*)(void *vidpn);\n"
+                        "struct TableRecord {\n    GetTopology pfnGetTopology;\n    void *hAllocation;\n};\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_an_array_of_objects_is_state(self):
+        self.tree.write("src/core/list.hpp",
+                        "class List {\npublic:\n    int count() const;\nprivate:\n    Mode modes_[count_limit];\n};\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_does_not_judge_whether_symbols_are_tested(self):
         self.tree.write("src/core/fine.hpp",
                         "class Fine {\npublic:\n    int never_named();\nprivate:\n    int v_;\n};\n")

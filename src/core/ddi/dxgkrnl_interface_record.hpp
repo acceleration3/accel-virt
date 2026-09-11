@@ -11,6 +11,7 @@
 #include "dxgk_device_info_record.hpp"
 #include "dxgkargcb_get_handle_data_record.hpp"
 #include "dxgkargcb_notify_interrupt_data_record.hpp"
+#include "dxgk_vidpn_interface_records.hpp"
 
 #include <stdint.h>
 
@@ -32,6 +33,8 @@ using DxgkCbSynchronizeExecution = int32_t (*)(void *device_handle, SynchronizeR
                                                uint32_t message_number, uint8_t *return_value);
 using DxgkCbNotifyInterrupt = void (*)(void *device_handle, const DxgkargcbNotifyInterruptDataRecord *data);
 using DxgkCbNotifyDpc = void (*)(void *device_handle);
+/* No device handle: the VidPn handle names the adapter. */
+using DxgkCbQueryVidPnInterface = int32_t (*)(void *vidpn, int32_t version, const DxgkVidPnInterfaceRecord **vidpn_interface);
 
 struct DxgkrnlInterfaceRecord {
     uint32_t                   Size;
@@ -53,7 +56,7 @@ struct DxgkrnlInterfaceRecord {
     void                      *DxgkCbEnumHandleChildren;
     DxgkCbNotifyInterrupt      DxgkCbNotifyInterrupt;
     DxgkCbNotifyDpc            DxgkCbNotifyDpc;
-    void                      *DxgkCbQueryVidPnInterface;
+    DxgkCbQueryVidPnInterface  DxgkCbQueryVidPnInterface;
     void                      *DxgkCbQueryMonitorInterface;
     void                      *DxgkCbGetCaptureAddress;
     void                      *DxgkCbLogEtwEvent;

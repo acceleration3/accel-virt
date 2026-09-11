@@ -38,7 +38,7 @@ int32_t AvDdiQueryChildRelations(void *context, av::DxgkChildDescriptorRecord *r
 int32_t AvDdiQueryChildStatus(void *context, av::DxgkChildStatusRecord *status, uint8_t non_destructive)
 { return static_cast<av::Adapter *>(context)->query_child_status(status, non_destructive); }
 
-int32_t AvDdiQueryDeviceDescriptor(void *context, uint32_t child, void *descriptor)
+int32_t AvDdiQueryDeviceDescriptor(void *context, uint32_t child, av::DxgkDeviceDescriptorRecord *descriptor)
 { return static_cast<av::Adapter *>(context)->query_device_descriptor(child, descriptor); }
 
 int32_t AvDdiSetPowerState(void *context, uint32_t device, int32_t power_state, int32_t action)

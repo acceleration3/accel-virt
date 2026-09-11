@@ -27,6 +27,20 @@
 #include "../../src/core/ddi/dxgkarg_render_record.hpp"
 #include "../../src/core/ddi/dxgkarg_submit_command_record.hpp"
 #include "../../src/core/ddi/dxgkargcb_notify_interrupt_data_record.hpp"
+#include "../../src/core/ddi/d3dkmdt_monitor_source_mode_record.hpp"
+#include "../../src/core/ddi/d3dkmdt_vidpn_present_path_record.hpp"
+#include "../../src/core/ddi/d3dkmdt_vidpn_source_mode_record.hpp"
+#include "../../src/core/ddi/d3dkmdt_vidpn_target_mode_record.hpp"
+#include "../../src/core/ddi/d3dkmdt_video_signal_info_record.hpp"
+#include "../../src/core/ddi/dxgk_device_descriptor_record.hpp"
+#include "../../src/core/ddi/dxgk_vidpn_interface_records.hpp"
+#include "../../src/core/ddi/dxgkarg_commit_vidpn_record.hpp"
+#include "../../src/core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
+#include "../../src/core/ddi/dxgkarg_get_scan_line_record.hpp"
+#include "../../src/core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
+#include "../../src/core/ddi/dxgkarg_recommend_functional_vidpn_record.hpp"
+#include "../../src/core/ddi/dxgkarg_recommend_monitor_modes_record.hpp"
+#include "../../src/core/ddi/dxgkarg_recommend_vidpn_topology_record.hpp"
 #include "../../src/core/ddi/dxgk_child_descriptor_record.hpp"
 #include "../../src/core/ddi/dxgk_child_status_record.hpp"
 #include "../../src/core/ddi/dxgk_device_info_record.hpp"
@@ -159,3 +173,28 @@ TEST(ddi_records, context_and_submission_records_match_the_x64_layout)
   CHECK_EQ(offsetof(av::DxgkargBuildPagingBufferRecord, Operation), 0x1Cu);
   CHECK_EQ(offsetof(av::DxgkargcbNotifyInterruptDataRecord, FenceId), 0x08u);
   CHECK_EQ(offsetof(av::DxgkargcbNotifyInterruptDataRecord, Flags), 0x48u); }
+
+/* The VidPn records (feature 011), at the offsets basicdisplay.sys reads. */
+TEST(ddi_records, vidpn_records_match_the_offsets_basicdisplay_reads)
+{ CHECK_EQ(sizeof(av::D3dkmdtVidPnSourceModeRecord), 0x28u);
+  CHECK_EQ(offsetof(av::D3dkmdtVidPnSourceModeRecord, PixelFormat), 0x1Cu);
+  CHECK_EQ(sizeof(av::D3dkmdtVideoSignalInfoRecord), 0x38u);
+  CHECK_EQ(sizeof(av::D3dkmdtVidPnTargetModeRecord), 0x50u);
+  CHECK_EQ(offsetof(av::D3dkmdtVidPnTargetModeRecord, WireFormatAndPreference), 0x40u);
+  CHECK_EQ(sizeof(av::D3dkmdtMonitorSourceModeRecord), 0x60u);
+  CHECK_EQ(offsetof(av::D3dkmdtMonitorSourceModeRecord, Origin), 0x54u);
+  CHECK_EQ(sizeof(av::D3dkmdtVidPnPresentPathRecord), 0x168u);
+  CHECK_EQ(offsetof(av::D3dkmdtVidPnPresentPathRecord, GammaRampType), 0x150u);
+  CHECK_EQ(offsetof(av::DxgkVidPnInterfaceRecord, pfnAssignTargetModeSet), 0x50u);
+  CHECK_EQ(offsetof(av::DxgkVidPnTopologyInterfaceRecord, pfnReleasePathInfo), 0x40u);
+  CHECK_EQ(offsetof(av::DxgkVidPnSourceModeSetInterfaceRecord, pfnAddMode), 0x30u);
+  CHECK_EQ(offsetof(av::DxgkVidPnTargetModeSetInterfaceRecord, pfnCreateNewModeInfo), 0x28u);
+  CHECK_EQ(offsetof(av::DxgkMonitorSourceModeSetInterfaceRecord, pfnReleaseModeInfo), 0x30u);
+  CHECK_EQ(sizeof(av::DxgkargIsSupportedVidPnRecord), 0x10u);
+  CHECK_EQ(sizeof(av::DxgkargRecommendFunctionalVidPnRecord), 0x30u);
+  CHECK_EQ(sizeof(av::DxgkargEnumVidPnCofuncModalityRecord), 0x18u);
+  CHECK_EQ(sizeof(av::DxgkargCommitVidPnRecord), 0x20u);
+  CHECK_EQ(sizeof(av::DxgkargRecommendMonitorModesRecord), 0x18u);
+  CHECK_EQ(sizeof(av::DxgkargRecommendVidPnTopologyRecord), 0x18u);
+  CHECK_EQ(sizeof(av::DxgkargGetScanLineRecord), 0x0Cu);
+  CHECK_EQ(sizeof(av::DxgkDeviceDescriptorRecord), 0x10u); }

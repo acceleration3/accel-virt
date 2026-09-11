@@ -1,6 +1,7 @@
 #include "fake_dxgkrnl_adapter.hpp"
 
 #include "fake_handle_table.hpp"
+#include "fake_vidpn.hpp"
 #include "test_registry.hpp"
 
 #include <cstring>
@@ -40,6 +41,7 @@ FakeDxgkrnlAdapter::FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunc
         return static_cast<FakeDxgkrnlAdapter *>(handle)->unmap_memory(mapped);
     };
     record_.DxgkCbGetHandleData = &AvFakeGetHandleData;
+    record_.DxgkCbQueryVidPnInterface = &AvFakeQueryVidPnInterface;
     record_.DxgkCbSynchronizeExecution = +[](void *handle, SynchronizeRoutine routine, void *context,
                                              std::uint32_t message, std::uint8_t *returned) {
         return static_cast<FakeDxgkrnlAdapter *>(handle)->synchronize_execution(routine, context, message, returned);

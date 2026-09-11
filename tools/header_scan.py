@@ -20,11 +20,11 @@ METHOD_RE = re.compile(
     r"(?:=\s*(?:0|default|delete)\s*)?;")
 STATIC_METHOD_RE = re.compile(r"^\s*static\s+(?!constexpr\b|inline\s+constexpr\b)"
                               r"[\w:<>,\s*&]+\s+(\w+)\s*\(")
-MEMBER_RE = re.compile(r"^\s*(?:mutable\s+)?[\w:<>,\s\[\]]+[\s*&]+(\w+_)\s*(?:=[^;]*)?;")
+MEMBER_RE = re.compile(r"^\s*(?:mutable\s+)?[\w:<>,\s\[\]]+[\s*&]+(\w+_)\s*(?:\[[^\]]*\])*\s*(?:=[^;]*)?;")
 ACCESS_RE = re.compile(r"^\s*(private|protected|public)\s*:")
 PURE_RE = re.compile(r"=\s*0\s*;")
 RECORD_DIRECTORY = "src/core/ddi/"
-RECORD_FIELD_RE = re.compile(r"^\s*[\w:]+(?:\s*\*+\s*|\s+)[A-Z]\w*(?:\[\w+\])?\s*;")
+RECORD_FIELD_RE = re.compile(r"^\s*[\w:]+(?:\s*\*+\s*|\s+)[A-Za-z_]\w*(?:\[\w+\])?\s*;")
 
 
 @dataclass

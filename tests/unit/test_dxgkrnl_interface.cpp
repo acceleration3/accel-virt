@@ -74,6 +74,13 @@ public:
             static_cast<Callbacks *>(handle)->last_interrupt_fence = data->FenceId;
         };
         record_.DxgkCbNotifyDpc = +[](void *handle) { static_cast<Callbacks *>(handle)->dpc_notifications++; };
+        record_.DxgkCbQueryVidPnInterface = +[](void *vidpn, std::int32_t version,
+                                                const av::DxgkVidPnInterfaceRecord **table) {
+            auto *self = static_cast<Callbacks *>(vidpn);
+            self->vidpn_version = version;
+            *table = self->vidpn_table;
+            return self->answer;
+        };
         record_.DxgkCbGetHandleData = +[](const av::DxgkargcbGetHandleDataRecord *arguments) -> void * {
             const bool known = arguments->hObject == 0x40000042u && arguments->Type == 1 && arguments->Flags == 0u;
             return known ? &handle_data_marker : nullptr;
@@ -128,6 +135,9 @@ public:
     std::uint32_t       synchronized_message = 9u;
     std::uint32_t       last_interrupt_fence = 0u;
     std::uint32_t       dpc_notifications = 0u;
+    std::int32_t        vidpn_version = 0;
+    av::DxgkVidPnInterfaceRecord  vidpn_record = {};
+    const av::DxgkVidPnInterfaceRecord *vidpn_table = &vidpn_record;
 
 private:
     DxgkrnlInterfaceRecord record_;
@@ -178,8 +188,9 @@ TEST(dxgkrnl_interface_initialize, refuses_a_table_missing_a_callback_core_calls
       if (which == 6) record.DxgkCbSynchronizeExecution = nullptr;
       if (which == 7) record.DxgkCbNotifyInterrupt = nullptr;
       if (which == 8) record.DxgkCbNotifyDpc = nullptr;
+      if (which == 9) record.DxgkCbQueryVidPnInterface = nullptr;
   };
-  for (int which = 0; which < 9; which++) {
+  for (int which = 0; which < 10; which++) {
       Callbacks callbacks;
       clear(callbacks.record(), which);
       CHECK_STATUS(interface.initialize(&callbacks.record()), Status::invalid_parameter);
@@ -336,3 +347,21 @@ TEST(dxgkrnl_interface_notify_dpc, is_dispatch_at_most_and_notify_interrupt_is_d
   static_cast<void>(interface.synchronize_execution(&mark_ran, &ran));
   CHECK(platform.claim(Violation::irql_ceiling));
   platform.set_irql(Irql::passive); }
+
+TEST(dxgkrnl_interface_query_vidpn_interface, answers_version_one_of_the_table)
+{ MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;
+  const av::DxgkVidPnInterfaceRecord *table = &callbacks.vidpn_record;
+  CHECK_STATUS(interface.query_vidpn_interface(&callbacks, table), Status::invalid_state);
+  CHECK(table == nullptr);
+  CHECK_STATUS(interface.initialize(&callbacks.record()), Status::ok);
+  CHECK_STATUS(interface.query_vidpn_interface(&callbacks, table), Status::ok);
+  CHECK(table == &callbacks.vidpn_record);
+  CHECK_EQ(callbacks.vidpn_version, 1);
+  callbacks.vidpn_table = nullptr;
+  CHECK_STATUS(interface.query_vidpn_interface(&callbacks, table), Status::malformed);
+  callbacks.answer = no_memory;
+  CHECK_STATUS(interface.query_vidpn_interface(&callbacks, table), Status::no_memory);
+  platform.set_irql(Irql::dispatch);
+  static_cast<void>(interface.query_vidpn_interface(&callbacks, table));
+  platform.set_irql(Irql::passive);
+  CHECK(platform.claim(Violation::irql_ceiling)); }

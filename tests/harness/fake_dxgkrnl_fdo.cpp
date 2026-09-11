@@ -2,6 +2,7 @@
 
 #include "../../src/core/ddi/dxgk_child_descriptor_record.hpp"
 #include "../../src/core/ddi/dxgk_child_status_record.hpp"
+#include "../../src/core/ddi/dxgk_device_descriptor_record.hpp"
 #include "../../src/core/ddi/linked_device_record.hpp"
 #include "test_registry.hpp"
 
@@ -18,14 +19,13 @@ using InterruptRoutine = std::uint8_t (*)(void *, std::uint32_t);
 using VoidContext = void (*)(void *);
 using QueryChildRelations = std::int32_t (*)(void *, DxgkChildDescriptorRecord *, std::uint32_t);
 using QueryChildStatus = std::int32_t (*)(void *, DxgkChildStatusRecord *, std::uint8_t);
-using QueryDeviceDescriptor = std::int32_t (*)(void *, std::uint32_t, void *);
+using QueryDeviceDescriptor = std::int32_t (*)(void *, std::uint32_t, DxgkDeviceDescriptorRecord *);
 using SetPowerState = std::int32_t (*)(void *, std::uint32_t, std::int32_t, std::int32_t);
 using LinkDevice = std::int32_t (*)(void *, void *, LinkedDeviceRecord *);
 
 /* DpiAddDevice answers a chain longer than 0x100 links with STATUS_QUOTA_EXCEEDED. */
 constexpr std::int32_t  status_quota_exceeded = static_cast<std::int32_t>(0xC0000044u);
 constexpr std::int32_t  status_invalid_parameter = static_cast<std::int32_t>(0xC000000Du);
-constexpr std::int32_t  status_child_descriptor_not_supported = static_cast<std::int32_t>(0xC01E0401u);
 constexpr std::int32_t  status_connection = 1;
 constexpr std::uint32_t adapter_uid = 0xFFFFFFFFu;
 constexpr std::int32_t  power_action_none = 0;
@@ -96,11 +96,12 @@ std::int32_t FakeDxgkrnlFdo::enumerate_children()
         std::int32_t status = query_status(context_, &child_status, 1u);
         if (status < 0) return status;
         connected_ += child_status.HotPlugConnected != 0u ? 1u : 0u;
-        std::uint8_t descriptor[32] = {};
+        std::uint8_t edid[128] = {};
+        DxgkDeviceDescriptorRecord descriptor = {0u, sizeof edid, edid};
         const auto query_descriptor =
             reinterpret_cast<QueryDeviceDescriptor>(table_.routine(DdiSlot::DxgkDdiQueryDeviceDescriptor));
-        status = query_descriptor(context_, child, descriptor);
-        if (status < 0 && status != status_child_descriptor_not_supported) return status;
+        status = query_descriptor(context_, child, &descriptor);
+        if (status < 0) return status;
     }
     return 0;
 }

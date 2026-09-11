@@ -1,6 +1,7 @@
 #include "../../src/core/adapter.hpp"
 #include "../../src/core/ddi/dxgk_child_descriptor_record.hpp"
 #include "../../src/core/ddi/dxgk_child_status_record.hpp"
+#include "../../src/core/ddi/dxgk_device_descriptor_record.hpp"
 #include "../../src/core/ddi/d3dkmdt_shadow_surface_data_record.hpp"
 #include "../../src/core/ddi/dxgk_allocation_info_record.hpp"
 #include "../../src/core/ddi/dxgk_open_allocation_info_record.hpp"
@@ -53,6 +54,7 @@ using av::Adapter;
 using av::AdapterProbe;
 using av::DxgkChildDescriptorRecord;
 using av::DxgkChildStatusRecord;
+using av::DxgkDeviceDescriptorRecord;
 using av::DxgkDriverCapsRecord;
 using av::DxgkargCollectDbgInfoExtRecord;
 using av::DxgkargCollectDbgInfoRecord;
@@ -76,7 +78,7 @@ constexpr std::uint32_t no_space = 0xC000009Au;
 constexpr std::uint32_t not_supported = 0xC00000BBu;
 constexpr std::uint32_t invalid_device_state = 0xC0000184u;
 constexpr std::uint32_t buffer_too_small = 0xC0000023u;
-constexpr std::uint32_t child_descriptor_not_supported = 0xC01E0401u;
+constexpr std::uint32_t no_more_descriptor_data = 0xC01D0008u;
 constexpr std::uint32_t not_implemented = 0xC0000002u;
 constexpr std::int32_t  query_driver_caps = 1;          /* DXGKQAITYPE_DRIVERCAPS */
 constexpr std::int32_t  query_wddm_device_caps = 29;    /* DXGKQAITYPE_WDDMDEVICECAPS */
@@ -420,9 +422,23 @@ TEST(adapter_query_child_status, rotation_other_types_and_other_children_are_ref
   CHECK_EQ(status.HotPlugConnected, 0u);
   CHECK_EQ(nt(fixture.adapter().query_child_status(nullptr, 0u)), invalid_parameter); }
 
-TEST(adapter_query_device_descriptor, answers_as_basicdisplay_does_without_an_edid)
+TEST(adapter_query_device_descriptor, answers_the_synthetic_monitor_edid_for_the_one_child)
 { Fixture fixture;
-  CHECK_EQ(nt(fixture.adapter().query_device_descriptor(0u, nullptr)), child_descriptor_not_supported); }
+  std::uint8_t edid[128] = {};
+  DxgkDeviceDescriptorRecord descriptor = {0u, sizeof edid, edid};
+  CHECK_EQ(nt(fixture.adapter().query_device_descriptor(0u, &descriptor)), success);
+  CHECK_EQ(descriptor.DescriptorLength, 128u);
+  CHECK_EQ(edid[1], 0xFFu);
+  descriptor.DescriptorOffset = 128u;
+  CHECK_EQ(nt(fixture.adapter().query_device_descriptor(0u, &descriptor)), no_more_descriptor_data); }
+
+TEST(adapter_query_device_descriptor, another_child_or_no_descriptor_is_invalid)
+{ Fixture fixture;
+  std::uint8_t edid[128] = {};
+  DxgkDeviceDescriptorRecord descriptor = {0u, sizeof edid, edid};
+  CHECK_EQ(nt(fixture.adapter().query_device_descriptor(1u, &descriptor)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().query_device_descriptor(0u, nullptr)), invalid_parameter);
+  CHECK_EQ(edid[0], 0u); }
 
 /* ---- The rest of the slot list --------------------------------------------- */
 

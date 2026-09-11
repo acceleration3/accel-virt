@@ -11,8 +11,6 @@ namespace av {
 
 class NtStatus {
 public:
-    /* What basicdisplay.sys answers DxgkDdiQueryDeviceDescriptor with no EDID. */
-    static constexpr uint32_t child_descriptor_not_supported = 0xC01E0401u;
     static constexpr uint32_t buffer_too_small = 0xC0000023u;
     /* DXGADAPTER::DdiQueryAdapterInfo accepts it as a declined query type. */
     static constexpr uint32_t not_implemented = 0xC0000002u;

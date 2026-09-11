@@ -41,6 +41,8 @@ public:
     void                 notify_interrupt(const DxgkargcbNotifyInterruptDataRecord &data);
     /* From the DPC, after the interrupts it follows. */
     void                 notify_dpc();
+    /* DxgkCbQueryVidPnInterface, version 1. */
+    [[nodiscard]] Status query_vidpn_interface(void *vidpn, const DxgkVidPnInterfaceRecord *&vidpn_interface);
 
     bool initialized() const;
     bool invariants_hold() const;
@@ -49,6 +51,7 @@ private:
     static constexpr uint32_t config_space = 0u;  /* DXGK_WHICHSPACE_CONFIG */
     static constexpr int32_t  non_cached   = 0;   /* MmNonCached */
     static constexpr int32_t  handle_allocation = 1;   /* DXGK_HANDLE_ALLOCATION */
+    static constexpr int32_t  vidpn_interface_v1 = 1;  /* DXGK_VIDPN_INTERFACE_VERSION_V1 */
 
     bool has_callbacks(const DxgkrnlInterfaceRecord &table) const;
 

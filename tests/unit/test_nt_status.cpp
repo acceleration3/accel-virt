@@ -25,8 +25,8 @@ TEST(nt_status, maps_every_core_status_to_its_ntstatus)
       CHECK_EQ(static_cast<std::uint32_t>(NtStatus(c.status).value()), c.value); }
 
 TEST(nt_status, carries_a_graphics_status_core_has_no_name_for)
-{ const NtStatus status(NtStatus::child_descriptor_not_supported);
-  CHECK_EQ(static_cast<std::uint32_t>(status.value()), 0xC01E0401u);
+{ const NtStatus status(0xC01D0008u);   /* STATUS_MONITOR_NO_MORE_DESCRIPTOR_DATA */
+  CHECK_EQ(static_cast<std::uint32_t>(status.value()), 0xC01D0008u);
   CHECK(!status.succeeded());
   CHECK(NtStatus(Status::ok).succeeded()); }
 

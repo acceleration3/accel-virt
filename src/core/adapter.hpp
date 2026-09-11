@@ -8,8 +8,10 @@
 #include "bar_mappings.hpp"
 #include "context_table.hpp"
 #include "device_table.hpp"
+#include "display_mode_list.hpp"
 #include "display_sources.hpp"
 #include "driver_capabilities.hpp"
+#include "edid.hpp"
 #include "execution_node.hpp"
 #include "interrupt_notification.hpp"
 #include "dxgkrnl_interface.hpp"
@@ -26,6 +28,7 @@ namespace av {
 
 struct DxgkChildDescriptorRecord;
 struct DxgkChildStatusRecord;
+struct DxgkDeviceDescriptorRecord;
 struct DxgkrnlInterfaceRecord;
 struct DxgkargCloseAllocationRecord;
 struct DxgkargBuildPagingBufferRecord;
@@ -66,7 +69,7 @@ public:
     void    dpc_routine();
     int32_t query_child_relations(DxgkChildDescriptorRecord *relations, uint32_t size);
     int32_t query_child_status(DxgkChildStatusRecord *status, uint8_t non_destructive);
-    int32_t query_device_descriptor(uint32_t child, void *descriptor);
+    int32_t query_device_descriptor(uint32_t child, DxgkDeviceDescriptorRecord *descriptor);
     int32_t set_power_state(uint32_t device, int32_t power_state, int32_t action);
     int32_t notify_acpi_event(int32_t type, uint32_t event, void *argument, uint32_t *acpi_flags);
     void    reset_device();
@@ -119,6 +122,8 @@ private:
     ObjectStorage<VirtioGpuDevice> device_;
     DriverCapabilities             capabilities_;
     ApertureSegment                segment_;
+    DisplayModeList                modes_;
+    Edid                           edid_;
     DisplaySources                 sources_;
     AllocationTable                allocations_;
     DeviceTable                    devices_;

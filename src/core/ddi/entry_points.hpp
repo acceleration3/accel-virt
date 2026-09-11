@@ -12,6 +12,7 @@
 #include "../miniport_binding.hpp"
 #include "dxgk_child_descriptor_record.hpp"
 #include "dxgk_child_status_record.hpp"
+#include "dxgk_device_descriptor_record.hpp"
 #include "dxgkarg_build_paging_buffer_record.hpp"
 #include "dxgkarg_close_allocation_record.hpp"
 #include "dxgkarg_collect_dbg_info_record.hpp"
@@ -53,7 +54,7 @@ uint8_t AvDdiInterruptRoutine(void *context, uint32_t message);
 void    AvDdiDpcRoutine(void *context);
 int32_t AvDdiQueryChildRelations(void *context, av::DxgkChildDescriptorRecord *relations, uint32_t size);
 int32_t AvDdiQueryChildStatus(void *context, av::DxgkChildStatusRecord *status, uint8_t non_destructive);
-int32_t AvDdiQueryDeviceDescriptor(void *context, uint32_t child, void *descriptor);
+int32_t AvDdiQueryDeviceDescriptor(void *context, uint32_t child, av::DxgkDeviceDescriptorRecord *descriptor);
 int32_t AvDdiSetPowerState(void *context, uint32_t device, int32_t power_state, int32_t action);
 int32_t AvDdiNotifyAcpiEvent(void *context, int32_t type, uint32_t event, void *argument,
                              uint32_t *acpi_flags);

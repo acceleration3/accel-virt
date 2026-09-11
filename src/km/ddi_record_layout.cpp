@@ -33,6 +33,20 @@
 #include "ddi/dxgkarg_render_record.hpp"
 #include "ddi/dxgkarg_submit_command_record.hpp"
 #include "ddi/dxgkargcb_notify_interrupt_data_record.hpp"
+#include "ddi/d3dkmdt_monitor_source_mode_record.hpp"
+#include "ddi/d3dkmdt_video_signal_info_record.hpp"
+#include "ddi/d3dkmdt_vidpn_present_path_record.hpp"
+#include "ddi/d3dkmdt_vidpn_source_mode_record.hpp"
+#include "ddi/d3dkmdt_vidpn_target_mode_record.hpp"
+#include "ddi/dxgk_device_descriptor_record.hpp"
+#include "ddi/dxgk_vidpn_interface_records.hpp"
+#include "ddi/dxgkarg_commit_vidpn_record.hpp"
+#include "ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
+#include "ddi/dxgkarg_get_scan_line_record.hpp"
+#include "ddi/dxgkarg_is_supported_vidpn_record.hpp"
+#include "ddi/dxgkarg_recommend_functional_vidpn_record.hpp"
+#include "ddi/dxgkarg_recommend_monitor_modes_record.hpp"
+#include "ddi/dxgkarg_recommend_vidpn_topology_record.hpp"
 #include "ddi/dxgk_child_descriptor_record.hpp"
 #include "ddi/dxgk_child_status_record.hpp"
 #include "ddi/dxgk_device_info_record.hpp"
@@ -469,6 +483,173 @@ static_assert(DXGK_INTERRUPT_DMA_COMPLETED == 1 && DXGK_INTERRUPT_DMA_PREEMPTED 
                   DXGK_OPERATION_MAP_APERTURE_SEGMENT == 5 && DXGK_OPERATION_UNMAP_APERTURE_SEGMENT == 6 &&
                   DXGK_OPERATION_DISCARD_CONTENT == 2,
               "interrupt types and paging operations");
+
+AV_SAME_SIZE(D3dkmdtVidPnSourceModeRecord, D3DKMDT_VIDPN_SOURCE_MODE);
+AV_SAME_OFFSET(D3dkmdtVidPnSourceModeRecord, Id, D3DKMDT_VIDPN_SOURCE_MODE, Id);
+AV_SAME_OFFSET(D3dkmdtVidPnSourceModeRecord, Type, D3DKMDT_VIDPN_SOURCE_MODE, Type);
+AV_SAME_OFFSET(D3dkmdtVidPnSourceModeRecord, PrimSurfSizeCx, D3DKMDT_VIDPN_SOURCE_MODE, Format.Graphics.PrimSurfSize.cx);
+AV_SAME_OFFSET(D3dkmdtVidPnSourceModeRecord, PrimSurfSizeCy, D3DKMDT_VIDPN_SOURCE_MODE, Format.Graphics.PrimSurfSize.cy);
+AV_SAME_OFFSET(D3dkmdtVidPnSourceModeRecord, VisibleRegionSizeCx, D3DKMDT_VIDPN_SOURCE_MODE, Format.Graphics.VisibleRegionSize.cx);
+AV_SAME_OFFSET(D3dkmdtVidPnSourceModeRecord, VisibleRegionSizeCy, D3DKMDT_VIDPN_SOURCE_MODE, Format.Graphics.VisibleRegionSize.cy);
+AV_SAME_OFFSET(D3dkmdtVidPnSourceModeRecord, Stride, D3DKMDT_VIDPN_SOURCE_MODE, Format.Graphics.Stride);
+AV_SAME_OFFSET(D3dkmdtVidPnSourceModeRecord, PixelFormat, D3DKMDT_VIDPN_SOURCE_MODE, Format.Graphics.PixelFormat);
+AV_SAME_OFFSET(D3dkmdtVidPnSourceModeRecord, ColorBasis, D3DKMDT_VIDPN_SOURCE_MODE, Format.Graphics.ColorBasis);
+AV_SAME_OFFSET(D3dkmdtVidPnSourceModeRecord, PixelValueAccessMode, D3DKMDT_VIDPN_SOURCE_MODE, Format.Graphics.PixelValueAccessMode);
+
+AV_SAME_SIZE(D3dkmdtVideoSignalInfoRecord, D3DKMDT_VIDEO_SIGNAL_INFO);
+AV_SAME_OFFSET(D3dkmdtVideoSignalInfoRecord, VideoStandard, D3DKMDT_VIDEO_SIGNAL_INFO, VideoStandard);
+AV_SAME_OFFSET(D3dkmdtVideoSignalInfoRecord, TotalSizeCx, D3DKMDT_VIDEO_SIGNAL_INFO, TotalSize.cx);
+AV_SAME_OFFSET(D3dkmdtVideoSignalInfoRecord, TotalSizeCy, D3DKMDT_VIDEO_SIGNAL_INFO, TotalSize.cy);
+AV_SAME_OFFSET(D3dkmdtVideoSignalInfoRecord, ActiveSizeCx, D3DKMDT_VIDEO_SIGNAL_INFO, ActiveSize.cx);
+AV_SAME_OFFSET(D3dkmdtVideoSignalInfoRecord, ActiveSizeCy, D3DKMDT_VIDEO_SIGNAL_INFO, ActiveSize.cy);
+AV_SAME_OFFSET(D3dkmdtVideoSignalInfoRecord, VSyncFreqNumerator, D3DKMDT_VIDEO_SIGNAL_INFO, VSyncFreq.Numerator);
+AV_SAME_OFFSET(D3dkmdtVideoSignalInfoRecord, VSyncFreqDenominator, D3DKMDT_VIDEO_SIGNAL_INFO, VSyncFreq.Denominator);
+AV_SAME_OFFSET(D3dkmdtVideoSignalInfoRecord, HSyncFreqNumerator, D3DKMDT_VIDEO_SIGNAL_INFO, HSyncFreq.Numerator);
+AV_SAME_OFFSET(D3dkmdtVideoSignalInfoRecord, HSyncFreqDenominator, D3DKMDT_VIDEO_SIGNAL_INFO, HSyncFreq.Denominator);
+AV_SAME_OFFSET(D3dkmdtVideoSignalInfoRecord, PixelRate, D3DKMDT_VIDEO_SIGNAL_INFO, PixelRate);
+AV_SAME_OFFSET(D3dkmdtVideoSignalInfoRecord, ScanLineOrdering, D3DKMDT_VIDEO_SIGNAL_INFO, ScanLineOrdering);
+
+AV_SAME_SIZE(D3dkmdtVidPnTargetModeRecord, D3DKMDT_VIDPN_TARGET_MODE);
+AV_SAME_OFFSET(D3dkmdtVidPnTargetModeRecord, Id, D3DKMDT_VIDPN_TARGET_MODE, Id);
+AV_SAME_OFFSET(D3dkmdtVidPnTargetModeRecord, VideoSignalInfo, D3DKMDT_VIDPN_TARGET_MODE, VideoSignalInfo);
+AV_SAME_OFFSET(D3dkmdtVidPnTargetModeRecord, WireFormatAndPreference, D3DKMDT_VIDPN_TARGET_MODE, WireFormatAndPreference);
+AV_SAME_OFFSET(D3dkmdtVidPnTargetModeRecord, MinimumVSyncFreqNumerator, D3DKMDT_VIDPN_TARGET_MODE, MinimumVSyncFreq.Numerator);
+AV_SAME_OFFSET(D3dkmdtVidPnTargetModeRecord, MinimumVSyncFreqDenominator, D3DKMDT_VIDPN_TARGET_MODE, MinimumVSyncFreq.Denominator);
+
+AV_SAME_SIZE(D3dkmdtMonitorSourceModeRecord, D3DKMDT_MONITOR_SOURCE_MODE);
+AV_SAME_OFFSET(D3dkmdtMonitorSourceModeRecord, Id, D3DKMDT_MONITOR_SOURCE_MODE, Id);
+AV_SAME_OFFSET(D3dkmdtMonitorSourceModeRecord, VideoSignalInfo, D3DKMDT_MONITOR_SOURCE_MODE, VideoSignalInfo);
+AV_SAME_OFFSET(D3dkmdtMonitorSourceModeRecord, ColorBasis, D3DKMDT_MONITOR_SOURCE_MODE, ColorBasis);
+AV_SAME_OFFSET(D3dkmdtMonitorSourceModeRecord, ColorCoeffDynamicRanges, D3DKMDT_MONITOR_SOURCE_MODE, ColorCoeffDynamicRanges);
+AV_SAME_OFFSET(D3dkmdtMonitorSourceModeRecord, Origin, D3DKMDT_MONITOR_SOURCE_MODE, Origin);
+AV_SAME_OFFSET(D3dkmdtMonitorSourceModeRecord, Preference, D3DKMDT_MONITOR_SOURCE_MODE, Preference);
+
+AV_SAME_SIZE(D3dkmdtVidPnPresentPathRecord, D3DKMDT_VIDPN_PRESENT_PATH);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, VidPnSourceId, D3DKMDT_VIDPN_PRESENT_PATH, VidPnSourceId);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, VidPnTargetId, D3DKMDT_VIDPN_PRESENT_PATH, VidPnTargetId);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, ImportanceOrdinal, D3DKMDT_VIDPN_PRESENT_PATH, ImportanceOrdinal);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, ContentTransformationScaling, D3DKMDT_VIDPN_PRESENT_PATH, ContentTransformation.Scaling);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, ContentTransformationRotation, D3DKMDT_VIDPN_PRESENT_PATH, ContentTransformation.Rotation);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, VisibleFromActiveTLOffsetCx, D3DKMDT_VIDPN_PRESENT_PATH, VisibleFromActiveTLOffset.cx);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, VisibleFromActiveBROffsetCy, D3DKMDT_VIDPN_PRESENT_PATH, VisibleFromActiveBROffset.cy);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, VidPnTargetColorBasis, D3DKMDT_VIDPN_PRESENT_PATH, VidPnTargetColorBasis);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, VidPnTargetColorCoeffDynamicRanges, D3DKMDT_VIDPN_PRESENT_PATH, VidPnTargetColorCoeffDynamicRanges);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, Content, D3DKMDT_VIDPN_PRESENT_PATH, Content);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, CopyProtectionType, D3DKMDT_VIDPN_PRESENT_PATH, CopyProtection.CopyProtectionType);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, CopyProtectionAPSTriggerBits, D3DKMDT_VIDPN_PRESENT_PATH, CopyProtection.APSTriggerBits);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, CopyProtectionOEMCopyProtection, D3DKMDT_VIDPN_PRESENT_PATH, CopyProtection.OEMCopyProtection);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, GammaRampType, D3DKMDT_VIDPN_PRESENT_PATH, GammaRamp.Type);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, GammaRampDataSize, D3DKMDT_VIDPN_PRESENT_PATH, GammaRamp.DataSize);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, GammaRampData, D3DKMDT_VIDPN_PRESENT_PATH, GammaRamp.Data);
+
+AV_SAME_SIZE(DxgkVidPnInterfaceRecord, DXGK_VIDPN_INTERFACE);
+AV_SAME_OFFSET(DxgkVidPnInterfaceRecord, Version, DXGK_VIDPN_INTERFACE, Version);
+AV_SAME_OFFSET(DxgkVidPnInterfaceRecord, pfnGetTopology, DXGK_VIDPN_INTERFACE, pfnGetTopology);
+AV_SAME_OFFSET(DxgkVidPnInterfaceRecord, pfnAcquireSourceModeSet, DXGK_VIDPN_INTERFACE, pfnAcquireSourceModeSet);
+AV_SAME_OFFSET(DxgkVidPnInterfaceRecord, pfnReleaseSourceModeSet, DXGK_VIDPN_INTERFACE, pfnReleaseSourceModeSet);
+AV_SAME_OFFSET(DxgkVidPnInterfaceRecord, pfnCreateNewSourceModeSet, DXGK_VIDPN_INTERFACE, pfnCreateNewSourceModeSet);
+AV_SAME_OFFSET(DxgkVidPnInterfaceRecord, pfnAssignSourceModeSet, DXGK_VIDPN_INTERFACE, pfnAssignSourceModeSet);
+AV_SAME_OFFSET(DxgkVidPnInterfaceRecord, pfnAssignMultisamplingMethodSet, DXGK_VIDPN_INTERFACE, pfnAssignMultisamplingMethodSet);
+AV_SAME_OFFSET(DxgkVidPnInterfaceRecord, pfnAcquireTargetModeSet, DXGK_VIDPN_INTERFACE, pfnAcquireTargetModeSet);
+AV_SAME_OFFSET(DxgkVidPnInterfaceRecord, pfnReleaseTargetModeSet, DXGK_VIDPN_INTERFACE, pfnReleaseTargetModeSet);
+AV_SAME_OFFSET(DxgkVidPnInterfaceRecord, pfnCreateNewTargetModeSet, DXGK_VIDPN_INTERFACE, pfnCreateNewTargetModeSet);
+AV_SAME_OFFSET(DxgkVidPnInterfaceRecord, pfnAssignTargetModeSet, DXGK_VIDPN_INTERFACE, pfnAssignTargetModeSet);
+
+AV_SAME_SIZE(DxgkVidPnTopologyInterfaceRecord, DXGK_VIDPNTOPOLOGY_INTERFACE);
+AV_SAME_OFFSET(DxgkVidPnTopologyInterfaceRecord, pfnGetNumPaths, DXGK_VIDPNTOPOLOGY_INTERFACE, pfnGetNumPaths);
+AV_SAME_OFFSET(DxgkVidPnTopologyInterfaceRecord, pfnGetNumPathsFromSource, DXGK_VIDPNTOPOLOGY_INTERFACE, pfnGetNumPathsFromSource);
+AV_SAME_OFFSET(DxgkVidPnTopologyInterfaceRecord, pfnEnumPathTargetsFromSource, DXGK_VIDPNTOPOLOGY_INTERFACE, pfnEnumPathTargetsFromSource);
+AV_SAME_OFFSET(DxgkVidPnTopologyInterfaceRecord, pfnGetPathSourceFromTarget, DXGK_VIDPNTOPOLOGY_INTERFACE, pfnGetPathSourceFromTarget);
+AV_SAME_OFFSET(DxgkVidPnTopologyInterfaceRecord, pfnAcquirePathInfo, DXGK_VIDPNTOPOLOGY_INTERFACE, pfnAcquirePathInfo);
+AV_SAME_OFFSET(DxgkVidPnTopologyInterfaceRecord, pfnAcquireFirstPathInfo, DXGK_VIDPNTOPOLOGY_INTERFACE, pfnAcquireFirstPathInfo);
+AV_SAME_OFFSET(DxgkVidPnTopologyInterfaceRecord, pfnAcquireNextPathInfo, DXGK_VIDPNTOPOLOGY_INTERFACE, pfnAcquireNextPathInfo);
+AV_SAME_OFFSET(DxgkVidPnTopologyInterfaceRecord, pfnUpdatePathSupportInfo, DXGK_VIDPNTOPOLOGY_INTERFACE, pfnUpdatePathSupportInfo);
+AV_SAME_OFFSET(DxgkVidPnTopologyInterfaceRecord, pfnReleasePathInfo, DXGK_VIDPNTOPOLOGY_INTERFACE, pfnReleasePathInfo);
+AV_SAME_OFFSET(DxgkVidPnTopologyInterfaceRecord, pfnCreateNewPathInfo, DXGK_VIDPNTOPOLOGY_INTERFACE, pfnCreateNewPathInfo);
+AV_SAME_OFFSET(DxgkVidPnTopologyInterfaceRecord, pfnAddPath, DXGK_VIDPNTOPOLOGY_INTERFACE, pfnAddPath);
+AV_SAME_OFFSET(DxgkVidPnTopologyInterfaceRecord, pfnRemovePath, DXGK_VIDPNTOPOLOGY_INTERFACE, pfnRemovePath);
+
+AV_SAME_SIZE(DxgkVidPnSourceModeSetInterfaceRecord, DXGK_VIDPNSOURCEMODESET_INTERFACE);
+AV_SAME_OFFSET(DxgkVidPnSourceModeSetInterfaceRecord, pfnGetNumModes, DXGK_VIDPNSOURCEMODESET_INTERFACE, pfnGetNumModes);
+AV_SAME_OFFSET(DxgkVidPnSourceModeSetInterfaceRecord, pfnAcquireFirstModeInfo, DXGK_VIDPNSOURCEMODESET_INTERFACE, pfnAcquireFirstModeInfo);
+AV_SAME_OFFSET(DxgkVidPnSourceModeSetInterfaceRecord, pfnAcquireNextModeInfo, DXGK_VIDPNSOURCEMODESET_INTERFACE, pfnAcquireNextModeInfo);
+AV_SAME_OFFSET(DxgkVidPnSourceModeSetInterfaceRecord, pfnAcquirePinnedModeInfo, DXGK_VIDPNSOURCEMODESET_INTERFACE, pfnAcquirePinnedModeInfo);
+AV_SAME_OFFSET(DxgkVidPnSourceModeSetInterfaceRecord, pfnReleaseModeInfo, DXGK_VIDPNSOURCEMODESET_INTERFACE, pfnReleaseModeInfo);
+AV_SAME_OFFSET(DxgkVidPnSourceModeSetInterfaceRecord, pfnCreateNewModeInfo, DXGK_VIDPNSOURCEMODESET_INTERFACE, pfnCreateNewModeInfo);
+AV_SAME_OFFSET(DxgkVidPnSourceModeSetInterfaceRecord, pfnAddMode, DXGK_VIDPNSOURCEMODESET_INTERFACE, pfnAddMode);
+AV_SAME_OFFSET(DxgkVidPnSourceModeSetInterfaceRecord, pfnPinMode, DXGK_VIDPNSOURCEMODESET_INTERFACE, pfnPinMode);
+
+AV_SAME_SIZE(DxgkVidPnTargetModeSetInterfaceRecord, DXGK_VIDPNTARGETMODESET_INTERFACE);
+AV_SAME_OFFSET(DxgkVidPnTargetModeSetInterfaceRecord, pfnGetNumModes, DXGK_VIDPNTARGETMODESET_INTERFACE, pfnGetNumModes);
+AV_SAME_OFFSET(DxgkVidPnTargetModeSetInterfaceRecord, pfnAcquireFirstModeInfo, DXGK_VIDPNTARGETMODESET_INTERFACE, pfnAcquireFirstModeInfo);
+AV_SAME_OFFSET(DxgkVidPnTargetModeSetInterfaceRecord, pfnAcquireNextModeInfo, DXGK_VIDPNTARGETMODESET_INTERFACE, pfnAcquireNextModeInfo);
+AV_SAME_OFFSET(DxgkVidPnTargetModeSetInterfaceRecord, pfnAcquirePinnedModeInfo, DXGK_VIDPNTARGETMODESET_INTERFACE, pfnAcquirePinnedModeInfo);
+AV_SAME_OFFSET(DxgkVidPnTargetModeSetInterfaceRecord, pfnReleaseModeInfo, DXGK_VIDPNTARGETMODESET_INTERFACE, pfnReleaseModeInfo);
+AV_SAME_OFFSET(DxgkVidPnTargetModeSetInterfaceRecord, pfnCreateNewModeInfo, DXGK_VIDPNTARGETMODESET_INTERFACE, pfnCreateNewModeInfo);
+AV_SAME_OFFSET(DxgkVidPnTargetModeSetInterfaceRecord, pfnAddMode, DXGK_VIDPNTARGETMODESET_INTERFACE, pfnAddMode);
+AV_SAME_OFFSET(DxgkVidPnTargetModeSetInterfaceRecord, pfnPinMode, DXGK_VIDPNTARGETMODESET_INTERFACE, pfnPinMode);
+
+AV_SAME_SIZE(DxgkMonitorSourceModeSetInterfaceRecord, DXGK_MONITORSOURCEMODESET_INTERFACE);
+AV_SAME_OFFSET(DxgkMonitorSourceModeSetInterfaceRecord, pfnGetNumModes, DXGK_MONITORSOURCEMODESET_INTERFACE, pfnGetNumModes);
+AV_SAME_OFFSET(DxgkMonitorSourceModeSetInterfaceRecord, pfnAcquirePreferredModeInfo, DXGK_MONITORSOURCEMODESET_INTERFACE, pfnAcquirePreferredModeInfo);
+AV_SAME_OFFSET(DxgkMonitorSourceModeSetInterfaceRecord, pfnAcquireFirstModeInfo, DXGK_MONITORSOURCEMODESET_INTERFACE, pfnAcquireFirstModeInfo);
+AV_SAME_OFFSET(DxgkMonitorSourceModeSetInterfaceRecord, pfnAcquireNextModeInfo, DXGK_MONITORSOURCEMODESET_INTERFACE, pfnAcquireNextModeInfo);
+AV_SAME_OFFSET(DxgkMonitorSourceModeSetInterfaceRecord, pfnCreateNewModeInfo, DXGK_MONITORSOURCEMODESET_INTERFACE, pfnCreateNewModeInfo);
+AV_SAME_OFFSET(DxgkMonitorSourceModeSetInterfaceRecord, pfnAddMode, DXGK_MONITORSOURCEMODESET_INTERFACE, pfnAddMode);
+AV_SAME_OFFSET(DxgkMonitorSourceModeSetInterfaceRecord, pfnReleaseModeInfo, DXGK_MONITORSOURCEMODESET_INTERFACE, pfnReleaseModeInfo);
+
+AV_SAME_SIZE(DxgkargIsSupportedVidPnRecord, DXGKARG_ISSUPPORTEDVIDPN);
+AV_SAME_OFFSET(DxgkargIsSupportedVidPnRecord, hDesiredVidPn, DXGKARG_ISSUPPORTEDVIDPN, hDesiredVidPn);
+AV_SAME_OFFSET(DxgkargIsSupportedVidPnRecord, IsVidPnSupported, DXGKARG_ISSUPPORTEDVIDPN, IsVidPnSupported);
+
+AV_SAME_SIZE(DxgkargRecommendFunctionalVidPnRecord, DXGKARG_RECOMMENDFUNCTIONALVIDPN);
+AV_SAME_OFFSET(DxgkargRecommendFunctionalVidPnRecord, NumberOfVidPnTargets, DXGKARG_RECOMMENDFUNCTIONALVIDPN, NumberOfVidPnTargets);
+AV_SAME_OFFSET(DxgkargRecommendFunctionalVidPnRecord, pVidPnTargetPrioritizationVector, DXGKARG_RECOMMENDFUNCTIONALVIDPN, pVidPnTargetPrioritizationVector);
+AV_SAME_OFFSET(DxgkargRecommendFunctionalVidPnRecord, hRecommendedFunctionalVidPn, DXGKARG_RECOMMENDFUNCTIONALVIDPN, hRecommendedFunctionalVidPn);
+AV_SAME_OFFSET(DxgkargRecommendFunctionalVidPnRecord, RequestReason, DXGKARG_RECOMMENDFUNCTIONALVIDPN, RequestReason);
+AV_SAME_OFFSET(DxgkargRecommendFunctionalVidPnRecord, pPrivateDriverData, DXGKARG_RECOMMENDFUNCTIONALVIDPN, pPrivateDriverData);
+AV_SAME_OFFSET(DxgkargRecommendFunctionalVidPnRecord, PrivateDriverDataSize, DXGKARG_RECOMMENDFUNCTIONALVIDPN, PrivateDriverDataSize);
+
+AV_SAME_SIZE(DxgkargEnumVidPnCofuncModalityRecord, DXGKARG_ENUMVIDPNCOFUNCMODALITY);
+AV_SAME_OFFSET(DxgkargEnumVidPnCofuncModalityRecord, hConstrainingVidPn, DXGKARG_ENUMVIDPNCOFUNCMODALITY, hConstrainingVidPn);
+AV_SAME_OFFSET(DxgkargEnumVidPnCofuncModalityRecord, EnumPivotType, DXGKARG_ENUMVIDPNCOFUNCMODALITY, EnumPivotType);
+AV_SAME_OFFSET(DxgkargEnumVidPnCofuncModalityRecord, EnumPivotVidPnSourceId, DXGKARG_ENUMVIDPNCOFUNCMODALITY, EnumPivot.VidPnSourceId);
+AV_SAME_OFFSET(DxgkargEnumVidPnCofuncModalityRecord, EnumPivotVidPnTargetId, DXGKARG_ENUMVIDPNCOFUNCMODALITY, EnumPivot.VidPnTargetId);
+
+AV_SAME_SIZE(DxgkargCommitVidPnRecord, DXGKARG_COMMITVIDPN);
+AV_SAME_OFFSET(DxgkargCommitVidPnRecord, hFunctionalVidPn, DXGKARG_COMMITVIDPN, hFunctionalVidPn);
+AV_SAME_OFFSET(DxgkargCommitVidPnRecord, AffectedVidPnSourceId, DXGKARG_COMMITVIDPN, AffectedVidPnSourceId);
+AV_SAME_OFFSET(DxgkargCommitVidPnRecord, MonitorConnectivityChecks, DXGKARG_COMMITVIDPN, MonitorConnectivityChecks);
+AV_SAME_OFFSET(DxgkargCommitVidPnRecord, hPrimaryAllocation, DXGKARG_COMMITVIDPN, hPrimaryAllocation);
+
+AV_SAME_SIZE(DxgkargRecommendMonitorModesRecord, DXGKARG_RECOMMENDMONITORMODES);
+AV_SAME_OFFSET(DxgkargRecommendMonitorModesRecord, VideoPresentTargetId, DXGKARG_RECOMMENDMONITORMODES, VideoPresentTargetId);
+AV_SAME_OFFSET(DxgkargRecommendMonitorModesRecord, hMonitorSourceModeSet, DXGKARG_RECOMMENDMONITORMODES, hMonitorSourceModeSet);
+AV_SAME_OFFSET(DxgkargRecommendMonitorModesRecord, pMonitorSourceModeSetInterface, DXGKARG_RECOMMENDMONITORMODES, pMonitorSourceModeSetInterface);
+
+AV_SAME_SIZE(DxgkargRecommendVidPnTopologyRecord, DXGKARG_RECOMMENDVIDPNTOPOLOGY);
+AV_SAME_OFFSET(DxgkargRecommendVidPnTopologyRecord, hVidPn, DXGKARG_RECOMMENDVIDPNTOPOLOGY, hVidPn);
+AV_SAME_OFFSET(DxgkargRecommendVidPnTopologyRecord, VidPnSourceId, DXGKARG_RECOMMENDVIDPNTOPOLOGY, VidPnSourceId);
+AV_SAME_OFFSET(DxgkargRecommendVidPnTopologyRecord, RequestReason, DXGKARG_RECOMMENDVIDPNTOPOLOGY, RequestReason);
+AV_SAME_OFFSET(DxgkargRecommendVidPnTopologyRecord, hFallbackTopology, DXGKARG_RECOMMENDVIDPNTOPOLOGY, hFallbackTopology);
+
+AV_SAME_SIZE(DxgkargGetScanLineRecord, DXGKARG_GETSCANLINE);
+AV_SAME_OFFSET(DxgkargGetScanLineRecord, VidPnTargetId, DXGKARG_GETSCANLINE, VidPnTargetId);
+AV_SAME_OFFSET(DxgkargGetScanLineRecord, InVerticalBlank, DXGKARG_GETSCANLINE, InVerticalBlank);
+AV_SAME_OFFSET(DxgkargGetScanLineRecord, ScanLine, DXGKARG_GETSCANLINE, ScanLine);
+
+AV_SAME_SIZE(DxgkDeviceDescriptorRecord, DXGK_DEVICE_DESCRIPTOR);
+AV_SAME_OFFSET(DxgkDeviceDescriptorRecord, DescriptorOffset, DXGK_DEVICE_DESCRIPTOR, DescriptorOffset);
+AV_SAME_OFFSET(DxgkDeviceDescriptorRecord, DescriptorLength, DXGK_DEVICE_DESCRIPTOR, DescriptorLength);
+AV_SAME_OFFSET(DxgkDeviceDescriptorRecord, DescriptorBuffer, DXGK_DEVICE_DESCRIPTOR, DescriptorBuffer);
+
+static_assert(sizeof(DXGKARG_UPDATEACTIVEVIDPNPRESENTPATH) == sizeof(av::D3dkmdtVidPnPresentPathRecord),
+              "DXGKARG_UPDATEACTIVEVIDPNPRESENTPATH is one present path");
+static_assert(DXGK_VIDPN_INTERFACE_VERSION_V1 == 1 && D3DKMDT_EPT_VIDPNSOURCE == 1 && D3DKMDT_EPT_VIDPNTARGET == 2 &&
+                  D3DKMDT_VPPS_IDENTITY == 1 && D3DKMDT_VPPR_IDENTITY == 1 && D3DKMDT_RMT_GRAPHICS == 1 &&
+                  D3DDDIFMT_X8R8G8B8 == 22 && D3DKMDT_MCO_DRIVER == 5 && D3DKMDT_MP_PREFERRED == 1 &&
+                  DXGK_INTERRUPT_CRTC_VSYNC == 3,
+              "VidPn enumerations");
 
 /* ResourceList reads CM_RESOURCE_LIST as bytes; these pin the offsets it reads at. */
 static_assert(offsetof(CM_RESOURCE_LIST, List) == av::ResourceList::list_header_bytes, "CM_RESOURCE_LIST::List");
