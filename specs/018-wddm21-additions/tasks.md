@@ -18,4 +18,4 @@ description: "Task list for feature 018: WDDM 2.1 additions"
 
 ## Phase 3: Scenario
 
-- [ ] T003 Scenario through the table; docs; gate; merge; push
+- [X] T003 Scenario through the table; docs; gate; merge; push

@@ -630,6 +630,36 @@ WDDM 1.2 (with GPU VA, feature 017): a 1.2 claim below `DXGKDDI_WDDMv1_2` fails
   `CheckMultiPlaneOverlaySupport2`, `SetVidPnSourceAddressWithMultiPlaneOverlay2`,
   `PowerRuntimeSetDeviceHandle` and `SetVideoProtectedRegion` stay NULL.
 
+## 4j. WDDM 2.1 (feature 018)
+
+- `DXGADAPTER::Initialize @ 1401a2e21` calls `SetModeBehavior @ 1401a8d0c`
+  before `DRIVERCAPS` for an adapter reporting a source and a child: Request
+  `PrioritizeHDR` at DDI interface >= 0x7000 (from the DWM `HighColor` registry
+  value between 0x6002 and 0x6FFF). The answer is only traced; a status other
+  than `STATUS_NOT_SUPPORTED` is logged, one outside SUCCESS, NO_MEMORY and
+  NOT_SUPPORTED logged invalid, and the wrapper asserts Satisfied and
+  NotSatisfied share no bit. A NULL slot gets `DefaultDdiControlModeBehavior`
+  (NOT_SUPPORTED). `ColorimetricControl` is requested at runtime only from driver
+  version 2400. The driver satisfies nothing.
+- `DXGMONITOR::_UpdateLinkInfo @ 14028e4a0` calls `UpdateMonitorLinkInfo` on
+  monitor arrival and usage change with `Hidden` for a non-desktop usage and
+  `HeadMounted` for usage 1 (NULL: a default answering NOT_SUPPORTED). It keeps
+  capabilities 0x7F (plus `VariableRefresh` from driver version 2600; HDR10+ and
+  Dolby Vision only for Xbox or software adapters), always clears
+  `TargetIndependentPrimary`, masks other bits below driver version 2400 and
+  fails with `STATUS_UNSUCCESSFUL` from it, and zeroes a `DitheringSupport` with
+  a preference. A failure zeroes the link info and is swallowed below 2400. The
+  driver answers the EDID's view: no stereo, no wide or high colour, no
+  dithering.
+- `WDDMVersion` 0x2100 is accepted and makes nothing new mandatory; user mode
+  sees driver version 2100. `ReadConfig @ 1401a84bd` then enables the secondary
+  independent flip when `FlipIndependent` is reported (it is not), and the MPO3
+  flip path only with `SetVidPnSourceAddressWithMultiPlaneOverlay3` registered.
+- `CheckMultiPlaneOverlaySupport3` is gated on `SupportMultiPlaneOverlay`,
+  `PostMultiPlaneOverlayPresent` has no caller in this build, and
+  `NtGdiDdDDIUpdateAllocationProperty` answers `STATUS_NOT_IMPLEMENTED` for a NULL
+  `ValidateUpdateAllocationProperty`; all four stay NULL.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the
@@ -703,3 +733,6 @@ shipping stack. Scheduler/paging DDIs live in `dxgmms2.sys` (same project).
   order; what flag 0x1000 of dxgmms2's context object means; and whether
   `DxgkPhysicalAdapterHandle` in `PHYSICALADAPTERCAPS` must be the
   `DeviceHandle` dxgkrnl passed at start (it is answered as that).
+- What `DXGADAPTER+0x1bc` bit 9 (which with WDDM 2.1 enables the MPO3 flip
+  path) means, and how callers of `DXGMONITOR::_UpdateLinkInfo` handle its
+  failure at driver version 2400 and above.

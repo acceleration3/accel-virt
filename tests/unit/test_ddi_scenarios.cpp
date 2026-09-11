@@ -39,6 +39,7 @@
 #include "../harness/fake_dxgkrnl.hpp"
 #include "../harness/fake_dxgkrnl_adapter.hpp"
 #include "../harness/fake_dxgkrnl_fdo.hpp"
+#include "../harness/fake_dxgmonitor.hpp"
 #include "../harness/fake_gpu_mmu.hpp"
 #include "../harness/gpu_mmu_rule.hpp"
 #include "../harness/fake_handle_table.hpp"
@@ -890,6 +891,35 @@ TEST(ddi_scenario, a_gpu_mmu_adapter_pages_submits_by_virtual_address_and_flips_
   driver.platform().run_timers(10000000u / 60u);
   CHECK_EQ(device.dxgkrnl().interrupts(), reported + 1u);
   CHECK_EQ(device.dxgkrnl().interrupt(reported).Argument3, 4u);
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- WDDM 2.1 (feature 018) ----------------------------------------------------- */
+
+TEST(ddi_scenario, start_declines_hdr_priority_and_the_monitor_link_is_plain)
+{ LoadedDriver driver;
+  const DdiTable &table = driver.table();
+  CHECK(table.routine(DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport3) == nullptr);
+  CHECK(table.routine(DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3) == nullptr);
+  CHECK(table.routine(DdiSlot::DxgkDdiPostMultiPlaneOverlayPresent) == nullptr);
+  CHECK(table.routine(DdiSlot::DxgkDdiValidateUpdateAllocationProperty) == nullptr);
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.fdo().dxgadapter().mode_behavior().Request, 0x1u);
+  CHECK_EQ(device.fdo().dxgadapter().mode_behavior().Satisfied, 0u);
+  CHECK_EQ(device.fdo().dxgadapter().mode_behavior().NotSatisfied, 0x1u);
+  CHECK_EQ(device.fdo().enumerate_children(), 0);
+  av::FakeDxgmonitor monitor(driver.platform(), table, device.fdo().context(), 2100u);
+  CHECK_EQ(monitor.update_link_info(0u, 0u), 0);
+  CHECK_EQ(monitor.capabilities(), 0u);
+  CHECK_EQ(monitor.dithering_support(), 0u);
+  CHECK_EQ(monitor.update_link_info(0u, 1u), 0);
+  CHECK_EQ(monitor.usage_hints(), 0x3u);
+  av::FakeDxgmonitor stricter(driver.platform(), table, device.fdo().context(), 2400u);
+  CHECK_EQ(stricter.update_link_info(0u, 0u), 0);
+  CHECK_EQ(stricter.update_link_info(1u, 0u), static_cast<std::int32_t>(0xC000000Du));
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), 0u);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
