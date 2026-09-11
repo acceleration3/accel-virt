@@ -19,10 +19,10 @@ Implement only the subset listed below. Everything else in this level is stubbed
 
 | Slot | Field | Introduced |
 |--:|---|---|
-| 154 | `DxgkDdiSetAllocationBackingStore` | WDDM3_0 |
-| 155 | `DxgkDdiCreateCpuEvent` | WDDM3_0 |
-| 156 | `DxgkDdiDestroyCpuEvent` | WDDM3_0 |
-| 157 | `DxgkDdiCancelFlips` | WDDM3_0 |
+| 158 | `DxgkDdiSetAllocationBackingStore` | WDDM3_0 |
+| 159 | `DxgkDdiCreateCpuEvent` | WDDM3_0 |
+| 160 | `DxgkDdiDestroyCpuEvent` | WDDM3_0 |
+| 161 | `DxgkDdiCancelFlips` | WDDM3_0 |
 
 Slot numbers are indices into `DRIVER_INITIALIZATION_DATA` as laid out by the WDDM 3.2 headers; see `docs/ref/driver_init_table.md`. They are the fastest way to navigate an unsymbolized vendor driver.
 

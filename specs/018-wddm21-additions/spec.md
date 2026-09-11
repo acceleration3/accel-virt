@@ -19,12 +19,12 @@ Implement only the subset listed below. Everything else in this level is stubbed
 
 | Slot | Field | Introduced |
 |--:|---|---|
-| 101 | `DxgkDdiCheckMultiPlaneOverlaySupport3` | WDDM2_1 |
-| 102 | `DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3` | WDDM2_1 |
-| 103 | `DxgkDdiPostMultiPlaneOverlayPresent` | WDDM2_1 |
-| 104 | `DxgkDdiValidateUpdateAllocationProperty` | WDDM2_1 |
-| 105 | `DxgkDdiControlModeBehavior` | WDDM2_1 |
-| 106 | `DxgkDdiUpdateMonitorLinkInfo` | WDDM2_1 |
+| 104 | `DxgkDdiCheckMultiPlaneOverlaySupport3` | WDDM2_1 |
+| 105 | `DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3` | WDDM2_1 |
+| 106 | `DxgkDdiPostMultiPlaneOverlayPresent` | WDDM2_1 |
+| 107 | `DxgkDdiValidateUpdateAllocationProperty` | WDDM2_1 |
+| 108 | `DxgkDdiControlModeBehavior` | WDDM2_1 |
+| 109 | `DxgkDdiUpdateMonitorLinkInfo` | WDDM2_1 |
 
 Slot numbers are indices into `DRIVER_INITIALIZATION_DATA` as laid out by the WDDM 3.2 headers; see `docs/ref/driver_init_table.md`. They are the fastest way to navigate an unsymbolized vendor driver.
 

@@ -47,7 +47,8 @@ def slots_for(feat, rows):
         levels = {level}
     if not levels:
         return []
-    return [r for r in rows if r[3] in levels]
+    # Reserved fields are padding in the table, not DDIs anyone implements.
+    return [r for r in rows if r[3] in levels and not r[1].startswith("Reserved")]
 
 
 def body(feat, rows):

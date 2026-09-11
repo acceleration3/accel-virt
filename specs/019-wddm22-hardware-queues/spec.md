@@ -22,25 +22,25 @@ Build it, test it to the constitution's standard, and report the capabilities it
 
 | Slot | Field | Introduced |
 |--:|---|---|
-| 107 | `DxgkDdiCreateHwContext` | WDDM2_2 |
-| 108 | `DxgkDdiDestroyHwContext` | WDDM2_2 |
-| 109 | `DxgkDdiCreateHwQueue` | WDDM2_2 |
-| 110 | `DxgkDdiDestroyHwQueue` | WDDM2_2 |
-| 111 | `DxgkDdiSubmitCommandToHwQueue` | WDDM2_2 |
-| 112 | `DxgkDdiSwitchToHwContextList` | WDDM2_2 |
-| 113 | `DxgkDdiResetHwEngine` | WDDM2_2 |
-| 114 | `DxgkDdiCreatePeriodicFrameNotification` | WDDM2_2 |
-| 115 | `DxgkDdiDestroyPeriodicFrameNotification` | WDDM2_2 |
-| 116 | `DxgkDdiSetTimingsFromVidPn` | WDDM2_2 |
-| 117 | `DxgkDdiSetTargetGamma` | WDDM2_2 |
-| 118 | `DxgkDdiSetTargetContentType` | WDDM2_2 |
-| 119 | `DxgkDdiSetTargetAnalogCopyProtection` | WDDM2_2 |
-| 120 | `DxgkDdiSetTargetAdjustedColorimetry` | WDDM2_2 |
-| 121 | `DxgkDdiDisplayDetectControl` | WDDM2_2 |
-| 122 | `DxgkDdiQueryConnectionChange` | WDDM2_2 |
-| 123 | `DxgkDdiExchangePreStartInfo` | WDDM2_2 |
-| 124 | `DxgkDdiGetMultiPlaneOverlayCaps` | WDDM2_2 |
-| 125 | `DxgkDdiGetPostCompositionCaps` | WDDM2_2 |
+| 110 | `DxgkDdiCreateHwContext` | WDDM2_2 |
+| 111 | `DxgkDdiDestroyHwContext` | WDDM2_2 |
+| 112 | `DxgkDdiCreateHwQueue` | WDDM2_2 |
+| 113 | `DxgkDdiDestroyHwQueue` | WDDM2_2 |
+| 114 | `DxgkDdiSubmitCommandToHwQueue` | WDDM2_2 |
+| 115 | `DxgkDdiSwitchToHwContextList` | WDDM2_2 |
+| 116 | `DxgkDdiResetHwEngine` | WDDM2_2 |
+| 117 | `DxgkDdiCreatePeriodicFrameNotification` | WDDM2_2 |
+| 118 | `DxgkDdiDestroyPeriodicFrameNotification` | WDDM2_2 |
+| 119 | `DxgkDdiSetTimingsFromVidPn` | WDDM2_2 |
+| 120 | `DxgkDdiSetTargetGamma` | WDDM2_2 |
+| 121 | `DxgkDdiSetTargetContentType` | WDDM2_2 |
+| 122 | `DxgkDdiSetTargetAnalogCopyProtection` | WDDM2_2 |
+| 123 | `DxgkDdiSetTargetAdjustedColorimetry` | WDDM2_2 |
+| 124 | `DxgkDdiDisplayDetectControl` | WDDM2_2 |
+| 125 | `DxgkDdiQueryConnectionChange` | WDDM2_2 |
+| 126 | `DxgkDdiExchangePreStartInfo` | WDDM2_2 |
+| 127 | `DxgkDdiGetMultiPlaneOverlayCaps` | WDDM2_2 |
+| 128 | `DxgkDdiGetPostCompositionCaps` | WDDM2_2 |
 
 Slot numbers are indices into `DRIVER_INITIALIZATION_DATA` as laid out by the WDDM 3.2 headers; see `docs/ref/driver_init_table.md`. They are the fastest way to navigate an unsymbolized vendor driver.
 

@@ -25,7 +25,7 @@
   │   ├─ GPU virtual address space, page tables                      │
   │   └─ per-node queues, preemption, TDR                            │
   └──────────────────────────────────────────────────────────────────┘
-                                   │ DDI  (188 function pointers)
+                                   │ DDI  (187 function pointers)
   ┌──────────────────────────────────────────────────────────────────┐
   │ KERNEL-MODE DISPLAY MINIPORT DRIVER (KMD)   ← what we build      │
   │   dispmprt.h + d3dkmddi.h                                        │
@@ -45,7 +45,7 @@ initiate goes back up through `DXGKRNL_INTERFACE` callbacks (`DxgkCb*`).
 
 | Entry point | Init struct | Shape |
 |---|---|---|
-| `DxgkInitialize` | `DRIVER_INITIALIZATION_DATA` (188 slots) | Full miniport. Render + display, or render-only. |
+| `DxgkInitialize` | `DRIVER_INITIALIZATION_DATA` (187 DDIs) | Full miniport. Render + display, or render-only. |
 | `DxgkInitializeDisplayOnlyDriver` | `KMDDOD_INITIALIZATION_DATA` | Display-only (KMDOD). Scanout, no GPU engines. |
 
 `basicdisplay.sys` takes the second path; `basicrender.sys` takes the first.

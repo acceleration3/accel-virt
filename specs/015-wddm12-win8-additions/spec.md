@@ -19,18 +19,18 @@ Build it, test it to the constitution's standard, and report the capabilities it
 
 | Slot | Field | Introduced |
 |--:|---|---|
-| 70 | `DxgkDdiSetPowerComponentFState` | WIN8 |
-| 71 | `DxgkDdiQueryDependentEngineGroup` | WIN8 |
-| 72 | `DxgkDdiQueryEngineStatus` | WIN8 |
-| 73 | `DxgkDdiResetEngine` | WIN8 |
-| 74 | `DxgkDdiStopDeviceAndReleasePostDisplayOwnership` | WIN8 |
-| 75 | `DxgkDdiSystemDisplayEnable` | WIN8 |
-| 76 | `DxgkDdiSystemDisplayWrite` | WIN8 |
-| 77 | `DxgkDdiCancelCommand` | WIN8 |
-| 78 | `DxgkDdiGetChildContainerId` | WIN8 |
-| 79 | `DxgkDdiPowerRuntimeControlRequest` | WIN8 |
-| 80 | `DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay` | WIN8 |
-| 81 | `DxgkDdiNotifySurpriseRemoval` | WIN8 |
+| 71 | `DxgkDdiSetPowerComponentFState` | WIN8 |
+| 72 | `DxgkDdiQueryDependentEngineGroup` | WIN8 |
+| 73 | `DxgkDdiQueryEngineStatus` | WIN8 |
+| 74 | `DxgkDdiResetEngine` | WIN8 |
+| 75 | `DxgkDdiStopDeviceAndReleasePostDisplayOwnership` | WIN8 |
+| 76 | `DxgkDdiSystemDisplayEnable` | WIN8 |
+| 77 | `DxgkDdiSystemDisplayWrite` | WIN8 |
+| 78 | `DxgkDdiCancelCommand` | WIN8 |
+| 79 | `DxgkDdiGetChildContainerId` | WIN8 |
+| 80 | `DxgkDdiPowerRuntimeControlRequest` | WIN8 |
+| 81 | `DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay` | WIN8 |
+| 82 | `DxgkDdiNotifySurpriseRemoval` | WIN8 |
 
 Slot numbers are indices into `DRIVER_INITIALIZATION_DATA` as laid out by the WDDM 3.2 headers; see `docs/ref/driver_init_table.md`. They are the fastest way to navigate an unsymbolized vendor driver.
 

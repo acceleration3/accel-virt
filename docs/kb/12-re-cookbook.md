@@ -46,7 +46,7 @@ Catalog, which is scriptable and needs no vendor account). Analysis there is
 unassisted, but the DDI table gives a strong foothold: find `DriverEntry`, find
 the `DRIVER_INITIALIZATION_DATA` it fills, and every slot index maps to a name
 via `docs/ref/driver_init_table.md`. That single table converts an unnamed 50 MB
-binary into ~188 named entry points.
+binary into 187 named entry points.
 
 ## Importing and querying
 
@@ -108,7 +108,7 @@ diff — that is how you get early warning of DDI changes.
 | `dxgkrnl.sys` — doorbell path | `Doorbell`-named functions show how `dxgkrnl` validates and maps a doorbell page. Directly relevant to phase 6. |
 | `d3d12core.dll` | Which UMD DDI entries the runtime actually calls, in what order, at device creation. Answers "what is the minimum UMD" for phase 7. |
 | `vpci.sys` | How a synthetic PCI device gets enumerated in a guest — relevant if `rvkgpu` is to bind to a virtio-pci device rather than a root-enumerated one. |
-| `amdkmdag.sys` | A real, shipping, WDDM 3.2 KMD. No symbols, but the 188-slot table makes it navigable. Worth it once a specific question needs a real-hardware answer. |
+| `amdkmdag.sys` | A real, shipping, WDDM 3.2 KMD. No symbols, but the 193-field table makes it navigable. Worth it once a specific question needs a real-hardware answer. |
 
 ## A note on what RE is and is not good for here
 

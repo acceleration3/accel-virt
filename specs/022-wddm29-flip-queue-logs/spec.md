@@ -19,10 +19,10 @@ Implement only the subset listed below. Everything else in this level is stubbed
 
 | Slot | Field | Introduced |
 |--:|---|---|
-| 150 | `DxgkDdiSetFlipQueueLogBuffer` | WDDM2_9 |
-| 151 | `DxgkDdiUpdateFlipQueueLog` | WDDM2_9 |
-| 152 | `DxgkDdiCancelQueuedFlips` | WDDM2_9 |
-| 153 | `DxgkDdiSetInterruptTargetPresentId` | WDDM2_9 |
+| 154 | `DxgkDdiSetFlipQueueLogBuffer` | WDDM2_9 |
+| 155 | `DxgkDdiUpdateFlipQueueLog` | WDDM2_9 |
+| 156 | `DxgkDdiCancelQueuedFlips` | WDDM2_9 |
+| 157 | `DxgkDdiSetInterruptTargetPresentId` | WDDM2_9 |
 
 Slot numbers are indices into `DRIVER_INITIALIZATION_DATA` as laid out by the WDDM 3.2 headers; see `docs/ref/driver_init_table.md`. They are the fastest way to navigate an unsymbolized vendor driver.
 

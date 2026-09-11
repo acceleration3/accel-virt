@@ -24,27 +24,27 @@ Implement only the subset listed below. Everything else in this level is stubbed
 
 | Slot | Field | Introduced |
 |--:|---|---|
-| 167 | `DxgkDdiCreateMemoryBasis` | WDDM3_2 |
-| 168 | `DxgkDdiDestroyMemoryBasis` | WDDM3_2 |
-| 169 | `DxgkDdiStartDirtyTracking` | WDDM3_2 |
-| 170 | `DxgkDdiStopDirtyTracking` | WDDM3_2 |
-| 171 | `DxgkDdiQueryDirtyBitData` | WDDM3_2 |
-| 172 | `DxgkDdiPrepareLiveMigration` | WDDM3_2 |
-| 173 | `DxgkDdiSaveImmutableMigrationData` | WDDM3_2 |
-| 174 | `DxgkDdiSaveMutableMigrationData` | WDDM3_2 |
-| 175 | `DxgkDdiEndLiveMigration` | WDDM3_2 |
-| 176 | `DxgkDdiRestoreImmutableMigrationData` | WDDM3_2 |
-| 177 | `DxgkDdiRestoreMutableMigrationData` | WDDM3_2 |
-| 178 | `DxgkDdiWriteVirtualizedInterrupt` | WDDM3_2 |
-| 179 | `DxgkDdiSetVirtualGpuResources2` | WDDM3_2 |
-| 180 | `DxgkDdiSetVirtualFunctionPauseState` | WDDM3_2 |
-| 181 | `DxgkDdiOpenNativeFence` | WDDM3_2 |
-| 182 | `DxgkDdiCloseNativeFence` | WDDM3_2 |
-| 183 | `DxgkDdiSetNativeFenceLogBuffer` | WDDM3_2 |
-| 184 | `DxgkDdiUpdateNativeFenceLogs` | WDDM3_2 |
-| 185 | `DxgkDdiCollectDbgInfo2` | WDDM3_2 |
-| 186 | `DxgkDdiNotifyContextPriorityChange` | WDDM3_2 |
-| 187 | `DxgkDdiResetDisplayEngine` | WDDM3_2 |
+| 172 | `DxgkDdiCreateMemoryBasis` | WDDM3_2 |
+| 173 | `DxgkDdiDestroyMemoryBasis` | WDDM3_2 |
+| 174 | `DxgkDdiStartDirtyTracking` | WDDM3_2 |
+| 175 | `DxgkDdiStopDirtyTracking` | WDDM3_2 |
+| 176 | `DxgkDdiQueryDirtyBitData` | WDDM3_2 |
+| 177 | `DxgkDdiPrepareLiveMigration` | WDDM3_2 |
+| 178 | `DxgkDdiSaveImmutableMigrationData` | WDDM3_2 |
+| 179 | `DxgkDdiSaveMutableMigrationData` | WDDM3_2 |
+| 180 | `DxgkDdiEndLiveMigration` | WDDM3_2 |
+| 181 | `DxgkDdiRestoreImmutableMigrationData` | WDDM3_2 |
+| 182 | `DxgkDdiRestoreMutableMigrationData` | WDDM3_2 |
+| 183 | `DxgkDdiWriteVirtualizedInterrupt` | WDDM3_2 |
+| 184 | `DxgkDdiSetVirtualGpuResources2` | WDDM3_2 |
+| 185 | `DxgkDdiSetVirtualFunctionPauseState` | WDDM3_2 |
+| 186 | `DxgkDdiOpenNativeFence` | WDDM3_2 |
+| 187 | `DxgkDdiCloseNativeFence` | WDDM3_2 |
+| 188 | `DxgkDdiSetNativeFenceLogBuffer` | WDDM3_2 |
+| 189 | `DxgkDdiUpdateNativeFenceLogs` | WDDM3_2 |
+| 190 | `DxgkDdiCollectDbgInfo2` | WDDM3_2 |
+| 191 | `DxgkDdiNotifyContextPriorityChange` | WDDM3_2 |
+| 192 | `DxgkDdiResetDisplayEngine` | WDDM3_2 |
 
 Slot numbers are indices into `DRIVER_INITIALIZATION_DATA` as laid out by the WDDM 3.2 headers; see `docs/ref/driver_init_table.md`. They are the fastest way to navigate an unsymbolized vendor driver.
 

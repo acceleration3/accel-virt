@@ -22,18 +22,18 @@ Implement only the subset listed below. Everything else in this level is stubbed
 
 | Slot | Field | Introduced |
 |--:|---|---|
-| 126 | `DxgkDdiUpdateHwContextState` | WDDM2_3 |
-| 127 | `DxgkDdiCreateProtectedSession` | WDDM2_3 |
-| 128 | `DxgkDdiDestroyProtectedSession` | WDDM2_3 |
-| 141 | `DxgkDdiSignalMonitoredFence` | WDDM2_5 |
-| 142 | `DxgkDdiPresentToHwQueue` | WDDM2_5 |
-| 143 | `DxgkDdiValidateSubmitCommand` | WDDM2_5 |
-| 144 | `DxgkDdiSetTargetAdjustedColorimetry2` | WDDM2_5 |
-| 145 | `DxgkDdiSetTrackedWorkloadPowerLevel` | WDDM2_5 |
-| 146 | `DxgkDdiSaveMemoryForHotUpdate` | WDDM2_6 |
-| 147 | `DxgkDdiRestoreMemoryForHotUpdate` | WDDM2_6 |
-| 148 | `DxgkDdiCollectDiagnosticInfo` | WDDM2_6 |
-| 149 | `DxgkDdiControlInterrupt3` | WDDM2_7 |
+| 129 | `DxgkDdiUpdateHwContextState` | WDDM2_3 |
+| 130 | `DxgkDdiCreateProtectedSession` | WDDM2_3 |
+| 131 | `DxgkDdiDestroyProtectedSession` | WDDM2_3 |
+| 144 | `DxgkDdiSignalMonitoredFence` | WDDM2_5 |
+| 145 | `DxgkDdiPresentToHwQueue` | WDDM2_5 |
+| 146 | `DxgkDdiValidateSubmitCommand` | WDDM2_5 |
+| 147 | `DxgkDdiSetTargetAdjustedColorimetry2` | WDDM2_5 |
+| 148 | `DxgkDdiSetTrackedWorkloadPowerLevel` | WDDM2_5 |
+| 149 | `DxgkDdiSaveMemoryForHotUpdate` | WDDM2_6 |
+| 150 | `DxgkDdiRestoreMemoryForHotUpdate` | WDDM2_6 |
+| 151 | `DxgkDdiCollectDiagnosticInfo` | WDDM2_6 |
+| 153 | `DxgkDdiControlInterrupt3` | WDDM2_7 |
 
 Slot numbers are indices into `DRIVER_INITIALIZATION_DATA` as laid out by the WDDM 3.2 headers; see `docs/ref/driver_init_table.md`. They are the fastest way to navigate an unsymbolized vendor driver.
 

@@ -23,19 +23,19 @@ Build it, test it to the constitution's standard, and report the capabilities it
 
 | Slot | Field | Introduced |
 |--:|---|---|
-| 88 | `DxgkDdiRenderGdi` | WDDM2_0 |
-| 89 | `DxgkDdiSubmitCommandVirtual` | WDDM2_0 |
-| 90 | `DxgkDdiSetRootPageTable` | WDDM2_0 |
-| 91 | `DxgkDdiGetRootPageTableSize` | WDDM2_0 |
-| 92 | `DxgkDdiMapCpuHostAperture` | WDDM2_0 |
-| 93 | `DxgkDdiUnmapCpuHostAperture` | WDDM2_0 |
-| 94 | `DxgkDdiCheckMultiPlaneOverlaySupport2` | WDDM2_0 |
-| 95 | `DxgkDdiCreateProcess` | WDDM2_0 |
-| 96 | `DxgkDdiDestroyProcess` | WDDM2_0 |
-| 97 | `DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay2` | WDDM2_0 |
-| 98 | `DxgkDdiPowerRuntimeSetDeviceHandle` | WDDM2_0 |
-| 99 | `DxgkDdiSetStablePowerState` | WDDM2_0 |
-| 100 | `DxgkDdiSetVideoProtectedRegion` | WDDM2_0 |
+| 89 | `DxgkDdiRenderGdi` | WDDM2_0 |
+| 90 | `DxgkDdiSubmitCommandVirtual` | WDDM2_0 |
+| 91 | `DxgkDdiSetRootPageTable` | WDDM2_0 |
+| 92 | `DxgkDdiGetRootPageTableSize` | WDDM2_0 |
+| 93 | `DxgkDdiMapCpuHostAperture` | WDDM2_0 |
+| 94 | `DxgkDdiUnmapCpuHostAperture` | WDDM2_0 |
+| 95 | `DxgkDdiCheckMultiPlaneOverlaySupport2` | WDDM2_0 |
+| 96 | `DxgkDdiCreateProcess` | WDDM2_0 |
+| 97 | `DxgkDdiDestroyProcess` | WDDM2_0 |
+| 98 | `DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay2` | WDDM2_0 |
+| 101 | `DxgkDdiPowerRuntimeSetDeviceHandle` | WDDM2_0 |
+| 102 | `DxgkDdiSetStablePowerState` | WDDM2_0 |
+| 103 | `DxgkDdiSetVideoProtectedRegion` | WDDM2_0 |
 
 Slot numbers are indices into `DRIVER_INITIALIZATION_DATA` as laid out by the WDDM 3.2 headers; see `docs/ref/driver_init_table.md`. They are the fastest way to navigate an unsymbolized vendor driver.
 

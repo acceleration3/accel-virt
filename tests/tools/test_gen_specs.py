@@ -46,6 +46,13 @@ class GenSpecsPreservesClassDecisions(unittest.TestCase):
         self.regenerate()
         self.assertTrue(self.filled.read_text().endswith("prose written by hand\n"))
 
+    def test_reserved_fields_are_not_listed_as_ddis(self):
+        self.regenerate()
+        wddm20 = next((self.root / "specs").glob("017-*")) / "spec.md"
+        text = wddm20.read_text()
+        self.assertIn("DxgkDdiSubmitCommandVirtual", text)
+        self.assertNotIn("`Reserved1`", text)
+
     def test_regenerating_twice_changes_nothing(self):
         self.regenerate()
         once = self.filled.read_text()

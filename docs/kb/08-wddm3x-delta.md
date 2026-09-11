@@ -9,7 +9,7 @@ WDDM3_1  0x10004    Windows 11 23H2
 WDDM3_2  0x11007    Windows 11 24H2 (build 26100)   ← our target
 ```
 
-The `DRIVER_INITIALIZATION_DATA` table is 188 slots at WDDM 3.2. The last 34
+The `DRIVER_INITIALIZATION_DATA` table is 193 fields at WDDM 3.2 (187 DDIs, 5 reserved). The last 34
 slots are everything 2.9 and later added, and the theme is unmistakable:
 **user-mode submission, and virtualization.**
 

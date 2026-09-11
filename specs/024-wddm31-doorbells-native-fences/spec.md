@@ -23,15 +23,15 @@ Build it, test it to the constitution's standard, and report the capabilities it
 
 | Slot | Field | Introduced |
 |--:|---|---|
-| 158 | `DxgkDdiCreateNativeFence` | WDDM3_1 |
-| 159 | `DxgkDdiDestroyNativeFence` | WDDM3_1 |
-| 160 | `DxgkDdiUpdateMonitoredValues` | WDDM3_1 |
-| 161 | `DxgkDdiUpdateCurrentValuesFromCpu` | WDDM3_1 |
-| 162 | `DxgkDdiCreateDoorbell` | WDDM3_1 |
-| 163 | `DxgkDdiConnectDoorbell` | WDDM3_1 |
-| 164 | `DxgkDdiDisconnectDoorbell` | WDDM3_1 |
-| 165 | `DxgkDdiDestroyDoorbell` | WDDM3_1 |
-| 166 | `DxgkDdiNotifyWorkSubmission` | WDDM3_1 |
+| 162 | `DxgkDdiCreateNativeFence` | WDDM3_1 |
+| 163 | `DxgkDdiDestroyNativeFence` | WDDM3_1 |
+| 164 | `DxgkDdiUpdateMonitoredValues` | WDDM3_1 |
+| 165 | `DxgkDdiUpdateCurrentValuesFromCpu` | WDDM3_1 |
+| 166 | `DxgkDdiCreateDoorbell` | WDDM3_1 |
+| 167 | `DxgkDdiConnectDoorbell` | WDDM3_1 |
+| 168 | `DxgkDdiDisconnectDoorbell` | WDDM3_1 |
+| 169 | `DxgkDdiDestroyDoorbell` | WDDM3_1 |
+| 170 | `DxgkDdiNotifyWorkSubmission` | WDDM3_1 |
 
 Slot numbers are indices into `DRIVER_INITIALIZATION_DATA` as laid out by the WDDM 3.2 headers; see `docs/ref/driver_init_table.md`. They are the fastest way to navigate an unsymbolized vendor driver.
 

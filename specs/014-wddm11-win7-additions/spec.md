@@ -26,7 +26,7 @@ Implement only the subset listed below. Everything else in this level is stubbed
 | 66 | `DxgkDdiSubmitRender` | WIN7 |
 | 67 | `DxgkDdiCreateAllocation2` | WIN7 |
 | 68 | `DxgkDdiRenderKm` | WIN7 |
-| 69 | `DxgkDdiQueryVidPnHWCapability` | WIN7 |
+| 70 | `DxgkDdiQueryVidPnHWCapability` | WIN7 |
 
 Slot numbers are indices into `DRIVER_INITIALIZATION_DATA` as laid out by the WDDM 3.2 headers; see `docs/ref/driver_init_table.md`. They are the fastest way to navigate an unsymbolized vendor driver.
 

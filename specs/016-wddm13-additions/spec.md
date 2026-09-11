@@ -19,12 +19,12 @@ Implement only the subset listed below. Everything else in this level is stubbed
 
 | Slot | Field | Introduced |
 |--:|---|---|
-| 82 | `DxgkDdiGetNodeMetadata` | WDDM1_3 |
-| 83 | `DxgkDdiSetPowerPState` | WDDM1_3 |
-| 84 | `DxgkDdiControlInterrupt2` | WDDM1_3 |
-| 85 | `DxgkDdiCheckMultiPlaneOverlaySupport` | WDDM1_3 |
-| 86 | `DxgkDdiCalibrateGpuClock` | WDDM1_3 |
-| 87 | `DxgkDdiFormatHistoryBuffer` | WDDM1_3 |
+| 83 | `DxgkDdiGetNodeMetadata` | WDDM1_3 |
+| 84 | `DxgkDdiSetPowerPState` | WDDM1_3 |
+| 85 | `DxgkDdiControlInterrupt2` | WDDM1_3 |
+| 86 | `DxgkDdiCheckMultiPlaneOverlaySupport` | WDDM1_3 |
+| 87 | `DxgkDdiCalibrateGpuClock` | WDDM1_3 |
+| 88 | `DxgkDdiFormatHistoryBuffer` | WDDM1_3 |
 
 Slot numbers are indices into `DRIVER_INITIALIZATION_DATA` as laid out by the WDDM 3.2 headers; see `docs/ref/driver_init_table.md`. They are the fastest way to navigate an unsymbolized vendor driver.
 

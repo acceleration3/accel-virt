@@ -32,7 +32,7 @@ The design this implements lives in the knowledge base in `docs/kb/`:
   WDDM miniport, reverse engineered. The closest existing thing to what we build.
 - `docs/kb/12-re-cookbook.md` — how to answer a question by reverse engineering
   instead of guessing.
-- `docs/ref/driver_init_table.md` — all 188 DDI slots and the WDDM level each
+- `docs/ref/driver_init_table.md` — all 193 fields (187 DDIs, 5 reserved) and the WDDM level each
   arrived in.
 
 Normative headers (these outrank everything above when they disagree):

@@ -42,7 +42,7 @@ scanout, and move serialized command streams to the device.
  │        │ D3DKMT (gdi32)                  │     │     ├ fence pages + irqfd MSI-X             │
  │        ▼                                 │     │     ├ worker thread per context             │
  │ dxgkrnl.sys / dxgmms2.sys                │     │     ├ decoders from render-server (C ABI)   │
- │        │ DDI (188 slots)                 │     │     └ executor: host libvulkan / GL / CL    │
+ │        │ DDI (187 slots)                 │     │     └ executor: host libvulkan / GL / CL    │
  │        ▼                                 │     │                                             │
  │ rvkgpu.sys   WDDM 3.2 KMD       NEW      │◄───►│   PCI: virtio-gpu, MSI-X                    │
  │  └ virtio-pci modern transport           │     └─────────────────────────────────────────────┘

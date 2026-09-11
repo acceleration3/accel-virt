@@ -1,6 +1,6 @@
 # 06 — Display: VidPn, modes, present, flip
 
-The display half is where most of the 188 DDI slots live and where most of the
+The display half is where most of the 187 DDI slots live and where most of the
 tedium is. It is also, for a paravirtual driver, the half you can make almost
 entirely synthetic.
 

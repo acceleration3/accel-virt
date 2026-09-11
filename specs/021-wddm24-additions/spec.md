@@ -19,18 +19,18 @@ Implement only the subset listed below. Everything else in this level is stubbed
 
 | Slot | Field | Introduced |
 |--:|---|---|
-| 129 | `DxgkDdiSetSchedulingLogBuffer` | WDDM2_4 |
-| 130 | `DxgkDdiSetupPriorityBands` | WDDM2_4 |
-| 131 | `DxgkDdiNotifyFocusPresent` | WDDM2_4 |
-| 132 | `DxgkDdiSetContextSchedulingProperties` | WDDM2_4 |
-| 133 | `DxgkDdiSuspendContext` | WDDM2_4 |
-| 134 | `DxgkDdiResumeContext` | WDDM2_4 |
-| 135 | `DxgkDdiSetVirtualMachineData` | WDDM2_4 |
-| 136 | `DxgkDdiBeginExclusiveAccess` | WDDM2_4 |
-| 137 | `DxgkDdiEndExclusiveAccess` | WDDM2_4 |
-| 138 | `DxgkDdiQueryDiagnosticTypesSupport` | WDDM2_4 |
-| 139 | `DxgkDdiControlDiagnosticReporting` | WDDM2_4 |
-| 140 | `DxgkDdiResumeHwEngine` | WDDM2_4 |
+| 132 | `DxgkDdiSetSchedulingLogBuffer` | WDDM2_4 |
+| 133 | `DxgkDdiSetupPriorityBands` | WDDM2_4 |
+| 134 | `DxgkDdiNotifyFocusPresent` | WDDM2_4 |
+| 135 | `DxgkDdiSetContextSchedulingProperties` | WDDM2_4 |
+| 136 | `DxgkDdiSuspendContext` | WDDM2_4 |
+| 137 | `DxgkDdiResumeContext` | WDDM2_4 |
+| 138 | `DxgkDdiSetVirtualMachineData` | WDDM2_4 |
+| 139 | `DxgkDdiBeginExclusiveAccess` | WDDM2_4 |
+| 140 | `DxgkDdiEndExclusiveAccess` | WDDM2_4 |
+| 141 | `DxgkDdiQueryDiagnosticTypesSupport` | WDDM2_4 |
+| 142 | `DxgkDdiControlDiagnosticReporting` | WDDM2_4 |
+| 143 | `DxgkDdiResumeHwEngine` | WDDM2_4 |
 
 Slot numbers are indices into `DRIVER_INITIALIZATION_DATA` as laid out by the WDDM 3.2 headers; see `docs/ref/driver_init_table.md`. They are the fastest way to navigate an unsymbolized vendor driver.
 

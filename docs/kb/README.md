@@ -40,7 +40,7 @@ claims a layout it did not get from one of those two places.
 | File | Contents |
 |---|---|
 | `01-architecture.md` | The whole stack, who calls whom, what runs in which address space. |
-| `02-kmd-contract.md` | `DriverEntry` → `DxgkInitialize`, the 188-slot DDI table, version and capability negotiation. |
+| `02-kmd-contract.md` | `DriverEntry` → `DxgkInitialize`, the 187-DDI table, version and capability negotiation. |
 | `03-object-model.md` | Adapter, device, context, node/engine, hardware queue, paging queue, process. |
 | `04-memory.md` | Segments, allocations, residency, the paging buffer, GPU virtual addressing. |
 | `05-scheduling.md` | Packet scheduling, hardware queues, doorbells, fences, native fences, TDR. |

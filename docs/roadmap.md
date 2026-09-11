@@ -43,4 +43,4 @@ spec under `specs/`.
 | [034](../specs/034-loopback-protocol-suite/spec.md) | Loopback protocol test suite | — | `implement` | — | 030, 031 |
 | [035](../specs/035-guest-integration-suite/spec.md) | In-guest integration suite | — | `implement` | — | 034 |
 
-35 features. The `DRIVER_INITIALIZATION_DATA` table has 188 slots at WDDM 3.2; see `docs/ref/driver_init_table.md`.
+35 features. The `DRIVER_INITIALIZATION_DATA` table has 193 fields at WDDM 3.2 (187 DDIs, 5 reserved); see `docs/ref/driver_init_table.md`.
