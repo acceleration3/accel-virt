@@ -731,6 +731,37 @@ WDDM 1.2 (with GPU VA, feature 017): a 1.2 claim below `DXGKDDI_WDDMv1_2` fails
   only 130, 131 and 146 of them. The driver reports 2.3 and leaves all twelve
   NULL.
 
+## 4m. WDDM 2.4 and flips on a GPU MMU adapter (feature 021)
+
+- `InitializeDriverWorkarounds @ 1401a4fc8` sets `FlipImmediateMmIo` for every
+  2.4 adapter that is not IndirectKmd (`DXGADAPTER+0x1bc` bit 8, from the
+  `\Driver\IndirectKmd` object name); the default flip mode becomes 3 and
+  `VidSchiExecuteMmIoFlip @ 14000f440` adds `FlipImmediate` for an immediate
+  present. At device IRQL like a vsync flip; VidSch completes it on return
+  (`VidSchiCompleteFlipEntry`) and expects no report. STATUS_DEVICE_BUSY
+  requeues it; INVALID_PARAMETER fails it.
+- A primary's segment and address come from VidMm's allocation record
+  (`VidSchiBindFlipPhysicalAddress @ 14003ba00`), written only by aperture and
+  memory segments; for the implicit system memory segment both are 0
+  (`VIDMM_SEGMENT::DriverId @ 1400397a8`). `VidSchiIsExpectedVSyncCookie
+  @ 14003a0d4` completes a flip whose PrimaryAddress equals the vsync's exactly.
+  The driver accepts segment 0 and reports the stored address, 0.
+- For a context with GPU virtual addressing (every context here, CDD's
+  included: `DXGDEVICE::CreateContext @ 1402dc274`),
+  `DXGCONTEXT::SubmitPresentWithDmaBuffer @ 14031b804` calls `DxgkDdiPresent`
+  with a `DXGK_PRESENTALLOCATIONINFO` array (source 1, destination 2, each with
+  `AllocationVirtualAddress`) and no patch list, then submits virtually;
+  `DxgkDdiPatch` is called only for other contexts. The driver writes the GPU
+  virtual addresses into the command (address space 1).
+- `ResumeHwEngine` (no NULL check) follows a successful `ResetHwEngine`. Slots
+  132-142 stay NULL: NOT_IMPLEMENTED is accepted from the scheduling ones,
+  `SuspendContext` NULL is synchronous, exclusive access is IoMmuSecureMode only,
+  virtual machine data is GPU-PV host only, and the diagnostic pair left NULL
+  gets dxgkrnl's defaults. Hardware scheduling additionally needs WDDM 2.5,
+  `DxgkCbQueryFeatureSupport` (`DXGKRNL_INTERFACE+0x1e8`) at StartDevice,
+  `SignalMonitoredFence`, `DxgkCbInvalidateHwContext` (`+0x148`) inside
+  ResetHwEngine, and a user-mode driver submitting to hardware queues.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the
@@ -814,3 +845,6 @@ shipping stack. Scheduler/paging DDIs live in `dxgmms2.sys` (same project).
 - Which DDIs `FlushPresentReferencesAndDisableOverlays` issues; the contract of
   `SignalMonitoredFence`'s DMA buffer; what VidSch `+0xaf8`, `HwQueuePacketCap`
   and FDO+0x486 mean.
+- Where the flip entry flag 0x100 that also selects `FlipImmediate` comes from;
+  the offset part of an implicit-segment address; whether non-virtual contexts
+  are allowed on a GPU MMU adapter.

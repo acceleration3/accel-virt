@@ -31,6 +31,7 @@
 #include "../../src/core/ddi/dxgkarg_build_paging_buffer_record.hpp"
 #include "../../src/core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "../../src/core/ddi/dxgkarg_reset_hw_engine_record.hpp"
+#include "../../src/core/ddi/dxgkarg_resume_hw_engine_record.hpp"
 #include "../../src/core/ddi_slot.hpp"
 #include "../../src/core/ddi_table.hpp"
 #include "../../src/core/driver_image.hpp"
@@ -1000,6 +1001,60 @@ TEST(ddi_scenario, a_wddm_2_3_adapter_starts_and_scans_out_with_the_later_slots_
   CHECK_EQ(dmm.set_visible(false), 0);
   CHECK_EQ(dmm.show_primary(nullptr, 0), 0);
   CHECK_EQ(dmm.control_vsync(false), 0);
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- WDDM 2.4 (feature 021) ----------------------------------------------------- */
+
+TEST(ddi_scenario, a_system_memory_primary_flips_immediately_and_gpu_va_presents_complete)
+{ LoadedDriver driver;
+  const DdiTable &table = driver.table();
+  const DdiSlot skipped[] = {
+      DdiSlot::DxgkDdiSetSchedulingLogBuffer, DdiSlot::DxgkDdiSetupPriorityBands, DdiSlot::DxgkDdiNotifyFocusPresent,
+      DdiSlot::DxgkDdiSetContextSchedulingProperties, DdiSlot::DxgkDdiSuspendContext, DdiSlot::DxgkDdiResumeContext,
+      DdiSlot::DxgkDdiSetVirtualMachineData, DdiSlot::DxgkDdiBeginExclusiveAccess,
+      DdiSlot::DxgkDdiEndExclusiveAccess, DdiSlot::DxgkDdiQueryDiagnosticTypesSupport,
+      DdiSlot::DxgkDdiControlDiagnosticReporting,
+  };
+  for (const DdiSlot slot : skipped) CHECK(table.routine(slot) == nullptr);
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2400);
+  void *const adapter = device.fdo().context();
+  av::FakeDisplayModeManager dmm(driver.platform(), table, adapter);
+  { av::FakeVidPn vidpn;
+    CHECK_EQ(dmm.set_mode(vidpn, 1280u, 800u), 0); }
+  CHECK_EQ(dmm.set_visible(true), 0);
+  CHECK_EQ(dmm.control_vsync(true), 0);
+  int first = 0, second = 0;
+  CHECK_EQ(dmm.flip(&first, 0u, 0, 0x4u), 0);    /* FlipOnNextVSync, segment 0 address 0 */
+  const std::uint32_t before = device.dxgkrnl().interrupts();
+  CHECK_EQ(dmm.flip(&second, 0u, 0, 0x2u), 0);   /* FlipImmediate: completed on return */
+  CHECK_EQ(device.dxgkrnl().interrupts(), before);
+  driver.platform().run_timers(10000000u / 60u);
+  CHECK_EQ(device.dxgkrnl().interrupt(before).InterruptType, 3);
+  CHECK_EQ(device.dxgkrnl().interrupt(before).Argument2, 0u);
+  CHECK_EQ(device.dxgkrnl().interrupt(before).Argument3, 0u);
+  CHECK_EQ(dmm.flip(&first, 2u, 0, 0x2u), static_cast<std::int32_t>(0xC000000Du));
+  CHECK_EQ(dmm.control_vsync(false), 0);
+  { av::FakeVidSch vidsch(driver.platform(), table, device.dxgkrnl(), adapter);
+    CHECK_EQ(vidsch.create_context(0x4u), 0);
+    const av::RectRecord dirty[1] = {{0, 0, 32, 32}};
+    CHECK_EQ(vidsch.present_blt_virtual(0x0000000100000000ull, 0x0000000200000000ull, dirty, 1u), 0);
+    CHECK_EQ(vidsch.dma()[av::PresentCommand::source_address_offset + 4u], 1u);
+    CHECK_EQ(vidsch.dma()[av::PresentCommand::destination_address_offset + 4u], 2u);
+    CHECK_EQ(vidsch.dma()[68], 1u);
+    vidsch.run_dpc();
+    CHECK_EQ(vidsch.completed(), 1u); }
+  const av::DxgkargResetHwEngineRecord reset = {0u, 0u};
+  const av::DxgkargResumeHwEngineRecord resume = {0u, 0u};
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargResetHwEngineRecord *)>(
+               table.routine(DdiSlot::DxgkDdiResetHwEngine))(adapter, &reset), 0);
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargResumeHwEngineRecord *)>(
+               table.routine(DdiSlot::DxgkDdiResumeHwEngine))(adapter, &resume), 0);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), 0u);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }

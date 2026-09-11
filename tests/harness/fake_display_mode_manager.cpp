@@ -129,6 +129,21 @@ std::int32_t FakeDisplayModeManager::show_primary(void *allocation, std::int64_t
         table_.routine(DdiSlot::DxgkDdiSetVidPnSourceAddress))(adapter_, &request);
 }
 
+std::int32_t FakeDisplayModeManager::flip(void *allocation, std::uint32_t segment, std::int64_t address,
+                                         std::uint32_t flags)
+{
+    DxgkargSetVidPnSourceAddressRecord request = {};
+    request.PrimarySegment = segment;
+    request.PrimaryAddress = address;
+    request.hAllocation = allocation;
+    request.Flags = flags;
+    platform_.set_irql(Irql::isr);
+    const std::int32_t status = reinterpret_cast<std::int32_t (*)(void *, const DxgkargSetVidPnSourceAddressRecord *)>(
+        table_.routine(DdiSlot::DxgkDdiSetVidPnSourceAddress))(adapter_, &request);
+    platform_.set_irql(Irql::passive);
+    return status;
+}
+
 std::int32_t FakeDisplayModeManager::set_visible(bool visible)
 {
     const DxgkargSetVidPnSourceVisibilityRecord request = {0u, visible ? std::uint8_t{1u} : std::uint8_t{0u}, {}};

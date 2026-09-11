@@ -39,6 +39,9 @@ public:
     std::int32_t control_vsync(bool enable);
     /* SetVidPnSourceAddress for source 0: the primary at `address` in segment 1, or none. */
     std::int32_t show_primary(void *allocation, std::int64_t address);
+    /* VidSchiExecuteMmIoFlipAtISR @ 140038640: at device IRQL, with the segment
+     * and address VidMm records for the primary and DXGK_SETVIDPNSOURCEADDRESS_FLAGS. */
+    std::int32_t flip(void *allocation, std::uint32_t segment, std::int64_t address, std::uint32_t flags);
     std::int32_t set_visible(bool visible);
 
 private:

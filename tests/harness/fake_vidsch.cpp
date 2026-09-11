@@ -25,7 +25,7 @@ constexpr std::int32_t dma_completed = 1, dma_preempted = 2, monitored_fence_sig
 
 FakeVidSch::FakeVidSch(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlAdapter &dxgkrnl, void *adapter)
     : platform_(platform), table_(table), dxgkrnl_(dxgkrnl), adapter_(adapter), device_(nullptr), context_(nullptr),
-      dma_{}, rendered_(0u), allocation_{}, patch_in_{}, patch_out_{}, present_allocations_{}, present_patches_{},
+      dma_{}, rendered_(0u), allocation_{}, patch_in_{}, patch_out_{}, present_allocations_{}, present_patches_{}, present_virtual_{},
       submitted_(0u), completed_(0u),
       preemption_fence_(0x80000000u), preemptions_(0u), seen_(dxgkrnl.interrupts()), fence_signals_(0u) {}
 
@@ -86,6 +86,27 @@ std::int32_t FakeVidSch::render(const std::uint8_t *command, std::uint32_t lengt
     patch.SubmissionFenceId = submitted_ + 1u;
     return reinterpret_cast<std::int32_t (*)(void *, const DxgkargPatchRecord *)>(table_.routine(DdiSlot::DxgkDdiPatch))(
         adapter_, &patch);
+}
+
+std::int32_t FakeVidSch::present_blt_virtual(std::uint64_t source, std::uint64_t destination,
+                                             const RectRecord *sub_rects, std::uint32_t count)
+{
+    platform_.set_irql(Irql::passive);
+    present_virtual_[1].AllocationVirtualAddress = source;
+    present_virtual_[2].AllocationVirtualAddress = destination;
+    DxgkargPresentRecord present = {};
+    present.pDmaBuffer = dma_;
+    present.DmaSize = dma_bytes;
+    present.pAllocationList = present_virtual_;
+    present.SrcRect = {0, 0, 1, 1};
+    present.DstRect = {0, 0, 1, 1};
+    present.SubRectCnt = count;
+    present.pDstSubRects = sub_rects;
+    present.Flags = 1u;   /* Blt */
+    const std::int32_t status = reinterpret_cast<std::int32_t (*)(void *, DxgkargPresentRecord *)>(
+        table_.routine(DdiSlot::DxgkDdiPresent))(context_, &present);
+    if (status < 0) return status;
+    return submit_virtual(present_virtual_[2].AllocationVirtualAddress);
 }
 
 std::int32_t FakeVidSch::present_blt(std::int64_t source, std::int64_t destination, const RectRecord *sub_rects,

@@ -7,6 +7,7 @@
 #ifndef AV_FAKE_VIDSCH_HPP
 #define AV_FAKE_VIDSCH_HPP
 
+#include "../../src/core/ddi/dxgk_present_allocation_info_record.hpp"
 #include "../../src/core/ddi/d3dddi_patch_location_list_record.hpp"
 #include "../../src/core/ddi/dxgk_allocation_list_record.hpp"
 #include "../../src/core/ddi/rect_record.hpp"
@@ -40,6 +41,11 @@ public:
     std::int32_t present_blt(std::int64_t source, std::int64_t destination, const RectRecord *sub_rects,
                              std::uint32_t count);
     std::int32_t submit();
+    /* DXGCONTEXT::SubmitPresentWithDmaBuffer @ 14031b804 for a context with GPU
+     * virtual addressing: no patch list, the allocations by GPU virtual address,
+     * then SubmitCommandVirtual. */
+    std::int32_t present_blt_virtual(std::uint64_t source, std::uint64_t destination, const RectRecord *sub_rects,
+                                     std::uint32_t count);
     /* VidSchiEnsureRootPageTableUpdated @ dxgmms2 1400fcb40: the context's root,
      * before a virtual submission. */
     void         set_root_page_table(std::uint64_t segment_offset, std::uint32_t entries);
@@ -77,6 +83,7 @@ private:
     D3dddiPatchLocationListRecord  patch_out_;
     DxgkAllocationListRecord       present_allocations_[3];
     D3dddiPatchLocationListRecord  present_patches_[2];
+    DxgkPresentAllocationInfoRecord present_virtual_[3];
     std::uint32_t                  submitted_;
     std::uint32_t                  completed_;
     std::uint32_t                  preemption_fence_;
