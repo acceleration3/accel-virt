@@ -33,10 +33,10 @@ description: "Task list for feature 002: platform abstraction and adversarial mo
 
 ## Phase 4: US2 - core locks (P1)
 
-- [ ] T009 [P] [US2] Write `tests/unit/test_spin_lock.cpp` and `tests/unit/test_spin_lock_guard.cpp`: acquire/release raise and restore IRQL from PASSIVE and from DISPATCH; increasing ranks nest cleanly; equal and decreasing ranks record `lock_order`; out-of-order guard destruction impossible by scope but manual release out of order records `release_order`; acquire above DISPATCH records `irql_ceiling`; an early return inside a guard's scope releases. Must fail to compile
-- [ ] T010 [P] [US2] Write `tests/unit/test_mutex.cpp` and `tests/unit/test_mutex_guard.cpp`: construction initializes; guard raises to APC and restores; acquire at DISPATCH records `irql_ceiling` and `blocking_at_dispatch`; rank rules as for spin locks; early return releases. Must fail to compile
-- [ ] T011 [US2] Implement `src/core/spin_lock.{hpp,cpp}` and `src/core/spin_lock_guard.{hpp,cpp}` (ceilings DISPATCH). T009 passes
-- [ ] T012 [US2] Implement `src/core/mutex.{hpp,cpp}` (64-byte storage aligned 8, `storage_bytes` public constant, initialize in constructor at ceiling DISPATCH, acquire/release ceiling APC) and `src/core/mutex_guard.{hpp,cpp}`. T010 passes
+- [X] T009 [P] [US2] Write `tests/unit/test_spin_lock.cpp` and `tests/unit/test_spin_lock_guard.cpp`: acquire/release raise and restore IRQL from PASSIVE and from DISPATCH; increasing ranks nest cleanly; equal and decreasing ranks record `lock_order`; out-of-order guard destruction impossible by scope but manual release out of order records `release_order`; acquire above DISPATCH records `irql_ceiling`; an early return inside a guard's scope releases. Must fail to compile
+- [X] T010 [P] [US2] Write `tests/unit/test_mutex.cpp` and `tests/unit/test_mutex_guard.cpp`: construction initializes; guard raises to APC and restores; acquire at DISPATCH records `irql_ceiling` and `blocking_at_dispatch`; rank rules as for spin locks; early return releases. Must fail to compile
+- [X] T011 [US2] Implement `src/core/spin_lock.{hpp,cpp}` and `src/core/spin_lock_guard.{hpp,cpp}` (ceilings DISPATCH). T009 passes
+- [X] T012 [US2] Implement `src/core/mutex.{hpp,cpp}` (64-byte storage aligned 8, `storage_bytes` public constant, initialize in constructor at ceiling DISPATCH, acquire/release ceiling APC) and `src/core/mutex_guard.{hpp,cpp}`. T010 passes. Found: the mock's spin-lock acquire lowered an IRQL above DISPATCH to DISPATCH; it now only raises (test added)
 
 **Checkpoint**: commit.
 

@@ -108,6 +108,15 @@ TEST(mock_platform_spin_lock, raises_to_dispatch_and_returns_the_level_to_restor
   platform.release_spin_lock(word, low, previous);
   CHECK(platform.current_irql() == Irql::passive); }
 
+TEST(mock_platform_spin_lock, never_lowers_an_irql_above_dispatch)
+{ MockPlatform platform;
+  std::uintptr_t word = 0u;
+  platform.set_irql(Irql::isr);
+  const Irql previous = platform.acquire_spin_lock(word, low);
+  CHECK(platform.current_irql() == Irql::isr);
+  platform.release_spin_lock(word, low, previous);
+  CHECK(platform.current_irql() == Irql::isr); }
+
 TEST(mock_platform_lock_order, increasing_ranks_are_legal)
 { MockPlatform platform;
   std::uintptr_t a = 0u, b = 0u;

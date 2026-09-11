@@ -138,7 +138,7 @@ Irql MockPlatform::acquire_spin_lock(std::uintptr_t &, LockRank rank)
 {
     const Irql previous = irql_;
     push_lock(rank, previous);
-    irql_ = Irql::dispatch;
+    if (irql_ < Irql::dispatch) irql_ = Irql::dispatch;
     return previous;
 }
 
