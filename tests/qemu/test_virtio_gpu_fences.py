@@ -22,6 +22,8 @@ FENCE_QUEUE_FIRST = 2
 DOORBELLS = 64
 WANTED = virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID | FEATURE_CONTEXT_INIT
 QUIET = 0.3
+# SC-004's 10,000 is 40k qtest round trips; the live run carries that sweep.
+TOGGLES = 1000
 
 
 def wait_for(condition, seconds=10.0):
@@ -159,6 +161,65 @@ class VirtioGpuFences(unittest.TestCase):
         self.assertEqual(gpu.device.isr(), 0)
         self.assertTrue(context.completed(context.complete()))
         self.assertTrue(wait_for(lambda: gpu.device.isr() & 1))
+
+    def test_msix_toggled_under_driver_ok_keeps_qemu_and_the_next_interrupt(self):
+        qtest = self.qtest()
+        gpu, msix = self.msix_gpu(qtest, {5: 3})
+        context = Context(self, gpu, 1, 5)
+        msix.disable()
+        msix.enable()
+        self.assertTrue(msix.enabled())
+        self.assertIsNone(qtest.process.poll())
+        self.assertNotIn("msix_fire_vector_notifier", qtest.printed())
+        self.assertTrue(context.completed(context.complete()))
+        self.assertTrue(wait_for(lambda: msix.pending(3)))
+
+    def test_a_driver_that_stops_without_resetting_releases_its_fence_interrupts(self):
+        """035's live run: viogpudo cleared DRIVER_OK with status 11 and never
+        reset, so the guest notifiers stayed registered and rvkgpu's MSI-X
+        toggle registered the same eventfd twice, which KVM refuses."""
+        qtest = self.qtest()
+        gpu, msix = self.msix_gpu(qtest, {6: 2})
+        stopping = virtio_qtest.STATUS_ACKNOWLEDGE | virtio_qtest.STATUS_DRIVER | virtio_qtest.STATUS_FEATURES_OK
+        context = Context(self, gpu, 1, 6)
+        self.assertTrue(context.completed(context.complete()))
+        self.assertTrue(wait_for(lambda: msix.pending(2)))
+        msix.mask(2, False)
+        self.assertTrue(wait_for(lambda: not msix.pending(2)))
+        gpu.device.status(stopping)
+        fence = context.complete()
+        self.assertTrue(context.completed(fence))   # progress is still readable
+        time.sleep(QUIET)
+        self.assertFalse(msix.pending(2))           # but nothing was injected
+        msix.disable()
+        msix.enable()
+        gpu.device.status(stopping | virtio_qtest.STATUS_DRIVER_OK)
+        self.assertIsNone(qtest.process.poll())
+        self.assertTrue(context.completed(context.complete()))
+        self.assertTrue(wait_for(lambda: msix.pending(2)))
+
+    def test_msix_enabled_only_after_driver_ok_still_delivers(self):
+        qtest = self.qtest()
+        gpu = virtio_qtest.VirtioGpu(qtest, WANTED)
+        msix = virtio_qtest.Msix(qtest, gpu.device.pci)
+        msix.enable()
+        self.assertEqual(gpu.device.set_queue_vector(FENCE_QUEUE_FIRST + 4, 2), 2)
+        context = Context(self, gpu, 1, 4)
+        self.assertTrue(context.completed(context.complete()))
+        self.assertTrue(wait_for(lambda: msix.pending(2)))
+
+    def test_a_sweep_of_msix_toggles_leaks_no_descriptors(self):
+        qtest = self.qtest()
+        gpu, msix = self.msix_gpu(qtest, {5: 3})
+        context = Context(self, gpu, 1, 5)
+        before = len(os.listdir(f"/proc/{qtest.process.pid}/fd"))
+        for _ in range(TOGGLES):
+            msix.disable()
+            msix.enable()
+        self.assertIsNone(qtest.process.poll())
+        self.assertEqual(len(os.listdir(f"/proc/{qtest.process.pid}/fd")), before)
+        self.assertTrue(context.completed(context.complete()))
+        self.assertTrue(wait_for(lambda: msix.pending(3)))
 
     def test_after_a_reset_completions_interrupt_again(self):
         qtest = self.qtest()

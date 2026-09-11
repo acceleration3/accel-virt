@@ -209,6 +209,13 @@ class Msix:
         control = self.pci.read(16, self.position + 2)
         self.pci.write(16, self.position + 2, control | MSIX_CONTROL_ENABLE)
 
+    def disable(self):
+        control = self.pci.read(16, self.position + 2)
+        self.pci.write(16, self.position + 2, control & ~MSIX_CONTROL_ENABLE)
+
+    def enabled(self):
+        return bool(self.pci.read(16, self.position + 2) & MSIX_CONTROL_ENABLE)
+
     def mask(self, vector, masked=True):
         self.qtest.write(32, self.table + 16 * vector + 12, MSIX_VECTOR_MASKED if masked else 0)
 
@@ -304,6 +311,10 @@ class VirtioPciDevice:
 
     def queue_count(self):
         return self.common(16, 0x12)
+
+    def status(self, value=None):
+        """The device status register: read it, or write `value` and answer it."""
+        return self.common(8, 0x14, value)
 
     def set_queue_vector(self, index, vector):
         """The vector the device accepted: VIRTIO_MSI_NO_VECTOR when refused."""

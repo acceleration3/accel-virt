@@ -16,10 +16,10 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 2: The MSI-X sequences under qtest
 
-- [ ] T004 [US1] tests/qemu/test_virtio_gpu_fences.py: MSI-X disabled and enabled again while `DRIVER_OK` stands - QEMU still running, and the next completion's interrupt arrives on its vector
-- [ ] T005 [US1] tests/qemu/test_virtio_gpu_fences.py: 035's restart sequence - `DRIVER_OK`, a status write without it, MSI-X off and on, `DRIVER_OK` again - delivers a fence on its vector, and a fence raised while `DRIVER_OK` is clear is dropped with progress still readable from the fence page
-- [ ] T006 [US2] tests/qemu/test_virtio_gpu_fences.py: a fence queue moved to another vector interrupts on the new one only, a queue left at `VIRTIO_MSI_NO_VECTOR` drops its fence, and MSI-X enabled only after `DRIVER_OK` still delivers
-- [ ] T007 [US1] tests/qemu/test_virtio_gpu_fences.py: a sweep of MSI-X enable toggles leaves QEMU's open descriptors where they started, read from /proc/<pid>/fd
+- [X] T004 [US1] tests/qemu/test_virtio_gpu_fences.py: MSI-X disabled and enabled again while `DRIVER_OK` stands - QEMU still running, and the next completion's interrupt arrives on its vector
+- [X] T005 [US1] tests/qemu/test_virtio_gpu_fences.py: 035's restart sequence - `DRIVER_OK`, a status write without it, MSI-X off and on, `DRIVER_OK` again - delivers a fence on its vector, and a fence raised while `DRIVER_OK` is clear is dropped with progress still readable from the fence page
+- [X] T006 [US2] tests/qemu/test_virtio_gpu_fences.py: a fence queue moved to another vector interrupts on the new one only, a queue left at `VIRTIO_MSI_NO_VECTOR` drops its fence, and MSI-X enabled only after `DRIVER_OK` still delivers
+- [X] T007 [US1] tests/qemu/test_virtio_gpu_fences.py: a sweep of MSI-X enable toggles leaves QEMU's open descriptors where they started, read from /proc/<pid>/fd
 
 **Checkpoint**: commit.
 
