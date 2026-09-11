@@ -11,6 +11,7 @@
 #include "alignment.hpp"
 #include "byte_range.hpp"
 #include "platform.hpp"
+#include "status.hpp"
 
 namespace av {
 
@@ -76,6 +77,7 @@ public:
 
 private:
     [[nodiscard]] Status grow();
+    void                 release_table();
     [[nodiscard]] Status insert(uint32_t index, const VirtualRange &range);
     uint32_t        lower_bound(uint64_t base) const;
     VirtualRange        *find_exact(uint64_t base);

@@ -54,6 +54,18 @@ class CoverageGate(unittest.TestCase):
         self.assertEqual(self.evaluate(files),
                          ["src/device/orphan.cpp: not linked into any test binary"])
 
+    def test_template_instantiations_of_one_branch_are_merged(self):
+        files = [source_file(self.tree.root, "src/core/t.hpp",
+                             [branch(13, 24, 3, 0), branch(13, 24, 0, 2)])]
+        self.assertEqual(self.evaluate(files), [])
+
+    def test_a_direction_no_instantiation_takes_is_reported_once(self):
+        files = [source_file(self.tree.root, "src/core/t.hpp",
+                             [branch(13, 24, 3, 0), branch(13, 24, 1, 0)])]
+        violations = self.evaluate(files)
+        self.assertEqual(violations.count("src/core/t.hpp:13:24: false branch never taken"), 1)
+        self.assertIn("branch coverage 50.00% < 100%", violations)
+
     def test_a_header_branch_counts(self):
         files = [source_file(self.tree.root, "src/device/b.hpp", [branch(7, 3, 0, 4)])]
         self.assertIn("src/device/b.hpp:7:3: true branch never taken", self.evaluate(files))

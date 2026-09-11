@@ -84,5 +84,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
         }
         if (!space.invariants_hold()) __builtin_trap();
     }
+    /* A rule the address space broke is a finding, even when nothing crashed. */
+    if (platform.unclaimed_violations() != 0u) __builtin_trap();
     return 0;
 }

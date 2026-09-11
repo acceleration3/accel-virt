@@ -57,7 +57,9 @@ def declared_classes(root):
 
 
 def classes_in(lines, relative):
-    current, public = None, True
+    """Only lines at the class body's own brace level declare members; a call
+    inside an inline body (templates must define in the header) does not."""
+    current, public, depth, opened = None, True, 0, False
     for line in lines:
         match = CLASS_RE.match(line)
         if match:
@@ -65,8 +67,20 @@ def classes_in(lines, relative):
                 yield current
             current = DeclaredClass(match.group(1), relative)
             public = line.lstrip().startswith("struct")
+            depth = line.count("{") - line.count("}")
+            opened = depth > 0
             continue
         if current is None:
+            continue
+        at_body_level = depth == 1
+        depth += line.count("{") - line.count("}")
+        if depth > 0:
+            opened = True
+        elif opened:
+            yield current
+            current = None
+            continue
+        if not at_body_level:
             continue
         access = ACCESS_RE.match(line)
         if access:

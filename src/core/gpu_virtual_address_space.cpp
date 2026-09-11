@@ -1,5 +1,7 @@
 #include "gpu_virtual_address_space.hpp"
 
+#include "invariant_scope.hpp"
+
 namespace av {
 
 /* ------------------------------------------------------------ VirtualRange */
@@ -69,7 +71,7 @@ GpuVirtualAddressSpace::GpuVirtualAddressSpace(Platform &platform)
 
 GpuVirtualAddressSpace::~GpuVirtualAddressSpace()
 {
-    platform_.release(ranges_);
+    release_table();
 }
 
 Status GpuVirtualAddressSpace::initialize(const ByteRange &bounds)
@@ -109,6 +111,13 @@ VirtualRange *GpuVirtualAddressSpace::find_exact(uint64_t base)
     return nullptr;
 }
 
+/* The table does not exist until the first grow, and the kernel bugchecks on
+ * a null release. */
+void GpuVirtualAddressSpace::release_table()
+{
+    if (ranges_ != nullptr) platform_.release(ranges_);
+}
+
 Status GpuVirtualAddressSpace::grow()
 {
     uint32_t wanted = (capacity_ == 0u) ? 16u : capacity_ * 2u;
@@ -126,7 +135,7 @@ Status GpuVirtualAddressSpace::grow()
     if (count_ != 0u)
         platform_.copy(fresh, ranges_,
                        static_cast<size_t>(count_) * sizeof(VirtualRange));
-    platform_.release(ranges_);
+    release_table();
     ranges_ = fresh;
     capacity_ = wanted;
     return Status::ok;

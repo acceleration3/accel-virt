@@ -45,6 +45,25 @@ class SymbolTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("symbol_tests: ok", result.stdout)
 
+    def test_calls_inside_an_inline_template_body_are_not_declarations(self):
+        self.tree.write("src/core/holder.hpp", """template <typename T>
+class Holder {
+public:
+    explicit Holder(T value) : value_(value)
+    {
+        check();
+        if (value_) { touch(); }
+    }
+
+private:
+    void check() const { helper(); }
+    T value_;
+};
+""")
+        self.tree.write("tests/unit/test_widget.cpp", "Widget w; w.named(); w.unnamed(); Holder h;\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_the_platform_contract_is_excluded(self):
         self.tree.write("src/core/platform.hpp",
                         "class Platform {\npublic:\n    virtual int allocate() = 0;\n};\n")

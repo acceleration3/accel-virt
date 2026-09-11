@@ -45,6 +45,13 @@ void TestRegistry::record_failure(const char *file, int line, const char *format
     current_failed_ = true;
 }
 
+bool TestRegistry::take_current_failure()
+{
+    const bool failed = current_failed_;
+    current_failed_ = false;
+    return failed;
+}
+
 int TestRegistry::run(int argc, char **argv)
 {
     const char *filter = (argc > 1) ? argv[1] : nullptr;

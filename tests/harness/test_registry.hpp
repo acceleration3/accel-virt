@@ -40,6 +40,10 @@ public:
 
     void record_failure(const char *file, int line, const char *format, ...);
 
+    /* Whether the running test has failed so far; clears it. Lets a test prove
+     * that something fails a test without failing itself. */
+    bool take_current_failure();
+
     static TestRegistry &instance();
 
 private:

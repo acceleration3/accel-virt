@@ -3,6 +3,7 @@
 #include "../harness/address_space_fixture.hpp"
 #include "../harness/hostile_sweep.hpp"
 #include "../harness/test_registry.hpp"
+#include "../harness/violation.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -15,6 +16,7 @@ using av::GpuVirtualAddressSpaceProbe;
 using av::Irql;
 using av::MockPlatform;
 using av::Status;
+using av::Violation;
 using av::VirtualRange;
 
 static constexpr std::uint64_t kBase = AddressSpaceFixture::base;
@@ -155,6 +157,24 @@ TEST(address_space_reserve, propagates_allocation_failure)
   MUTATE(fixture, fixture.space().reserve(kPage, Alignment(kPage), out),
          Status::no_memory);
   CHECK_EQ(fixture.space().range_count(), 0u); }
+
+TEST(address_space_lifetime, destroying_before_any_reservation_releases_nothing)
+{ MockPlatform platform;
+  { GpuVirtualAddressSpace space(platform);
+    CHECK_STATUS(space.initialize(ByteRange(AddressSpaceFixture::base,
+                                            AddressSpaceFixture::size)), Status::ok); }
+  CHECK(!platform.claim(Violation::null_release)); }
+
+TEST(address_space_lifetime, destroying_after_a_failed_first_allocation_releases_nothing)
+{ MockPlatform platform;
+  { GpuVirtualAddressSpace space(platform);
+    CHECK_STATUS(space.initialize(ByteRange(AddressSpaceFixture::base,
+                                            AddressSpaceFixture::size)), Status::ok);
+    platform.fail_allocation_at(1u);
+    std::uint64_t out = 0u;
+    CHECK_STATUS(space.reserve(kPage, Alignment(kPage), out), Status::no_memory); }
+  CHECK(!platform.claim(Violation::null_release));
+  CHECK_EQ(platform.live_allocations(), 0u); }
 
 TEST(address_space_reserve, grows_the_table_past_its_initial_capacity)
 { AddressSpaceFixture fixture;
@@ -341,14 +361,15 @@ TEST(address_space_translate, is_callable_at_dispatch_level)
   fixture.platform().set_irql(Irql::dispatch);
   std::uint32_t object = 0u; std::uint64_t offset = 0u;
   CHECK_STATUS(fixture.space().translate(reserved, object, offset), Status::ok);
-  CHECK(!fixture.platform().irql_was_violated());
+  CHECK_EQ(fixture.platform().unclaimed_violations(), 0u);
   fixture.platform().set_irql(Irql::passive); }
 
 TEST(address_space_reserve, is_rejected_at_dispatch_level)
 { AddressSpaceFixture fixture; std::uint64_t out = 0u;
   fixture.platform().set_irql(Irql::dispatch);
-  (void)fixture.space().reserve(kPage, Alignment(kPage), out);
-  CHECK(fixture.platform().irql_was_violated());
+  CHECK_STATUS(fixture.space().reserve(kPage, Alignment(kPage), out), Status::no_memory);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  CHECK(fixture.platform().claim(Violation::allocation_at_dispatch));
   fixture.platform().set_irql(Irql::passive); }
 
 /* --------------------------------------------------------- virtual range ---- */
@@ -446,12 +467,14 @@ TEST(address_space_invariants, reject_a_zero_ceiling_on_an_untouched_table)
 TEST(address_space, reports_a_broken_invariant_from_a_mutating_call)
 { AddressSpaceFixture fixture;
   const std::uint64_t reserved = fixture.reserve_page();
-  CHECK(!fixture.platform().invariant_was_broken());
+  CHECK_EQ(fixture.platform().unclaimed_violations(), 0u);
 
   GpuVirtualAddressSpaceProbe probe(fixture.space());
   probe.set_object(0u, 5u);                 /* object set without mapped_ */
   (void)fixture.space().unmap(reserved);    /* the scope guard must notice */
-  CHECK(fixture.platform().invariant_was_broken());
+  /* once on entry, once on exit: the call left it broken too */
+  CHECK(fixture.platform().claim(Violation::broken_invariant));
+  CHECK(fixture.platform().claim(Violation::broken_invariant));
 
   probe.set_object(0u, 0u);
   CHECK(fixture.space().invariants_hold()); }

@@ -62,30 +62,33 @@ class CoverageVerdict:
         return relative if relative.startswith(SOURCE_DIRECTORIES) else None
 
     def uncovered(self):
-        lines, covered, total = [], 0, 0
+        """Branches are merged by source position: llvm-cov lists each template
+        instantiation separately, and a direction is covered when any
+        instantiation takes it."""
+        taken = {}
         for record in self.export["data"][0]["files"]:
             relative = self.source_path(record["filename"])
             if relative is None:
                 continue
-            summary = record["summary"]["branches"]
-            covered += summary["covered"]
-            total += summary["count"]
-            lines += self.untaken(relative, record.get("branches", []))
+            branches = list(record.get("branches", []))
             for expansion in record.get("expansions", []):
-                lines += self.untaken(relative, expansion.get("branches", []))
-        if total and covered < total:
-            lines.append(f"branch coverage {100.0 * covered / total:.2f}% < 100%")
-        self.notes_.append(f"branch coverage {100.0 * covered / total if total else 100.0:.2f}%")
-        return lines
-
-    @staticmethod
-    def untaken(relative, branches):
+                branches += expansion.get("branches", [])
+            for line, column, _end_line, _end_column, true_count, false_count, *_ in branches:
+                both = taken.setdefault((relative, line, column), [False, False])
+                both[0] = both[0] or true_count > 0
+                both[1] = both[1] or false_count > 0
         lines = []
-        for line, column, _end_line, _end_column, true_count, false_count, *_rest in branches:
-            if true_count == 0:
+        for (relative, line, column), (true_taken, false_taken) in sorted(taken.items()):
+            if not true_taken:
                 lines.append(f"{relative}:{line}:{column}: true branch never taken")
-            if false_count == 0:
+            if not false_taken:
                 lines.append(f"{relative}:{line}:{column}: false branch never taken")
+        total = 2 * len(taken)
+        covered = total - len(lines)
+        percent = 100.0 * covered / total if total else 100.0
+        if covered < total:
+            lines.append(f"branch coverage {percent:.2f}% < 100%")
+        self.notes_.append(f"branch coverage {percent:.2f}%")
         return lines
 
     def untestable_marks(self):
