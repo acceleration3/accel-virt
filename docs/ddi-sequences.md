@@ -818,6 +818,21 @@ WDDM 1.2 (with GPU VA, feature 017): a 1.2 claim below `DXGKDDI_WDDMv1_2` fails
   slots NULL until hardware scheduling, which needs a user-mode driver, and the
   device's doorbell BAR (030) exist.
 
+## 4q. WDDM 3.2 (feature 025)
+
+- Slots 172-189 are copied from DDI interface 0x11000, 190 from 0x11002, 191 from
+  0x11005 and 192 from 0x11006. At 3.2 `DpiFdoStartAdapter @ 14025b7b4` fails a
+  display adapter without `UpdateMonitorLinkInfo` with STATUS_REVISION_MISMATCH;
+  query 39 (dirty bit tracking caps) is asked, a failure logged, and a
+  DirtyBitTracking answer makes 172-176 mandatory (`CreateRenderCore
+  @ 1401b1a74`). The render core needs CollectDbgInfo or CollectDbgInfo2.
+- 172-176 are reached only from GPU partitioning (`DXGK_VIRTUAL_GPU_GPUP`),
+  177-185 only through the live migration interface, which requires all of them
+  (`DxgkIsLiveMigrationInterfaceSupported @ 14006ced4`); 186-189 serve native
+  fences; `NotifyContextPriorityChange` is NULL-checked and answers success;
+  `ResetDisplayEngine` has no call site. The driver reports 3.2, declines query
+  39 and leaves all twenty-one NULL.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the
@@ -910,3 +925,5 @@ shipping stack. Scheduler/paging DDIs live in `dxgmms2.sys` (same project).
   addresses of `UpdateMonitoredValues`; whether the native fence grant requires
   hardware scheduling; what device flag `+0x188 & 0x20` (which skips the doorbell
   DDIs) means.
+- How 184 and 185 are dispatched; whether `ResetDisplayEngine` is reached through
+  another table.

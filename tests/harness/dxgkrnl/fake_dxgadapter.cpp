@@ -179,7 +179,10 @@ std::int32_t FakeDxgadapter::initialize(void *context, std::uint32_t children)
     const CapabilityRule rule = validate(caps_, children);
     if (rule == CapabilityRule::unknown_wddm_version) return refuse(rule, status_revision_mismatch);
     if (rule != CapabilityRule::none) return refuse(rule, status_invalid_parameter);
-    return query_after_validation(context, children);
+    status = query_after_validation(context, children);
+    if (status >= 0 && caps_.WDDMVersion >= wddm_3_2 && children != 0u && !has(DdiSlot::DxgkDdiUpdateMonitorLinkInfo))
+        return refuse(CapabilityRule::wddm_3_2_display_without_monitor_link_info, status_revision_mismatch);
+    return status;
 }
 
 void FakeDxgadapter::set_mode_behavior(void *context)

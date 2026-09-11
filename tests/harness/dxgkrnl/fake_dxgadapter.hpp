@@ -34,7 +34,8 @@ public:
      * adapter with outputs is first asked to prioritize HDR (SetModeBehavior
      * @ 1401a8d0c, DDI interface >= 0x7000): the answer is only traced, but a
      * status other than SUCCESS, NO_MEMORY or NOT_SUPPORTED is logged invalid
-     * and a behavior both satisfied and not trips an assertion. */
+     * and a behavior both satisfied and not trips an assertion. From 3.2 an
+     * adapter with outputs must register UpdateMonitorLinkInfo. */
     std::int32_t initialize(void *context, std::uint32_t children);
     /* The registry value GraphicsDrivers\ValidateWDDMCaps (DXGADAPTER+0xBE0):
      * only with it does Initialize refuse 1.2/1.3 features below their version

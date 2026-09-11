@@ -162,6 +162,22 @@ TEST(fake_dxgadapter_initialize, a_wddm_2_display_adapter_is_asked_for_its_caps_
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
   CHECK_EQ(adapter.queries(), asked - 2u); }
 
+TEST(fake_dxgadapter_initialize, a_wddm_3_2_display_adapter_needs_monitor_link_info)
+{ MockPlatform platform; CraftedMiniport miniport;
+  miniport.caps().WDDMVersion = 0x3200;
+  miniport.caps().SchedulingCaps = 0x1u;
+  FakeDxgadapter adapter(platform, miniport.table());
+  CHECK_EQ(adapter.initialize(&miniport, 1u), revision_mismatch);
+  CHECK(adapter.failed_rule() == CapabilityRule::wddm_3_2_display_without_monitor_link_info);
+  CHECK_EQ(adapter.initialize(&miniport, 0u), 0);   /* render only */
+  miniport.fail_query(1, no_memory);
+  CHECK_EQ(adapter.initialize(&miniport, 1u), no_memory);
+  miniport.fail_query(1, 0);
+  miniport.register_slot(DdiSlot::DxgkDdiUpdateMonitorLinkInfo);
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  miniport.caps().WDDMVersion = 0x3100;
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0); }
+
 TEST(fake_dxgadapter_query, a_status_dxgkrnl_logs_as_invalid_fails_the_test)
 { MockPlatform platform; CraftedMiniport miniport;
   miniport.fail_query(13, not_supported);
@@ -351,6 +367,7 @@ TEST(fake_dxgadapter_initialize, native_gpu_fence_requires_its_caps_and_wddm_3_2
 { MockPlatform platform; CraftedMiniport miniport;
   miniport.caps().WDDMVersion = 0x3200;
   miniport.caps().SchedulingCaps = 0x801u;
+  miniport.register_slot(DdiSlot::DxgkDdiUpdateMonitorLinkInfo);
   FakeDxgadapter adapter(platform, miniport.table());
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
   CHECK_EQ(adapter.queries(), 6u);   /* DRIVERCAPS, PHYSICAL, DISPLAY EXTENSION, DIRTYBIT, 64BITONLY, NATIVE_FENCE */

@@ -28,7 +28,7 @@ using av::Violation;
 namespace {
 
 constexpr std::uint32_t driver_caps_bytes = 0x250u;   /* GetDriverCapsSizeFromDdiVersion(0x11007) */
-constexpr std::int32_t  wddm_version = 0x3100;             /* DXGKDDI_WDDMv3_1 */
+constexpr std::int32_t  wddm_version = 0x3200;             /* DXGKDDI_WDDMv3_2 */
 
 DxgkargQueryAdapterInfoRecord request(void *input, std::uint32_t input_size, void *output, std::uint32_t output_size)
 {
@@ -50,11 +50,11 @@ TEST(driver_capabilities_report_driver_caps, fills_exactly_the_wddm_3_2_block)
   CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, record)), Status::ok);
   CHECK(output.guards_intact()); }
 
-/* Constitution VI: nothing is claimed before it is implemented. WDDM 3.1 with a
+/* Constitution VI: nothing is claimed before it is implemented. WDDM 3.2 with a
  * GPU MMU, MultiEngineAware over one node and flips at device IRQL (017),
  * per-engine recovery (015), an unrestricted address range and the hardware
  * cursor (013) are the whole answer at this level. */
-TEST(driver_capabilities_report_driver_caps, claims_wddm_3_1_gpu_mmu_and_what_earlier_features_implement)
+TEST(driver_capabilities_report_driver_caps, claims_wddm_3_2_gpu_mmu_and_what_earlier_features_implement)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
   DxgkDriverCapsRecord caps;
   std::memset(&caps, 0xA5, sizeof caps);

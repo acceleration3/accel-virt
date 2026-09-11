@@ -131,7 +131,7 @@ TEST(ddi_scenario, the_recorded_bring_up_and_teardown)
     CHECK(device.fdo().context() != nullptr);
     CHECK_EQ(device.fdo().start_device(), 0);
     CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-    CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3100);
+    CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
     CHECK_EQ(device.fdo().dxgadapter().display_caps_extension(), 0u);
     CHECK_EQ(device.fdo().sources(), 1u);
     CHECK_EQ(device.fdo().children(), 1u);
@@ -990,7 +990,7 @@ TEST(ddi_scenario, a_wddm_2_3_adapter_starts_and_scans_out_with_the_later_slots_
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3100);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
   av::FakeDisplayModeManager dmm(driver.platform(), table, device.fdo().context());
   { av::FakeVidPn vidpn;
@@ -1025,7 +1025,7 @@ TEST(ddi_scenario, a_system_memory_primary_flips_immediately_and_gpu_va_presents
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3100);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
   void *const adapter = device.fdo().context();
   av::FakeDisplayModeManager dmm(driver.platform(), table, adapter);
   { av::FakeVidPn vidpn;
@@ -1074,7 +1074,7 @@ TEST(ddi_scenario, a_wddm_2_9_adapter_flips_without_a_hardware_flip_queue)
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3100);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().MaxHwQueuedFlips, 0u);
   av::FakeDisplayModeManager dmm(driver.platform(), table, device.fdo().context());
   { av::FakeVidPn vidpn;
@@ -1102,7 +1102,7 @@ TEST(ddi_scenario, a_wddm_3_0_adapter_allocates_a_primary_with_the_later_slots_n
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3100);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
   { Runtime runtime(table, device.fdo().context());
     CHECK_EQ(runtime.create_primary(), 0);
     CHECK_EQ(runtime.flags2(), 0u);   /* CreateDriverAllocations refuses Flags2 above 0x3f from 3.0 */
@@ -1126,12 +1126,38 @@ TEST(ddi_scenario, a_wddm_3_1_adapter_starts_without_native_fences_or_doorbells)
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3100);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().SchedulingCaps & 0x800u, 0u);   /* no NativeGpuFence */
   { av::FakeVidSch vidsch(driver.platform(), table, device.dxgkrnl(), device.fdo().context());
     CHECK_EQ(vidsch.create_context(0x14u), 0);
     av::FakeHwQueue queue(driver.platform(), table, device.fdo().context(), vidsch.context());
     CHECK_EQ(queue.create(0u), 0); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- WDDM 3.2 (feature 025) ----------------------------------------------------- */
+
+TEST(ddi_scenario, a_wddm_3_2_display_adapter_starts_with_the_3_2_slots_null)
+{ LoadedDriver driver;
+  const DdiTable &table = driver.table();
+  for (std::uint32_t slot = static_cast<std::uint32_t>(DdiSlot::DxgkDdiCreateMemoryBasis);
+       slot <= static_cast<std::uint32_t>(DdiSlot::DxgkDdiResetDisplayEngine); slot++)
+      CHECK(table.routine(static_cast<DdiSlot>(slot)) == nullptr);
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
+  std::uint32_t dirty_bits = 0u;
+  CHECK_EQ(nt(device.fdo().dxgadapter().query(device.fdo().context(), 39, nullptr, 0u, &dirty_bits, sizeof dirty_bits)),
+           0xC0000002u);
+  CHECK_EQ(device.fdo().enumerate_children(), 0);
+  av::FakeDxgmonitor monitor(driver.platform(), table, device.fdo().context(), 3200u);
+  CHECK_EQ(monitor.update_link_info(0u, 0u), 0);
+  av::FakeDisplayModeManager dmm(driver.platform(), table, device.fdo().context());
+  { av::FakeVidPn vidpn;
+    CHECK_EQ(dmm.set_mode(vidpn, 1280u, 800u), 0); }
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), 0u);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }

@@ -1089,11 +1089,11 @@ std::uint32_t query_driver_caps_of(Adapter &adapter, DxgkDriverCapsRecord &caps)
 
 }  // namespace
 
-TEST(adapter_query_adapter_info, answers_driver_caps_with_wddm_3_1)
+TEST(adapter_query_adapter_info, answers_driver_caps_with_wddm_3_2)
 { Fixture fixture; DxgkDriverCapsRecord caps = {};
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(query_driver_caps_of(fixture.adapter(), caps), success);
-  CHECK_EQ(caps.WDDMVersion, 0x3100); }
+  CHECK_EQ(caps.WDDMVersion, 0x3200); }
 
 TEST(adapter_query_adapter_info, answers_the_gpu_mmu_and_physical_adapter_queries)
 { Fixture fixture;
@@ -1150,7 +1150,7 @@ TEST(adapter_query_adapter_info, answers_wddm_device_caps_before_start)
   query.pOutputData = &caps;
   query.OutputDataSize = sizeof caps;
   CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
-  CHECK_EQ(caps, 0x3100); }
+  CHECK_EQ(caps, 0x3200); }
 
 TEST(adapter_query_adapter_info, answers_the_display_caps_extension)
 { Fixture fixture; std::uint32_t extension = 0xEEu;

@@ -40,6 +40,7 @@ enum class CapabilityRule : unsigned {
     preemption_without_multi_engine,       /* CreateRenderCore: PreemptionAware or CancelCommandAware alone */
     multi_engine_without_nodes,            /* CreateRenderCore: MultiEngineAware with no asymmetric node */
     swizzling_without_ddis,                /* NumberOfSwizzlingRanges without Acquire/ReleaseSwizzlingRange */
+    wddm_3_2_display_without_monitor_link_info, /* DpiFdoStartAdapter @ 14025b7b4: STATUS_REVISION_MISMATCH */
 };
 
 }  // namespace av
