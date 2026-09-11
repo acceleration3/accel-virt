@@ -26,6 +26,8 @@
 #include "../../src/core/ddi/dxgkarg_query_current_fence_record.hpp"
 #include "../../src/core/ddi/dxgkarg_render_record.hpp"
 #include "../../src/core/ddi/dxgkarg_present_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_pointer_position_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_pointer_shape_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "../../src/core/ddi/dxgkarg_submit_command_record.hpp"
@@ -223,3 +225,11 @@ TEST(ddi_records, present_and_scanout_records_match_the_x64_layout)
   CHECK_EQ(sizeof(av::DxgkargSetVidPnSourceVisibilityRecord), 0x08u);
   CHECK_EQ(offsetof(av::DxgkargcbNotifyInterruptDataRecord, Argument2), 0x10u);
   CHECK_EQ(offsetof(av::DxgkargcbNotifyInterruptDataRecord, UnionRemainder), 0x18u); }
+
+/* The pointer records (feature 013). */
+TEST(ddi_records, pointer_records_match_the_x64_layout)
+{ CHECK_EQ(sizeof(av::DxgkargSetPointerShapeRecord), 0x28u);
+  CHECK_EQ(offsetof(av::DxgkargSetPointerShapeRecord, pPixels), 0x18u);
+  CHECK_EQ(offsetof(av::DxgkargSetPointerShapeRecord, YHot), 0x24u);
+  CHECK_EQ(sizeof(av::DxgkargSetPointerPositionRecord), 0x10u);
+  CHECK_EQ(offsetof(av::DxgkargSetPointerPositionRecord, Flags), 0x0Cu); }

@@ -14,8 +14,8 @@ description: "Task list for feature 013: WDDM 1.0 cursor, and declining the lega
 
 ## Phase 2: Cursor (US1)
 
-- [ ] T004 Tests then `CursorImage`; fuzz_cursor_image with corpus
-- [ ] T005 Tests then `HardwareCursor`
+- [X] T004 Tests then `CursorImage`; fuzz_cursor_image with corpus
+- [X] T005 Tests then `HardwareCursor`
 
 **Checkpoint**: commit.
 

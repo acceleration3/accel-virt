@@ -55,6 +55,8 @@
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
 #include "ddi/dxgkarg_present_record.hpp"
+#include "ddi/dxgkarg_set_pointer_position_record.hpp"
+#include "ddi/dxgkarg_set_pointer_shape_record.hpp"
 #include "ddi/dxgkarg_set_vidpn_source_address_record.hpp"
 #include "ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "ddi/rect_record.hpp"
@@ -531,6 +533,22 @@ AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, DriverPrivateDataSize, DXGKAR
                DriverPrivateDataSize);
 AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, pDriverPrivateData, DXGKARG_SETVIDPNSOURCEADDRESS,
                pDriverPrivateData);
+
+AV_SAME_SIZE(DxgkargSetPointerShapeRecord, DXGKARG_SETPOINTERSHAPE);
+AV_SAME_OFFSET(DxgkargSetPointerShapeRecord, Flags, DXGKARG_SETPOINTERSHAPE, Flags);
+AV_SAME_OFFSET(DxgkargSetPointerShapeRecord, Width, DXGKARG_SETPOINTERSHAPE, Width);
+AV_SAME_OFFSET(DxgkargSetPointerShapeRecord, Height, DXGKARG_SETPOINTERSHAPE, Height);
+AV_SAME_OFFSET(DxgkargSetPointerShapeRecord, Pitch, DXGKARG_SETPOINTERSHAPE, Pitch);
+AV_SAME_OFFSET(DxgkargSetPointerShapeRecord, VidPnSourceId, DXGKARG_SETPOINTERSHAPE, VidPnSourceId);
+AV_SAME_OFFSET(DxgkargSetPointerShapeRecord, pPixels, DXGKARG_SETPOINTERSHAPE, pPixels);
+AV_SAME_OFFSET(DxgkargSetPointerShapeRecord, XHot, DXGKARG_SETPOINTERSHAPE, XHot);
+AV_SAME_OFFSET(DxgkargSetPointerShapeRecord, YHot, DXGKARG_SETPOINTERSHAPE, YHot);
+
+AV_SAME_SIZE(DxgkargSetPointerPositionRecord, DXGKARG_SETPOINTERPOSITION);
+AV_SAME_OFFSET(DxgkargSetPointerPositionRecord, VidPnSourceId, DXGKARG_SETPOINTERPOSITION, VidPnSourceId);
+AV_SAME_OFFSET(DxgkargSetPointerPositionRecord, X, DXGKARG_SETPOINTERPOSITION, X);
+AV_SAME_OFFSET(DxgkargSetPointerPositionRecord, Y, DXGKARG_SETPOINTERPOSITION, Y);
+AV_SAME_OFFSET(DxgkargSetPointerPositionRecord, Flags, DXGKARG_SETPOINTERPOSITION, Flags);
 
 AV_SAME_SIZE(DxgkargSetVidPnSourceVisibilityRecord, DXGKARG_SETVIDPNSOURCEVISIBILITY);
 AV_SAME_OFFSET(DxgkargSetVidPnSourceVisibilityRecord, VidPnSourceId, DXGKARG_SETVIDPNSOURCEVISIBILITY, VidPnSourceId);
