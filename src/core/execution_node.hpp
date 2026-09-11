@@ -1,0 +1,61 @@
+/* The one node's packets from submission to completion. SubmitCommand queues a
+ * fence; the DPC completes everything queued, in order, and reports it - a
+ * loopback engine until the device executes packets (feature 030). Reachable
+ * at DISPATCH from SubmitCommand, PreemptCommand and the DPC at once, so the
+ * state is under a spin lock and nothing here allocates or blocks. */
+#ifndef AV_EXECUTION_NODE_HPP
+#define AV_EXECUTION_NODE_HPP
+
+#include "platform.hpp"
+#include "spin_lock.hpp"
+#include "status.hpp"
+
+#include <stdint.h>
+
+namespace av {
+
+class InterruptNotification;
+struct ExecutionNodeProbe;
+
+class ExecutionNode {
+public:
+    /* More than VidSch queues to a node before its DPC runs. */
+    static constexpr uint32_t capacity = 64u;
+
+    explicit ExecutionNode(Platform &platform);
+    ExecutionNode(const ExecutionNode &) = delete;
+    ExecutionNode &operator=(const ExecutionNode &) = delete;
+
+    /* invalid_parameter for a fence not above the last submitted, or a full queue. */
+    [[nodiscard]] Status submit(uint32_t fence);
+    /* The latest request wins; reported at the next completion. */
+    [[nodiscard]] Status preempt(uint32_t fence);
+    /* Completes and reports every queued fence, then any preemption; stops at
+     * the first report dxgkrnl refuses. */
+    [[nodiscard]] Status complete(InterruptNotification &notification);
+    uint32_t             current_fence();
+    uint32_t             pending();
+
+    bool invariants_hold() const;
+
+private:
+    /* Takes the next queued fence into `fence`, marking it completed. */
+    bool take(uint32_t &fence);
+    bool take_preemption(uint32_t &fence, uint32_t &last_completed);
+
+    Platform &platform_;
+    SpinLock  lock_;
+    uint32_t  pending_[capacity];
+    uint32_t  head_;
+    uint32_t  count_;
+    uint32_t  last_submitted_;
+    uint32_t  last_completed_;
+    uint32_t  preemption_fence_;
+    bool      preemption_requested_;
+
+    friend struct ExecutionNodeProbe;
+};
+
+}  // namespace av
+
+#endif  // AV_EXECUTION_NODE_HPP

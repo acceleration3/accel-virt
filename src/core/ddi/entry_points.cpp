@@ -112,4 +112,19 @@ int32_t AvDdiRender(void *context, av::DxgkargRenderRecord *request)
 int32_t AvDdiPatch(void *context, const av::DxgkargPatchRecord *request)
 { return static_cast<av::Adapter *>(context)->patch(request); }
 
+int32_t AvDdiSubmitCommand(void *context, const av::DxgkargSubmitCommandRecord *request)
+{ return static_cast<av::Adapter *>(context)->submit_command(request); }
+
+int32_t AvDdiPreemptCommand(void *context, const av::DxgkargPreemptCommandRecord *request)
+{ return static_cast<av::Adapter *>(context)->preempt_command(request); }
+
+int32_t AvDdiQueryCurrentFence(void *context, av::DxgkargQueryCurrentFenceRecord *request)
+{ return static_cast<av::Adapter *>(context)->query_current_fence(request); }
+
+int32_t AvDdiBuildPagingBuffer(void *context, av::DxgkargBuildPagingBufferRecord *request)
+{ return static_cast<av::Adapter *>(context)->build_paging_buffer(request); }
+
+uint8_t AvSynchronizedNotify(void *notification)
+{ return static_cast<av::InterruptNotification *>(notification)->notify(); }
+
 }

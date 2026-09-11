@@ -8,9 +8,11 @@
 
 #include "../context.hpp"
 #include "../device.hpp"
+#include "../interrupt_notification.hpp"
 #include "../miniport_binding.hpp"
 #include "dxgk_child_descriptor_record.hpp"
 #include "dxgk_child_status_record.hpp"
+#include "dxgkarg_build_paging_buffer_record.hpp"
 #include "dxgkarg_close_allocation_record.hpp"
 #include "dxgkarg_collect_dbg_info_record.hpp"
 #include "dxgkarg_create_allocation_record.hpp"
@@ -21,8 +23,11 @@
 #include "dxgkarg_get_standard_allocation_driver_data_record.hpp"
 #include "dxgkarg_open_allocation_record.hpp"
 #include "dxgkarg_patch_record.hpp"
+#include "dxgkarg_preempt_command_record.hpp"
+#include "dxgkarg_query_current_fence_record.hpp"
 #include "dxgkarg_render_record.hpp"
 #include "dxgkarg_set_display_private_driver_format_record.hpp"
+#include "dxgkarg_submit_command_record.hpp"
 #include "dxgkarg_escape_record.hpp"
 #include "dxgkarg_query_adapter_info_record.hpp"
 #include "dxgkrnl_interface_record.hpp"
@@ -74,6 +79,12 @@ int32_t AvDdiCreateContext(void *device, av::DxgkargCreateContextRecord *request
 int32_t AvDdiDestroyContext(void *context);
 int32_t AvDdiRender(void *context, av::DxgkargRenderRecord *request);
 int32_t AvDdiPatch(void *context, const av::DxgkargPatchRecord *request);
+int32_t AvDdiSubmitCommand(void *context, const av::DxgkargSubmitCommandRecord *request);
+int32_t AvDdiPreemptCommand(void *context, const av::DxgkargPreemptCommandRecord *request);
+int32_t AvDdiQueryCurrentFence(void *context, av::DxgkargQueryCurrentFenceRecord *request);
+int32_t AvDdiBuildPagingBuffer(void *context, av::DxgkargBuildPagingBufferRecord *request);
+/* The KSYNCHRONIZE_ROUTINE DxgkCbSynchronizeExecution runs at device IRQL. */
+uint8_t AvSynchronizedNotify(void *notification);
 
 }
 

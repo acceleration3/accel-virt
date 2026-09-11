@@ -10,6 +10,8 @@
 #include "device_table.hpp"
 #include "display_sources.hpp"
 #include "driver_capabilities.hpp"
+#include "execution_node.hpp"
+#include "interrupt_notification.hpp"
 #include "dxgkrnl_interface.hpp"
 #include "object_storage.hpp"
 #include "platform.hpp"
@@ -26,6 +28,7 @@ struct DxgkChildDescriptorRecord;
 struct DxgkChildStatusRecord;
 struct DxgkrnlInterfaceRecord;
 struct DxgkargCloseAllocationRecord;
+struct DxgkargBuildPagingBufferRecord;
 struct DxgkargCollectDbgInfoRecord;
 struct DxgkargCreateContextRecord;
 struct DxgkargCreateAllocationRecord;
@@ -35,8 +38,11 @@ struct DxgkargDestroyAllocationRecord;
 struct DxgkargGetStandardAllocationDriverDataRecord;
 struct DxgkargOpenAllocationRecord;
 struct DxgkargPatchRecord;
+struct DxgkargPreemptCommandRecord;
+struct DxgkargQueryCurrentFenceRecord;
 struct DxgkargRenderRecord;
 struct DxgkargSetDisplayPrivateDriverFormatRecord;
+struct DxgkargSubmitCommandRecord;
 struct DxgkargEscapeRecord;
 struct DxgkargQueryAdapterInfoRecord;
 struct LinkedDeviceRecord;
@@ -83,6 +89,11 @@ public:
     int32_t destroy_context(void *context);
     int32_t render(void *context, DxgkargRenderRecord *request);
     int32_t patch(const DxgkargPatchRecord *request);
+    /* DISPATCH: queues the fence and asks for the DPC that completes it. */
+    int32_t submit_command(const DxgkargSubmitCommandRecord *request);
+    int32_t preempt_command(const DxgkargPreemptCommandRecord *request);
+    int32_t query_current_fence(DxgkargQueryCurrentFenceRecord *request);
+    int32_t build_paging_buffer(DxgkargBuildPagingBufferRecord *request);
 
     bool invariants_hold() const;
 
@@ -109,6 +120,8 @@ private:
     AllocationTable                allocations_;
     DeviceTable                    devices_;
     ContextTable                   contexts_;
+    ExecutionNode                  node_;
+    InterruptNotification          notification_;
     bool                           started_;
 
     friend struct AdapterProbe;

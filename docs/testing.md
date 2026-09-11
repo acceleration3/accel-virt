@@ -45,8 +45,9 @@ service owning a collection); nothing here is a namespace with static methods.
 | `DeviceTable` | system | The adapter's devices and what each has open |
 | `ApertureSegment` | object | The memory segment reported to VidMm |
 | `PagingEngine` | system | `BuildPagingBuffer` operation emission and the byte budget |
-| `Context` | object | One execution context: node, engine affinity, priority |
-| `Node` | object | One scheduling queue and its pending packets |
+| `Context` | object | One execution context: its device, node and flags |
+| `ExecutionNode` | object | One node's pending packets, completed and preempted from the DPC |
+| `RenderRequest` / `PatchRequest` | object | One command buffer into its DMA buffer; one submission's addresses |
 | `SubmissionRing` | object | Head/tail, wrap, full/empty, slot lifetime |
 | `MonitoredFence` | object | Value, monotonicity, registered thresholds |
 | `TimeoutDetector` | system | Progress tracking, timeout decision, preempt/reset state machine |
@@ -170,6 +171,8 @@ Each scenario arrives with the DDIs it calls. Since feature 006:
   one `CapabilityRule` per check dxgkrnl applies - so a capability claimed
   without the DDIs it needs fails start in a test, as it would in the guest.
 
+- `FakeVidSch` is VidSch's side of one node (feature 009): render, patch,
+  submit at DISPATCH, the DPC, and a check of every completion and preemption.
 - `FakeVidMm` is VidMm's segment creation for a render adapter (feature 008),
   and `FakeHandleTable` dxgkrnl's allocation handles behind
   `DxgkCbGetHandleData`.

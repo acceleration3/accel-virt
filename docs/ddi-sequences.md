@@ -391,6 +391,28 @@ So a paravirtual miniport's `DxgkDdiInterruptRoutine` is entered at DIRQL from
 
 ---
 
+## 4a. Submission for a driver that is not MultiEngineAware (feature 009)
+
+VidSch calls `DxgkDdiRender` (slot 53) at PASSIVE in the submitting process,
+`DxgkDdiPatch` (slot 25) and `DxgkDdiBuildPagingBuffer` (slot 28) at PASSIVE
+(`d3dkmddi.h` annotations), and `DxgkDdiSubmitCommand` (slot 26) and
+`DxgkDdiPreemptCommand` (slot 27) at DISPATCH, with the device handle rather
+than the context when `SchedulingCaps.MultiEngineAware` is clear.
+
+The driver completes a packet with `DXGK_INTERRUPT_DMA_COMPLETED` carrying its
+fence. Outside the ISR that notification must run inside
+`DxgkCbSynchronizeExecution`, and the DPC then calls `DxgkCbNotifyDpc`.
+`basicrender.sys` does exactly this from its worker thread
+(`WARPKMADAPTER::WarpSynchronizeNotifyInterrupt`). This driver completes from
+the DPC its SubmitCommand queues, never inside SubmitCommand itself.
+`FakeVidSch` drives the sequence and checks every notification.
+
+For paging, VidMm's `TransferToSegment` is the path that issues FILL and
+TRANSFER, and that path is for memory segments. An aperture segment's pages come
+from `MapVideoApertureSegment` and `UnmapVideoApertureSegmentInternal`, and
+discards from `DiscardAllocation` (all dxgmms2). So an aperture-only adapter
+answers MAP_APERTURE_SEGMENT, UNMAP_APERTURE_SEGMENT and DISCARD_CONTENT.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the

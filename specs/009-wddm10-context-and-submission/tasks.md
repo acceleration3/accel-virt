@@ -24,13 +24,13 @@ description: "Task list for feature 009: WDDM 1.0 contexts and packet submission
 
 ## Phase 4: Execution and paging (US3, US4)
 
-- [ ] T006 Tests then `InterruptNotification`, `AvSynchronizedNotify`
-- [ ] T007 Tests then `ExecutionNode`; adapter SubmitCommand, PreemptCommand, QueryCurrentFence, DPC drain
-- [ ] T008 Tests then `PagingRequest`; adapter BuildPagingBuffer
+- [X] T006 Tests then `InterruptNotification`, `AvSynchronizedNotify`
+- [X] T007 Tests then `ExecutionNode`; adapter SubmitCommand, PreemptCommand, QueryCurrentFence, DPC drain
+- [X] T008 Tests then `PagingRequest`; adapter BuildPagingBuffer
 
 **Checkpoint**: commit.
 
 ## Phase 5: Harness and scenarios
 
-- [ ] T009 `FakeVidSch` and tests; scenarios: the pipeline end to end, preempt, render core rule now missing ResetFromTimeout
-- [ ] T010 Docs (`docs/ddi-sequences.md` submission and paging, `docs/testing.md`); gate; merge; push
+- [X] T009 `FakeVidSch` and tests; scenarios: the pipeline end to end, preempt, render core rule now missing ResetFromTimeout
+- [X] T010 Docs (`docs/ddi-sequences.md` submission and paging, `docs/testing.md`); gate; merge; push

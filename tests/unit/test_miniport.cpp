@@ -51,6 +51,8 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiSetDisplayPrivateDriverFormat,
     DdiSlot::DxgkDdiCreateContext,       DdiSlot::DxgkDdiDestroyContext,
     DdiSlot::DxgkDdiRender,              DdiSlot::DxgkDdiPatch,
+    DdiSlot::DxgkDdiSubmitCommand,       DdiSlot::DxgkDdiPreemptCommand,
+    DdiSlot::DxgkDdiQueryCurrentFence,   DdiSlot::DxgkDdiBuildPagingBuffer,
 };
 
 bool is_implemented(std::uint16_t index)

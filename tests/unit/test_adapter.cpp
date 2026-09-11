@@ -12,7 +12,11 @@
 #include "../../src/core/ddi/dxgkarg_destroy_allocation_record.hpp"
 #include "../../src/core/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
 #include "../../src/core/ddi/dxgkarg_open_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_build_paging_buffer_record.hpp"
 #include "../../src/core/ddi/dxgkarg_patch_record.hpp"
+#include "../../src/core/ddi/dxgkarg_preempt_command_record.hpp"
+#include "../../src/core/ddi/dxgkarg_query_current_fence_record.hpp"
+#include "../../src/core/ddi/dxgkarg_submit_command_record.hpp"
 #include "../../src/core/ddi/dxgkarg_render_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
@@ -348,11 +352,16 @@ TEST(adapter_dpc_routine, harvests_the_control_queue_at_dispatch)
 
 TEST(adapter_dpc_routine, before_start_or_after_power_down_does_nothing)
 { Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
-  CHECK_EQ(fixture.platform().logged(), 0u); }
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.platform().logged(), 0u);
+  CHECK_EQ(fixture.dxgkrnl().dpc_notifications(), 1u); }
 
 TEST(adapter_dpc_routine, a_device_lying_about_a_completion_is_failed_and_logged)
 { Fixture fixture;
@@ -361,7 +370,9 @@ TEST(adapter_dpc_routine, a_device_lying_about_a_completion_is_failed_and_logged
   const auto used = static_cast<std::uint8_t *>(fixture.platform().translate_physical(queue.device, 4u));
   used[2] = 1u;   /* used.idx: one completion nothing was submitted for */
   const std::uint32_t logged = fixture.platform().logged();
+  fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
   CHECK(fixture.platform().logged() > logged);
   CHECK((fixture.function().common().status() & failed_bit) != 0u); }
 
@@ -849,3 +860,57 @@ TEST(adapter_patch, patches_or_refuses_a_missing_block)
   patch.DmaBufferSize = sizeof dma;
   CHECK_EQ(nt(fixture.adapter().patch(&patch)), success);
   CHECK_EQ(nt(fixture.adapter().patch(nullptr)), invalid_parameter); }
+
+/* ---- Submission (feature 009) ------------------------------------------------- */
+
+TEST(adapter_submit_command, queues_and_asks_for_the_dpc_that_completes_it)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargSubmitCommandRecord submit = {};
+  submit.SubmissionFenceId = 1u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), success);
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), 1u);
+  CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), invalid_parameter);
+  submit.SubmissionFenceId = 2u;
+  submit.NodeOrdinal = 1u;
+  CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().submit_command(nullptr)), invalid_parameter);
+  av::DxgkargPreemptCommandRecord preempt = {};
+  preempt.PreemptionFenceId = 5u;
+  CHECK_EQ(nt(fixture.adapter().preempt_command(&preempt)), success);
+  preempt.NodeOrdinal = 3u;
+  CHECK_EQ(nt(fixture.adapter().preempt_command(&preempt)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().preempt_command(nullptr)), invalid_parameter);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);
+  CHECK_EQ(fixture.dxgkrnl().dpc_notifications(), 1u);
+  av::DxgkargQueryCurrentFenceRecord fence = {};
+  CHECK_EQ(nt(fixture.adapter().query_current_fence(&fence)), success);
+  CHECK_EQ(fence.CurrentFence, 1u);
+  fence.NodeOrdinal = 1u;
+  CHECK_EQ(nt(fixture.adapter().query_current_fence(&fence)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().query_current_fence(nullptr)), invalid_parameter); }
+
+TEST(adapter_dpc_routine, a_refused_completion_is_logged)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargSubmitCommandRecord submit = {};
+  submit.SubmissionFenceId = 1u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), success);
+  fixture.dxgkrnl().refuse_synchronize(no_memory);
+  const std::uint32_t logged = fixture.platform().logged();
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().logged() > logged); }
+
+TEST(adapter_build_paging_buffer, answers_aperture_operations_only)
+{ Fixture fixture;
+  av::DxgkargBuildPagingBufferRecord request = {};
+  request.Operation = 5;
+  CHECK_EQ(nt(fixture.adapter().build_paging_buffer(&request)), success);
+  request.Operation = 1;
+  CHECK_EQ(nt(fixture.adapter().build_paging_buffer(&request)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().build_paging_buffer(nullptr)), invalid_parameter); }

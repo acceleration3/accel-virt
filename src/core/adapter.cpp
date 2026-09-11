@@ -4,6 +4,7 @@
 #include "ddi/dxgk_child_status_record.hpp"
 #include "adapter_info_query.hpp"
 #include "ddi/dxgk_device_info_record.hpp"
+#include "ddi/dxgkarg_build_paging_buffer_record.hpp"
 #include "ddi/dxgkarg_close_allocation_record.hpp"
 #include "ddi/dxgkarg_create_allocation_record.hpp"
 #include "ddi/dxgkarg_create_context_record.hpp"
@@ -13,8 +14,11 @@
 #include "ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
 #include "ddi/dxgkarg_open_allocation_record.hpp"
 #include "ddi/dxgkarg_patch_record.hpp"
+#include "ddi/dxgkarg_preempt_command_record.hpp"
+#include "ddi/dxgkarg_query_current_fence_record.hpp"
 #include "ddi/dxgkarg_render_record.hpp"
 #include "ddi/dxgkarg_set_display_private_driver_format_record.hpp"
+#include "ddi/dxgkarg_submit_command_record.hpp"
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
 #include "ddi/dxgkarg_query_adapter_info_record.hpp"
@@ -22,6 +26,7 @@
 #include "ddi/linked_device_record.hpp"
 #include "invariant_scope.hpp"
 #include "nt_status.hpp"
+#include "paging_request.hpp"
 #include "patch_request.hpp"
 #include "pci_base_addresses.hpp"
 #include "render_request.hpp"
@@ -49,7 +54,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
       resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), segment_(platform), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_),
-      started_(false) {}
+      node_(platform), notification_(platform, dxgkrnl_), started_(false) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
 
@@ -140,10 +145,11 @@ uint8_t Adapter::interrupt_routine(uint32_t)
 void Adapter::dpc_routine()
 {
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::dpc_routine");
-    if (!device_.constructed()) return;
     uint32_t completed = 0u;
-    if (device_.object().harvest_control(completed) != Status::ok)
+    if (device_.constructed() && device_.object().harvest_control(completed) != Status::ok)
         platform_.log("rvkgpu: control queue harvest failed in the DPC");
+    if (node_.complete(notification_) != Status::ok) platform_.log("rvkgpu: a completion was refused in the DPC");
+    dxgkrnl_.notify_dpc();
 }
 
 int32_t Adapter::query_child_relations(DxgkChildDescriptorRecord *relations, uint32_t size)
@@ -348,6 +354,39 @@ int32_t Adapter::patch(const DxgkargPatchRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::patch");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     return NtStatus(PatchRequest(platform_, *request).patch()).value();
+}
+
+int32_t Adapter::submit_command(const DxgkargSubmitCommandRecord *request)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "Adapter::submit_command");
+    if (request == nullptr || request->NodeOrdinal != 0u) return NtStatus(Status::invalid_parameter).value();
+    const Status status = node_.submit(request->SubmissionFenceId);
+    if (status == Status::ok) static_cast<void>(dxgkrnl_.queue_dpc());
+    return NtStatus(status).value();
+}
+
+int32_t Adapter::preempt_command(const DxgkargPreemptCommandRecord *request)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "Adapter::preempt_command");
+    if (request == nullptr || request->NodeOrdinal != 0u) return NtStatus(Status::invalid_parameter).value();
+    const Status status = node_.preempt(request->PreemptionFenceId);
+    static_cast<void>(dxgkrnl_.queue_dpc());
+    return NtStatus(status).value();
+}
+
+int32_t Adapter::query_current_fence(DxgkargQueryCurrentFenceRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::query_current_fence");
+    if (request == nullptr || request->NodeOrdinal != 0u) return NtStatus(Status::invalid_parameter).value();
+    request->CurrentFence = node_.current_fence();
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::build_paging_buffer(DxgkargBuildPagingBufferRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::build_paging_buffer");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(PagingRequest(platform_, *request).build()).value();
 }
 
 bool Adapter::invariants_hold() const

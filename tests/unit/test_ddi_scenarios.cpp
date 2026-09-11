@@ -27,6 +27,7 @@
 #include "../harness/fake_dxgkrnl_fdo.hpp"
 #include "../harness/fake_handle_table.hpp"
 #include "../harness/fake_vidmm.hpp"
+#include "../harness/fake_vidsch.hpp"
 #include "../harness/fake_virtio_gpu_function.hpp"
 #include "../harness/mock_platform.hpp"
 #include "../harness/test_registry.hpp"
@@ -294,14 +295,14 @@ TEST(ddi_scenario, vidmm_accepts_the_aperture_segment_after_start)
   CHECK(vidmm.segment(0u).Size == std::uint64_t{8} << 30u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
-TEST(ddi_scenario, the_render_ddi_set_is_incomplete_until_submission_arrives)
+TEST(ddi_scenario, the_render_ddi_set_is_incomplete_until_present_arrives)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), revision_mismatch);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::render_ddis_incomplete);
-  CHECK(device.fdo().dxgadapter().missing_render_slot() == DdiSlot::DxgkDdiSubmitCommand);
+  CHECK(device.fdo().dxgadapter().missing_render_slot() == DdiSlot::DxgkDdiResetFromTimeout);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 namespace {
@@ -458,3 +459,63 @@ TEST(ddi_scenario, remove_device_with_devices_and_allocations_outstanding)
     CHECK_EQ(runtime.open(), 0);
     CHECK_EQ(device.fdo().remove_device(), 0); }
   CHECK_EQ(driver.platform().live_allocations(), 0u); }
+
+/* ---- Submission (feature 009) ------------------------------------------------- */
+
+TEST(ddi_scenario, render_patch_submit_and_three_fences_complete_through_the_dpc)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
+    CHECK_EQ(vidsch.create_context(), 0);
+    std::uint8_t command[32] = {0x52, 0x56, 0x4B, 0x53};
+    for (int packet = 0; packet < 3; packet++) {
+        CHECK_EQ(vidsch.render(command, sizeof command, 8u, 0xC0002000 + static_cast<std::int64_t>(packet)), 0);
+        CHECK_EQ(vidsch.submit(), 0);
+    }
+    CHECK_EQ(vidsch.dma()[0], 0x52u);
+    CHECK_EQ(vidsch.dma()[8], 0x02u);
+    CHECK_EQ(vidsch.dma()[9], 0x20u);
+    CHECK_EQ(vidsch.completed(), 0u);
+    vidsch.run_dpc();
+    CHECK_EQ(vidsch.completed(), 3u);
+    std::uint32_t fence = 0u;
+    CHECK_EQ(vidsch.query_current_fence(fence), 0);
+    CHECK_EQ(fence, 3u);
+    CHECK_EQ(device.dxgkrnl().dpc_notifications(), 1u); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+TEST(ddi_scenario, a_preemption_is_reported_after_what_was_pending_and_again_with_nothing_pending)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
+    CHECK_EQ(vidsch.create_context(), 0);
+    std::uint8_t command[16] = {};
+    CHECK_EQ(vidsch.render(command, sizeof command, 0u, 0), 0);
+    CHECK_EQ(vidsch.submit(), 0);
+    CHECK_EQ(vidsch.preempt(), 0);
+    vidsch.run_dpc();
+    CHECK_EQ(vidsch.completed(), 1u);
+    CHECK_EQ(vidsch.preemptions(), 1u);
+    CHECK_EQ(vidsch.preempt(), 0);
+    vidsch.run_dpc();
+    CHECK_EQ(vidsch.preemptions(), 2u); }
+  CHECK_EQ(device.fdo().remove_device(), 0); }
+
+TEST(ddi_scenario, a_render_that_overruns_is_refused_and_nothing_is_submitted)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
+    CHECK_EQ(vidsch.create_context(), 0);
+    std::uint8_t command[16] = {};
+    CHECK_EQ(nt(vidsch.render(command, sizeof command, 9u, 0)), 0xC000000Du);
+    vidsch.run_dpc();
+    CHECK_EQ(vidsch.completed(), 0u); }
+  CHECK_EQ(device.fdo().remove_device(), 0); }

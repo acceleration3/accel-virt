@@ -45,6 +45,10 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiDestroyContext, reinterpret_cast<DdiRoutine>(&AvDdiDestroyContext)},
         {DdiSlot::DxgkDdiRender, reinterpret_cast<DdiRoutine>(&AvDdiRender)},
         {DdiSlot::DxgkDdiPatch, reinterpret_cast<DdiRoutine>(&AvDdiPatch)},
+        {DdiSlot::DxgkDdiSubmitCommand, reinterpret_cast<DdiRoutine>(&AvDdiSubmitCommand)},
+        {DdiSlot::DxgkDdiPreemptCommand, reinterpret_cast<DdiRoutine>(&AvDdiPreemptCommand)},
+        {DdiSlot::DxgkDdiQueryCurrentFence, reinterpret_cast<DdiRoutine>(&AvDdiQueryCurrentFence)},
+        {DdiSlot::DxgkDdiBuildPagingBuffer, reinterpret_cast<DdiRoutine>(&AvDdiBuildPagingBuffer)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)
