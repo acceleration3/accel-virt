@@ -15,9 +15,9 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 2: Capset and context setup
 
-- [ ] T003 [US1] [US3] Tests then `CapsetQuery` in src/core/rvk/
-- [ ] T004 [US1] Tests then `ContextMemory` in src/core/rvk/ (allocation-failure sweep)
-- [ ] T005 [US1] [US3] Tests then `ContextRequestSequence` in src/core/rvk/: setup, teardown, partial teardown, refusals
+- [X] T003 [US1] [US3] Tests then `CapsetQuery` in src/core/rvk/
+- [X] T004 [US1] Tests then `ContextMemory` in src/core/rvk/ (allocation-failure sweep)
+- [X] T005 [US1] [US3] Tests then `ContextRequestSequence` in src/core/rvk/: setup, teardown, partial teardown, refusals
 
 **Checkpoint**: commit.
 

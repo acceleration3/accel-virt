@@ -1,0 +1,143 @@
+#include "core/rvk/context_request_sequence.hpp"
+
+#include "core/rvk/context_memory.hpp"
+#include "proto/context/capset_info.hpp"
+#include "proto/virtio_gpu/gpu_response.hpp"
+#include "proto/virtio_gpu/gpu_response_reader.hpp"
+#include "proto/virtio_gpu/rvk_request_writer.hpp"
+
+namespace av {
+
+ContextRequestSequence::ContextRequestSequence(Platform &platform)
+    : platform_(platform), phase_(Phase::idle), setup_(), context_id_(0u), addresses_{}, lengths_{}, step_(0u),
+      awaiting_(false), context_created_(false), blobs_created_(0u), refusal_(0u), refused_(false) {}
+
+Status ContextRequestSequence::begin_setup(uint32_t context_id, const ContextSetup &setup, const ContextMemory &memory)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "ContextRequestSequence::begin_setup");
+    if (phase_ != Phase::idle || context_created_) return Status::invalid_state;
+    if (!memory.allocated()) return Status::invalid_parameter;
+    setup_ = setup;
+    context_id_ = context_id;
+    addresses_[0] = memory.ring_address();
+    lengths_[0] = static_cast<uint32_t>(memory.ring_bytes());
+    addresses_[1] = memory.fence_address();
+    lengths_[1] = ContextMemory::page_bytes;
+    addresses_[2] = memory.reply_address();
+    lengths_[2] = ContextMemory::page_bytes;
+    phase_ = Phase::setting_up;
+    step_ = 0u;
+    return Status::ok;
+}
+
+Status ContextRequestSequence::begin_teardown()
+{
+    platform_.require_irql_at_most(Irql::dispatch, "ContextRequestSequence::begin_teardown");
+    if (phase_ == Phase::setting_up || phase_ == Phase::tearing_down || teardown_steps() == 0u)
+        return Status::invalid_state;
+    phase_ = Phase::tearing_down;
+    step_ = context_step;
+    return Status::ok;
+}
+
+Status ContextRequestSequence::next_request(uint8_t *bytes, size_t capacity, size_t &length)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "ContextRequestSequence::next_request");
+    length = 0u;
+    if (awaiting_ || (phase_ != Phase::setting_up && phase_ != Phase::tearing_down)) return Status::invalid_state;
+    const Status status = phase_ == Phase::setting_up ? write_setup_request(bytes, capacity, length)
+                                                      : write_teardown_request(bytes, capacity, length);
+    awaiting_ = status == Status::ok;
+    return status;
+}
+
+Status ContextRequestSequence::write_setup_request(uint8_t *bytes, size_t capacity, size_t &length)
+{
+    RvkRequestWriter writer(bytes, capacity);
+    const uint32_t   resources[blob_count] = {setup_.ring_resource(), setup_.fence_resource(), setup_.reply_resource()};
+    Status           status = Status::ok;
+    if (step_ == context_step) status = writer.create_context(context_id_, CapsetInfo::capset_id);
+    else if (step_ == setup_step) status = writer.setup(context_id_, setup_);
+    else status = writer.guest_blob(resources[step_ - first_blob_step], addresses_[step_ - first_blob_step],
+                                    lengths_[step_ - first_blob_step]);
+    length = writer.length();
+    return status;
+}
+
+/* Step 0 destroys the context; steps 1 to blobs_created_ release the blobs. */
+Status ContextRequestSequence::write_teardown_request(uint8_t *bytes, size_t capacity, size_t &length)
+{
+    RvkRequestWriter writer(bytes, capacity);
+    const uint32_t   resources[blob_count] = {setup_.ring_resource(), setup_.fence_resource(), setup_.reply_resource()};
+    const Status     status = step_ == context_step ? writer.destroy_context(context_id_)
+                                                    : writer.unref(resources[step_ - first_blob_step]);
+    length = writer.length();
+    return status;
+}
+
+Status ContextRequestSequence::accept(const uint8_t *bytes, size_t length)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "ContextRequestSequence::accept");
+    if (!awaiting_) return Status::invalid_state;
+    awaiting_ = false;
+    GpuResponseReader answer;
+    const bool readable = answer.decode(bytes, length) == Status::ok;
+    const bool done = readable && answer.type() == GpuResponse::ok_nodata;
+    if (phase_ == Phase::setting_up) finish_setup_step(done || !readable);
+    else step_++;
+    if (phase_ == Phase::tearing_down && step_ > blobs_created_) forget();
+    if (!readable) {
+        refuse(unreadable);
+        phase_ = phase_ == Phase::setting_up ? Phase::set_up : phase_;
+        return Status::malformed;
+    }
+    if (done) return Status::ok;
+    refuse(answer.type());
+    return Status::not_supported;
+}
+
+/* A step that took effect, or may have, is counted for teardown; a refused
+ * setup ends. */
+void ContextRequestSequence::finish_setup_step(bool done)
+{
+    if (done && step_ == context_step) context_created_ = true;
+    if (done && step_ >= first_blob_step && step_ < setup_step) blobs_created_++;
+    step_++;
+    if (!done || step_ == setup_steps) phase_ = Phase::set_up;
+}
+
+/* Everything the setup created has been released. */
+void ContextRequestSequence::forget()
+{
+    phase_ = Phase::idle;
+    context_created_ = false;
+    blobs_created_ = 0u;
+}
+
+void ContextRequestSequence::refuse(uint32_t type)
+{
+    if (!refused_) refusal_ = type;
+    refused_ = true;
+    platform_.log("rvk: the device refused a context request");
+}
+
+/* The context itself, and each blob. */
+uint32_t ContextRequestSequence::teardown_steps() const
+{
+    return (context_created_ ? 1u : 0u) + blobs_created_;
+}
+
+bool ContextRequestSequence::finished() const
+{
+    return !awaiting_ && (phase_ == Phase::set_up || phase_ == Phase::idle);
+}
+
+bool     ContextRequestSequence::refused() const { return refused_; }
+uint32_t ContextRequestSequence::refusal() const { return refusal_; }
+
+bool ContextRequestSequence::invariants_hold() const
+{
+    return blobs_created_ <= blob_count && (context_created_ || blobs_created_ == 0u);
+}
+
+}  // namespace av
