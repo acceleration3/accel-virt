@@ -8,9 +8,9 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 1: Reporting
 
-- [ ] T001 [US2] Tests then the fence notifier contract in `Host`, `TableHost`, `rvk_device.h`, `MockHost` (`fail_fence_connect_at`, `raised(line)`, violations), `MockHostOps`
-- [ ] T002 [US2] Tests then `FenceInterrupts` in src/device/fence/fence_interrupts.{hpp,cpp}: initialize, start, stop, raise gated by the mutex, from worker threads
-- [ ] T003 [US1] Tests then `FenceWindow` and `FenceReporter` in src/device/fence/: prepare writes the fresh page, complete, signal once, withdraw
+- [X] T001 [US2] Tests then the fence notifier contract in `Host`, `TableHost`, `rvk_device.h`, `MockHost` (`fail_fence_connect_at`, `raised(line)`, violations), `MockHostOps`
+- [X] T002 [US2] Tests then `FenceInterrupts` in src/device/fence/fence_interrupts.{hpp,cpp}: initialize, start, stop, raise gated by the mutex, from worker threads
+- [X] T003 [US1] Tests then `FenceWindow` and `FenceReporter` in src/device/fence/: prepare writes the fresh page, complete, signal once, withdraw
 
 **Checkpoint**: commit.
 

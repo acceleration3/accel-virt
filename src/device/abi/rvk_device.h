@@ -19,6 +19,8 @@ typedef void (*RvkHostRoutine)(void *context);
 #define RVK_DEVICE_DOORBELLS 64u
 #define RVK_DEVICE_DOORBELL_PAGE 4096u
 #define RVK_DEVICE_DOORBELL_SHM_ID 0x72u
+/* Fence queue n, the interrupt line of doorbell page n, is virtqueue FIRST + n. */
+#define RVK_DEVICE_FENCE_QUEUE_FIRST 2u
 
 /* One host Vulkan physical device, as the glue read it at realize. */
 typedef struct RvkGpuProperties {
@@ -71,6 +73,11 @@ typedef struct RvkHostOps {
      * (memory_region_add_eventfd); disconnect removes it. */
     void (*connect_doorbell)(void *opaque, void *event, uint32_t index);
     void (*disconnect_doorbell)(void *opaque, void *event, uint32_t index);
+    /* set_guest_notifiers for every virtqueue: nonzero on failure. */
+    int (*connect_fence_interrupts)(void *opaque);
+    void (*disconnect_fence_interrupts)(void *opaque);
+    /* Any thread: event_notifier_set on fence queue `line`'s guest notifier. */
+    void (*raise_fence_interrupt)(void *opaque, uint32_t line);
     /* Up to `size` bytes of a control request from `offset`: the count copied. */
     size_t (*read_request)(void *opaque, void *request, size_t offset, uint8_t *buffer, size_t size);
     /* The request's response; the host copies fence, flags and context from the request. */

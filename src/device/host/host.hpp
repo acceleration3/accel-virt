@@ -76,6 +76,15 @@ public:
     virtual void connect_doorbell(void *event, uint32_t index) = 0;
     virtual void disconnect_doorbell(void *event, uint32_t index) = 0;
 
+    /* Main loop. The guest notifiers of every virtqueue, the fence queues
+     * included (virtio-pci's set_guest_notifiers): no_memory when the host
+     * cannot connect them. */
+    [[nodiscard]] virtual Status connect_fence_interrupts() = 0;
+    virtual void                 disconnect_fence_interrupts() = 0;
+    /* Any thread, while connected: the fence queue of doorbell `line`
+     * interrupts the guest on the vector the driver gave it. */
+    virtual void                 raise_fence_interrupt(uint32_t line) = 0;
+
     /* Main loop. A control request's bytes, up to `size` from `offset`: the
      * count copied. */
     virtual size_t read_request(void *request, size_t offset, uint8_t *buffer, size_t size) = 0;

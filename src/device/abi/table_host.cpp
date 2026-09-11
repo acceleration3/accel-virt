@@ -159,6 +159,21 @@ void TableHost::disconnect_doorbell(void *event, uint32_t index)
     ops_.disconnect_doorbell(ops_.opaque, event, index);
 }
 
+Status TableHost::connect_fence_interrupts()
+{
+    return ops_.connect_fence_interrupts(ops_.opaque) == 0 ? Status::ok : Status::no_memory;
+}
+
+void TableHost::disconnect_fence_interrupts()
+{
+    ops_.disconnect_fence_interrupts(ops_.opaque);
+}
+
+void TableHost::raise_fence_interrupt(uint32_t line)
+{
+    ops_.raise_fence_interrupt(ops_.opaque, line);
+}
+
 size_t TableHost::read_request(void *request, size_t offset, uint8_t *buffer, size_t size)
 {
     return ops_.read_request(ops_.opaque, request, offset, buffer, size);

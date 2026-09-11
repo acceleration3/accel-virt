@@ -39,6 +39,9 @@ public:
     void     remove_from_hostmem(uint64_t offset, uint64_t size) override;
     void     connect_doorbell(void *event, uint32_t index) override;
     void     disconnect_doorbell(void *event, uint32_t index) override;
+    Status   connect_fence_interrupts() override;
+    void     disconnect_fence_interrupts() override;
+    void     raise_fence_interrupt(uint32_t line) override;
     size_t   read_request(void *request, size_t offset, uint8_t *buffer, size_t size) override;
     void     respond(void *request, const uint8_t *bytes, size_t size) override;
     bool     resource_exists(uint32_t id) override;

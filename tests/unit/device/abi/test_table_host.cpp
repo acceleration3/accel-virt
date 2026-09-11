@@ -134,3 +134,13 @@ TEST(table_host, forwards_doorbell_connections)
   host.disconnect_doorbell(event, 63u);
   CHECK_EQ(mock.live_doorbells(), 0u);
   host.destroy_event(event); }
+
+TEST(table_host, forwards_fence_interrupts)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  CHECK_STATUS(host.connect_fence_interrupts(), Status::ok);
+  host.raise_fence_interrupt(9u);
+  CHECK_EQ(mock.raised(9u), 1u);
+  host.disconnect_fence_interrupts();
+  CHECK(!mock.fence_interrupts_connected());
+  mock.fail_fence_connect_at(1u);
+  CHECK_STATUS(host.connect_fence_interrupts(), Status::no_memory); }

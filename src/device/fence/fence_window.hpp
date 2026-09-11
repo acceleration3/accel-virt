@@ -1,0 +1,30 @@
+/* One context's fence page, in the pinned blob the setup named
+ * (docs/protocol.md). The device only ever writes it: the guest's copy is
+ * never read back. Any thread. */
+#ifndef AV_FENCE_WINDOW_HPP
+#define AV_FENCE_WINDOW_HPP
+
+#include "core/support/status.hpp"
+#include "device/memory/blob_window.hpp"
+
+namespace av {
+
+class FencePage;
+
+class FenceWindow {
+public:
+    FenceWindow();
+    explicit FenceWindow(const BlobWindow &blob);
+
+    /* invalid_parameter when the blob cannot hold a page. */
+    [[nodiscard]] Status publish(const FencePage &page) const;
+
+    bool invariants_hold() const;
+
+private:
+    BlobWindow blob_;
+};
+
+}  // namespace av
+
+#endif  // AV_FENCE_WINDOW_HPP

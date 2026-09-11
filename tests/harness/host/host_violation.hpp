@@ -11,6 +11,8 @@ enum class HostViolation : unsigned {
     held_mutex,           /* a mutex destroyed while locked, or unlocked while not */
     second_response,      /* a control request answered twice */
     overlapping_placement,/* a host memory block placed over another in the hostmem region */
+    fence_misuse,         /* fence interrupts connected twice, disconnected unconnected, or raised
+                           * while disconnected or on a line past the fence queues */
     doorbell_misuse,      /* a doorbell connected twice, to a taken page or unknown event, disconnected by
                            * another event, or an event destroyed while connected */
     count

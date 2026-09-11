@@ -14,7 +14,7 @@ namespace av {
 namespace {
 
 const char *const violation_names[] = {"main_loop_required", "worker_required", "unknown_handle", "held_mutex",
-                                       "second_response", "overlapping_placement", "doorbell_misuse"};
+                                       "second_response", "overlapping_placement", "fence_misuse", "doorbell_misuse"};
 
 class StateLock {
 public:
@@ -35,7 +35,7 @@ MockHost::MockHost()
       fail_allocation_(0u), fail_host_memory_(0u), fail_placement_(0u), empty_mapping_(0u), allocations_{}, regions_{}, region_count_(0u),
       splits_{}, split_count_(0u),
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
-      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}
+      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, fence_connected_(false), fail_fence_connect_(0u), raised_{}
 {
     pthread_mutex_init(&state_, nullptr);
     pthread_cond_init(&work_queued_, nullptr);
@@ -61,6 +61,7 @@ MockHost::~MockHost()
         registry.record_failure(__FILE__, __LINE__, "%u host memory block(s) leaked", live_host_memory());
     if (live_placements() != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u hostmem placement(s) left", live_placements());
+    if (fence_connected_) registry.record_failure(__FILE__, __LINE__, "fence interrupts left connected");
     if (live_doorbells() != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u doorbell(s) left connected", live_doorbells());
     for (void *block : allocations_) std::free(block);
@@ -254,6 +255,53 @@ void MockHost::disconnect_doorbell(void *event, std::uint32_t index)
     }
     StateLock lock(state_);
     doorbells_[index] = nullptr;
+}
+
+Status MockHost::connect_fence_interrupts()
+{
+    require_main_loop("MockHost::connect_fence_interrupts");
+    bool twice = false;
+    {
+        StateLock lock(state_);
+        if (fail_now(fail_fence_connect_)) return Status::no_memory;
+        twice = fence_connected_;
+        fence_connected_ = true;
+    }
+    if (twice) record(HostViolation::fence_misuse, "MockHost::connect_fence_interrupts");
+    return Status::ok;
+}
+
+void MockHost::disconnect_fence_interrupts()
+{
+    require_main_loop("MockHost::disconnect_fence_interrupts");
+    bool connected = false;
+    {
+        StateLock lock(state_);
+        connected = fence_connected_;
+        fence_connected_ = false;
+    }
+    if (!connected) record(HostViolation::fence_misuse, "MockHost::disconnect_fence_interrupts");
+}
+
+void MockHost::raise_fence_interrupt(std::uint32_t line)
+{
+    bool raised = false;
+    {
+        StateLock lock(state_);
+        raised = fence_connected_ && line < max_doorbells;
+        if (raised) raised_[line]++;
+    }
+    if (!raised) record(HostViolation::fence_misuse, "MockHost::raise_fence_interrupt");
+}
+
+void MockHost::fail_fence_connect_at(std::uint32_t nth) { StateLock lock(state_); fail_fence_connect_ = nth; }
+
+bool MockHost::fence_interrupts_connected() { StateLock lock(state_); return fence_connected_; }
+
+std::uint32_t MockHost::raised(std::uint32_t line)
+{
+    StateLock lock(state_);
+    return line < max_doorbells ? raised_[line] : 0u;
 }
 
 bool MockHost::ring_doorbell(std::uint32_t index)

@@ -275,3 +275,37 @@ TEST(mock_host_doorbells, a_connected_doorbell_wakes_its_event_and_misuse_is_cau
   mock.join_thread(thread);
   CHECK(mock.claim(HostViolation::main_loop_required));
   CHECK(mock.claim(HostViolation::doorbell_misuse)); }
+
+TEST(mock_host_fence_interrupts, counts_raises_while_connected_and_catches_misuse)
+{ MockHost mock;
+  CHECK(!mock.fence_interrupts_connected());
+  mock.raise_fence_interrupt(0u);            /* not connected */
+  CHECK_EQ(mock.raised(0u), 0u);
+  CHECK_STATUS(mock.connect_fence_interrupts(), Status::ok);
+  CHECK(mock.fence_interrupts_connected());
+  CHECK_STATUS(mock.connect_fence_interrupts(), Status::ok);   /* twice */
+  mock.raise_fence_interrupt(3u);
+  mock.raise_fence_interrupt(3u);
+  mock.raise_fence_interrupt(MockHost::max_doorbells);           /* no such queue */
+  CHECK_EQ(mock.raised(3u), 2u);
+  CHECK_EQ(mock.raised(4u), 0u);
+  CHECK_EQ(mock.raised(MockHost::max_doorbells), 0u);
+  mock.disconnect_fence_interrupts();
+  mock.disconnect_fence_interrupts();                            /* not connected */
+  for (int count = 0; count < 4; count++) CHECK(mock.claim(HostViolation::fence_misuse));
+  mock.fail_fence_connect_at(1u);
+  CHECK_STATUS(mock.connect_fence_interrupts(), Status::no_memory);
+  CHECK(!mock.fence_interrupts_connected());
+  void *thread = nullptr;
+  CHECK_STATUS(mock.start_thread([](void *host) {
+                   auto *const m = static_cast<MockHost *>(host);
+                   m->disconnect_fence_interrupts();
+                   static_cast<void>(m->connect_fence_interrupts());
+               },
+                                 &mock, thread),
+               Status::ok);
+  mock.join_thread(thread);
+  CHECK(mock.claim(HostViolation::main_loop_required));
+  CHECK(mock.claim(HostViolation::main_loop_required));
+  CHECK(mock.claim(HostViolation::fence_misuse));
+  mock.disconnect_fence_interrupts(); }

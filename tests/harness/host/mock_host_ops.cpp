@@ -79,6 +79,11 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.disconnect_doorbell = [](void *opaque, void *event, std::uint32_t index) {
         host_of(opaque).disconnect_doorbell(event, index);
     };
+    table_.connect_fence_interrupts = [](void *opaque) {
+        return host_of(opaque).connect_fence_interrupts() == Status::ok ? 0 : 1;
+    };
+    table_.disconnect_fence_interrupts = [](void *opaque) { host_of(opaque).disconnect_fence_interrupts(); };
+    table_.raise_fence_interrupt = [](void *opaque, std::uint32_t line) { host_of(opaque).raise_fence_interrupt(line); };
     table_.read_request = [](void *opaque, void *request, std::size_t offset, std::uint8_t *buffer, std::size_t size) {
         return host_of(opaque).read_request(request, offset, buffer, size);
     };

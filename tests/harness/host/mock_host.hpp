@@ -58,6 +58,9 @@ public:
     void     remove_from_hostmem(std::uint64_t offset, std::uint64_t size) override;
     void     connect_doorbell(void *event, std::uint32_t index) override;
     void     disconnect_doorbell(void *event, std::uint32_t index) override;
+    Status   connect_fence_interrupts() override;
+    void     disconnect_fence_interrupts() override;
+    void     raise_fence_interrupt(std::uint32_t line) override;
     std::size_t read_request(void *request, std::size_t offset, std::uint8_t *buffer, std::size_t size) override;
     void     respond(void *request, const std::uint8_t *bytes, std::size_t size) override;
     bool     resource_exists(std::uint32_t id) override;
@@ -85,6 +88,10 @@ public:
     std::uint8_t *guest_ram(std::uint64_t address);
     void          set_hostmem_size(std::uint64_t size);
     void          add_resource(std::uint32_t id);
+    void          fail_fence_connect_at(std::uint32_t nth);
+    bool          fence_interrupts_connected();
+    /* Interrupts raised on fence queue `line`. */
+    std::uint32_t raised(std::uint32_t line);
     /* A guest store to doorbell page `index`: whether an event was connected to it. */
     bool          ring_doorbell(std::uint32_t index);
     /* The device view of the block placed at `offset`, or null. */
@@ -200,6 +207,9 @@ private:
     std::uint32_t   resources_[max_resources];
     std::uint32_t   resource_count_;
     void           *doorbells_[max_doorbells];
+    bool            fence_connected_;
+    std::uint32_t   fail_fence_connect_;
+    std::uint32_t   raised_[max_doorbells];
 };
 
 }  // namespace av
