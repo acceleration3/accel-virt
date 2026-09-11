@@ -245,3 +245,58 @@ TEST(mock_platform_memory, zero_and_copy_touch_only_their_bytes)
   platform.zero(bytes + 1, 2u);
   platform.copy(copy, bytes, 3u);
   CHECK_EQ(copy[0], 1); CHECK_EQ(copy[1], 0); CHECK_EQ(copy[2], 0); CHECK_EQ(copy[3], 9); }
+
+/* ---- contiguous DMA memory and stalls -------------------------------------- */
+
+TEST(mock_platform_contiguous, blocks_get_distinct_page_aligned_physical_addresses)
+{ MockPlatform platform;
+  void *first = platform.allocate_contiguous(100u);
+  void *second = platform.allocate_contiguous(8192u);
+  CHECK(first != nullptr); CHECK(second != nullptr);
+  const std::uint64_t first_address = platform.physical_address(first);
+  const std::uint64_t second_address = platform.physical_address(second);
+  CHECK(first_address != 0u); CHECK((first_address & 0xFFFu) == 0u);
+  CHECK((second_address & 0xFFFu) == 0u);
+  CHECK(second_address >= first_address + 4096u);
+  CHECK_EQ(platform.live_allocations(), 2u);
+  platform.release_contiguous(first, 100u);
+  platform.release_contiguous(second, 8192u);
+  CHECK_EQ(platform.live_allocations(), 0u); }
+
+TEST(mock_platform_contiguous, translates_addresses_inside_a_block_only)
+{ MockPlatform platform;
+  auto *block = static_cast<std::uint8_t *>(platform.allocate_contiguous(64u));
+  const std::uint64_t address = platform.physical_address(block);
+  CHECK(platform.translate_physical(address, 64u) == block);
+  CHECK(platform.translate_physical(address + 10u, 4u) == block + 10);
+  CHECK(platform.translate_physical(address + 60u, 5u) == nullptr);
+  CHECK(platform.translate_physical(address - 1u, 1u) == nullptr);
+  CHECK(platform.translate_physical(address, ~std::size_t{0}) == nullptr);
+  CHECK(platform.translate_physical(0u, 1u) == nullptr);
+  platform.release_contiguous(block, 64u); }
+
+TEST(mock_platform_contiguous, refuses_at_dispatch)
+{ MockPlatform platform;
+  platform.set_irql(Irql::dispatch);
+  CHECK(platform.allocate_contiguous(64u) == nullptr);
+  CHECK(platform.claim(Violation::allocation_at_dispatch)); }
+
+TEST(mock_platform_contiguous, honours_the_failure_point_and_zero_bytes)
+{ MockPlatform platform;
+  CHECK(platform.allocate_contiguous(0u) == nullptr);
+  platform.fail_allocation_at(1u);
+  CHECK(platform.allocate_contiguous(64u) == nullptr);
+  CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
+TEST(mock_platform_contiguous, a_leaked_block_fails_the_test)
+{ { MockPlatform platform;
+    CHECK(platform.allocate_contiguous(64u) != nullptr); }
+  CHECK(TestRegistry::instance().take_current_failure()); }
+
+TEST(mock_platform_stall, is_legal_at_dispatch_and_advances_the_clock)
+{ MockPlatform platform;
+  platform.set_irql(Irql::dispatch);
+  const std::uint64_t before = platform.interrupt_time();
+  platform.stall(1000u);
+  CHECK(platform.interrupt_time() - before == 10000u);
+  CHECK_EQ(platform.unclaimed_violations(), 0u); }

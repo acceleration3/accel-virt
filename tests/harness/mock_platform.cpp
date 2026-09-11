@@ -22,7 +22,8 @@ const char *const violation_names[] = {
 }  // namespace
 
 MockPlatform::MockPlatform()
-    : live_{}, live_count_(0u), allocation_sequence_(0u), fail_at_(0u),
+    : live_{}, live_count_(0u), allocation_sequence_(0u), contiguous_{}, contiguous_count_(0u),
+      next_physical_address_(first_physical_address), fail_at_(0u),
       irql_(Irql::passive), held_{}, held_count_(0u), violations_{}, now_(0u),
       verbose_(std::getenv("AV_TEST_VERBOSE") != nullptr) {}
 
@@ -34,11 +35,13 @@ MockPlatform::~MockPlatform()
             registry.record_failure(__FILE__, __LINE__, "%u unclaimed %s violation(s)",
                                     violations_[kind], violation_names[kind]);
     }
-    if (live_count_ != 0u)
-        registry.record_failure(__FILE__, __LINE__, "%u allocation(s) leaked", live_count_);
+    if (live_count_ + contiguous_count_ != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u allocation(s) leaked",
+                                live_count_ + contiguous_count_);
     if (held_count_ != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u lock(s) still held", held_count_);
     for (std::uint32_t i = 0u; i < live_count_; i++) std::free(live_[i]);
+    for (std::uint32_t i = 0u; i < contiguous_count_; i++) std::free(contiguous_[i].block);
 }
 
 void MockPlatform::record(Violation kind, const char *format, ...)
@@ -91,6 +94,59 @@ void MockPlatform::release(void *block)
      * would free a foreign pointer. */
     std::fprintf(stderr, "\n    release of untracked pointer %p\n", block);
     std::abort();
+}
+
+void *MockPlatform::allocate_contiguous(std::size_t bytes)
+{
+    if (irql_ >= Irql::dispatch) {
+        record(Violation::allocation_at_dispatch, "%zu contiguous bytes at IRQL %u", bytes,
+               static_cast<unsigned>(irql_));
+        return nullptr;
+    }
+    allocation_sequence_++;
+    if (fail_at_ != 0u && allocation_sequence_ == fail_at_) return nullptr;
+    if (bytes == 0u || contiguous_count_ == max_contiguous) return nullptr;
+    void *block = std::malloc(bytes);
+    if (block == nullptr) return nullptr;
+    std::memset(block, 0xA5, bytes);
+    const std::uint64_t address = next_physical_address_;
+    /* A guard page between blocks, so an overrun never lands in a neighbour. */
+    next_physical_address_ += ((bytes + 0xFFFu) & ~std::uint64_t{0xFFF}) + 0x1000u;
+    contiguous_[contiguous_count_++] = ContiguousBlock{block, address, bytes};
+    return block;
+}
+
+void MockPlatform::release_contiguous(void *block, std::size_t bytes)
+{
+    for (std::uint32_t i = 0u; i < contiguous_count_; i++) {
+        if (contiguous_[i].block == block && contiguous_[i].bytes == bytes) {
+            contiguous_[i] = contiguous_[--contiguous_count_];
+            std::free(block);
+            return;
+        }
+    }
+    std::fprintf(stderr, "\n    release of untracked contiguous block %p (%zu bytes)\n", block, bytes);
+    std::abort();
+}
+
+std::uint64_t MockPlatform::physical_address(void *block)
+{
+    for (std::uint32_t i = 0u; i < contiguous_count_; i++)
+        if (contiguous_[i].block == block) return contiguous_[i].physical_address;
+    std::fprintf(stderr, "\n    physical address of untracked block %p\n", block);
+    std::abort();
+}
+
+void *MockPlatform::translate_physical(std::uint64_t physical_address, std::size_t bytes) const
+{
+    for (std::uint32_t i = 0u; i < contiguous_count_; i++) {
+        const ContiguousBlock &candidate = contiguous_[i];
+        if (physical_address < candidate.physical_address) continue;
+        const std::uint64_t offset = physical_address - candidate.physical_address;
+        if (offset <= candidate.bytes && bytes <= candidate.bytes - offset)
+            return static_cast<std::uint8_t *>(candidate.block) + offset;
+    }
+    return nullptr;
 }
 
 void MockPlatform::zero(void *dst, std::size_t bytes) { std::memset(dst, 0, bytes); }
@@ -165,6 +221,9 @@ void MockPlatform::release_mutex(void *, LockRank rank)
 
 std::uint64_t MockPlatform::interrupt_time() const { return now_; }
 
+/* A stall busy-waits in the kernel; here it only moves the clock. */
+void MockPlatform::stall(std::uint32_t microseconds) { advance_time(std::uint64_t{microseconds} * 10u); }
+
 void MockPlatform::advance_time(std::uint64_t ticks)
 {
     if (ticks > ~std::uint64_t{0} - now_) {
@@ -209,7 +268,7 @@ std::uint32_t MockPlatform::unclaimed_violations() const
     return total;
 }
 
-std::uint32_t MockPlatform::live_allocations() const { return live_count_; }
+std::uint32_t MockPlatform::live_allocations() const { return live_count_ + contiguous_count_; }
 std::uint32_t MockPlatform::allocations_made() const { return allocation_sequence_; }
 std::uint32_t MockPlatform::locks_held() const       { return held_count_; }
 

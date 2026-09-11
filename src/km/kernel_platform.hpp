@@ -18,6 +18,9 @@ public:
 
     void    *allocate(size_t bytes, Pool pool) override;
     void     release(void *block) override;
+    void    *allocate_contiguous(size_t bytes) override;
+    void     release_contiguous(void *block, size_t bytes) override;
+    uint64_t physical_address(void *block) override;
     void     zero(void *dst, size_t bytes) override;
     void     copy(void *dst, const void *src, size_t bytes) override;
     Irql     current_irql() const override;
@@ -28,6 +31,7 @@ public:
     void     acquire_mutex(void *storage, LockRank rank) override;
     void     release_mutex(void *storage, LockRank rank) override;
     uint64_t interrupt_time() const override;
+    void     stall(uint32_t microseconds) override;
     void     log(const char *message) override;
     void     report_broken_invariant(const char *what, const char *function) override;
 

@@ -30,6 +30,13 @@ public:
     /* Never null: the kernel bugchecks on it. */
     virtual void  release(void *block) = 0;
 
+    /* Physically contiguous memory a device can address; never at DISPATCH.
+     * Not zero-filled. Released with the same size. */
+    virtual void    *allocate_contiguous(size_t bytes) = 0;
+    virtual void     release_contiguous(void *block, size_t bytes) = 0;
+    /* Of a block allocate_contiguous returned; never of null. */
+    virtual uint64_t physical_address(void *block) = 0;
+
     virtual void zero(void *dst, size_t bytes) = 0;
     virtual void copy(void *dst, const void *src, size_t bytes) = 0;
 
@@ -47,6 +54,8 @@ public:
 
     /* Monotonic, in 100 ns units. */
     virtual uint64_t interrupt_time() const = 0;
+    /* Busy-waits; legal at any IRQL, so keep it short. */
+    virtual void     stall(uint32_t microseconds) = 0;
 
     virtual void log(const char *message) = 0;
     virtual void report_broken_invariant(const char *what, const char *function) = 0;

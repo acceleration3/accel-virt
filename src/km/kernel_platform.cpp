@@ -19,6 +19,27 @@ void *KernelPlatform::allocate(size_t bytes, Pool pool)
 
 void KernelPlatform::release(void *block) { ExFreePoolWithTag(block, pool_tag_); }
 
+/* Any physical address, cached: virtio without ACCESS_PLATFORM addresses guest
+ * physical memory directly. */
+void *KernelPlatform::allocate_contiguous(size_t bytes)
+{
+    PHYSICAL_ADDRESS lowest = {};
+    PHYSICAL_ADDRESS highest = {};
+    PHYSICAL_ADDRESS boundary = {};
+    highest.QuadPart = MAXLONGLONG;
+    return MmAllocateContiguousMemorySpecifyCache(bytes, lowest, highest, boundary, MmCached);
+}
+
+uint64_t KernelPlatform::physical_address(void *block)
+{
+    return static_cast<uint64_t>(MmGetPhysicalAddress(block).QuadPart);
+}
+
+void KernelPlatform::release_contiguous(void *block, size_t bytes)
+{
+    MmFreeContiguousMemorySpecifyCache(block, bytes, MmCached);
+}
+
 void KernelPlatform::zero(void *dst, size_t bytes) { RtlZeroMemory(dst, bytes); }
 
 void KernelPlatform::copy(void *dst, const void *src, size_t bytes)
@@ -58,6 +79,8 @@ void KernelPlatform::release_mutex(void *storage, LockRank)
 }
 
 uint64_t KernelPlatform::interrupt_time() const { return KeQueryInterruptTime(); }
+
+void KernelPlatform::stall(uint32_t microseconds) { KeStallExecutionProcessor(microseconds); }
 
 void KernelPlatform::log(const char *message)
 {

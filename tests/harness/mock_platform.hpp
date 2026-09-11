@@ -26,6 +26,9 @@ public:
 
     void    *allocate(std::size_t bytes, Pool pool) override;
     void     release(void *block) override;
+    void    *allocate_contiguous(std::size_t bytes) override;
+    void     release_contiguous(void *block, std::size_t bytes) override;
+    std::uint64_t physical_address(void *block) override;
     void     zero(void *dst, std::size_t bytes) override;
     void     copy(void *dst, const void *src, std::size_t bytes) override;
     Irql     current_irql() const override;
@@ -36,6 +39,7 @@ public:
     void     acquire_mutex(void *storage, LockRank rank) override;
     void     release_mutex(void *storage, LockRank rank) override;
     std::uint64_t interrupt_time() const override;
+    void     stall(std::uint32_t microseconds) override;
     void     log(const char *message) override;
     void     report_broken_invariant(const char *what, const char *function) override;
 
@@ -49,6 +53,10 @@ public:
 
     void advance_time(std::uint64_t ticks);
 
+    /* What a device sees at a fake physical address: the host pointer, if the
+     * whole range lies inside one contiguous block. */
+    void *translate_physical(std::uint64_t physical_address, std::size_t bytes) const;
+
     /* Removes one recorded occurrence of `kind`; false if there was none. */
     bool claim(Violation kind);
 
@@ -59,8 +67,16 @@ public:
 
 private:
     static constexpr std::uint32_t max_live = 4096u;
+    static constexpr std::uint32_t max_contiguous = 256u;
+    static constexpr std::uint64_t first_physical_address = 0x100000000ull;
     static constexpr std::uint32_t violation_kinds =
         static_cast<std::uint32_t>(Violation::count);
+
+    struct ContiguousBlock {
+        void         *block;
+        std::uint64_t physical_address;
+        std::size_t   bytes;
+    };
 
     struct HeldLock {
         LockRank rank;
@@ -74,6 +90,9 @@ private:
     void         *live_[max_live];
     std::uint32_t live_count_;
     std::uint32_t allocation_sequence_;
+    ContiguousBlock contiguous_[max_contiguous];
+    std::uint32_t contiguous_count_;
+    std::uint64_t next_physical_address_;
     std::uint32_t fail_at_;
     Irql          irql_;
     HeldLock      held_[lock_stack_depth];
