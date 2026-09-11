@@ -5,6 +5,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
+#include "harness/host/mock_request.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -147,3 +148,92 @@ TEST(mock_host, every_create_can_be_failed_and_the_catalog_answers_what_was_adde
   std::uint8_t read[Host::uuid_bytes] = {};
   mock.gpu_uuid(0u, read);
   CHECK(std::memcmp(read, uuid, sizeof uuid) == 0); }
+
+TEST(mock_host_memory, allocations_are_tracked_and_can_fail)
+{ MockHost mock;
+  void *const block = mock.allocate(16u);
+  CHECK(block != nullptr);
+  CHECK_EQ(mock.live_allocations(), 1u);
+  mock.release(block);
+  mock.release(block);
+  CHECK(mock.claim(HostViolation::unknown_handle));
+  mock.fail_allocation_at(1u);
+  CHECK(mock.allocate(16u) == nullptr); }
+
+TEST(mock_host_map_guest, maps_ram_up_to_a_boundary_and_bounces_the_rest)
+{ MockHost mock;
+  mock.add_guest_ram(0x1000u, 0x4000u);
+  mock.split_guest_memory_at(0x3000u);
+  mock.add_bounce_region(0x10000u, 0x1000u);
+  mock.guest_ram(0x2000u)[0] = 0x5A;
+  std::uint64_t length = 0x3000u;
+  bool direct = false;
+  void *const ram = mock.map_guest(0x2000u, length, direct);
+  CHECK(direct);
+  CHECK_EQ(length, 0x1000u);
+  CHECK_EQ(static_cast<std::uint8_t *>(ram)[0], 0x5Au);
+  length = 0x100u;
+  void *const bounce = mock.map_guest(0x10000u, length, direct);
+  CHECK(!direct);
+  CHECK(bounce != nullptr);
+  CHECK(mock.guest_ram(0x10000u) == nullptr);
+  CHECK(mock.guest_ram(0x90000u) == nullptr);
+  length = 0x1000u;
+  CHECK(mock.map_guest(0x90000u, length, direct) == nullptr);
+  CHECK_EQ(length, 0u);
+  CHECK_EQ(mock.live_guest_mappings(), 2u);
+  mock.unmap_guest(ram, 0x1000u);
+  mock.unmap_guest(bounce, 0x100u);
+  mock.unmap_guest(ram, 0x1000u);
+  CHECK(mock.claim(HostViolation::unknown_handle));
+  CHECK_EQ(mock.live_guest_mappings(), 0u); }
+
+TEST(mock_host_hostmem, placements_are_tracked_and_misuse_is_caught)
+{ MockHost mock;
+  mock.set_hostmem_size(0x10000u);
+  CHECK_EQ(mock.hostmem_size(), 0x10000u);
+  void *view = nullptr;
+  void *const first = mock.create_host_memory(0x2000u, view);
+  CHECK(first != nullptr && view != nullptr);
+  void *const second = mock.create_host_memory(0x2000u, view);
+  CHECK_STATUS(mock.place_in_hostmem(first, 0u), Status::ok);
+  CHECK(mock.placed_at(0u) != nullptr);
+  CHECK(mock.placed_at(0x1000u) == nullptr);
+  CHECK_STATUS(mock.place_in_hostmem(second, 0x1000u), Status::ok);
+  CHECK(mock.claim(HostViolation::overlapping_placement));
+  mock.remove_from_hostmem(0x1000u, 0x2000u);
+  mock.fail_placement_at(1u);
+  CHECK_STATUS(mock.place_in_hostmem(second, 0x4000u), Status::no_memory);
+  CHECK_STATUS(mock.place_in_hostmem(&view, 0x4000u), Status::invalid_parameter);
+  CHECK(mock.claim(HostViolation::unknown_handle));
+  mock.destroy_host_memory(first);
+  CHECK(mock.claim(HostViolation::unknown_handle));
+  mock.remove_from_hostmem(0u, 0x1000u);
+  CHECK(mock.claim(HostViolation::unknown_handle));
+  CHECK_EQ(mock.live_placements(), 1u);
+  mock.remove_from_hostmem(0u, 0x2000u);
+  mock.destroy_host_memory(first);
+  mock.destroy_host_memory(second);
+  CHECK_EQ(mock.live_host_memory(), 0u);
+  mock.fail_host_memory_at(1u);
+  CHECK(mock.create_host_memory(0x1000u, view) == nullptr);
+  CHECK(view == nullptr); }
+
+TEST(mock_host_requests, answers_once_and_knows_the_base_class_resources)
+{ MockHost mock;
+  const std::uint8_t bytes[] = {7, 8};
+  av::MockRequest request(bytes, sizeof bytes);
+  std::uint8_t read[4] = {};
+  CHECK_EQ(mock.read_request(&request, 0u, read, sizeof read), 2u);
+  CHECK_EQ(read[1], 8u);
+  const std::uint8_t response[] = {0x00, 0x11, 0x00, 0x00};
+  mock.respond(&request, response, sizeof response);
+  CHECK(request.answered());
+  CHECK_EQ(request.response_type(), 0x1100u);
+  CHECK_EQ(request.response_size(), 4u);
+  CHECK_EQ(request.response_u32(4u), 0u);
+  mock.respond(&request, response, sizeof response);
+  CHECK(mock.claim(HostViolation::second_response));
+  mock.add_resource(3u);
+  CHECK(mock.resource_exists(3u));
+  CHECK(!mock.resource_exists(4u)); }

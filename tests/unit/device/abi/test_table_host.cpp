@@ -9,6 +9,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_host_ops.hpp"
+#include "harness/host/mock_request.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -75,3 +76,39 @@ TEST(table_host, checks_the_threading_contract_against_the_big_lock)
                Status::ok);
   host.join_thread(thread);
   CHECK_EQ(mock.logged(), 4u); }
+
+TEST(table_host, forwards_memory_hostmem_and_requests)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  void *const block = host.allocate(8u);
+  CHECK(block != nullptr);
+  host.release(block);
+  mock.add_guest_ram(0x1000u, 0x1000u);
+  mock.add_bounce_region(0x8000u, 0x1000u);
+  std::uint64_t length = 0x1000u;
+  bool direct = false;
+  void *const ram = host.map_guest(0x1000u, length, direct);
+  CHECK(direct);
+  host.unmap_guest(ram, length);
+  void *const bounce = host.map_guest(0x8000u, length, direct);
+  CHECK(!direct);
+  host.unmap_guest(bounce, length);
+  mock.set_hostmem_size(0x4000u);
+  CHECK_EQ(host.hostmem_size(), 0x4000u);
+  void *view = &mock;
+  void *const memory = host.create_host_memory(0x1000u, view);
+  CHECK(memory != nullptr && view != &mock);
+  CHECK_STATUS(host.place_in_hostmem(memory, 0x1000u), Status::ok);
+  mock.fail_placement_at(1u);
+  CHECK_STATUS(host.place_in_hostmem(memory, 0x2000u), Status::no_memory);
+  host.remove_from_hostmem(0x1000u, 0x1000u);
+  host.destroy_host_memory(memory);
+  const std::uint8_t bytes[] = {1, 2, 3};
+  av::MockRequest request(bytes, sizeof bytes);
+  std::uint8_t read[3] = {};
+  CHECK_EQ(host.read_request(&request, 1u, read, sizeof read), 2u);
+  const std::uint8_t response[] = {0x05, 0x12, 0, 0};
+  host.respond(&request, response, sizeof response);
+  CHECK_EQ(request.response_type(), 0x1205u);
+  mock.add_resource(9u);
+  CHECK(host.resource_exists(9u));
+  CHECK(!host.resource_exists(10u)); }

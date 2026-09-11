@@ -9,6 +9,8 @@ enum class HostViolation : unsigned {
     worker_required,      /* worker work run on the main loop */
     unknown_handle,       /* a thread, event or mutex the host never made, or already destroyed */
     held_mutex,           /* a mutex destroyed while locked, or unlocked while not */
+    second_response,      /* a control request answered twice */
+    overlapping_placement,/* a host memory block placed over another in the hostmem region */
     count
 };
 

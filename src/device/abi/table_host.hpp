@@ -28,6 +28,18 @@ public:
     void     run_on_main_loop(HostRoutine routine, void *context) override;
     uint32_t gpu_count() override;
     void     gpu_uuid(uint32_t index, uint8_t *uuid) override;
+    void    *allocate(size_t bytes) override;
+    void     release(void *block) override;
+    void    *map_guest(uint64_t address, uint64_t &length, bool &direct) override;
+    void     unmap_guest(void *pointer, uint64_t length) override;
+    void    *create_host_memory(uint64_t size, void *&pointer) override;
+    void     destroy_host_memory(void *memory) override;
+    uint64_t hostmem_size() override;
+    Status   place_in_hostmem(void *memory, uint64_t offset) override;
+    void     remove_from_hostmem(uint64_t offset, uint64_t size) override;
+    size_t   read_request(void *request, size_t offset, uint8_t *buffer, size_t size) override;
+    void     respond(void *request, const uint8_t *bytes, size_t size) override;
+    bool     resource_exists(uint32_t id) override;
 
 private:
     void violated(const char *rule, const char *function);

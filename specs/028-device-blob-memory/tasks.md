@@ -12,7 +12,7 @@ description: "Task list for feature 028: QEMU device blob resources and host-vis
 
 ## Phase 2: Host memory
 
-- [ ] T002 Tests then the `Host` extension and `MockHost`; `GuestPageMapping`, `HostMemoryBlock`, `HostmemSpace`
+- [X] T002 Tests then the `Host` extension and `MockHost`; `GuestPageMapping`, `HostMemoryBlock`, `HostmemSpace`
 
 **Checkpoint**: commit.
 

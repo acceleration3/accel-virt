@@ -41,6 +41,36 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     };
     table_.gpu_count = [](void *opaque) { return host_of(opaque).gpu_count(); };
     table_.gpu_uuid = [](void *opaque, std::uint32_t index, std::uint8_t *uuid) { host_of(opaque).gpu_uuid(index, uuid); };
+    table_.allocate = [](void *opaque, std::size_t size) { return host_of(opaque).allocate(size); };
+    table_.release = [](void *opaque, void *block) { host_of(opaque).release(block); };
+    table_.map_guest = [](void *opaque, std::uint64_t address, std::uint64_t *length, int *direct) {
+        bool from_ram = false;
+        void *const pointer = host_of(opaque).map_guest(address, *length, from_ram);
+        *direct = from_ram ? 1 : 0;
+        return pointer;
+    };
+    table_.unmap_guest = [](void *opaque, void *pointer, std::uint64_t length) { host_of(opaque).unmap_guest(pointer, length); };
+    table_.create_host_memory = [](void *opaque, std::uint64_t size, void **pointer) {
+        void *view = nullptr;
+        void *const memory = host_of(opaque).create_host_memory(size, view);
+        *pointer = view;
+        return memory;
+    };
+    table_.destroy_host_memory = [](void *opaque, void *memory) { host_of(opaque).destroy_host_memory(memory); };
+    table_.hostmem_size = [](void *opaque) { return host_of(opaque).hostmem_size(); };
+    table_.place_in_hostmem = [](void *opaque, void *memory, std::uint64_t offset) {
+        return host_of(opaque).place_in_hostmem(memory, offset) == Status::ok ? 0 : 1;
+    };
+    table_.remove_from_hostmem = [](void *opaque, std::uint64_t offset, std::uint64_t size) {
+        host_of(opaque).remove_from_hostmem(offset, size);
+    };
+    table_.read_request = [](void *opaque, void *request, std::size_t offset, std::uint8_t *buffer, std::size_t size) {
+        return host_of(opaque).read_request(request, offset, buffer, size);
+    };
+    table_.respond = [](void *opaque, void *request, const std::uint8_t *bytes, std::size_t size) {
+        host_of(opaque).respond(request, bytes, size);
+    };
+    table_.resource_exists = [](void *opaque, std::uint32_t id) { return host_of(opaque).resource_exists(id) ? 1 : 0; };
 }
 
 const RvkHostOps &MockHostOps::table() const

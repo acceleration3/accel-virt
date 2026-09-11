@@ -37,6 +37,26 @@ typedef struct RvkHostOps {
     uint32_t (*gpu_count)(void *opaque);
     /* Writes the 16-byte VkPhysicalDeviceIDProperties::deviceUUID of device `index`. */
     void (*gpu_uuid)(void *opaque, uint32_t index, uint8_t *uuid);
+    /* Zeroed memory, or NULL; any thread. */
+    void *(*allocate)(void *opaque, size_t size);
+    void (*release)(void *opaque, void *block);
+    /* dma_memory_map toward the device: NULL when nothing is mapped. Shortens
+     * *length at a region boundary; *direct is 0 for a bounce buffer. */
+    void *(*map_guest)(void *opaque, uint64_t address, uint64_t *length, int *direct);
+    void (*unmap_guest)(void *opaque, void *pointer, uint64_t length);
+    /* A zeroed shareable block of `size` bytes: its handle, or NULL; *pointer is the device's view. */
+    void *(*create_host_memory)(void *opaque, uint64_t size, void **pointer);
+    void (*destroy_host_memory)(void *opaque, void *memory);
+    uint64_t (*hostmem_size)(void *opaque);
+    /* Nonzero when the block cannot be placed at `offset` of the hostmem region. */
+    int (*place_in_hostmem)(void *opaque, void *memory, uint64_t offset);
+    void (*remove_from_hostmem)(void *opaque, uint64_t offset, uint64_t size);
+    /* Up to `size` bytes of a control request from `offset`: the count copied. */
+    size_t (*read_request)(void *opaque, void *request, size_t offset, uint8_t *buffer, size_t size);
+    /* The request's response; the host copies fence, flags and context from the request. */
+    void (*respond)(void *opaque, void *request, const uint8_t *bytes, size_t size);
+    /* Nonzero when the base virtio-gpu device holds a 2D resource `id`. */
+    int (*resource_exists)(void *opaque, uint32_t id);
 } RvkHostOps;
 
 typedef struct RvkDevice RvkDevice;

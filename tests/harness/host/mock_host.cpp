@@ -1,8 +1,10 @@
 #include "harness/host/mock_host.hpp"
 
 #include "harness/framework/test_registry.hpp"
+#include "harness/host/mock_request.hpp"
 
 #include <cerrno>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -11,7 +13,8 @@ namespace av {
 
 namespace {
 
-const char *const violation_names[] = {"main_loop_required", "worker_required", "unknown_handle", "held_mutex"};
+const char *const violation_names[] = {"main_loop_required", "worker_required", "unknown_handle", "held_mutex",
+                                       "second_response", "overlapping_placement"};
 
 class StateLock {
 public:
@@ -28,7 +31,11 @@ private:
 
 MockHost::MockHost()
     : main_loop_(pthread_self()), violations_{}, logged_(0u), threads_{}, events_{}, mutexes_{}, gpus_{},
-      gpu_count_(0u), work_{}, work_count_(0u), fail_thread_(0u), fail_event_(0u), fail_mutex_(0u)
+      gpu_count_(0u), work_{}, work_count_(0u), fail_thread_(0u), fail_event_(0u), fail_mutex_(0u),
+      fail_allocation_(0u), fail_host_memory_(0u), fail_placement_(0u), empty_mapping_(0u), allocations_{}, regions_{}, region_count_(0u),
+      splits_{}, split_count_(0u),
+      guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
+      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u)
 {
     pthread_mutex_init(&state_, nullptr);
     pthread_cond_init(&work_queued_, nullptr);
@@ -46,6 +53,21 @@ MockHost::~MockHost()
     if (live_mutexes() != 0u) registry.record_failure(__FILE__, __LINE__, "%u mutex(es) leaked", live_mutexes());
     if (work_count_ != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u main loop routine(s) never ran", work_count_);
+    if (live_allocations() != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u allocation(s) leaked", live_allocations());
+    if (live_guest_mappings() != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u guest mapping(s) leaked", live_guest_mappings());
+    if (live_host_memory() != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u host memory block(s) leaked", live_host_memory());
+    if (live_placements() != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u hostmem placement(s) left", live_placements());
+    for (void *block : allocations_) std::free(block);
+    for (std::uint32_t index = 0u; index < max_guest_mappings; index++)
+        if (guest_mappings_[index].bounce) std::free(guest_mappings_[index].pointer);
+    std::free(guest_mappings_);
+    for (std::uint32_t index = 0u; index < region_count_; index++) std::free(regions_[index].bytes);
+    for (HostBlock &block : host_blocks_)
+        if (block.live) std::free(block.pointer);
     pthread_cond_destroy(&work_queued_);
     pthread_mutex_destroy(&state_);
 }
@@ -325,6 +347,259 @@ std::uint32_t MockHost::run_main_loop()
         next.routine(next.context);
         ran++;
     }
+}
+
+void *MockHost::allocate(std::size_t bytes)
+{
+    StateLock lock(state_);
+    if (fail_now(fail_allocation_)) return nullptr;
+    for (void *&slot : allocations_) {
+        if (slot != nullptr) continue;
+        slot = std::calloc(1u, bytes != 0u ? bytes : 1u);
+        return slot;
+    }
+    return nullptr;
+}
+
+void MockHost::release(void *block)
+{
+    {
+        StateLock lock(state_);
+        for (void *&slot : allocations_) {
+            if (slot != block || block == nullptr) continue;
+            std::free(slot);
+            slot = nullptr;
+            return;
+        }
+    }
+    record(HostViolation::unknown_handle, "MockHost::release");
+}
+
+MockHost::GuestRegion *MockHost::region_of(std::uint64_t address)
+{
+    for (std::uint32_t index = 0u; index < region_count_; index++)
+        if (address >= regions_[index].base && address - regions_[index].base < regions_[index].size)
+            return &regions_[index];
+    return nullptr;
+}
+
+void *MockHost::map_guest(std::uint64_t address, std::uint64_t &length, bool &direct)
+{
+    require_main_loop("MockHost::map_guest");
+    StateLock lock(state_);
+    direct = false;
+    if (fail_now(empty_mapping_)) {
+        length = 0u;
+        direct = true;
+        return this;
+    }
+    const GuestRegion *const region = region_of(address);
+    if (region == nullptr) {
+        length = 0u;
+        return nullptr;
+    }
+    std::uint64_t available = region->size - (address - region->base);
+    for (std::uint32_t index = 0u; index < split_count_; index++)
+        if (splits_[index] > address && splits_[index] - address < available) available = splits_[index] - address;
+    if (length > available) length = available;
+    GuestMapping *slot = nullptr;
+    for (std::uint32_t index = 0u; index < max_guest_mappings && slot == nullptr; index++)
+        if (guest_mappings_[index].pointer == nullptr) slot = &guest_mappings_[index];
+    if (slot == nullptr) {
+        length = 0u;
+        return nullptr;
+    }
+    direct = region->bytes != nullptr;
+    slot->bounce = !direct;
+    slot->length = length;
+    slot->pointer = direct ? region->bytes + (address - region->base) : std::calloc(1u, length + 1u);
+    return slot->pointer;
+}
+
+void MockHost::unmap_guest(void *pointer, std::uint64_t length)
+{
+    require_main_loop("MockHost::unmap_guest");
+    {
+        StateLock lock(state_);
+        for (std::uint32_t index = 0u; index < max_guest_mappings; index++) {
+            GuestMapping &mapping = guest_mappings_[index];
+            if (mapping.pointer != pointer || pointer == nullptr || mapping.length != length) continue;
+            if (mapping.bounce) std::free(mapping.pointer);
+            mapping = GuestMapping{};
+            return;
+        }
+    }
+    record(HostViolation::unknown_handle, "MockHost::unmap_guest");
+}
+
+MockHost::HostBlock *MockHost::block_of(void *memory)
+{
+    for (HostBlock &block : host_blocks_)
+        if (&block == memory && block.live) return &block;
+    return nullptr;
+}
+
+void *MockHost::create_host_memory(std::uint64_t size, void *&pointer)
+{
+    require_main_loop("MockHost::create_host_memory");
+    StateLock lock(state_);
+    pointer = nullptr;
+    if (fail_now(fail_host_memory_)) return nullptr;
+    for (HostBlock &block : host_blocks_) {
+        if (block.live) continue;
+        block = HostBlock{std::calloc(1u, size), size, true, false, 0u};
+        pointer = block.pointer;
+        return &block;
+    }
+    return nullptr;
+}
+
+void MockHost::destroy_host_memory(void *memory)
+{
+    require_main_loop("MockHost::destroy_host_memory");
+    HostBlock *const block = block_of(memory);
+    if (block == nullptr || block->placed) {
+        record(HostViolation::unknown_handle, "MockHost::destroy_host_memory");
+        return;
+    }
+    StateLock lock(state_);
+    std::free(block->pointer);
+    *block = HostBlock{};
+}
+
+std::uint64_t MockHost::hostmem_size()
+{
+    StateLock lock(state_);
+    return hostmem_size_;
+}
+
+Status MockHost::place_in_hostmem(void *memory, std::uint64_t offset)
+{
+    require_main_loop("MockHost::place_in_hostmem");
+    HostBlock *const block = block_of(memory);
+    if (block == nullptr) {
+        record(HostViolation::unknown_handle, "MockHost::place_in_hostmem");
+        return Status::invalid_parameter;
+    }
+    for (const HostBlock &other : host_blocks_)
+        if (other.live && other.placed && offset < other.offset + other.size && other.offset < offset + block->size)
+            record(HostViolation::overlapping_placement, "MockHost::place_in_hostmem");
+    StateLock lock(state_);
+    if (fail_now(fail_placement_)) return Status::no_memory;
+    block->placed = true;
+    block->offset = offset;
+    return Status::ok;
+}
+
+void MockHost::remove_from_hostmem(std::uint64_t offset, std::uint64_t size)
+{
+    require_main_loop("MockHost::remove_from_hostmem");
+    for (HostBlock &block : host_blocks_) {
+        if (!block.live || !block.placed || block.offset != offset || block.size != size) continue;
+        block.placed = false;
+        return;
+    }
+    record(HostViolation::unknown_handle, "MockHost::remove_from_hostmem");
+}
+
+std::size_t MockHost::read_request(void *request, std::size_t offset, std::uint8_t *buffer, std::size_t size)
+{
+    require_main_loop("MockHost::read_request");
+    return static_cast<MockRequest *>(request)->read(offset, buffer, size);
+}
+
+void MockHost::respond(void *request, const std::uint8_t *bytes, std::size_t size)
+{
+    require_main_loop("MockHost::respond");
+    if (!static_cast<MockRequest *>(request)->answer(bytes, size))
+        record(HostViolation::second_response, "MockHost::respond");
+}
+
+bool MockHost::resource_exists(std::uint32_t id)
+{
+    StateLock lock(state_);
+    for (std::uint32_t index = 0u; index < resource_count_; index++)
+        if (resources_[index] == id) return true;
+    return false;
+}
+
+void MockHost::fail_allocation_at(std::uint32_t nth) { StateLock lock(state_); fail_allocation_ = nth; }
+void MockHost::fail_host_memory_at(std::uint32_t nth) { StateLock lock(state_); fail_host_memory_ = nth; }
+void MockHost::fail_placement_at(std::uint32_t nth) { StateLock lock(state_); fail_placement_ = nth; }
+void MockHost::empty_mapping_at(std::uint32_t nth) { StateLock lock(state_); empty_mapping_ = nth; }
+
+void MockHost::add_guest_ram(std::uint64_t base, std::size_t size)
+{
+    StateLock lock(state_);
+    regions_[region_count_++] = GuestRegion{base, size, static_cast<std::uint8_t *>(std::calloc(1u, size))};
+}
+
+void MockHost::split_guest_memory_at(std::uint64_t address)
+{
+    StateLock lock(state_);
+    splits_[split_count_++] = address;
+}
+
+void MockHost::add_bounce_region(std::uint64_t base, std::uint64_t size)
+{
+    StateLock lock(state_);
+    regions_[region_count_++] = GuestRegion{base, size, nullptr};
+}
+
+std::uint8_t *MockHost::guest_ram(std::uint64_t address)
+{
+    StateLock lock(state_);
+    const GuestRegion *const region = region_of(address);
+    return region != nullptr && region->bytes != nullptr ? region->bytes + (address - region->base) : nullptr;
+}
+
+void MockHost::set_hostmem_size(std::uint64_t size) { StateLock lock(state_); hostmem_size_ = size; }
+
+void MockHost::add_resource(std::uint32_t id)
+{
+    StateLock lock(state_);
+    resources_[resource_count_++] = id;
+}
+
+void *MockHost::placed_at(std::uint64_t offset)
+{
+    StateLock lock(state_);
+    for (const HostBlock &block : host_blocks_)
+        if (block.live && block.placed && block.offset == offset) return block.pointer;
+    return nullptr;
+}
+
+std::uint32_t MockHost::live_allocations()
+{
+    StateLock lock(state_);
+    std::uint32_t live = 0u;
+    for (void *block : allocations_) live += block != nullptr ? 1u : 0u;
+    return live;
+}
+
+std::uint32_t MockHost::live_guest_mappings()
+{
+    StateLock lock(state_);
+    std::uint32_t live = 0u;
+    for (std::uint32_t index = 0u; index < max_guest_mappings; index++)
+        live += guest_mappings_[index].pointer != nullptr ? 1u : 0u;
+    return live;
+}
+
+std::uint32_t MockHost::live_host_memory()
+{
+    StateLock lock(state_);
+    std::uint32_t live = 0u;
+    for (const HostBlock &block : host_blocks_) live += block.live ? 1u : 0u;
+    return live;
+}
+
+std::uint32_t MockHost::live_placements()
+{
+    StateLock lock(state_);
+    std::uint32_t live = 0u;
+    for (const HostBlock &block : host_blocks_) live += block.live && block.placed ? 1u : 0u;
+    return live;
 }
 
 bool MockHost::holds_main_loop() const

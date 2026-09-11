@@ -93,4 +93,68 @@ void TableHost::gpu_uuid(uint32_t index, uint8_t *uuid)
     ops_.gpu_uuid(ops_.opaque, index, uuid);
 }
 
+void *TableHost::allocate(size_t bytes)
+{
+    return ops_.allocate(ops_.opaque, bytes);
+}
+
+void TableHost::release(void *block)
+{
+    ops_.release(ops_.opaque, block);
+}
+
+void *TableHost::map_guest(uint64_t address, uint64_t &length, bool &direct)
+{
+    int from_ram = 0;
+    void *const pointer = ops_.map_guest(ops_.opaque, address, &length, &from_ram);
+    direct = from_ram != 0;
+    return pointer;
+}
+
+void TableHost::unmap_guest(void *pointer, uint64_t length)
+{
+    ops_.unmap_guest(ops_.opaque, pointer, length);
+}
+
+void *TableHost::create_host_memory(uint64_t size, void *&pointer)
+{
+    pointer = nullptr;
+    return ops_.create_host_memory(ops_.opaque, size, &pointer);
+}
+
+void TableHost::destroy_host_memory(void *memory)
+{
+    ops_.destroy_host_memory(ops_.opaque, memory);
+}
+
+uint64_t TableHost::hostmem_size()
+{
+    return ops_.hostmem_size(ops_.opaque);
+}
+
+Status TableHost::place_in_hostmem(void *memory, uint64_t offset)
+{
+    return ops_.place_in_hostmem(ops_.opaque, memory, offset) == 0 ? Status::ok : Status::no_memory;
+}
+
+void TableHost::remove_from_hostmem(uint64_t offset, uint64_t size)
+{
+    ops_.remove_from_hostmem(ops_.opaque, offset, size);
+}
+
+size_t TableHost::read_request(void *request, size_t offset, uint8_t *buffer, size_t size)
+{
+    return ops_.read_request(ops_.opaque, request, offset, buffer, size);
+}
+
+void TableHost::respond(void *request, const uint8_t *bytes, size_t size)
+{
+    ops_.respond(ops_.opaque, request, bytes, size);
+}
+
+bool TableHost::resource_exists(uint32_t id)
+{
+    return ops_.resource_exists(ops_.opaque, id) != 0;
+}
+
 }  // namespace av
