@@ -199,6 +199,10 @@ asking for no answer leaves the slot as it was.
 
 ### The executor ABI (device <-> host library)
 
+Every call must return: `CTX_DESTROY` and a reset wait for a worker's call to
+finish.
+
+
 `src/device/abi/rvk_executor.h`, version 1, is what runs a context's commands on
 the host's API: `sub_apis`, `create(sub_api, gpu_uuid)`, `destroy`, and
 `execute(id, payload, size, reply, capacity, &reply_size)` answering executed,
@@ -450,10 +454,35 @@ once `faulted` is observed it stays set for the context's lifetime.
 
 **When the device writes it.** At the context setup, before the ring is
 attached: magic, flags 0, completed 0, progress 0, fault code 0. Then from the
-context's worker after every batch it consumes: completed is that batch's
-fence and progress counts the batches completed. Every write is the whole
-page from the device's own counters; the device never reads the page back, so
-a page the guest overwrites is simply rewritten by the next completion.
+context's worker: after every command it executes, progress moves on (a
+heartbeat: a long batch reads as busy, not hung); after every batch it
+completes, completed is that batch's fence and progress moves on again; and
+once, if the context faults, the page reads `faulted` with the last completed
+fence, the progress so far and the fault code. Nothing is written after a
+fault. Every write is the whole page from the device's own counters; the
+device never reads the page back, so a page the guest overwrites is rewritten
+by the next write.
+
+| Fault code | Reason |
+|--:|---|
+| 1 | ring header malformed, or its order changed |
+| 2 | ring tail moved backwards, or more than the ring ahead of head |
+| 3 | batch header malformed, or the batch cannot fit the ring |
+| 4 | batch fence not greater than the last |
+| 5 | commands framed wrong, or an answer asked for with no reply slot |
+| 6 | a payload the executor cannot decode |
+| 7 | the host device was lost |
+| 8 | the context's executor could not be created |
+
+A faulted context's executor is destroyed at once, on its worker; the context,
+its doorbell and its blobs stay until `CTX_DESTROY` or a reset.
+
+**Recovery.** The guest's engine reset destroys the context (`CTX_DESTROY`),
+writes a fresh ring header, and creates and sets up a context again - the same
+id, blobs and doorbell may be reused - which starts healthy from progress 0.
+An adapter reset is a virtio reset: every context is destroyed and a new
+driver starts from nothing. A context the guest wants to stop without a fault
+(preemption) needs no command: the guest stops publishing its tail.
 
 ## Fence queues and interrupts (device -> guest)
 

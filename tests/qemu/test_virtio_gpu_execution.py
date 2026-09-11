@@ -124,7 +124,7 @@ class VirtioGpuExecution(unittest.TestCase):
                 healthy = Context(self, gpu, 2, 5)
                 self.assertTrue(broken.run(command(ECHO)))
                 self.assertFalse(broken.run(commands))
-                self.assertTrue(wait_for(lambda: "context ring stopped" in gpu.qtest.printed()))
+                self.assertTrue(wait_for(lambda: "context faulted" in gpu.qtest.printed()))
                 self.assertTrue(healthy.run(command(ECHO, b"still", GENERATE_REPLY)))
                 self.assertEqual(healthy.answer()[1], b"still")
 

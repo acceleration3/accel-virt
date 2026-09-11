@@ -147,6 +147,9 @@ the fence queues' interrupts arrive. `test_virtio_gpu_execution.py` runs
 batches through `rvk_echo_executor` (`tests/qemu/echo_executor.cpp`), an executor
 library the qemu configuration builds so the execution path runs on the real
 device without render-server, and reads answers from reply slots.
+`test_virtio_gpu_faults.py` faults contexts for every reason the echo executor
+can reach and reads the faulted page, the pending vector, a healthy neighbour,
+a recreated context and progress per command.
 
 ### The shape of a test file
 

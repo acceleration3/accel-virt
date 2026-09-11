@@ -163,9 +163,9 @@ class VirtioGpuRing(unittest.TestCase):
                 spoil(hostile)
                 self.ring_doorbell(gpu, 1)
                 deadline = time.monotonic() + 10
-                while "context ring stopped" not in gpu.qtest.printed() and time.monotonic() < deadline:
+                while "context faulted" not in gpu.qtest.printed() and time.monotonic() < deadline:
                     time.sleep(0.01)
-                self.assertIn("context ring stopped", gpu.qtest.printed())
+                self.assertIn("context faulted", gpu.qtest.printed())
                 healthy.write_batch(1, 64)
                 healthy.publish()
                 self.ring_doorbell(gpu, 2)

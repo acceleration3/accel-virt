@@ -21,5 +21,5 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 3: QEMU
 
-- [ ] T004 [US1] [US2] [US3] tests/qemu/test_virtio_gpu_faults.py; progress in tests/qemu/test_virtio_gpu_fences.py
-- [ ] T005 Docs: docs/protocol.md (codes, progress, recovery), rvk_executor.h (calls return), docs/testing.md; `tools/gate.sh`; merge; push
+- [X] T004 [US1] [US2] [US3] tests/qemu/test_virtio_gpu_faults.py; progress in tests/qemu/test_virtio_gpu_fences.py
+- [X] T005 Docs: docs/protocol.md (codes, progress, recovery), rvk_executor.h (calls return), docs/testing.md; `tools/gate.sh`; merge; push

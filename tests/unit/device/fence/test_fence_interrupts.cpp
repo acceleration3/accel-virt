@@ -69,6 +69,14 @@ TEST(fence_interrupts_raise, reaches_the_host_only_while_connected)
   interrupts.raise(2u);
   CHECK_EQ(host.raised(2u), 1u); }
 
+TEST(fence_interrupts_raise, before_initialize_does_nothing)
+{ MockHost host;
+  FenceInterrupts interrupts(host);
+  interrupts.raise(0u);
+  CHECK_EQ(host.raised(0u), 0u);
+  CHECK_EQ(host.live_mutexes(), 0u);
+  CHECK(interrupts.invariants_hold()); }
+
 TEST(fence_interrupts_initialize, a_host_without_a_mutex_or_a_second_call_is_refused)
 { MockHost host;
   FenceInterrupts interrupts(host);

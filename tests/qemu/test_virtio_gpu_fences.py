@@ -99,10 +99,10 @@ class VirtioGpuFences(unittest.TestCase):
         self.assertEqual(context.fence_page(), (FENCE_MAGIC, 0, 0, 0, 0, 0))
         fence = context.complete(3)
         self.assertTrue(context.completed(fence))
-        self.assertEqual(context.fence_page(), (FENCE_MAGIC, 0, 3, 3, 0, 0))
+        self.assertEqual(context.fence_page(), (FENCE_MAGIC, 0, 3, 6, 0, 0))   # a command in each batch
         fence = context.complete(2)
         self.assertTrue(context.completed(fence))
-        self.assertEqual(context.fence_page()[3], 5)
+        self.assertEqual(context.fence_page()[3], 10)
 
     def test_a_page_the_guest_overwrites_is_rewritten_from_the_device_counters(self):
         gpu = virtio_qtest.VirtioGpu(self.qtest(), WANTED)
@@ -110,17 +110,17 @@ class VirtioGpuFences(unittest.TestCase):
         self.assertTrue(context.completed(context.complete()))
         gpu.qtest.write_bytes(context.page, b"\xFF" * 32)
         self.assertTrue(context.completed(context.complete()))
-        self.assertEqual(context.fence_page(), (FENCE_MAGIC, 0, 2, 2, 0, 0))
+        self.assertEqual(context.fence_page(), (FENCE_MAGIC, 0, 2, 4, 0, 0))
 
-    def test_a_stopped_ring_leaves_its_page_alone(self):
+    def test_a_faulted_ring_leaves_its_page_faulted(self):
         gpu = virtio_qtest.VirtioGpu(self.qtest(), WANTED)
         context = Context(self, gpu, 1, 0)
         self.assertTrue(context.completed(context.complete()))
         context.ring.publish(8)
         address = gpu.device.shared_memory[DOORBELL_SHM_ID][0]
         gpu.qtest.write(32, address, 1)
-        self.assertTrue(wait_for(lambda: "context ring stopped" in gpu.qtest.printed()))
-        self.assertEqual(context.fence_page(), (FENCE_MAGIC, 0, 1, 1, 0, 0))
+        self.assertTrue(wait_for(lambda: "context faulted" in gpu.qtest.printed()))
+        self.assertEqual(context.fence_page(), (FENCE_MAGIC, 1, 1, 2, 2, 0))   # faulted: ring tail
 
     def test_a_completion_pends_the_masked_vector_of_its_fence_queue_until_unmasked(self):
         qtest = self.qtest()

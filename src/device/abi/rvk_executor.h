@@ -6,7 +6,9 @@
  * the library the device's `executor` property names and hands the table over.
  *
  * Threading: sub_apis runs on QEMU's main loop. create, execute and destroy for
- * one executor run on that context's worker thread only, one call at a time. */
+ * one executor run on that context's worker thread only, one call at a time.
+ * Every call must return: destroying a context, or resetting the device, waits
+ * on QEMU's main loop for the worker's call to finish. */
 #ifndef RVK_EXECUTOR_H
 #define RVK_EXECUTOR_H
 
