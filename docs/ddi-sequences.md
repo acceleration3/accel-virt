@@ -701,6 +701,36 @@ WDDM 1.2 (with GPU VA, feature 017): a 1.2 claim below `DXGKDDI_WDDMv1_2` fails
   enabling hardware scheduling; enablement, invalidation and `ResumeHwEngine`
   arrive with driver version 2.5.
 
+## 4l. WDDM 2.3 - 2.9 (feature 020)
+
+- Swept every compare against WDDMVersion 0x22ff-0x29ff and driver versions
+  2300-2900 in dxgkrnl and dxgmms2: for a driver with no colour transform, HDR,
+  `MiscCaps` or `IndependentVidPnVSyncControl`, no step makes a DDI, capability
+  or start query mandatory.
+- 2.3: `HwQueuePacketCap` survives; disabling a primary, removing ownership and
+  hiding a source go through `FlushPresentReferencesAndDisableOverlays` instead
+  of the legacy synchronization (`IsLegacyDisplayStateSynchronization
+  @ 14005829c`).
+- 2.4: `MiscCaps` bits 9 and up must be 0; the diagnostic DDIs are a pair;
+  `InitializeDriverWorkarounds @ 1401a4fc8` forces `FlipCaps.FlipImmediateMmIo`;
+  per-adapter perf data and GPU version queries (26, 27) are asked, failures
+  logged; the broadcast present sync object becomes a monitored fence.
+- 2.5: HdrFP16 and HdrARGB10 scanout together fail start; HwQueueSupported
+  contexts and more than 64 nodes are allowed; `SetTargetAdjustedColorimetry2`
+  is tried first. 2.6: `ComputeOnly` honoured. 2.7: a registered
+  `ControlInterrupt3` replaces `ControlInterrupt2` (`DdiControlInterrupt2
+  @ 140025f44`); black-screen `CollectDiagnosticInfo`.
+- Slots: `UpdateHwContextState` is never copied; protected sessions answer
+  NOT_SUPPORTED when NULL (`DXGPROTECTEDSESSION::Initialize @ 14020b73c`);
+  `SignalMonitoredFence` (no NULL check) and `PresentToHwQueue` serve only
+  hardware-scheduled nodes; `ValidateSubmitCommand` only contexts and queues
+  with private data (`DXGCONTEXT::SubmitCommand @ 1402bd5f0`);
+  `SetTrackedWorkloadPowerLevel` needs `SupportTrackedWorkload`; the hot update
+  pair needs the GPU partition interface; `CollectDiagnosticInfo` is NULL-checked
+  and called after a failed AddDevice or StartDevice. `basicrender.sys` fills
+  only 130, 131 and 146 of them. The driver reports 2.3 and leaves all twelve
+  NULL.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the
@@ -781,3 +811,6 @@ shipping stack. Scheduler/paging DDIs live in `dxgmms2.sys` (same project).
   `DMA_COMPLETED` on a hardware-scheduled node; what `HwQueuePacketCap` and
   `MaxInFlightHwQueueBuffers` limit; the input `hHwQueue` of the paging queue;
   whether VidSch holds its scheduler lock across `SubmitPagingToHwQueue`.
+- Which DDIs `FlushPresentReferencesAndDisableOverlays` issues; the contract of
+  `SignalMonitoredFence`'s DMA buffer; what VidSch `+0xaf8`, `HwQueuePacketCap`
+  and FDO+0x486 mean.

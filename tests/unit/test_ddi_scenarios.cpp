@@ -130,7 +130,7 @@ TEST(ddi_scenario, the_recorded_bring_up_and_teardown)
     CHECK(device.fdo().context() != nullptr);
     CHECK_EQ(device.fdo().start_device(), 0);
     CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-    CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2200);
+    CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2300);
     CHECK_EQ(device.fdo().dxgadapter().display_caps_extension(), 0u);
     CHECK_EQ(device.fdo().sources(), 1u);
     CHECK_EQ(device.fdo().children(), 1u);
@@ -964,6 +964,42 @@ TEST(ddi_scenario, hardware_queues_submit_complete_through_progress_fences_and_r
     vidsch.run_dpc();
     CHECK_EQ(vidsch.fence_signals(), 1u);
     CHECK_EQ(queue.submit(0x10000u, 0u), 0); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- WDDM 2.3 - 2.7 (feature 020) ----------------------------------------------- */
+
+TEST(ddi_scenario, a_wddm_2_3_adapter_starts_and_scans_out_with_the_later_slots_null)
+{ LoadedDriver driver;
+  const DdiTable &table = driver.table();
+  const DdiSlot skipped[] = {
+      DdiSlot::DxgkDdiUpdateHwContextState, DdiSlot::DxgkDdiCreateProtectedSession,
+      DdiSlot::DxgkDdiDestroyProtectedSession, DdiSlot::DxgkDdiSignalMonitoredFence,
+      DdiSlot::DxgkDdiPresentToHwQueue, DdiSlot::DxgkDdiValidateSubmitCommand,
+      DdiSlot::DxgkDdiSetTargetAdjustedColorimetry2, DdiSlot::DxgkDdiSetTrackedWorkloadPowerLevel,
+      DdiSlot::DxgkDdiSaveMemoryForHotUpdate, DdiSlot::DxgkDdiRestoreMemoryForHotUpdate,
+      DdiSlot::DxgkDdiCollectDiagnosticInfo, DdiSlot::DxgkDdiControlInterrupt3,
+  };
+  for (const DdiSlot slot : skipped) CHECK(table.routine(slot) == nullptr);
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
+  CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2300);
+  CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
+  av::FakeDisplayModeManager dmm(driver.platform(), table, device.fdo().context());
+  { av::FakeVidPn vidpn;
+    CHECK_EQ(dmm.set_mode(vidpn, 1024u, 768u), 0); }
+  int primary = 0;
+  CHECK_EQ(dmm.show_primary(&primary, 0x0000000200000000ll), 0);
+  CHECK_EQ(dmm.set_visible(true), 0);
+  CHECK_EQ(dmm.control_vsync(true), 0);
+  driver.platform().run_timers(10000000u / 60u);
+  CHECK_EQ(device.dxgkrnl().interrupt(device.dxgkrnl().interrupts() - 1u).Argument3, 2u);
+  CHECK_EQ(dmm.set_visible(false), 0);
+  CHECK_EQ(dmm.show_primary(nullptr, 0), 0);
+  CHECK_EQ(dmm.control_vsync(false), 0);
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), 0u);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
