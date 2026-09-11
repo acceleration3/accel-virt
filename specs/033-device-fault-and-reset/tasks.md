@@ -8,7 +8,7 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 1: Reporting faults
 
-- [ ] T001 [US1] Tests then `FaultCode` in src/proto/submission/fault_code.hpp and `FenceReporter::fault`, `heartbeat`, `faulted` in src/device/fence/
+- [X] T001 [US1] Tests then `FaultCode` in src/proto/submission/fault_code.hpp and `FenceReporter::fault`, `heartbeat`, `faulted` in src/device/fence/
 
 **Checkpoint**: commit.
 

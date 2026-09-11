@@ -10,6 +10,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
+#include "proto/submission/fault_code.hpp"
 #include "proto/submission/fence_page.hpp"
 
 #include <cstdint>
@@ -17,6 +18,7 @@
 
 using av::BlobWindow;
 using av::ByteLayout;
+using av::FaultCode;
 using av::FenceInterrupts;
 using av::FencePage;
 using av::FenceReporter;
@@ -31,6 +33,7 @@ struct FenceReporterProbe {
     static void pend_unprepared(FenceReporter &reporter) { reporter.pending_ = true; }
     static void lose_progress(FenceReporter &reporter) { reporter.completed_ = 5u; reporter.progress_ = 0u; }
     static void lose_page(FenceReporter &reporter) { reporter.page_ = FenceWindow(); }
+    static void fault_without_code(FenceReporter &reporter) { reporter.faulted_ = true; reporter.fault_ = FaultCode::none; }
 };
 
 }  // namespace av
@@ -155,12 +158,72 @@ TEST(fence_reporter_complete, an_unprepared_reporter_writes_and_raises_nothing)
   CHECK_EQ(fixture.page().completed_fence(), 0u);
   CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok); }
 
+TEST(fence_reporter_fault, publishes_the_code_with_the_last_completion_and_signals_once)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.complete(4u);
+      reporter.signal();
+      reporter.heartbeat();
+      reporter.fault(FaultCode::undecodable);
+      reporter.signal();
+  });
+  CHECK(fixture.reporter().faulted());
+  CHECK(fixture.page().faulted());
+  CHECK_EQ(fixture.page().fault_code(), static_cast<std::uint32_t>(FaultCode::undecodable));
+  CHECK_EQ(fixture.page().completed_fence(), 4u);
+  CHECK_EQ(fixture.page().progress(), 2u);
+  CHECK_EQ(fixture.host().raised(line), 2u); }
+
+TEST(fence_reporter_fault, a_faulted_context_reports_nothing_more)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.fault(FaultCode::ring_tail);
+      reporter.signal();
+      reporter.complete(9u);
+      reporter.heartbeat();
+      reporter.fault(FaultCode::device_lost);
+      reporter.signal();
+  });
+  CHECK_EQ(fixture.page().fault_code(), static_cast<std::uint32_t>(FaultCode::ring_tail));
+  CHECK_EQ(fixture.page().completed_fence(), 0u);
+  CHECK_EQ(fixture.page().progress(), 0u);
+  CHECK_EQ(fixture.host().raised(line), 1u);
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::invalid_state); }
+
+TEST(fence_reporter_heartbeat, moves_progress_without_an_interrupt)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.heartbeat();
+      reporter.heartbeat();
+      reporter.signal();
+  });
+  CHECK_EQ(fixture.page().progress(), 2u);
+  CHECK_EQ(fixture.page().completed_fence(), 0u);
+  CHECK(!fixture.page().faulted());
+  CHECK_EQ(fixture.host().raised(line), 0u); }
+
+TEST(fence_reporter_fault, an_unprepared_reporter_writes_nothing_and_preparing_starts_healthy)
+{ Fixture fixture;
+  fixture.on_worker([](FenceReporter &reporter) {
+      reporter.fault(FaultCode::no_executor);
+      reporter.heartbeat();
+      reporter.signal();
+  });
+  CHECK(!fixture.reporter().faulted());
+  CHECK_EQ(fixture.bytes()[0], 0xEEu);
+  CHECK_STATUS(fixture.reporter().prepare(fixture.window(), line), Status::ok);
+  CHECK(!fixture.page().faulted()); }
+
 TEST(fence_reporter, prepares_on_the_main_loop_and_reports_on_a_worker)
 { Fixture fixture;
   fixture.reporter().complete(1u);
   fixture.reporter().signal();
-  CHECK(fixture.host().claim(HostViolation::worker_required));
-  CHECK(fixture.host().claim(HostViolation::worker_required));
+  fixture.reporter().heartbeat();
+  fixture.reporter().fault(FaultCode::ring_header);
+  for (int count = 0; count < 4; count++) CHECK(fixture.host().claim(HostViolation::worker_required));
   fixture.on_worker([](FenceReporter &reporter) {
       reporter.withdraw();
   });
@@ -177,4 +240,11 @@ TEST(fence_reporter_invariants, pending_before_preparing_or_a_completion_without
   Fixture pageless;
   CHECK_STATUS(pageless.reporter().prepare(pageless.window(), line), Status::ok);
   av::FenceReporterProbe::lose_page(pageless.reporter());
-  CHECK(!pageless.reporter().invariants_hold()); }
+  CHECK(!pageless.reporter().invariants_hold());
+  Fixture codeless;
+  CHECK_STATUS(codeless.reporter().prepare(codeless.window(), line), Status::ok);
+  av::FenceReporterProbe::fault_without_code(codeless.reporter());
+  CHECK(!codeless.reporter().invariants_hold());
+  Fixture unprepared;
+  av::FenceReporterProbe::fault_without_code(unprepared.reporter());
+  CHECK(!unprepared.reporter().invariants_hold()); }
