@@ -21,9 +21,8 @@ Status DeviceContextTable::create(uint32_t id)
     if (id == 0u) return Status::invalid_parameter;
     if (slot_of(id) != nullptr) return Status::conflict;
     for (ObjectStorage<DeviceContext> &slot : slots_) {
-        if (slot.constructed()) continue;
-        Status status = slot.construct(host_, id);
-        if (status == Status::ok) status = slot.object().start();
+        if (slot.construct(host_, id) != Status::ok) continue;   /* occupied */
+        const Status status = slot.object().start();
         if (status != Status::ok) slot.destroy();
         return status;
     }
