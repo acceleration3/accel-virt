@@ -1,13 +1,43 @@
 #!/usr/bin/env python3
 """Gate for constitution Principle III: every unit of behaviour is a class that
-owns state. Reports static member functions and classes with no data members
-in src/core, src/device and src/proto.
+owns state. Reports static member functions and classes with no data members,
+and any new or delete expression - objects are constructed in place only by
+ObjectStorage - in src/core, src/device and src/proto.
 
   check_design.py [repository root]
 """
+import os
+import re
 import sys
 
-from header_scan import declared_classes
+from header_scan import SOURCE_DIRECTORIES, declared_classes
+
+OBJECT_STORAGE = "src/core/object_storage.hpp"
+COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
+NEW_EXPRESSION = re.compile(r"(?<![\w.])new\s*[\(\w:]")
+
+
+def sources(root):
+    for directory in SOURCE_DIRECTORIES:
+        for base, _dirs, files in sorted(os.walk(os.path.join(root, directory))):
+            for name in sorted(files):
+                if name.endswith((".cpp", ".hpp")):
+                    path = os.path.join(base, name)
+                    yield path, os.path.relpath(path, root)
+
+
+def allocation_expressions(root):
+    """Comments are blanked line-preservingly so a line number still points at the code."""
+    found = []
+    for path, relative in sources(root):
+        with open(path) as source:
+            code = COMMENT.sub(lambda m: "\n" * m.group(0).count("\n"), source.read())
+        for number, line in enumerate(code.split("\n"), 1):
+            if NEW_EXPRESSION.search(line) and relative != OBJECT_STORAGE:
+                found.append(f"{relative}:{number}: new expression outside {OBJECT_STORAGE}")
+            if re.search(r"\bdelete\b", line) and not re.search(r"=\s*delete\b", line):
+                found.append(f"{relative}:{number}: delete expression")
+    return found
 
 
 def main():
@@ -18,6 +48,7 @@ def main():
             violations.append(f"{declared.header}: {declared.name}::{method} is static")
         if not declared.has_state and not declared.is_contract():
             violations.append(f"{declared.header}: class {declared.name} has no data members")
+    violations += allocation_expressions(root)
     for violation in violations:
         print(violation, file=sys.stderr)
     if violations:

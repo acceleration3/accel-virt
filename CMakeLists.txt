@@ -50,7 +50,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DI
 # ---- portable code: no platform headers, compiled into every target --------
 # src/device and src/proto join the same gates the moment they hold a source.
 file(GLOB AV_PORTABLE_SOURCES CONFIGURE_DEPENDS
-  src/core/*.cpp src/proto/*.cpp src/device/*.cpp)
+  src/core/*.cpp src/core/ddi/*.cpp src/proto/*.cpp src/device/*.cpp)
 add_library(av_core STATIC ${AV_PORTABLE_SOURCES})
 target_include_directories(av_core PUBLIC src/core src/proto src/device)
 target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
@@ -138,7 +138,9 @@ ExternalProject_Add(rvkgpu
   BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/driver/rvkgpu.sys)
 add_test(NAME driver_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_driver_image.py
-                 ${CMAKE_BINARY_DIR}/driver/rvkgpu.sys)
+                 ${CMAKE_BINARY_DIR}/driver/rvkgpu.sys
+                 # displib's DxgkInitialize is linked, not just declared
+                 --require-import IoGetDeviceObjectPointer)
 
 # ---- gate scripts are tested like any other code ---------------------------
 add_test(NAME tools_tests

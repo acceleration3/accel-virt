@@ -25,7 +25,13 @@ MockPlatform::MockPlatform()
     : live_{}, live_count_(0u), allocation_sequence_(0u), contiguous_{}, contiguous_count_(0u),
       next_physical_address_(first_physical_address), fail_at_(0u),
       irql_(Irql::passive), held_{}, held_count_(0u), violations_{}, now_(0u),
-      verbose_(std::getenv("AV_TEST_VERBOSE") != nullptr) {}
+      verbose_(std::getenv("AV_TEST_VERBOSE") != nullptr), logged_(0u), registration_status_(0u),
+      registered_driver_object_(nullptr), registered_registry_path_(nullptr), registered_table_(nullptr) {}
+
+MockPlatform::MockPlatform(std::uint32_t registration_status) : MockPlatform()
+{
+    registration_status_ = registration_status;
+}
 
 MockPlatform::~MockPlatform()
 {
@@ -237,7 +243,16 @@ void MockPlatform::advance_time(std::uint64_t ticks)
 
 void MockPlatform::log(const char *message)
 {
+    logged_++;
     if (verbose_) std::fprintf(stderr, "%s\n", message);
+}
+
+std::int32_t MockPlatform::register_miniport(void *driver_object, void *registry_path, const DdiTable &table)
+{
+    registered_driver_object_ = driver_object;
+    registered_registry_path_ = registry_path;
+    registered_table_ = &table;
+    return static_cast<std::int32_t>(registration_status_);
 }
 
 void MockPlatform::report_broken_invariant(const char *what, const char *function)
@@ -271,5 +286,9 @@ std::uint32_t MockPlatform::unclaimed_violations() const
 std::uint32_t MockPlatform::live_allocations() const { return live_count_ + contiguous_count_; }
 std::uint32_t MockPlatform::allocations_made() const { return allocation_sequence_; }
 std::uint32_t MockPlatform::locks_held() const       { return held_count_; }
+std::uint32_t MockPlatform::logged() const           { return logged_; }
+void         *MockPlatform::registered_driver_object() const { return registered_driver_object_; }
+void         *MockPlatform::registered_registry_path() const { return registered_registry_path_; }
+const DdiTable *MockPlatform::registered_table() const { return registered_table_; }
 
 }  // namespace av

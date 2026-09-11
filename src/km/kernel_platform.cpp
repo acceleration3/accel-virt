@@ -1,5 +1,13 @@
 #include "kernel_platform.hpp"
 
+#include <intrin.h>
+
+/* dispmprt.h, unlike ntddk.h, declares its imports without a C linkage guard. */
+extern "C" {
+#include <dispmprt.h>
+}
+
+#include "ddi_table.hpp"
 #include "mutex.hpp"
 
 namespace av {
@@ -85,6 +93,21 @@ void KernelPlatform::stall(uint32_t microseconds) { KeStallExecutionProcessor(mi
 void KernelPlatform::log(const char *message)
 {
     DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_ERROR_LEVEL, "rvkgpu: %s\n", message);
+    /* WRITE_PORT_BUFFER_UCHAR expands to __outbytestring, which clang-cl does
+     * not provide; one byte at a time is the same port protocol. */
+    for (const char *cursor = message; *cursor != '\0'; ++cursor)
+        WRITE_PORT_UCHAR(reinterpret_cast<PUCHAR>(debug_port), static_cast<UCHAR>(*cursor));
+    WRITE_PORT_UCHAR(reinterpret_cast<PUCHAR>(debug_port), '\n');
+}
+
+/* The table's layout is proven identical to DRIVER_INITIALIZATION_DATA by
+ * ddi_table_layout.cpp. */
+int32_t KernelPlatform::register_miniport(void *driver_object, void *registry_path,
+                                          const DdiTable &table)
+{
+    return DxgkInitialize(static_cast<PDRIVER_OBJECT>(driver_object),
+                          static_cast<PUNICODE_STRING>(registry_path),
+                          reinterpret_cast<PDRIVER_INITIALIZATION_DATA>(const_cast<DdiTable *>(&table)));
 }
 
 /* Broken invariants mean corrupted state; the kernel's own response to that is

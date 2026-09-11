@@ -20,6 +20,8 @@ public:
     static constexpr std::uint32_t lock_stack_depth = 16u;
 
     MockPlatform();
+    /* The NTSTATUS register_miniport answers, as dxgkrnl would. */
+    explicit MockPlatform(std::uint32_t registration_status);
     ~MockPlatform();
     MockPlatform(const MockPlatform &) = delete;
     MockPlatform &operator=(const MockPlatform &) = delete;
@@ -42,6 +44,8 @@ public:
     void     stall(std::uint32_t microseconds) override;
     void     log(const char *message) override;
     void     report_broken_invariant(const char *what, const char *function) override;
+    std::int32_t register_miniport(void *driver_object, void *registry_path,
+                                   const DdiTable &table) override;
 
     /* Fail the Nth allocation from now (1-based); 0 disables. This is how
      * out-of-memory paths reach full branch coverage instead of being assumed
@@ -64,6 +68,10 @@ public:
     std::uint32_t live_allocations() const;
     std::uint32_t allocations_made() const;
     std::uint32_t locks_held() const;
+    std::uint32_t logged() const;
+    void         *registered_driver_object() const;
+    void         *registered_registry_path() const;
+    const DdiTable *registered_table() const;
 
 private:
     static constexpr std::uint32_t max_live = 4096u;
@@ -100,6 +108,11 @@ private:
     std::uint32_t violations_[violation_kinds];
     std::uint64_t now_;
     bool          verbose_;
+    std::uint32_t logged_;
+    std::uint32_t registration_status_;
+    void         *registered_driver_object_;
+    void         *registered_registry_path_;
+    const DdiTable *registered_table_;
 };
 
 }  // namespace av

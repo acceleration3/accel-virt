@@ -24,9 +24,12 @@ inject its dependencies at construction. `Alignment` owns an alignment,
 take what they own as a parameter.
 
 The two exceptions are ABI boundaries that C requires, and they are one line
-each: the `DxgkDdi*` thunks in `src/km/`, which do nothing but
-`static_cast<Adapter *>(context)->method(...)`, and the `extern "C"` entry
-points that libFuzzer and QEMU call. No logic lives in either.
+each: the `DxgkDdi*` entry points in `src/core/ddi/`, which forward to the
+adapter behind the context pointer (or, for AddDevice and Unload, the root
+registered in `MiniportBinding`), and the `extern "C"` entry points that
+libFuzzer and QEMU call. No logic lives in either. `MiniportBinding`'s pointer
+and the kernel shim's static storage for the root are the only process-lifetime
+state (constitution III).
 
 Genuinely stateless operators and ADL hooks stay free functions. Nothing else
 does.
@@ -101,7 +104,8 @@ in `initialize`, not spread across both.
 **Allocation**: there is no C++ standard library here. No `std::vector`,
 `std::string`, `std::map`, `std::function`, no `new`/`delete`. Memory comes
 from `Platform::allocate` with an explicit `Pool`, and the caller owns
-releasing it. A fixed maximum means a fixed-size member array, not a heap
+releasing it. An object whose lifetime is not a scope lives in
+`ObjectStorage<T>`, the one place a placement-new expression is allowed. A fixed maximum means a fixed-size member array, not a heap
 allocation. Nothing allocates on the submission path.
 
 **IRQL is part of the signature.** Every public method calls

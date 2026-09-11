@@ -16,6 +16,8 @@
 
 namespace av {
 
+class DdiTable;
+
 enum class Irql : unsigned { passive = 0, apc = 1, dispatch = 2, isr = 3 };
 enum class Pool : unsigned { non_paged = 0, paged = 1 };
 
@@ -58,6 +60,10 @@ public:
     virtual void     stall(uint32_t microseconds) = 0;
 
     virtual void log(const char *message) = 0;
+
+    /* DxgkInitialize: hands the table to dxgkrnl; answers an NTSTATUS. */
+    virtual int32_t register_miniport(void *driver_object, void *registry_path,
+                                      const DdiTable &table) = 0;
     virtual void report_broken_invariant(const char *what, const char *function) = 0;
 
 protected:

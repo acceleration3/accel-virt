@@ -5,8 +5,12 @@ Linking proves every symbol resolved; it does not prove they resolved to the
 kernel. A user-mode import library on the link line links cleanly and then
 fails to load in the guest.
 
-  check_driver_image.py build/driver/rvkgpu.sys
+  check_driver_image.py build/driver/rvkgpu.sys [--require-import NAME ...]
+
+--require-import proves a static library's code was linked in, e.g. that
+displib's DxgkInitialize reached the image through the routines it imports.
 """
+import argparse
 import os
 import re
 import subprocess
@@ -18,9 +22,11 @@ KERNEL_MODULES = {"ntoskrnl.exe", "hal.dll"}
 
 
 def main():
-    if len(sys.argv) != 2:
-        sys.exit("usage: check_driver_image.py <image>")
-    image = sys.argv[1]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("image")
+    parser.add_argument("--require-import", action="append", default=[])
+    args = parser.parse_args()
+    image = args.image
     if not os.path.isfile(image):
         print(f"{image}: no such image", file=sys.stderr)
         sys.exit(1)
@@ -40,6 +46,10 @@ def main():
     for module in re.findall(r"^\s*Name: (\S+)", dump.stdout, re.M):
         if module.lower() not in KERNEL_MODULES:
             violations.append(f"imports {module}, not a kernel module")
+    imported = set(re.findall(r"^\s*Symbol: (\S+)", dump.stdout, re.M))
+    for routine in args.require_import:
+        if routine not in imported:
+            violations.append(f"does not import {routine}")
 
     for violation in violations:
         print(f"{image}: {violation}", file=sys.stderr)

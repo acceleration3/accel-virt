@@ -34,10 +34,15 @@ public:
     void     stall(uint32_t microseconds) override;
     void     log(const char *message) override;
     void     report_broken_invariant(const char *what, const char *function) override;
+    int32_t  register_miniport(void *driver_object, void *registry_path,
+                               const DdiTable &table) override;
 
 private:
     /* Indexed by Pool, so choosing a pool is a lookup rather than a branch. */
     static constexpr POOL_FLAGS pool_flags_[] = {POOL_FLAG_NON_PAGED, POOL_FLAG_PAGED};
+    /* QEMU isa-debugcon (docs/kb/11-implementation-plan.md, M0): one byte per
+     * port write, legal at any IRQL, readable on the host from DriverEntry on. */
+    static constexpr uintptr_t debug_port = 0x402u;
 
     ULONG pool_tag_;
 };

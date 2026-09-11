@@ -74,6 +74,13 @@ class DriverImageCheck(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("imports KERNEL32.dll, not a kernel module", result.stderr)
 
+    def test_a_required_import_must_be_present(self):
+        present = run(CHECK, self.user.path, "--require-import", "ExitProcess")
+        self.assertNotIn("does not import ExitProcess", present.stderr)
+        absent = run(CHECK, self.project.image("driver"), "--require-import", "IoGetDeviceObjectPointer")
+        self.assertEqual(absent.returncode, 1)
+        self.assertIn("does not import IoGetDeviceObjectPointer", absent.stderr)
+
     def test_rejects_a_missing_image_naming_it(self):
         missing = self.scratch / "absent.sys"
         result = run(CHECK, missing)

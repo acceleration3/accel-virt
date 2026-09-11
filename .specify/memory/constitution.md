@@ -1,6 +1,6 @@
 # accel-virt Constitution
 
-**Version**: 2.0.1 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-11
+**Version**: 2.1.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-11
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
 display miniport (`rvkgpu.sys`), a custom in-process QEMU device
@@ -55,9 +55,19 @@ Dependencies are injected at construction, never reached for. Nothing consults
 a global, a singleton, or file-scope state.
 
 The only exceptions are the ABI boundaries C requires, and each is one line
-with no logic: the `DxgkDdi*` thunks in `src/km/`, which do nothing but
-`static_cast<Adapter *>(context)->method(...)`, and the `extern "C"` entry
-points QEMU and libFuzzer call.
+with no logic: the `DxgkDdi*` entry points in `src/core/ddi/`, which forward to
+the adapter behind the context pointer, and the `extern "C"` entry points QEMU
+and libFuzzer call. The DDI entry points live in core, over mirror types whose
+layout `src/km` proves against the WDK, so the L2 harness drives the same entry
+points `dxgkrnl` calls.
+
+Two pieces of process-lifetime state exist because the ABI leaves no
+alternative, and nothing else may: `DxgkDdiAddDevice` and `DxgkDdiUnload`
+receive no context, so they reach the driver's root through the single pointer
+`MiniportBinding` holds; and the kernel runs no global constructors, so
+`DriverEntry` constructs that root in the shim's static storage. An object whose
+lifetime cannot be a scope is held in `ObjectStorage<T>`, which is the only place
+a placement-new expression may appear; `tools/check_design.py` enforces it.
 
 The full standard, including naming, ownership, error handling and the
 freestanding-kernel adaptations, is in [`CLAUDE.md`](../../CLAUDE.md) and is
@@ -164,7 +174,8 @@ device exists.
 ## Technology constraints
 
 - **Language: C++23**, freestanding subset — `-fno-exceptions -fno-rtti`, no
-  C++ standard library, no `new`/`delete`. `basicrender.sys`, Microsoft's own
+  C++ standard library, no heap `new`/`delete` (in-place construction only in
+  `ObjectStorage`). `basicrender.sys`, Microsoft's own
   WDDM miniport, is C++ classes with virtuals, so this is the supported way to
   write one. RAII is not a style preference here: it removes cleanup branches,
   which is what makes Principle IV's 100% branch coverage affordable.
