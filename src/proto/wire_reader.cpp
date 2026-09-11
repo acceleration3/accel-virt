@@ -48,7 +48,8 @@ void WireReader::expect_zero(size_t count)
 
 Status WireReader::status() const    { return status_; }
 size_t WireReader::offset() const    { return offset_; }
-size_t WireReader::remaining() const { return length_ - offset_; }
+/* Zero after a failure, so a loop reading until nothing remains always ends. */
+size_t WireReader::remaining() const { return status_ == Status::ok ? length_ - offset_ : 0u; }
 
 bool WireReader::invariants_hold() const
 {

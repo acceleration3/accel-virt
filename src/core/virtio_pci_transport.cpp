@@ -1,6 +1,7 @@
 #include "virtio_pci_transport.hpp"
 
 #include "invariant_scope.hpp"
+#include "virt_queue.hpp"
 
 namespace av {
 
@@ -15,6 +16,14 @@ enum : uint64_t {
     config_msix_vector    = 0x10u,
     num_queues            = 0x12u,
     device_status         = 0x14u,
+    queue_select          = 0x16u,
+    queue_size            = 0x18u,
+    queue_msix_vector     = 0x1Au,
+    queue_enable          = 0x1Cu,
+    queue_notify_off      = 0x1Eu,
+    queue_desc            = 0x20u,
+    queue_driver          = 0x28u,
+    queue_device          = 0x30u,
 };
 
 /* 2.1 device status bits. */
@@ -114,6 +123,37 @@ Status VirtioPciTransport::assign_config_vector(uint16_t vector)
     if (stage_ != Stage::negotiated) return Status::invalid_state;
     common_.write_u16(config_msix_vector, vector);
     return common_.read_u16(config_msix_vector) == vector ? Status::ok : Status::no_space;
+}
+
+Status VirtioPciTransport::activate_queue(VirtQueue &queue, uint16_t vector)
+{
+    platform_.require_irql_at_most(Irql::passive, "VirtioPciTransport::activate_queue");
+    InvariantScope<VirtioPciTransport> guard(platform_, *this, "activate_queue");
+    if (stage_ != Stage::negotiated) return Status::invalid_state;
+    if (queue.index() >= common_.read_u16(num_queues)) return Status::not_found;
+    common_.write_u16(queue_select, queue.index());
+    const uint16_t device_size = common_.read_u16(queue_size);
+    if (device_size == 0u) return Status::not_found;
+    const Status allocated = queue.initialize(device_size);
+    if (allocated != Status::ok) return allocated;
+
+    common_.write_u16(queue_size, queue.size());
+    common_.write_u16(queue_msix_vector, vector);
+    if (common_.read_u16(queue_msix_vector) != vector) return Status::no_space;
+    common_.write_u64(queue_desc, queue.descriptor_area());
+    common_.write_u64(queue_driver, queue.driver_area());
+    common_.write_u64(queue_device, queue.device_area());
+    const uint64_t offset = uint64_t{common_.read_u16(queue_notify_off)} * notify_multiplier_;
+    if (notify_.length() < 2u || offset > notify_.length() - 2u) return Status::malformed;
+    queue.bind_notify_offset(offset);
+    common_.write_u16(queue_enable, 1u);
+    return common_.read_u16(queue_enable) == 1u ? Status::ok : Status::invalid_state;
+}
+
+void VirtioPciTransport::notify(const VirtQueue &queue)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "VirtioPciTransport::notify");
+    notify_.write_u16(queue.notify_offset(), queue.index());
 }
 
 void VirtioPciTransport::fail()

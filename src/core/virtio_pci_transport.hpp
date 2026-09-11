@@ -12,6 +12,7 @@
 
 namespace av {
 
+class VirtQueue;
 struct VirtioPciTransportProbe;
 
 class VirtioPciTransport {
@@ -28,6 +29,9 @@ public:
     /* 3.1.1 step 8, after queues are activated. */
     [[nodiscard]] Status start();
     [[nodiscard]] Status assign_config_vector(uint16_t vector);
+    /* Sizes, allocates and enables `queue` on the device, bound to MSI-X `vector`. */
+    [[nodiscard]] Status activate_queue(VirtQueue &queue, uint16_t vector);
+    void                 notify(const VirtQueue &queue);
     void                 fail();
 
     uint64_t features() const;

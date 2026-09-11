@@ -28,9 +28,11 @@ description: "Task list for feature 005: virtio-pci transport"
 
 ## Phase 4: Virtqueue (US3)
 
-- [ ] T008 Fake device processes a queue: reads avail/desc through mock translation, completes chains into the used ring, hostile knobs for used id/len/idx
-- [ ] T009 Tests `tests/unit/test_virt_queue.cpp` for every US3 scenario, wrap of 16-bit indices, allocation-failure sweep, no allocation at DISPATCH; `tests/fuzz/fuzz_virt_queue.cpp` feeding hostile used rings. Must fail
-- [ ] T010 Implement `src/core/virtq_segment.{hpp,cpp}`, `src/core/virt_queue.{hpp,cpp}`, `VirtioPciTransport::activate_queue`
+- [X] T008 Fake device processes a queue: reads avail/desc through mock translation, completes chains into the used ring, hostile knobs for used id/len/idx
+- [X] T009 Tests `tests/unit/test_virt_queue.cpp` for every US3 scenario, wrap of 16-bit indices, allocation-failure sweep, no allocation at DISPATCH; `tests/fuzz/fuzz_virt_queue.cpp` feeding hostile used rings. Must fail
+- [X] T010 Implement `src/core/virtq_segment.{hpp,cpp}`, `src/core/virt_queue.{hpp,cpp}`, `VirtioPciTransport::activate_queue`
+
+- [X] T010a Found by fuzz_virt_queue's first run: a consumer looping `while (reader.remaining() != 0)` spun forever once a read failed, because the latched reader stops advancing. `WireReader::remaining()` now reports 0 after a failure (test-first), so every such loop ends.
 
 **Checkpoint**: commit.
 

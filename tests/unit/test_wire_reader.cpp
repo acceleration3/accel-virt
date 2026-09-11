@@ -118,3 +118,11 @@ TEST(wire_reader_invariants, a_length_without_bytes_is_detected)
 { WireReader reader(sample, sizeof sample);
   WireReaderProbe(reader).drop_bytes();
   CHECK(!reader.invariants_hold()); }
+
+TEST(wire_reader, nothing_remains_after_a_failure_so_read_loops_end)
+{ WireReader reader(sample, sizeof sample);
+  CHECK_EQ(reader.read_u8(), 0x01);
+  (void)reader.read_u64();
+  (void)reader.read_u64();
+  CHECK_STATUS(reader.status(), Status::malformed);
+  CHECK_EQ(reader.remaining(), 0u); }

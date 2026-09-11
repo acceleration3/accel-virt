@@ -31,6 +31,7 @@ public:
 
     Status status() const;
     size_t offset() const;
+    /* Zero once a read has failed. */
     size_t remaining() const;
 
     bool invariants_hold() const;
