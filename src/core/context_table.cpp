@@ -7,8 +7,8 @@
 
 namespace av {
 
-ContextTable::ContextTable(Platform &platform, DeviceTable &devices)
-    : platform_(platform), devices_(devices), mutex_(platform, LockRank::context_table), contexts_(platform) {}
+ContextTable::ContextTable(Platform &platform, DeviceTable &devices, const GpuMmuGeometry &geometry)
+    : platform_(platform), devices_(devices), geometry_(geometry), mutex_(platform, LockRank::context_table), contexts_(platform) {}
 
 Status ContextTable::create(void *device, DxgkargCreateContextRecord &request)
 {
@@ -21,7 +21,7 @@ Status ContextTable::create(void *device, DxgkargCreateContextRecord &request)
         (request.Flags & ~known_flags) != 0u || request.PrivateDriverDataSize != 0u)
         return Status::invalid_parameter;
     Context *context = nullptr;
-    const Status status = contexts_.create(context, platform_, *owner, request.NodeOrdinal, request.Flags);
+    const Status status = contexts_.create(context, platform_, *owner, geometry_, request.NodeOrdinal, request.Flags);
     if (status == Status::ok) context->report_to(request);
     return status;
 }

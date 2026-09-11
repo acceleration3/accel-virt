@@ -245,6 +245,24 @@ int32_t AvDdiControlInterrupt2(void *context, av::DxgkargControlInterrupt2Record
 int32_t AvDdiCalibrateGpuClock(void *context, uint32_t node, uint32_t engine, av::DxgkGpuClockDataRecord *clock)
 { return static_cast<av::Adapter *>(context)->calibrate_gpu_clock(node, engine, clock); }
 
+int32_t AvDdiSubmitCommandVirtual(void *context, const av::DxgkargSubmitCommandVirtualRecord *request)
+{ return static_cast<av::Adapter *>(context)->submit_command_virtual(request); }
+
+void AvDdiSetRootPageTable(void *context, const av::DxgkargSetRootPageTableRecord *request)
+{ static_cast<av::Adapter *>(context)->set_root_page_table(request); }
+
+size_t AvDdiGetRootPageTableSize(void *context, av::DxgkargGetRootPageTableSizeRecord *request)
+{ return static_cast<av::Adapter *>(context)->get_root_page_table_size(request); }
+
+int32_t AvDdiCreateProcess(void *context, av::DxgkargCreateProcessRecord *request)
+{ return static_cast<av::Adapter *>(context)->create_process(request); }
+
+int32_t AvDdiDestroyProcess(void *context, void *process)
+{ return static_cast<av::Adapter *>(context)->destroy_process(process); }
+
+void AvDdiSetStablePowerState(void *context, const av::DxgkargSetStablePowerStateRecord *request)
+{ static_cast<av::Adapter *>(context)->set_stable_power_state(request); }
+
 int32_t AvDdiUpdateOverlay(void *, const void *)
 { return av::NtStatus(av::Status::not_supported).value(); }
 

@@ -4,6 +4,7 @@
 #include "../../src/core/context.hpp"
 #include "../../src/core/context_table.hpp"
 #include "../../src/core/ddi/dxgkarg_create_context_record.hpp"
+#include "../../src/core/gpu_mmu_geometry.hpp"
 #include "../../src/core/ddi/dxgkarg_create_device_record.hpp"
 #include "../../src/core/device_table.hpp"
 #include "../../src/core/dxgkrnl_interface.hpp"
@@ -36,6 +37,7 @@ using av::DeviceTable;
 using av::DxgkargCreateContextRecord;
 using av::DxgkargCreateDeviceRecord;
 using av::DxgkrnlInterface;
+using av::GpuMmuGeometry;
 using av::Irql;
 using av::MockPlatform;
 using av::Status;
@@ -47,7 +49,8 @@ class Fixture {
 public:
     Fixture()
         : interface_(platform_), adapter_(platform_, &pdo_), segment_(platform_), allocations_(platform_, segment_),
-          devices_(platform_, allocations_, interface_), contexts_(platform_, devices_), device_(nullptr)
+          devices_(platform_, allocations_, interface_), geometry_(platform_), contexts_(platform_, devices_, geometry_),
+          device_(nullptr)
     {
         DxgkargCreateDeviceRecord request = {};
         if (devices_.create(adapter_, request) != Status::ok)
@@ -68,6 +71,7 @@ private:
     ApertureSegment  segment_;
     AllocationTable  allocations_;
     DeviceTable      devices_;
+    GpuMmuGeometry   geometry_;
     ContextTable     contexts_;
     void            *device_;
 };
@@ -87,6 +91,14 @@ TEST(context_table_create, answers_a_context_on_the_device_for_node_zero)
   CHECK(static_cast<void *>(&context->device()) == fixture.device());
   CHECK_EQ(request.ContextInfoDmaBufferSize, 0x10000u); }
 
+TEST(context_table_create, accepts_a_context_with_gpu_virtual_addressing)
+{ Fixture fixture;
+  DxgkargCreateContextRecord request = {};
+  request.Flags = 0x5u;
+  CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
+  CHECK(fixture.contexts().invariants_hold());
+  CHECK_EQ(fixture.contexts().find(request.hContext)->flags(), 0x5u); }
+
 TEST(context_table_create, refuses_what_this_adapter_cannot_run)
 { for (int knob = 0; knob < 6; knob++) {
       Fixture fixture;
@@ -95,7 +107,7 @@ TEST(context_table_create, refuses_what_this_adapter_cannot_run)
       if (knob == 0) device = &fixture;                    /* not a device */
       if (knob == 1) request.NodeOrdinal = 1u;             /* one node */
       if (knob == 2) request.EngineAffinity = 2u;          /* one engine */
-      if (knob == 3) request.Flags = 0x4u;                 /* VirtualAddressing: not reported */
+      if (knob == 3) request.Flags = 0x8u;                 /* SystemProtectedContext: WDDM 2.1 */
       if (knob == 4) request.PrivateDriverDataSize = 4u;   /* no private data defined */
       if (knob == 5) fixture.platform().fail_allocation_at(1u);
       const Status status = fixture.contexts().create(device, request);

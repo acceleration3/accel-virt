@@ -99,6 +99,15 @@ TEST(gpu_mmu_geometry_root_table_bytes, is_eight_bytes_an_entry)
   CHECK_EQ(geometry.root_table_bytes(512u), 4096u);
   CHECK_EQ(geometry.root_table_bytes(0xFFFFFFFFu), 0x7FFFFFFF8ull); }
 
+TEST(gpu_mmu_geometry_root_reaches, each_root_entry_covers_512_gigabytes)
+{ MockPlatform platform; const GpuMmuGeometry geometry(platform);
+  CHECK(geometry.root_reaches(0u, 1u));
+  CHECK(geometry.root_reaches(0x7FFFFFFFFFull, 1u));
+  CHECK(!geometry.root_reaches(0x8000000000ull, 1u));
+  CHECK(geometry.root_reaches(0xFFFFFFFFFFFFull, 512u));
+  CHECK(!geometry.root_reaches(0x1000000000000ull, 0xFFFFFFFFu));
+  CHECK(!geometry.root_reaches(0u, 0u)); }
+
 TEST(gpu_mmu_geometry, is_passive_only)
 { MockPlatform platform; const GpuMmuGeometry geometry(platform);
   const DxgkargQueryAdapterInfoRecord record = query_of(13, nullptr, 0u, nullptr, 0u);

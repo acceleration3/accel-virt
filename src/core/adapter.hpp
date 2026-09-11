@@ -73,6 +73,11 @@ struct DxgkargQueryVidPnHwCapabilityRecord;
 struct DxgkargRenderRecord;
 struct DxgkargSetDisplayPrivateDriverFormatRecord;
 struct DxgkargSubmitCommandRecord;
+struct DxgkargSubmitCommandVirtualRecord;
+struct DxgkargSetRootPageTableRecord;
+struct DxgkargGetRootPageTableSizeRecord;
+struct DxgkargCreateProcessRecord;
+struct DxgkargSetStablePowerStateRecord;
 struct DxgkargEscapeRecord;
 struct DxgkargQueryAdapterInfoRecord;
 struct LinkedDeviceRecord;
@@ -183,6 +188,16 @@ public:
     int32_t control_interrupt2(DxgkargControlInterrupt2Record control);
     /* The GPU clock is the CPU performance counter. */
     int32_t calibrate_gpu_clock(uint32_t node, uint32_t engine, DxgkGpuClockDataRecord *clock);
+    /* SubmitCommand for a context on GPU virtual addresses: the fence, queued. */
+    int32_t submit_command_virtual(const DxgkargSubmitCommandVirtualRecord *request);
+    /* dxgkrnl ignores what it returns; a root for no context is logged. */
+    void    set_root_page_table(const DxgkargSetRootPageTableRecord *request);
+    size_t  get_root_page_table_size(DxgkargGetRootPageTableSizeRecord *request);
+    /* No per-process driver state, as basicrender.sys keeps none. */
+    int32_t create_process(DxgkargCreateProcessRecord *request);
+    int32_t destroy_process(void *process);
+    /* Nothing to hold steady: the device has no power states. */
+    void    set_stable_power_state(const DxgkargSetStablePowerStateRecord *request);
 
     bool invariants_hold() const;
 

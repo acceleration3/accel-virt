@@ -43,4 +43,11 @@ uint64_t GpuMmuGeometry::root_table_bytes(uint32_t entries) const
     return uint64_t{entries} * entry_bytes;
 }
 
+bool GpuMmuGeometry::root_reaches(uint64_t address, uint32_t root_entries) const
+{
+    platform_.require_irql_at_most(Irql::dispatch, "GpuMmuGeometry::root_reaches");
+    const uint32_t root_shift = page_shift + index_bits_ * (level_count - 1u);
+    return (address >> virtual_address_bits_) == 0u && (address >> root_shift) < root_entries;
+}
+
 }  // namespace av

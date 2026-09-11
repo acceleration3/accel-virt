@@ -66,6 +66,7 @@
 #include "ddi/dxgk_pte_record.hpp"
 #include "ddi/dxgk_query_page_table_level_desc_in_record.hpp"
 #include "ddi/dxgkarg_create_process_record.hpp"
+#include "ddi/dxgkarg_set_stable_power_state_record.hpp"
 #include "ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "ddi/dxgkarg_set_root_page_table_record.hpp"
 #include "ddi/dxgkarg_submit_command_virtual_record.hpp"
@@ -757,6 +758,9 @@ AV_SAME_OFFSET(DxgkargCreateProcessRecord, pPasid, DXGKARG_CREATEPROCESS, pPasid
 AV_SAME_OFFSET(DxgkargCreateProcessRecord, hKmdVmWorkerProcess, DXGKARG_CREATEPROCESS, hKmdVmWorkerProcess);
 AV_SAME_OFFSET(DxgkargCreateProcessRecord, ProcessNameLength, DXGKARG_CREATEPROCESS, ProcessNameLength);
 AV_SAME_OFFSET(DxgkargCreateProcessRecord, pProcessName, DXGKARG_CREATEPROCESS, pProcessName);
+
+AV_SAME_SIZE(DxgkargSetStablePowerStateRecord, DXGKARG_SETSTABLEPOWERSTATE);
+AV_SAME_OFFSET(DxgkargSetStablePowerStateRecord, Enabled, DXGKARG_SETSTABLEPOWERSTATE, Enabled);
 
 /* The operation records overlay DXGKARG_BUILDPAGINGBUFFER's union, which they copy from. */
 AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, Reserved, DXGKARG_BUILDPAGINGBUFFER, UpdatePageTable);

@@ -93,6 +93,12 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiSetPowerPState, reinterpret_cast<DdiRoutine>(&AvDdiSetPowerPState)},
         {DdiSlot::DxgkDdiControlInterrupt2, reinterpret_cast<DdiRoutine>(&AvDdiControlInterrupt2)},
         {DdiSlot::DxgkDdiCalibrateGpuClock, reinterpret_cast<DdiRoutine>(&AvDdiCalibrateGpuClock)},
+        {DdiSlot::DxgkDdiSubmitCommandVirtual, reinterpret_cast<DdiRoutine>(&AvDdiSubmitCommandVirtual)},
+        {DdiSlot::DxgkDdiSetRootPageTable, reinterpret_cast<DdiRoutine>(&AvDdiSetRootPageTable)},
+        {DdiSlot::DxgkDdiGetRootPageTableSize, reinterpret_cast<DdiRoutine>(&AvDdiGetRootPageTableSize)},
+        {DdiSlot::DxgkDdiCreateProcess, reinterpret_cast<DdiRoutine>(&AvDdiCreateProcess)},
+        {DdiSlot::DxgkDdiDestroyProcess, reinterpret_cast<DdiRoutine>(&AvDdiDestroyProcess)},
+        {DdiSlot::DxgkDdiSetStablePowerState, reinterpret_cast<DdiRoutine>(&AvDdiSetStablePowerState)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

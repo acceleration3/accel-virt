@@ -33,5 +33,5 @@ description: "Task list for feature 017: WDDM 2.0 GPU virtual addressing"
 
 ## Phase 6: Contexts and submission
 
-- [ ] T007 Tests then `RootPageTable`, context flags, processes, SubmitCommandVirtual, GetRootPageTableSize, SetStablePowerState; slots
+- [X] T007 Tests then `RootPageTable`, context flags, processes, SubmitCommandVirtual, GetRootPageTableSize, SetStablePowerState; slots
 - [ ] T008 Scenarios; docs; gate; merge; push

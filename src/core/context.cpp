@@ -4,8 +4,8 @@
 
 namespace av {
 
-Context::Context(Platform &platform, Device &device, uint32_t node, uint32_t flags)
-    : platform_(platform), device_(device), node_(node), flags_(flags) {}
+Context::Context(Platform &platform, Device &device, const GpuMmuGeometry &geometry, uint32_t node, uint32_t flags)
+    : platform_(platform), device_(device), node_(node), flags_(flags), root_(platform, geometry) {}
 
 Device &Context::device() const
 {
@@ -37,6 +37,18 @@ void Context::report_to(DxgkargCreateContextRecord &request)
     request.ContextInfoReserved = 0u;
     request.ContextInfoCaps = 0u;
     request.ContextInfoPagingCompanionNodeId = 0u;
+}
+
+Status Context::assign_root(const DxgkargSetRootPageTableRecord &root)
+{
+    platform_.require_irql_at_most(Irql::passive, "Context::assign_root");
+    return root_.assign(root);
+}
+
+bool Context::admits(uint64_t dma_address) const
+{
+    platform_.require_irql_at_most(Irql::dispatch, "Context::admits");
+    return root_.admits(dma_address);
 }
 
 }  // namespace av

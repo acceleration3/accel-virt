@@ -20,6 +20,11 @@
 #include "ddi/dxgkarg_render_record.hpp"
 #include "ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "ddi/dxgkarg_submit_command_record.hpp"
+#include "ddi/dxgkarg_submit_command_virtual_record.hpp"
+#include "ddi/dxgkarg_set_root_page_table_record.hpp"
+#include "ddi/dxgkarg_get_root_page_table_size_record.hpp"
+#include "ddi/dxgkarg_create_process_record.hpp"
+#include "ddi/dxgkarg_set_stable_power_state_record.hpp"
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
 #include "ddi/dxgkarg_query_adapter_info_record.hpp"
@@ -77,7 +82,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), geometry_(platform),
       segment_(platform),
       modes_(), edid_(platform, modes_.preferred()), sources_(platform),
-      allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_),
+      allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       node_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, device_), started_(false), present_(true) {}
 
@@ -735,6 +740,51 @@ int32_t Adapter::calibrate_gpu_clock(uint32_t node, uint32_t engine, DxgkGpuCloc
     clock->CpuClockCounter = counter;
     clock->Flags = 0u;
     return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::submit_command_virtual");
+    if (request == nullptr || request->NodeOrdinal != 0u) return NtStatus(Status::invalid_parameter).value();
+    const Context *context = contexts_.find(request->hContext);
+    if (context == nullptr || !context->admits(request->DmaBufferVirtualAddress))
+        return NtStatus(Status::invalid_parameter).value();
+    const Status status = node_.submit(request->SubmissionFenceId);
+    if (status == Status::ok) static_cast<void>(dxgkrnl_.queue_dpc());
+    return NtStatus(status).value();
+}
+
+void Adapter::set_root_page_table(const DxgkargSetRootPageTableRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::set_root_page_table");
+    Context *context = request != nullptr ? contexts_.find(request->hContext) : nullptr;
+    if (context == nullptr || context->assign_root(*request) != Status::ok)
+        platform_.log("rvkgpu: SetRootPageTable named no context or no usable root");
+}
+
+size_t Adapter::get_root_page_table_size(DxgkargGetRootPageTableSizeRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::get_root_page_table_size");
+    return request != nullptr ? static_cast<size_t>(geometry_.root_table_bytes(request->NumberOfPte)) : 0u;
+}
+
+int32_t Adapter::create_process(DxgkargCreateProcessRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::create_process");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    request->hKmdProcess = nullptr;
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::destroy_process(void *)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_process");
+    return NtStatus(Status::ok).value();
+}
+
+void Adapter::set_stable_power_state(const DxgkargSetStablePowerStateRecord *)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::set_stable_power_state");
 }
 
 bool Adapter::invariants_hold() const

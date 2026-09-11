@@ -1,5 +1,5 @@
 /* The adapter's execution contexts. One node, one engine: a context for
- * anything else, or with GPU virtual addressing, is refused. */
+ * anything else is refused. */
 #ifndef AV_CONTEXT_TABLE_HPP
 #define AV_CONTEXT_TABLE_HPP
 
@@ -14,12 +14,13 @@
 namespace av {
 
 class DeviceTable;
+class GpuMmuGeometry;
 struct ContextTableProbe;
 struct DxgkargCreateContextRecord;
 
 class ContextTable {
 public:
-    ContextTable(Platform &platform, DeviceTable &devices);
+    ContextTable(Platform &platform, DeviceTable &devices, const GpuMmuGeometry &geometry);
     ContextTable(const ContextTable &) = delete;
     ContextTable &operator=(const ContextTable &) = delete;
 
@@ -31,11 +32,12 @@ public:
     bool invariants_hold() const;
 
 private:
-    static constexpr uint32_t known_flags = 0x3u;       /* SystemContext | GdiContext */
+    static constexpr uint32_t known_flags = 0x7u;       /* SystemContext | GdiContext | VirtualAddressing */
     static constexpr uint32_t known_engines = 0x1u;
 
     Platform            &platform_;
     DeviceTable         &devices_;
+    const GpuMmuGeometry &geometry_;
     Mutex                mutex_;
     ObjectPool<Context>  contexts_;
 

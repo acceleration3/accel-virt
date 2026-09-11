@@ -28,6 +28,9 @@ public:
     [[nodiscard]] Status report_level(const AdapterInfoQuery &query) const;
     /* DxgkDdiGetRootPageTableSize. */
     uint64_t             root_table_bytes(uint32_t entries) const;
+    /* Whether `address` is inside the address space and indexes one of a
+     * root table's first `root_entries` entries. */
+    bool                 root_reaches(uint64_t address, uint32_t root_entries) const;
 
 private:
     enum : uint32_t {
@@ -36,6 +39,7 @@ private:
         update_through_cpu = 0u,                   /* DXGK_PAGETABLEUPDATE_CPU_VIRTUAL */
     };
     static constexpr uint32_t physical_adapter_index_bytes = 4u;
+    static constexpr uint32_t page_shift = 12u;
 
     Platform &platform_;
     uint32_t  virtual_address_bits_;

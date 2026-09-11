@@ -46,6 +46,11 @@
 #include "../../src/core/ddi/dxgkarg_preempt_command_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_current_fence_record.hpp"
 #include "../../src/core/ddi/dxgkarg_submit_command_record.hpp"
+#include "../../src/core/ddi/dxgkarg_submit_command_virtual_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_root_page_table_record.hpp"
+#include "../../src/core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
+#include "../../src/core/ddi/dxgkarg_create_process_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_stable_power_state_record.hpp"
 #include "../../src/core/ddi/dxgkarg_render_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
@@ -1475,6 +1480,95 @@ TEST(adapter_patch, patches_or_refuses_a_missing_block)
   CHECK_EQ(nt(fixture.adapter().patch(nullptr)), invalid_parameter); }
 
 /* ---- Submission (feature 009) ------------------------------------------------- */
+
+TEST(adapter_submit_command_virtual, queues_a_context_s_buffer_inside_its_root)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::DxgkargSubmitCommandVirtualRecord submit = {};
+  submit.hContext = context.hContext;
+  submit.DmaBufferVirtualAddress = 0x8000000000ull;
+  submit.SubmissionFenceId = 1u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), 1u);
+  const av::DxgkargSetRootPageTableRecord root = {context.hContext, 2u, 0u, 0x4000u, 1u, 0u};
+  fixture.adapter().set_root_page_table(&root);
+  submit.SubmissionFenceId = 2u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), invalid_parameter);
+  submit.DmaBufferVirtualAddress = 0x10000u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), invalid_parameter);   /* fence not newer */
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), 2u);
+  submit.SubmissionFenceId = 3u;
+  submit.NodeOrdinal = 1u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), invalid_parameter);
+  submit.NodeOrdinal = 0u;
+  submit.hContext = &fixture;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(nullptr)), invalid_parameter);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  av::DxgkargQueryCurrentFenceRecord fence = {};
+  CHECK_EQ(nt(fixture.adapter().query_current_fence(&fence)), success);
+  CHECK_EQ(fence.CurrentFence, 2u);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_set_root_page_table, a_root_for_no_context_or_no_table_is_logged)
+{ Fixture fixture;
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  const std::uint32_t logged = fixture.platform().logged();
+  const av::DxgkargSetRootPageTableRecord good = {context.hContext, 2u, 0u, 0x4000u, 512u, 0u};
+  fixture.adapter().set_root_page_table(&good);
+  CHECK_EQ(fixture.platform().logged(), logged);
+  const av::DxgkargSetRootPageTableRecord empty = {context.hContext, 2u, 0u, 0x4000u, 0u, 0u};
+  fixture.adapter().set_root_page_table(&empty);
+  const av::DxgkargSetRootPageTableRecord stranger = {&fixture, 2u, 0u, 0x4000u, 1u, 0u};
+  fixture.adapter().set_root_page_table(&stranger);
+  fixture.adapter().set_root_page_table(nullptr);
+  CHECK_EQ(fixture.platform().logged(), logged + 3u);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_get_root_page_table_size, is_eight_bytes_an_entry)
+{ Fixture fixture;
+  av::DxgkargGetRootPageTableSizeRecord request = {512u, 0u};
+  CHECK_EQ(fixture.adapter().get_root_page_table_size(&request), 4096u);
+  CHECK_EQ(fixture.adapter().get_root_page_table_size(nullptr), 0u); }
+
+TEST(adapter_create_process, keeps_no_driver_process)
+{ Fixture fixture;
+  av::DxgkargCreateProcessRecord request = {};
+  request.hKmdProcess = &fixture;
+  CHECK_EQ(nt(fixture.adapter().create_process(&request)), success);
+  CHECK(request.hKmdProcess == nullptr);
+  CHECK_EQ(nt(fixture.adapter().create_process(nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_process(nullptr)), success); }
+
+TEST(adapter_wddm_2_0_process_and_root_ddis, are_passive_only)
+{ Fixture fixture;
+  av::DxgkargGetRootPageTableSizeRecord size = {1u, 0u};
+  const av::DxgkargSetStablePowerStateRecord stable = {1};
+  fixture.adapter().set_stable_power_state(&stable);
+  CHECK_EQ(fixture.platform().unclaimed_violations(), 0u);
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.adapter().submit_command_virtual(nullptr));
+  fixture.adapter().set_root_page_table(nullptr);
+  static_cast<void>(fixture.adapter().get_root_page_table_size(&size));
+  static_cast<void>(fixture.adapter().create_process(nullptr));
+  static_cast<void>(fixture.adapter().destroy_process(nullptr));
+  fixture.adapter().set_stable_power_state(&stable);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  while (fixture.platform().claim(Violation::irql_ceiling)) {} }
 
 TEST(adapter_submit_command, queues_and_asks_for_the_dpc_that_completes_it)
 { Fixture fixture;
