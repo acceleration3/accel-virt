@@ -25,6 +25,8 @@
 #include "ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "ddi/dxgkarg_create_process_record.hpp"
 #include "ddi/dxgkarg_set_stable_power_state_record.hpp"
+#include "ddi/dxgkarg_control_mode_behavior_record.hpp"
+#include "ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
 #include "ddi/dxgkarg_query_adapter_info_record.hpp"
@@ -785,6 +787,23 @@ int32_t Adapter::destroy_process(void *)
 void Adapter::set_stable_power_state(const DxgkargSetStablePowerStateRecord *)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::set_stable_power_state");
+}
+
+int32_t Adapter::control_mode_behavior(DxgkargControlModeBehaviorRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::control_mode_behavior");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    capabilities_.answer_mode_behavior(*request);
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::update_monitor_link_info(DxgkargUpdateMonitorLinkInfoRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::update_monitor_link_info");
+    if (request == nullptr || request->VideoPresentTargetId >= DisplaySources::target_count)
+        return NtStatus(Status::invalid_parameter).value();
+    edid_.describe_link(*request);
+    return NtStatus(Status::ok).value();
 }
 
 bool Adapter::invariants_hold() const

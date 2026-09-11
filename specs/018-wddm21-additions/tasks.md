@@ -12,7 +12,7 @@ description: "Task list for feature 018: WDDM 2.1 additions"
 
 ## Phase 2: DDIs
 
-- [ ] T002 Tests then WDDM 2.1, ControlModeBehavior, UpdateMonitorLinkInfo; entry points; slots
+- [X] T002 Tests then WDDM 2.1, ControlModeBehavior, UpdateMonitorLinkInfo; entry points; slots
 
 **Checkpoint**: commit.
 

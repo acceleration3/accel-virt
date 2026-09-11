@@ -2,6 +2,7 @@
 #include "../../src/core/display_mode.hpp"
 #include "../../src/core/ddi/dxgk_child_container_id_record.hpp"
 #include "../../src/core/ddi/dxgk_device_descriptor_record.hpp"
+#include "../../src/core/ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "../../src/core/nt_status.hpp"
 #include "../harness/mock_platform.hpp"
 #include "../harness/test_registry.hpp"
@@ -116,6 +117,19 @@ TEST(edid_describe, fills_the_eld_from_the_block)
   CHECK_EQ(container.ContainerId[0], 0xEEu);
   platform.set_irql(Irql::dispatch);
   edid.describe(container);
+  platform.set_irql(Irql::passive);
+  CHECK(platform.claim(Violation::irql_ceiling)); }
+
+TEST(edid_describe_link, a_mono_monitor_without_colour_extensions)
+{ MockPlatform platform;
+  const Edid edid(platform, DisplayMode(1280u, 800u));
+  av::DxgkargUpdateMonitorLinkInfoRecord link = {0u, 0x3u, 0xEEu, 0xEEu};
+  edid.describe_link(link);
+  CHECK_EQ(link.MonitorLinkInfoUsageHints, 0x3u);
+  CHECK_EQ(link.MonitorLinkInfoCapabilities, 0u);
+  CHECK_EQ(link.MonitorLinkInfoDitheringSupport, 0u);
+  platform.set_irql(Irql::dispatch);
+  edid.describe_link(link);
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling)); }
 

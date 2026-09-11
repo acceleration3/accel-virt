@@ -4,12 +4,14 @@
 #include "ddi/dxgk_driver_caps_record.hpp"
 #include "ddi/dxgk_physical_adapter_caps_record.hpp"
 #include "ddi/dxgk_wddm_device_caps_record.hpp"
+#include "ddi/dxgkarg_control_mode_behavior_record.hpp"
 #include "hardware_cursor.hpp"
 
 namespace av {
 
 DriverCapabilities::DriverCapabilities(Platform &platform)
-    : platform_(platform), wddm_version_(wddm_2_0), highest_acceptable_address_(any_address) {}
+    : platform_(platform), wddm_version_(wddm_2_1), highest_acceptable_address_(any_address),
+      mode_behaviors_(0u) {}
 
 Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) const
 {
@@ -51,6 +53,13 @@ Status DriverCapabilities::report_physical_adapter_caps(const AdapterInfoQuery &
     caps.DxgkPhysicalAdapterHandle = device_handle;
     caps.Flags = physical_gpu_mmu;
     return query.write_output(&caps, sizeof caps);
+}
+
+void DriverCapabilities::answer_mode_behavior(DxgkargControlModeBehaviorRecord &request) const
+{
+    platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::answer_mode_behavior");
+    request.Satisfied = request.Request & mode_behaviors_;
+    request.NotSatisfied = request.Request & ~mode_behaviors_;
 }
 
 }  // namespace av

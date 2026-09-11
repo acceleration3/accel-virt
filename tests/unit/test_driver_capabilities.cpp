@@ -4,6 +4,7 @@
 #include "../../src/core/ddi/dxgk_wddm_device_caps_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
 #include "../../src/core/driver_capabilities.hpp"
+#include "../../src/core/ddi/dxgkarg_control_mode_behavior_record.hpp"
 #include "../harness/guarded_buffer.hpp"
 #include "../harness/mock_platform.hpp"
 #include "../harness/test_registry.hpp"
@@ -27,7 +28,7 @@ using av::Violation;
 namespace {
 
 constexpr std::uint32_t driver_caps_bytes = 0x250u;   /* GetDriverCapsSizeFromDdiVersion(0x11007) */
-constexpr std::int32_t  wddm_v2 = 0x2000;             /* DXGKDDI_WDDMv2 */
+constexpr std::int32_t  wddm_v2 = 0x2100;             /* DXGKDDI_WDDMv2_1 */
 
 DxgkargQueryAdapterInfoRecord request(void *input, std::uint32_t input_size, void *output, std::uint32_t output_size)
 {
@@ -53,7 +54,7 @@ TEST(driver_capabilities_report_driver_caps, fills_exactly_the_wddm_3_2_block)
  * GPU MMU, MultiEngineAware over one node and flips at device IRQL (017),
  * per-engine recovery (015), an unrestricted address range and the hardware
  * cursor (013) are the whole answer at this level. */
-TEST(driver_capabilities_report_driver_caps, claims_wddm_2_0_gpu_mmu_and_what_earlier_features_implement)
+TEST(driver_capabilities_report_driver_caps, claims_wddm_2_1_gpu_mmu_and_what_earlier_features_implement)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
   DxgkDriverCapsRecord caps;
   std::memset(&caps, 0xA5, sizeof caps);
@@ -95,6 +96,18 @@ TEST(driver_capabilities_report_wddm_device_caps, a_short_input_or_output_is_inv
   const DxgkargQueryAdapterInfoRecord short_output = request(&interface_version, 4u, &caps, 3u);
   CHECK_STATUS(capabilities.report_wddm_device_caps(AdapterInfoQuery(platform, short_output)), Status::invalid_parameter);
   CHECK_EQ(caps.WDDMVersion, 0); }
+
+TEST(driver_capabilities_answer_mode_behavior, satisfies_no_behavior)
+{ MockPlatform platform; const DriverCapabilities capabilities(platform);
+  av::DxgkargControlModeBehaviorRecord request = {0x3u, 0xEEu, 0xEEu};
+  capabilities.answer_mode_behavior(request);
+  CHECK_EQ(request.Satisfied, 0u);
+  CHECK_EQ(request.NotSatisfied, 0x3u);
+  CHECK_EQ(request.Request, 0x3u);
+  platform.set_irql(Irql::dispatch);
+  capabilities.answer_mode_behavior(request);
+  platform.set_irql(Irql::passive);
+  CHECK(platform.claim(Violation::irql_ceiling)); }
 
 TEST(driver_capabilities, is_passive_only)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);

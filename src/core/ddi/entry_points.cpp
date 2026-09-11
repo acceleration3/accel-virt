@@ -263,6 +263,12 @@ int32_t AvDdiDestroyProcess(void *context, void *process)
 void AvDdiSetStablePowerState(void *context, const av::DxgkargSetStablePowerStateRecord *request)
 { static_cast<av::Adapter *>(context)->set_stable_power_state(request); }
 
+int32_t AvDdiControlModeBehavior(void *context, av::DxgkargControlModeBehaviorRecord *request)
+{ return static_cast<av::Adapter *>(context)->control_mode_behavior(request); }
+
+int32_t AvDdiUpdateMonitorLinkInfo(void *context, av::DxgkargUpdateMonitorLinkInfoRecord *request)
+{ return static_cast<av::Adapter *>(context)->update_monitor_link_info(request); }
+
 int32_t AvDdiUpdateOverlay(void *, const void *)
 { return av::NtStatus(av::Status::not_supported).value(); }
 

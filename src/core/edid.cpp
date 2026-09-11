@@ -3,6 +3,7 @@
 #include "../proto/wire_writer.hpp"
 #include "ddi/dxgk_child_container_id_record.hpp"
 #include "ddi/dxgk_device_descriptor_record.hpp"
+#include "ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "display_mode.hpp"
 
 namespace av {
@@ -114,6 +115,14 @@ void Edid::write_checksum()
     uint8_t sum = 0u;
     for (uint32_t index = 0u; index + 1u < block_bytes; index++) sum = static_cast<uint8_t>(sum + bytes_[index]);
     bytes_[block_bytes - 1u] = static_cast<uint8_t>(0u - sum);
+}
+
+void Edid::describe_link(DxgkargUpdateMonitorLinkInfoRecord &link) const
+{
+    platform_.require_irql_at_most(Irql::passive, "Edid::describe_link");
+    const uint32_t stereo = (bytes_[timing_flags_offset] & timing_stereo_bits) != 0u;
+    link.MonitorLinkInfoCapabilities = stereo * link_stereo;
+    link.MonitorLinkInfoDitheringSupport = 0u;
 }
 
 }  // namespace av

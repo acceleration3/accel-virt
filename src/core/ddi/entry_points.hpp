@@ -17,6 +17,8 @@
 #include "dxgk_gpu_clock_data_record.hpp"
 #include "dxgk_node_metadata_record.hpp"
 #include "dxgkarg_control_interrupt2_record.hpp"
+#include "dxgkarg_control_mode_behavior_record.hpp"
+#include "dxgkarg_update_monitor_link_info_record.hpp"
 #include "dxgkarg_create_process_record.hpp"
 #include "dxgkarg_get_root_page_table_size_record.hpp"
 #include "dxgkarg_set_root_page_table_record.hpp"
@@ -162,6 +164,8 @@ size_t  AvDdiGetRootPageTableSize(void *context, av::DxgkargGetRootPageTableSize
 int32_t AvDdiCreateProcess(void *context, av::DxgkargCreateProcessRecord *request);
 int32_t AvDdiDestroyProcess(void *context, void *process);
 void    AvDdiSetStablePowerState(void *context, const av::DxgkargSetStablePowerStateRecord *request);
+int32_t AvDdiControlModeBehavior(void *context, av::DxgkargControlModeBehaviorRecord *request);
+int32_t AvDdiUpdateMonitorLinkInfo(void *context, av::DxgkargUpdateMonitorLinkInfoRecord *request);
 /* An overlay handle this driver never creates: nothing behind it to reach. */
 int32_t AvDdiUpdateOverlay(void *overlay, const void *request);
 int32_t AvDdiFlipOverlay(void *overlay, const void *request);

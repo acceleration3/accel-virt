@@ -13,6 +13,7 @@ namespace av {
 
 class DisplayMode;
 struct DxgkChildContainerIdRecord;
+struct DxgkargUpdateMonitorLinkInfoRecord;
 struct DxgkDeviceDescriptorRecord;
 
 class Edid {
@@ -29,12 +30,19 @@ public:
     /* The ELD fields: the manufacturer id in the EDID's byte order, the product
      * code, port 0. The container GUID is left as it is. */
     void     describe(DxgkChildContainerIdRecord &container) const;
+    /* DXGK_MONITORLINKINFO capabilities and dithering support: stereo when the
+     * preferred timing is stereo; no wide or high colour without a colour
+     * extension block. The usage hints are left as the OS gave them. */
+    void     describe_link(DxgkargUpdateMonitorLinkInfoRecord &link) const;
 
 private:
     static constexpr uint32_t timing_offset = 54u;
     static constexpr uint32_t manufacturer_offset = 8u;
     static constexpr uint32_t product_offset = 10u;
     static constexpr uint32_t descriptor_bytes = 18u;
+    static constexpr uint32_t timing_flags_offset = timing_offset + 17u;
+    static constexpr uint8_t  timing_stereo_bits = 0x60u;
+    static constexpr uint32_t link_stereo = 0x1u;   /* DXGK_MONITORLINKINFO_CAPABILITIES */
     /* STATUS_MONITOR_NO_MORE_DESCRIPTOR_DATA */
     static constexpr uint32_t no_more_descriptor_data = 0xC01D0008u;
 

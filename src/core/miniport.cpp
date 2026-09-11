@@ -99,6 +99,8 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiCreateProcess, reinterpret_cast<DdiRoutine>(&AvDdiCreateProcess)},
         {DdiSlot::DxgkDdiDestroyProcess, reinterpret_cast<DdiRoutine>(&AvDdiDestroyProcess)},
         {DdiSlot::DxgkDdiSetStablePowerState, reinterpret_cast<DdiRoutine>(&AvDdiSetStablePowerState)},
+        {DdiSlot::DxgkDdiControlModeBehavior, reinterpret_cast<DdiRoutine>(&AvDdiControlModeBehavior)},
+        {DdiSlot::DxgkDdiUpdateMonitorLinkInfo, reinterpret_cast<DdiRoutine>(&AvDdiUpdateMonitorLinkInfo)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

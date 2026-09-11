@@ -13,6 +13,7 @@
 namespace av {
 
 class AdapterInfoQuery;
+struct DxgkargControlModeBehaviorRecord;
 
 class DriverCapabilities {
 public:
@@ -27,9 +28,12 @@ public:
     /* DXGKQAITYPE_PHYSICALADAPTERCAPS for physical adapter 0, named by dxgkrnl's
      * device handle. */
     [[nodiscard]] Status report_physical_adapter_caps(const AdapterInfoQuery &query, void *device_handle) const;
+    /* DxgkDdiControlModeBehavior: each requested behavior satisfied only if
+     * this driver implements it. */
+    void                 answer_mode_behavior(DxgkargControlModeBehaviorRecord &request) const;
 
 private:
-    static constexpr int32_t wddm_2_0 = 0x2000;   /* DXGKDDI_WDDMv2 */
+    static constexpr int32_t wddm_2_1 = 0x2100;   /* DXGKDDI_WDDMv2_1 */
     enum : uint32_t {
         scheduling_multi_engine_aware = 0x1u,      /* DXGK_VIDSCHCAPS */
         memory_virtual_addressing = 0x20u,         /* DXGK_VIDMMCAPS: VidMm keys on it */
@@ -47,6 +51,8 @@ private:
     Platform &platform_;
     int32_t   wddm_version_;
     int64_t   highest_acceptable_address_;
+    /* DXGK_MODE_BEHAVIOR_FLAGS: neither HDR nor colorimetric control. */
+    uint32_t  mode_behaviors_;
 };
 
 }  // namespace av

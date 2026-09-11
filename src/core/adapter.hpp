@@ -78,6 +78,8 @@ struct DxgkargSetRootPageTableRecord;
 struct DxgkargGetRootPageTableSizeRecord;
 struct DxgkargCreateProcessRecord;
 struct DxgkargSetStablePowerStateRecord;
+struct DxgkargControlModeBehaviorRecord;
+struct DxgkargUpdateMonitorLinkInfoRecord;
 struct DxgkargEscapeRecord;
 struct DxgkargQueryAdapterInfoRecord;
 struct LinkedDeviceRecord;
@@ -198,6 +200,9 @@ public:
     int32_t destroy_process(void *process);
     /* Nothing to hold steady: the device has no power states. */
     void    set_stable_power_state(const DxgkargSetStablePowerStateRecord *request);
+    /* dxgkrnl asks on every start, before any capability query. */
+    int32_t control_mode_behavior(DxgkargControlModeBehaviorRecord *request);
+    int32_t update_monitor_link_info(DxgkargUpdateMonitorLinkInfoRecord *request);
 
     bool invariants_hold() const;
 

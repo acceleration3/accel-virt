@@ -51,6 +51,8 @@
 #include "../../src/core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "../../src/core/ddi/dxgkarg_create_process_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_stable_power_state_record.hpp"
+#include "../../src/core/ddi/dxgkarg_control_mode_behavior_record.hpp"
+#include "../../src/core/ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_render_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
@@ -1052,11 +1054,11 @@ std::uint32_t query_driver_caps_of(Adapter &adapter, DxgkDriverCapsRecord &caps)
 
 }  // namespace
 
-TEST(adapter_query_adapter_info, answers_driver_caps_with_wddm_2_0)
+TEST(adapter_query_adapter_info, answers_driver_caps_with_wddm_2_1)
 { Fixture fixture; DxgkDriverCapsRecord caps = {};
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(query_driver_caps_of(fixture.adapter(), caps), success);
-  CHECK_EQ(caps.WDDMVersion, 0x2000); }
+  CHECK_EQ(caps.WDDMVersion, 0x2100); }
 
 TEST(adapter_query_adapter_info, answers_the_gpu_mmu_and_physical_adapter_queries)
 { Fixture fixture;
@@ -1113,7 +1115,7 @@ TEST(adapter_query_adapter_info, answers_wddm_device_caps_before_start)
   query.pOutputData = &caps;
   query.OutputDataSize = sizeof caps;
   CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
-  CHECK_EQ(caps, 0x2000); }
+  CHECK_EQ(caps, 0x2100); }
 
 TEST(adapter_query_adapter_info, answers_the_segment_query_once_started)
 { Fixture fixture; std::uint32_t physical_adapter = 0u; av::DxgkQuerySegmentOut4Record out = {};
@@ -1566,6 +1568,29 @@ TEST(adapter_wddm_2_0_process_and_root_ddis, are_passive_only)
   static_cast<void>(fixture.adapter().create_process(nullptr));
   static_cast<void>(fixture.adapter().destroy_process(nullptr));
   fixture.adapter().set_stable_power_state(&stable);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  while (fixture.platform().claim(Violation::irql_ceiling)) {} }
+
+TEST(adapter_control_mode_behavior, answers_before_start_with_nothing_satisfied)
+{ Fixture fixture;
+  av::DxgkargControlModeBehaviorRecord request = {0x1u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().control_mode_behavior(&request)), success);
+  CHECK_EQ(request.NotSatisfied, 0x1u);
+  CHECK_EQ(nt(fixture.adapter().control_mode_behavior(nullptr)), invalid_parameter); }
+
+TEST(adapter_update_monitor_link_info, describes_the_monitor_on_the_one_target)
+{ Fixture fixture;
+  av::DxgkargUpdateMonitorLinkInfoRecord link = {0u, 0x1u, 0xEEu, 0xEEu};
+  CHECK_EQ(nt(fixture.adapter().update_monitor_link_info(&link)), success);
+  CHECK_EQ(link.MonitorLinkInfoCapabilities, 0u);
+  CHECK_EQ(link.MonitorLinkInfoUsageHints, 0x1u);
+  link.VideoPresentTargetId = 1u;
+  CHECK_EQ(nt(fixture.adapter().update_monitor_link_info(&link)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().update_monitor_link_info(nullptr)), invalid_parameter);
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.adapter().update_monitor_link_info(nullptr));
+  static_cast<void>(fixture.adapter().control_mode_behavior(nullptr));
   fixture.platform().set_irql(Irql::passive);
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   while (fixture.platform().claim(Violation::irql_ceiling)) {} }

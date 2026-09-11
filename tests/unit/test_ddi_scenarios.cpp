@@ -127,7 +127,7 @@ TEST(ddi_scenario, the_recorded_bring_up_and_teardown)
     CHECK(device.fdo().context() != nullptr);
     CHECK_EQ(device.fdo().start_device(), 0);
     CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
-    CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2000);
+    CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x2100);
     CHECK_EQ(device.fdo().sources(), 1u);
     CHECK_EQ(device.fdo().children(), 1u);
     CHECK_EQ(device.function().common().status(), driver_ok_status);
