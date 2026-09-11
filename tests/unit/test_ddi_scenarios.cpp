@@ -13,6 +13,7 @@
 #include "../harness/fake_dxgkrnl.hpp"
 #include "../harness/fake_dxgkrnl_adapter.hpp"
 #include "../harness/fake_dxgkrnl_fdo.hpp"
+#include "../harness/fake_vidmm.hpp"
 #include "../harness/fake_virtio_gpu_function.hpp"
 #include "../harness/mock_platform.hpp"
 #include "../harness/test_registry.hpp"
@@ -264,4 +265,17 @@ TEST(ddi_scenario, escape_and_debug_collection_through_the_table)
       driver.table().routine(DdiSlot::DxgkDdiCollectDbgInfo));
   CHECK_EQ(collect_routine(device.fdo().context(), &collect), 0);
   CHECK_EQ(report[6], 1u);
+  CHECK_EQ(device.fdo().remove_device(), 0); }
+
+/* ---- Memory model (feature 008) ---------------------------------------------- */
+
+TEST(ddi_scenario, vidmm_accepts_the_aperture_segment_after_start)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  av::FakeVidMm vidmm(device.fdo().dxgadapter());
+  CHECK_EQ(vidmm.create_segments(device.fdo().context()), 0);
+  CHECK(vidmm.failed_rule() == av::SegmentRule::none);
+  CHECK(vidmm.segment(0u).Size == std::uint64_t{8} << 30u);
   CHECK_EQ(device.fdo().remove_device(), 0); }

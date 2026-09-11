@@ -3,6 +3,7 @@
 #ifndef AV_ADAPTER_HPP
 #define AV_ADAPTER_HPP
 
+#include "aperture_segment.hpp"
 #include "bar_mappings.hpp"
 #include "driver_capabilities.hpp"
 #include "dxgkrnl_interface.hpp"
@@ -61,7 +62,7 @@ private:
     static constexpr uint32_t config_space_bytes = 256u;
     static constexpr uint32_t adapter_device_uid = 0xFFFFFFFFu;  /* DISPLAY_ADAPTER_HW_ID */
     enum : int32_t { power_unspecified = 0, power_d0 = 1, power_d3 = 4 };
-    enum : int32_t { query_driver_caps = 1, query_wddm_device_caps = 29 };   /* DXGKQAITYPE_* */
+    enum : int32_t { query_driver_caps = 1, query_segment4 = 11, query_wddm_device_caps = 29 };   /* DXGKQAITYPE_* */
 
     [[nodiscard]] Status discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface);
     [[nodiscard]] Status power_up();
@@ -75,6 +76,7 @@ private:
     VirtioPciLayout                layout_;
     ObjectStorage<VirtioGpuDevice> device_;
     DriverCapabilities             capabilities_;
+    ApertureSegment                segment_;
     bool                           started_;
 
     friend struct AdapterProbe;

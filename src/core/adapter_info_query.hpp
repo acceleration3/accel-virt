@@ -21,6 +21,11 @@ public:
     int32_t type() const;
     /* invalid_parameter unless the caller supplied at least `bytes` of input. */
     [[nodiscard]] Status require_input(uint32_t bytes) const;
+    /* Copies the first `count` input bytes; invalid_parameter, copying nothing,
+     * unless the caller supplied that many. */
+    [[nodiscard]] Status read_input(void *destination, uint32_t count) const;
+    /* The same for an output block the caller also fills in. */
+    [[nodiscard]] Status read_output(void *destination, uint32_t count) const;
     /* Copies exactly `count` bytes to the start of the output; a null output
      * or a declared size below `count` is invalid_parameter and writes nothing. */
     [[nodiscard]] Status write_output(const void *bytes, uint32_t count) const;

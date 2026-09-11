@@ -33,6 +33,8 @@ public:
     void refuse_device_information(std::uint32_t status);
     void refuse_config_read(std::uint32_t status);
     void short_config_read();
+    /* DXGK_DEVICE_INFO.SystemMemorySize; 8 GiB unless set. */
+    void set_system_memory(std::int64_t bytes);
     /* The `nth` map from now (1-based) answers `status`. */
     void refuse_map(std::uint32_t nth, std::uint32_t status);
     /* Unmaps still release the mapping, then answer `status`. */
@@ -74,6 +76,7 @@ private:
     std::uint32_t          maps_;
     std::uint32_t          dpcs_;
     std::uint8_t           index_;
+    std::int64_t           system_memory_;
 };
 
 }  // namespace av

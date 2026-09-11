@@ -2,6 +2,7 @@
 #include "../../src/core/ddi/dxgk_child_descriptor_record.hpp"
 #include "../../src/core/ddi/dxgk_child_status_record.hpp"
 #include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
+#include "../../src/core/ddi/dxgk_query_segment_out4_record.hpp"
 #include "../../src/core/ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_escape_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
@@ -139,6 +140,7 @@ TEST(adapter_start_device, each_refused_input_fails_with_its_status_and_leaves_n
       {4, not_found},             /* no resource for the virtio BAR */
       {5, invalid_parameter},     /* malformed capability list */
       {6, not_supported},         /* device without VERSION_1 */
+      {7, invalid_parameter},     /* less system memory than a page */
   };
   for (const Case &c : cases) {
       Fixture fixture;
@@ -149,6 +151,7 @@ TEST(adapter_start_device, each_refused_input_fails_with_its_status_and_leaves_n
       if (c.knob == 4) fixture.function().remove_virtio_bar_resource();
       if (c.knob == 5) fixture.function().config_space()[0x34u] = 0x20u;
       if (c.knob == 6) fixture.function().common().offer_features(FakeVirtioGpuFunction::feature_edid);
+      if (c.knob == 7) fixture.dxgkrnl().set_system_memory(0);
       CHECK_EQ(fixture.start(), c.expected);
       CHECK_EQ(fixture.dxgkrnl().live_mappings(), 0u);
       CHECK_EQ(fixture.platform().live_allocations(), 0u);
@@ -481,13 +484,26 @@ TEST(adapter_query_adapter_info, answers_wddm_device_caps_before_start)
   CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
   CHECK_EQ(caps, 0x1000); }
 
+TEST(adapter_query_adapter_info, answers_the_segment_query_once_started)
+{ Fixture fixture; std::uint32_t physical_adapter = 0u; av::DxgkQuerySegmentOut4Record out = {};
+  DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = 11;   /* DXGKQAITYPE_QUERYSEGMENT4 */
+  query.pInputData = &physical_adapter;
+  query.InputDataSize = sizeof physical_adapter;
+  query.pOutputData = &out;
+  query.OutputDataSize = sizeof out;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), invalid_parameter);
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(out.NbSegment, 1u); }
+
 TEST(adapter_query_adapter_info, declines_every_other_type_without_touching_either_buffer)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
   const std::int32_t out_of_range[] = {-1, last_query_type + 1, 0x7FFFFFFF, static_cast<std::int32_t>(0x80000000u)};
   for (std::int32_t type = 0; type <= last_query_type + 4; type++) {
       const std::int32_t requested = type <= last_query_type ? type : out_of_range[type - last_query_type - 1];
-      if (requested == query_driver_caps || requested == query_wddm_device_caps) continue;
+      if (requested == query_driver_caps || requested == query_wddm_device_caps || requested == 11) continue;
       GuardedBuffer input(64u), output(64u);
       std::memset(input.data(), 0xEE, 64u);
       std::memset(output.data(), 0xEE, 64u);

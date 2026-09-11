@@ -33,7 +33,7 @@ enum : int32_t {
 
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
-      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), started_(false) {}
+      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), segment_(platform), started_(false) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
 
@@ -48,6 +48,7 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
     Status status = dxgkrnl_.initialize(dxgkrnl_interface);
     DxgkDeviceInfoRecord info = {};
     if (status == Status::ok) status = dxgkrnl_.get_device_information(info);
+    if (status == Status::ok) status = segment_.initialize(info.SystemMemorySize);
     if (status == Status::ok) status = resources_.initialize(info.TranslatedResourceList, ResourceList::max_bytes);
     uint8_t config[config_space_bytes] = {};
     if (status == Status::ok) status = dxgkrnl_.read_config_space(config, config_space_bytes);
@@ -213,6 +214,8 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
         return NtStatus(capabilities_.report_driver_caps(request)).value();
     case query_wddm_device_caps:
         return NtStatus(capabilities_.report_wddm_device_caps(request)).value();
+    case query_segment4:
+        return NtStatus(segment_.report(request)).value();
     default:
         return NtStatus(NtStatus::not_implemented).value();
     }

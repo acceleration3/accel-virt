@@ -25,8 +25,8 @@ description: "Task list for feature 008: WDDM 1.0 devices, allocations and segme
 
 ## Phase 4: Segment (US1)
 
-- [ ] T007 Tests then `AdapterInfoQuery::read_output`, `ApertureSegment`, `QUERYSEGMENT4` dispatch; system memory from `DXGK_DEVICE_INFO`
-- [ ] T008 `FakeVidMm` and its rule tests; fake device info carries system memory
+- [X] T007 Tests then `AdapterInfoQuery::read_output`, `ApertureSegment`, `QUERYSEGMENT4` dispatch; system memory from `DXGK_DEVICE_INFO`
+- [X] T008 `FakeVidMm` and its rule tests; fake device info carries system memory
 
 **Checkpoint**: commit.
 

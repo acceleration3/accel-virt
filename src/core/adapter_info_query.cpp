@@ -21,6 +21,22 @@ Status AdapterInfoQuery::require_input(uint32_t bytes) const
     return Status::ok;
 }
 
+Status AdapterInfoQuery::read_input(void *destination, uint32_t count) const
+{
+    platform_.require_irql_at_most(Irql::passive, "AdapterInfoQuery::read_input");
+    const Status status = require_input(count);
+    if (status == Status::ok) platform_.copy(destination, record_.pInputData, count);
+    return status;
+}
+
+Status AdapterInfoQuery::read_output(void *destination, uint32_t count) const
+{
+    platform_.require_irql_at_most(Irql::passive, "AdapterInfoQuery::read_output");
+    if (record_.pOutputData == nullptr || record_.OutputDataSize < count) return Status::invalid_parameter;
+    platform_.copy(destination, record_.pOutputData, count);
+    return Status::ok;
+}
+
 Status AdapterInfoQuery::write_output(const void *bytes, uint32_t count) const
 {
     platform_.require_irql_at_most(Irql::passive, "AdapterInfoQuery::write_output");

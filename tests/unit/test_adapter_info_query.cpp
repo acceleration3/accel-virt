@@ -110,4 +110,35 @@ TEST(adapter_info_query, is_passive_only)
   CHECK(platform.claim(Violation::irql_ceiling));
   CHECK_STATUS(query.write_output(payload, payload_bytes), Status::ok);
   CHECK(platform.claim(Violation::irql_ceiling));
+  std::uint8_t copy[payload_bytes] = {};
+  CHECK_STATUS(query.read_output(copy, payload_bytes), Status::ok);
+  CHECK(platform.claim(Violation::irql_ceiling));
+  CHECK_STATUS(query.read_input(copy, 1u), Status::invalid_parameter);
+  CHECK(platform.claim(Violation::irql_ceiling));
+  CHECK(platform.claim(Violation::irql_ceiling));
   platform.set_irql(Irql::passive); }
+
+/* ---- read_input and read_output --------------------------------------------- */
+
+TEST(adapter_info_query_read_input, copies_what_the_caller_supplied)
+{ MockPlatform platform; std::uint32_t input = 0x11007u, copy = 0u;
+  DxgkargQueryAdapterInfoRecord record = {};
+  record.pInputData = &input;
+  record.InputDataSize = sizeof input;
+  CHECK_STATUS(AdapterInfoQuery(platform, record).read_input(&copy, sizeof copy), Status::ok);
+  CHECK_EQ(copy, 0x11007u);
+  record.InputDataSize = 3u;
+  copy = 0u;
+  CHECK_STATUS(AdapterInfoQuery(platform, record).read_input(&copy, sizeof copy), Status::invalid_parameter);
+  CHECK_EQ(copy, 0u); }
+
+TEST(adapter_info_query_read_output, copies_an_in_out_block_or_refuses_a_short_one)
+{ MockPlatform platform; std::uint8_t output[payload_bytes] = {9, 8, 7}; std::uint8_t copy[payload_bytes] = {};
+  DxgkargQueryAdapterInfoRecord record = record_with_output(output, payload_bytes);
+  CHECK_STATUS(AdapterInfoQuery(platform, record).read_output(copy, payload_bytes), Status::ok);
+  CHECK_EQ(copy[2], 7u);
+  record.OutputDataSize = payload_bytes - 1u;
+  CHECK_STATUS(AdapterInfoQuery(platform, record).read_output(copy, payload_bytes), Status::invalid_parameter);
+  record.pOutputData = nullptr;
+  record.OutputDataSize = payload_bytes;
+  CHECK_STATUS(AdapterInfoQuery(platform, record).read_output(copy, payload_bytes), Status::invalid_parameter); }

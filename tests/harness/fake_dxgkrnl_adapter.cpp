@@ -16,7 +16,7 @@ constexpr std::int32_t invalid_parameter = static_cast<std::int32_t>(0xC000000Du
 FakeDxgkrnlAdapter::FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunction &function, std::uint8_t index)
     : platform_(platform), function_(function), record_(), device_information_status_(0u),
       config_read_status_(0u), short_config_read_(false), map_refusal_countdown_(0u),
-      map_refusal_status_(0u), unmap_status_(0u), mappings_{}, mapping_count_(0u), maps_(0u), dpcs_(0u), index_(index)
+      map_refusal_status_(0u), unmap_status_(0u), mappings_{}, mapping_count_(0u), maps_(0u), dpcs_(0u), index_(index), system_memory_(std::int64_t{8} << 30u)
 {
     record_.Size = sizeof record_;
     record_.Version = 0x11007u;
@@ -69,11 +69,14 @@ std::uint32_t FakeDxgkrnlAdapter::live_mappings() const { return mapping_count_;
 std::uint32_t FakeDxgkrnlAdapter::maps() const { return maps_; }
 std::uint32_t FakeDxgkrnlAdapter::dpcs_queued() const { return dpcs_; }
 
+void FakeDxgkrnlAdapter::set_system_memory(std::int64_t bytes) { system_memory_ = bytes; }
+
 std::int32_t FakeDxgkrnlAdapter::get_device_information(DxgkDeviceInfoRecord *info)
 {
     std::memset(info, 0, sizeof *info);
     info->TranslatedResourceList = function_.resources().bytes();
     info->PhysicalDeviceObject = &function_;
+    info->SystemMemorySize = system_memory_;
     return static_cast<std::int32_t>(device_information_status_);
 }
 
