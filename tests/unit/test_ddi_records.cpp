@@ -25,6 +25,21 @@
 #include "../../src/core/ddi/dxgkarg_preempt_command_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_current_fence_record.hpp"
 #include "../../src/core/ddi/dxgkarg_render_record.hpp"
+#include "../../src/core/ddi/dxgk_build_paging_buffer_copy_page_table_entries_record.hpp"
+#include "../../src/core/ddi/dxgk_build_paging_buffer_copy_range_record.hpp"
+#include "../../src/core/ddi/dxgk_build_paging_buffer_fill_virtual_record.hpp"
+#include "../../src/core/ddi/dxgk_build_paging_buffer_flush_tlb_record.hpp"
+#include "../../src/core/ddi/dxgk_build_paging_buffer_transfer_virtual_record.hpp"
+#include "../../src/core/ddi/dxgk_build_paging_buffer_update_page_table_record.hpp"
+#include "../../src/core/ddi/dxgk_gpu_mmu_caps_record.hpp"
+#include "../../src/core/ddi/dxgk_page_table_level_desc_record.hpp"
+#include "../../src/core/ddi/dxgk_physical_adapter_caps_record.hpp"
+#include "../../src/core/ddi/dxgk_pte_record.hpp"
+#include "../../src/core/ddi/dxgk_query_page_table_level_desc_in_record.hpp"
+#include "../../src/core/ddi/dxgkarg_create_process_record.hpp"
+#include "../../src/core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_root_page_table_record.hpp"
+#include "../../src/core/ddi/dxgkarg_submit_command_virtual_record.hpp"
 #include "../../src/core/ddi/dxgk_child_container_id_record.hpp"
 #include "../../src/core/ddi/dxgk_gpu_clock_data_record.hpp"
 #include "../../src/core/ddi/dxgk_node_metadata_record.hpp"
@@ -272,3 +287,25 @@ TEST(ddi_records, wddm_1_3_records_match_the_x64_layout)
   CHECK_EQ(offsetof(av::DxgkNodeMetadataRecord, IoMmuSupported), 0x49u);
   CHECK_EQ(sizeof(av::DxgkGpuClockDataRecord), 0x1Cu);
   CHECK_EQ(sizeof(av::DxgkargControlInterrupt2Record), 0x08u); }
+
+/* WDDM 2.0 (feature 017). */
+TEST(ddi_records, wddm_2_0_records_match_the_x64_layout)
+{ CHECK_EQ(sizeof(av::DxgkGpuMmuCapsRecord), 0x18u);
+  CHECK_EQ(sizeof(av::DxgkPageTableLevelDescRecord), 0x14u);
+  CHECK_EQ(sizeof(av::DxgkQueryPageTableLevelDescInRecord), 0x04u);
+  CHECK_EQ(sizeof(av::DxgkPhysicalAdapterCapsRecord), 0x20u);
+  CHECK_EQ(offsetof(av::DxgkPhysicalAdapterCapsRecord, Flags), 0x10u);
+  CHECK_EQ(sizeof(av::DxgkPteRecord), 0x10u);
+  CHECK_EQ(sizeof(av::DxgkBuildPagingBufferUpdatePageTableRecord), 0x68u);
+  CHECK_EQ(offsetof(av::DxgkBuildPagingBufferUpdatePageTableRecord, pPageTableEntries), 0x20u);
+  CHECK_EQ(offsetof(av::DxgkBuildPagingBufferUpdatePageTableRecord, Flags), 0x34u);
+  CHECK_EQ(sizeof(av::DxgkBuildPagingBufferFlushTlbRecord), 0x28u);
+  CHECK_EQ(sizeof(av::DxgkBuildPagingBufferCopyRangeRecord), 0x20u);
+  CHECK_EQ(sizeof(av::DxgkBuildPagingBufferCopyPageTableEntriesRecord), 0x10u);
+  CHECK_EQ(sizeof(av::DxgkBuildPagingBufferFillVirtualRecord), 0x28u);
+  CHECK_EQ(sizeof(av::DxgkBuildPagingBufferTransferVirtualRecord), 0x40u);
+  CHECK_EQ(sizeof(av::DxgkargSubmitCommandVirtualRecord), 0x40u);
+  CHECK_EQ(offsetof(av::DxgkargSubmitCommandVirtualRecord, SubmissionFenceId), 0x28u);
+  CHECK_EQ(sizeof(av::DxgkargSetRootPageTableRecord), 0x20u);
+  CHECK_EQ(sizeof(av::DxgkargGetRootPageTableSizeRecord), 0x08u);
+  CHECK_EQ(sizeof(av::DxgkargCreateProcessRecord), 0x38u); }

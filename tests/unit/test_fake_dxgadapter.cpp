@@ -146,6 +146,7 @@ TEST(fake_dxgadapter_validate, refuses_each_claim_dxgadapter_initialize_refuses)
       /* A WDDMv2 answer reaches these checks only past MultiEngineAware. */
       if (miniport.caps().WDDMVersion >= 0x2000) miniport.caps().SchedulingCaps |= 0x1u;
       FakeDxgadapter adapter(platform, miniport.table());
+      adapter.validate_wddm_caps();
       CHECK(adapter.validate(miniport.caps(), 0u) == c.rule);
       const std::int32_t expected = c.rule == CapabilityRule::unknown_wddm_version ? revision_mismatch : invalid_parameter;
       CHECK_EQ(adapter.initialize(&miniport, 0u), expected);
@@ -187,6 +188,8 @@ TEST(fake_dxgadapter_validate, full_adapter_rules_and_diagnostic_pairing)
   DxgkDriverCapsRecord caps = {};
   FakeDxgadapter adapter(platform, miniport.table());
   caps.WDDMVersion = 0x1200;
+  CHECK(adapter.validate(caps, 1u) == CapabilityRule::none);
+  adapter.validate_wddm_caps();
   CHECK(adapter.validate(caps, 1u) == CapabilityRule::wddm_1_2_full_adapter_without_direct_flip);
   caps.WDDMVersion = 0x1300;
   caps.SupportDirectFlip = 1u;
@@ -199,6 +202,21 @@ TEST(fake_dxgadapter_validate, full_adapter_rules_and_diagnostic_pairing)
   caps.SupportDirectFlip = 1u; caps.FlipCaps = 0x10u;
   miniport.register_slot(DdiSlot::DxgkDdiQueryDiagnosticTypesSupport);
   CHECK(adapter.validate(caps, 1u) == CapabilityRule::diagnostic_ddis_unpaired); }
+
+TEST(fake_dxgadapter_validate, without_validate_wddm_caps_level_claims_pass)
+{ MockPlatform platform; CraftedMiniport miniport;
+  FakeDxgadapter adapter(platform, miniport.table());
+  DxgkDriverCapsRecord caps = {};
+  caps.WDDMVersion = 0x1000;
+  caps.SupportDirectFlip = 1u;
+  CHECK(adapter.validate(caps, 1u) == CapabilityRule::none);
+  caps.WDDMVersion = 0x1200;
+  caps.FlipCaps = 0x10u;
+  CHECK(adapter.validate(caps, 1u) == CapabilityRule::none);
+  caps.WDDMVersion = 0x1300;
+  caps.HybridIntegrated = 1u;
+  caps.MemoryManagementCaps = 0x10u;
+  CHECK(adapter.validate(caps, 1u) == CapabilityRule::none); }
 
 /* ---- The queries that follow DRIVERCAPS ------------------------------------ */
 
@@ -219,9 +237,31 @@ TEST(fake_dxgadapter_initialize, a_wddm_2_driver_is_asked_for_physical_adapter_c
 TEST(fake_dxgadapter_initialize, a_failed_physical_adapter_query_keeps_defaults)
 { MockPlatform platform; CraftedMiniport miniport;
   miniport.caps().WDDMVersion = 0x2000;
+  miniport.caps().GpuEngineTopologyNbAsymetricProcessingNodes = 2u;
+  miniport.caps().MemoryManagementCapsPagingNode = 1u;
+  miniport.caps().MemoryManagementCaps = 0xC0u;
   miniport.fail_query(15, invalid_parameter);
   FakeDxgadapter adapter(platform, miniport.table());
-  CHECK_EQ(adapter.initialize(&miniport, 1u), 0); }
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(adapter.physical_adapter_caps().NumExecutionNodes, 2u);
+  CHECK_EQ(adapter.physical_adapter_caps().PagingNodeIndex, 1u);
+  CHECK_EQ(adapter.physical_adapter_caps().Flags, 3u);
+  miniport.caps().MemoryManagementCaps = 0u;
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(adapter.physical_adapter_caps().Flags, 0u); }
+
+TEST(fake_dxgadapter_node_metadata, calls_through_the_table_or_is_a_revision_mismatch)
+{ MockPlatform platform; CraftedMiniport miniport;
+  FakeDxgadapter adapter(platform, miniport.table());
+  av::DxgkNodeMetadataRecord metadata = {};
+  CHECK_EQ(adapter.node_metadata(&miniport, 0u, metadata), revision_mismatch);
+  miniport.set(DdiSlot::DxgkDdiGetNodeMetadata,
+               reinterpret_cast<DdiRoutine>(+[](void *, std::uint32_t node, av::DxgkNodeMetadataRecord *m) {
+                   m->EngineType = static_cast<std::int32_t>(node) + 1;
+                   return 0;
+               }));
+  CHECK_EQ(adapter.node_metadata(&miniport, 2u, metadata), 0);
+  CHECK_EQ(metadata.EngineType, 3); }
 
 TEST(fake_dxgadapter_initialize, io_mmu_secure_mode_asks_for_a_page_multiple_save_size)
 { MockPlatform platform; CraftedMiniport miniport;
@@ -323,6 +363,20 @@ TEST(fake_dxgadapter_create_render_core, alternatives_wddm_2_and_compute_only_re
   CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
   CHECK_EQ(adapter.create_render_core(), 0);
   CHECK(adapter.render_adapter()); }
+
+TEST(fake_dxgadapter_create_render_core, a_wddm_2_render_adapter_needs_flip_on_vsync_mmio)
+{ MockPlatform platform; CraftedMiniport miniport;
+  for (const DdiSlot slot : full_wddm_1_render_set) miniport.register_slot(slot);
+  miniport.caps().WDDMVersion = 0x2000;
+  miniport.caps().SchedulingCaps = 0x1u;
+  miniport.caps().GpuEngineTopologyNbAsymetricProcessingNodes = 1u;
+  FakeDxgadapter adapter(platform, miniport.table());
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(adapter.create_render_core(), invalid_parameter);
+  CHECK(adapter.failed_rule() == CapabilityRule::wddm_2_without_flip_on_vsync_mmio);
+  miniport.caps().FlipCaps = 0x2u;
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(adapter.create_render_core(), 0); }
 
 TEST(fake_dxgadapter_create_render_core, refuses_swizzling_preemption_and_nodes_it_cannot_honour)
 { struct Case { int knob; std::int32_t status; CapabilityRule rule; };

@@ -11,6 +11,8 @@
 #define AV_FAKE_DXGADAPTER_HPP
 
 #include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
+#include "../../src/core/ddi/dxgk_node_metadata_record.hpp"
+#include "../../src/core/ddi/dxgk_physical_adapter_caps_record.hpp"
 #include "../../src/core/ddi_table.hpp"
 #include "capability_rule.hpp"
 #include "mock_platform.hpp"
@@ -29,6 +31,10 @@ public:
     /* Initialize's capability queries and checks for an adapter reporting
      * `children` outputs; answers the NTSTATUS adapter start fails with. */
     std::int32_t initialize(void *context, std::uint32_t children);
+    /* The registry value GraphicsDrivers\ValidateWDDMCaps (DXGADAPTER+0xBE0):
+     * only with it does Initialize refuse 1.2/1.3 features below their version
+     * or a full adapter without DirectFlip and FlipIndependent. Off by default. */
+    void         validate_wddm_caps();
     /* DXGADAPTER::DdiQueryAdapterInfo at PASSIVE. */
     std::int32_t query(void *context, std::int32_t type, void *input, std::uint32_t input_size, void *output,
                        std::uint32_t output_size);
@@ -37,12 +43,19 @@ public:
      * render_adapter() false); some but not all fails with
      * STATUS_REVISION_MISMATCH naming the first missing slot. The later checks
      * CreateRenderCore makes (WDDM 1.2 render features, node metadata) arrive
-     * with the features that report those levels. */
+     * with the features that report those levels. From 2.0 a render adapter
+     * that is not compute-only must report FlipOnVSyncMmIo. */
     std::int32_t create_render_core();
     bool         render_adapter() const;
     DdiSlot      missing_render_slot() const;
     /* The DRIVERCAPS checks alone, so a test can craft an answer. */
     CapabilityRule validate(const DxgkDriverCapsRecord &caps, std::uint32_t children) const;
+
+    /* DxgkDdiGetNodeMetadata through the table at PASSIVE. */
+    std::int32_t node_metadata(void *context, std::uint32_t node, DxgkNodeMetadataRecord &metadata);
+    /* The answer to PHYSICALADAPTERCAPS, or the defaults Initialize derives
+     * from DRIVERCAPS when the driver is below 2.0 or does not answer. */
+    const DxgkPhysicalAdapterCapsRecord &physical_adapter_caps() const;
 
     CapabilityRule              failed_rule() const;
     const DxgkDriverCapsRecord &driver_caps() const;
@@ -70,6 +83,8 @@ private:
     MockPlatform         &platform_;
     const DdiTable       &table_;
     DxgkDriverCapsRecord  caps_;
+    DxgkPhysicalAdapterCapsRecord physical_;
+    bool                  validate_wddm_caps_;
     CapabilityRule        failed_;
     std::uint32_t         queries_;
     bool                  render_adapter_;

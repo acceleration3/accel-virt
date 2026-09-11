@@ -42,7 +42,13 @@ constexpr std::uint32_t memory_cross_adapter_texture = 0x8000u;
 constexpr std::uint32_t memory_cross_adapter_scanout = 0x10000u;
 constexpr std::uint32_t presentation_kernel_mode_command_buffer = 0x4u;
 constexpr std::uint32_t presentation_software_device_bitmaps = 0x10000000u;
+constexpr std::uint32_t flip_on_vsync_mmio = 0x2u;
 constexpr std::uint32_t flip_independent = 0x10u;
+constexpr std::uint32_t misc_compute_only = 0x8u;
+constexpr std::uint32_t memory_gpu_mmu = 0x40u;
+constexpr std::uint32_t memory_io_mmu = 0x80u;
+constexpr std::uint32_t physical_io_mmu = 0x1u;
+constexpr std::uint32_t physical_gpu_mmu = 0x2u;
 constexpr std::uint32_t misc_independent_vidpn_vsync_control = 0x10u;
 constexpr std::uint32_t misc_first_reserved = 0x200u;
 constexpr std::uint32_t color_3x4_matrix = 0x4u;
@@ -60,7 +66,8 @@ bool bit(std::uint32_t word, std::uint32_t mask) { return (word & mask) != 0u; }
 }  // namespace
 
 FakeDxgadapter::FakeDxgadapter(MockPlatform &platform, const DdiTable &table)
-    : platform_(platform), table_(table), caps_{}, failed_(CapabilityRule::none), queries_(0u),
+    : platform_(platform), table_(table), caps_{}, physical_{}, validate_wddm_caps_(false), failed_(CapabilityRule::none),
+      queries_(0u),
       render_adapter_(false), missing_render_slot_(DdiSlot::Version) {}
 
 bool FakeDxgadapter::has(DdiSlot slot) const { return table_.routine(slot) != nullptr; }
@@ -97,11 +104,17 @@ std::int32_t FakeDxgadapter::query(void *context, std::int32_t type, void *input
  * than failing start; a successful one is held to MultiEngineAware. */
 std::int32_t FakeDxgadapter::query_physical_adapter(void *context)
 {
+    physical_ = DxgkPhysicalAdapterCapsRecord{};
+    physical_.NumExecutionNodes = static_cast<std::uint16_t>(caps_.GpuEngineTopologyNbAsymetricProcessingNodes);
+    physical_.PagingNodeIndex = static_cast<std::uint16_t>(caps_.MemoryManagementCapsPagingNode);
+    physical_.Flags = (bit(caps_.MemoryManagementCaps, memory_io_mmu) ? physical_io_mmu : 0u) |
+                      (bit(caps_.MemoryManagementCaps, memory_gpu_mmu) ? physical_gpu_mmu : 0u);
     if (caps_.WDDMVersion < wddm_2_0) return 0;
     std::uint32_t index = 0u;
-    std::uint8_t  physical[physical_adapter_caps_bytes] = {};
-    if (query(context, query_physical_adapter_caps, &index, sizeof index, physical, sizeof physical) >= 0) {
-        const std::uint32_t nodes = static_cast<std::uint32_t>(physical[0] | physical[1] << 8u);
+    DxgkPhysicalAdapterCapsRecord answer = {};
+    if (query(context, query_physical_adapter_caps, &index, sizeof index, &answer, physical_adapter_caps_bytes) >= 0) {
+        physical_ = answer;
+        const std::uint32_t nodes = answer.NumExecutionNodes;
         if (caps_.WDDMVersion < wddm_2_5 && nodes > max_nodes_before_2_5)
             return refuse(CapabilityRule::too_many_nodes, status_invalid_parameter);
         if (!bit(caps_.SchedulingCaps, scheduling_multi_engine_aware))
@@ -130,6 +143,19 @@ std::int32_t FakeDxgadapter::query_after_validation(void *context)
     if (status < 0) return refuse(CapabilityRule::native_fence_caps_query_failed, status);
     return 0;
 }
+
+void FakeDxgadapter::validate_wddm_caps() { validate_wddm_caps_ = true; }
+
+std::int32_t FakeDxgadapter::node_metadata(void *context, std::uint32_t node, DxgkNodeMetadataRecord &metadata)
+{
+    using GetNodeMetadata = std::int32_t (*)(void *, std::uint32_t, DxgkNodeMetadataRecord *);
+    const auto routine = reinterpret_cast<GetNodeMetadata>(table_.routine(DdiSlot::DxgkDdiGetNodeMetadata));
+    if (routine == nullptr) return status_revision_mismatch;
+    platform_.set_irql(Irql::passive);
+    return routine(context, node, &metadata);
+}
+
+const DxgkPhysicalAdapterCapsRecord &FakeDxgadapter::physical_adapter_caps() const { return physical_; }
 
 std::int32_t FakeDxgadapter::initialize(void *context, std::uint32_t children)
 {
@@ -169,6 +195,7 @@ CapabilityRule FakeDxgadapter::validate_version(const DxgkDriverCapsRecord &caps
     return CapabilityRule::unknown_wddm_version;
 }
 
+/* The version checks run only with ValidateWDDMCaps; the tier checks always do. */
 CapabilityRule FakeDxgadapter::validate_levels(const DxgkDriverCapsRecord &caps) const
 {
     const bool wddm_1_2_features =
@@ -177,12 +204,15 @@ CapabilityRule FakeDxgadapter::validate_levels(const DxgkDriverCapsRecord &caps)
         bit(caps.PresentationCaps, presentation_software_device_bitmaps) ||
         bit(caps.SchedulingCaps, scheduling_wddm_1_2_bits) || caps.SupportDirectFlip != 0u ||
         caps.SupportRuntimePowerManagement != 0u || caps.SupportSurpriseRemovalInHibernation != 0u;
-    if (caps.WDDMVersion < wddm_1_2 && wddm_1_2_features) return CapabilityRule::wddm_1_2_feature_below_1_2;
+    if (validate_wddm_caps_ && caps.WDDMVersion < wddm_1_2 && wddm_1_2_features)
+        return CapabilityRule::wddm_1_2_feature_below_1_2;
     const bool wddm_1_3_features = bit(caps.FlipCaps, flip_independent) ||
                                    bit(caps.MemoryManagementCaps, memory_cross_adapter_resource) ||
                                    caps.HybridDiscrete != 0u || caps.MaxOverlayPlanes != 0u;
-    if (caps.WDDMVersion < wddm_1_3 && wddm_1_3_features) return CapabilityRule::wddm_1_3_feature_below_1_3;
-    if (caps.WDDMVersion < wddm_2_0 && caps.HybridIntegrated != 0u) return CapabilityRule::hybrid_integrated_below_2_0;
+    if (validate_wddm_caps_ && caps.WDDMVersion < wddm_1_3 && wddm_1_3_features)
+        return CapabilityRule::wddm_1_3_feature_below_1_3;
+    if (validate_wddm_caps_ && caps.WDDMVersion < wddm_2_0 && caps.HybridIntegrated != 0u)
+        return CapabilityRule::hybrid_integrated_below_2_0;
     const std::uint32_t memory = caps.MemoryManagementCaps;
     const std::uint32_t tiers = memory & (memory_cross_adapter_resource | memory_cross_adapter_texture);
     if (bit(memory, memory_cross_adapter_scanout) && tiers != (memory_cross_adapter_resource | memory_cross_adapter_texture))
@@ -253,7 +283,7 @@ CapabilityRule FakeDxgadapter::validate_color_and_diagnostics(const DxgkDriverCa
 CapabilityRule FakeDxgadapter::validate_full_adapter(const DxgkDriverCapsRecord &caps) const
 {
     const bool full = has(DdiSlot::DxgkDdiCreateDevice) && has(DdiSlot::DxgkDdiCommitVidPn);
-    if (!full) return CapabilityRule::none;
+    if (!full || !validate_wddm_caps_) return CapabilityRule::none;
     if (caps.WDDMVersion >= wddm_1_2 && caps.SupportDirectFlip == 0u)
         return CapabilityRule::wddm_1_2_full_adapter_without_direct_flip;
     if (caps.WDDMVersion >= wddm_1_3 && !bit(caps.FlipCaps, flip_independent))
@@ -328,6 +358,9 @@ std::int32_t FakeDxgadapter::create_render_core()
     failed_ = CapabilityRule::none;
     const std::int32_t status = render_ddi_rule();
     if (status < 0 || !render_adapter_) return status;
+    if (caps_.WDDMVersion >= wddm_2_0 && !bit(caps_.MiscCaps, misc_compute_only) &&
+        !bit(caps_.FlipCaps, flip_on_vsync_mmio))
+        return refuse(CapabilityRule::wddm_2_without_flip_on_vsync_mmio, status_invalid_parameter);
     if (caps_.NumberOfSwizzlingRanges != 0u &&
         (!has(DdiSlot::DxgkDdiAcquireSwizzlingRange) || !has(DdiSlot::DxgkDdiReleaseSwizzlingRange)))
         return refuse(CapabilityRule::swizzling_without_ddis, status_revision_mismatch);

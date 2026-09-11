@@ -54,6 +54,21 @@
 #include "ddi/dxgk_wddm_device_caps_record.hpp"
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
+#include "ddi/dxgk_build_paging_buffer_copy_page_table_entries_record.hpp"
+#include "ddi/dxgk_build_paging_buffer_copy_range_record.hpp"
+#include "ddi/dxgk_build_paging_buffer_fill_virtual_record.hpp"
+#include "ddi/dxgk_build_paging_buffer_flush_tlb_record.hpp"
+#include "ddi/dxgk_build_paging_buffer_transfer_virtual_record.hpp"
+#include "ddi/dxgk_build_paging_buffer_update_page_table_record.hpp"
+#include "ddi/dxgk_gpu_mmu_caps_record.hpp"
+#include "ddi/dxgk_page_table_level_desc_record.hpp"
+#include "ddi/dxgk_physical_adapter_caps_record.hpp"
+#include "ddi/dxgk_pte_record.hpp"
+#include "ddi/dxgk_query_page_table_level_desc_in_record.hpp"
+#include "ddi/dxgkarg_create_process_record.hpp"
+#include "ddi/dxgkarg_get_root_page_table_size_record.hpp"
+#include "ddi/dxgkarg_set_root_page_table_record.hpp"
+#include "ddi/dxgkarg_submit_command_virtual_record.hpp"
 #include "ddi/dxgk_child_container_id_record.hpp"
 #include "ddi/dxgk_gpu_clock_data_record.hpp"
 #include "ddi/dxgk_node_metadata_record.hpp"
@@ -625,6 +640,128 @@ AV_SAME_OFFSET(DxgkGpuClockDataRecord, Flags, DXGK_GPUCLOCKDATA, Flags);
 AV_SAME_SIZE(DxgkargControlInterrupt2Record, DXGKARG_CONTROLINTERRUPT2);
 AV_SAME_OFFSET(DxgkargControlInterrupt2Record, InterruptType, DXGKARG_CONTROLINTERRUPT2, InterruptType);
 AV_SAME_OFFSET(DxgkargControlInterrupt2Record, CrtcVsyncState, DXGKARG_CONTROLINTERRUPT2, CrtcVsyncState);
+
+AV_SAME_SIZE(DxgkGpuMmuCapsRecord, DXGK_GPUMMUCAPS);
+AV_SAME_OFFSET(DxgkGpuMmuCapsRecord, Flags, DXGK_GPUMMUCAPS, Value);
+AV_SAME_OFFSET(DxgkGpuMmuCapsRecord, PageTableUpdateMode, DXGK_GPUMMUCAPS, PageTableUpdateMode);
+AV_SAME_OFFSET(DxgkGpuMmuCapsRecord, VirtualAddressBitCount, DXGK_GPUMMUCAPS, VirtualAddressBitCount);
+AV_SAME_OFFSET(DxgkGpuMmuCapsRecord, LeafPageTableSizeFor64KPagesInBytes, DXGK_GPUMMUCAPS, LeafPageTableSizeFor64KPagesInBytes);
+AV_SAME_OFFSET(DxgkGpuMmuCapsRecord, PageTableLevelCount, DXGK_GPUMMUCAPS, PageTableLevelCount);
+AV_SAME_OFFSET(DxgkGpuMmuCapsRecord, LegacyBehaviors, DXGK_GPUMMUCAPS, LegacyBehaviors);
+
+AV_SAME_SIZE(DxgkPageTableLevelDescRecord, DXGK_PAGE_TABLE_LEVEL_DESC);
+AV_SAME_OFFSET(DxgkPageTableLevelDescRecord, PageTableIndexBitCount, DXGK_PAGE_TABLE_LEVEL_DESC, PageTableIndexBitCount);
+AV_SAME_OFFSET(DxgkPageTableLevelDescRecord, PageTableSegmentId, DXGK_PAGE_TABLE_LEVEL_DESC, PageTableSegmentId);
+AV_SAME_OFFSET(DxgkPageTableLevelDescRecord, PagingProcessPageTableSegmentId, DXGK_PAGE_TABLE_LEVEL_DESC, PagingProcessPageTableSegmentId);
+AV_SAME_OFFSET(DxgkPageTableLevelDescRecord, PageTableSizeInBytes, DXGK_PAGE_TABLE_LEVEL_DESC, PageTableSizeInBytes);
+AV_SAME_OFFSET(DxgkPageTableLevelDescRecord, PageTableAlignmentInBytes, DXGK_PAGE_TABLE_LEVEL_DESC, PageTableAlignmentInBytes);
+
+AV_SAME_SIZE(DxgkQueryPageTableLevelDescInRecord, DXGK_QUERYPAGETABLELEVELDESCIN);
+AV_SAME_OFFSET(DxgkQueryPageTableLevelDescInRecord, LevelIndex, DXGK_QUERYPAGETABLELEVELDESCIN, LevelIndex);
+AV_SAME_OFFSET(DxgkQueryPageTableLevelDescInRecord, PhysicalAdapterIndex, DXGK_QUERYPAGETABLELEVELDESCIN, PhysicalAdapterIndex);
+
+AV_SAME_SIZE(DxgkPhysicalAdapterCapsRecord, DXGK_PHYSICALADAPTERCAPS);
+AV_SAME_OFFSET(DxgkPhysicalAdapterCapsRecord, NumExecutionNodes, DXGK_PHYSICALADAPTERCAPS, NumExecutionNodes);
+AV_SAME_OFFSET(DxgkPhysicalAdapterCapsRecord, PagingNodeIndex, DXGK_PHYSICALADAPTERCAPS, PagingNodeIndex);
+AV_SAME_OFFSET(DxgkPhysicalAdapterCapsRecord, DxgkPhysicalAdapterHandle, DXGK_PHYSICALADAPTERCAPS, DxgkPhysicalAdapterHandle);
+AV_SAME_OFFSET(DxgkPhysicalAdapterCapsRecord, Flags, DXGK_PHYSICALADAPTERCAPS, Flags.Value);
+AV_SAME_OFFSET(DxgkPhysicalAdapterCapsRecord, VPRPagingNode, DXGK_PHYSICALADAPTERCAPS, VPRPagingNode);
+AV_SAME_OFFSET(DxgkPhysicalAdapterCapsRecord, VirtualCopyNodeIndex, DXGK_PHYSICALADAPTERCAPS, VirtualCopyNodeIndex);
+
+AV_SAME_SIZE(DxgkPteRecord, DXGK_PTE);
+AV_SAME_OFFSET(DxgkPteRecord, Flags, DXGK_PTE, Flags);
+AV_SAME_OFFSET(DxgkPteRecord, PageAddress, DXGK_PTE, PageAddress);
+
+AV_SAME_SIZE(DxgkBuildPagingBufferUpdatePageTableRecord, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, PageTableLevel, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, PageTableLevel);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, hAllocation, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, hAllocation);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, PageTableAddress, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, PageTableAddress.CpuVirtual);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, pPageTableEntries, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, pPageTableEntries);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, StartIndex, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, StartIndex);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, NumPageTableEntries, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, NumPageTableEntries);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, Reserved0, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, Reserved0);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, Flags, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, Flags);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, DriverProtection, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, DriverProtection);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, AllocationOffsetInBytes, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, AllocationOffsetInBytes);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, hProcess, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, hProcess);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, UpdateMode, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, UpdateMode);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, pPageTableEntries64KB, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, pPageTableEntries64KB);
+AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, FirstPteVirtualAddress, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, FirstPteVirtualAddress);
+
+AV_SAME_SIZE(DxgkBuildPagingBufferFlushTlbRecord, DXGK_BUILDPAGINGBUFFER_FLUSHTLB);
+AV_SAME_OFFSET(DxgkBuildPagingBufferFlushTlbRecord, RootPageTableAddressSegmentId, DXGK_BUILDPAGINGBUFFER_FLUSHTLB, RootPageTableAddress.SegmentId);
+AV_SAME_OFFSET(DxgkBuildPagingBufferFlushTlbRecord, RootPageTableAddressSegmentOffset, DXGK_BUILDPAGINGBUFFER_FLUSHTLB, RootPageTableAddress.SegmentOffset);
+AV_SAME_OFFSET(DxgkBuildPagingBufferFlushTlbRecord, hProcess, DXGK_BUILDPAGINGBUFFER_FLUSHTLB, hProcess);
+AV_SAME_OFFSET(DxgkBuildPagingBufferFlushTlbRecord, StartVirtualAddress, DXGK_BUILDPAGINGBUFFER_FLUSHTLB, StartVirtualAddress);
+AV_SAME_OFFSET(DxgkBuildPagingBufferFlushTlbRecord, EndVirtualAddress, DXGK_BUILDPAGINGBUFFER_FLUSHTLB, EndVirtualAddress);
+
+AV_SAME_SIZE(DxgkBuildPagingBufferCopyRangeRecord, DXGK_BUILDPAGINGBUFFER_COPY_RANGE);
+AV_SAME_OFFSET(DxgkBuildPagingBufferCopyRangeRecord, NumPageTableEntries, DXGK_BUILDPAGINGBUFFER_COPY_RANGE, NumPageTableEntries);
+AV_SAME_OFFSET(DxgkBuildPagingBufferCopyRangeRecord, SrcPageTableAddress, DXGK_BUILDPAGINGBUFFER_COPY_RANGE, SrcPageTableAddress);
+AV_SAME_OFFSET(DxgkBuildPagingBufferCopyRangeRecord, DstPageTableAddress, DXGK_BUILDPAGINGBUFFER_COPY_RANGE, DstPageTableAddress);
+AV_SAME_OFFSET(DxgkBuildPagingBufferCopyRangeRecord, SrcStartPteIndex, DXGK_BUILDPAGINGBUFFER_COPY_RANGE, SrcStartPteIndex);
+AV_SAME_OFFSET(DxgkBuildPagingBufferCopyRangeRecord, DstStartPteIndex, DXGK_BUILDPAGINGBUFFER_COPY_RANGE, DstStartPteIndex);
+
+AV_SAME_SIZE(DxgkBuildPagingBufferCopyPageTableEntriesRecord, DXGK_BUILDPAGINGBUFFER_COPYPAGETABLEENTRIES);
+AV_SAME_OFFSET(DxgkBuildPagingBufferCopyPageTableEntriesRecord, NumRanges, DXGK_BUILDPAGINGBUFFER_COPYPAGETABLEENTRIES, NumRanges);
+AV_SAME_OFFSET(DxgkBuildPagingBufferCopyPageTableEntriesRecord, pRanges, DXGK_BUILDPAGINGBUFFER_COPYPAGETABLEENTRIES, pRanges);
+
+AV_SAME_SIZE(DxgkBuildPagingBufferFillVirtualRecord, DXGK_BUILDPAGINGBUFFER_FILLVIRTUAL);
+AV_SAME_OFFSET(DxgkBuildPagingBufferFillVirtualRecord, hAllocation, DXGK_BUILDPAGINGBUFFER_FILLVIRTUAL, hAllocation);
+AV_SAME_OFFSET(DxgkBuildPagingBufferFillVirtualRecord, AllocationOffsetInBytes, DXGK_BUILDPAGINGBUFFER_FILLVIRTUAL, AllocationOffsetInBytes);
+AV_SAME_OFFSET(DxgkBuildPagingBufferFillVirtualRecord, FillSizeInBytes, DXGK_BUILDPAGINGBUFFER_FILLVIRTUAL, FillSizeInBytes);
+AV_SAME_OFFSET(DxgkBuildPagingBufferFillVirtualRecord, FillPattern, DXGK_BUILDPAGINGBUFFER_FILLVIRTUAL, FillPattern);
+AV_SAME_OFFSET(DxgkBuildPagingBufferFillVirtualRecord, DestinationVirtualAddress, DXGK_BUILDPAGINGBUFFER_FILLVIRTUAL, DestinationVirtualAddress);
+
+AV_SAME_SIZE(DxgkBuildPagingBufferTransferVirtualRecord, DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL);
+AV_SAME_OFFSET(DxgkBuildPagingBufferTransferVirtualRecord, hAllocation, DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL, hAllocation);
+AV_SAME_OFFSET(DxgkBuildPagingBufferTransferVirtualRecord, AllocationOffsetInBytes, DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL, AllocationOffsetInBytes);
+AV_SAME_OFFSET(DxgkBuildPagingBufferTransferVirtualRecord, TransferSizeInBytes, DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL, TransferSizeInBytes);
+AV_SAME_OFFSET(DxgkBuildPagingBufferTransferVirtualRecord, SourceVirtualAddress, DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL, SourceVirtualAddress);
+AV_SAME_OFFSET(DxgkBuildPagingBufferTransferVirtualRecord, DestinationVirtualAddress, DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL, DestinationVirtualAddress);
+AV_SAME_OFFSET(DxgkBuildPagingBufferTransferVirtualRecord, SourcePageTable, DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL, SourcePageTable);
+AV_SAME_OFFSET(DxgkBuildPagingBufferTransferVirtualRecord, TransferDirection, DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL, TransferDirection);
+AV_SAME_OFFSET(DxgkBuildPagingBufferTransferVirtualRecord, Flags, DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL, Flags);
+AV_SAME_OFFSET(DxgkBuildPagingBufferTransferVirtualRecord, DestinationPageTable, DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL, DestinationPageTable);
+
+AV_SAME_SIZE(DxgkargSubmitCommandVirtualRecord, DXGKARG_SUBMITCOMMANDVIRTUAL);
+AV_SAME_OFFSET(DxgkargSubmitCommandVirtualRecord, hContext, DXGKARG_SUBMITCOMMANDVIRTUAL, hContext);
+AV_SAME_OFFSET(DxgkargSubmitCommandVirtualRecord, DmaBufferVirtualAddress, DXGKARG_SUBMITCOMMANDVIRTUAL, DmaBufferVirtualAddress);
+AV_SAME_OFFSET(DxgkargSubmitCommandVirtualRecord, DmaBufferSize, DXGKARG_SUBMITCOMMANDVIRTUAL, DmaBufferSize);
+AV_SAME_OFFSET(DxgkargSubmitCommandVirtualRecord, pDmaBufferPrivateData, DXGKARG_SUBMITCOMMANDVIRTUAL, pDmaBufferPrivateData);
+AV_SAME_OFFSET(DxgkargSubmitCommandVirtualRecord, DmaBufferPrivateDataSize, DXGKARG_SUBMITCOMMANDVIRTUAL, DmaBufferPrivateDataSize);
+AV_SAME_OFFSET(DxgkargSubmitCommandVirtualRecord, DmaBufferUmdPrivateDataSize, DXGKARG_SUBMITCOMMANDVIRTUAL, DmaBufferUmdPrivateDataSize);
+AV_SAME_OFFSET(DxgkargSubmitCommandVirtualRecord, SubmissionFenceId, DXGKARG_SUBMITCOMMANDVIRTUAL, SubmissionFenceId);
+AV_SAME_OFFSET(DxgkargSubmitCommandVirtualRecord, VidPnSourceId, DXGKARG_SUBMITCOMMANDVIRTUAL, VidPnSourceId);
+AV_SAME_OFFSET(DxgkargSubmitCommandVirtualRecord, FlipInterval, DXGKARG_SUBMITCOMMANDVIRTUAL, FlipInterval);
+AV_SAME_OFFSET(DxgkargSubmitCommandVirtualRecord, Flags, DXGKARG_SUBMITCOMMANDVIRTUAL, Flags);
+AV_SAME_OFFSET(DxgkargSubmitCommandVirtualRecord, EngineOrdinal, DXGKARG_SUBMITCOMMANDVIRTUAL, EngineOrdinal);
+AV_SAME_OFFSET(DxgkargSubmitCommandVirtualRecord, NodeOrdinal, DXGKARG_SUBMITCOMMANDVIRTUAL, NodeOrdinal);
+
+AV_SAME_SIZE(DxgkargSetRootPageTableRecord, DXGKARG_SETROOTPAGETABLE);
+AV_SAME_OFFSET(DxgkargSetRootPageTableRecord, hContext, DXGKARG_SETROOTPAGETABLE, hContext);
+AV_SAME_OFFSET(DxgkargSetRootPageTableRecord, AddressSegmentId, DXGKARG_SETROOTPAGETABLE, Address.SegmentId);
+AV_SAME_OFFSET(DxgkargSetRootPageTableRecord, AddressSegmentOffset, DXGKARG_SETROOTPAGETABLE, Address.SegmentOffset);
+AV_SAME_OFFSET(DxgkargSetRootPageTableRecord, NumEntries, DXGKARG_SETROOTPAGETABLE, NumEntries);
+
+AV_SAME_SIZE(DxgkargGetRootPageTableSizeRecord, DXGKARG_GETROOTPAGETABLESIZE);
+AV_SAME_OFFSET(DxgkargGetRootPageTableSizeRecord, NumberOfPte, DXGKARG_GETROOTPAGETABLESIZE, NumberOfPte);
+AV_SAME_OFFSET(DxgkargGetRootPageTableSizeRecord, PhysicalAdapterIndex, DXGKARG_GETROOTPAGETABLESIZE, PhysicalAdapterIndex);
+
+AV_SAME_SIZE(DxgkargCreateProcessRecord, DXGKARG_CREATEPROCESS);
+AV_SAME_OFFSET(DxgkargCreateProcessRecord, hDxgkProcess, DXGKARG_CREATEPROCESS, hDxgkProcess);
+AV_SAME_OFFSET(DxgkargCreateProcessRecord, hKmdProcess, DXGKARG_CREATEPROCESS, hKmdProcess);
+AV_SAME_OFFSET(DxgkargCreateProcessRecord, Flags, DXGKARG_CREATEPROCESS, Flags);
+AV_SAME_OFFSET(DxgkargCreateProcessRecord, NumPasid, DXGKARG_CREATEPROCESS, NumPasid);
+AV_SAME_OFFSET(DxgkargCreateProcessRecord, pPasid, DXGKARG_CREATEPROCESS, pPasid);
+AV_SAME_OFFSET(DxgkargCreateProcessRecord, hKmdVmWorkerProcess, DXGKARG_CREATEPROCESS, hKmdVmWorkerProcess);
+AV_SAME_OFFSET(DxgkargCreateProcessRecord, ProcessNameLength, DXGKARG_CREATEPROCESS, ProcessNameLength);
+AV_SAME_OFFSET(DxgkargCreateProcessRecord, pProcessName, DXGKARG_CREATEPROCESS, pProcessName);
+
+/* The operation records overlay DXGKARG_BUILDPAGINGBUFFER's union, which they copy from. */
+AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, Reserved, DXGKARG_BUILDPAGINGBUFFER, UpdatePageTable);
+static_assert(sizeof(DXGK_BUILDPAGINGBUFFER_TRANSFERVIRTUAL) <= sizeof(av::DxgkargBuildPagingBufferRecord::Reserved),
+              "the largest operation this driver reads fits the union copy");
 
 AV_SAME_SIZE(DxgkargSetPointerShapeRecord, DXGKARG_SETPOINTERSHAPE);
 AV_SAME_OFFSET(DxgkargSetPointerShapeRecord, Flags, DXGKARG_SETPOINTERSHAPE, Flags);

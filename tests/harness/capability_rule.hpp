@@ -36,6 +36,7 @@ enum class CapabilityRule : unsigned {
     wddm_1_2_full_adapter_without_direct_flip,
     wddm_1_3_full_adapter_without_independent_flip,
     render_ddis_incomplete,                /* "Not all the render relevant DDIs are NULL" / "did not provide required DDIs" */
+    wddm_2_without_flip_on_vsync_mmio,     /* "Driver reports WDDM version 2.0 or higher but does not support FlipOnVSyncMmIo cap" */
     preemption_without_multi_engine,       /* CreateRenderCore: PreemptionAware or CancelCommandAware alone */
     multi_engine_without_nodes,            /* CreateRenderCore: MultiEngineAware with no asymmetric node */
     swizzling_without_ddis,                /* NumberOfSwizzlingRanges without Acquire/ReleaseSwizzlingRange */

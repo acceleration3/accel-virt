@@ -6,11 +6,11 @@ description: "Task list for feature 017: WDDM 2.0 GPU virtual addressing"
 
 ## Phase 1: Records
 
-- [ ] T001 Records, km proofs, Linux layout tests
+- [X] T001 Records, km proofs, Linux layout tests
 
 ## Phase 2: Harness
 
-- [ ] T002 Tests then `FakeDxgadapter` WDDM 2.0 rules and ValidateWDDMCaps gating; `FakeGpuMmu`; `FakeVidMm` implicit segment
+- [X] T002 Tests then `FakeDxgadapter` WDDM 2.0 rules and ValidateWDDMCaps gating; `FakeGpuMmu`; `FakeVidMm` implicit segment
 
 **Checkpoint**: commit.
 

@@ -27,6 +27,10 @@ public:
     /* The descriptor checks alone, over `count` descriptors `stride` apart. */
     SegmentRule validate(const std::uint8_t *descriptors, std::uint32_t count, std::uint32_t paging_segment) const;
 
+    /* The segments VidMm knows: the driver's, and for a GPU MMU or IoMmu
+     * physical adapter the system memory segment it appends
+     * (CreatePhysicalAdapterSegments). */
+    std::uint32_t                     segment_count() const;
     SegmentRule                       failed_rule() const;
     const DxgkQuerySegmentOut4Record &answer() const;
     DxgkSegmentDescriptor4Record      segment(std::uint32_t index) const;
@@ -38,6 +42,8 @@ private:
         flag_aperture = 0x1u, flag_agp = 0x2u, flag_cpu_visible = 0x4u, flag_preserved_during_standby = 0x80u,
         flag_hibernate_preservation = 0x300u, flag_cpu_host_aperture = 0x2000u,
     };
+
+    static constexpr std::uint32_t physical_virtual_addressing = 0x3u;   /* IoMmuSupported | GpuMmuSupported */
 
     std::int32_t refuse(SegmentRule rule, std::int32_t status);
 

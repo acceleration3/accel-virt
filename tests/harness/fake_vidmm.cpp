@@ -64,6 +64,12 @@ SegmentRule FakeVidMm::validate(const std::uint8_t *descriptors, std::uint32_t c
     return paging_segment > count ? SegmentRule::paging_buffer_segment_out_of_range : SegmentRule::none;
 }
 
+std::uint32_t FakeVidMm::segment_count() const
+{
+    const bool implicit = (adapter_.physical_adapter_caps().Flags & physical_virtual_addressing) != 0u;
+    return answer_.NbSegment + (implicit ? 1u : 0u);
+}
+
 SegmentRule                       FakeVidMm::failed_rule() const { return failed_; }
 const DxgkQuerySegmentOut4Record &FakeVidMm::answer() const { return answer_; }
 
