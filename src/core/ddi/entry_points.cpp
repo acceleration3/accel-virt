@@ -130,6 +130,33 @@ int32_t AvDdiResetFromTimeout(void *context)
 int32_t AvDdiRestartFromTimeout(void *context)
 { return static_cast<av::Adapter *>(context)->restart_from_timeout(); }
 
+int32_t AvDdiIsSupportedVidPn(void *context, av::DxgkargIsSupportedVidPnRecord *request)
+{ return static_cast<av::Adapter *>(context)->is_supported_vidpn(request); }
+
+int32_t AvDdiRecommendFunctionalVidPn(void *context, const av::DxgkargRecommendFunctionalVidPnRecord *request)
+{ return static_cast<av::Adapter *>(context)->recommend_functional_vidpn(request); }
+
+int32_t AvDdiEnumVidPnCofuncModality(void *context, const av::DxgkargEnumVidPnCofuncModalityRecord *request)
+{ return static_cast<av::Adapter *>(context)->enum_vidpn_cofunc_modality(request); }
+
+int32_t AvDdiCommitVidPn(void *context, const av::DxgkargCommitVidPnRecord *request)
+{ return static_cast<av::Adapter *>(context)->commit_vidpn(request); }
+
+int32_t AvDdiUpdateActiveVidPnPresentPath(void *context, const av::D3dkmdtVidPnPresentPathRecord *path)
+{ return static_cast<av::Adapter *>(context)->update_active_vidpn_present_path(path); }
+
+int32_t AvDdiRecommendMonitorModes(void *context, const av::DxgkargRecommendMonitorModesRecord *request)
+{ return static_cast<av::Adapter *>(context)->recommend_monitor_modes(request); }
+
+int32_t AvDdiRecommendVidPnTopology(void *context, const av::DxgkargRecommendVidPnTopologyRecord *request)
+{ return static_cast<av::Adapter *>(context)->recommend_vidpn_topology(request); }
+
+int32_t AvDdiGetScanLine(void *context, av::DxgkargGetScanLineRecord *request)
+{ return static_cast<av::Adapter *>(context)->get_scan_line(request); }
+
+int32_t AvDdiControlInterrupt(void *context, int32_t type, uint8_t enable)
+{ return static_cast<av::Adapter *>(context)->control_interrupt(type, enable); }
+
 uint8_t AvSynchronizedNotify(void *notification)
 { return static_cast<av::InterruptNotification *>(notification)->notify(); }
 

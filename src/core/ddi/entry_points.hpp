@@ -10,7 +10,15 @@
 #include "../device.hpp"
 #include "../interrupt_notification.hpp"
 #include "../miniport_binding.hpp"
+#include "d3dkmdt_vidpn_present_path_record.hpp"
 #include "dxgk_child_descriptor_record.hpp"
+#include "dxgkarg_commit_vidpn_record.hpp"
+#include "dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
+#include "dxgkarg_get_scan_line_record.hpp"
+#include "dxgkarg_is_supported_vidpn_record.hpp"
+#include "dxgkarg_recommend_functional_vidpn_record.hpp"
+#include "dxgkarg_recommend_monitor_modes_record.hpp"
+#include "dxgkarg_recommend_vidpn_topology_record.hpp"
 #include "dxgk_child_status_record.hpp"
 #include "dxgk_device_descriptor_record.hpp"
 #include "dxgkarg_build_paging_buffer_record.hpp"
@@ -86,6 +94,15 @@ int32_t AvDdiQueryCurrentFence(void *context, av::DxgkargQueryCurrentFenceRecord
 int32_t AvDdiBuildPagingBuffer(void *context, av::DxgkargBuildPagingBufferRecord *request);
 int32_t AvDdiResetFromTimeout(void *context);
 int32_t AvDdiRestartFromTimeout(void *context);
+int32_t AvDdiIsSupportedVidPn(void *context, av::DxgkargIsSupportedVidPnRecord *request);
+int32_t AvDdiRecommendFunctionalVidPn(void *context, const av::DxgkargRecommendFunctionalVidPnRecord *request);
+int32_t AvDdiEnumVidPnCofuncModality(void *context, const av::DxgkargEnumVidPnCofuncModalityRecord *request);
+int32_t AvDdiCommitVidPn(void *context, const av::DxgkargCommitVidPnRecord *request);
+int32_t AvDdiUpdateActiveVidPnPresentPath(void *context, const av::D3dkmdtVidPnPresentPathRecord *path);
+int32_t AvDdiRecommendMonitorModes(void *context, const av::DxgkargRecommendMonitorModesRecord *request);
+int32_t AvDdiRecommendVidPnTopology(void *context, const av::DxgkargRecommendVidPnTopologyRecord *request);
+int32_t AvDdiGetScanLine(void *context, av::DxgkargGetScanLineRecord *request);
+int32_t AvDdiControlInterrupt(void *context, int32_t type, uint8_t enable);
 /* The KSYNCHRONIZE_ROUTINE DxgkCbSynchronizeExecution runs at device IRQL. */
 uint8_t AvSynchronizedNotify(void *notification);
 

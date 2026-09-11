@@ -16,13 +16,13 @@ description: "Task list for feature 011: WDDM 1.0 VidPn topology and mode enumer
 
 ## Phase 3: Fake VidPn
 
-- [ ] T003 `FakeVidPn` (VidPn, topology, source/target mode set interfaces; monitor source mode set) with leak checking, and its tests
+- [X] T003 `FakeVidPn` (VidPn, topology, source/target mode set interfaces; monitor source mode set) with leak checking, and its tests
 
 ## Phase 4: DDIs (US2-US4)
 
-- [ ] T004 Tests then `VidPn`, `SourceModeSet`, `TargetModeSet`
-- [ ] T005 Tests then `VidPnSupportCheck`, `CofuncModality`
-- [ ] T006 Tests then `VidPnCommit`, `MonitorModes`, `DisplaySources` state; adapter DDIs, entry points, nine slots
+- [X] T004 Tests then `VidPn`, `SourceModeSet`, `TargetModeSet`
+- [X] T005 Tests then `VidPnSupportCheck`, `CofuncModality`
+- [X] T006 Tests then `VidPnCommit`, `MonitorModes`, `DisplaySources` state; adapter DDIs, entry points, nine slots
 
 **Checkpoint**: commit.
 

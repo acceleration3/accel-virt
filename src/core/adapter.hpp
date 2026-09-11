@@ -26,11 +26,19 @@
 
 namespace av {
 
+struct D3dkmdtVidPnPresentPathRecord;
 struct DxgkChildDescriptorRecord;
 struct DxgkChildStatusRecord;
 struct DxgkDeviceDescriptorRecord;
 struct DxgkrnlInterfaceRecord;
 struct DxgkargCloseAllocationRecord;
+struct DxgkargCommitVidPnRecord;
+struct DxgkargEnumVidPnCofuncModalityRecord;
+struct DxgkargGetScanLineRecord;
+struct DxgkargIsSupportedVidPnRecord;
+struct DxgkargRecommendFunctionalVidPnRecord;
+struct DxgkargRecommendMonitorModesRecord;
+struct DxgkargRecommendVidPnTopologyRecord;
 struct DxgkargBuildPagingBufferRecord;
 struct DxgkargCollectDbgInfoRecord;
 struct DxgkargCreateContextRecord;
@@ -100,6 +108,18 @@ public:
     /* TDR: every packet is abandoned and the device reset, until restart. */
     int32_t reset_from_timeout();
     int32_t restart_from_timeout();
+    int32_t is_supported_vidpn(DxgkargIsSupportedVidPnRecord *request);
+    /* Declines: dxgkrnl then builds the VidPn from the modes offered. */
+    int32_t recommend_functional_vidpn(const DxgkargRecommendFunctionalVidPnRecord *request);
+    int32_t enum_vidpn_cofunc_modality(const DxgkargEnumVidPnCofuncModalityRecord *request);
+    int32_t commit_vidpn(const DxgkargCommitVidPnRecord *request);
+    /* DXGKARG_UPDATEACTIVEVIDPNPRESENTPATH is the path and nothing else. */
+    int32_t update_active_vidpn_present_path(const D3dkmdtVidPnPresentPathRecord *path);
+    int32_t recommend_monitor_modes(const DxgkargRecommendMonitorModesRecord *request);
+    /* Declines: dxgkrnl then joins the one source to the one target itself. */
+    int32_t recommend_vidpn_topology(const DxgkargRecommendVidPnTopologyRecord *request);
+    int32_t get_scan_line(DxgkargGetScanLineRecord *request);
+    int32_t control_interrupt(int32_t type, uint8_t enable);
 
     bool invariants_hold() const;
 
@@ -108,6 +128,8 @@ private:
     static constexpr uint32_t adapter_device_uid = 0xFFFFFFFFu;  /* DISPLAY_ADAPTER_HW_ID */
     enum : int32_t { power_unspecified = 0, power_d0 = 1, power_d3 = 4 };
     enum : int32_t { query_driver_caps = 1, query_segment4 = 11, query_wddm_device_caps = 29 };   /* DXGKQAITYPE_* */
+    enum : int32_t { interrupt_crtc_vsync = 3 };                          /* DXGK_INTERRUPT_CRTC_VSYNC */
+    enum : int32_t { transformation_identity = 1 };   /* D3DKMDT_VPPS_IDENTITY, D3DKMDT_VPPR_IDENTITY */
 
     [[nodiscard]] Status discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface);
     [[nodiscard]] Status power_up();

@@ -2,6 +2,15 @@
 #include "../../src/core/ddi/dxgk_child_descriptor_record.hpp"
 #include "../../src/core/ddi/dxgk_child_status_record.hpp"
 #include "../../src/core/ddi/dxgk_device_descriptor_record.hpp"
+#include "../../src/core/ddi/dxgkarg_commit_vidpn_record.hpp"
+#include "../../src/core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
+#include "../../src/core/ddi/dxgkarg_get_scan_line_record.hpp"
+#include "../../src/core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
+#include "../../src/core/ddi/dxgkarg_recommend_functional_vidpn_record.hpp"
+#include "../../src/core/ddi/dxgkarg_recommend_monitor_modes_record.hpp"
+#include "../../src/core/ddi/dxgkarg_recommend_vidpn_topology_record.hpp"
+#include "../../src/core/display_mode.hpp"
+#include "../harness/fake_vidpn.hpp"
 #include "../../src/core/ddi/d3dkmdt_shadow_surface_data_record.hpp"
 #include "../../src/core/ddi/dxgk_allocation_info_record.hpp"
 #include "../../src/core/ddi/dxgk_open_allocation_info_record.hpp"
@@ -439,6 +448,150 @@ TEST(adapter_query_device_descriptor, another_child_or_no_descriptor_is_invalid)
   CHECK_EQ(nt(fixture.adapter().query_device_descriptor(1u, &descriptor)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().query_device_descriptor(0u, nullptr)), invalid_parameter);
   CHECK_EQ(edid[0], 0u); }
+
+/* ---- VidPn and modes -------------------------------------------------------- */
+
+namespace {
+
+constexpr std::uint32_t invalid_source_mode = 0xC01E0310u;
+constexpr std::uint32_t transformation_not_supported = 0xC01E0346u;
+constexpr std::uint32_t no_recommended_functional_vidpn = 0xC01E0323u;
+constexpr std::uint32_t no_recommended_vidpn_topology = 0xC01E031Au;
+constexpr std::int32_t  interrupt_crtc_vsync = 3;
+constexpr std::int32_t  interrupt_dpc_log = 4;   /* DXGK_INTERRUPT_DPC_LOG_TYPE: anything else */
+constexpr std::int32_t  no_pivot = 5;
+
+av::D3dkmdtVidPnSourceModeRecord source_mode(std::uint32_t width, std::uint32_t height)
+{
+    av::D3dkmdtVidPnSourceModeRecord mode = {};
+    av::DisplayMode(width, height).describe(mode);
+    return mode;
+}
+
+/* Commits `width` x `height` to source 0 through a fake VidPn. */
+std::uint32_t commit(Fixture &fixture, std::uint32_t width, std::uint32_t height)
+{
+    av::FakeVidPn vidpn;
+    vidpn.add_path(0u, 0u);
+    vidpn.source_modes(0u).seed(source_mode(width, height), true);
+    const av::DxgkargCommitVidPnRecord request = {&vidpn, 0u, 0, nullptr, 0u, 0u};
+    return nt(fixture.adapter().commit_vidpn(&request));
+}
+
+}  // namespace
+
+TEST(adapter_is_supported_vidpn, answers_for_the_proposed_vidpn)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::FakeVidPn vidpn;
+  vidpn.add_path(0u, 1u);
+  av::DxgkargIsSupportedVidPnRecord request = {&vidpn, 1u, {}};
+  CHECK_EQ(nt(fixture.adapter().is_supported_vidpn(&request)), success);
+  CHECK_EQ(request.IsVidPnSupported, 0u);
+  CHECK_EQ(nt(fixture.adapter().is_supported_vidpn(nullptr)), invalid_parameter); }
+
+TEST(adapter_enum_vidpn_cofunc_modality, offers_the_modes_on_the_path)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::FakeVidPn vidpn;
+  vidpn.add_path(0u, 0u);
+  const av::DxgkargEnumVidPnCofuncModalityRecord request = {&vidpn, no_pivot, 0u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(&request)), success);
+  CHECK_EQ(vidpn.source_modes(0u).modes(), 11u);
+  CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(nullptr)), invalid_parameter); }
+
+TEST(adapter_enum_vidpn_cofunc_modality, before_start_dxgkrnl_cannot_be_reached)
+{ Fixture fixture;
+  av::FakeVidPn vidpn;
+  const av::DxgkargEnumVidPnCofuncModalityRecord request = {&vidpn, no_pivot, 0u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(&request)), invalid_device_state); }
+
+TEST(adapter_commit_vidpn, records_the_mode_scan_lines_follow)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(commit(fixture, 1920u, 1080u), success);
+  av::DxgkargGetScanLineRecord scan = {0u, 0u, {}, 0u};
+  const std::uint64_t second = 10000000u;
+  fixture.platform().advance_time(second - fixture.platform().interrupt_time() % second + 163000u);
+  CHECK_EQ(nt(fixture.adapter().get_scan_line(&scan)), success);
+  CHECK_EQ(scan.ScanLine, 1100u);
+  CHECK_EQ(scan.InVerticalBlank, 1u);
+  fixture.platform().advance_time(second - 163000u + 83333u);
+  CHECK_EQ(nt(fixture.adapter().get_scan_line(&scan)), success);
+  CHECK_EQ(scan.ScanLine, 562u);
+  CHECK_EQ(scan.InVerticalBlank, 0u);
+  CHECK_EQ(commit(fixture, 1000u, 700u), invalid_source_mode);
+  CHECK_EQ(nt(fixture.adapter().commit_vidpn(nullptr)), invalid_parameter); }
+
+TEST(adapter_get_scan_line, needs_a_committed_mode_on_the_one_target)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargGetScanLineRecord scan = {0u, 0u, {}, 0u};
+  CHECK_EQ(nt(fixture.adapter().get_scan_line(&scan)), invalid_device_state);
+  CHECK_EQ(commit(fixture, 640u, 480u), success);
+  scan.VidPnTargetId = 1u;
+  CHECK_EQ(nt(fixture.adapter().get_scan_line(&scan)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().get_scan_line(nullptr)), invalid_parameter); }
+
+TEST(adapter_update_active_vidpn_present_path, accepts_identity_transformation_only)
+{ Fixture fixture;
+  av::D3dkmdtVidPnPresentPathRecord path = {};
+  path.ContentTransformationScaling = 1;
+  path.ContentTransformationRotation = 1;
+  CHECK_EQ(nt(fixture.adapter().update_active_vidpn_present_path(&path)), success);
+  path.ContentTransformationScaling = 2;   /* D3DKMDT_VPPS_CENTERED */
+  CHECK_EQ(nt(fixture.adapter().update_active_vidpn_present_path(&path)), transformation_not_supported);
+  path.ContentTransformationScaling = 1;
+  path.ContentTransformationRotation = 2;  /* D3DKMDT_VPPR_ROTATE90 */
+  CHECK_EQ(nt(fixture.adapter().update_active_vidpn_present_path(&path)), transformation_not_supported); }
+
+TEST(adapter_update_active_vidpn_present_path, a_path_the_adapter_lacks_is_invalid)
+{ Fixture fixture;
+  av::D3dkmdtVidPnPresentPathRecord path = {};
+  path.ContentTransformationScaling = 1;
+  path.ContentTransformationRotation = 1;
+  path.VidPnSourceId = 1u;
+  CHECK_EQ(nt(fixture.adapter().update_active_vidpn_present_path(&path)), invalid_parameter);
+  path.VidPnSourceId = 0u;
+  path.VidPnTargetId = 1u;
+  CHECK_EQ(nt(fixture.adapter().update_active_vidpn_present_path(&path)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().update_active_vidpn_present_path(nullptr)), invalid_parameter); }
+
+TEST(adapter_recommend_monitor_modes, fills_the_monitor_mode_set)
+{ Fixture fixture;
+  av::FakeVidPn vidpn;
+  const av::DxgkargRecommendMonitorModesRecord request = {0u, 0u, vidpn.monitor_mode_set(), &vidpn.monitor_interface()};
+  CHECK_EQ(nt(fixture.adapter().recommend_monitor_modes(&request)), success);
+  CHECK_EQ(vidpn.monitor_modes().modes(), 11u);
+  CHECK_EQ(nt(fixture.adapter().recommend_monitor_modes(nullptr)), invalid_parameter); }
+
+TEST(adapter, recommend_functional_vidpn_and_recommend_vidpn_topology_decline)
+{ Fixture fixture;
+  const av::DxgkargRecommendFunctionalVidPnRecord functional = {};
+  const av::DxgkargRecommendVidPnTopologyRecord topology = {};
+  CHECK_EQ(nt(fixture.adapter().recommend_functional_vidpn(&functional)), no_recommended_functional_vidpn);
+  CHECK_EQ(nt(fixture.adapter().recommend_vidpn_topology(&topology)), no_recommended_vidpn_topology); }
+
+TEST(adapter_control_interrupt, records_vsync_and_refuses_other_types)
+{ Fixture fixture;
+  CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 0u)), success);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_dpc_log, 1u)), not_supported); }
+
+TEST(adapter, the_display_ddis_are_passive_only)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.adapter().is_supported_vidpn(nullptr));
+  static_cast<void>(fixture.adapter().recommend_functional_vidpn(nullptr));
+  static_cast<void>(fixture.adapter().enum_vidpn_cofunc_modality(nullptr));
+  static_cast<void>(fixture.adapter().commit_vidpn(nullptr));
+  static_cast<void>(fixture.adapter().update_active_vidpn_present_path(nullptr));
+  static_cast<void>(fixture.adapter().recommend_monitor_modes(nullptr));
+  static_cast<void>(fixture.adapter().recommend_vidpn_topology(nullptr));
+  static_cast<void>(fixture.adapter().get_scan_line(nullptr));
+  static_cast<void>(fixture.adapter().control_interrupt(0, 0u));
+  fixture.platform().set_irql(Irql::passive);
+  for (int call = 0; call < 9; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
 
 /* ---- The rest of the slot list --------------------------------------------- */
 

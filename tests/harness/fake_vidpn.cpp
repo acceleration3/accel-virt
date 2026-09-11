@@ -11,13 +11,15 @@ constexpr std::int32_t invalid_parameter = static_cast<std::int32_t>(0xC000000Du
 constexpr std::int32_t no_more_elements = 0x401E034C;
 constexpr std::int32_t gamma_default = 1;   /* D3DDDI_GAMMARAMP_DEFAULT */
 
+FakeVidPn *owner_of(void *topology) { return *static_cast<FakeVidPn **>(topology); }
+
 }  // namespace
 
 FakeVidPn::FakeVidPn()
     : sources_{}, targets_{}, current_source_{}, current_target_{}, source_handles_{}, target_handles_{}, monitor_{},
-      paths_{}, path_count_(0u), path_updates_(0u), outstanding_paths_(0u), outstanding_sets_(0u),
-      topology_handle_(this), vidpn_interface_{}, topology_interface_{}, source_interface_{}, target_interface_{},
-      monitor_interface_{}
+      monitor_handle_{this, &monitor_}, refused_{}, refusals_{}, paths_{}, path_count_(0u), path_updates_(0u),
+      outstanding_paths_(0u), outstanding_sets_(0u), topology_handle_(this), vidpn_interface_{},
+      topology_interface_{}, source_interface_{}, target_interface_{}, monitor_interface_{}
 {
     for (std::uint32_t owner = 0u; owner < max_owners; owner++) {
         for (std::uint32_t slot = 0u; slot < 2u; slot++) {
@@ -25,60 +27,109 @@ FakeVidPn::FakeVidPn()
             target_handles_[owner][slot] = {this, &targets_[owner][slot]};
         }
     }
+    install_vidpn_interface();
+    install_topology_interface();
+    install_source_interface();
+    install_target_interface();
+    install_monitor_interface();
+}
+
+FakeVidPn::~FakeVidPn()
+{
+    if (outstanding_paths_ != 0u || outstanding_sets_ != 0u)
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "%u path info(s), %u mode set(s) never released",
+                                                outstanding_paths_, outstanding_sets_);
+}
+
+void FakeVidPn::install_vidpn_interface()
+{
     vidpn_interface_.Version = 1;
     vidpn_interface_.pfnGetTopology = +[](void *vidpn, void **topology, const DxgkVidPnTopologyInterfaceRecord **table) {
         auto *self = static_cast<FakeVidPn *>(vidpn);
-        *topology = &self->topology_handle_;
-        *table = &self->topology_interface_;
-        return 0;
+        std::int32_t status = 0;
+        const bool refused = self->refusing(VidPnCall::get_topology, status);
+        *topology = refused ? nullptr : &self->topology_handle_;
+        *table = refused ? nullptr : &self->topology_interface_;
+        return status;
     };
     vidpn_interface_.pfnAcquireSourceModeSet = +[](void *vidpn, std::uint32_t source, void **set,
                                                    const DxgkVidPnSourceModeSetInterfaceRecord **table) {
-        *table = &static_cast<FakeVidPn *>(vidpn)->source_interface_;
-        return static_cast<FakeVidPn *>(vidpn)->acquire_source(source, false, set);
+        auto *self = static_cast<FakeVidPn *>(vidpn);
+        std::int32_t status = 0;
+        *set = nullptr;
+        *table = nullptr;
+        if (self->refusing(VidPnCall::acquire_source_mode_set, status)) return status;
+        *table = &self->source_interface_;
+        return self->acquire_source(source, false, set);
     };
     vidpn_interface_.pfnCreateNewSourceModeSet = +[](void *vidpn, std::uint32_t source, void **set,
                                                      const DxgkVidPnSourceModeSetInterfaceRecord **table) {
-        *table = &static_cast<FakeVidPn *>(vidpn)->source_interface_;
-        return static_cast<FakeVidPn *>(vidpn)->acquire_source(source, true, set);
+        auto *self = static_cast<FakeVidPn *>(vidpn);
+        std::int32_t status = 0;
+        *set = nullptr;
+        *table = nullptr;
+        if (self->refusing(VidPnCall::create_source_mode_set, status)) return status;
+        *table = &self->source_interface_;
+        return self->acquire_source(source, true, set);
     };
     vidpn_interface_.pfnReleaseSourceModeSet = +[](void *vidpn, void *set) {
         return static_cast<FakeVidPn *>(vidpn)->release_set(set);
     };
     vidpn_interface_.pfnAssignSourceModeSet = +[](void *vidpn, std::uint32_t source, void *set) {
-        return static_cast<FakeVidPn *>(vidpn)->assign_source(source, set);
+        auto *self = static_cast<FakeVidPn *>(vidpn);
+        std::int32_t status = 0;
+        if (self->refusing(VidPnCall::assign_source_mode_set, status)) return status < 0 ? status : self->release_set(set);
+        return self->assign_source(source, set);
     };
     vidpn_interface_.pfnAcquireTargetModeSet = +[](void *vidpn, std::uint32_t target, void **set,
                                                    const DxgkVidPnTargetModeSetInterfaceRecord **table) {
-        *table = &static_cast<FakeVidPn *>(vidpn)->target_interface_;
-        return static_cast<FakeVidPn *>(vidpn)->acquire_target(target, false, set);
+        auto *self = static_cast<FakeVidPn *>(vidpn);
+        std::int32_t status = 0;
+        *set = nullptr;
+        *table = nullptr;
+        if (self->refusing(VidPnCall::acquire_target_mode_set, status)) return status;
+        *table = &self->target_interface_;
+        return self->acquire_target(target, false, set);
     };
     vidpn_interface_.pfnCreateNewTargetModeSet = +[](void *vidpn, std::uint32_t target, void **set,
                                                      const DxgkVidPnTargetModeSetInterfaceRecord **table) {
-        *table = &static_cast<FakeVidPn *>(vidpn)->target_interface_;
-        return static_cast<FakeVidPn *>(vidpn)->acquire_target(target, true, set);
+        auto *self = static_cast<FakeVidPn *>(vidpn);
+        std::int32_t status = 0;
+        *set = nullptr;
+        *table = nullptr;
+        if (self->refusing(VidPnCall::create_target_mode_set, status)) return status;
+        *table = &self->target_interface_;
+        return self->acquire_target(target, true, set);
     };
     vidpn_interface_.pfnReleaseTargetModeSet = +[](void *vidpn, void *set) {
         return static_cast<FakeVidPn *>(vidpn)->release_set(set);
     };
     vidpn_interface_.pfnAssignTargetModeSet = +[](void *vidpn, std::uint32_t target, void *set) {
-        return static_cast<FakeVidPn *>(vidpn)->assign_target(target, set);
+        auto *self = static_cast<FakeVidPn *>(vidpn);
+        std::int32_t status = 0;
+        if (self->refusing(VidPnCall::assign_target_mode_set, status)) return status < 0 ? status : self->release_set(set);
+        return self->assign_target(target, set);
     };
+}
 
+void FakeVidPn::install_topology_interface()
+{
     topology_interface_.pfnGetNumPaths = +[](void *topology, std::uint64_t *paths) {
-        *paths = (*static_cast<FakeVidPn **>(topology))->path_count_;
+        *paths = owner_of(topology)->path_count_;
         return 0;
     };
     topology_interface_.pfnGetNumPathsFromSource = +[](void *topology, std::uint32_t source, std::uint64_t *paths) {
-        const FakeVidPn *self = *static_cast<FakeVidPn **>(topology);
+        const FakeVidPn *self = owner_of(topology);
+        std::int32_t status = 0;
         *paths = 0u;
+        if (self->refusing(VidPnCall::paths_from_source, status)) return status;
         for (std::uint32_t index = 0u; index < self->path_count_; index++)
             *paths += self->paths_[index].VidPnSourceId == source ? 1u : 0u;
         return *paths == 0u ? source_not_in_topology : 0;
     };
     topology_interface_.pfnEnumPathTargetsFromSource = +[](void *topology, std::uint32_t source, std::uint64_t index,
                                                            std::uint32_t *target) {
-        const FakeVidPn *self = *static_cast<FakeVidPn **>(topology);
+        const FakeVidPn *self = owner_of(topology);
         std::uint64_t seen = 0u;
         for (std::uint32_t path = 0u; path < self->path_count_; path++) {
             if (self->paths_[path].VidPnSourceId != source) continue;
@@ -89,16 +140,23 @@ FakeVidPn::FakeVidPn()
         return source_not_in_topology;
     };
     topology_interface_.pfnAcquireFirstPathInfo = +[](void *topology, const D3dkmdtVidPnPresentPathRecord **path) {
-        return (*static_cast<FakeVidPn **>(topology))->acquire_path(0u, path);
+        FakeVidPn *self = owner_of(topology);
+        std::int32_t status = 0;
+        *path = nullptr;
+        if (self->refusing(VidPnCall::acquire_first_path, status)) return status;
+        return self->acquire_path(0u, path);
     };
     topology_interface_.pfnAcquireNextPathInfo = +[](void *topology, const D3dkmdtVidPnPresentPathRecord *path,
                                                      const D3dkmdtVidPnPresentPathRecord **next) {
-        FakeVidPn *self = *static_cast<FakeVidPn **>(topology);
+        FakeVidPn *self = owner_of(topology);
+        std::int32_t status = 0;
+        *next = nullptr;
+        if (self->refusing(VidPnCall::acquire_next_path, status)) return status;
         return self->acquire_path(self->index_of(path) + 1u, next);
     };
     topology_interface_.pfnAcquirePathInfo = +[](void *topology, std::uint32_t source, std::uint32_t target,
                                                  const D3dkmdtVidPnPresentPathRecord **path) {
-        FakeVidPn *self = *static_cast<FakeVidPn **>(topology);
+        FakeVidPn *self = owner_of(topology);
         for (std::uint32_t index = 0u; index < self->path_count_; index++)
             if (self->paths_[index].VidPnSourceId == source && self->paths_[index].VidPnTargetId == target)
                 return self->acquire_path(index, path);
@@ -106,18 +164,27 @@ FakeVidPn::FakeVidPn()
         return invalid_parameter;
     };
     topology_interface_.pfnUpdatePathSupportInfo = +[](void *topology, const D3dkmdtVidPnPresentPathRecord *path) {
-        return (*static_cast<FakeVidPn **>(topology))->update_path(*path);
+        FakeVidPn *self = owner_of(topology);
+        std::int32_t status = 0;
+        if (self->refusing(VidPnCall::update_path_support, status)) return status;
+        return self->update_path(*path);
     };
+    /* A refused release still releases, so the refusal is not also a leak. */
     topology_interface_.pfnReleasePathInfo = +[](void *topology, const D3dkmdtVidPnPresentPathRecord *) {
-        FakeVidPn *self = *static_cast<FakeVidPn **>(topology);
+        FakeVidPn *self = owner_of(topology);
         if (self->outstanding_paths_ == 0u) {
             TestRegistry::instance().record_failure(__FILE__, __LINE__, "released a path info that was not held");
             return invalid_parameter;
         }
         self->outstanding_paths_--;
-        return 0;
+        std::int32_t status = 0;
+        static_cast<void>(self->refusing(VidPnCall::release_path, status));
+        return status;
     };
+}
 
+void FakeVidPn::install_source_interface()
+{
     source_interface_.pfnGetNumModes = +[](void *set, std::uint64_t *modes) {
         return static_cast<SourceHandle *>(set)->set->count(modes);
     };
@@ -129,21 +196,35 @@ FakeVidPn::FakeVidPn()
         return static_cast<SourceHandle *>(set)->set->acquire_next(mode, next);
     };
     source_interface_.pfnAcquirePinnedModeInfo = +[](void *set, const D3dkmdtVidPnSourceModeRecord **mode) {
-        return static_cast<SourceHandle *>(set)->set->acquire_pinned(mode);
+        const SourceHandle *handle = static_cast<SourceHandle *>(set);
+        std::int32_t status = 0;
+        *mode = nullptr;
+        if (handle->vidpn->refusing(VidPnCall::acquire_pinned_mode, status)) return status;
+        return handle->set->acquire_pinned(mode);
     };
     source_interface_.pfnReleaseModeInfo = +[](void *set, const D3dkmdtVidPnSourceModeRecord *mode) {
         return static_cast<SourceHandle *>(set)->set->release(mode);
     };
     source_interface_.pfnCreateNewModeInfo = +[](void *set, D3dkmdtVidPnSourceModeRecord **mode) {
-        return static_cast<SourceHandle *>(set)->set->create_new(mode);
+        const SourceHandle *handle = static_cast<SourceHandle *>(set);
+        std::int32_t status = 0;
+        *mode = nullptr;
+        if (handle->vidpn->refusing(VidPnCall::create_mode_info, status)) return status;
+        return handle->set->create_new(mode);
     };
     source_interface_.pfnAddMode = +[](void *set, const D3dkmdtVidPnSourceModeRecord *mode) {
-        return static_cast<SourceHandle *>(set)->set->add(mode);
+        const SourceHandle *handle = static_cast<SourceHandle *>(set);
+        std::int32_t status = 0;
+        if (handle->vidpn->refusing(VidPnCall::add_mode, status)) return status < 0 ? status : handle->set->release(mode);
+        return handle->set->add(mode);
     };
     source_interface_.pfnPinMode = +[](void *set, std::uint32_t id) {
         return static_cast<SourceHandle *>(set)->set->pin(id);
     };
+}
 
+void FakeVidPn::install_target_interface()
+{
     target_interface_.pfnGetNumModes = +[](void *set, std::uint64_t *modes) {
         return static_cast<TargetHandle *>(set)->set->count(modes);
     };
@@ -155,40 +236,54 @@ FakeVidPn::FakeVidPn()
         return static_cast<TargetHandle *>(set)->set->acquire_next(mode, next);
     };
     target_interface_.pfnAcquirePinnedModeInfo = +[](void *set, const D3dkmdtVidPnTargetModeRecord **mode) {
-        return static_cast<TargetHandle *>(set)->set->acquire_pinned(mode);
+        const TargetHandle *handle = static_cast<TargetHandle *>(set);
+        std::int32_t status = 0;
+        *mode = nullptr;
+        if (handle->vidpn->refusing(VidPnCall::acquire_pinned_mode, status)) return status;
+        return handle->set->acquire_pinned(mode);
     };
     target_interface_.pfnReleaseModeInfo = +[](void *set, const D3dkmdtVidPnTargetModeRecord *mode) {
         return static_cast<TargetHandle *>(set)->set->release(mode);
     };
     target_interface_.pfnCreateNewModeInfo = +[](void *set, D3dkmdtVidPnTargetModeRecord **mode) {
-        return static_cast<TargetHandle *>(set)->set->create_new(mode);
+        const TargetHandle *handle = static_cast<TargetHandle *>(set);
+        std::int32_t status = 0;
+        *mode = nullptr;
+        if (handle->vidpn->refusing(VidPnCall::create_mode_info, status)) return status;
+        return handle->set->create_new(mode);
     };
     target_interface_.pfnAddMode = +[](void *set, const D3dkmdtVidPnTargetModeRecord *mode) {
-        return static_cast<TargetHandle *>(set)->set->add(mode);
+        const TargetHandle *handle = static_cast<TargetHandle *>(set);
+        std::int32_t status = 0;
+        if (handle->vidpn->refusing(VidPnCall::add_mode, status)) return status < 0 ? status : handle->set->release(mode);
+        return handle->set->add(mode);
     };
     target_interface_.pfnPinMode = +[](void *set, std::uint32_t id) {
         return static_cast<TargetHandle *>(set)->set->pin(id);
     };
-
-    monitor_interface_.pfnGetNumModes = +[](void *set, std::uint64_t *modes) {
-        return static_cast<FakeModeSet<D3dkmdtMonitorSourceModeRecord> *>(set)->count(modes);
-    };
-    monitor_interface_.pfnCreateNewModeInfo = +[](void *set, D3dkmdtMonitorSourceModeRecord **mode) {
-        return static_cast<FakeModeSet<D3dkmdtMonitorSourceModeRecord> *>(set)->create_new(mode);
-    };
-    monitor_interface_.pfnAddMode = +[](void *set, const D3dkmdtMonitorSourceModeRecord *mode) {
-        return static_cast<FakeModeSet<D3dkmdtMonitorSourceModeRecord> *>(set)->add(mode);
-    };
-    monitor_interface_.pfnReleaseModeInfo = +[](void *set, const D3dkmdtMonitorSourceModeRecord *mode) {
-        return static_cast<FakeModeSet<D3dkmdtMonitorSourceModeRecord> *>(set)->release(mode);
-    };
 }
 
-FakeVidPn::~FakeVidPn()
+void FakeVidPn::install_monitor_interface()
 {
-    if (outstanding_paths_ != 0u || outstanding_sets_ != 0u)
-        TestRegistry::instance().record_failure(__FILE__, __LINE__, "%u path info(s), %u mode set(s) never released",
-                                                outstanding_paths_, outstanding_sets_);
+    monitor_interface_.pfnGetNumModes = +[](void *set, std::uint64_t *modes) {
+        return static_cast<MonitorHandle *>(set)->set->count(modes);
+    };
+    monitor_interface_.pfnCreateNewModeInfo = +[](void *set, D3dkmdtMonitorSourceModeRecord **mode) {
+        const MonitorHandle *handle = static_cast<MonitorHandle *>(set);
+        std::int32_t status = 0;
+        *mode = nullptr;
+        if (handle->vidpn->refusing(VidPnCall::create_mode_info, status)) return status;
+        return handle->set->create_new(mode);
+    };
+    monitor_interface_.pfnAddMode = +[](void *set, const D3dkmdtMonitorSourceModeRecord *mode) {
+        const MonitorHandle *handle = static_cast<MonitorHandle *>(set);
+        std::int32_t status = 0;
+        if (handle->vidpn->refusing(VidPnCall::add_mode, status)) return status < 0 ? status : handle->set->release(mode);
+        return handle->set->add(mode);
+    };
+    monitor_interface_.pfnReleaseModeInfo = +[](void *set, const D3dkmdtMonitorSourceModeRecord *mode) {
+        return static_cast<MonitorHandle *>(set)->set->release(mode);
+    };
 }
 
 D3dkmdtVidPnPresentPathRecord &FakeVidPn::add_path(std::uint32_t source, std::uint32_t target)
@@ -228,9 +323,21 @@ std::int32_t FakeVidPn::query(std::int32_t version, const DxgkVidPnInterfaceReco
     return version == 1 ? 0 : invalid_parameter;
 }
 
+void FakeVidPn::refuse(VidPnCall call, std::int32_t status)
+{
+    refused_[static_cast<unsigned>(call)] = true;
+    refusals_[static_cast<unsigned>(call)] = status;
+}
+
+bool FakeVidPn::refusing(VidPnCall call, std::int32_t &status) const
+{
+    status = refusals_[static_cast<unsigned>(call)];
+    return refused_[static_cast<unsigned>(call)];
+}
+
 const DxgkMonitorSourceModeSetInterfaceRecord &FakeVidPn::monitor_interface() const { return monitor_interface_; }
 FakeModeSet<D3dkmdtMonitorSourceModeRecord>   &FakeVidPn::monitor_modes() { return monitor_; }
-void                                          *FakeVidPn::monitor_mode_set() { return &monitor_; }
+void                                          *FakeVidPn::monitor_mode_set() { return &monitor_handle_; }
 
 std::int32_t FakeVidPn::acquire_source(std::uint32_t source, bool fresh, void **mode_set)
 {

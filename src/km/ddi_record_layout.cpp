@@ -616,6 +616,9 @@ AV_SAME_OFFSET(DxgkargEnumVidPnCofuncModalityRecord, EnumPivotType, DXGKARG_ENUM
 AV_SAME_OFFSET(DxgkargEnumVidPnCofuncModalityRecord, EnumPivotVidPnSourceId, DXGKARG_ENUMVIDPNCOFUNCMODALITY, EnumPivot.VidPnSourceId);
 AV_SAME_OFFSET(DxgkargEnumVidPnCofuncModalityRecord, EnumPivotVidPnTargetId, DXGKARG_ENUMVIDPNCOFUNCMODALITY, EnumPivot.VidPnTargetId);
 
+/* Adapter::update_active_vidpn_present_path reads the argument block as the path. */
+AV_SAME_SIZE(D3dkmdtVidPnPresentPathRecord, DXGKARG_UPDATEACTIVEVIDPNPRESENTPATH);
+AV_SAME_OFFSET(D3dkmdtVidPnPresentPathRecord, VidPnSourceId, DXGKARG_UPDATEACTIVEVIDPNPRESENTPATH, VidPnPresentPathInfo);
 AV_SAME_SIZE(DxgkargCommitVidPnRecord, DXGKARG_COMMITVIDPN);
 AV_SAME_OFFSET(DxgkargCommitVidPnRecord, hFunctionalVidPn, DXGKARG_COMMITVIDPN, hFunctionalVidPn);
 AV_SAME_OFFSET(DxgkargCommitVidPnRecord, AffectedVidPnSourceId, DXGKARG_COMMITVIDPN, AffectedVidPnSourceId);

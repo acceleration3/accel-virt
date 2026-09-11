@@ -30,6 +30,19 @@ TEST(nt_status, carries_a_graphics_status_core_has_no_name_for)
   CHECK(!status.succeeded());
   CHECK(NtStatus(Status::ok).succeeded()); }
 
+TEST(nt_status, carries_a_callback_answer_as_it_came)
+{ CHECK_EQ(static_cast<std::uint32_t>(NtStatus(static_cast<std::int32_t>(0xC01E0314u)).value()), 0xC01E0314u);
+  CHECK(NtStatus(0x401E034C).succeeded());
+  CHECK(NtStatus(0x401E034C).status() == Status::ok); }
+
+TEST(nt_status, names_the_graphics_statuses_of_a_vidpn)
+{ CHECK_EQ(NtStatus::source_not_in_topology, 0xC01E0339u);
+  CHECK_EQ(NtStatus::mode_already_in_mode_set, 0xC01E0314u);
+  CHECK_EQ(NtStatus::invalid_video_present_source_mode, 0xC01E0310u);
+  CHECK_EQ(NtStatus::path_content_geometry_transformation_not_supported, 0xC01E0346u);
+  CHECK_EQ(NtStatus::no_recommended_functional_vidpn, 0xC01E0323u);
+  CHECK_EQ(NtStatus::no_recommended_vidpn_topology, 0xC01E031Au); }
+
 /* One of the four statuses DXGADAPTER::DdiQueryAdapterInfo accepts. */
 TEST(nt_status, not_implemented_is_status_not_implemented)
 { CHECK_EQ(NtStatus::not_implemented, 0xC0000002u);

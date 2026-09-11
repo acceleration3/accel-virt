@@ -51,6 +51,16 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiBuildPagingBuffer, reinterpret_cast<DdiRoutine>(&AvDdiBuildPagingBuffer)},
         {DdiSlot::DxgkDdiResetFromTimeout, reinterpret_cast<DdiRoutine>(&AvDdiResetFromTimeout)},
         {DdiSlot::DxgkDdiRestartFromTimeout, reinterpret_cast<DdiRoutine>(&AvDdiRestartFromTimeout)},
+        {DdiSlot::DxgkDdiIsSupportedVidPn, reinterpret_cast<DdiRoutine>(&AvDdiIsSupportedVidPn)},
+        {DdiSlot::DxgkDdiRecommendFunctionalVidPn, reinterpret_cast<DdiRoutine>(&AvDdiRecommendFunctionalVidPn)},
+        {DdiSlot::DxgkDdiEnumVidPnCofuncModality, reinterpret_cast<DdiRoutine>(&AvDdiEnumVidPnCofuncModality)},
+        {DdiSlot::DxgkDdiCommitVidPn, reinterpret_cast<DdiRoutine>(&AvDdiCommitVidPn)},
+        {DdiSlot::DxgkDdiUpdateActiveVidPnPresentPath,
+         reinterpret_cast<DdiRoutine>(&AvDdiUpdateActiveVidPnPresentPath)},
+        {DdiSlot::DxgkDdiRecommendMonitorModes, reinterpret_cast<DdiRoutine>(&AvDdiRecommendMonitorModes)},
+        {DdiSlot::DxgkDdiRecommendVidPnTopology, reinterpret_cast<DdiRoutine>(&AvDdiRecommendVidPnTopology)},
+        {DdiSlot::DxgkDdiGetScanLine, reinterpret_cast<DdiRoutine>(&AvDdiGetScanLine)},
+        {DdiSlot::DxgkDdiControlInterrupt, reinterpret_cast<DdiRoutine>(&AvDdiControlInterrupt)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

@@ -23,7 +23,13 @@
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
 #include "ddi/dxgkarg_query_adapter_info_record.hpp"
+#include "cofunc_modality.hpp"
+#include "ddi/d3dkmdt_vidpn_present_path_record.hpp"
+#include "ddi/dxgkarg_get_scan_line_record.hpp"
 #include "debug_report.hpp"
+#include "monitor_modes.hpp"
+#include "vidpn_commit.hpp"
+#include "vidpn_support_check.hpp"
 #include "ddi/linked_device_record.hpp"
 #include "invariant_scope.hpp"
 #include "nt_status.hpp"
@@ -111,8 +117,8 @@ int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_inte
     if (status == Status::ok) status = power_up();
     if (status != Status::ok) return NtStatus(status).value();
     unmap.dismiss();
-    *sources = 1u;
-    *children = 1u;
+    *sources = DisplaySources::source_count;
+    *children = DisplaySources::target_count;
     started_ = true;
     return NtStatus(Status::ok).value();
 }
@@ -407,6 +413,81 @@ int32_t Adapter::restart_from_timeout()
     const Status status = started_ ? power_up() : Status::ok;
     if (status == Status::ok) node_.restart();
     return NtStatus(status).value();
+}
+
+int32_t Adapter::is_supported_vidpn(DxgkargIsSupportedVidPnRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::is_supported_vidpn");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return VidPnSupportCheck(platform_, dxgkrnl_, *request).decide().value();
+}
+
+int32_t Adapter::recommend_functional_vidpn(const DxgkargRecommendFunctionalVidPnRecord *)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::recommend_functional_vidpn");
+    return NtStatus(NtStatus::no_recommended_functional_vidpn).value();
+}
+
+int32_t Adapter::enum_vidpn_cofunc_modality(const DxgkargEnumVidPnCofuncModalityRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::enum_vidpn_cofunc_modality");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return CofuncModality(platform_, dxgkrnl_, modes_, *request).enumerate().value();
+}
+
+int32_t Adapter::commit_vidpn(const DxgkargCommitVidPnRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::commit_vidpn");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return VidPnCommit(platform_, dxgkrnl_, modes_, sources_, *request).apply().value();
+}
+
+int32_t Adapter::update_active_vidpn_present_path(const D3dkmdtVidPnPresentPathRecord *path)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::update_active_vidpn_present_path");
+    if (path == nullptr || path->VidPnSourceId >= DisplaySources::source_count ||
+        path->VidPnTargetId >= DisplaySources::target_count)
+        return NtStatus(Status::invalid_parameter).value();
+    if (path->ContentTransformationScaling != transformation_identity ||
+        path->ContentTransformationRotation != transformation_identity)
+        return NtStatus(NtStatus::path_content_geometry_transformation_not_supported).value();
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::recommend_monitor_modes(const DxgkargRecommendMonitorModesRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::recommend_monitor_modes");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return MonitorModes(platform_, modes_, *request).recommend().value();
+}
+
+int32_t Adapter::recommend_vidpn_topology(const DxgkargRecommendVidPnTopologyRecord *)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::recommend_vidpn_topology");
+    return NtStatus(NtStatus::no_recommended_vidpn_topology).value();
+}
+
+/* Target 0 shows source 0. */
+int32_t Adapter::get_scan_line(DxgkargGetScanLineRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::get_scan_line");
+    if (request == nullptr || request->VidPnTargetId >= DisplaySources::target_count)
+        return NtStatus(Status::invalid_parameter).value();
+    const DisplayMode *mode = sources_.committed_mode(request->VidPnTargetId);
+    if (mode == nullptr) return NtStatus(Status::invalid_state).value();
+    const uint32_t line = mode->scan_line(platform_.interrupt_time());
+    request->InVerticalBlank = line >= mode->height() ? 1u : 0u;
+    request->ScanLine = line;
+    return NtStatus(Status::ok).value();
+}
+
+/* Only recorded: the scan-out timer that raises vsync arrives with presentation. */
+int32_t Adapter::control_interrupt(int32_t type, uint8_t enable)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::control_interrupt");
+    if (type != interrupt_crtc_vsync) return NtStatus(Status::not_supported).value();
+    sources_.set_vsync(enable != 0u);
+    return NtStatus(Status::ok).value();
 }
 
 bool Adapter::invariants_hold() const

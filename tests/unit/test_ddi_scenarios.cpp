@@ -302,7 +302,7 @@ TEST(ddi_scenario, the_render_ddi_set_is_incomplete_until_present_arrives)
   CHECK_EQ(device.fdo().start_device(), 0);
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), revision_mismatch);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::render_ddis_incomplete);
-  CHECK(device.fdo().dxgadapter().missing_render_slot() == DdiSlot::DxgkDdiControlInterrupt);
+  CHECK(device.fdo().dxgadapter().missing_render_slot() == DdiSlot::DxgkDdiPresent);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 namespace {

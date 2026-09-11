@@ -27,6 +27,8 @@ NtStatus::NtStatus(Status status)
 
 NtStatus::NtStatus(uint32_t value) : value_(value) {}
 
+NtStatus::NtStatus(int32_t answer) : value_(static_cast<uint32_t>(answer)) {}
+
 int32_t NtStatus::value() const { return static_cast<int32_t>(value_); }
 
 bool NtStatus::succeeded() const { return static_cast<int32_t>(value_) >= 0; }

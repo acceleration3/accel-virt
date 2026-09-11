@@ -5,12 +5,15 @@
  * so a capture-less thunk finds its way back. Every mode set, path info and mode
  * info the driver acquires must be released; outstanding ones fail the test when
  * the VidPn is destroyed. Also the monitor source mode set RecommendMonitorModes
- * fills. */
+ * fills. A refused call answers its status with null outputs; a refusal with a
+ * success status is dxgkrnl answering success without the object (or, for an
+ * assign or an add, taking what it was given without keeping it). */
 #ifndef AV_FAKE_VIDPN_HPP
 #define AV_FAKE_VIDPN_HPP
 
 #include "../../src/core/ddi/dxgk_vidpn_interface_records.hpp"
 #include "fake_mode_set.hpp"
+#include "vidpn_call.hpp"
 
 #include <cstdint>
 
@@ -35,6 +38,7 @@ public:
     std::uint32_t                              path_support_updates() const;
 
     std::int32_t query(std::int32_t version, const DxgkVidPnInterfaceRecord **table) const;
+    void         refuse(VidPnCall call, std::int32_t status);
 
     const DxgkMonitorSourceModeSetInterfaceRecord &monitor_interface() const;
     FakeModeSet<D3dkmdtMonitorSourceModeRecord>   &monitor_modes();
@@ -49,6 +53,18 @@ private:
         FakeVidPn                                 *vidpn;
         FakeModeSet<D3dkmdtVidPnTargetModeRecord> *set;
     };
+    struct MonitorHandle {
+        FakeVidPn                                   *vidpn;
+        FakeModeSet<D3dkmdtMonitorSourceModeRecord> *set;
+    };
+
+    /* Whether `call` is refused, and with what. */
+    bool refusing(VidPnCall call, std::int32_t &status) const;
+    void install_vidpn_interface();
+    void install_topology_interface();
+    void install_source_interface();
+    void install_target_interface();
+    void install_monitor_interface();
 
     std::int32_t acquire_source(std::uint32_t source, bool fresh, void **mode_set);
     std::int32_t acquire_target(std::uint32_t target, bool fresh, void **mode_set);
@@ -67,6 +83,9 @@ private:
     SourceHandle                              source_handles_[max_owners][2];
     TargetHandle                              target_handles_[max_owners][2];
     FakeModeSet<D3dkmdtMonitorSourceModeRecord> monitor_;
+    MonitorHandle                             monitor_handle_;
+    bool                                      refused_[static_cast<unsigned>(VidPnCall::count)];
+    std::int32_t                              refusals_[static_cast<unsigned>(VidPnCall::count)];
     D3dkmdtVidPnPresentPathRecord             paths_[max_paths];
     std::uint32_t                             path_count_;
     std::uint32_t                             path_updates_;
