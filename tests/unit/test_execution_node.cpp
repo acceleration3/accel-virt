@@ -158,3 +158,58 @@ TEST(execution_node_invariants, detect_a_regressed_or_unordered_queue)
       if (knob == 4) probe.set_last_submitted(9u);                      /* a submission missing from the queue */
       CHECK(!fixture.node().invariants_hold());
   } }
+
+/* ---- Reset and restart (feature 010) ------------------------------------------ */
+
+TEST(execution_node_reset, drops_the_queue_silently_and_refuses_submissions_until_restart)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.node().submit(1u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(2u), Status::ok);
+  CHECK_STATUS(fixture.node().preempt(7u), Status::ok);
+  fixture.node().reset();
+  CHECK(fixture.node().invariants_hold());
+  CHECK_EQ(fixture.node().pending(), 0u);
+  CHECK_STATUS(fixture.node().submit(3u), Status::invalid_state);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  fixture.node().restart();
+  CHECK(fixture.node().invariants_hold());
+  CHECK_STATUS(fixture.node().submit(2u), Status::invalid_parameter);
+  CHECK_STATUS(fixture.node().submit(3u), Status::ok);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.node().current_fence(), 3u);
+  CHECK_EQ(fixture.node().last_submitted(), 3u); }
+
+TEST(execution_node_progress_time, moves_on_a_submission_to_an_idle_queue_and_on_each_completion)
+{ Fixture fixture;
+  CHECK(fixture.node().progress_time() == 0u);
+  fixture.platform().advance_time(100u);
+  CHECK_STATUS(fixture.node().submit(1u), Status::ok);
+  CHECK(fixture.node().progress_time() == 100u);
+  fixture.platform().advance_time(50u);
+  CHECK_STATUS(fixture.node().submit(2u), Status::ok);
+  CHECK(fixture.node().progress_time() == 100u);
+  fixture.platform().advance_time(25u);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK(fixture.node().progress_time() == 175u); }
+
+TEST(execution_node_reset, is_dispatch_at_most)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::isr);
+  fixture.node().reset();
+  fixture.node().restart();
+  static_cast<void>(fixture.node().last_submitted());
+  static_cast<void>(fixture.node().progress_time());
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  while (fixture.platform().claim(Violation::irql_ceiling)) {}
+  while (fixture.platform().claim(Violation::lock_order)) {} }
+
+TEST(execution_node_invariants, a_stopped_node_with_pending_packets_is_detected)
+{ Fixture fixture;
+  fixture.node().reset();
+  ExecutionNodeProbe probe(fixture.node());
+  probe.set_last_submitted(1u);
+  probe.set_pending(0u, 1u);
+  probe.set_count(1u);
+  CHECK(!fixture.node().invariants_hold()); }

@@ -124,6 +124,12 @@ int32_t AvDdiQueryCurrentFence(void *context, av::DxgkargQueryCurrentFenceRecord
 int32_t AvDdiBuildPagingBuffer(void *context, av::DxgkargBuildPagingBufferRecord *request)
 { return static_cast<av::Adapter *>(context)->build_paging_buffer(request); }
 
+int32_t AvDdiResetFromTimeout(void *context)
+{ return static_cast<av::Adapter *>(context)->reset_from_timeout(); }
+
+int32_t AvDdiRestartFromTimeout(void *context)
+{ return static_cast<av::Adapter *>(context)->restart_from_timeout(); }
+
 uint8_t AvSynchronizedNotify(void *notification)
 { return static_cast<av::InterruptNotification *>(notification)->notify(); }
 

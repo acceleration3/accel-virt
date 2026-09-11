@@ -49,6 +49,8 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiPreemptCommand, reinterpret_cast<DdiRoutine>(&AvDdiPreemptCommand)},
         {DdiSlot::DxgkDdiQueryCurrentFence, reinterpret_cast<DdiRoutine>(&AvDdiQueryCurrentFence)},
         {DdiSlot::DxgkDdiBuildPagingBuffer, reinterpret_cast<DdiRoutine>(&AvDdiBuildPagingBuffer)},
+        {DdiSlot::DxgkDdiResetFromTimeout, reinterpret_cast<DdiRoutine>(&AvDdiResetFromTimeout)},
+        {DdiSlot::DxgkDdiRestartFromTimeout, reinterpret_cast<DdiRoutine>(&AvDdiRestartFromTimeout)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

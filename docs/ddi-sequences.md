@@ -413,6 +413,18 @@ from `MapVideoApertureSegment` and `UnmapVideoApertureSegmentInternal`, and
 discards from `DiscardAllocation` (all dxgmms2). So an aperture-only adapter
 answers MAP_APERTURE_SEGMENT, UNMAP_APERTURE_SEGMENT and DISCARD_CONTENT.
 
+## 4b. Timeout recovery (feature 010)
+
+`VidSchiRecoverFromTDR @ 140093834` (dxgmms2) starts `TdrResetFromTimeoutAsync`,
+which reaches `ADAPTER_RENDER::DdiResetFromTimeout @ 1401beff8` (slot 32) and
+later `DdiRestartFromTimeout @ 140425574` (slot 33), both at PASSIVE under the
+adapter's DDI sync lock. Both log any status other than `STATUS_SUCCESS` as an
+invalid NTSTATUS. VidSch aborts the packets it had submitted, so the driver
+drops its queue without reporting them; `basicrender.sys`'s reset flags its
+worker and waits for it to stop. This driver also resets the virtio device on
+reset and brings it back on restart. `FakeVidSch::reset_from_timeout` treats
+every submitted fence as settled, and the scenario recovers twice.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the

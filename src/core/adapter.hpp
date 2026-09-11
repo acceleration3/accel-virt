@@ -94,6 +94,9 @@ public:
     int32_t preempt_command(const DxgkargPreemptCommandRecord *request);
     int32_t query_current_fence(DxgkargQueryCurrentFenceRecord *request);
     int32_t build_paging_buffer(DxgkargBuildPagingBufferRecord *request);
+    /* TDR: every packet is abandoned and the device reset, until restart. */
+    int32_t reset_from_timeout();
+    int32_t restart_from_timeout();
 
     bool invariants_hold() const;
 

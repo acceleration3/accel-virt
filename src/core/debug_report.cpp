@@ -1,11 +1,12 @@
 #include "debug_report.hpp"
 
 #include "../proto/wire_writer.hpp"
+#include "execution_node.hpp"
 
 namespace av {
 
-DebugReport::DebugReport(Platform &platform, bool started, bool powered, uint64_t features)
-    : platform_(platform), started_(started), powered_(powered), features_(features) {}
+DebugReport::DebugReport(Platform &platform, bool started, bool powered, uint64_t features, ExecutionNode &node)
+    : platform_(platform), started_(started), powered_(powered), features_(features), node_(node) {}
 
 size_t DebugReport::write(uint8_t *buffer, size_t capacity) const
 {
@@ -16,6 +17,11 @@ size_t DebugReport::write(uint8_t *buffer, size_t capacity) const
     writer.write_u8(started_ ? 1u : 0u);
     writer.write_u8(powered_ ? 1u : 0u);
     writer.write_u64(features_);
+    writer.write_u32(node_.last_submitted());
+    writer.write_u32(node_.current_fence());
+    writer.write_u64(node_.progress_time());
+    writer.write_u32(node_.pending());
+    writer.write_zeros(4u);
     return writer.offset();
 }
 

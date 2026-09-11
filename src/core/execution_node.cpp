@@ -8,14 +8,17 @@ namespace av {
 
 ExecutionNode::ExecutionNode(Platform &platform)
     : platform_(platform), lock_(platform, LockRank::execution_node), pending_{}, head_(0u), count_(0u),
-      last_submitted_(0u), last_completed_(0u), preemption_fence_(0u), preemption_requested_(false) {}
+      last_submitted_(0u), last_completed_(0u), preemption_fence_(0u), preemption_requested_(false),
+      stopped_(false), progress_time_(0u) {}
 
 Status ExecutionNode::submit(uint32_t fence)
 {
     platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::submit");
     SpinLockGuard lock(lock_);
     InvariantScope<ExecutionNode> guard(platform_, *this, "submit");
+    if (stopped_) return Status::invalid_state;
     if (fence <= last_submitted_ || count_ == capacity) return Status::invalid_parameter;
+    if (count_ == 0u) progress_time_ = platform_.interrupt_time();
     pending_[(head_ + count_) % capacity] = fence;
     count_++;
     last_submitted_ = fence;
@@ -40,6 +43,7 @@ bool ExecutionNode::take(uint32_t &fence)
     head_ = (head_ + 1u) % capacity;
     count_--;
     last_completed_ = fence;
+    progress_time_ = platform_.interrupt_time();
     return true;
 }
 
@@ -75,6 +79,39 @@ uint32_t ExecutionNode::current_fence()
     return last_completed_;
 }
 
+uint32_t ExecutionNode::last_submitted()
+{
+    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::last_submitted");
+    SpinLockGuard lock(lock_);
+    return last_submitted_;
+}
+
+uint64_t ExecutionNode::progress_time()
+{
+    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::progress_time");
+    SpinLockGuard lock(lock_);
+    return progress_time_;
+}
+
+void ExecutionNode::reset()
+{
+    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::reset");
+    SpinLockGuard lock(lock_);
+    InvariantScope<ExecutionNode> guard(platform_, *this, "reset");
+    head_ = 0u;
+    count_ = 0u;
+    preemption_requested_ = false;
+    stopped_ = true;
+}
+
+void ExecutionNode::restart()
+{
+    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::restart");
+    SpinLockGuard lock(lock_);
+    InvariantScope<ExecutionNode> guard(platform_, *this, "restart");
+    stopped_ = false;
+}
+
 uint32_t ExecutionNode::pending()
 {
     platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::pending");
@@ -86,7 +123,7 @@ uint32_t ExecutionNode::pending()
  * end at the last submitted one. */
 bool ExecutionNode::invariants_hold() const
 {
-    if (count_ > capacity || last_completed_ > last_submitted_) return false;
+    if (count_ > capacity || last_completed_ > last_submitted_ || (stopped_ && count_ != 0u)) return false;
     uint32_t previous = last_completed_;
     for (uint32_t index = 0u; index < count_; index++) {
         const uint32_t fence = pending_[(head_ + index) % capacity];

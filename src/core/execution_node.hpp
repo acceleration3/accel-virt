@@ -35,6 +35,13 @@ public:
     [[nodiscard]] Status complete(InterruptNotification &notification);
     uint32_t             current_fence();
     uint32_t             pending();
+    uint32_t             last_submitted();
+    /* Interrupt time of the last submission into an idle queue or completion. */
+    uint64_t             progress_time();
+    /* ResetFromTimeout: VidSch aborts every packet itself, so the queue is
+     * dropped without a report, and submissions are refused until restart. */
+    void                 reset();
+    void                 restart();
 
     bool invariants_hold() const;
 
@@ -52,6 +59,8 @@ private:
     uint32_t  last_completed_;
     uint32_t  preemption_fence_;
     bool      preemption_requested_;
+    bool      stopped_;
+    uint64_t  progress_time_;
 
     friend struct ExecutionNodeProbe;
 };

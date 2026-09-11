@@ -83,6 +83,8 @@ int32_t AvDdiSubmitCommand(void *context, const av::DxgkargSubmitCommandRecord *
 int32_t AvDdiPreemptCommand(void *context, const av::DxgkargPreemptCommandRecord *request);
 int32_t AvDdiQueryCurrentFence(void *context, av::DxgkargQueryCurrentFenceRecord *request);
 int32_t AvDdiBuildPagingBuffer(void *context, av::DxgkargBuildPagingBufferRecord *request);
+int32_t AvDdiResetFromTimeout(void *context);
+int32_t AvDdiRestartFromTimeout(void *context);
 /* The KSYNCHRONIZE_ROUTINE DxgkCbSynchronizeExecution runs at device IRQL. */
 uint8_t AvSynchronizedNotify(void *notification);
 

@@ -649,6 +649,19 @@ TEST(adapter_collect_dbg_info, a_stopped_adapter_reports_stopped)
   CHECK_EQ(buffer[7], 0u);
   CHECK_EQ(buffer[8], 0u); }
 
+TEST(adapter_collect_dbg_info, the_report_carries_the_node_state)
+{ Fixture fixture; std::uint8_t buffer[av::DebugReport::report_bytes] = {};
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargSubmitCommandRecord submit = {};
+  submit.SubmissionFenceId = 4u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(collect(fixture.adapter(), buffer, sizeof buffer, nullptr), success);
+  CHECK_EQ(buffer[16], 4u);   /* last submitted */
+  CHECK_EQ(buffer[20], 0u);   /* last completed */
+  CHECK_EQ(buffer[32], 1u);   /* pending */ }
+
 TEST(adapter_collect_dbg_info, a_short_buffer_gets_whole_fields_only_and_nothing_past_it)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
@@ -914,3 +927,50 @@ TEST(adapter_build_paging_buffer, answers_aperture_operations_only)
   request.Operation = 1;
   CHECK_EQ(nt(fixture.adapter().build_paging_buffer(&request)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().build_paging_buffer(nullptr)), invalid_parameter); }
+
+/* ---- TDR (feature 010) ---------------------------------------------------------- */
+
+TEST(adapter_reset_from_timeout, abandons_packets_resets_the_device_then_restart_brings_both_back)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargSubmitCommandRecord submit = {};
+  submit.SubmissionFenceId = 1u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(nt(fixture.adapter().reset_from_timeout()), success);
+  CHECK(fixture.adapter().invariants_hold());
+  CHECK_EQ(fixture.function().common().status(), 0u);
+  submit.SubmissionFenceId = 2u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), invalid_device_state);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  CHECK_EQ(nt(fixture.adapter().restart_from_timeout()), success);
+  CHECK_EQ(fixture.function().common().status(), driver_ok_status);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), success);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).FenceId, 2u); }
+
+TEST(adapter_reset_from_timeout, before_start_touches_no_device)
+{ Fixture fixture;
+  CHECK_EQ(nt(fixture.adapter().reset_from_timeout()), success);
+  CHECK_EQ(nt(fixture.adapter().restart_from_timeout()), success);
+  CHECK_EQ(fixture.function().common().status_writes(), 0u); }
+
+TEST(adapter_restart_from_timeout, a_device_that_will_not_come_back_is_reported_and_submissions_stay_refused)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().reset_from_timeout()), success);
+  fixture.function().common().set_queues(1u, 256u);
+  CHECK_EQ(nt(fixture.adapter().restart_from_timeout()), not_found);
+  av::DxgkargSubmitCommandRecord submit = {};
+  submit.SubmissionFenceId = 1u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), invalid_device_state);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.platform().live_allocations(), 0u); }

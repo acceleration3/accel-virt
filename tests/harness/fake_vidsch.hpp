@@ -34,6 +34,9 @@ public:
     std::int32_t submit();
     std::int32_t preempt();
     void         run_dpc();
+    /* TdrResetFromTimeout: VidSch aborts every packet it had submitted. */
+    std::int32_t reset_from_timeout();
+    std::int32_t restart_from_timeout();
     std::int32_t query_current_fence(std::uint32_t &fence);
 
     const std::uint8_t *dma() const;

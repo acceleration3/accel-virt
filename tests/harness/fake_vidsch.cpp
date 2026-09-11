@@ -135,6 +135,21 @@ void FakeVidSch::run_dpc()
     for (; seen_ < dxgkrnl_.interrupts(); seen_++) check_notification(dxgkrnl_.interrupt(seen_));
 }
 
+std::int32_t FakeVidSch::reset_from_timeout()
+{
+    platform_.set_irql(Irql::passive);
+    const std::int32_t status =
+        reinterpret_cast<std::int32_t (*)(void *)>(table_.routine(DdiSlot::DxgkDdiResetFromTimeout))(adapter_);
+    if (status >= 0) completed_ = submitted_;
+    return status;
+}
+
+std::int32_t FakeVidSch::restart_from_timeout()
+{
+    platform_.set_irql(Irql::passive);
+    return reinterpret_cast<std::int32_t (*)(void *)>(table_.routine(DdiSlot::DxgkDdiRestartFromTimeout))(adapter_);
+}
+
 std::int32_t FakeVidSch::query_current_fence(std::uint32_t &fence)
 {
     platform_.set_irql(Irql::passive);

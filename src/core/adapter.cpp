@@ -260,7 +260,7 @@ int32_t Adapter::collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect)
         return NtStatus(Status::invalid_parameter).value();
     if (collect->pExtension != nullptr) platform_.zero(collect->pExtension, sizeof *collect->pExtension);
     const bool powered = device_.constructed();
-    const DebugReport report(platform_, started_, powered, powered ? device_.object().features() : 0u);
+    const DebugReport report(platform_, started_, powered, powered ? device_.object().features() : 0u, node_);
     static_cast<void>(report.write(collect->pBuffer, collect->BufferSize));
     return NtStatus(Status::ok).value();
 }
@@ -387,6 +387,23 @@ int32_t Adapter::build_paging_buffer(DxgkargBuildPagingBufferRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::build_paging_buffer");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     return NtStatus(PagingRequest(platform_, *request).build()).value();
+}
+
+int32_t Adapter::reset_from_timeout()
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::reset_from_timeout");
+    InvariantScope<Adapter> guard(platform_, *this, "reset_from_timeout");
+    node_.reset();
+    return NtStatus(power_down()).value();
+}
+
+int32_t Adapter::restart_from_timeout()
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::restart_from_timeout");
+    InvariantScope<Adapter> guard(platform_, *this, "restart_from_timeout");
+    const Status status = started_ ? power_up() : Status::ok;
+    if (status == Status::ok) node_.restart();
+    return NtStatus(status).value();
 }
 
 bool Adapter::invariants_hold() const

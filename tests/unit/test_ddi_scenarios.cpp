@@ -302,7 +302,7 @@ TEST(ddi_scenario, the_render_ddi_set_is_incomplete_until_present_arrives)
   CHECK_EQ(device.fdo().start_device(), 0);
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), revision_mismatch);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::render_ddis_incomplete);
-  CHECK(device.fdo().dxgadapter().missing_render_slot() == DdiSlot::DxgkDdiResetFromTimeout);
+  CHECK(device.fdo().dxgadapter().missing_render_slot() == DdiSlot::DxgkDdiControlInterrupt);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 namespace {
@@ -519,3 +519,33 @@ TEST(ddi_scenario, a_render_that_overruns_is_refused_and_nothing_is_submitted)
     vidsch.run_dpc();
     CHECK_EQ(vidsch.completed(), 0u); }
   CHECK_EQ(device.fdo().remove_device(), 0); }
+
+/* ---- TDR (feature 010) ---------------------------------------------------------- */
+
+TEST(ddi_scenario, a_timeout_is_recovered_from_twice)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
+    CHECK_EQ(vidsch.create_context(), 0);
+    std::uint8_t command[16] = {};
+    for (int round = 0; round < 2; round++) {
+        CHECK_EQ(vidsch.render(command, sizeof command, 0u, 0), 0);
+        CHECK_EQ(vidsch.submit(), 0);
+        CHECK_EQ(vidsch.reset_from_timeout(), 0);
+        vidsch.run_dpc();
+        CHECK_EQ(device.function().common().status(), 0u);
+        CHECK_EQ(vidsch.restart_from_timeout(), 0);
+        CHECK_EQ(device.function().common().status(), driver_ok_status);
+        CHECK_EQ(vidsch.render(command, sizeof command, 0u, 0), 0);
+        CHECK_EQ(vidsch.submit(), 0);
+        vidsch.run_dpc();
+        CHECK_EQ(vidsch.completed(), vidsch.submitted());
+    }
+    std::uint32_t fence = 0u;
+    CHECK_EQ(vidsch.query_current_fence(fence), 0);
+    CHECK_EQ(fence, 4u); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }

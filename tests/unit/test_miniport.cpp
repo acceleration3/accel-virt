@@ -53,6 +53,7 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiRender,              DdiSlot::DxgkDdiPatch,
     DdiSlot::DxgkDdiSubmitCommand,       DdiSlot::DxgkDdiPreemptCommand,
     DdiSlot::DxgkDdiQueryCurrentFence,   DdiSlot::DxgkDdiBuildPagingBuffer,
+    DdiSlot::DxgkDdiResetFromTimeout,    DdiSlot::DxgkDdiRestartFromTimeout,
 };
 
 bool is_implemented(std::uint16_t index)
