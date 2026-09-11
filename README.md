@@ -125,10 +125,12 @@ src/proto/                        the wire protocol, shared by both sides
 tests/unit/                       L1: every branch, invariants, garbage
 tests/harness/                    the adversarial platform mock, fake dxgkrnl
 tests/fuzz/ tests/corpus/         L3: libFuzzer targets and seed corpora
+tests/fixtures/                   bytes captured from real devices (tools/host/capture_pci_config.py)
 tests/loopback/                   L4: guest core ↔ device core in one process
 tests/tools/                      tests for the gate scripts themselves
 tools/                            gates, kit fetch, spec/roadmap generators
 tools/re/                         reverse-engineering scripts and pinned binaries
+tools/host/                       host-side tools: device captures, GPU discovery
 third_party/windows-kit/          fetched WDK/SDK subset (git-ignored)
 re/                               Ghidra workspace, rebuilt by tools/re/build_workspace.sh (git-ignored)
 ```

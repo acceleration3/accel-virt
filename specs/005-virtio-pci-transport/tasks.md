@@ -38,4 +38,4 @@ description: "Task list for feature 005: virtio-pci transport"
 
 ## Phase 5: Polish
 
-- [ ] T011 `tools/gate.sh`; docs; merge to `master`
+- [X] T011 `tools/gate.sh`; docs; merge to `master`
