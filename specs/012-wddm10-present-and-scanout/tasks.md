@@ -13,9 +13,9 @@ description: "Task list for feature 012: WDDM 1.0 present and scanout"
 
 ## Phase 2: Present (US1)
 
-- [ ] T003 Records and km proofs; Linux layout tests
-- [ ] T004 Tests then `PresentCommand` (proto) and its protocol section
-- [ ] T005 Tests then `PresentRequest`
+- [X] T003 Records and km proofs; Linux layout tests
+- [X] T004 Tests then `PresentCommand` (proto) and its protocol section
+- [X] T005 Tests then `PresentRequest`
 
 **Checkpoint**: commit.
 

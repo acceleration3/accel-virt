@@ -142,6 +142,31 @@ for its own; `DxgkDdiCreateAllocation` decodes it. It never reaches the device.
 
 Every kind but client is a surface: width, height and pitch are non-zero.
 
+## Present command (guest driver -> device, in a DMA buffer)
+
+What `DxgkDdiPresent` writes at the start of the DMA buffer dxgkrnl gives it,
+followed by its sub-rectangles; `DxgkDdiPatch` fills the addresses before the
+buffer is submitted. 72 bytes, then 16 per sub-rectangle. A rectangle is
+`left, top, right, bottom` as i32, right and bottom exclusive, `left <= right`,
+`top <= bottom`.
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | magic | `RVKP` = `0x504B5652` |
+| 4 | u32 | operation | 1 blt (source to destination), 2 colour fill (destination), 3 flip (source becomes the scanout) |
+| 8 | u32 | color | X8R8G8B8, colour fill only, else 0 |
+| 12 | u32 | sub_rect_count | rectangles following the header |
+| 16 | rect | source | in the source allocation, as dxgkrnl gave it; read for blt |
+| 32 | rect | destination | in the destination allocation |
+| 48 | u64 | source_address | patched: allocation-list entry 1; blt and flip |
+| 56 | u64 | destination_address | patched: allocation-list entry 2; blt and colour fill |
+| 64 | u32 | flip_interval | `D3DDDI_FLIPINTERVAL_TYPE`, flip only |
+| 68 | u32 | reserved | 0 |
+
+When a DMA buffer cannot hold every sub-rectangle, the command carries as many
+as fit and dxgkrnl calls `DxgkDdiPresent` again with a fresh buffer for the
+rest; each buffer holds one complete command.
+
 ## Fence page (device -> guest)
 
 Offset 0 of the fence resource. The device updates it from its worker thread;

@@ -25,6 +25,9 @@
 #include "../../src/core/ddi/dxgkarg_preempt_command_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_current_fence_record.hpp"
 #include "../../src/core/ddi/dxgkarg_render_record.hpp"
+#include "../../src/core/ddi/dxgkarg_present_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "../../src/core/ddi/dxgkarg_submit_command_record.hpp"
 #include "../../src/core/ddi/dxgkargcb_notify_interrupt_data_record.hpp"
 #include "../../src/core/ddi/d3dkmdt_monitor_source_mode_record.hpp"
@@ -198,3 +201,25 @@ TEST(ddi_records, vidpn_records_match_the_offsets_basicdisplay_reads)
   CHECK_EQ(sizeof(av::DxgkargRecommendVidPnTopologyRecord), 0x18u);
   CHECK_EQ(sizeof(av::DxgkargGetScanLineRecord), 0x0Cu);
   CHECK_EQ(sizeof(av::DxgkDeviceDescriptorRecord), 0x10u); }
+
+/* The present and scanout records (feature 012), at the x64 offsets basicrender.sys reads. */
+TEST(ddi_records, present_and_scanout_records_match_the_x64_layout)
+{ CHECK_EQ(sizeof(av::RectRecord), 0x10u);
+  CHECK_EQ(sizeof(av::DxgkargPresentRecord), 0xA8u);
+  CHECK_EQ(offsetof(av::DxgkargPresentRecord, pPatchLocationListOut), 0x28u);
+  CHECK_EQ(offsetof(av::DxgkargPresentRecord, Color), 0x38u);
+  CHECK_EQ(offsetof(av::DxgkargPresentRecord, DstRect), 0x3Cu);
+  CHECK_EQ(offsetof(av::DxgkargPresentRecord, SrcRect), 0x4Cu);
+  CHECK_EQ(offsetof(av::DxgkargPresentRecord, SubRectCnt), 0x5Cu);
+  CHECK_EQ(offsetof(av::DxgkargPresentRecord, pDstSubRects), 0x60u);
+  CHECK_EQ(offsetof(av::DxgkargPresentRecord, Flags), 0x6Cu);
+  CHECK_EQ(offsetof(av::DxgkargPresentRecord, PrivateDriverDataSize), 0x98u);
+  CHECK_EQ(offsetof(av::DxgkargPresentRecord, pPrivateDriverData), 0xA0u);
+  CHECK_EQ(sizeof(av::DxgkPrimaryDataRecord), 0x18u);
+  CHECK_EQ(sizeof(av::DxgkargSetVidPnSourceAddressRecord), 0x840u);
+  CHECK_EQ(offsetof(av::DxgkargSetVidPnSourceAddressRecord, hAllocation), 0x10u);
+  CHECK_EQ(offsetof(av::DxgkargSetVidPnSourceAddressRecord, Flags), 0x228u);
+  CHECK_EQ(offsetof(av::DxgkargSetVidPnSourceAddressRecord, PrimaryData), 0x230u);
+  CHECK_EQ(sizeof(av::DxgkargSetVidPnSourceVisibilityRecord), 0x08u);
+  CHECK_EQ(offsetof(av::DxgkargcbNotifyInterruptDataRecord, Argument2), 0x10u);
+  CHECK_EQ(offsetof(av::DxgkargcbNotifyInterruptDataRecord, UnionRemainder), 0x18u); }

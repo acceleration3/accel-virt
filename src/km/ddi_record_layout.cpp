@@ -54,6 +54,10 @@
 #include "ddi/dxgk_wddm_device_caps_record.hpp"
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
+#include "ddi/dxgkarg_present_record.hpp"
+#include "ddi/dxgkarg_set_vidpn_source_address_record.hpp"
+#include "ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
+#include "ddi/rect_record.hpp"
 #include "ddi/dxgkarg_query_adapter_info_record.hpp"
 #include "ddi/dxgkrnl_interface_record.hpp"
 #include "ddi/linked_device_record.hpp"
@@ -471,6 +475,66 @@ AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Argument1, DXGKARGCB_NOTIFY_I
 AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Argument2, DXGKARGCB_NOTIFY_INTERRUPT_DATA, DmaPreempted.NodeOrdinal);
 AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Argument3, DXGKARGCB_NOTIFY_INTERRUPT_DATA, DmaPreempted.EngineOrdinal);
 AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Flags, DXGKARGCB_NOTIFY_INTERRUPT_DATA, Flags);
+/* CRTC_VSYNC reuses the leading UINTs: the target, the 64-bit address over two, the adapter mask. */
+AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, FenceId, DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsync.VidPnTargetId);
+AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Argument2, DXGKARGCB_NOTIFY_INTERRUPT_DATA, CrtcVsync.PhysicalAddress);
+AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, UnionRemainder, DXGKARGCB_NOTIFY_INTERRUPT_DATA,
+               CrtcVsync.PhysicalAdapterMask);
+
+AV_SAME_SIZE(RectRecord, RECT);
+AV_SAME_OFFSET(RectRecord, left, RECT, left);
+AV_SAME_OFFSET(RectRecord, top, RECT, top);
+AV_SAME_OFFSET(RectRecord, right, RECT, right);
+AV_SAME_OFFSET(RectRecord, bottom, RECT, bottom);
+
+AV_SAME_SIZE(DxgkargPresentRecord, DXGKARG_PRESENT);
+AV_SAME_OFFSET(DxgkargPresentRecord, pDmaBuffer, DXGKARG_PRESENT, pDmaBuffer);
+AV_SAME_OFFSET(DxgkargPresentRecord, DmaSize, DXGKARG_PRESENT, DmaSize);
+AV_SAME_OFFSET(DxgkargPresentRecord, pDmaBufferPrivateData, DXGKARG_PRESENT, pDmaBufferPrivateData);
+AV_SAME_OFFSET(DxgkargPresentRecord, DmaBufferPrivateDataSize, DXGKARG_PRESENT, DmaBufferPrivateDataSize);
+AV_SAME_OFFSET(DxgkargPresentRecord, pAllocationList, DXGKARG_PRESENT, pAllocationList);
+AV_SAME_OFFSET(DxgkargPresentRecord, pPatchLocationListOut, DXGKARG_PRESENT, pPatchLocationListOut);
+AV_SAME_OFFSET(DxgkargPresentRecord, PatchLocationListOutSize, DXGKARG_PRESENT, PatchLocationListOutSize);
+AV_SAME_OFFSET(DxgkargPresentRecord, MultipassOffset, DXGKARG_PRESENT, MultipassOffset);
+AV_SAME_OFFSET(DxgkargPresentRecord, Color, DXGKARG_PRESENT, Color);
+AV_SAME_OFFSET(DxgkargPresentRecord, DstRect, DXGKARG_PRESENT, DstRect);
+AV_SAME_OFFSET(DxgkargPresentRecord, SrcRect, DXGKARG_PRESENT, SrcRect);
+AV_SAME_OFFSET(DxgkargPresentRecord, SubRectCnt, DXGKARG_PRESENT, SubRectCnt);
+AV_SAME_OFFSET(DxgkargPresentRecord, pDstSubRects, DXGKARG_PRESENT, pDstSubRects);
+AV_SAME_OFFSET(DxgkargPresentRecord, FlipInterval, DXGKARG_PRESENT, FlipInterval);
+AV_SAME_OFFSET(DxgkargPresentRecord, Flags, DXGKARG_PRESENT, Flags);
+AV_SAME_OFFSET(DxgkargPresentRecord, DmaBufferSegmentId, DXGKARG_PRESENT, DmaBufferSegmentId);
+AV_SAME_OFFSET(DxgkargPresentRecord, DmaBufferPhysicalAddress, DXGKARG_PRESENT, DmaBufferPhysicalAddress);
+AV_SAME_OFFSET(DxgkargPresentRecord, Reserved, DXGKARG_PRESENT, Reserved);
+AV_SAME_OFFSET(DxgkargPresentRecord, DmaBufferGpuVirtualAddress, DXGKARG_PRESENT, DmaBufferGpuVirtualAddress);
+AV_SAME_OFFSET(DxgkargPresentRecord, NumSrcAllocations, DXGKARG_PRESENT, NumSrcAllocations);
+AV_SAME_OFFSET(DxgkargPresentRecord, NumDstAllocations, DXGKARG_PRESENT, NumDstAllocations);
+AV_SAME_OFFSET(DxgkargPresentRecord, PrivateDriverDataSize, DXGKARG_PRESENT, PrivateDriverDataSize);
+AV_SAME_OFFSET(DxgkargPresentRecord, pPrivateDriverData, DXGKARG_PRESENT, pPrivateDriverData);
+
+AV_SAME_SIZE(DxgkPrimaryDataRecord, DXGK_PRIMARYDATA);
+AV_SAME_OFFSET(DxgkPrimaryDataRecord, hAllocation, DXGK_PRIMARYDATA, hAllocation);
+AV_SAME_OFFSET(DxgkPrimaryDataRecord, SegmentId, DXGK_PRIMARYDATA, SegmentId);
+AV_SAME_OFFSET(DxgkPrimaryDataRecord, SegmentAddress, DXGK_PRIMARYDATA, SegmentAddress);
+
+AV_SAME_SIZE(DxgkargSetVidPnSourceAddressRecord, DXGKARG_SETVIDPNSOURCEADDRESS);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, VidPnSourceId, DXGKARG_SETVIDPNSOURCEADDRESS, VidPnSourceId);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, PrimarySegment, DXGKARG_SETVIDPNSOURCEADDRESS, PrimarySegment);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, PrimaryAddress, DXGKARG_SETVIDPNSOURCEADDRESS, PrimaryAddress);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, hAllocation, DXGKARG_SETVIDPNSOURCEADDRESS, hAllocation);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, ContextCount, DXGKARG_SETVIDPNSOURCEADDRESS, ContextCount);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, Context, DXGKARG_SETVIDPNSOURCEADDRESS, Context);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, Flags, DXGKARG_SETVIDPNSOURCEADDRESS, Flags);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, Duration, DXGKARG_SETVIDPNSOURCEADDRESS, Duration);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, PrimaryData, DXGKARG_SETVIDPNSOURCEADDRESS, PrimaryData);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, DriverPrivateDataSize, DXGKARG_SETVIDPNSOURCEADDRESS,
+               DriverPrivateDataSize);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceAddressRecord, pDriverPrivateData, DXGKARG_SETVIDPNSOURCEADDRESS,
+               pDriverPrivateData);
+
+AV_SAME_SIZE(DxgkargSetVidPnSourceVisibilityRecord, DXGKARG_SETVIDPNSOURCEVISIBILITY);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceVisibilityRecord, VidPnSourceId, DXGKARG_SETVIDPNSOURCEVISIBILITY, VidPnSourceId);
+AV_SAME_OFFSET(DxgkargSetVidPnSourceVisibilityRecord, Visible, DXGKARG_SETVIDPNSOURCEVISIBILITY, Visible);
 
 static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, DmaCompleted.NodeOrdinal) ==
                   offsetof(av::DxgkargcbNotifyInterruptDataRecord, Argument1) &&
