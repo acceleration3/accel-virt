@@ -10,6 +10,7 @@
 namespace av {
 
 enum class LockRank : uint16_t {
+    context_table = 90u,      /* ContextTable, which looks devices up in DeviceTable */
     device_table = 100u,       /* DeviceTable, which calls into AllocationTable */
     allocation_table = 110u,
 };

@@ -100,4 +100,10 @@ int32_t AvDdiCloseAllocation(void *device, const av::DxgkargCloseAllocationRecor
 int32_t AvDdiSetDisplayPrivateDriverFormat(void *context, const av::DxgkargSetDisplayPrivateDriverFormatRecord *request)
 { return static_cast<av::Adapter *>(context)->set_display_private_driver_format(request); }
 
+int32_t AvDdiCreateContext(void *device, av::DxgkargCreateContextRecord *request)
+{ return static_cast<av::Device *>(device)->adapter().create_context(device, request); }
+
+int32_t AvDdiDestroyContext(void *context)
+{ return static_cast<av::Context *>(context)->device().adapter().destroy_context(context); }
+
 }

@@ -35,6 +35,12 @@ public:
     /* DxgkCbGetHandleData for an allocation, legal only inside the DDI dxgkrnl
      * is calling; not_found when dxgkrnl knows no such handle. */
     [[nodiscard]] Status get_handle_data(uint32_t allocation_handle, void *&data);
+    /* Runs `routine` at the adapter's device IRQL, synchronized with its ISR. */
+    [[nodiscard]] Status synchronize_execution(SynchronizeRoutine routine, void *context);
+    /* Only inside the ISR or a synchronized routine. */
+    void                 notify_interrupt(const DxgkargcbNotifyInterruptDataRecord &data);
+    /* From the DPC, after the interrupts it follows. */
+    void                 notify_dpc();
 
     bool initialized() const;
     bool invariants_hold() const;

@@ -34,6 +34,8 @@ public:
     [[nodiscard]] Status destroy(void *device);
     [[nodiscard]] Status open(void *device, DxgkargOpenAllocationRecord &request);
     [[nodiscard]] Status close(void *device, const DxgkargCloseAllocationRecord &request);
+    /* The live device `device` names, or null. */
+    Device              *find(void *device);
     uint32_t             devices() const;
     uint32_t             opens() const;
 

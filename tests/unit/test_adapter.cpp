@@ -6,6 +6,7 @@
 #include "../../src/core/ddi/dxgk_open_allocation_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_close_allocation_record.hpp"
 #include "../../src/core/ddi/dxgkarg_create_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_create_context_record.hpp"
 #include "../../src/core/ddi/dxgkarg_create_device_record.hpp"
 #include "../../src/core/ddi/dxgkarg_describe_allocation_record.hpp"
 #include "../../src/core/ddi/dxgkarg_destroy_allocation_record.hpp"
@@ -19,6 +20,7 @@
 #include "../../src/core/ddi/dxgkarg_escape_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
 #include "../../src/core/ddi/linked_device_record.hpp"
+#include "../../src/core/context.hpp"
 #include "../../src/core/debug_report.hpp"
 #include "../harness/guarded_buffer.hpp"
 #include "../harness/fake_dxgkrnl_adapter.hpp"
@@ -803,3 +805,17 @@ TEST(adapter, removal_with_devices_and_allocations_outstanding_releases_them)
     CHECK_EQ(nt(adapter.create_device(&device)), success);
     CHECK_EQ(nt(adapter.stop_device()), success); }
   CHECK_EQ(platform.live_allocations(), 0u); }
+
+/* ---- Contexts (feature 009) --------------------------------------------------- */
+
+TEST(adapter_create_context, answers_a_context_on_a_device_and_destroys_it)
+{ Fixture fixture;
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  CHECK(&static_cast<av::Context *>(context.hContext)->device().adapter() == &fixture.adapter());
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }

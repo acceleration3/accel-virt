@@ -41,6 +41,8 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiOpenAllocation, reinterpret_cast<DdiRoutine>(&AvDdiOpenAllocation)},
         {DdiSlot::DxgkDdiCloseAllocation, reinterpret_cast<DdiRoutine>(&AvDdiCloseAllocation)},
         {DdiSlot::DxgkDdiSetDisplayPrivateDriverFormat, reinterpret_cast<DdiRoutine>(&AvDdiSetDisplayPrivateDriverFormat)},
+        {DdiSlot::DxgkDdiCreateContext, reinterpret_cast<DdiRoutine>(&AvDdiCreateContext)},
+        {DdiSlot::DxgkDdiDestroyContext, reinterpret_cast<DdiRoutine>(&AvDdiDestroyContext)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

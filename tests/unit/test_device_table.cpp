@@ -169,7 +169,9 @@ TEST(device_table_create, answers_a_live_device_that_knows_its_adapter)
   CHECK_EQ(fixture.devices().devices(), 1u);
   const auto *device = static_cast<Device *>(handle);
   CHECK(&device->adapter() == &fixture.adapter());
-  CHECK(fixture.create_device() != handle); }
+  CHECK(fixture.create_device() != handle);
+  CHECK(fixture.devices().find(handle) == device);
+  CHECK(fixture.devices().find(&fixture) == nullptr); }
 
 TEST(device_table_create, propagates_allocation_failure)
 { Fixture fixture;

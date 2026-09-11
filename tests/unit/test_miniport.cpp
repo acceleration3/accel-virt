@@ -49,6 +49,7 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiDescribeAllocation,  DdiSlot::DxgkDdiGetStandardAllocationDriverData,
     DdiSlot::DxgkDdiOpenAllocation,      DdiSlot::DxgkDdiCloseAllocation,
     DdiSlot::DxgkDdiSetDisplayPrivateDriverFormat,
+    DdiSlot::DxgkDdiCreateContext,       DdiSlot::DxgkDdiDestroyContext,
 };
 
 bool is_implemented(std::uint16_t index)

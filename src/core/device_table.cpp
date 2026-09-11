@@ -132,6 +132,13 @@ Status DeviceTable::close(void *device, const DxgkargCloseAllocationRecord &requ
     return Status::ok;
 }
 
+Device *DeviceTable::find(void *device)
+{
+    platform_.require_irql_at_most(Irql::apc, "DeviceTable::find");
+    MutexGuard lock(mutex_);
+    return devices_.find(device);
+}
+
 uint32_t DeviceTable::devices() const { return devices_.live(); }
 uint32_t DeviceTable::opens() const { return opens_.live(); }
 

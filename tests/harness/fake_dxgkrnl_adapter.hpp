@@ -43,6 +43,12 @@ public:
     std::uint32_t live_mappings() const;
     std::uint32_t maps() const;
     std::uint32_t dpcs_queued() const;
+    /* DxgkCbNotifyInterrupt calls, in order; only the first max_interrupts kept. */
+    static constexpr std::uint32_t max_interrupts = 64u;
+    std::uint32_t                           interrupts() const;
+    const DxgkargcbNotifyInterruptDataRecord &interrupt(std::uint32_t index) const;
+    std::uint32_t                           dpc_notifications() const;
+    void                                    refuse_synchronize(std::uint32_t status);
 
     std::int32_t get_device_information(DxgkDeviceInfoRecord *info);
     std::int32_t read_device_space(std::uint32_t space, void *buffer, std::uint32_t offset,
@@ -51,6 +57,10 @@ public:
                             std::uint8_t user_mode, std::int32_t cache, void **mapped);
     std::int32_t unmap_memory(void *mapped);
     std::uint8_t queue_dpc();
+    std::int32_t synchronize_execution(SynchronizeRoutine routine, void *context, std::uint32_t message,
+                                       std::uint8_t *returned);
+    void         notify_interrupt(const DxgkargcbNotifyInterruptDataRecord &data);
+    void         notify_dpc();
 
 private:
     static constexpr std::uintptr_t virtual_base = 0x7FA000000000u;
@@ -77,6 +87,11 @@ private:
     std::uint32_t          dpcs_;
     std::uint8_t           index_;
     std::int64_t           system_memory_;
+    DxgkargcbNotifyInterruptDataRecord interrupts_[max_interrupts];
+    std::uint32_t          interrupt_count_;
+    std::uint32_t          dpc_notifications_;
+    std::uint32_t          synchronize_status_;
+    bool                   synchronized_;
 };
 
 }  // namespace av

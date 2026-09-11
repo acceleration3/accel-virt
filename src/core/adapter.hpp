@@ -6,6 +6,7 @@
 #include "allocation_table.hpp"
 #include "aperture_segment.hpp"
 #include "bar_mappings.hpp"
+#include "context_table.hpp"
 #include "device_table.hpp"
 #include "display_sources.hpp"
 #include "driver_capabilities.hpp"
@@ -26,6 +27,7 @@ struct DxgkChildStatusRecord;
 struct DxgkrnlInterfaceRecord;
 struct DxgkargCloseAllocationRecord;
 struct DxgkargCollectDbgInfoRecord;
+struct DxgkargCreateContextRecord;
 struct DxgkargCreateAllocationRecord;
 struct DxgkargCreateDeviceRecord;
 struct DxgkargDescribeAllocationRecord;
@@ -75,6 +77,8 @@ public:
     int32_t open_allocation(void *device, DxgkargOpenAllocationRecord *request);
     int32_t close_allocation(void *device, const DxgkargCloseAllocationRecord *request);
     int32_t set_display_private_driver_format(const DxgkargSetDisplayPrivateDriverFormatRecord *request);
+    int32_t create_context(void *device, DxgkargCreateContextRecord *request);
+    int32_t destroy_context(void *context);
 
     bool invariants_hold() const;
 
@@ -100,6 +104,7 @@ private:
     DisplaySources                 sources_;
     AllocationTable                allocations_;
     DeviceTable                    devices_;
+    ContextTable                   contexts_;
     bool                           started_;
 
     friend struct AdapterProbe;

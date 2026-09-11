@@ -6,6 +6,7 @@
 #include "ddi/dxgk_device_info_record.hpp"
 #include "ddi/dxgkarg_close_allocation_record.hpp"
 #include "ddi/dxgkarg_create_allocation_record.hpp"
+#include "ddi/dxgkarg_create_context_record.hpp"
 #include "ddi/dxgkarg_create_device_record.hpp"
 #include "ddi/dxgkarg_describe_allocation_record.hpp"
 #include "ddi/dxgkarg_destroy_allocation_record.hpp"
@@ -43,7 +44,8 @@ enum : int32_t {
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
       resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), segment_(platform), sources_(platform),
-      allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), started_(false) {}
+      allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_),
+      started_(false) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
 
@@ -315,6 +317,19 @@ int32_t Adapter::set_display_private_driver_format(const DxgkargSetDisplayPrivat
     if (request->PrimaryAllocation != nullptr && allocations_.find(request->PrimaryAllocation) == nullptr)
         return NtStatus(Status::invalid_parameter).value();
     return NtStatus(sources_.set_private_format(request->VidPnSourceId, request->PrivateDriverFormatAttribute)).value();
+}
+
+int32_t Adapter::create_context(void *device, DxgkargCreateContextRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::create_context");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(contexts_.create(device, *request)).value();
+}
+
+int32_t Adapter::destroy_context(void *context)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_context");
+    return NtStatus(contexts_.destroy(context)).value();
 }
 
 bool Adapter::invariants_hold() const

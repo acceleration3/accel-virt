@@ -12,7 +12,9 @@ bool DxgkrnlInterface::has_callbacks(const DxgkrnlInterfaceRecord &table) const
 {
     return table.DxgkCbGetDeviceInformation != nullptr && table.DxgkCbMapMemory != nullptr &&
            table.DxgkCbQueueDpc != nullptr && table.DxgkCbReadDeviceSpace != nullptr &&
-           table.DxgkCbUnmapMemory != nullptr && table.DxgkCbGetHandleData != nullptr;
+           table.DxgkCbUnmapMemory != nullptr && table.DxgkCbGetHandleData != nullptr &&
+           table.DxgkCbSynchronizeExecution != nullptr && table.DxgkCbNotifyInterrupt != nullptr &&
+           table.DxgkCbNotifyDpc != nullptr;
 }
 
 Status DxgkrnlInterface::initialize(const DxgkrnlInterfaceRecord *table)
@@ -88,6 +90,28 @@ Status DxgkrnlInterface::get_handle_data(uint32_t allocation_handle, void *&data
     arguments.Type = handle_allocation;
     data = record_.DxgkCbGetHandleData(&arguments);
     return data != nullptr ? Status::ok : Status::not_found;
+}
+
+Status DxgkrnlInterface::synchronize_execution(SynchronizeRoutine routine, void *context)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "DxgkrnlInterface::synchronize_execution");
+    if (!initialized_) return Status::invalid_state;
+    uint8_t returned = 0u;
+    return NtStatus(static_cast<uint32_t>(
+                        record_.DxgkCbSynchronizeExecution(record_.DeviceHandle, routine, context, 0u, &returned)))
+        .status();
+}
+
+void DxgkrnlInterface::notify_interrupt(const DxgkargcbNotifyInterruptDataRecord &data)
+{
+    platform_.require_irql_at_most(Irql::isr, "DxgkrnlInterface::notify_interrupt");
+    if (initialized_) record_.DxgkCbNotifyInterrupt(record_.DeviceHandle, &data);
+}
+
+void DxgkrnlInterface::notify_dpc()
+{
+    platform_.require_irql_at_most(Irql::dispatch, "DxgkrnlInterface::notify_dpc");
+    if (initialized_) record_.DxgkCbNotifyDpc(record_.DeviceHandle);
 }
 
 bool DxgkrnlInterface::initialized() const { return initialized_; }

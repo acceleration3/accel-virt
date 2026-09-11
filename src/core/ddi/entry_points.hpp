@@ -6,6 +6,7 @@
 #ifndef AV_DDI_ENTRY_POINTS_HPP
 #define AV_DDI_ENTRY_POINTS_HPP
 
+#include "../context.hpp"
 #include "../device.hpp"
 #include "../miniport_binding.hpp"
 #include "dxgk_child_descriptor_record.hpp"
@@ -13,6 +14,7 @@
 #include "dxgkarg_close_allocation_record.hpp"
 #include "dxgkarg_collect_dbg_info_record.hpp"
 #include "dxgkarg_create_allocation_record.hpp"
+#include "dxgkarg_create_context_record.hpp"
 #include "dxgkarg_create_device_record.hpp"
 #include "dxgkarg_describe_allocation_record.hpp"
 #include "dxgkarg_destroy_allocation_record.hpp"
@@ -66,6 +68,8 @@ int32_t AvDdiGetStandardAllocationDriverData(void *context, av::DxgkargGetStanda
 int32_t AvDdiOpenAllocation(void *device, av::DxgkargOpenAllocationRecord *request);
 int32_t AvDdiCloseAllocation(void *device, const av::DxgkargCloseAllocationRecord *request);
 int32_t AvDdiSetDisplayPrivateDriverFormat(void *context, const av::DxgkargSetDisplayPrivateDriverFormatRecord *request);
+int32_t AvDdiCreateContext(void *device, av::DxgkargCreateContextRecord *request);
+int32_t AvDdiDestroyContext(void *context);
 
 }
 

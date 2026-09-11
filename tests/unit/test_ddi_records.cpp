@@ -17,6 +17,16 @@
 #include "../../src/core/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
 #include "../../src/core/ddi/dxgkarg_open_allocation_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_display_private_driver_format_record.hpp"
+#include "../../src/core/ddi/d3dddi_patch_location_list_record.hpp"
+#include "../../src/core/ddi/dxgk_allocation_list_record.hpp"
+#include "../../src/core/ddi/dxgkarg_build_paging_buffer_record.hpp"
+#include "../../src/core/ddi/dxgkarg_create_context_record.hpp"
+#include "../../src/core/ddi/dxgkarg_patch_record.hpp"
+#include "../../src/core/ddi/dxgkarg_preempt_command_record.hpp"
+#include "../../src/core/ddi/dxgkarg_query_current_fence_record.hpp"
+#include "../../src/core/ddi/dxgkarg_render_record.hpp"
+#include "../../src/core/ddi/dxgkarg_submit_command_record.hpp"
+#include "../../src/core/ddi/dxgkargcb_notify_interrupt_data_record.hpp"
 #include "../../src/core/ddi/dxgk_child_descriptor_record.hpp"
 #include "../../src/core/ddi/dxgk_child_status_record.hpp"
 #include "../../src/core/ddi/dxgk_device_info_record.hpp"
@@ -129,3 +139,23 @@ TEST(ddi_records, device_and_allocation_records_match_the_x64_layout)
   CHECK_EQ(sizeof(av::D3dkmdtShadowSurfaceDataRecord), 0x10u);
   CHECK_EQ(sizeof(av::D3dkmdtStagingSurfaceDataRecord), 0x0Cu);
   CHECK_EQ(sizeof(av::D3dkmdtGdiSurfaceDataRecord), 0x18u); }
+
+/* The context and submission records (feature 009). */
+TEST(ddi_records, context_and_submission_records_match_the_x64_layout)
+{ CHECK_EQ(sizeof(av::DxgkargCreateContextRecord), 0x48u);
+  CHECK_EQ(offsetof(av::DxgkargCreateContextRecord, ContextInfoDmaBufferSize), 0x24u);
+  CHECK_EQ(sizeof(av::DxgkAllocationListRecord), 0x18u);
+  CHECK_EQ(sizeof(av::D3dddiPatchLocationListRecord), 0x18u);
+  CHECK_EQ(offsetof(av::D3dddiPatchLocationListRecord, PatchOffset), 0x10u);
+  CHECK_EQ(sizeof(av::DxgkargRenderRecord), 0x70u);
+  CHECK_EQ(offsetof(av::DxgkargRenderRecord, pPatchLocationListOut), 0x50u);
+  CHECK_EQ(sizeof(av::DxgkargPatchRecord), 0x78u);
+  CHECK_EQ(offsetof(av::DxgkargPatchRecord, SubmissionFenceId), 0x6Cu);
+  CHECK_EQ(sizeof(av::DxgkargSubmitCommandRecord), 0x60u);
+  CHECK_EQ(offsetof(av::DxgkargSubmitCommandRecord, SubmissionFenceId), 0x3Cu);
+  CHECK_EQ(sizeof(av::DxgkargPreemptCommandRecord), 0x10u);
+  CHECK_EQ(sizeof(av::DxgkargQueryCurrentFenceRecord), 0x0Cu);
+  CHECK_EQ(sizeof(av::DxgkargBuildPagingBufferRecord), 0x140u);
+  CHECK_EQ(offsetof(av::DxgkargBuildPagingBufferRecord, Operation), 0x1Cu);
+  CHECK_EQ(offsetof(av::DxgkargcbNotifyInterruptDataRecord, FenceId), 0x08u);
+  CHECK_EQ(offsetof(av::DxgkargcbNotifyInterruptDataRecord, Flags), 0x48u); }

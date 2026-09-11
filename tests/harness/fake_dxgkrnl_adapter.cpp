@@ -17,7 +17,8 @@ constexpr std::int32_t invalid_parameter = static_cast<std::int32_t>(0xC000000Du
 FakeDxgkrnlAdapter::FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunction &function, std::uint8_t index)
     : platform_(platform), function_(function), record_(), device_information_status_(0u),
       config_read_status_(0u), short_config_read_(false), map_refusal_countdown_(0u),
-      map_refusal_status_(0u), unmap_status_(0u), mappings_{}, mapping_count_(0u), maps_(0u), dpcs_(0u), index_(index), system_memory_(std::int64_t{8} << 30u)
+      map_refusal_status_(0u), unmap_status_(0u), mappings_{}, mapping_count_(0u), maps_(0u), dpcs_(0u), index_(index), system_memory_(std::int64_t{8} << 30u), interrupts_{},
+      interrupt_count_(0u), dpc_notifications_(0u), synchronize_status_(0u), synchronized_(false)
 {
     record_.Size = sizeof record_;
     record_.Version = 0x11007u;
@@ -39,6 +40,14 @@ FakeDxgkrnlAdapter::FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunc
         return static_cast<FakeDxgkrnlAdapter *>(handle)->unmap_memory(mapped);
     };
     record_.DxgkCbGetHandleData = &AvFakeGetHandleData;
+    record_.DxgkCbSynchronizeExecution = +[](void *handle, SynchronizeRoutine routine, void *context,
+                                             std::uint32_t message, std::uint8_t *returned) {
+        return static_cast<FakeDxgkrnlAdapter *>(handle)->synchronize_execution(routine, context, message, returned);
+    };
+    record_.DxgkCbNotifyInterrupt = +[](void *handle, const DxgkargcbNotifyInterruptDataRecord *data) {
+        static_cast<FakeDxgkrnlAdapter *>(handle)->notify_interrupt(*data);
+    };
+    record_.DxgkCbNotifyDpc = +[](void *handle) { static_cast<FakeDxgkrnlAdapter *>(handle)->notify_dpc(); };
     record_.DxgkCbQueueDpc = +[](void *handle) {
         return static_cast<FakeDxgkrnlAdapter *>(handle)->queue_dpc();
     };
@@ -133,6 +142,52 @@ std::uint8_t FakeDxgkrnlAdapter::queue_dpc()
 {
     dpcs_++;
     return 1u;
+}
+
+}  // namespace av
+
+namespace av {
+
+std::uint32_t FakeDxgkrnlAdapter::interrupts() const { return interrupt_count_; }
+
+const DxgkargcbNotifyInterruptDataRecord &FakeDxgkrnlAdapter::interrupt(std::uint32_t index) const
+{
+    return interrupts_[index < max_interrupts ? index : max_interrupts - 1u];
+}
+
+std::uint32_t FakeDxgkrnlAdapter::dpc_notifications() const { return dpc_notifications_; }
+
+void FakeDxgkrnlAdapter::refuse_synchronize(std::uint32_t status) { synchronize_status_ = status; }
+
+/* DxgkCbSynchronizeExecution: the routine runs at device IRQL with the ISR's
+ * lock held, so a notification is legal inside it and nowhere else outside the
+ * ISR. */
+std::int32_t FakeDxgkrnlAdapter::synchronize_execution(SynchronizeRoutine routine, void *context,
+                                                       std::uint32_t, std::uint8_t *returned)
+{
+    if (synchronize_status_ != 0u) return static_cast<std::int32_t>(synchronize_status_);
+    const Irql previous = platform_.current_irql();
+    platform_.set_irql(Irql::isr);
+    synchronized_ = true;
+    *returned = routine(context);
+    synchronized_ = false;
+    platform_.set_irql(previous);
+    return 0;
+}
+
+void FakeDxgkrnlAdapter::notify_interrupt(const DxgkargcbNotifyInterruptDataRecord &data)
+{
+    if (!synchronized_ && platform_.current_irql() != Irql::isr)
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "DxgkCbNotifyInterrupt outside the ISR");
+    if (interrupt_count_ < max_interrupts) interrupts_[interrupt_count_] = data;
+    interrupt_count_++;
+}
+
+void FakeDxgkrnlAdapter::notify_dpc()
+{
+    if (platform_.current_irql() != Irql::dispatch)
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "DxgkCbNotifyDpc outside the DPC");
+    dpc_notifications_++;
 }
 
 }  // namespace av

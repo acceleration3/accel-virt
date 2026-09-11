@@ -63,6 +63,17 @@ public:
         record_.DxgkCbUnmapMemory = +[](void *handle, void *mapped) {
             return static_cast<Callbacks *>(handle)->unmap_memory(mapped);
         };
+        record_.DxgkCbSynchronizeExecution = +[](void *handle, av::SynchronizeRoutine routine, void *context,
+                                                 std::uint32_t message, std::uint8_t *returned) {
+            auto *self = static_cast<Callbacks *>(handle);
+            self->synchronized_message = message;
+            *returned = routine(context);
+            return self->answer;
+        };
+        record_.DxgkCbNotifyInterrupt = +[](void *handle, const av::DxgkargcbNotifyInterruptDataRecord *data) {
+            static_cast<Callbacks *>(handle)->last_interrupt_fence = data->FenceId;
+        };
+        record_.DxgkCbNotifyDpc = +[](void *handle) { static_cast<Callbacks *>(handle)->dpc_notifications++; };
         record_.DxgkCbGetHandleData = +[](const av::DxgkargcbGetHandleDataRecord *arguments) -> void * {
             const bool known = arguments->hObject == 0x40000042u && arguments->Type == 1 && arguments->Flags == 0u;
             return known ? &handle_data_marker : nullptr;
@@ -114,6 +125,9 @@ public:
     std::uint32_t       read_space = 9u;
     std::uint32_t       read_offset = 9u;
     void               *unmapped = nullptr;
+    std::uint32_t       synchronized_message = 9u;
+    std::uint32_t       last_interrupt_fence = 0u;
+    std::uint32_t       dpc_notifications = 0u;
 
 private:
     DxgkrnlInterfaceRecord record_;
@@ -161,8 +175,11 @@ TEST(dxgkrnl_interface_initialize, refuses_a_table_missing_a_callback_core_calls
       if (which == 3) record.DxgkCbReadDeviceSpace = nullptr;
       if (which == 4) record.DxgkCbUnmapMemory = nullptr;
       if (which == 5) record.DxgkCbGetHandleData = nullptr;
+      if (which == 6) record.DxgkCbSynchronizeExecution = nullptr;
+      if (which == 7) record.DxgkCbNotifyInterrupt = nullptr;
+      if (which == 8) record.DxgkCbNotifyDpc = nullptr;
   };
-  for (int which = 0; which < 6; which++) {
+  for (int which = 0; which < 9; which++) {
       Callbacks callbacks;
       clear(callbacks.record(), which);
       CHECK_STATUS(interface.initialize(&callbacks.record()), Status::invalid_parameter);
@@ -272,3 +289,50 @@ TEST(dxgkrnl_interface_get_handle_data, is_passive_only)
   static_cast<void>(interface.get_handle_data(1u, data));
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling)); }
+
+namespace {
+
+std::uint8_t mark_ran(void *context)
+{
+    *static_cast<int *>(context) += 1;
+    return 1u;
+}
+
+}  // namespace
+
+TEST(dxgkrnl_interface_synchronize_execution, runs_the_routine_through_dxgkrnl_on_message_zero)
+{ MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks; int ran = 0;
+  CHECK_STATUS(interface.synchronize_execution(&mark_ran, &ran), Status::invalid_state);
+  CHECK_STATUS(interface.initialize(&callbacks.record()), Status::ok);
+  CHECK_STATUS(interface.synchronize_execution(&mark_ran, &ran), Status::ok);
+  CHECK_EQ(ran, 1);
+  CHECK_EQ(callbacks.synchronized_message, 0u);
+  callbacks.answer = no_memory;
+  CHECK_STATUS(interface.synchronize_execution(&mark_ran, &ran), Status::no_memory); }
+
+TEST(dxgkrnl_interface_notify_interrupt, forwards_the_data_and_the_dpc_notification_once_initialized)
+{ MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;
+  av::DxgkargcbNotifyInterruptDataRecord data = {};
+  data.FenceId = 7u;
+  interface.notify_interrupt(data);
+  interface.notify_dpc();
+  CHECK_EQ(callbacks.last_interrupt_fence, 0u);
+  CHECK_EQ(callbacks.dpc_notifications, 0u);
+  CHECK_STATUS(interface.initialize(&callbacks.record()), Status::ok);
+  interface.notify_interrupt(data);
+  interface.notify_dpc();
+  CHECK_EQ(callbacks.last_interrupt_fence, 7u);
+  CHECK_EQ(callbacks.dpc_notifications, 1u); }
+
+TEST(dxgkrnl_interface_notify_dpc, is_dispatch_at_most_and_notify_interrupt_is_device_irql)
+{ MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks; int ran = 0;
+  CHECK_STATUS(interface.initialize(&callbacks.record()), Status::ok);
+  av::DxgkargcbNotifyInterruptDataRecord data = {};
+  platform.set_irql(Irql::isr);
+  interface.notify_interrupt(data);
+  CHECK_EQ(platform.unclaimed_violations(), 0u);
+  interface.notify_dpc();
+  CHECK(platform.claim(Violation::irql_ceiling));
+  static_cast<void>(interface.synchronize_execution(&mark_ran, &ran));
+  CHECK(platform.claim(Violation::irql_ceiling));
+  platform.set_irql(Irql::passive); }

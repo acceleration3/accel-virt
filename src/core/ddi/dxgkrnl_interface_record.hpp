@@ -10,6 +10,7 @@
 
 #include "dxgk_device_info_record.hpp"
 #include "dxgkargcb_get_handle_data_record.hpp"
+#include "dxgkargcb_notify_interrupt_data_record.hpp"
 
 #include <stdint.h>
 
@@ -25,6 +26,12 @@ using DxgkCbReadDeviceSpace = int32_t (*)(void *device_handle, uint32_t data_typ
 using DxgkCbUnmapMemory = int32_t (*)(void *device_handle, void *virtual_address);
 /* No device handle: dxgkrnl resolves the handle in the calling thread's DDI. */
 using DxgkCbGetHandleData = void *(*)(const DxgkargcbGetHandleDataRecord *arguments);
+/* PKSYNCHRONIZE_ROUTINE: runs at the adapter's device IRQL. */
+using SynchronizeRoutine = uint8_t (*)(void *context);
+using DxgkCbSynchronizeExecution = int32_t (*)(void *device_handle, SynchronizeRoutine routine, void *context,
+                                               uint32_t message_number, uint8_t *return_value);
+using DxgkCbNotifyInterrupt = void (*)(void *device_handle, const DxgkargcbNotifyInterruptDataRecord *data);
+using DxgkCbNotifyDpc = void (*)(void *device_handle);
 
 struct DxgkrnlInterfaceRecord {
     uint32_t                   Size;
@@ -37,15 +44,15 @@ struct DxgkrnlInterfaceRecord {
     DxgkCbQueueDpc             DxgkCbQueueDpc;
     void                      *DxgkCbQueryServices;
     DxgkCbReadDeviceSpace      DxgkCbReadDeviceSpace;
-    void                      *DxgkCbSynchronizeExecution;
+    DxgkCbSynchronizeExecution DxgkCbSynchronizeExecution;
     DxgkCbUnmapMemory          DxgkCbUnmapMemory;
     void                      *DxgkCbWriteDeviceSpace;
     void                      *DxgkCbIsDevicePresent;
     DxgkCbGetHandleData        DxgkCbGetHandleData;
     void                      *DxgkCbGetHandleParent;
     void                      *DxgkCbEnumHandleChildren;
-    void                      *DxgkCbNotifyInterrupt;
-    void                      *DxgkCbNotifyDpc;
+    DxgkCbNotifyInterrupt      DxgkCbNotifyInterrupt;
+    DxgkCbNotifyDpc            DxgkCbNotifyDpc;
     void                      *DxgkCbQueryVidPnInterface;
     void                      *DxgkCbQueryMonitorInterface;
     void                      *DxgkCbGetCaptureAddress;

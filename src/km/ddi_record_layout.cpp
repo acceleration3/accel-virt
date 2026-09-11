@@ -23,6 +23,16 @@
 #include "ddi/dxgkarg_open_allocation_record.hpp"
 #include "ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "ddi/dxgkargcb_get_handle_data_record.hpp"
+#include "ddi/d3dddi_patch_location_list_record.hpp"
+#include "ddi/dxgk_allocation_list_record.hpp"
+#include "ddi/dxgkarg_build_paging_buffer_record.hpp"
+#include "ddi/dxgkarg_create_context_record.hpp"
+#include "ddi/dxgkarg_patch_record.hpp"
+#include "ddi/dxgkarg_preempt_command_record.hpp"
+#include "ddi/dxgkarg_query_current_fence_record.hpp"
+#include "ddi/dxgkarg_render_record.hpp"
+#include "ddi/dxgkarg_submit_command_record.hpp"
+#include "ddi/dxgkargcb_notify_interrupt_data_record.hpp"
 #include "ddi/dxgk_child_descriptor_record.hpp"
 #include "ddi/dxgk_child_status_record.hpp"
 #include "ddi/dxgk_device_info_record.hpp"
@@ -330,6 +340,135 @@ AV_SAME_SIZE(DxgkargcbGetHandleDataRecord, DXGKARGCB_GETHANDLEDATA);
 AV_SAME_OFFSET(DxgkargcbGetHandleDataRecord, hObject, DXGKARGCB_GETHANDLEDATA, hObject);
 AV_SAME_OFFSET(DxgkargcbGetHandleDataRecord, Type, DXGKARGCB_GETHANDLEDATA, Type);
 AV_SAME_OFFSET(DxgkargcbGetHandleDataRecord, Flags, DXGKARGCB_GETHANDLEDATA, Flags);
+
+AV_SAME_SIZE(DxgkargCreateContextRecord, DXGKARG_CREATECONTEXT);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, hContext, DXGKARG_CREATECONTEXT, hContext);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, NodeOrdinal, DXGKARG_CREATECONTEXT, NodeOrdinal);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, EngineAffinity, DXGKARG_CREATECONTEXT, EngineAffinity);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, Flags, DXGKARG_CREATECONTEXT, Flags);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, pPrivateDriverData, DXGKARG_CREATECONTEXT, pPrivateDriverData);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, PrivateDriverDataSize, DXGKARG_CREATECONTEXT, PrivateDriverDataSize);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, ContextInfoDmaBufferSize, DXGKARG_CREATECONTEXT, ContextInfo.DmaBufferSize);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, ContextInfoDmaBufferSegmentSet, DXGKARG_CREATECONTEXT, ContextInfo.DmaBufferSegmentSet);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, ContextInfoDmaBufferPrivateDataSize, DXGKARG_CREATECONTEXT, ContextInfo.DmaBufferPrivateDataSize);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, ContextInfoAllocationListSize, DXGKARG_CREATECONTEXT, ContextInfo.AllocationListSize);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, ContextInfoPatchLocationListSize, DXGKARG_CREATECONTEXT, ContextInfo.PatchLocationListSize);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, ContextInfoReserved, DXGKARG_CREATECONTEXT, ContextInfo.Reserved);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, ContextInfoCaps, DXGKARG_CREATECONTEXT, ContextInfo.Caps);
+AV_SAME_OFFSET(DxgkargCreateContextRecord, ContextInfoPagingCompanionNodeId, DXGKARG_CREATECONTEXT, ContextInfo.PagingCompanionNodeId);
+
+AV_SAME_SIZE(DxgkAllocationListRecord, DXGK_ALLOCATIONLIST);
+AV_SAME_OFFSET(DxgkAllocationListRecord, hDeviceSpecificAllocation, DXGK_ALLOCATIONLIST, hDeviceSpecificAllocation);
+AV_SAME_OFFSET(DxgkAllocationListRecord, PhysicalAddress, DXGK_ALLOCATIONLIST, PhysicalAddress);
+
+AV_SAME_SIZE(D3dddiPatchLocationListRecord, D3DDDI_PATCHLOCATIONLIST);
+AV_SAME_OFFSET(D3dddiPatchLocationListRecord, AllocationIndex, D3DDDI_PATCHLOCATIONLIST, AllocationIndex);
+AV_SAME_OFFSET(D3dddiPatchLocationListRecord, DriverId, D3DDDI_PATCHLOCATIONLIST, DriverId);
+AV_SAME_OFFSET(D3dddiPatchLocationListRecord, AllocationOffset, D3DDDI_PATCHLOCATIONLIST, AllocationOffset);
+AV_SAME_OFFSET(D3dddiPatchLocationListRecord, PatchOffset, D3DDDI_PATCHLOCATIONLIST, PatchOffset);
+AV_SAME_OFFSET(D3dddiPatchLocationListRecord, SplitOffset, D3DDDI_PATCHLOCATIONLIST, SplitOffset);
+AV_SAME_OFFSET(D3dddiPatchLocationListRecord, SlotId, D3DDDI_PATCHLOCATIONLIST, Value);
+
+AV_SAME_SIZE(DxgkargRenderRecord, DXGKARG_RENDER);
+AV_SAME_OFFSET(DxgkargRenderRecord, pCommand, DXGKARG_RENDER, pCommand);
+AV_SAME_OFFSET(DxgkargRenderRecord, CommandLength, DXGKARG_RENDER, CommandLength);
+AV_SAME_OFFSET(DxgkargRenderRecord, pDmaBuffer, DXGKARG_RENDER, pDmaBuffer);
+AV_SAME_OFFSET(DxgkargRenderRecord, DmaSize, DXGKARG_RENDER, DmaSize);
+AV_SAME_OFFSET(DxgkargRenderRecord, pDmaBufferPrivateData, DXGKARG_RENDER, pDmaBufferPrivateData);
+AV_SAME_OFFSET(DxgkargRenderRecord, DmaBufferPrivateDataSize, DXGKARG_RENDER, DmaBufferPrivateDataSize);
+AV_SAME_OFFSET(DxgkargRenderRecord, pAllocationList, DXGKARG_RENDER, pAllocationList);
+AV_SAME_OFFSET(DxgkargRenderRecord, AllocationListSize, DXGKARG_RENDER, AllocationListSize);
+AV_SAME_OFFSET(DxgkargRenderRecord, pPatchLocationListIn, DXGKARG_RENDER, pPatchLocationListIn);
+AV_SAME_OFFSET(DxgkargRenderRecord, PatchLocationListInSize, DXGKARG_RENDER, PatchLocationListInSize);
+AV_SAME_OFFSET(DxgkargRenderRecord, pPatchLocationListOut, DXGKARG_RENDER, pPatchLocationListOut);
+AV_SAME_OFFSET(DxgkargRenderRecord, PatchLocationListOutSize, DXGKARG_RENDER, PatchLocationListOutSize);
+AV_SAME_OFFSET(DxgkargRenderRecord, MultipassOffset, DXGKARG_RENDER, MultipassOffset);
+AV_SAME_OFFSET(DxgkargRenderRecord, DmaBufferSegmentId, DXGKARG_RENDER, DmaBufferSegmentId);
+AV_SAME_OFFSET(DxgkargRenderRecord, DmaBufferPhysicalAddress, DXGKARG_RENDER, DmaBufferPhysicalAddress);
+
+AV_SAME_SIZE(DxgkargPatchRecord, DXGKARG_PATCH);
+AV_SAME_OFFSET(DxgkargPatchRecord, hDevice, DXGKARG_PATCH, hDevice);
+AV_SAME_OFFSET(DxgkargPatchRecord, DmaBufferSegmentId, DXGKARG_PATCH, DmaBufferSegmentId);
+AV_SAME_OFFSET(DxgkargPatchRecord, DmaBufferPhysicalAddress, DXGKARG_PATCH, DmaBufferPhysicalAddress);
+AV_SAME_OFFSET(DxgkargPatchRecord, pDmaBuffer, DXGKARG_PATCH, pDmaBuffer);
+AV_SAME_OFFSET(DxgkargPatchRecord, DmaBufferSize, DXGKARG_PATCH, DmaBufferSize);
+AV_SAME_OFFSET(DxgkargPatchRecord, DmaBufferSubmissionStartOffset, DXGKARG_PATCH, DmaBufferSubmissionStartOffset);
+AV_SAME_OFFSET(DxgkargPatchRecord, DmaBufferSubmissionEndOffset, DXGKARG_PATCH, DmaBufferSubmissionEndOffset);
+AV_SAME_OFFSET(DxgkargPatchRecord, pDmaBufferPrivateData, DXGKARG_PATCH, pDmaBufferPrivateData);
+AV_SAME_OFFSET(DxgkargPatchRecord, DmaBufferPrivateDataSize, DXGKARG_PATCH, DmaBufferPrivateDataSize);
+AV_SAME_OFFSET(DxgkargPatchRecord, DmaBufferPrivateDataSubmissionStartOffset, DXGKARG_PATCH, DmaBufferPrivateDataSubmissionStartOffset);
+AV_SAME_OFFSET(DxgkargPatchRecord, DmaBufferPrivateDataSubmissionEndOffset, DXGKARG_PATCH, DmaBufferPrivateDataSubmissionEndOffset);
+AV_SAME_OFFSET(DxgkargPatchRecord, pAllocationList, DXGKARG_PATCH, pAllocationList);
+AV_SAME_OFFSET(DxgkargPatchRecord, AllocationListSize, DXGKARG_PATCH, AllocationListSize);
+AV_SAME_OFFSET(DxgkargPatchRecord, pPatchLocationList, DXGKARG_PATCH, pPatchLocationList);
+AV_SAME_OFFSET(DxgkargPatchRecord, PatchLocationListSize, DXGKARG_PATCH, PatchLocationListSize);
+AV_SAME_OFFSET(DxgkargPatchRecord, PatchLocationListSubmissionStart, DXGKARG_PATCH, PatchLocationListSubmissionStart);
+AV_SAME_OFFSET(DxgkargPatchRecord, PatchLocationListSubmissionLength, DXGKARG_PATCH, PatchLocationListSubmissionLength);
+AV_SAME_OFFSET(DxgkargPatchRecord, SubmissionFenceId, DXGKARG_PATCH, SubmissionFenceId);
+AV_SAME_OFFSET(DxgkargPatchRecord, Flags, DXGKARG_PATCH, Flags);
+AV_SAME_OFFSET(DxgkargPatchRecord, EngineOrdinal, DXGKARG_PATCH, EngineOrdinal);
+
+AV_SAME_SIZE(DxgkargSubmitCommandRecord, DXGKARG_SUBMITCOMMAND);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, hDevice, DXGKARG_SUBMITCOMMAND, hDevice);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, DmaBufferSegmentId, DXGKARG_SUBMITCOMMAND, DmaBufferSegmentId);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, DmaBufferPhysicalAddress, DXGKARG_SUBMITCOMMAND, DmaBufferPhysicalAddress);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, DmaBufferSize, DXGKARG_SUBMITCOMMAND, DmaBufferSize);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, DmaBufferSubmissionStartOffset, DXGKARG_SUBMITCOMMAND, DmaBufferSubmissionStartOffset);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, DmaBufferSubmissionEndOffset, DXGKARG_SUBMITCOMMAND, DmaBufferSubmissionEndOffset);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, pDmaBufferPrivateData, DXGKARG_SUBMITCOMMAND, pDmaBufferPrivateData);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, DmaBufferPrivateDataSize, DXGKARG_SUBMITCOMMAND, DmaBufferPrivateDataSize);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, DmaBufferPrivateDataSubmissionStartOffset, DXGKARG_SUBMITCOMMAND, DmaBufferPrivateDataSubmissionStartOffset);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, DmaBufferPrivateDataSubmissionEndOffset, DXGKARG_SUBMITCOMMAND, DmaBufferPrivateDataSubmissionEndOffset);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, SubmissionFenceId, DXGKARG_SUBMITCOMMAND, SubmissionFenceId);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, VidPnSourceId, DXGKARG_SUBMITCOMMAND, VidPnSourceId);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, FlipInterval, DXGKARG_SUBMITCOMMAND, FlipInterval);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, Flags, DXGKARG_SUBMITCOMMAND, Flags);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, EngineOrdinal, DXGKARG_SUBMITCOMMAND, EngineOrdinal);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, DmaBufferVirtualAddress, DXGKARG_SUBMITCOMMAND, DmaBufferVirtualAddress);
+AV_SAME_OFFSET(DxgkargSubmitCommandRecord, NodeOrdinal, DXGKARG_SUBMITCOMMAND, NodeOrdinal);
+
+AV_SAME_SIZE(DxgkargPreemptCommandRecord, DXGKARG_PREEMPTCOMMAND);
+AV_SAME_OFFSET(DxgkargPreemptCommandRecord, PreemptionFenceId, DXGKARG_PREEMPTCOMMAND, PreemptionFenceId);
+AV_SAME_OFFSET(DxgkargPreemptCommandRecord, NodeOrdinal, DXGKARG_PREEMPTCOMMAND, NodeOrdinal);
+AV_SAME_OFFSET(DxgkargPreemptCommandRecord, EngineOrdinal, DXGKARG_PREEMPTCOMMAND, EngineOrdinal);
+AV_SAME_OFFSET(DxgkargPreemptCommandRecord, Flags, DXGKARG_PREEMPTCOMMAND, Flags);
+
+AV_SAME_SIZE(DxgkargQueryCurrentFenceRecord, DXGKARG_QUERYCURRENTFENCE);
+AV_SAME_OFFSET(DxgkargQueryCurrentFenceRecord, CurrentFence, DXGKARG_QUERYCURRENTFENCE, CurrentFence);
+AV_SAME_OFFSET(DxgkargQueryCurrentFenceRecord, NodeOrdinal, DXGKARG_QUERYCURRENTFENCE, NodeOrdinal);
+AV_SAME_OFFSET(DxgkargQueryCurrentFenceRecord, EngineOrdinal, DXGKARG_QUERYCURRENTFENCE, EngineOrdinal);
+
+AV_SAME_SIZE(DxgkargBuildPagingBufferRecord, DXGKARG_BUILDPAGINGBUFFER);
+AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, pDmaBuffer, DXGKARG_BUILDPAGINGBUFFER, pDmaBuffer);
+AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, DmaSize, DXGKARG_BUILDPAGINGBUFFER, DmaSize);
+AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, pDmaBufferPrivateData, DXGKARG_BUILDPAGINGBUFFER, pDmaBufferPrivateData);
+AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, DmaBufferPrivateDataSize, DXGKARG_BUILDPAGINGBUFFER, DmaBufferPrivateDataSize);
+AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, Operation, DXGKARG_BUILDPAGINGBUFFER, Operation);
+AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, MultipassOffset, DXGKARG_BUILDPAGINGBUFFER, MultipassOffset);
+AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, Reserved, DXGKARG_BUILDPAGINGBUFFER, Reserved.Reserved);
+AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, hSystemContext, DXGKARG_BUILDPAGINGBUFFER, hSystemContext);
+AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, DmaBufferGpuVirtualAddress, DXGKARG_BUILDPAGINGBUFFER, DmaBufferGpuVirtualAddress);
+AV_SAME_OFFSET(DxgkargBuildPagingBufferRecord, DmaBufferWriteOffset, DXGKARG_BUILDPAGINGBUFFER, DmaBufferWriteOffset);
+
+AV_SAME_SIZE(DxgkargcbNotifyInterruptDataRecord, DXGKARGCB_NOTIFY_INTERRUPT_DATA);
+AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, InterruptType, DXGKARGCB_NOTIFY_INTERRUPT_DATA, InterruptType);
+AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, FenceId, DXGKARGCB_NOTIFY_INTERRUPT_DATA, DmaCompleted.SubmissionFenceId);
+AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Argument1, DXGKARGCB_NOTIFY_INTERRUPT_DATA, DmaPreempted.LastCompletedFenceId);
+AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Argument2, DXGKARGCB_NOTIFY_INTERRUPT_DATA, DmaPreempted.NodeOrdinal);
+AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Argument3, DXGKARGCB_NOTIFY_INTERRUPT_DATA, DmaPreempted.EngineOrdinal);
+AV_SAME_OFFSET(DxgkargcbNotifyInterruptDataRecord, Flags, DXGKARGCB_NOTIFY_INTERRUPT_DATA, Flags);
+
+static_assert(offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, DmaCompleted.NodeOrdinal) ==
+                  offsetof(av::DxgkargcbNotifyInterruptDataRecord, Argument1) &&
+              offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, DmaCompleted.EngineOrdinal) ==
+                  offsetof(av::DxgkargcbNotifyInterruptDataRecord, Argument2) &&
+              offsetof(DXGKARGCB_NOTIFY_INTERRUPT_DATA, DmaPreempted.PreemptionFenceId) ==
+                  offsetof(av::DxgkargcbNotifyInterruptDataRecord, FenceId),
+              "DmaCompleted and DmaPreempted share the record's four UINTs");
+static_assert(DXGK_INTERRUPT_DMA_COMPLETED == 1 && DXGK_INTERRUPT_DMA_PREEMPTED == 2 &&
+                  DXGK_OPERATION_MAP_APERTURE_SEGMENT == 5 && DXGK_OPERATION_UNMAP_APERTURE_SEGMENT == 6 &&
+                  DXGK_OPERATION_DISCARD_CONTENT == 2,
+              "interrupt types and paging operations");
 
 /* ResourceList reads CM_RESOURCE_LIST as bytes; these pin the offsets it reads at. */
 static_assert(offsetof(CM_RESOURCE_LIST, List) == av::ResourceList::list_header_bytes, "CM_RESOURCE_LIST::List");
