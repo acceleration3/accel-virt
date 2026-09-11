@@ -36,6 +36,12 @@ Status CapsetInfo::encode(uint8_t *bytes, size_t capacity) const
 {
     if (capacity < encoded_size) return Status::too_large;
     WireWriter writer(bytes, capacity);
+    encode(writer);
+    return writer.status();
+}
+
+void CapsetInfo::encode(WireWriter &writer) const
+{
     writer.write_u32(magic);
     writer.write_u16(version_.major_version());
     writer.write_u16(version_.minor_version());
@@ -46,7 +52,6 @@ Status CapsetInfo::encode(uint8_t *bytes, size_t capacity) const
     writer.write_zeros(6u);
     writer.write_u64(features_);
     gpu_.encode(writer);
-    return writer.status();
 }
 
 bool CapsetInfo::fields_valid() const

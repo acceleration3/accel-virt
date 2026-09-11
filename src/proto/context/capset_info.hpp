@@ -13,6 +13,8 @@
 
 namespace av {
 
+class WireWriter;
+
 class CapsetInfo {
 public:
     static constexpr uint32_t capset_id    = 0x72u;
@@ -33,6 +35,8 @@ public:
     bool                   has_feature(uint64_t feature) const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
+    /* encoded_size bytes; a writer short of them latches its failure. */
+    void                 encode(WireWriter &writer) const;
     /* Leaves this capset unchanged unless it returns ok. */
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
 

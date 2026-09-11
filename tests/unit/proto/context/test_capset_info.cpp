@@ -7,6 +7,7 @@
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/wire/wire_writer.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -19,6 +20,7 @@ using av::GuardedBuffer;
 using av::ProtocolVersion;
 using av::Status;
 using av::SubApi;
+using av::WireWriter;
 
 namespace {
 
@@ -165,3 +167,16 @@ TEST(capset_info_decode, survives_the_hostile_sweep)
   CHECK(sweep.cases_run() > CapsetInfo::encoded_size * 8u);
   CHECK(rejects(nullptr, 0u));
   CHECK(rejects(nullptr, CapsetInfo::encoded_size)); }
+
+TEST(capset_info_encode, into_a_writer_matches_the_buffer_encoding_and_a_short_writer_latches)
+{ const CapsetInfo capset = sample();
+  Encoded expected(capset);
+  std::uint8_t bytes[CapsetInfo::encoded_size] = {};
+  WireWriter writer(bytes, sizeof bytes);
+  capset.encode(writer);
+  CHECK_STATUS(writer.status(), Status::ok);
+  CHECK(std::memcmp(bytes, expected.bytes(), sizeof bytes) == 0);
+  std::uint8_t short_bytes[CapsetInfo::encoded_size - 1u] = {};
+  WireWriter short_writer(short_bytes, sizeof short_bytes);
+  capset.encode(short_writer);
+  CHECK(short_writer.status() != Status::ok); }
