@@ -46,8 +46,8 @@ Covered by T002/T005 (mock clock) - no separate core class consumes time yet.
 
 ## Phase 6: US4 - kernel translation (P2)
 
-- [ ] T013 [US4] Implement `src/km/kernel_platform.{hpp,cpp}`: `KernelPlatform final`, constructor takes the pool tag, overrides per research R3, `static constexpr POOL_FLAGS pool_flags_[]`, `static_assert` on `sizeof(FAST_MUTEX) <= av::Mutex::storage_bytes` and alignment; no conditional branch. `cmake --build build` links; `driver_image` passes
-- [ ] T014 [US4] Add a kernel-probe test to `tests/tools/test_kernel_build.py` that builds a probe including `kernel_platform.hpp` and instantiating `KernelPlatform` with a spin lock and mutex round trip, and asserts the image imports only `ntoskrnl.exe`
+- [X] T013 [US4] Implement `src/km/kernel_platform.{hpp,cpp}`: `KernelPlatform final`, constructor takes the pool tag, overrides per research R3, `static constexpr POOL_FLAGS pool_flags_[]`, `static_assert` on `sizeof(FAST_MUTEX) <= av::Mutex::storage_bytes` and alignment; no conditional branch. `cmake --build build` links; `driver_image` passes
+- [X] T014 [US4] Add a kernel-probe test to `tests/tools/test_kernel_build.py` that builds a probe including `kernel_platform.hpp` and instantiating `KernelPlatform` with a spin lock and mutex round trip, and asserts the image imports only `ntoskrnl.exe`
 
 **Checkpoint**: commit.
 

@@ -12,15 +12,21 @@ TOOLCHAIN = ROOT / "cmake" / "windows_kernel_toolchain.cmake"
 
 
 class KernelProbeProject:
-    def __init__(self, probes):
+    def __init__(self, probes, sources=(), include_directories=()):
+        """`sources` are repository files compiled into every probe, so a probe
+        can exercise real core and shim code."""
         self.directory = pathlib.Path(tempfile.mkdtemp())
         self.build = self.directory / "build"
         lines = ["cmake_minimum_required(VERSION 3.24)", "project(probes CXX)",
                  "set(CMAKE_CXX_STANDARD 23)"]
+        shared = " ".join(str(ROOT / source) for source in sources)
+        includes = " ".join(str(ROOT / directory) for directory in include_directories)
         for name, source in probes.items():
             (self.directory / f"{name}.cpp").write_text(source)
-            lines.append(f"add_executable({name} {name}.cpp)")
+            lines.append(f"add_executable({name} {name}.cpp {shared})")
             lines.append(f"set_target_properties({name} PROPERTIES SUFFIX .sys)")
+            if includes:
+                lines.append(f"target_include_directories({name} PRIVATE {includes})")
         (self.directory / "CMakeLists.txt").write_text("\n".join(lines) + "\n")
 
     def configure(self):
