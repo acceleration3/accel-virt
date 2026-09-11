@@ -27,9 +27,9 @@ The two exceptions are ABI boundaries that C requires, and they are one line
 each: the `DxgkDdi*` entry points in `src/core/ddi/`, which forward to the
 adapter behind the context pointer (or, for AddDevice and Unload, the root
 registered in `MiniportBinding`), and the `extern "C"` entry points that
-libFuzzer and QEMU call. No logic lives in either. `MiniportBinding`'s pointer
-and the kernel shim's static storage for the root are the only process-lifetime
-state (constitution III).
+libFuzzer and QEMU call. No logic lives in either. `MiniportBinding`'s pointer,
+the kernel shim's static storage for the root and the device module's
+`DeviceModule` are the only process-lifetime state (constitution III).
 
 Genuinely stateless operators and ADL hooks stay free functions. Nothing else
 does.

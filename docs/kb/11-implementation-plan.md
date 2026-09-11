@@ -70,23 +70,28 @@ the loadable module `hw-display-virtio-gpu-rutabaga.so`: a subclass of
 3D command set. New files, and nothing else in QEMU changes:
 
 ```
-hw/display/virtio-gpu-rvk.c        the device
-hw/display/virtio-gpu-rvk-pci.c    the PCI wrapper (virtio-gpu-rvk-pci)
-hw/display/meson.build             + module 'virtio-gpu-rvk', dep: librvk_codec
-hw/display/Kconfig                 + VIRTIO_GPU_RVK
-meson_options.txt / meson.build    + option 'rvk' (feature)
+hw/display/virtio-gpu-rvk.c          the device (virtio-gpu-rvk-device)
+hw/display/virtio-gpu-rvk-host.c     the host operations the device core runs on
+hw/display/virtio-gpu-pci-rvk.c      the PCI wrapper (virtio-gpu-rvk-pci)
+include/hw/virtio/virtio-gpu-rvk.h   the instance struct the PCI wrapper embeds
+hw/display/meson.build               + modules 'virtio-gpu-rvk', 'virtio-gpu-pci-rvk'
+meson_options.txt / meson.build      + option 'rvk' (feature), deps rvk_device, vulkan
 ```
 
-Built as module `hw-display-virtio-gpu-rvk.so` inside a **rebuilt QEMU
-package** (Arch PKGBUILD + patch). A drop-in module next to the distro QEMU is
-not a plan: every module carries a build stamp
-(`qemu_stamp_3baffb598960aa3aaa0bea5b85abe5d7b4d898b0` on the installed
-11.1.1) that must match the binary, and QEMU resolves which module provides a
-device type from a table compiled into the binary. Rebase the patch on each
-QEMU update; keeping it to new files makes that trivial.
+The C files live in `src/device/qemu/` with the meson patch
+(`qemu-build.patch`); `tools/build_qemu.sh` copies them into the pinned source
+(`tools/fetch_qemu.sh`) and builds. No Kconfig symbol is needed: rutabaga's
+module is selected by meson alone. The build stamp hashes only the version and
+`configure` (`scripts/qemu-stamp.py`), so a module built from the same source
+does match the distro binary - verified - but the binary's compiled-in module
+table has no entry for new device types, so `qemu-system-x86_64` itself is
+rebuilt (about a minute for `x86_64-softmmu`). Rebase the patch on each QEMU
+update; keeping it to new files makes that trivial.
 
-The codec is C++23; QEMU is C. The boundary is a narrow C API exported by
-`librvk_codec.so` and found through `pkg-config`. No C++ enters the QEMU tree.
+QEMU's meson builds no C++ in modules and its modinfo collector reads only `.c`,
+so the device core is `librvk_device.a` from this repository's CMake, behind the
+C ABI in `rvk_device.h`, found through `pkg-config` - as is the codec's
+`librvk_codec.so` later. No C++ enters the QEMU tree.
 
 ### Protocol
 
@@ -120,7 +125,7 @@ guest vCPU stores to doorbell[ctx]
           decode   (librvk_codec)
           execute  (host Vulkan / GL / CL)
           advance fence value in the ctx's fence page
-          event_notifier_set(irqfd)   → KVM injects MSI-X, no BQL
+          event_notifier_set(guest notifier) → irqfd, KVM injects MSI-X, no BQL
 
 control queue (CTX_CREATE, RESOURCE_CREATE_BLOB, SET_SCANOUT, …)
   └ main loop, BQL held → validate, hand off to the ctx thread, return
@@ -137,11 +142,14 @@ Rules:
   context. Satisfies Vulkan's external queue synchronization and GL's
   one-current-thread rule by construction.
 - **Virtqueue state only under the BQL**, reached from workers by bottom half.
-- **MSI-X from a worker via irqfd** — the mechanism virtio-pci already uses for
-  vhost: `kvm_irqchip_add_msi_route`, `kvm_irqchip_add_irqfd_notifier_gsi`, and
-  vector mask/unmask notifiers (`msix_set_vector_notifiers`) so a masked vector
-  is honoured. Fallback without an in-kernel irqchip: bottom half +
-  `msix_notify`.
+- **MSI-X from a worker through the virtqueue guest notifiers** virtio-pci
+  already routes: `msix_set_vector_notifiers` holds one notifier slot per PCI
+  device and virtio-pci owns it, so the device must not install its own irqfd
+  routes. Enable the guest notifiers (`set_guest_notifiers`, as virtio-blk and
+  vhost do) and `event_notifier_set(virtio_queue_get_guest_notifier(vq))` from
+  the worker: with an in-kernel irqchip that is an irqfd with masking handled by
+  virtio-pci; without one, virtio-pci's handler raises the interrupt on the main
+  loop. Each fence ring is a virtqueue with its own vector.
 
 ### Memory
 

@@ -80,7 +80,7 @@ cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++
 cmake --build build             # host core, test binaries, AND rvkgpu.sys
 ctest --test-dir build          # the fast gates, a few seconds
 
-tools/gate.sh                   # the full verdict, three configurations
+tools/gate.sh                   # the full verdict, four configurations
 ```
 
 | Configuration | Directory | Gates in its `ctest` |
@@ -88,6 +88,21 @@ tools/gate.sh                   # the full verdict, three configurations
 | default | `build/` | unit tests under ASan+UBSan, `design_rules`, `symbol_tests`, `driver_image`, `self_contained`, `tools_tests` |
 | coverage | `build-coverage/` | the above, plus `coverage_gate`: 100% branches of `src/core`, `src/device`, `src/proto`, and the `AV_UNTESTABLE` ratchet |
 | fuzz | `build-fuzz/` | the above, plus `fuzz_<target>_smoke`: 60 s per target (`AV_FUZZ_SECONDS`) |
+| qemu | `build-qemu/` | `librvk_device.a`, QEMU 11.1.1 patched with `virtio-gpu-rvk-pci` (`tools/fetch_qemu.sh`, `tools/build_qemu.sh`), and `qemu_smoke`: the PCI function a guest sees and the realize failures |
+
+### Running the device
+
+```bash
+tools/host/list_gpus.py                     # the host's Vulkan devices, by UUID
+tools/host/list_gpus.py --qemu              # one -device argument per GPU
+QEMU_MODULE_DIR=build-qemu/qemu build-qemu/qemu/qemu-system-x86_64 \
+    -enable-kvm -m 8G -device virtio-gpu-rvk-pci,host-gpu=auto ...
+tools/host/list_gpus.py --libvirt           # the same for a libvirt domain
+```
+
+`host-gpu` is `auto` (the first Vulkan device) or a device UUID; a malformed or
+absent one fails to start with the reason. The distro QEMU cannot load the
+modules: its compiled-in module table has no entry for the new device types.
 
 `cmake --build build` compiles `src/core` twice: for the host tests, and with
 `clang-cl /kernel` against the Windows kit, linked into `rvkgpu.sys`. A core
@@ -132,7 +147,11 @@ src/core/                         portable driver logic — no platform headers
   vidpn/                            VidPn topology, mode sets, cofunctional modality, commit
   present/                          Present and how it addresses allocations
 src/km/                           Windows kernel shim — translation only; builds rvkgpu.sys
-src/device/                       QEMU device core
+src/device/                       QEMU device core — freestanding C++23, librvk_device.a
+  host/  abi/                       the Host contract; TableHost, rvk_device.h, the C entry points
+  gpu/  threading/  context/        host GPU binding; per-context workers; the context table
+  module/  support/                 the device object and the module holding every device
+  qemu/                             the C glue and meson patch built into QEMU (translation only)
 src/proto/                        the wire protocol, shared by both sides
   wire/  context/  submission/      codecs; context setup and capsets; rings and fences
   resources/  commands/  virtio_gpu/ allocation descriptors; present and paging commands; virtio-gpu requests
@@ -144,6 +163,7 @@ tests/harness/                    the adversarial platform mock, fake dxgkrnl
   device/                           fake virtio-gpu PCI function and virtqueue device
 tests/fuzz/ tests/corpus/         L3: libFuzzer targets and seed corpora
 tests/fixtures/                   bytes captured from real devices (tools/host/capture_pci_config.py)
+tests/qemu/                       the smoke test run against the patched QEMU
 tests/loopback/                   L4: guest core ↔ device core in one process
 tests/tools/                      tests for the gate scripts themselves
 tools/                            gates, kit fetch, spec/roadmap generators

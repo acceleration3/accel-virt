@@ -1,0 +1,71 @@
+diff --git a/hw/display/meson.build b/hw/display/meson.build
+index ffecedb..74a6884 100644
+--- a/hw/display/meson.build
++++ b/hw/display/meson.build
+@@ -90,6 +90,13 @@ if config_all_devices.has_key('CONFIG_VIRTIO_GPU')
+                                if_true: [files('virtio-gpu-rutabaga.c'), pixman])
+     hw_display_modules += {'virtio-gpu-rutabaga': virtio_gpu_rutabaga_ss}
+   endif
++
++  if rvk_device.found() and rvk_vulkan.found()
++    virtio_gpu_rvk_ss = ss.source_set()
++    virtio_gpu_rvk_ss.add(when: ['CONFIG_VIRTIO_GPU', rvk_device, rvk_vulkan],
++                          if_true: [files('virtio-gpu-rvk.c', 'virtio-gpu-rvk-host.c'), pixman])
++    hw_display_modules += {'virtio-gpu-rvk': virtio_gpu_rvk_ss}
++  endif
+ endif
+ 
+ if config_all_devices.has_key('CONFIG_VIRTIO_PCI')
+@@ -112,6 +119,12 @@ if config_all_devices.has_key('CONFIG_VIRTIO_PCI')
+                                    if_true: [files('virtio-gpu-pci-rutabaga.c'), pixman])
+     hw_display_modules += {'virtio-gpu-pci-rutabaga': virtio_gpu_pci_rutabaga_ss}
+   endif
++  if rvk_device.found() and rvk_vulkan.found()
++    virtio_gpu_pci_rvk_ss = ss.source_set()
++    virtio_gpu_pci_rvk_ss.add(when: ['CONFIG_VIRTIO_GPU', 'CONFIG_VIRTIO_PCI', rvk_device],
++                              if_true: [files('virtio-gpu-pci-rvk.c'), pixman])
++    hw_display_modules += {'virtio-gpu-pci-rvk': virtio_gpu_pci_rvk_ss}
++  endif
+ endif
+ 
+ if config_all_devices.has_key('CONFIG_VIRTIO_VGA')
+diff --git a/meson.build b/meson.build
+index 40e3f4e..3195913 100644
+--- a/meson.build
++++ b/meson.build
+@@ -1428,6 +1428,14 @@ if not get_option('rutabaga_gfx').auto() or have_system or have_vhost_user_gpu
+                          method: 'pkg-config',
+                          required: get_option('rutabaga_gfx'))
+ endif
++rvk_device = not_found
++rvk_vulkan = not_found
++if not get_option('rvk').auto() or have_system
++  rvk_device = dependency('rvk_device', method: 'pkg-config',
++                          required: get_option('rvk'))
++  rvk_vulkan = dependency('vulkan', method: 'pkg-config',
++                          required: get_option('rvk'))
++endif
+ blkio = not_found
+ if not get_option('blkio').auto() or have_block
+   blkio = dependency('blkio',
+@@ -4924,6 +4932,7 @@ summary(summary_info, bool_yn: true, section: 'User interface')
+ summary_info = {}
+ summary_info += {'VirGL support':     virgl}
+ summary_info += {'Rutabaga support':  rutabaga}
++summary_info += {'rvk support':       rvk_device.found() and rvk_vulkan.found()}
+ summary(summary_info, bool_yn: true, section: 'Graphics backends')
+ 
+ # Audio backends
+diff --git a/meson_options.txt b/meson_options.txt
+index a07cb47..d2efd43 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -252,6 +252,8 @@ option('virglrenderer', type : 'feature', value : 'auto',
+        description: 'virgl rendering support')
+ option('rutabaga_gfx', type : 'feature', value : 'auto',
+        description: 'rutabaga_gfx support')
++option('rvk', type : 'feature', value : 'auto',
++       description: 'accel-virt virtio-gpu-rvk device')
+ option('png', type : 'feature', value : 'auto',
+        description: 'PNG support with libpng')
+ option('vnc', type : 'feature', value : 'auto',

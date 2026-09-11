@@ -101,6 +101,28 @@ core class under test.
 - **Deterministic time.** A test controls the clock, so TDR timeouts are exact
   and not flaky.
 
+### The mock host
+
+The device core's counterpart is `Host` (`src/device/host/host.hpp`), with
+`TableHost` over the C operations table the QEMU glue fills and `MockHost`
+(`tests/harness/host/`) in tests. Where the guest core is single-threaded under
+test, the device core's point is threads, so `MockHost` runs real pthreads and
+the worker tests run under ASan and UBSan:
+
+- **The threading contract is checked.** The thread that constructed the mock is
+  the main loop. A lifecycle or virtqueue method called from a worker, or worker
+  work run on the main loop, is a `HostViolation`, claimed like the platform's.
+- **Main-loop work is explicit.** `run_on_main_loop` queues; a test waits for
+  the work it expects (`wait_for_main_loop_work`) and runs it
+  (`run_main_loop`), so completion order is asserted, not hoped for.
+- **Failing creation.** Any thread, event or mutex creation can be failed, and
+  a thread, event, mutex or main-loop routine left over when the mock is
+  destroyed fails the test. `MockHostOps` exposes the mock as the C table, so
+  `TableHost` and the `rvk_device.h` entry points run against it too.
+
+The glue itself is exercised by the `qemu` gate configuration: the patched
+QEMU is built and `tests/qemu/qemu_smoke.py` reads the PCI function over qtest.
+
 ### The shape of a test file
 
 Every core class `X` has `tests/unit/test_x.cpp` with three sections:

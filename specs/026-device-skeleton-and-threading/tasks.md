@@ -25,5 +25,5 @@ description: "Task list for feature 026: QEMU device skeleton, object model and 
 
 ## Phase 4: QEMU
 
-- [ ] T005 C glue, meson patch, `tools/fetch_qemu.sh`, `tools/build_qemu.sh`, qtest smoke test in the gate
-- [ ] T006 `tools/host/list_gpus.py`; docs, kb corrections, constitution amendment; gate; merge; push
+- [X] T005 C glue, meson patch, `tools/fetch_qemu.sh`, `tools/build_qemu.sh`, qtest smoke test in the gate
+- [X] T006 `tools/host/list_gpus.py`; docs, kb corrections, constitution amendment; gate; merge; push

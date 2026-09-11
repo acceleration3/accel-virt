@@ -1,6 +1,6 @@
 # accel-virt Constitution
 
-**Version**: 2.2.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-11
+**Version**: 2.3.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-11
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
 display miniport (`rvkgpu.sys`), a custom in-process QEMU device
@@ -61,11 +61,14 @@ and libFuzzer call. The DDI entry points live in core, over mirror types whose
 layout `src/km` proves against the WDK, so the L2 harness drives the same entry
 points `dxgkrnl` calls.
 
-Two pieces of process-lifetime state exist because the ABI leaves no
+Three pieces of process-lifetime state exist because the ABI leaves no
 alternative, and nothing else may: `DxgkDdiAddDevice` and `DxgkDdiUnload`
 receive no context, so they reach the driver's root through the single pointer
-`MiniportBinding` holds; and the kernel runs no global constructors, so
-`DriverEntry` constructs that root in the shim's static storage. An object whose
+`MiniportBinding` holds; the kernel runs no global constructors, so
+`DriverEntry` constructs that root in the shim's static storage; and QEMU's C
+glue cannot hold a C++ object, so the device module keeps its devices in a
+`DeviceModule` in the ABI translation unit's static storage
+(`src/device/abi/entry_points.cpp`), handing the glue opaque handles. An object whose
 lifetime cannot be a scope is held in `ObjectStorage<T>`; an object whose count
 has no fixed bound - a device, an allocation - lives in an `ObjectPool<T>`,
 which constructs it in platform-allocated chunks at an address that stays valid
@@ -183,7 +186,9 @@ device exists.
   write one. RAII is not a style preference here: it removes cleanup branches,
   which is what makes Principle IV's 100% branch coverage affordable.
   The QEMU device is C++ behind a C ABI, exactly as QEMU already links
-  `rutabaga_gfx`; only `hw/display/virtio-gpu-rvk.c` is C.
+  `rutabaga_gfx`: `src/device` builds `librvk_device.a` with `rvk_device.h`, and
+  only the glue in `src/device/qemu/` - copied into QEMU's `hw/display/` by
+  `tools/build_qemu.sh` - is C, because QEMU's meson builds no C++ in modules.
 - **Toolchain**: clang/LLVM. Native tests and fuzzing with the host clang;
   the driver cross-built with `clang-cl` + `lld-link` against the WDK/SDK
   headers and import libraries. `gcc` is not supported.

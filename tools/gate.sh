@@ -7,6 +7,7 @@
 #                              driver_image, self_contained, tools_tests
 #   coverage  build-coverage/  the above plus coverage_gate
 #   fuzz      build-fuzz/      the above plus fuzz_<target>_smoke
+#   qemu      build-qemu/      QEMU patched with the device, and qemu_smoke
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -14,6 +15,7 @@ CONFIGURATIONS=(
     "default build"
     "coverage build-coverage -DAV_COVERAGE=ON"
     "fuzz build-fuzz -DAV_FUZZ=ON"
+    "qemu build-qemu -DAV_QEMU=ON"
 )
 
 for entry in "${CONFIGURATIONS[@]}"; do

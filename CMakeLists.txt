@@ -13,6 +13,7 @@ endif()
 option(AV_COVERAGE "instrument for llvm-cov"        OFF)
 option(AV_SANITIZE "build tests with ASan + UBSan"  ON)
 option(AV_FUZZ     "build libFuzzer targets"        OFF)
+option(AV_QEMU     "build the patched QEMU with the device and smoke-test it" OFF)
 
 add_compile_options(
   -Wall -Wextra -Werror
@@ -68,6 +69,19 @@ set_target_properties(rvk_device PROPERTIES
   POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
 configure_file(cmake/rvk_device.pc.in ${CMAKE_BINARY_DIR}/rvk_device.pc.in @ONLY)
 file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/pkgconfig/rvk_device.pc INPUT ${CMAKE_BINARY_DIR}/rvk_device.pc.in)
+
+# ---- the patched QEMU: its own configuration, since it needs nothing else ----
+if(AV_QEMU)
+  enable_testing()
+  add_custom_target(qemu ALL
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/build_qemu.sh ${CMAKE_BINARY_DIR} ${CMAKE_BINARY_DIR}/pkgconfig
+    DEPENDS rvk_device
+    USES_TERMINAL
+    COMMENT "QEMU with virtio-gpu-rvk")
+  add_test(NAME qemu_smoke
+           COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tests/qemu/qemu_smoke.py ${CMAKE_BINARY_DIR}/qemu)
+  return()
+endif()
 
 # ---- test harness ----------------------------------------------------------
 # Harness includes name a path from tests/ ("harness/vidsch/fake_vidsch.hpp").
