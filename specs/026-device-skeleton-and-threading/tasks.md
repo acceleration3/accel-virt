@@ -19,7 +19,7 @@ description: "Task list for feature 026: QEMU device skeleton, object model and 
 
 ## Phase 3: The device and its C ABI
 
-- [ ] T004 Tests then `RvkDevice`, `TableHost`, `DeviceInstance`, `DeviceModule`, `rvk_device.h` and entry points; `librvk_device.a` and `rvk_device.pc`
+- [X] T004 Tests then `RvkDevice`, `TableHost`, `DeviceInstance`, `DeviceModule`, `rvk_device.h` and entry points; `librvk_device.a` and `rvk_device.pc`
 
 **Checkpoint**: commit.
 

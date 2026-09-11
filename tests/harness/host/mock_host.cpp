@@ -327,6 +327,11 @@ std::uint32_t MockHost::run_main_loop()
     }
 }
 
+bool MockHost::holds_main_loop() const
+{
+    return pthread_equal(pthread_self(), main_loop_) != 0;
+}
+
 bool MockHost::claim(HostViolation kind)
 {
     StateLock lock(state_);

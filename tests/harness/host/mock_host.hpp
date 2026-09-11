@@ -58,6 +58,8 @@ public:
      * runs, on the calling thread; answers how many routines ran. */
     std::uint32_t run_main_loop();
 
+    /* Whether the calling thread is the one that constructed the mock. */
+    bool          holds_main_loop() const;
     bool          claim(HostViolation kind);
     std::uint32_t unclaimed_violations();
     std::uint32_t logged();

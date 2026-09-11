@@ -56,6 +56,19 @@ add_library(av_core STATIC ${AV_PORTABLE_SOURCES})
 target_include_directories(av_core PUBLIC src)
 target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 
+# ---- the device core for QEMU: a PIC static library behind the C ABI -------
+# No sanitizer or profile flags and hidden visibility: the archive exports only
+# rvk_device.h, and tools/build_qemu.sh links it into the virtio-gpu-rvk module
+# through the generated rvk_device.pc.
+file(GLOB_RECURSE AV_DEVICE_SOURCES CONFIGURE_DEPENDS src/device/*.cpp)
+add_library(rvk_device STATIC ${AV_DEVICE_SOURCES})
+target_include_directories(rvk_device PRIVATE src)
+target_compile_options(rvk_device PRIVATE -O2 -ffreestanding)
+set_target_properties(rvk_device PROPERTIES
+  POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+configure_file(cmake/rvk_device.pc.in ${CMAKE_BINARY_DIR}/rvk_device.pc.in @ONLY)
+file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/pkgconfig/rvk_device.pc INPUT ${CMAKE_BINARY_DIR}/rvk_device.pc.in)
+
 # ---- test harness ----------------------------------------------------------
 # Harness includes name a path from tests/ ("harness/vidsch/fake_vidsch.hpp").
 file(GLOB_RECURSE AV_HARNESS_SOURCES CONFIGURE_DEPENDS tests/harness/*.cpp)
