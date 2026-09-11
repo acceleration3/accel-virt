@@ -172,11 +172,15 @@ document names a function present in the pinned `dxgkrnl.sys`.
 
 ### Edge Cases
 
-- A table whose version is older than WDDM 3.2 but otherwise valid: rejected
-  the way `dxgkrnl` rejects it on Windows 11, not accepted as a legacy driver.
-- Registering twice: the second registration behaves as `dxgkrnl` does
-  (recorded from RE), not silently replacing the first.
-- A null table pointer: registration fails; no dereference.
+- A table whose version is older than WDDM 3.2 but otherwise valid: registration
+  accepts any version from 0x104E (`DpiInitializeInternal`); any rejection of an
+  old level on Windows 11 happens after registration, not in it. The harness
+  mirrors that, and the driver never declares anything but 0x11007.
+- Registering twice: the second registration fails with
+  `STATUS_OBJECT_NAME_COLLISION` from `IoAllocateDriverObjectExtension` and the
+  first stays registered (`DpiInitializeEx`).
+- A null table pointer: `dxgkrnl` would dereference it; the harness refuses it
+  instead.
 - A slot index equal to the slot count: rejected by the table.
 
 ## Requirements *(mandatory)*

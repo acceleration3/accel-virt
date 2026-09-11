@@ -61,7 +61,9 @@ add_library(av_harness STATIC
   tests/harness/mock_platform.cpp
   tests/harness/guarded_buffer.cpp
   tests/harness/hostile_sweep.cpp
-  tests/harness/address_space_fixture.cpp)
+  tests/harness/address_space_fixture.cpp
+  tests/harness/ddi_table_probe.cpp
+  tests/harness/fake_dxgkrnl.cpp)
 target_link_libraries(av_harness PUBLIC av_core)
 
 # Sanitizers, profile instrumentation and libFuzzer each need every object built

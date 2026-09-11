@@ -1,6 +1,7 @@
 #include "../../src/core/ddi_slot.hpp"
 #include "../../src/core/ddi_table.hpp"
 #include "../../src/core/status.hpp"
+#include "../harness/ddi_table_probe.hpp"
 #include "../harness/test_registry.hpp"
 
 #include <cstdint>
@@ -9,18 +10,6 @@ using av::DdiRoutine;
 using av::DdiSlot;
 using av::DdiTable;
 using av::Status;
-
-namespace av {
-
-/* Corrupts a table so the invariant tests can prove they notice. */
-struct DdiTableProbe {
-    explicit DdiTableProbe(DdiTable &target) : table(target) {}
-    void set_version(std::uint32_t version) { table.version_ = version; }
-    void set_padding(std::uint32_t padding) { table.padding_ = padding; }
-    DdiTable &table;
-};
-
-}  // namespace av
 
 using av::DdiTableProbe;
 

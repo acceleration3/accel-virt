@@ -21,8 +21,8 @@ description: "Task list for feature 003: DDI conformance harness"
 
 ## Phase 3: Fake dxgkrnl registration (US2, P1)
 
-- [ ] T006 [US2] Write `tests/unit/test_fake_dxgkrnl.cpp`: one rejecting test per recovered rule (naming the rule), one accepting test, null table, second registration per T005. Must fail to compile
-- [ ] T007 [US2] Implement `tests/harness/fake_dxgkrnl.{hpp,cpp}` and `tests/harness/registration_rule.hpp`. T006 passes
+- [X] T006 [US2] Write `tests/unit/test_fake_dxgkrnl.cpp`: one rejecting test per recovered rule (naming the rule), one accepting test, null table, second registration per T005. Must fail to compile
+- [X] T007 [US2] Implement `tests/harness/fake_dxgkrnl.{hpp,cpp}` and `tests/harness/registration_rule.hpp`. T006 passes
 
 **Checkpoint**: commit.
 
