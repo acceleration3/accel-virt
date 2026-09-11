@@ -13,7 +13,7 @@ description: "Task list for feature 026: QEMU device skeleton, object model and 
 
 ## Phase 2: Threading
 
-- [ ] T003 Tests then `WorkItem`, `Worker`, `DeviceContext`, `DeviceContextTable`
+- [X] T003 Tests then `WorkItem`, `Worker`, `DeviceContext`, `DeviceContextTable`
 
 **Checkpoint**: commit.
 
