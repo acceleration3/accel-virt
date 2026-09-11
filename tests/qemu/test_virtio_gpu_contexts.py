@@ -13,6 +13,7 @@ import subprocess
 import sys
 import unittest
 
+import rvk_context
 import virtio_qtest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "tools" / "host"))
@@ -104,9 +105,11 @@ class VirtioGpuContexts(unittest.TestCase):
         self.assertEqual(hex(response_type(gpu.control(request, response_size))), hex(answer), request[:32].hex())
 
     def bindable(self, gpu, context=1):
-        """A context and a ring and fence blob it can be set up with."""
+        """A context, a guest-backed ring with a fresh header and a fence blob it can be set up with."""
         self.expect(gpu, create_context(context), RESP_OK_NODATA)
-        self.expect(gpu, host_blob(RING, 2 * PAGE), RESP_OK_NODATA)
+        address = gpu.device.memory.allocate(2 * PAGE)
+        rvk_context.GuestRing(gpu.qtest, address)
+        self.expect(gpu, rvk_context.guest_blob(RING, address, 2 * PAGE), RESP_OK_NODATA)
         self.expect(gpu, host_blob(FENCE, PAGE), RESP_OK_NODATA)
 
     def test_context_init_and_one_capset_are_offered_and_accepted(self):

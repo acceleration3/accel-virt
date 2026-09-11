@@ -66,7 +66,8 @@ may advertise a capability an older guest does not use.
 ## Context setup (guest -> device)
 
 Sent in an rvk control command after `VIRTIO_GPU_CMD_CTX_CREATE` with context
-init capset id 0x72. It binds the context to its ring and fence page. 32 bytes.
+init capset id 0x72. It binds the context to its ring, fence page and doorbell.
+32 bytes.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
@@ -78,11 +79,12 @@ init capset id 0x72. It binds the context to its ring and fence page. 32 bytes.
 | 16 | u8 | ring_order | within the capset's [min, max] |
 | 17 | u8[3] | reserved | 0 |
 | 20 | u32 | fence_resource | non-zero, different from `ring_resource` |
-| 24 | u64 | reserved | 0 |
+| 24 | u32 | doorbell | the doorbell page, below the capset's `max_contexts` |
+| 28 | u32 | reserved | 0 |
 
-The checks that need the capset (major, sub_api membership, ring order range)
-are a separate validation against a decoded capset; the decoder checks what the
-bytes alone can prove.
+The checks that need the capset (major, sub_api membership, ring order range,
+doorbell index) are a separate validation against a decoded capset; the decoder
+checks what the bytes alone can prove.
 
 ## Capset and context commands (guest -> device)
 
@@ -94,7 +96,9 @@ device is bound to. The context setup travels as the whole command buffer of a
 `SUBMIT_3D` to the context: `size` is 32 and the buffer is one setup. The ring
 blob must hold at least `32 + 2^ring_order` bytes and the fence blob at least 32;
 both stay referenced while the context lives, and `RESOURCE_UNREF` of either is
-refused until `CTX_DESTROY` or a reset.
+refused until `CTX_DESTROY` or a reset. The ring blob's header must already be
+written: magic, the setup's order, head 0 and a tail at most `2^ring_order`.
+A successful setup connects the doorbell page it names to the context.
 
 | Request | Answer |
 |---|---|
@@ -108,10 +112,49 @@ refused until `CTX_DESTROY` or a reset.
 | `CTX_DESTROY` of a live context / any other | `OK_NODATA` / `ERR_INVALID_CONTEXT_ID` |
 | `SUBMIT_3D` to a context that does not exist | `ERR_INVALID_CONTEXT_ID` |
 | a setup naming a resource that is not a blob | `ERR_INVALID_RESOURCE_ID` |
-| `size` not 32, the buffer short or malformed, a setup the capset does not allow, a blob too small for its role, or a context already set up | `ERR_INVALID_PARAMETER` |
+| `size` not 32, the buffer short or malformed, a setup the capset does not allow, a blob too small for its role, a ring header that is not fresh, a doorbell another context holds, or a context already set up | `ERR_INVALID_PARAMETER` |
 | `RESOURCE_UNREF` of a blob a context is bound to | `ERR_INVALID_PARAMETER`, the blob kept |
 
 A device reset destroys every context, then releases every blob.
+
+## Doorbells (guest -> device)
+
+PCI BAR 0 of `virtio-gpu-rvk-pci` is a 32-bit memory BAR of `max_contexts`
+pages of 4096 bytes (64 pages, 256 KiB), located by a virtio shared memory
+capability (`VIRTIO_PCI_CAP_SHARED_MEMORY_CFG`) with id **0x72**. Page *n* is
+the doorbell of the context whose setup named *n*.
+
+A 4-byte store at offset 0 of a connected page wakes that context's worker; the
+value is ignored. The store completes without the device's main loop (a KVM
+ioeventfd; QEMU dispatches the same eventfd itself without KVM). Any other
+width or offset, and any page no context holds, does nothing; reads return 0.
+A store is a wake-up, not a count: the worker consumes everything published
+since it last looked, so one store after several batches is enough.
+
+## Batches (guest -> device, in the ring)
+
+The ring's bytes are a sequence of batches. Each starts with a 16-byte header
+and occupies the header and its payload rounded up to a multiple of 8 bytes.
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | magic | `RVKB` = `0x424B5652` |
+| 4 | u32 | length | payload bytes following the header; header and payload fit in `2^order` |
+| 8 | u64 | fence_id | >= 1, greater than the previous batch's on this context |
+
+A batch completes its fence. The producer assigns fence ids: a user-mode driver
+its own, the kernel driver's submission path maps dxgkrnl's to them.
+
+**Consumption.** On every wake the device reads the ring header, judges the
+tail against its own history (see the ring header's rules; the device's own
+head, not the header's head field, is the one judged and published), then
+consumes batch after batch from its head while a whole header and then a whole
+batch lie before the tail, publishing head after each. A partly published batch
+waits for a later wake. A header that is malformed or changes order, a tail
+that moves backwards or runs more than `2^order` ahead of head, or a batch with
+a bad magic, a length that cannot fit the ring, fence 0 or a fence not greater
+than the last, stops the context: the device logs the reason once and consumes
+nothing more for it until `CTX_DESTROY` or a reset. Other contexts carry on.
 
 ## Ring header (shared, both write)
 

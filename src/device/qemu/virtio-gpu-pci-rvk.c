@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * virtio-gpu-rvk-pci: the PCI function the guest's rvkgpu.sys binds to - a
- * virtio-gpu (1af4:1050) with subsystem 1af4:5256, "RV".
+ * virtio-gpu (1af4:1050) with subsystem 1af4:5256, "RV", whose doorbell pages
+ * are BAR 0, located by a shared memory capability.
  *
  * Installed by accel-virt's tools/build_qemu.sh as hw/display/virtio-gpu-pci-rvk.c.
  */
@@ -13,6 +14,7 @@
 #include "hw/virtio/virtio.h"
 #include "hw/virtio/virtio-bus.h"
 #include "hw/virtio/virtio-gpu-pci.h"
+#include "hw/virtio/virtio-pci.h"
 #include "hw/virtio/virtio-gpu-rvk.h"
 #include "qom/object.h"
 
@@ -27,6 +29,18 @@ struct VirtIOGPURvkPCI {
     VirtIOGPURvk vdev;
 };
 
+static void (*virtio_gpu_rvk_pci_parent_realize)(VirtIOPCIProxy *proxy, Error **errp);
+
+/* BAR 0 is free: virtio-gpu-pci forces virtio 1, so there is no legacy I/O BAR. */
+static void virtio_gpu_rvk_pci_realize(VirtIOPCIProxy *proxy, Error **errp)
+{
+    VirtIOGPURvkPCI *dev = VIRTIO_GPU_RVK_PCI(proxy);
+
+    pci_register_bar(&proxy->pci_dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY, &dev->vdev.doorbells);
+    virtio_pci_add_shm_cap(proxy, 0, 0, memory_region_size(&dev->vdev.doorbells), RVK_DEVICE_DOORBELL_SHM_ID);
+    virtio_gpu_rvk_pci_parent_realize(proxy, errp);
+}
+
 static void virtio_gpu_rvk_pci_initfn(Object *obj)
 {
     VirtIOGPURvkPCI *dev = VIRTIO_GPU_RVK_PCI(obj);
@@ -38,6 +52,10 @@ static void virtio_gpu_rvk_pci_initfn(Object *obj)
 static void virtio_gpu_rvk_pci_class_init(ObjectClass *klass, const void *data)
 {
     PCIDeviceClass *pcidev_k = PCI_DEVICE_CLASS(klass);
+    VirtioPCIClass *k = VIRTIO_PCI_CLASS(klass);
+
+    virtio_gpu_rvk_pci_parent_realize = k->realize;
+    k->realize = virtio_gpu_rvk_pci_realize;
 
     pcidev_k->subsystem_vendor_id = PCI_SUBVENDOR_ID_REDHAT_QUMRANET;
     pcidev_k->subsystem_id = VIRTIO_GPU_RVK_PCI_SUBSYSTEM_ID;

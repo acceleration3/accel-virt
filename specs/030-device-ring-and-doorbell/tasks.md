@@ -31,9 +31,9 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 4: QEMU
 
-- [ ] T009 [US1] Glue: eventfd events, doorbell BAR 0 with shared memory capability 0x72, connect/disconnect in src/device/qemu/
-- [ ] T010 [US1] [US2] [US3] qtest suite tests/qemu/test_virtio_gpu_ring.py; ring headers in tests/qemu/test_virtio_gpu_contexts.py
-- [ ] T011 Docs: docs/protocol.md (doorbells, setup field, batches, consumption), docs/testing.md, README layout; `tools/gate.sh`; merge; push
+- [X] T009 [US1] Glue: eventfd events, doorbell BAR 0 with shared memory capability 0x72, connect/disconnect in src/device/qemu/
+- [X] T010 [US1] [US2] [US3] qtest suite tests/qemu/test_virtio_gpu_ring.py; ring headers in tests/qemu/test_virtio_gpu_contexts.py
+- [X] T011 Docs: docs/protocol.md (doorbells, setup field, batches, consumption), docs/testing.md, README layout; `tools/gate.sh`; merge; push
 
 ## Dependencies
 

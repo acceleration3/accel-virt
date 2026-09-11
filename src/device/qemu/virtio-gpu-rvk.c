@@ -3,7 +3,8 @@
  * virtio-gpu-rvk-device: the base virtio-gpu device handles the 2D protocol;
  * realize, reset, finalize and every control request reach the device core
  * through rvk_device.h first. Beyond stock virtio-gpu, only what the core says
- * it implements is offered: context init, when it has a capset.
+ * it implements is offered: context init, when it has a capset, and the
+ * doorbell pages the PCI wrapper maps.
  *
  * Installed by accel-virt's tools/build_qemu.sh as hw/display/virtio-gpu-rvk.c.
  */
@@ -85,6 +86,30 @@ static void virtio_gpu_rvk_finalize(Object *obj)
     (void)rvk_device_destroy(r->core);
 }
 
+/* Stores that are not a connected doorbell's ioeventfd land here and do nothing. */
+static uint64_t virtio_gpu_rvk_doorbell_read(void *opaque, hwaddr offset, unsigned size)
+{
+    return 0;
+}
+
+static void virtio_gpu_rvk_doorbell_write(void *opaque, hwaddr offset, uint64_t value, unsigned size)
+{
+}
+
+static const MemoryRegionOps virtio_gpu_rvk_doorbell_ops = {
+    .read = virtio_gpu_rvk_doorbell_read,
+    .write = virtio_gpu_rvk_doorbell_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+};
+
+static void virtio_gpu_rvk_instance_init(Object *obj)
+{
+    VirtIOGPURvk *r = VIRTIO_GPU_RVK(obj);
+
+    memory_region_init_io(&r->doorbells, obj, &virtio_gpu_rvk_doorbell_ops, r, "virtio-gpu-rvk-doorbells",
+                          (uint64_t)RVK_DEVICE_DOORBELLS * RVK_DEVICE_DOORBELL_PAGE);
+}
+
 static const Property virtio_gpu_rvk_properties[] = {
     DEFINE_PROP_STRING("host-gpu", VirtIOGPURvk, host_gpu),
 };
@@ -106,6 +131,7 @@ static const TypeInfo virtio_gpu_rvk_info[] = {
         .name = TYPE_VIRTIO_GPU_RVK,
         .parent = TYPE_VIRTIO_GPU,
         .instance_size = sizeof(VirtIOGPURvk),
+        .instance_init = virtio_gpu_rvk_instance_init,
         .instance_finalize = virtio_gpu_rvk_finalize,
         .class_init = virtio_gpu_rvk_class_init,
     },

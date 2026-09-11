@@ -31,6 +31,9 @@ struct VirtIOGPURvk {
      * placed over with MAP_FIXED, as virtio-gpu-gl does for virgl. */
     MemoryRegion hostmem_background;
     void *hostmem_mmap;
+    /* One page per context; a store to a page is an ioeventfd the core
+     * connects to the context's worker. The PCI wrapper maps it as BAR 0. */
+    MemoryRegion doorbells;
 };
 
 /* Fills r->host with QEMU's threads, events, locks, main loop, memory and

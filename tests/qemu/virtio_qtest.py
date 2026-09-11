@@ -68,6 +68,12 @@ class Qtest:
         self.stderr.close()
         return printed
 
+    def printed(self):
+        """What QEMU has printed on stderr so far. pread, because QEMU writes
+        through the same file description and a seek would move its offset."""
+        descriptor = self.stderr.fileno()
+        return os.pread(descriptor, os.fstat(descriptor).st_size, 0).decode(errors="replace")
+
     def command(self, line):
         self.process.stdin.write(line + "\n")
         self.process.stdin.flush()

@@ -138,7 +138,10 @@ host-visible shared memory region among the capabilities and reads and writes
 mapped blobs through BAR 4 with qtest's memory commands, and
 `test_virtio_gpu_contexts.py` reads the capset, checking its GPU identity
 against `vulkaninfo` through `tools/host/list_gpus.py`, and creates, sets up and
-destroys contexts.
+destroys contexts. `test_virtio_gpu_ring.py` writes rings as the guest does
+(`rvk_context.py`), stores to the doorbell pages in BAR 0 and waits for head -
+QEMU dispatches the ioeventfd itself under qtest - and checks that a hostile
+ring stops only its own context.
 
 ### The shape of a test file
 

@@ -4,7 +4,8 @@
  * QEMU's threads (qemu_thread_create blocks the signals a worker must not take),
  * events, mutexes and bottom halves, guest memory through the device's DMA
  * address space, memfd blocks placed over the hostmem reservation, the control
- * queue, and the host GPU catalog read from the Vulkan loader. Translation only.
+ * queue, doorbell pages as ioeventfds on the worker's eventfd, and the host GPU
+ * catalog read from the Vulkan loader. Translation only.
  *
  * Installed by accel-virt's tools/build_qemu.sh as hw/display/virtio-gpu-rvk-host.c.
  */
@@ -15,6 +16,7 @@
 #include "qemu/aio.h"
 #include "qemu/iov.h"
 #include "qemu/memfd.h"
+#include "qemu/event_notifier.h"
 #include "qapi/error.h"
 #include "system/dma.h"
 #include "system/memory.h"
@@ -71,31 +73,39 @@ static void rvk_join_thread(void *opaque, void *thread)
     g_free(t);
 }
 
+/* An eventfd, so a doorbell's ioeventfd can signal the same event the worker
+ * waits on. */
 static void *rvk_create_event(void *opaque)
 {
-    QemuEvent *event = g_new0(QemuEvent, 1);
+    EventNotifier *event = g_new0(EventNotifier, 1);
 
-    qemu_event_init(event, false);
+    if (event_notifier_init(event, 0) < 0) {
+        g_free(event);
+        return NULL;
+    }
     return event;
 }
 
 static void rvk_destroy_event(void *opaque, void *event)
 {
-    qemu_event_destroy(event);
+    event_notifier_cleanup(event);
     g_free(event);
 }
 
 static void rvk_signal_event(void *opaque, void *event)
 {
-    qemu_event_set(event);
+    event_notifier_set(event);
 }
 
-/* Auto-reset: a signal between the wait returning and the reset is not lost,
- * because the core drains its queue after this returns. */
+/* Auto-reset: clearing reads the whole counter, and a signal after the clear
+ * is not lost, because the core drains its work and ring after this returns. */
 static void rvk_wait_event(void *opaque, void *event)
 {
-    qemu_event_wait(event);
-    qemu_event_reset(event);
+    GPollFD wake = { .fd = event_notifier_get_fd(event), .events = G_IO_IN };
+
+    while (g_poll(&wake, 1, -1) < 0 && errno == EINTR) {
+    }
+    event_notifier_test_and_clear(event);
 }
 
 static void *rvk_create_mutex(void *opaque)
@@ -226,6 +236,20 @@ static void rvk_remove_from_hostmem(void *opaque, uint64_t offset, uint64_t size
     }
 }
 
+static void rvk_connect_doorbell(void *opaque, void *event, uint32_t index)
+{
+    VirtIOGPURvk *r = opaque;
+
+    memory_region_add_eventfd(&r->doorbells, (hwaddr)index * RVK_DEVICE_DOORBELL_PAGE, 4, false, 0, event);
+}
+
+static void rvk_disconnect_doorbell(void *opaque, void *event, uint32_t index)
+{
+    VirtIOGPURvk *r = opaque;
+
+    memory_region_del_eventfd(&r->doorbells, (hwaddr)index * RVK_DEVICE_DOORBELL_PAGE, 4, false, 0, event);
+}
+
 static size_t rvk_read_request(void *opaque, void *request, size_t offset, uint8_t *buffer, size_t size)
 {
     struct virtio_gpu_ctrl_command *cmd = request;
@@ -337,6 +361,8 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .hostmem_size = rvk_hostmem_size,
         .place_in_hostmem = rvk_place_in_hostmem,
         .remove_from_hostmem = rvk_remove_from_hostmem,
+        .connect_doorbell = rvk_connect_doorbell,
+        .disconnect_doorbell = rvk_disconnect_doorbell,
         .read_request = rvk_read_request,
         .respond = rvk_respond,
         .resource_exists = rvk_resource_exists,
