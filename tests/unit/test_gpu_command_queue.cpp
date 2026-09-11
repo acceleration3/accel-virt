@@ -27,12 +27,18 @@ constexpr std::uint32_t ok_nodata = 0x1100u;
 constexpr std::uint32_t err_unspec = 0x1200u;
 constexpr std::uint16_t flag_write = 2u;
 
+av::Status configure(av::MappedVirtioFunction &mapped, std::uint16_t queue_size)
+{
+    mapped.common().set_queues(2u, queue_size);
+    return mapped.map();
+}
+
 /* A started transport with a control-style queue (0, with responses) and a
  * cursor-style one (1, without). */
 class Fixture {
 public:
-    Fixture()
-        : mapped_(), mapped_status_(mapped_.map()),
+    explicit Fixture(std::uint16_t queue_size = 256u)
+        : mapped_(), mapped_status_(configure(mapped_, queue_size)),
           common_(mapped_.platform(), mapped_.mappings().address_of(mapped_.layout().common()),
                   mapped_.layout().common().length()),
           notify_(mapped_.platform(), mapped_.mappings().address_of(mapped_.layout().notify()),
@@ -194,3 +200,12 @@ TEST(gpu_command_queue, ceilings)
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   while (fixture.platform().claim(Violation::irql_ceiling)) {}
   while (fixture.platform().claim(Violation::allocation_at_dispatch)) {} }
+
+TEST(gpu_command_queue_send, a_queue_smaller_than_its_slots_runs_out_of_descriptors_first)
+{ Fixture fixture(8u);
+  CHECK_STATUS(fixture.start(), Status::ok);
+  for (std::uint32_t request = 0u; request < 4u; request++)
+      CHECK_STATUS(fixture.control().send(request_bytes, move_request(1)), Status::ok);
+  CHECK_STATUS(fixture.control().send(request_bytes, move_request(1)), Status::no_space);
+  CHECK_EQ(fixture.control().in_flight(), 4u);
+  CHECK(fixture.control().invariants_hold()); }

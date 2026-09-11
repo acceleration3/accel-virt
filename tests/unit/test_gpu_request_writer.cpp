@@ -104,5 +104,10 @@ TEST(gpu_request_writer, a_request_that_does_not_fit_writes_nothing)
   CHECK_EQ(buffer.bytes[0], 0xEEu);
   CHECK_STATUS(writer.create_2d(1u, 1u, 1u, 1u), Status::ok);
   CHECK_EQ(writer.length(), 40u);
+  GpuRequestWriter tiny(buffer.bytes, 39u);
+  CHECK_STATUS(tiny.create_2d(1u, 1u, 1u, 1u), Status::too_large);
+  CHECK_STATUS(tiny.transfer_to_host_2d(1u, 1u, 1u), Status::too_large);
+  CHECK_STATUS(tiny.update_cursor(0u, 0, 0, 1u, 0u, 0u), Status::too_large);
+  CHECK_EQ(tiny.length(), 0u);
   GpuRequestWriter none(nullptr, 64u);
   CHECK_STATUS(none.attach_backing(1u, 0u, 0u), Status::too_large); }

@@ -21,6 +21,6 @@ description: "Task list for feature 013: WDDM 1.0 cursor, and declining the lega
 
 ## Phase 3: DDIs (US1, US2)
 
-- [ ] T006 Records and km proofs; pointer capabilities
-- [ ] T007 Tests then adapter pointer DDIs, the eight stubs, entry points, ten slots
-- [ ] T008 Scenario through the table; docs; gate; merge; push
+- [X] T006 Records and km proofs; pointer capabilities
+- [X] T007 Tests then adapter pointer DDIs, the eight stubs, entry points, ten slots
+- [X] T008 Scenario through the table; docs; gate; merge; push
