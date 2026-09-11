@@ -1,5 +1,6 @@
 #include "virtio_gpu_device.hpp"
 
+#include "../proto/gpu_request_writer.hpp"
 #include "bar_mappings.hpp"
 #include "invariant_scope.hpp"
 #include "scope_exit.hpp"
@@ -14,7 +15,8 @@ VirtioGpuDevice::VirtioGpuDevice(Platform &platform, const BarMappings &mappings
       isr_(platform, mappings.address_of(layout.isr()), layout.isr().length()),
       device_(platform, mappings.address_of(layout.device()), layout.device().length()),
       transport_(platform, common_, notify_, isr_, device_, layout.notify_multiplier()),
-      control_(platform, control_queue), cursor_(platform, cursor_queue), running_(false) {}
+      control_(platform, transport_, control_queue, GpuRequestWriter::response_size, LockRank::control_queue),
+      cursor_(platform, transport_, cursor_queue, 0u, LockRank::cursor_queue), running_(false) {}
 
 /* The device must stop using the rings before the members release them. */
 VirtioGpuDevice::~VirtioGpuDevice() { transport_.abandon(); }
@@ -37,9 +39,8 @@ Status VirtioGpuDevice::start(uint32_t message_interrupts)
 
     if (message_interrupts != 0u) status = transport_.assign_config_vector(vector_for(config_source, message_interrupts));
     if (status == Status::ok)
-        status = transport_.activate_queue(control_, vector_for(control_source, message_interrupts));
-    if (status == Status::ok)
-        status = transport_.activate_queue(cursor_, vector_for(cursor_source, message_interrupts));
+        status = control_.activate(vector_for(control_source, message_interrupts));
+    if (status == Status::ok) status = cursor_.activate(vector_for(cursor_source, message_interrupts));
     if (status == Status::ok) status = transport_.start();
     if (status != Status::ok) return status;
     failed.dismiss();
@@ -68,25 +69,43 @@ uint8_t VirtioGpuDevice::read_isr()
     return transport_.read_isr();
 }
 
+Status VirtioGpuDevice::send_control(const uint8_t *request, size_t length)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "VirtioGpuDevice::send_control");
+    return running_ ? control_.send(request, length) : Status::invalid_state;
+}
+
+Status VirtioGpuDevice::send_cursor(const uint8_t *request, size_t length)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "VirtioGpuDevice::send_cursor");
+    return running_ ? cursor_.send(request, length) : Status::invalid_state;
+}
+
 Status VirtioGpuDevice::harvest_control(uint32_t &completed)
 {
     platform_.require_irql_at_most(Irql::dispatch, "VirtioGpuDevice::harvest_control");
-    InvariantScope<VirtioGpuDevice> guard(platform_, *this, "harvest_control");
+    return harvest(control_, completed, "virtio-gpu: the device refused a control request");
+}
+
+Status VirtioGpuDevice::harvest_cursor(uint32_t &completed)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "VirtioGpuDevice::harvest_cursor");
+    return harvest(cursor_, completed, "virtio-gpu: the device refused a cursor request");
+}
+
+Status VirtioGpuDevice::harvest(GpuCommandQueue &queue, uint32_t &completed, const char *refusal)
+{
+    InvariantScope<VirtioGpuDevice> guard(platform_, *this, "harvest");
     completed = 0u;
     if (!running_) return Status::invalid_state;
-    for (;;) {
-        uint16_t head = 0u;
-        uint32_t written = 0u;
-        const Status status = control_.take_used(head, written);
-        if (status == Status::not_found) return Status::ok;
-        if (status != Status::ok) {
-            platform_.log("virtio-gpu: control queue returned a request it was never given");
-            transport_.fail();
-            running_ = false;
-            return status;
-        }
-        completed++;
-    }
+    uint32_t refused = 0u;
+    const Status status = queue.harvest(completed, refused);
+    if (refused != 0u) platform_.log(refusal);
+    if (status == Status::ok) return Status::ok;
+    platform_.log("virtio-gpu: a queue returned a request it was never given");
+    transport_.fail();
+    running_ = false;
+    return status;
 }
 
 uint64_t VirtioGpuDevice::features() const { return transport_.features(); }

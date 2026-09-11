@@ -165,6 +165,8 @@ void Adapter::dpc_routine()
     uint32_t completed = 0u;
     if (device_.constructed() && device_.object().harvest_control(completed) != Status::ok)
         platform_.log("rvkgpu: control queue harvest failed in the DPC");
+    if (device_.constructed() && device_.object().harvest_cursor(completed) != Status::ok)
+        platform_.log("rvkgpu: cursor queue harvest failed in the DPC");
     if (node_.complete(notification_) != Status::ok) platform_.log("rvkgpu: a completion was refused in the DPC");
     dxgkrnl_.notify_dpc();
 }

@@ -167,6 +167,20 @@ When a DMA buffer cannot hold every sub-rectangle, the command carries as many
 as fit and dxgkrnl calls `DxgkDdiPresent` again with a fresh buffer for the
 rest; each buffer holds one complete command.
 
+## The driver's own virtio-gpu resources
+
+Besides rvk commands, the driver sends standard virtio-gpu requests (virtio 1.2
+§5.7.6) for resources it owns. Resource ids 1 to 15 are reserved for them;
+nothing else may create one.
+
+| Id | Resource | Requests |
+|--:|---|---|
+| 1 | the hardware cursor: 64x64 `B8G8R8A8_UNORM`, one contiguous backing | `RESOURCE_CREATE_2D`, `RESOURCE_ATTACH_BACKING` once per device start; `TRANSFER_TO_HOST_2D` per shape (control queue); `UPDATE_CURSOR`, `MOVE_CURSOR` (cursor queue) |
+
+Control requests travel with a 24-byte response the device answers with
+`VIRTIO_GPU_RESP_OK_NODATA`; anything else is logged. Cursor requests carry no
+response. The driver does not wait for either.
+
 ## Fence page (device -> guest)
 
 Offset 0 of the fence resource. The device updates it from its worker thread;

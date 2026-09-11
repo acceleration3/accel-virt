@@ -11,6 +11,7 @@
 #include "../harness/fake_dxgkrnl_adapter.hpp"
 #include "../harness/fake_virtio_gpu_function.hpp"
 #include "../harness/fake_virtqueue_device.hpp"
+#include "../harness/mapped_virtio_function.hpp"
 #include "../harness/mock_platform.hpp"
 #include "../harness/test_registry.hpp"
 #include "../harness/violation.hpp"
@@ -21,7 +22,7 @@ namespace av {
 
 struct VirtioGpuDeviceProbe {
     explicit VirtioGpuDeviceProbe(VirtioGpuDevice &target) : device(target) {}
-    VirtQueue &control() { return device.control_; }
+    GpuCommandQueue &control() { return device.control_; }
     void set_running() { device.running_ = true; }
     VirtioGpuDevice &device;
 };
@@ -58,40 +59,11 @@ constexpr std::uint16_t no_vector = 0xFFFFu;
 constexpr std::uint8_t  driver_ok_status = 0x0Fu;
 constexpr std::uint8_t  failed_bit = 0x80u;
 
-/* The function mapped as a started adapter maps it. */
-class MappedFunction {
-public:
-    MappedFunction() : dxgkrnl_(platform_, function_), interface_(platform_), mappings_(platform_, interface_) {}
+using MappedFunction = av::MappedVirtioFunction;
 
-    Status map()
-    {
-        ResourceList resources(platform_);
-        DxgkDeviceInfoRecord info;
-        Status status = interface_.initialize(&dxgkrnl_.record());
-        if (status == Status::ok) status = interface_.get_device_information(info);
-        if (status == Status::ok) status = resources.initialize(info.TranslatedResourceList, ResourceList::max_bytes);
-        if (status == Status::ok) status = VirtioCapabilityWalk(function_.config_space(), 256u).walk(layout_);
-        const PciBaseAddresses bars(function_.config_space(), 256u);
-        if (status == Status::ok) status = mappings_.map(bars, resources, layout_);
-        return status;
-    }
-
-    MockPlatform          &platform() { return platform_; }
-    FakeVirtioGpuFunction &function() { return function_; }
-    FakeCommonConfig      &common() { return function_.common(); }
-    BarMappings           &mappings() { return mappings_; }
-    const VirtioPciLayout &layout() const { return layout_; }
-
-private:
-    MockPlatform          platform_;
-    FakeVirtioGpuFunction function_;
-    FakeDxgkrnlAdapter    dxgkrnl_;
-    DxgkrnlInterface      interface_;
-    BarMappings           mappings_;
-    VirtioPciLayout       layout_;
-};
-
-const VirtqSegment request[] = {VirtqSegment(0x5000u, 24u, SegmentDirection::device_reads)};
+constexpr std::uint32_t ok_nodata = 0x1100u;
+/* A TRANSFER_TO_HOST_2D request's type and padding: what the device reads first. */
+const std::uint8_t request_bytes[32] = {0x05, 0x01};
 
 }  // namespace
 
@@ -248,18 +220,50 @@ TEST(virtio_gpu_device_harvest_control, collects_every_completed_request)
   CHECK_STATUS(device.harvest_control(completed), Status::ok);
   CHECK_EQ(completed, 0u);
   mapped.platform().set_irql(Irql::passive);
-  VirtioGpuDeviceProbe probe(device);
-  std::uint16_t head = 0u;
-  CHECK_STATUS(probe.control().add(request, 1u, head), Status::ok);
-  CHECK_STATUS(probe.control().add(request, 1u, head), Status::ok);
-  const FakeCommonConfig::Queue &queue = mapped.common().queue(0u);
-  FakeVirtqueueDevice fake(mapped.platform(), queue.desc, queue.driver, queue.device, queue.size);
-  CHECK_EQ(fake.complete_all(0u), 2u);
+  CHECK_STATUS(device.send_control(request_bytes, sizeof request_bytes), Status::ok);
+  CHECK_STATUS(device.send_control(request_bytes, sizeof request_bytes), Status::ok);
+  FakeVirtqueueDevice fake = mapped.queue_device(0u);
+  CHECK_EQ(fake.respond_all(ok_nodata), 2u);
+  CHECK_EQ(fake.request_type(1u), 0x0105u);
   mapped.platform().set_irql(Irql::dispatch);
   CHECK_STATUS(device.harvest_control(completed), Status::ok);
   mapped.platform().set_irql(Irql::passive);
   CHECK_EQ(completed, 2u);
+  CHECK_EQ(mapped.platform().logged(), 0u);
   CHECK_EQ(mapped.platform().unclaimed_violations(), 0u); }
+
+TEST(virtio_gpu_device_harvest_control, a_refused_request_is_logged_not_failed)
+{ MappedFunction mapped;
+  CHECK_STATUS(mapped.map(), Status::ok);
+  VirtioGpuDevice device(mapped.platform(), mapped.mappings(), mapped.layout());
+  CHECK_STATUS(device.start(3u), Status::ok);
+  CHECK_STATUS(device.send_control(request_bytes, sizeof request_bytes), Status::ok);
+  FakeVirtqueueDevice fake = mapped.queue_device(0u);
+  CHECK_EQ(fake.respond_all(0x1203u), 1u);
+  std::uint32_t completed = 0u;
+  CHECK_STATUS(device.harvest_control(completed), Status::ok);
+  CHECK_EQ(completed, 1u);
+  CHECK_EQ(mapped.platform().logged(), 1u);
+  CHECK_EQ(mapped.common().status(), driver_ok_status); }
+
+TEST(virtio_gpu_device_harvest_cursor, collects_cursor_requests_that_carry_no_response)
+{ MappedFunction mapped;
+  CHECK_STATUS(mapped.map(), Status::ok);
+  VirtioGpuDevice device(mapped.platform(), mapped.mappings(), mapped.layout());
+  std::uint32_t completed = 9u;
+  CHECK_STATUS(device.send_cursor(request_bytes, sizeof request_bytes), Status::invalid_state);
+  CHECK_STATUS(device.harvest_cursor(completed), Status::invalid_state);
+  CHECK_STATUS(device.start(3u), Status::ok);
+  CHECK_STATUS(device.send_cursor(request_bytes, sizeof request_bytes), Status::ok);
+  FakeVirtqueueDevice fake = mapped.queue_device(1u);
+  CHECK_EQ(fake.complete_all(0u), 1u);
+  CHECK_EQ(fake.seen_count(), 1u);
+  mapped.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(device.harvest_cursor(completed), Status::ok);
+  mapped.platform().set_irql(Irql::passive);
+  CHECK_EQ(completed, 1u);
+  CHECK_STATUS(device.stop(), Status::ok);
+  CHECK_STATUS(device.send_control(request_bytes, sizeof request_bytes), Status::invalid_state); }
 
 TEST(virtio_gpu_device_harvest_control, a_lying_device_is_failed)
 { MappedFunction mapped;
@@ -273,7 +277,8 @@ TEST(virtio_gpu_device_harvest_control, a_lying_device_is_failed)
   std::uint32_t completed = 9u;
   CHECK_STATUS(device.harvest_control(completed), Status::invalid_state);
   CHECK_EQ(completed, 0u);
-  CHECK((mapped.common().status() & failed_bit) != 0u); }
+  CHECK((mapped.common().status() & failed_bit) != 0u);
+  CHECK_STATUS(device.harvest_cursor(completed), Status::invalid_state); }
 
 TEST(virtio_gpu_device_harvest_control, before_start_is_invalid_state)
 { MappedFunction mapped;

@@ -1,16 +1,18 @@
 /* The virtio-gpu function of one adapter while it is powered: its register
- * windows, transport, control queue and cursor queue (virtio 1.2 5.7). Built
+ * windows, transport, and the control and cursor queues requests are sent on
+ * (virtio 1.2 5.7). Built
  * over BARs already mapped; start brings it to DRIVER_OK, and destruction
  * writes reset before the queues' memory is released. */
 #ifndef AV_VIRTIO_GPU_DEVICE_HPP
 #define AV_VIRTIO_GPU_DEVICE_HPP
 
+#include "gpu_command_queue.hpp"
 #include "mapped_register_window.hpp"
 #include "platform.hpp"
 #include "status.hpp"
-#include "virt_queue.hpp"
 #include "virtio_pci_transport.hpp"
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace av {
@@ -40,9 +42,13 @@ public:
     void                 reset_immediately();
 
     uint8_t              read_isr();
-    /* Takes every completed control request; a device that lies about one is
-     * failed. */
+    /* A virtio-gpu request, not waited on: invalid_state unless running. */
+    [[nodiscard]] Status send_control(const uint8_t *request, size_t length);
+    [[nodiscard]] Status send_cursor(const uint8_t *request, size_t length);
+    /* Takes every completed request of the queue, logging refusals; a device
+     * that lies about one is failed. */
     [[nodiscard]] Status harvest_control(uint32_t &completed);
+    [[nodiscard]] Status harvest_cursor(uint32_t &completed);
 
     uint64_t features() const;
     bool     invariants_hold() const;
@@ -53,6 +59,7 @@ private:
     static constexpr uint16_t no_vector = 0xFFFFu;
 
     uint16_t vector_for(uint16_t source, uint32_t message_interrupts) const;
+    [[nodiscard]] Status harvest(GpuCommandQueue &queue, uint32_t &completed, const char *refusal);
 
     Platform            &platform_;
     MappedRegisterWindow common_;
@@ -60,8 +67,8 @@ private:
     MappedRegisterWindow isr_;
     MappedRegisterWindow device_;
     VirtioPciTransport   transport_;
-    VirtQueue            control_;
-    VirtQueue            cursor_;
+    GpuCommandQueue      control_;
+    GpuCommandQueue      cursor_;
     bool                 running_;
 
     friend struct VirtioGpuDeviceProbe;

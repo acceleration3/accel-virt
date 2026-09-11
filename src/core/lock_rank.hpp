@@ -15,6 +15,8 @@ enum class LockRank : uint16_t {
     allocation_table = 110u,
     execution_node = 200u,     /* spin lock: SubmitCommand, PreemptCommand and the DPC */
     display_scanout = 210u,    /* spin lock: SetVidPnSourceAddress and the vsync tick */
+    control_queue = 220u,      /* spin lock: virtio-gpu control requests and the DPC's harvest */
+    cursor_queue = 230u,       /* spin lock: virtio-gpu cursor requests and the DPC's harvest */
 };
 
 }  // namespace av

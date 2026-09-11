@@ -28,6 +28,16 @@ public:
     /* Completes every published chain, reporting `written` bytes for each.
      * Returns the number completed. */
     std::uint16_t complete_all(std::uint32_t written);
+    /* Completes every published chain as virtio-gpu does: keeps the first
+     * bytes of what the driver sent, writes a response header of `type` into
+     * the chain's writable buffer, and reports that as written (nothing
+     * written for a chain without one). */
+    std::uint16_t respond_all(std::uint32_t type);
+    static constexpr std::uint32_t max_requests = 64u;
+    static constexpr std::uint32_t request_bytes = 64u;
+    std::uint32_t        requests() const;
+    const std::uint8_t  *request(std::uint32_t index) const;
+    std::uint32_t        request_type(std::uint32_t index) const;
 
     std::uint16_t available_index() const;
     const Seen   &seen(std::uint32_t index) const;
@@ -39,6 +49,9 @@ public:
     void set_used_index(std::uint16_t index);
 
 private:
+    /* Walks one chain, recording each segment (and keeping the first bytes the
+     * driver sent, if asked); answers its writable buffer's address and length. */
+    void          walk(std::uint16_t chain, bool keep_request, std::uint64_t &writable, std::uint32_t &writable_length);
     std::uint8_t *at(std::uint64_t address, std::size_t bytes) const;
     std::uint64_t read(std::uint64_t address, unsigned width) const;
     void          write(std::uint64_t address, std::uint64_t value, unsigned width);
@@ -52,6 +65,8 @@ private:
     std::uint16_t used_index_;
     Seen          seen_[max_seen];
     std::uint32_t seen_count_;
+    std::uint8_t  requests_[max_requests][request_bytes];
+    std::uint32_t request_count_;
 };
 
 }  // namespace av
