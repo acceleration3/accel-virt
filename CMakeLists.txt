@@ -178,6 +178,21 @@ add_test(NAME driver_image
                  # displib's DxgkInitialize is linked, not just declared
                  --require-import IoGetDeviceObjectPointer)
 
+# ---- the in-guest suite: src/guest and src/um, for Windows user mode ---------
+ExternalProject_Add(rvktest
+  SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/um
+  BINARY_DIR ${CMAKE_BINARY_DIR}/guest
+  CMAKE_ARGS -G Ninja
+             -DCMAKE_TOOLCHAIN_FILE=${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
+             -DAV_WINDOWS_KIT_DIR=${AV_WINDOWS_KIT_DIR}
+  BUILD_ALWAYS ON
+  INSTALL_COMMAND ""
+  BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/rvktest.exe)
+add_test(NAME guest_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvktest.exe
+                 --require-import D3DKMTSubmitCommand)
+
 # ---- gate scripts are tested like any other code ---------------------------
 add_test(NAME tools_tests
          COMMAND python3 -B -m unittest discover

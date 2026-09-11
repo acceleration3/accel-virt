@@ -10,7 +10,7 @@ Tests come first in every task and must fail before the code they cover exists.
 
 - [X] T001 Kit: the `um` header closure in tools/fetch_windows_kit.sh, the overlay root, VERSION subset line, CMake check; tests/tools overlay test
 - [X] T002 Move `TextBuffer` to src/core/support; `append_hex`; tests
-- [ ] T003 cmake/windows_user_toolchain.cmake, src/um CMake project with `.def` import libraries; `rvktest` external project; `guest_image` check (console subsystem, imports only gdi32/kernel32/ntdll)
+- [X] T003 cmake/windows_user_{toolchain,flags}.cmake, src/um CMake project with `.def` import libraries; `rvktest` external project; tools/check_guest_image.py and `guest_image` test (console subsystem, imports only gdi32/kernel32/ntdll)
 
 **Checkpoint**: commit.
 
@@ -25,8 +25,8 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 3: The guest side
 
-- [ ] T008 [US2] `GdiKmt`, `GuestProgram`, entry point in src/um/
-- [ ] T009 [US3] src/km/rvkgpu.inf; tests/tools package check
+- [X] T008 [US2] `GdiKmt`, `GuestProgram`, entry point in src/um/
+- [X] T009 [US3] src/km/rvkgpu.inf; tests/tools package check
 
 **Checkpoint**: commit.
 

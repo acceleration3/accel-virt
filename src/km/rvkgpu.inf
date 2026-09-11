@@ -1,0 +1,64 @@
+; The driver package for rvkgpu.sys, the accel-virt WDDM 3.2 display miniport,
+; bound to virtio-gpu-rvk-pci: virtio-gpu 1af4:1050 with subsystem 1af4:5256,
+; so neither stock virtio-gpu-pci nor another virtio-gpu driver is claimed.
+; Test-signed in the guest by tools/guest/provision.ps1, which writes the
+; catalog this file names.
+
+[Version]
+Signature   = "$Windows NT$"
+Class       = Display
+ClassGuid   = {4d36e968-e325-11ce-bfc1-08002be10318}
+Provider    = %Provider%
+DriverVer   = 09/11/2026,0.35.0.0
+CatalogFile = rvkgpu.cat
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+[SourceDisksNames]
+1 = %DiskName%
+
+[SourceDisksFiles]
+rvkgpu.sys = 1
+
+; WDDM 3.2 arrived in Windows 11 24H2, build 26100.
+[Manufacturer]
+%Provider% = Rvkgpu, NTamd64.10.0...26100
+
+[Rvkgpu.NTamd64.10.0...26100]
+%DeviceName% = Rvkgpu_Install, PCI\VEN_1AF4&DEV_1050&SUBSYS_52561AF4
+
+[Rvkgpu_Install]
+FeatureScore = F8
+CopyFiles    = Rvkgpu_Files
+
+[Rvkgpu_Files]
+rvkgpu.sys
+
+; One message for each of the device's default vectors: control, cursor and
+; configuration changes.
+[Rvkgpu_Install.HW]
+AddReg = Rvkgpu_Interrupts
+
+[Rvkgpu_Interrupts]
+HKR, "Interrupt Management", 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", 0x00000010
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", MSISupported, 0x00010001, 1
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", MessageNumberLimit, 0x00010001, 3
+
+[Rvkgpu_Install.Services]
+AddService = rvkgpu, 0x00000002, Rvkgpu_Service
+
+[Rvkgpu_Service]
+DisplayName   = %ServiceName%
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %13%\rvkgpu.sys
+
+[Strings]
+Provider    = "accel-virt"
+DiskName    = "accel-virt driver package"
+DeviceName  = "accel-virt paravirtual GPU"
+ServiceName = "accel-virt WDDM display miniport"
