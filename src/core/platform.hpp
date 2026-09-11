@@ -21,6 +21,10 @@ class DdiTable;
 enum class Irql : unsigned { passive = 0, apc = 1, dispatch = 2, isr = 3 };
 enum class Pool : unsigned { non_paged = 0, paged = 1 };
 
+/* What a platform timer calls at DISPATCH: the timer, and the context it was
+ * created with. The signature is the kernel's EXT_CALLBACK. */
+using TimerCallback = void (*)(void *timer, void *context);
+
 class Platform {
 public:
     Platform() = default;
@@ -58,6 +62,17 @@ public:
     virtual uint64_t interrupt_time() const = 0;
     /* Busy-waits; legal at any IRQL, so keep it short. */
     virtual void     stall(uint32_t microseconds) = 0;
+
+    /* A periodic high-resolution timer, not yet running; null when out of
+     * memory. Never at DISPATCH. */
+    virtual void *create_timer(TimerCallback callback, void *context) = 0;
+    /* Fires every `period` (100 ns, non-zero) from one period after the call,
+     * replacing any earlier schedule. At most DISPATCH. */
+    virtual void  start_timer(void *timer, uint64_t period) = 0;
+    /* No new callback starts; one already running may finish. At most DISPATCH. */
+    virtual void  stop_timer(void *timer) = 0;
+    /* Stops, waits for a running callback, and frees. PASSIVE; never of null. */
+    virtual void  destroy_timer(void *timer) = 0;
 
     /* Registers of a device BAR mapped with DxgkCbMapMemory; legal at any
      * IRQL. The caller keeps each access inside the mapping. */

@@ -71,6 +71,26 @@ void KernelPlatform::release_spin_lock(uintptr_t &word, LockRank, Irql previous)
     KeReleaseSpinLock(&word, static_cast<KIRQL>(previous));
 }
 
+/* TimerCallback is EXT_CALLBACK with void pointers, so it is passed as is. */
+void *KernelPlatform::create_timer(TimerCallback callback, void *context)
+{
+    return ExAllocateTimer(reinterpret_cast<PEXT_CALLBACK>(callback), context, EX_TIMER_HIGH_RESOLUTION);
+}
+
+/* A negative due time is relative. */
+void KernelPlatform::start_timer(void *timer, uint64_t period)
+{
+    static_cast<void>(ExSetTimer(static_cast<PEX_TIMER>(timer), -static_cast<LONGLONG>(period),
+                                 static_cast<LONGLONG>(period), nullptr));
+}
+
+void KernelPlatform::stop_timer(void *timer) { static_cast<void>(ExCancelTimer(static_cast<PEX_TIMER>(timer), nullptr)); }
+
+void KernelPlatform::destroy_timer(void *timer)
+{
+    static_cast<void>(ExDeleteTimer(static_cast<PEX_TIMER>(timer), TRUE, TRUE, nullptr));
+}
+
 void KernelPlatform::initialize_mutex(void *storage)
 {
     ExInitializeFastMutex(static_cast<PFAST_MUTEX>(storage));

@@ -20,6 +20,7 @@ class MockPlatform final : public Platform {
 public:
     static constexpr std::uint32_t lock_stack_depth = 16u;
     static constexpr std::uint32_t max_register_windows = 16u;
+    static constexpr std::uint32_t max_timers = 8u;
 
     MockPlatform();
     /* The NTSTATUS register_miniport answers, as dxgkrnl would. */
@@ -43,6 +44,10 @@ public:
     void     acquire_mutex(void *storage, LockRank rank) override;
     void     release_mutex(void *storage, LockRank rank) override;
     std::uint64_t interrupt_time() const override;
+    void    *create_timer(TimerCallback callback, void *context) override;
+    void     start_timer(void *timer, std::uint64_t period) override;
+    void     stop_timer(void *timer) override;
+    void     destroy_timer(void *timer) override;
     void     stall(std::uint32_t microseconds) override;
     std::uint8_t  read_register_u8(void *address) override;
     std::uint16_t read_register_u16(void *address) override;
@@ -65,6 +70,9 @@ public:
     void set_irql(Irql irql);
 
     void advance_time(std::uint64_t ticks);
+    /* Advances the clock by `ticks`, stopping at each running timer's due time
+     * to call it at DISPATCH, earliest first. The only way a timer fires. */
+    void run_timers(std::uint64_t ticks);
 
     /* Register accesses from `base` to base + window.length() reach `window`,
      * the way a mapped BAR reaches the device. Anything else is unmapped. */
@@ -107,6 +115,18 @@ private:
         RegisterWindow *window;
     };
 
+    struct Timer {
+        TimerCallback callback;
+        void         *context;
+        std::uint64_t period;
+        std::uint64_t due;
+        bool          live;
+        bool          running;
+    };
+
+    /* The live timer `timer` names, or null. */
+    Timer *find_timer(void *timer);
+
     struct HeldLock {
         LockRank rank;
         Irql     previous;
@@ -136,6 +156,7 @@ private:
     void         *registered_driver_object_;
     void         *registered_registry_path_;
     const DdiTable *registered_table_;
+    Timer          timers_[max_timers];
     AttachedWindow register_windows_[max_register_windows];
     std::uint32_t  register_window_count_;
 };

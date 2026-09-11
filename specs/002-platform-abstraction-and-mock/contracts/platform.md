@@ -16,16 +16,21 @@ column: the one kernel call. `MockPlatform` column: what it checks.
 | `void acquire_mutex(void *storage, LockRank)` | `ExAcquireFastMutex` | `blocking_at_dispatch`, `lock_order`, `lock_stack_overflow`; raises to APC |
 | `void release_mutex(void *storage, LockRank)` | `ExReleaseFastMutex` | `release_order`; restores saved IRQL |
 | `uint64_t interrupt_time() const` | `KeQueryInterruptTime` | test-controlled clock |
+| `void *create_timer(TimerCallback, void *context)` | `ExAllocateTimer(EX_TIMER_HIGH_RESOLUTION)` | `allocation_at_dispatch` (returns null); honours `fail_allocation_at`; null past `max_timers` |
+| `void start_timer(void *timer, uint64_t period)` | `ExSetTimer`, relative due time, periodic | `irql_ceiling` above DISPATCH; `timer_misuse` for an unknown timer or a zero period |
+| `void stop_timer(void *timer)` | `ExCancelTimer` | `irql_ceiling` above DISPATCH; `timer_misuse` |
+| `void destroy_timer(void *timer)` | `ExDeleteTimer(cancel, wait)` | `blocking_at_dispatch`; `null_release`; `timer_misuse` |
 | `void log(const char *)` | `DbgPrintEx` | printed when `AV_TEST_VERBOSE` is set |
 | `void report_broken_invariant(const char *what, const char *function)` | log + `__fastfail` | `broken_invariant` |
 
 ## Mock-only test surface
 
 `fail_allocation_at(n)`, `set_irql(irql)`, `advance_time(ticks)`,
+`run_timers(ticks)` (the only way a timer fires: at DISPATCH, earliest due first),
 `bool claim(Violation)`, `uint32_t unclaimed_violations() const`,
 `uint32_t live_allocations() const`, `uint32_t allocations_made() const`,
 `uint32_t locks_held() const`. Destruction fails the running test for any
-unclaimed violation, live allocation, or held lock.
+unclaimed violation, live allocation, held lock, or timer not destroyed.
 
 `TestRegistry::take_current_failure()` returns whether the running test has
 recorded a failure and clears it, so a test can prove that destroying a mock

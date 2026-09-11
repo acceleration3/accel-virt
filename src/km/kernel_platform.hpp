@@ -31,6 +31,10 @@ public:
     void     acquire_mutex(void *storage, LockRank rank) override;
     void     release_mutex(void *storage, LockRank rank) override;
     uint64_t interrupt_time() const override;
+    void    *create_timer(TimerCallback callback, void *context) override;
+    void     start_timer(void *timer, uint64_t period) override;
+    void     stop_timer(void *timer) override;
+    void     destroy_timer(void *timer) override;
     void     stall(uint32_t microseconds) override;
     uint8_t  read_register_u8(void *address) override;
     uint16_t read_register_u16(void *address) override;

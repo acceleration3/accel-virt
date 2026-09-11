@@ -16,7 +16,7 @@ namespace {
 const char *const violation_names[] = {
     "irql_ceiling", "allocation_at_dispatch", "blocking_at_dispatch", "lock_order",
     "release_order", "lock_stack_overflow", "null_release", "broken_invariant",
-    "time_overflow", "unmapped_register",
+    "time_overflow", "unmapped_register", "timer_misuse",
 };
 
 }  // namespace
@@ -27,7 +27,7 @@ MockPlatform::MockPlatform()
       irql_(Irql::passive), held_{}, held_count_(0u), violations_{}, now_(0u),
       verbose_(std::getenv("AV_TEST_VERBOSE") != nullptr), logged_(0u), registration_status_(0u),
       registered_driver_object_(nullptr), registered_registry_path_(nullptr), registered_table_(nullptr),
-      register_windows_{}, register_window_count_(0u) {}
+      timers_{}, register_windows_{}, register_window_count_(0u) {}
 
 MockPlatform::MockPlatform(std::uint32_t registration_status) : MockPlatform()
 {
@@ -47,6 +47,8 @@ MockPlatform::~MockPlatform()
                                 live_count_ + contiguous_count_);
     if (held_count_ != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u lock(s) still held", held_count_);
+    for (const Timer &timer : timers_)
+        if (timer.live) registry.record_failure(__FILE__, __LINE__, "a timer was never destroyed");
     for (std::uint32_t i = 0u; i < live_count_; i++) std::free(live_[i]);
     for (std::uint32_t i = 0u; i < contiguous_count_; i++) std::free(contiguous_[i].block);
 }
@@ -230,6 +232,84 @@ std::uint64_t MockPlatform::interrupt_time() const { return now_; }
 
 /* A stall busy-waits in the kernel; here it only moves the clock. */
 void MockPlatform::stall(std::uint32_t microseconds) { advance_time(std::uint64_t{microseconds} * 10u); }
+
+void *MockPlatform::create_timer(TimerCallback callback, void *context)
+{
+    if (irql_ >= Irql::dispatch) {
+        record(Violation::allocation_at_dispatch, "timer created at IRQL %u", static_cast<unsigned>(irql_));
+        return nullptr;
+    }
+    allocation_sequence_++;
+    if (fail_at_ != 0u && allocation_sequence_ == fail_at_) return nullptr;
+    for (Timer &timer : timers_) {
+        if (timer.live) continue;
+        timer = Timer{callback, context, 0u, 0u, true, false};
+        return &timer;
+    }
+    return nullptr;
+}
+
+MockPlatform::Timer *MockPlatform::find_timer(void *timer)
+{
+    for (Timer &candidate : timers_)
+        if (&candidate == timer && candidate.live) return &candidate;
+    record(Violation::timer_misuse, "%p is not a live timer", timer);
+    return nullptr;
+}
+
+void MockPlatform::start_timer(void *timer, std::uint64_t period)
+{
+    if (irql_ > Irql::dispatch)
+        record(Violation::irql_ceiling, "start_timer at IRQL %u", static_cast<unsigned>(irql_));
+    Timer *found = find_timer(timer);
+    if (found == nullptr) return;
+    if (period == 0u) {
+        record(Violation::timer_misuse, "a zero period");
+        return;
+    }
+    found->period = period;
+    found->due = now_ + period;
+    found->running = true;
+}
+
+void MockPlatform::stop_timer(void *timer)
+{
+    if (irql_ > Irql::dispatch)
+        record(Violation::irql_ceiling, "stop_timer at IRQL %u", static_cast<unsigned>(irql_));
+    Timer *found = find_timer(timer);
+    if (found != nullptr) found->running = false;
+}
+
+void MockPlatform::destroy_timer(void *timer)
+{
+    if (timer == nullptr) {
+        record(Violation::null_release, "destroy_timer of null");
+        return;
+    }
+    if (irql_ >= Irql::dispatch)
+        record(Violation::blocking_at_dispatch, "destroy_timer waits, at IRQL %u", static_cast<unsigned>(irql_));
+    Timer *found = find_timer(timer);
+    if (found != nullptr) *found = Timer{};
+}
+
+void MockPlatform::run_timers(std::uint64_t ticks)
+{
+    const std::uint64_t end = now_ + ticks;
+    for (;;) {
+        Timer *next = nullptr;
+        for (Timer &timer : timers_)
+            if (timer.live && timer.running && timer.due <= end && (next == nullptr || timer.due < next->due))
+                next = &timer;
+        if (next == nullptr) break;
+        now_ = next->due;
+        next->due += next->period;
+        const Irql previous = irql_;
+        irql_ = Irql::dispatch;
+        next->callback(next, next->context);
+        irql_ = previous;
+    }
+    now_ = end;
+}
 
 void MockPlatform::advance_time(std::uint64_t ticks)
 {
