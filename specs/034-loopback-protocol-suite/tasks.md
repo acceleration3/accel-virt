@@ -31,6 +31,6 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 4: Loopback
 
-- [ ] T009 [US1] Harness: `MockHost` guest memory translator; `LoopbackDevice` in tests/harness/loopback/; CMake builds tests/loopback/test_*.cpp
-- [ ] T010 [US1] [US2] [US3] tests/loopback/: capset and versions, a context end to end, backpressure, faults and recovery, reset, hostile guest, hostile device
+- [X] T009 [US1] Harness: `MockHost` guest memory translator; `LoopbackDevice` in tests/harness/loopback/; CMake builds tests/loopback/test_*.cpp
+- [X] T010 [US1] [US2] [US3] tests/loopback/: capset and versions, a context end to end, backpressure, faults and recovery, reset, hostile guest, hostile device
 - [ ] T011 Docs: docs/testing.md (L4 as built), docs/protocol.md (the driver's sequence), README; `tools/gate.sh`; merge; push

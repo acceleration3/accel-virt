@@ -1,0 +1,203 @@
+/* L4: the guest core's rvk objects against the device core in one process.
+ * Requests travel as bytes, doorbell stores ring the device's worker, and the
+ * test serves each fence interrupt as the driver's DPC would. */
+#include "core/rvk/capset_query.hpp"
+#include "core/rvk/context_memory.hpp"
+#include "core/rvk/guest_context.hpp"
+#include "core/support/status.hpp"
+#include "harness/framework/test_registry.hpp"
+#include "harness/loopback/loopback_rig.hpp"
+#include "harness/ring/guest_ring.hpp"
+#include "proto/context/capset_info.hpp"
+#include "proto/context/context_setup.hpp"
+#include "proto/context/protocol_version.hpp"
+#include "proto/context/sub_api.hpp"
+#include "proto/submission/command_header.hpp"
+#include "proto/submission/reply_header.hpp"
+#include "proto/virtio_gpu/gpu_response.hpp"
+#include "proto/virtio_gpu/gpu_response_reader.hpp"
+#include "proto/virtio_gpu/rvk_request_writer.hpp"
+
+#include <cstdint>
+#include <cstring>
+
+using av::CapsetInfo;
+using av::CapsetQuery;
+using av::CommandHeader;
+using av::ContextMemory;
+using av::ContextSetup;
+using av::GpuResponse;
+using av::GpuResponseReader;
+using av::GuestContext;
+using av::GuestRing;
+using av::LoopbackRig;
+using av::ProtocolVersion;
+using av::ReplyHeader;
+using av::RvkRequestWriter;
+using av::Status;
+using av::SubApi;
+
+namespace {
+
+/* The capset follows the 24-byte response header; its major follows its magic. */
+constexpr std::size_t   capset_major_offset = 28u;
+constexpr std::uint32_t large_batch = 1024u;
+
+/* One request straight to the device: the type it answered. */
+std::uint32_t answer_type(LoopbackRig &rig, const RvkRequestWriter &writer, const std::uint8_t *request)
+{
+    std::uint8_t      answer[256] = {};
+    const std::size_t answered = rig.device().exchange(request, writer.length(), answer, sizeof answer);
+    GpuResponseReader reader;
+    return reader.decode(answer, answered) == Status::ok ? reader.type() : 0u;
+}
+
+}  // namespace
+
+TEST(loopback_capset, the_driver_reads_the_devices_capset_and_refuses_another_major)
+{ LoopbackRig rig;
+  CHECK(rig.device().device().realized());
+  CHECK(rig.read_capset());
+  CapsetQuery other(rig.platform());
+  rig.driver().tamper_answer(2u, capset_major_offset, 2u);
+  CHECK(rig.driver().query(other) != Status::ok);
+  CHECK(other.failed());
+  CHECK(other.invariants_hold()); }
+
+TEST(loopback_capset, the_device_refuses_a_setup_of_another_major)
+{ LoopbackRig rig;
+  ContextMemory memory(rig.platform());
+  CHECK_STATUS(memory.allocate(LoopbackRig::ring_order), Status::ok);
+  std::uint8_t     request[RvkRequestWriter::max_request_size] = {};
+  RvkRequestWriter writer(request, sizeof request);
+  CHECK_STATUS(writer.create_context(5u, CapsetInfo::capset_id), Status::ok);
+  CHECK_EQ(answer_type(rig, writer, request), GpuResponse::ok_nodata);
+  const std::uint64_t addresses[3] = {memory.ring_address(), memory.fence_address(), memory.reply_address()};
+  const std::uint64_t lengths[3] = {memory.ring_bytes(), ContextMemory::page_bytes, ContextMemory::page_bytes};
+  for (std::uint32_t blob = 0u; blob < 3u; blob++) {
+      CHECK_STATUS(writer.guest_blob(40u + blob, addresses[blob], static_cast<std::uint32_t>(lengths[blob])),
+                   Status::ok);
+      CHECK_EQ(answer_type(rig, writer, request), GpuResponse::ok_nodata);
+  }
+  CHECK_STATUS(writer.setup(5u, ContextSetup(ProtocolVersion(2u, 0u), SubApi::vulkan, 40u, 12u, 41u, 3u, 42u)),
+               Status::ok);
+  CHECK(answer_type(rig, writer, request) != GpuResponse::ok_nodata);
+  CHECK_STATUS(writer.setup(5u, ContextSetup(ProtocolVersion(1u, 0u), SubApi::vulkan, 40u, 12u, 41u, 3u, 42u)),
+               Status::ok);
+  CHECK_EQ(answer_type(rig, writer, request), GpuResponse::ok_nodata);
+  CHECK_STATUS(writer.destroy_context(5u), Status::ok);
+  CHECK_EQ(answer_type(rig, writer, request), GpuResponse::ok_nodata);
+  for (std::uint32_t blob = 0u; blob < 3u; blob++) {
+      CHECK_STATUS(writer.unref(40u + blob), Status::ok);
+      CHECK_EQ(answer_type(rig, writer, request), GpuResponse::ok_nodata);
+  }
+  CHECK_EQ(rig.device().device().contexts(), 0u);
+  CHECK_EQ(rig.device().device().blobs(), 0u); }
+
+TEST(loopback_context, sets_up_runs_batches_with_a_reply_and_tears_down)
+{ LoopbackRig rig;
+  CHECK(rig.read_capset());
+  CHECK(rig.establish(0u));
+  CHECK(rig.context(0u).invariants_hold());
+  CHECK_EQ(rig.device().device().contexts(), 1u);
+  CHECK_EQ(rig.device().device().blobs(), 3u);
+  GuestRing ring(rig.context(0u).ring(), LoopbackRig::ring_order);
+  ring.write_batch(1u, 64u);
+  CHECK_STATUS(rig.submit(0u, 1u, 0u, ring.tail()), Status::ok);
+  const std::uint64_t first_end = ring.tail();
+  std::uint8_t payload[CommandHeader::encoded_size + 8u] = {};
+  CHECK_STATUS(CommandHeader(GuestRing::filler_command, sizeof payload, 1u).encode(payload, sizeof payload),
+               Status::ok);
+  std::memcpy(payload + CommandHeader::encoded_size, "loopback", 8u);
+  ring.write_batch(2u, payload, sizeof payload);
+  CHECK_STATUS(rig.submit(0u, 2u, first_end, ring.tail()), Status::ok);
+  CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 2u));
+  CHECK_EQ(rig.context(0u).completed(), 2u);
+  CHECK(!rig.context(0u).faulted());
+  CHECK_EQ(rig.device().executor().executed(), 2u);
+  ReplyHeader reply;
+  CHECK_STATUS(reply.decode(rig.context(0u).reply(), ReplyHeader::encoded_size), Status::ok);
+  CHECK_EQ(reply.fence_id(), 2u);
+  CHECK_EQ(reply.size(), 8u);
+  CHECK(std::memcmp(rig.context(0u).reply() + ReplyHeader::encoded_size, "loopback", 8u) == 0);
+  CHECK(rig.retire(0u));
+  CHECK_EQ(rig.device().device().contexts(), 0u);
+  CHECK_EQ(rig.device().device().blobs(), 0u);
+  CHECK(rig.context(0u).invariants_hold()); }
+
+TEST(loopback_backpressure, a_full_ring_refuses_until_the_device_moves_its_head)
+{ LoopbackRig rig;
+  CHECK(rig.read_capset());
+  CHECK(rig.establish(0u));
+  GuestRing ring(rig.context(0u).ring(), LoopbackRig::ring_order);
+  rig.device().executor().hold();
+  std::uint64_t begin = 0u;
+  for (std::uint64_t fence = 1u; fence <= 3u; fence++) {
+      ring.write_batch(fence, large_batch);
+      CHECK_STATUS(rig.submit(0u, fence, begin, ring.tail()), Status::ok);
+      begin = ring.tail();
+  }
+  CHECK(rig.device().holding(1u));
+  const std::uint32_t stores = rig.device().doorbells().stores();
+  CHECK_STATUS(rig.submit(0u, 4u, begin, begin + 16u + large_batch), Status::no_space);
+  CHECK_EQ(rig.context(0u).tail(), begin);
+  CHECK_EQ(rig.device().doorbells().stores(), stores);
+  rig.device().executor().release();
+  CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 3u));
+  ring.write_batch(4u, large_batch);
+  CHECK_STATUS(rig.submit(0u, 4u, begin, ring.tail()), Status::ok);
+  CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 4u));
+  CHECK(rig.context(0u).invariants_hold()); }
+
+TEST(loopback_faults, a_faulted_context_reports_its_code_while_another_completes_and_sets_up_again)
+{ LoopbackRig rig;
+  CHECK(rig.read_capset());
+  CHECK(rig.establish(0u));
+  CHECK(rig.establish(1u));
+  GuestRing broken(rig.context(0u).ring(), LoopbackRig::ring_order);
+  broken.write_batch(1u, 64u);
+  broken.data(0u) = 0u;
+  CHECK_STATUS(rig.submit(0u, 1u, 0u, broken.tail()), Status::ok);
+  GuestRing healthy(rig.context(1u).ring(), LoopbackRig::ring_order);
+  healthy.write_batch(1u, 64u);
+  CHECK_STATUS(rig.submit(1u, 1u, 0u, healthy.tail()), Status::ok);
+  CHECK(!rig.driver().serve_until(rig.context(0u), rig.line(0u), 1u));
+  CHECK(rig.context(0u).faulted());
+  CHECK_EQ(rig.context(0u).fault_code(), 3u);
+  CHECK(rig.driver().serve_until(rig.context(1u), rig.line(1u), 1u));
+  CHECK(!rig.context(1u).faulted());
+  CHECK(rig.retire(0u));
+  CHECK_EQ(rig.device().device().contexts(), 1u);
+  CHECK(rig.establish(0u));
+  GuestRing again(rig.context(0u).ring(), LoopbackRig::ring_order);
+  again.write_batch(1u, 64u);
+  CHECK_STATUS(rig.submit(0u, 1u, 0u, again.tail()), Status::ok);
+  CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 1u));
+  CHECK(!rig.context(0u).faulted());
+  CHECK(rig.context(0u).invariants_hold());
+  CHECK(rig.context(1u).invariants_hold()); }
+
+TEST(loopback_reset, after_a_device_reset_serving_finds_nothing_more_and_a_new_context_sets_up)
+{ LoopbackRig rig;
+  CHECK(rig.read_capset());
+  CHECK(rig.establish(0u));
+  GuestRing ring(rig.context(0u).ring(), LoopbackRig::ring_order);
+  ring.write_batch(1u, 64u);
+  CHECK_STATUS(rig.submit(0u, 1u, 0u, ring.tail()), Status::ok);
+  CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 1u));
+  rig.device().device().reset();
+  CHECK_EQ(rig.device().device().contexts(), 0u);
+  CHECK_EQ(rig.device().device().blobs(), 0u);
+  CHECK_STATUS(rig.serve(0u), Status::ok);
+  CHECK_EQ(rig.context(0u).completed(), 1u);
+  rig.device().device().status(av::VirtioGpuRvk::driver_ok);
+  rig.platform().set_irql(av::Irql::dispatch);
+  rig.context(0u).abandon();
+  rig.platform().set_irql(av::Irql::passive);
+  CHECK_STATUS(rig.context(0u).release(), Status::ok);
+  CHECK(rig.establish(0u));
+  GuestRing fresh(rig.context(0u).ring(), LoopbackRig::ring_order);
+  fresh.write_batch(1u, 64u);
+  CHECK_STATUS(rig.submit(0u, 1u, 0u, fresh.tail()), Status::ok);
+  CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 1u));
+  CHECK(rig.context(0u).invariants_hold()); }

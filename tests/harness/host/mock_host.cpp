@@ -35,7 +35,7 @@ MockHost::MockHost()
       fail_allocation_(0u), fail_host_memory_(0u), fail_placement_(0u), empty_mapping_(0u), allocations_{}, regions_{}, region_count_(0u),
       splits_{}, split_count_(0u),
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
-      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, fence_connected_(false), fail_fence_connect_(0u), raised_{}
+      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}
 {
     pthread_mutex_init(&state_, nullptr);
     pthread_cond_init(&work_queued_, nullptr);
@@ -494,8 +494,18 @@ void *MockHost::map_guest(std::uint64_t address, std::uint64_t &length, bool &di
         direct = true;
         return this;
     }
+    GuestMapping *slot = nullptr;
+    for (std::uint32_t index = 0u; index < max_guest_mappings && slot == nullptr; index++)
+        if (guest_mappings_[index].pointer == nullptr) slot = &guest_mappings_[index];
+    void *const translated = translate_ != nullptr && slot != nullptr ? translate_(translate_context_, address, length)
+                                                                      : nullptr;
+    if (translated != nullptr) {
+        *slot = GuestMapping{translated, length, false};
+        direct = true;
+        return translated;
+    }
     const GuestRegion *const region = region_of(address);
-    if (region == nullptr) {
+    if (region == nullptr || slot == nullptr) {
         length = 0u;
         return nullptr;
     }
@@ -503,13 +513,6 @@ void *MockHost::map_guest(std::uint64_t address, std::uint64_t &length, bool &di
     for (std::uint32_t index = 0u; index < split_count_; index++)
         if (splits_[index] > address && splits_[index] - address < available) available = splits_[index] - address;
     if (length > available) length = available;
-    GuestMapping *slot = nullptr;
-    for (std::uint32_t index = 0u; index < max_guest_mappings && slot == nullptr; index++)
-        if (guest_mappings_[index].pointer == nullptr) slot = &guest_mappings_[index];
-    if (slot == nullptr) {
-        length = 0u;
-        return nullptr;
-    }
     direct = region->bytes != nullptr;
     slot->bounce = !direct;
     slot->length = length;
@@ -652,6 +655,13 @@ std::uint8_t *MockHost::guest_ram(std::uint64_t address)
     StateLock lock(state_);
     const GuestRegion *const region = region_of(address);
     return region != nullptr && region->bytes != nullptr ? region->bytes + (address - region->base) : nullptr;
+}
+
+void MockHost::translate_guest_with(GuestTranslator translate, void *context)
+{
+    StateLock lock(state_);
+    translate_ = translate;
+    translate_context_ = context;
 }
 
 void MockHost::set_hostmem_size(std::uint64_t size) { StateLock lock(state_); hostmem_size_ = size; }

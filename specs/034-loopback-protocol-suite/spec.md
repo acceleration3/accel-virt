@@ -47,6 +47,9 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 | `GuestContext` | object | memory, sequence, submitter, observer, fence progress, lock, state | One rvk context as the driver sees it, from setup to teardown |
 | `MockHost` (harness, extended) | object | + a guest memory translator | Maps guest pages from another harness's memory |
 | `LoopbackDevice` (harness) | object | mock host, mock executor, the device, doorbell pages | The device core as a guest core reaches it in one process |
+| `LoopbackDoorbells` (harness) | object | host, stores seen | Rings the device's doorbell for a store to offset 0 of a page |
+| `LoopbackDriver` (harness) | object | platform, device, the answer to cut or rewrite | Carries a guest core's requests to the device and its answers back |
+| `LoopbackRig` (harness) | object | platform, device, driver, capset query, two contexts | Holds both sides of the loopback suite in one process |
 
 ### Test requirements
 

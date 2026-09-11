@@ -22,10 +22,11 @@ private:
 }  // namespace
 
 MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
-    : table_{}, sub_apis_(sub_apis), lock_(), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u),
+    : table_{}, sub_apis_(sub_apis), lock_(), released_(), held_(false), waiting_(0u), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u),
       executed_(0u), ids_{}, sizes_{}, last_sub_api_(0u), last_uuid_byte_(0u), misuses_(0u)
 {
     pthread_mutex_init(&lock_, nullptr);
+    pthread_cond_init(&released_, nullptr);
     table_.abi_version = RVK_EXECUTOR_ABI_VERSION;
     table_.opaque = this;
     table_.sub_apis = [](void *opaque) { return mock_of(opaque).sub_apis_; };
@@ -59,6 +60,9 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         if (mock.executor_of(handle) == nullptr) return RVK_DEVICE_LOST;
         {
             Lock lock(mock.lock_);
+            mock.waiting_++;
+            while (mock.held_) pthread_cond_wait(&mock.released_, &mock.lock_);
+            mock.waiting_--;
             if (mock.executed_ < journal_capacity) {
                 mock.ids_[mock.executed_] = id;
                 mock.sizes_[mock.executed_] = static_cast<std::uint32_t>(size);
@@ -80,7 +84,23 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
     };
 }
 
-MockExecutorOps::~MockExecutorOps() { pthread_mutex_destroy(&lock_); }
+MockExecutorOps::~MockExecutorOps()
+{
+    release();
+    pthread_cond_destroy(&released_);
+    pthread_mutex_destroy(&lock_);
+}
+
+void MockExecutorOps::hold() { Lock lock(lock_); held_ = true; }
+
+void MockExecutorOps::release()
+{
+    Lock lock(lock_);
+    held_ = false;
+    pthread_cond_broadcast(&released_);
+}
+
+std::uint32_t MockExecutorOps::waiting() { Lock lock(lock_); return waiting_; }
 
 MockExecutorOps::Executor *MockExecutorOps::executor_of(RvkExecutor *handle)
 {

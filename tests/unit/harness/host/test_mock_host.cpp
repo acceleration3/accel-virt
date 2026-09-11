@@ -240,6 +240,27 @@ TEST(mock_host_requests, answers_once_and_knows_the_base_class_resources)
   CHECK(mock.resource_exists(3u));
   CHECK(!mock.resource_exists(4u)); }
 
+TEST(mock_host_map_guest, a_translator_answers_before_guest_ram)
+{ MockHost mock;
+  static std::uint8_t other[64];
+  mock.add_guest_ram(0x1000u, 0x1000u);
+  mock.translate_guest_with([](void *, std::uint64_t address, std::uint64_t length) -> void * {
+      return address >= 0x9000u && address + length <= 0x9040u ? other + (address - 0x9000u) : nullptr;
+  }, nullptr);
+  std::uint64_t length = 16u;
+  bool direct = false;
+  void *const translated = mock.map_guest(0x9010u, length, direct);
+  CHECK(translated == other + 16);
+  CHECK(direct);
+  CHECK_EQ(length, 16u);
+  length = 0x1000u;
+  void *const ram = mock.map_guest(0x1000u, length, direct);
+  CHECK(ram != nullptr);
+  CHECK_EQ(mock.live_guest_mappings(), 2u);
+  mock.unmap_guest(translated, 16u);
+  mock.unmap_guest(ram, 0x1000u);
+  CHECK_EQ(mock.live_guest_mappings(), 0u); }
+
 TEST(mock_host_doorbells, a_connected_doorbell_wakes_its_event_and_misuse_is_caught)
 { MockHost mock;
   void *event = nullptr;

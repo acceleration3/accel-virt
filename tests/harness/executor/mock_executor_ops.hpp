@@ -33,6 +33,12 @@ public:
     const RvkExecutorOps &table() const;
     RvkExecutorOps       &editable();
 
+    /* While held, every command waits at the start of execute, so a test can
+     * keep a worker busy; release lets them all go. */
+    void          hold();
+    void          release();
+    /* Commands waiting behind a hold. */
+    std::uint32_t waiting();
     /* The Nth create from now answers NULL. */
     void          fail_create_at(std::uint32_t nth);
     std::uint32_t created();
@@ -60,6 +66,9 @@ private:
     RvkExecutorOps             table_;
     std::uint32_t              sub_apis_;
     pthread_mutex_t            lock_;
+    pthread_cond_t             released_;
+    bool                       held_;
+    std::uint32_t              waiting_;
     Executor                   executors_[max_executors];
     std::uint32_t              fail_create_;
     std::uint32_t              created_;

@@ -79,6 +79,11 @@ public:
      * host that says yes and means no. */
     void empty_mapping_at(std::uint32_t nth);
 
+    /* Guest memory another harness owns (the guest's MockPlatform in the
+     * loopback suite): `translate` answers the host pointer of `length` bytes
+     * at `address`, or null, and is asked before any guest RAM region. */
+    using GuestTranslator = void *(*)(void *context, std::uint64_t address, std::uint64_t length);
+    void          translate_guest_with(GuestTranslator translate, void *context);
     /* Guest RAM at [base, base + size), backed by the mock. A mapping stops at
      * a region's end and at every split, as QEMU's does at a region boundary. */
     void          add_guest_ram(std::uint64_t base, std::size_t size);
@@ -207,6 +212,8 @@ private:
     std::uint32_t   resources_[max_resources];
     std::uint32_t   resource_count_;
     void           *doorbells_[max_doorbells];
+    GuestTranslator translate_;
+    void           *translate_context_;
     bool            fence_connected_;
     std::uint32_t   fail_fence_connect_;
     std::uint32_t   raised_[max_doorbells];
