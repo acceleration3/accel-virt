@@ -9,6 +9,7 @@
 #include "device/context/device_context_table.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/fence/fence_interrupts.hpp"
+#include "device/module/driver_status.hpp"
 #include "device/gpu/gpu_binding.hpp"
 #include "device/memory/blob_table.hpp"
 
@@ -22,9 +23,6 @@ struct VirtioGpuRvkProbe;
 
 class VirtioGpuRvk {
 public:
-    /* VIRTIO_CONFIG_S_DRIVER_OK. */
-    static constexpr uint8_t driver_ok = 4u;
-
     explicit VirtioGpuRvk(Host &host);
     VirtioGpuRvk(const VirtioGpuRvk &) = delete;
     VirtioGpuRvk &operator=(const VirtioGpuRvk &) = delete;
@@ -39,8 +37,8 @@ public:
     /* Main loop: a virtio reset destroys every context, releases the fence
      * interrupts, then every blob. */
     void                 reset();
-    /* Main loop: the driver's status. DRIVER_OK connects the fence interrupts
-     * of a realized device; a failure is logged and leaves them off. */
+    /* Main loop: the driver's status, on a realized device. DRIVER_OK connects
+     * the fence interrupts and a status without it releases them. */
     void                 status(uint8_t status);
     /* Main loop. Whether the core answered the control request; false leaves it
      * to the base class, as does every request to an unrealized device. */
@@ -65,6 +63,7 @@ private:
      * they are destroyed. */
     BlobTable          blobs_;
     FenceInterrupts    interrupts_;
+    DriverStatus       status_;
     DeviceContextTable contexts_;
 
     friend struct VirtioGpuRvkProbe;

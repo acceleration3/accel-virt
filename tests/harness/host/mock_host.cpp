@@ -30,7 +30,7 @@ private:
 }  // namespace
 
 MockHost::MockHost()
-    : main_loop_(pthread_self()), violations_{}, logged_(0u), threads_{}, events_{}, mutexes_{}, gpus_{},
+    : main_loop_(pthread_self()), violations_{}, logged_(0u), last_log_{}, threads_{}, events_{}, mutexes_{}, gpus_{},
       gpu_count_(0u), work_{}, work_count_(0u), fail_thread_(0u), fail_event_(0u), fail_mutex_(0u),
       fail_allocation_(0u), fail_host_memory_(0u), fail_placement_(0u), empty_mapping_(0u), allocations_{}, regions_{}, region_count_(0u),
       splits_{}, split_count_(0u),
@@ -92,6 +92,7 @@ void MockHost::log(const char *message)
 {
     StateLock lock(state_);
     logged_++;
+    std::snprintf(last_log_, sizeof last_log_, "%s", message);
     std::fprintf(stderr, "    host log: %s\n", message);
 }
 
@@ -739,6 +740,12 @@ std::uint32_t MockHost::logged()
 {
     StateLock lock(state_);
     return logged_;
+}
+
+const char *MockHost::last_log()
+{
+    StateLock lock(state_);
+    return last_log_;
 }
 
 std::uint32_t MockHost::live_threads()

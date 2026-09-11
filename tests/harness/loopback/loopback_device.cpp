@@ -1,6 +1,7 @@
 #include "harness/loopback/loopback_device.hpp"
 
 #include "core/support/text_buffer.hpp"
+#include "device/module/driver_status.hpp"
 #include "harness/host/mock_request.hpp"
 #include "harness/platform/mock_platform.hpp"
 
@@ -34,7 +35,7 @@ LoopbackDevice::LoopbackDevice(MockPlatform &guest)
     char       bytes[128];
     TextBuffer message(bytes, sizeof bytes);
     static_cast<void>(device_.realize("auto", false, &executor_.table(), message));
-    device_.status(VirtioGpuRvk::driver_ok);
+    device_.status(DriverStatus::driver_ok);
 }
 
 LoopbackDevice::~LoopbackDevice()

@@ -6,6 +6,7 @@
 #include "device/module/device_instance.hpp"
 #include "device/module/device_module.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
+#include "device/module/driver_status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/mock_host.hpp"
@@ -39,6 +40,7 @@ TEST(device_module_create, realizes_a_device_on_the_named_gpu)
   CHECK(instance->device().realized());
   CHECK_EQ(error[0], '\0');
   CHECK_EQ(module.live(), 1u);
+  instance->device().status(av::DriverStatus::driver_ok);
   CHECK_STATUS(instance->device().create_context(3u), Status::ok);
   CHECK_STATUS(module.destroy(instance), Status::ok);
   CHECK_EQ(module.live(), 0u);
@@ -87,9 +89,9 @@ TEST(rvk_device_abi, create_reset_and_destroy_through_the_c_entry_points)
   RvkDevice *const device = rvk_device_create(&ops.table(), nullptr, "auto", 0, error, sizeof error);
   CHECK(device != nullptr);
   auto *const instance = reinterpret_cast<DeviceInstance *>(device);
-  CHECK_STATUS(instance->device().create_context(1u), Status::ok);
   rvk_device_status(device, 0x0Fu);
   CHECK(host.fence_interrupts_connected());
+  CHECK_STATUS(instance->device().create_context(1u), Status::ok);
   rvk_device_reset(device);
   CHECK(!host.fence_interrupts_connected());
   CHECK_EQ(instance->device().contexts(), 0u);

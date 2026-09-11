@@ -5,6 +5,7 @@
 #include "core/rvk/context_memory.hpp"
 #include "core/rvk/guest_context.hpp"
 #include "core/support/status.hpp"
+#include "device/module/driver_status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/loopback/loopback_rig.hpp"
 #include "harness/ring/guest_ring.hpp"
@@ -190,7 +191,7 @@ TEST(loopback_reset, after_a_device_reset_serving_finds_nothing_more_and_a_new_c
   CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK_STATUS(rig.serve(0u), Status::ok);
   CHECK_EQ(rig.context(0u).completed(), 1u);
-  rig.device().device().status(av::VirtioGpuRvk::driver_ok);
+  rig.device().device().status(av::DriverStatus::driver_ok);
   rig.platform().set_irql(av::Irql::dispatch);
   rig.context(0u).abandon();
   rig.platform().set_irql(av::Irql::passive);

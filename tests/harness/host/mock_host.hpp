@@ -114,6 +114,8 @@ public:
     bool          claim(HostViolation kind);
     std::uint32_t unclaimed_violations();
     std::uint32_t logged();
+    /* The last message logged, empty before the first, cut at its capacity. */
+    const char   *last_log();
     std::uint32_t live_threads();
     std::uint32_t live_events();
     std::uint32_t live_mutexes();
@@ -187,6 +189,7 @@ private:
     pthread_cond_t  work_queued_;
     std::uint32_t   violations_[violation_kinds];
     std::uint32_t   logged_;
+    char            last_log_[192];
     Thread          threads_[max_threads];
     Event           events_[max_events];
     Mutex           mutexes_[max_mutexes];

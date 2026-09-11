@@ -3,6 +3,7 @@
 #include "device/context/device_context_table.hpp"
 #include "device/memory/blob_resource.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/module/driver_status.hpp"
 #include "device/module/virtio_gpu_rvk.hpp"
 #include "core/support/text_buffer.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -19,6 +20,7 @@
 #include <cstdint>
 #include <cstring>
 
+using av::DriverStatus;
 using av::GpuRequestBuilder;
 using av::HostViolation;
 using av::MockHost;
@@ -107,6 +109,8 @@ TEST(virtio_gpu_rvk_realize, binds_once_and_contexts_follow)
   CHECK(device.invariants_hold());
   CHECK_EQ(device.gpu_index(), 1u);
   CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::invalid_state);
+  CHECK_STATUS(device.create_context(1u), Status::invalid_state);   /* no interrupt carries its fences yet */
+  device.status(DriverStatus::driver_ok);
   CHECK_STATUS(device.create_context(1u), Status::ok);
   CHECK_STATUS(device.create_context(2u), Status::ok);
   CHECK(device.invariants_hold());
@@ -179,6 +183,7 @@ TEST(virtio_gpu_rvk_realize, without_an_executor_there_is_no_capset_and_no_conte
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::ok);
+  device.status(DriverStatus::driver_ok);
   CHECK(device.realized());
   CHECK_EQ(device.capsets(), 0u);
   GpuRequestBuilder info(0x0108u);
@@ -215,6 +220,7 @@ TEST(virtio_gpu_rvk_control, answers_context_requests_and_reset_destroys_context
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, &executor.table(), message), Status::ok);
+  device.status(DriverStatus::driver_ok);
   CHECK_EQ(device.capsets(), 1u);
   GpuRequestBuilder info(0x0108u);
   info.u32(0u).u32(0u);
@@ -248,11 +254,11 @@ TEST(virtio_gpu_rvk_control, answers_context_requests_and_reset_destroys_context
   CHECK_EQ(device.blobs(), 0u);
   CHECK(device.invariants_hold()); }
 
-TEST(virtio_gpu_rvk_status, driver_ok_connects_the_fence_interrupts_until_reset)
+TEST(virtio_gpu_rvk_status, the_fence_interrupts_follow_the_drivers_status_byte)
 { MockHost host;
   host.add_gpu(first);
   VirtioGpuRvk device(host);
-  device.status(VirtioGpuRvk::driver_ok);   /* unrealized: nothing */
+  device.status(DriverStatus::driver_ok);   /* unrealized: nothing */
   CHECK(!host.fence_interrupts_connected());
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
@@ -263,16 +269,23 @@ TEST(virtio_gpu_rvk_status, driver_ok_connects_the_fence_interrupts_until_reset)
   CHECK(host.fence_interrupts_connected());
   CHECK(device.invariants_hold());
   device.status(0x0Fu);
-  device.status(0u);                        /* status 0 comes before the reset: nothing */
-  CHECK(host.fence_interrupts_connected());
-  device.reset();
+  /* A driver that stops writes this and never resets: 035's abort. */
+  device.status(0x0Bu);
+  CHECK(!host.fence_interrupts_connected());
+  CHECK(device.invariants_hold());
+  device.status(0x0Fu);
+  device.status(0u);
+  CHECK(!host.fence_interrupts_connected());
+  device.reset();                           /* the reset QEMU delivers after it */
   CHECK(!host.fence_interrupts_connected());
   host.fail_fence_connect_at(1u);
-  device.status(VirtioGpuRvk::driver_ok);
+  device.status(DriverStatus::driver_ok);
   CHECK(!host.fence_interrupts_connected());
   CHECK_EQ(host.logged(), 1u);
-  device.status(VirtioGpuRvk::driver_ok);
+  CHECK_STATUS(device.create_context(1u), Status::invalid_state);
+  device.status(DriverStatus::driver_ok);
   CHECK(host.fence_interrupts_connected());
+  CHECK(device.invariants_hold());
   device.reset(); }
 
 TEST(virtio_gpu_rvk_realize, a_host_without_a_mutex_for_fence_interrupts_is_refused)
@@ -308,10 +321,10 @@ TEST(virtio_gpu_rvk, lifecycle_is_main_loop_only)
                    &device, thread),
                Status::ok);
   host.join_thread(thread);
-  /* realize, its fence interrupts and its binding, reset, both tables and the
-   * interrupts, create, destroy and its table, and control, which an
-   * unrealized device answers no further */
-  for (int violation = 0; violation < 11; violation++) CHECK(host.claim(HostViolation::main_loop_required));
+  /* realize, its fence interrupts and its binding, reset, both tables, the
+   * status and the interrupts under it, create, destroy and its table, and
+   * control, which an unrealized device answers no further */
+  for (int violation = 0; violation < 12; violation++) CHECK(host.claim(HostViolation::main_loop_required));
   CHECK_EQ(host.unclaimed_violations(), 0u);
   CHECK_EQ(host.logged(), 1u); }
 

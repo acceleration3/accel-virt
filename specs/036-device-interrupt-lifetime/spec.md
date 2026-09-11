@@ -40,7 +40,11 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `DriverStatus` | object | The last status byte the guest wrote; the `FenceInterrupts` it drives; its `Host` | Matches the fence interrupts to the driver's status |
+
+No class models an MSI-X vector, mask or pending bit: those belong to QEMU's
+`msix.c` and `virtio-pci.c`, which FR-006 forbids patching. `FenceInterrupts`
+keeps owning the connection and the lock that holds workers apart from it.
 
 ### Test requirements
 

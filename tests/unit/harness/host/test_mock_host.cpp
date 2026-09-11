@@ -127,8 +127,10 @@ TEST(mock_host, the_contract_is_checked_on_both_sides)
   CHECK_STATUS(mock.start_thread(&touch_main_loop_state, &mock, thread), Status::ok);
   mock.join_thread(thread);
   CHECK(mock.claim(HostViolation::main_loop_required));
+  CHECK_EQ(std::strlen(mock.last_log()), 0u);
   mock.log("once");
-  CHECK_EQ(mock.logged(), 1u); }
+  CHECK_EQ(mock.logged(), 1u);
+  CHECK(std::strcmp(mock.last_log(), "once") == 0); }
 
 TEST(mock_host, every_create_can_be_failed_and_the_catalog_answers_what_was_added)
 { MockHost mock;

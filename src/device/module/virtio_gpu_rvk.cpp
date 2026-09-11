@@ -9,7 +9,8 @@
 namespace av {
 
 VirtioGpuRvk::VirtioGpuRvk(Host &host)
-    : host_(host), binding_(host), library_(), capset_(host), blobs_(host), interrupts_(host), contexts_(host, blobs_, interrupts_, library_) {}
+    : host_(host), binding_(host), library_(), capset_(host), blobs_(host), interrupts_(host),
+      status_(host, interrupts_), contexts_(host, blobs_, interrupts_, library_) {}
 
 Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExecutorOps *executor,
                              TextBuffer &message)
@@ -41,15 +42,17 @@ void VirtioGpuRvk::reset()
 {
     host_.require_main_loop("VirtioGpuRvk::reset");
     contexts_.destroy_all();
-    interrupts_.disconnect();
+    status_.reset();
     blobs_.release_all();
 }
 
+/* An unrealized device has no lock to hold its interrupts apart, so a status
+ * written before realize would only log a refusal it can do nothing about. */
 void VirtioGpuRvk::status(uint8_t status)
 {
     host_.require_main_loop("VirtioGpuRvk::status");
-    if ((status & driver_ok) == 0u || !binding_.bound()) return;
-    if (interrupts_.connect() != Status::ok) host_.log("virtio-gpu-rvk: the fence interrupts could not be connected");
+    if (!binding_.bound()) return;
+    status_.set(status);
 }
 
 bool VirtioGpuRvk::control(void *request, uint32_t type)
@@ -71,10 +74,12 @@ uint32_t VirtioGpuRvk::blobs() const
     return blobs_.live();
 }
 
+/* A context reports its fences by interrupt, so one created while nothing
+ * carries them would run with no one to tell. */
 Status VirtioGpuRvk::create_context(uint32_t id)
 {
     host_.require_main_loop("VirtioGpuRvk::create_context");
-    if (!binding_.bound()) return Status::invalid_state;
+    if (!binding_.bound() || !interrupts_.connected()) return Status::invalid_state;
     return contexts_.create(id);
 }
 
@@ -103,7 +108,7 @@ uint32_t VirtioGpuRvk::gpu_index() const
 bool VirtioGpuRvk::invariants_hold() const
 {
     return contexts_.invariants_hold() && blobs_.invariants_hold() && interrupts_.invariants_hold() &&
-           (binding_.bound() || contexts_.live() == 0u);
+           status_.invariants_hold() && (binding_.bound() || contexts_.live() == 0u);
 }
 
 }  // namespace av
