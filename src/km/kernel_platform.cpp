@@ -90,6 +90,41 @@ uint64_t KernelPlatform::interrupt_time() const { return KeQueryInterruptTime();
 
 void KernelPlatform::stall(uint32_t microseconds) { KeStallExecutionProcessor(microseconds); }
 
+uint8_t KernelPlatform::read_register_u8(void *address)
+{
+    return READ_REGISTER_UCHAR(static_cast<PUCHAR>(address));
+}
+
+uint16_t KernelPlatform::read_register_u16(void *address)
+{
+    return READ_REGISTER_USHORT(static_cast<PUSHORT>(address));
+}
+
+uint32_t KernelPlatform::read_register_u32(void *address)
+{
+    return READ_REGISTER_ULONG(static_cast<PULONG>(address));
+}
+
+void KernelPlatform::write_register_u8(void *address, uint8_t value)
+{
+    WRITE_REGISTER_UCHAR(static_cast<PUCHAR>(address), value);
+}
+
+void KernelPlatform::write_register_u16(void *address, uint16_t value)
+{
+    WRITE_REGISTER_USHORT(static_cast<PUSHORT>(address), value);
+}
+
+void KernelPlatform::write_register_u32(void *address, uint32_t value)
+{
+    WRITE_REGISTER_ULONG(static_cast<PULONG>(address), value);
+}
+
+void KernelPlatform::write_register_u64(void *address, uint64_t value)
+{
+    WRITE_REGISTER_ULONG64(static_cast<PULONG64>(address), value);
+}
+
 void KernelPlatform::log(const char *message)
 {
     DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_ERROR_LEVEL, "rvkgpu: %s\n", message);

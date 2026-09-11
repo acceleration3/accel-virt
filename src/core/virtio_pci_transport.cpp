@@ -46,6 +46,9 @@ VirtioPciTransport::VirtioPciTransport(Platform &platform, RegisterWindow &commo
 
 Status VirtioPciTransport::reset()
 {
+    platform_.require_irql_at_most(Irql::passive, "VirtioPciTransport::reset");
+    features_ = 0u;
+    stage_ = Stage::unconfigured;
     common_.write_u8(device_status, 0u);
     for (uint32_t poll = 0u; poll < reset_polls; poll++) {
         if (common_.read_u8(device_status) == 0u) return Status::ok;
@@ -53,6 +56,14 @@ Status VirtioPciTransport::reset()
     }
     platform_.log("virtio: device did not complete reset");
     return Status::invalid_state;
+}
+
+void VirtioPciTransport::abandon()
+{
+    platform_.require_irql_at_most(Irql::isr, "VirtioPciTransport::abandon");
+    features_ = 0u;
+    stage_ = Stage::unconfigured;
+    common_.write_u8(device_status, 0u);
 }
 
 void VirtioPciTransport::add_status(uint8_t bits)
@@ -81,8 +92,6 @@ Status VirtioPciTransport::negotiate(uint64_t wanted, uint64_t required)
 {
     platform_.require_irql_at_most(Irql::passive, "VirtioPciTransport::negotiate");
     InvariantScope<VirtioPciTransport> guard(platform_, *this, "negotiate");
-    features_ = 0u;
-    stage_ = Stage::unconfigured;
     const Status reset_status = reset();
     if (reset_status != Status::ok) return reset_status;
     add_status(acknowledge);

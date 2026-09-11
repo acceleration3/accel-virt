@@ -23,16 +23,16 @@ description: "Task list for feature 006: WDDM 1.0 PnP, power and adapter lifetim
 
 ## Phase 3: Adapter lifetime (US2)
 
-- [ ] T008 `Platform` register I/O; mock routes addresses to attached `RegisterWindow`s and records `unmapped_register`; `MappedRegisterWindow`; `src/km/mmio_register_window` removed
-- [ ] T009 `FakeDxgkrnl` callbacks (`tests/harness/fake_dxgkrnl_callbacks.cpp`, one-line `extern "C"` thunks) over a fake virtio-gpu PCI function built from `tests/fixtures/virtio_gpu_pci_config.bin`
-- [ ] T010 Tests then `BarMappings`, `VirtioGpuDevice`
-- [ ] T011 Tests then `Adapter` start/stop/remove/power/reset, with the allocation-failure sweep
+- [X] T008 `Platform` register I/O; mock routes addresses to attached `RegisterWindow`s and records `unmapped_register`; `MappedRegisterWindow`; `src/km/mmio_register_window` removed
+- [X] T009 `FakeDxgkrnl` callbacks (`tests/harness/fake_dxgkrnl_callbacks.cpp`, one-line `extern "C"` thunks) over a fake virtio-gpu PCI function built from `tests/fixtures/virtio_gpu_pci_config.bin`
+- [X] T010 Tests then `BarMappings`, `VirtioGpuDevice`
+- [X] T011 Tests then `Adapter` start/stop/remove/power/reset, with the allocation-failure sweep. Found: `VirtioPciTransport` needed a public waiting `reset` (StopDevice, D3) and a non-waiting `abandon` (ResetDevice, destruction)
 
-**Checkpoint**: commit.
+**Checkpoint**: commit (Phases 3 and 4 share one: `Adapter`'s DDIs landed together over the same fixture).
 
 ## Phase 4: Interrupts and children (US3, US4)
 
-- [ ] T012 Tests then ISR, DPC, QueryChildRelations/Status, QueryDeviceDescriptor, LinkDevice
+- [X] T012 Tests then ISR, DPC, QueryChildRelations/Status, QueryDeviceDescriptor, LinkDevice
 
 **Checkpoint**: commit.
 

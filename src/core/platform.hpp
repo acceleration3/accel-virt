@@ -59,6 +59,16 @@ public:
     /* Busy-waits; legal at any IRQL, so keep it short. */
     virtual void     stall(uint32_t microseconds) = 0;
 
+    /* Registers of a device BAR mapped with DxgkCbMapMemory; legal at any
+     * IRQL. The caller keeps each access inside the mapping. */
+    virtual uint8_t  read_register_u8(void *address) = 0;
+    virtual uint16_t read_register_u16(void *address) = 0;
+    virtual uint32_t read_register_u32(void *address) = 0;
+    virtual void     write_register_u8(void *address, uint8_t value) = 0;
+    virtual void     write_register_u16(void *address, uint16_t value) = 0;
+    virtual void     write_register_u32(void *address, uint32_t value) = 0;
+    virtual void     write_register_u64(void *address, uint64_t value) = 0;
+
     virtual void log(const char *message) = 0;
 
     /* DxgkInitialize: hands the table to dxgkrnl; answers an NTSTATUS. */

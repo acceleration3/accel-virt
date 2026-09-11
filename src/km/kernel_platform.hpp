@@ -32,6 +32,13 @@ public:
     void     release_mutex(void *storage, LockRank rank) override;
     uint64_t interrupt_time() const override;
     void     stall(uint32_t microseconds) override;
+    uint8_t  read_register_u8(void *address) override;
+    uint16_t read_register_u16(void *address) override;
+    uint32_t read_register_u32(void *address) override;
+    void     write_register_u8(void *address, uint8_t value) override;
+    void     write_register_u16(void *address, uint16_t value) override;
+    void     write_register_u32(void *address, uint32_t value) override;
+    void     write_register_u64(void *address, uint64_t value) override;
     void     log(const char *message) override;
     void     report_broken_invariant(const char *what, const char *function) override;
     int32_t  register_miniport(void *driver_object, void *registry_path,

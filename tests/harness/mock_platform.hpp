@@ -8,6 +8,7 @@
 #define AV_MOCK_PLATFORM_HPP
 
 #include "../../src/core/platform.hpp"
+#include "../../src/core/register_window.hpp"
 #include "violation.hpp"
 
 #include <cstddef>
@@ -18,6 +19,7 @@ namespace av {
 class MockPlatform final : public Platform {
 public:
     static constexpr std::uint32_t lock_stack_depth = 16u;
+    static constexpr std::uint32_t max_register_windows = 16u;
 
     MockPlatform();
     /* The NTSTATUS register_miniport answers, as dxgkrnl would. */
@@ -42,6 +44,13 @@ public:
     void     release_mutex(void *storage, LockRank rank) override;
     std::uint64_t interrupt_time() const override;
     void     stall(std::uint32_t microseconds) override;
+    std::uint8_t  read_register_u8(void *address) override;
+    std::uint16_t read_register_u16(void *address) override;
+    std::uint32_t read_register_u32(void *address) override;
+    void     write_register_u8(void *address, std::uint8_t value) override;
+    void     write_register_u16(void *address, std::uint16_t value) override;
+    void     write_register_u32(void *address, std::uint32_t value) override;
+    void     write_register_u64(void *address, std::uint64_t value) override;
     void     log(const char *message) override;
     void     report_broken_invariant(const char *what, const char *function) override;
     std::int32_t register_miniport(void *driver_object, void *registry_path,
@@ -56,6 +65,13 @@ public:
     void set_irql(Irql irql);
 
     void advance_time(std::uint64_t ticks);
+
+    /* Register accesses from `base` to base + window.length() reach `window`,
+     * the way a mapped BAR reaches the device. Anything else is unmapped. */
+    void          attach_register_window(void *base, RegisterWindow &window);
+    /* Every window whose base lies in [base, base + length). */
+    void          detach_register_windows(void *base, std::uint64_t length);
+    std::uint32_t attached_register_windows() const;
 
     /* What a device sees at a fake physical address: the host pointer, if the
      * whole range lies inside one contiguous block. */
@@ -86,6 +102,11 @@ private:
         std::size_t   bytes;
     };
 
+    struct AttachedWindow {
+        std::uintptr_t  base;
+        RegisterWindow *window;
+    };
+
     struct HeldLock {
         LockRank rank;
         Irql     previous;
@@ -94,6 +115,8 @@ private:
     void record(Violation kind, const char *format, ...);
     void push_lock(LockRank rank, Irql previous);
     bool pop_lock(LockRank rank);
+    /* The window holding [address, address + width), and the offset in it. */
+    RegisterWindow *route(void *address, std::uint32_t width, std::uint64_t &offset);
 
     void         *live_[max_live];
     std::uint32_t live_count_;
@@ -113,6 +136,8 @@ private:
     void         *registered_driver_object_;
     void         *registered_registry_path_;
     const DdiTable *registered_table_;
+    AttachedWindow register_windows_[max_register_windows];
+    std::uint32_t  register_window_count_;
 };
 
 }  // namespace av

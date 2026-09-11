@@ -28,6 +28,11 @@ public:
     [[nodiscard]] Status negotiate(uint64_t wanted, uint64_t required);
     /* 3.1.1 step 8, after queues are activated. */
     [[nodiscard]] Status start();
+    /* Writes status 0 and waits for the device to acknowledge; the device is
+     * unconfigured either way. */
+    [[nodiscard]] Status reset();
+    /* Writes status 0 and returns: for DxgkDdiResetDevice, at any IRQL. */
+    void                 abandon();
     [[nodiscard]] Status assign_config_vector(uint16_t vector);
     /* Sizes, allocates and enables `queue` on the device, bound to MSI-X `vector`. */
     [[nodiscard]] Status activate_queue(VirtQueue &queue, uint16_t vector);
@@ -49,7 +54,6 @@ private:
     static constexpr uint32_t reset_poll_us      = 1000u;
     static constexpr uint16_t no_vector          = 0xFFFFu;
 
-    [[nodiscard]] Status reset();
     void                 add_status(uint8_t bits);
     uint64_t             read_device_features();
     void                 write_driver_features(uint64_t features);

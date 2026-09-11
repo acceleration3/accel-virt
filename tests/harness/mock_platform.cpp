@@ -16,7 +16,7 @@ namespace {
 const char *const violation_names[] = {
     "irql_ceiling", "allocation_at_dispatch", "blocking_at_dispatch", "lock_order",
     "release_order", "lock_stack_overflow", "null_release", "broken_invariant",
-    "time_overflow",
+    "time_overflow", "unmapped_register",
 };
 
 }  // namespace
@@ -26,7 +26,8 @@ MockPlatform::MockPlatform()
       next_physical_address_(first_physical_address), fail_at_(0u),
       irql_(Irql::passive), held_{}, held_count_(0u), violations_{}, now_(0u),
       verbose_(std::getenv("AV_TEST_VERBOSE") != nullptr), logged_(0u), registration_status_(0u),
-      registered_driver_object_(nullptr), registered_registry_path_(nullptr), registered_table_(nullptr) {}
+      registered_driver_object_(nullptr), registered_registry_path_(nullptr), registered_table_(nullptr),
+      register_windows_{}, register_window_count_(0u) {}
 
 MockPlatform::MockPlatform(std::uint32_t registration_status) : MockPlatform()
 {
@@ -290,5 +291,92 @@ std::uint32_t MockPlatform::logged() const           { return logged_; }
 void         *MockPlatform::registered_driver_object() const { return registered_driver_object_; }
 void         *MockPlatform::registered_registry_path() const { return registered_registry_path_; }
 const DdiTable *MockPlatform::registered_table() const { return registered_table_; }
+
+}  // namespace av
+
+namespace av {
+
+void MockPlatform::attach_register_window(void *base, RegisterWindow &window)
+{
+    if (register_window_count_ == max_register_windows) {
+        TestRegistry::instance().record_failure(__FILE__, __LINE__, "more than %u register windows",
+                                                max_register_windows);
+        return;
+    }
+    register_windows_[register_window_count_++] = AttachedWindow{reinterpret_cast<std::uintptr_t>(base), &window};
+}
+
+void MockPlatform::detach_register_windows(void *base, std::uint64_t length)
+{
+    const std::uintptr_t first = reinterpret_cast<std::uintptr_t>(base);
+    std::uint32_t kept = 0u;
+    for (std::uint32_t i = 0u; i < register_window_count_; i++) {
+        const bool inside = register_windows_[i].base >= first && register_windows_[i].base - first < length;
+        if (!inside) register_windows_[kept++] = register_windows_[i];
+    }
+    register_window_count_ = kept;
+}
+
+std::uint32_t MockPlatform::attached_register_windows() const { return register_window_count_; }
+
+RegisterWindow *MockPlatform::route(void *address, std::uint32_t width, std::uint64_t &offset)
+{
+    const std::uintptr_t at = reinterpret_cast<std::uintptr_t>(address);
+    for (std::uint32_t i = 0u; i < register_window_count_; i++) {
+        const AttachedWindow &attached = register_windows_[i];
+        const std::uint64_t length = attached.window->length();
+        if (at < attached.base || at - attached.base > length || length - (at - attached.base) < width)
+            continue;
+        offset = at - attached.base;
+        return attached.window;
+    }
+    record(Violation::unmapped_register, "%u-byte access at %p", width, address);
+    return nullptr;
+}
+
+std::uint8_t MockPlatform::read_register_u8(void *address)
+{
+    std::uint64_t offset = 0u;
+    RegisterWindow *window = route(address, 1u, offset);
+    return window != nullptr ? window->read_u8(offset) : 0xFFu;
+}
+
+std::uint16_t MockPlatform::read_register_u16(void *address)
+{
+    std::uint64_t offset = 0u;
+    RegisterWindow *window = route(address, 2u, offset);
+    return window != nullptr ? window->read_u16(offset) : 0xFFFFu;
+}
+
+std::uint32_t MockPlatform::read_register_u32(void *address)
+{
+    std::uint64_t offset = 0u;
+    RegisterWindow *window = route(address, 4u, offset);
+    return window != nullptr ? window->read_u32(offset) : 0xFFFFFFFFu;
+}
+
+void MockPlatform::write_register_u8(void *address, std::uint8_t value)
+{
+    std::uint64_t offset = 0u;
+    if (RegisterWindow *window = route(address, 1u, offset)) window->write_u8(offset, value);
+}
+
+void MockPlatform::write_register_u16(void *address, std::uint16_t value)
+{
+    std::uint64_t offset = 0u;
+    if (RegisterWindow *window = route(address, 2u, offset)) window->write_u16(offset, value);
+}
+
+void MockPlatform::write_register_u32(void *address, std::uint32_t value)
+{
+    std::uint64_t offset = 0u;
+    if (RegisterWindow *window = route(address, 4u, offset)) window->write_u32(offset, value);
+}
+
+void MockPlatform::write_register_u64(void *address, std::uint64_t value)
+{
+    std::uint64_t offset = 0u;
+    if (RegisterWindow *window = route(address, 8u, offset)) window->write_u64(offset, value);
+}
 
 }  // namespace av

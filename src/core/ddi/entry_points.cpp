@@ -13,7 +13,7 @@ extern "C" {
 int32_t AvDdiAddDevice(void *physical_device_object, void **context)
 { return av::miniport_binding.add_device(physical_device_object, context); }
 
-int32_t AvDdiStartDevice(void *context, void *start_info, void *dxgkrnl_interface,
+int32_t AvDdiStartDevice(void *context, void *start_info, const av::DxgkrnlInterfaceRecord *dxgkrnl_interface,
                          uint32_t *sources, uint32_t *children)
 { return static_cast<av::Adapter *>(context)->start_device(start_info, dxgkrnl_interface, sources, children); }
 
@@ -32,10 +32,10 @@ uint8_t AvDdiInterruptRoutine(void *context, uint32_t message)
 void AvDdiDpcRoutine(void *context)
 { static_cast<av::Adapter *>(context)->dpc_routine(); }
 
-int32_t AvDdiQueryChildRelations(void *context, void *relations, uint32_t size)
+int32_t AvDdiQueryChildRelations(void *context, av::DxgkChildDescriptorRecord *relations, uint32_t size)
 { return static_cast<av::Adapter *>(context)->query_child_relations(relations, size); }
 
-int32_t AvDdiQueryChildStatus(void *context, void *status, uint8_t non_destructive)
+int32_t AvDdiQueryChildStatus(void *context, av::DxgkChildStatusRecord *status, uint8_t non_destructive)
 { return static_cast<av::Adapter *>(context)->query_child_status(status, non_destructive); }
 
 int32_t AvDdiQueryDeviceDescriptor(void *context, uint32_t child, void *descriptor)
@@ -61,7 +61,7 @@ int32_t AvDdiQueryInterface(void *context, void *query)
 void AvDdiControlEtwLogging(uint8_t, uint32_t, uint8_t)
 {}
 
-int32_t AvDdiLinkDevice(void *physical_device_object, void *context, void *linked)
+int32_t AvDdiLinkDevice(void *physical_device_object, void *context, av::LinkedDeviceRecord *linked)
 { return static_cast<av::Adapter *>(context)->link_device(physical_device_object, linked); }
 
 }

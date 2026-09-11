@@ -162,27 +162,27 @@ TEST(ddi_entry_points, with_no_root_bound_fail_without_dereferencing)
   CHECK(context == nullptr);
   AvDdiUnload(); }
 
-TEST(ddi_entry_points, the_stubs_answer_not_supported_or_nothing)
+TEST(ddi_entry_points, each_forwards_to_the_adapter_behind_the_context)
 { Bound bound;
   int pdo = 0; void *context = nullptr;
   CHECK_EQ(AvDdiAddDevice(&pdo, &context), 0);
   std::uint32_t sources = 9u, children = 9u;
-  CHECK_EQ(static_cast<std::uint32_t>(AvDdiStartDevice(context, nullptr, nullptr, &sources, &children)), 0xC00000BBu);
-  CHECK_EQ(static_cast<std::uint32_t>(AvDdiStopDevice(context)), 0xC00000BBu);
+  CHECK_EQ(static_cast<std::uint32_t>(AvDdiStartDevice(context, nullptr, nullptr, &sources, &children)), 0xC000000Du);
+  CHECK_EQ(AvDdiStopDevice(context), 0);
   CHECK_EQ(static_cast<std::uint32_t>(AvDdiDispatchIoRequest(context, 0u, nullptr)), 0xC00000BBu);
   CHECK_EQ(AvDdiInterruptRoutine(context, 0u), 0u);
   AvDdiDpcRoutine(context);
-  CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryChildRelations(context, nullptr, 0u)), 0xC00000BBu);
-  CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryChildStatus(context, nullptr, 0u)), 0xC00000BBu);
-  CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryDeviceDescriptor(context, 0u, nullptr)), 0xC00000BBu);
-  CHECK_EQ(static_cast<std::uint32_t>(AvDdiSetPowerState(context, 0u, 1, 0)), 0xC00000BBu);
+  CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryChildRelations(context, nullptr, 0u)), 0xC000000Du);
+  CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryChildStatus(context, nullptr, 0u)), 0xC000000Du);
+  CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryDeviceDescriptor(context, 0u, nullptr)), 0xC01E0401u);
+  CHECK_EQ(AvDdiSetPowerState(context, 0u, 1, 0), 0);
   std::uint32_t acpi_flags = 5u;
   CHECK_EQ(AvDdiNotifyAcpiEvent(context, 0, 0u, nullptr, &acpi_flags), 0);
   CHECK_EQ(acpi_flags, 0u);
   AvDdiResetDevice(context);
   CHECK_EQ(static_cast<std::uint32_t>(AvDdiQueryInterface(context, nullptr)), 0xC00000BBu);
   AvDdiControlEtwLogging(1u, 0u, 0u);
-  CHECK_EQ(static_cast<std::uint32_t>(AvDdiLinkDevice(&pdo, context, nullptr)), 0xC00000BBu);
+  CHECK_EQ(static_cast<std::uint32_t>(AvDdiLinkDevice(&pdo, context, nullptr)), 0xC000000Du);
   CHECK_EQ(AvDdiRemoveDevice(context), 0); }
 
 TEST(miniport_remove_device, finds_an_adapter_behind_another)

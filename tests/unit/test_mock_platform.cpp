@@ -1,9 +1,11 @@
+#include "../harness/fake_register_bytes.hpp"
 #include "../harness/mock_platform.hpp"
 #include "../harness/test_registry.hpp"
 #include "../harness/violation.hpp"
 
 #include <cstdint>
 
+using av::FakeRegisterBytes;
 using av::Irql;
 using av::LockRank;
 using av::MockPlatform;
@@ -300,3 +302,66 @@ TEST(mock_platform_stall, is_legal_at_dispatch_and_advances_the_clock)
   platform.stall(1000u);
   CHECK(platform.interrupt_time() - before == 10000u);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
+TEST(mock_platform_register, routes_each_width_to_the_attached_window)
+{ MockPlatform platform; FakeRegisterBytes window(16u);
+  const auto base = reinterpret_cast<std::uint8_t *>(std::uintptr_t{0x7F0000001000u});
+  platform.attach_register_window(base, window);
+  platform.write_register_u8(base + 1u, 0xABu);
+  CHECK_EQ(window.last_write_offset(), 1u);
+  platform.write_register_u16(base + 2u, 0x1234u);
+  platform.write_register_u32(base + 4u, 0xCAFEF00Du);
+  platform.write_register_u64(base + 8u, 0x1122334455667788ull);
+  CHECK_EQ(window.writes(), 4u);
+  CHECK_EQ(platform.read_register_u8(base + 1u), 0xABu);
+  CHECK_EQ(platform.read_register_u16(base + 2u), 0x1234u);
+  CHECK_EQ(platform.read_register_u32(base + 4u), 0xCAFEF00Du);
+  CHECK_EQ(platform.read_register_u32(base + 12u), 0x11223344u);
+  CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
+TEST(mock_platform_register, legal_at_any_irql)
+{ MockPlatform platform; FakeRegisterBytes window(4u);
+  const auto base = reinterpret_cast<std::uint8_t *>(std::uintptr_t{0x7F0000002000u});
+  platform.attach_register_window(base, window);
+  platform.set_irql(Irql::isr);
+  CHECK_EQ(platform.read_register_u8(base), 0u);
+  CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
+TEST(mock_platform_register, an_access_outside_every_window_is_recorded)
+{ MockPlatform platform; FakeRegisterBytes window(4u);
+  const auto base = reinterpret_cast<std::uint8_t *>(std::uintptr_t{0x7F0000003000u});
+  platform.attach_register_window(base, window);
+  CHECK_EQ(platform.read_register_u32(base + 1u), 0xFFFFFFFFu);   /* straddles the end */
+  CHECK(platform.claim(Violation::unmapped_register));
+  CHECK_EQ(platform.read_register_u8(base - 1u), 0xFFu);
+  CHECK(platform.claim(Violation::unmapped_register));
+  platform.write_register_u16(base + 4u, 1u);
+  CHECK(platform.claim(Violation::unmapped_register));
+  CHECK_EQ(platform.read_register_u16(base + 8u), 0xFFFFu);
+  CHECK(platform.claim(Violation::unmapped_register));
+  platform.write_register_u8(base + 4u, 1u);
+  platform.write_register_u32(base + 4u, 1u);
+  platform.write_register_u64(base + 4u, 1u);
+  CHECK(platform.claim(Violation::unmapped_register));
+  CHECK(platform.claim(Violation::unmapped_register));
+  CHECK(platform.claim(Violation::unmapped_register));
+  CHECK_EQ(window.writes(), 0u); }
+
+TEST(mock_platform_register, a_detached_window_is_unmapped)
+{ MockPlatform platform; FakeRegisterBytes first(4u), second(4u);
+  const auto base = reinterpret_cast<std::uint8_t *>(std::uintptr_t{0x7F0000004000u});
+  platform.attach_register_window(base, first);
+  platform.attach_register_window(base + 4u, second);
+  CHECK_EQ(platform.attached_register_windows(), 2u);
+  platform.detach_register_windows(base, 8u);
+  CHECK_EQ(platform.attached_register_windows(), 0u);
+  CHECK_EQ(platform.read_register_u8(base + 4u), 0xFFu);
+  CHECK(platform.claim(Violation::unmapped_register)); }
+
+TEST(mock_platform_register, attaching_past_capacity_fails_the_test)
+{ { MockPlatform platform; FakeRegisterBytes window(4u);
+    const std::uintptr_t first = 0x7F0000010000u;
+    for (std::uint32_t i = 0u; i <= MockPlatform::max_register_windows; i++)
+        platform.attach_register_window(reinterpret_cast<std::uint8_t *>(first + 0x100u * i), window);
+    CHECK_EQ(platform.attached_register_windows(), MockPlatform::max_register_windows); }
+  CHECK(TestRegistry::instance().take_current_failure()); }

@@ -113,6 +113,7 @@ TEST(virtio_pci_transport_negotiate, is_passive_only)
   device.platform().set_irql(Irql::dispatch);
   CHECK_STATUS(device.transport().negotiate(version_1, version_1), Status::ok);
   CHECK(device.platform().claim(Violation::irql_ceiling));
+  CHECK(device.platform().claim(Violation::irql_ceiling));   /* and its reset */
   device.platform().set_irql(Irql::passive); }
 
 TEST(virtio_pci_transport_start, sets_driver_ok_after_negotiation)
@@ -123,6 +124,41 @@ TEST(virtio_pci_transport_start, sets_driver_ok_after_negotiation)
   CHECK_EQ(device.common().status(), 0xFu);
   CHECK(device.transport().invariants_hold());
   CHECK_STATUS(device.transport().start(), Status::invalid_state); }
+
+TEST(virtio_pci_transport_reset, returns_a_running_device_to_unconfigured)
+{ Device device;
+  CHECK_STATUS(device.transport().negotiate(version_1, version_1), Status::ok);
+  CHECK_STATUS(device.transport().start(), Status::ok);
+  CHECK_STATUS(device.transport().reset(), Status::ok);
+  CHECK(device.transport().invariants_hold());
+  CHECK_EQ(device.common().status(), 0u);
+  CHECK(device.transport().features() == 0u);
+  CHECK_STATUS(device.transport().start(), Status::invalid_state); }
+
+TEST(virtio_pci_transport_reset, a_reset_that_never_completes_is_invalid_state_and_unconfigured)
+{ Device device;
+  CHECK_STATUS(device.transport().negotiate(version_1, version_1), Status::ok);
+  device.common().delay_reset(100000u);
+  CHECK_STATUS(device.transport().reset(), Status::invalid_state);
+  CHECK(device.transport().features() == 0u);
+  CHECK_STATUS(device.transport().start(), Status::invalid_state); }
+
+TEST(virtio_pci_transport_abandon, writes_reset_once_from_any_irql_without_waiting)
+{ Device device;
+  CHECK_STATUS(device.transport().negotiate(version_1, version_1), Status::ok);
+  CHECK_STATUS(device.transport().start(), Status::ok);
+  device.common().delay_reset(100000u);
+  const std::uint32_t writes = device.common().status_writes();
+  const std::uint64_t before = device.platform().interrupt_time();
+  device.platform().set_irql(Irql::isr);
+  device.transport().abandon();
+  device.platform().set_irql(Irql::passive);
+  CHECK_EQ(device.common().status_writes(), writes + 1u);
+  CHECK_EQ(device.common().status_written(writes), 0u);
+  CHECK(device.platform().interrupt_time() == before);
+  CHECK(device.transport().features() == 0u);
+  CHECK(device.transport().invariants_hold());
+  CHECK_EQ(device.platform().unclaimed_violations(), 0u); }
 
 TEST(virtio_pci_transport_config_vector, is_assigned_and_read_back)
 { Device device;
