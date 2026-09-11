@@ -53,5 +53,5 @@ Covered by T002/T005 (mock clock) - no separate core class consumes time yet.
 
 ## Phase 7: Polish
 
-- [ ] T015 [P] `CLAUDE.md` adaptations: polymorphic bases never deleted through a base pointer get a protected non-virtual destructor (no `operator delete` in the kernel); `docs/testing.md`: `lock_rank.hpp`, record-and-claim instead of abort, time and lock checks as implemented
-- [ ] T016 Run `tools/gate.sh`; fix anything; confirm no unclaimed violations printed anywhere in the unit suite output; merge to `master` per `.claude/commands/dev.md`
+- [X] T015 [P] `CLAUDE.md` adaptations: polymorphic bases never deleted through a base pointer get a protected non-virtual destructor (no `operator delete` in the kernel); `docs/testing.md`: `lock_rank.hpp`, record-and-claim instead of abort, time and lock checks as implemented
+- [X] T016 Run `tools/gate.sh`; fix anything; confirm no unclaimed violations printed anywhere in the unit suite output; merge to `master` per `.claude/commands/dev.md`

@@ -67,18 +67,29 @@ core class under test.
 
 `MockPlatform` is not a stub. It is adversarial:
 
-- **Simulated IRQL.** Raise and lower are tracked. Calling a function annotated
-  `AV_AT_PASSIVE` while at DISPATCH aborts the test. Allocating at DISPATCH
-  aborts. Blocking at DISPATCH aborts. This turns the most common class of
-  driver bugcheck into a failing unit test.
+- **Simulated IRQL.** Spin locks raise to DISPATCH and mutexes to APC; release
+  restores. A function called above the ceiling it declares with
+  `platform_.require_irql_at_most(...)`, an allocation at DISPATCH, and a
+  mutex taken at DISPATCH are each recorded as a violation. This turns the most
+  common class of driver bugcheck into a failing unit test.
+- **Violations fail the test unless claimed.** Every rule break is printed once
+  with its cause and counted by kind (`tests/harness/violation.hpp`). A test
+  that means to break a rule claims it with `platform.claim(Violation::...)`;
+  anything left unclaimed when the mock is destroyed fails the test. Recording
+  instead of aborting is what lets a test prove the violation is detected. Fuzz
+  targets trap on any unclaimed violation.
 - **Failing allocator.** `fail_allocation_at(n)` makes the Nth allocation
   fail, so error paths get covered rather than assumed. A sweep runs the same
   scenario once per allocation site, failing that site, and asserts no leak and
   no crash — this is how out-of-memory paths reach 100% branch coverage.
-- **Leak and balance tracking.** Allocation, lock acquire/release, and refcount
-  operations are counted; a test that ends unbalanced fails.
-- **Lock order checking.** The declared order in `src/core/lock_order.hpp` is
-  enforced at runtime.
+- **Leak and balance tracking.** Live allocations and held locks are counted;
+  a test that ends with either fails. Releasing null is a violation (the kernel
+  bugchecks on it). Refcount balance arrives with the objects that own
+  refcounts (feature 008).
+- **Lock order checking.** Ranks are declared once in `src/core/lock_rank.hpp`.
+  Acquisition must strictly increase the rank, release must be LIFO, and both
+  are checked on every acquire and release. This runs in the native test build;
+  in the guest, Driver Verifier's deadlock detection covers it.
 - **Deterministic time.** A test controls the clock, so TDR timeouts are exact
   and not flaky.
 

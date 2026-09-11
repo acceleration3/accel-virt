@@ -87,7 +87,8 @@ another branch the coverage gate makes you test.
 
 **Ownership**: rule of zero is the target. Owning a raw resource means wrapping
 it in a handle type; declaring one of the five means declaring all five
-consistently. A polymorphic base gets a virtual destructor. Copy and assignment
+consistently. A polymorphic base gets a protected non-virtual destructor (see
+Adaptations). Copy and assignment
 are `= delete` unless copying is meaningful. Data members are private; expose
 the operation callers actually perform, not a getter/setter pair. `const`,
 `explicit`, `[[nodiscard]]` wherever they hold.
@@ -127,6 +128,14 @@ Dropped, because this codebase is freestanding kernel-mode C++:
   yet, so this is speculative. Reinstate it if a container class appears.
 - **`std::optional` / `std::expected` / throw** for errors. Replaced by
   `av::Status`, since neither type is available and exceptions are off.
+
+Changed, because the kernel has no heap operators:
+
+- **Virtual destructor on a polymorphic base** becomes a `protected`
+  non-virtual destructor. A virtual destructor makes the compiler emit a
+  deleting destructor that calls `operator delete`, which does not exist in the
+  kernel, so the driver fails to link. No object here is ever destroyed through
+  a base pointer, and `protected` makes trying a compile error.
 
 Tightened, at the project's request:
 

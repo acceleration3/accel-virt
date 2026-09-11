@@ -450,6 +450,6 @@ and the gate command; both succeed.
 - Deciding how the command-serialization codec is brought into the
   repository (feature 032).
 - Committing Microsoft binaries, PDBs or kit files to git.
-- Amending stale wording in the constitution (Principle II "freestanding C11",
+- (Done in constitution 2.0.1, feature 002.) Amending stale wording in the constitution (Principle II "freestanding C11",
   IV.2 `<module>_invariants(const <module>_t *)`, VII `locks.h`). Recorded as a
   follow-up constitution PATCH amendment, not silently edited here.

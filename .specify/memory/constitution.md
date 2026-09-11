@@ -1,6 +1,6 @@
 # accel-virt Constitution
 
-**Version**: 2.0.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-10
+**Version**: 2.0.1 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-11
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
 display miniport (`rvkgpu.sys`), a custom in-process QEMU device
@@ -21,7 +21,7 @@ ready to plan.
 ### II. The core is portable; the shim is not
 
 All decision-making logic lives in `src/core/` (guest) and `src/device/`
-(host), compiles as freestanding C11 with **no** WDM, dxgk, QEMU or libc
+(host), compiles as freestanding C++23 with **no** WDM, dxgk, QEMU or libc
 dependency, and is reachable from a native Linux test binary.
 
 `src/km/` is the Windows kernel shim and `src/device/qemu/` is the QEMU glue.
@@ -74,11 +74,11 @@ exercise every branch, assert the module's invariants, and feed it garbage.**
    coverage gate counts those marks, fails if the count rises without a spec
    change, and every mark is reviewed.
 
-2. **Invariants.** Every module that owns state exports
-   `bool <module>_invariants(const <module>_t *)`, total and side-effect free.
+2. **Invariants.** Every class that owns state has
+   `bool invariants_hold() const`, total and side-effect free.
    Tests call it after **every** mutating operation, not once at the end.
-   Debug builds check it on entry and exit of every public function
-   (`AV_INVARIANT_SCOPE`). An invariant function that can never return false is
+   Checked builds verify it on entry and exit of every mutating public
+   function (`InvariantScope`). An invariant function that can never return false is
    not an invariant; delete it and write a real one.
 
 3. **Garbage data.** Every function that reads bytes it did not write —
@@ -135,11 +135,13 @@ incorrectly, which surfaces as a silent failure far from the cause.
 
 ### VII. IRQL and locking are typed, not documented
 
-Every core function declares its maximum IRQL in its signature's annotation
-macro (`AV_AT_PASSIVE`, `AV_AT_DISPATCH`, `AV_AT_ISR`). The native test build
-tracks a simulated IRQL and aborts if a function calls something with a lower
-maximum, allocates at DISPATCH, or blocks at DISPATCH. Lock order is declared
-once in `src/core/locks.h` and checked at runtime in debug builds.
+Every public core function declares its maximum IRQL on entry with
+`platform_.require_irql_at_most(...)`. The native test build tracks a simulated
+IRQL, and the mock records a violation - failing the test unless the test
+claims it - when a function is called above its ceiling, allocates at
+DISPATCH, or blocks at DISPATCH. Lock ranks are declared once in
+`src/core/lock_rank.hpp`; acquisition order and LIFO release are checked at
+runtime in the native test build, and by Driver Verifier in the guest.
 
 The submission path never blocks, never allocates and never takes a mutex.
 That is a testable property, and it is tested.
