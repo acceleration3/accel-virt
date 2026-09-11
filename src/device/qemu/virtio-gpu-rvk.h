@@ -34,6 +34,8 @@ struct VirtIOGPURvk {
     /* One page per context; a store to a page is an ioeventfd the core
      * connects to the context's worker. The PCI wrapper maps it as BAR 0. */
     MemoryRegion doorbells;
+    /* Queue FIRST + n carries doorbell n's fence interrupts on its vector. */
+    VirtQueue *fence_queues[RVK_DEVICE_DOORBELLS];
 };
 
 /* Fills r->host with QEMU's threads, events, locks, main loop, memory and

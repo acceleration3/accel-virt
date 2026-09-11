@@ -141,7 +141,9 @@ against `vulkaninfo` through `tools/host/list_gpus.py`, and creates, sets up and
 destroys contexts. `test_virtio_gpu_ring.py` writes rings as the guest does
 (`rvk_context.py`), stores to the doorbell pages in BAR 0 and waits for head -
 QEMU dispatches the ioeventfd itself under qtest - and checks that a hostile
-ring stops only its own context.
+ring stops only its own context. `test_virtio_gpu_fences.py` reads fence pages
+and the MSI-X pending bits of masked vectors, and the ISR with MSI-X off, to see
+the fence queues' interrupts arrive.
 
 ### The shape of a test file
 

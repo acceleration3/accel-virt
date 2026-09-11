@@ -21,6 +21,7 @@
 #include "system/dma.h"
 #include "system/memory.h"
 #include "hw/virtio/virtio-gpu-bswap.h"
+#include "hw/virtio/virtio-bus.h"
 #include "hw/virtio/virtio-gpu-rvk.h"
 
 #include <vulkan/vulkan.h>
@@ -250,6 +251,37 @@ static void rvk_disconnect_doorbell(void *opaque, void *event, uint32_t index)
     memory_region_del_eventfd(&r->doorbells, (hwaddr)index * RVK_DEVICE_DOORBELL_PAGE, 4, false, 0, event);
 }
 
+static int rvk_connect_fence_interrupts(void *opaque)
+{
+    BusState *bus = qdev_get_parent_bus(DEVICE(opaque));
+    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(bus);
+
+    if (!k->set_guest_notifiers) {
+        return 1;
+    }
+    return k->set_guest_notifiers(bus->parent, RVK_DEVICE_FENCE_QUEUE_FIRST + RVK_DEVICE_DOORBELLS, true) < 0;
+}
+
+static void rvk_disconnect_fence_interrupts(void *opaque)
+{
+    BusState *bus = qdev_get_parent_bus(DEVICE(opaque));
+    VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(bus);
+
+    k->set_guest_notifiers(bus->parent, RVK_DEVICE_FENCE_QUEUE_FIRST + RVK_DEVICE_DOORBELLS, false);
+}
+
+/* virtio-pci stops assigning notifiers at the first queue without a size, so
+ * one it never initialized is left alone. */
+static void rvk_raise_fence_interrupt(void *opaque, uint32_t line)
+{
+    VirtIOGPURvk *r = opaque;
+    EventNotifier *notifier = virtio_queue_get_guest_notifier(r->fence_queues[line]);
+
+    if (notifier->initialized) {
+        event_notifier_set(notifier);
+    }
+}
+
 static size_t rvk_read_request(void *opaque, void *request, size_t offset, uint8_t *buffer, size_t size)
 {
     struct virtio_gpu_ctrl_command *cmd = request;
@@ -363,6 +395,9 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .remove_from_hostmem = rvk_remove_from_hostmem,
         .connect_doorbell = rvk_connect_doorbell,
         .disconnect_doorbell = rvk_disconnect_doorbell,
+        .connect_fence_interrupts = rvk_connect_fence_interrupts,
+        .disconnect_fence_interrupts = rvk_disconnect_fence_interrupts,
+        .raise_fence_interrupt = rvk_raise_fence_interrupt,
         .read_request = rvk_read_request,
         .respond = rvk_respond,
         .resource_exists = rvk_resource_exists,

@@ -25,6 +25,10 @@ PCI_COMMAND_MEMORY = 0x2
 PCI_COMMAND_MASTER = 0x4
 PCI_STATUS_CAPABILITIES = 0x10
 PCI_CAPABILITY_VENDOR = 0x09
+PCI_CAPABILITY_MSIX = 0x11
+MSIX_CONTROL_ENABLE = 1 << 15
+MSIX_VECTOR_MASKED = 1
+VIRTIO_MSI_NO_VECTOR = 0xFFFF
 
 VIRTIO_PCI_CAP_COMMON = 1
 VIRTIO_PCI_CAP_NOTIFY = 2
@@ -178,6 +182,40 @@ class PciFunction:
         return found
 
 
+class Msix:
+    """A PCI function's MSI-X capability: its table and pending bits, reached
+    through the BARs the firmware assigned."""
+
+    def __init__(self, qtest, pci):
+        self.qtest = qtest
+        self.pci = pci
+        self.position = next(position for position, capability in pci.capabilities()
+                             if capability == PCI_CAPABILITY_MSIX)
+        control = pci.read(16, self.position + 2)
+        self.vectors = (control & 0x7FF) + 1
+        table = pci.read(32, self.position + 4)
+        pending = pci.read(32, self.position + 8)
+        self.table = pci.bars[table & 7] + (table & ~7)
+        self.pending_bits = pci.bars[pending & 7] + (pending & ~7)
+
+    def enable(self):
+        """Every vector programmed to the local APIC and masked, then MSI-X on."""
+        for vector in range(self.vectors):
+            entry = self.table + 16 * vector
+            self.qtest.write(32, entry, 0xFEE00000)
+            self.qtest.write(32, entry + 4, 0)
+            self.qtest.write(32, entry + 8, 0x40 + vector)
+            self.qtest.write(32, entry + 12, MSIX_VECTOR_MASKED)
+        control = self.pci.read(16, self.position + 2)
+        self.pci.write(16, self.position + 2, control | MSIX_CONTROL_ENABLE)
+
+    def mask(self, vector, masked=True):
+        self.qtest.write(32, self.table + 16 * vector + 12, MSIX_VECTOR_MASKED if masked else 0)
+
+    def pending(self, vector):
+        return bool(self.qtest.read(32, self.pending_bits + 4 * (vector // 32)) >> (vector % 32) & 1)
+
+
 class SplitQueue:
     """A split virtqueue in guest memory, one request/response chain at a time."""
 
@@ -264,6 +302,19 @@ class VirtioPciDevice:
         self.qtest.write(width, address, value)
         return value
 
+    def queue_count(self):
+        return self.common(16, 0x12)
+
+    def set_queue_vector(self, index, vector):
+        """The vector the device accepted: VIRTIO_MSI_NO_VECTOR when refused."""
+        self.common(16, 0x16, index)
+        self.common(16, 0x1A, vector)
+        return self.common(16, 0x1A)
+
+    def isr(self):
+        """The ISR status byte; reading it clears it."""
+        return self.qtest.read(8, self.regions[VIRTIO_PCI_CAP_ISR])
+
     def device_config(self, width, offset):
         return self.qtest.read(width, self.regions[VIRTIO_PCI_CAP_DEVICE] + offset)
 
@@ -311,11 +362,14 @@ class VirtioGpu:
     CONTROL = 0
     CURSOR = 1
 
-    def __init__(self, qtest, wanted=FEATURE_VERSION_1 | FEATURE_EDID):
+    def __init__(self, qtest, wanted=FEATURE_VERSION_1 | FEATURE_EDID, before_start=None):
+        """`before_start(device)` runs after the queues are set up and before DRIVER_OK."""
         self.device = VirtioPciDevice(qtest)
         self.features = self.device.initialize(wanted)
         self.control_queue = self.device.activate_queue(self.CONTROL)
         self.cursor_queue = self.device.activate_queue(self.CURSOR)
+        if before_start:
+            before_start(self.device)
         self.device.start()
         self.qtest = qtest
 

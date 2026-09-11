@@ -393,3 +393,28 @@ the guest reads it from its interrupt path. 32 bytes.
 Against what the guest has seen: `completed_fence` and `progress` never
 decrease, `completed_fence` never exceeds the highest fence id submitted, and
 once `faulted` is observed it stays set for the context's lifetime.
+
+**When the device writes it.** At the context setup, before the ring is
+attached: magic, flags 0, completed 0, progress 0, fault code 0. Then from the
+context's worker after every batch it consumes: completed is that batch's
+fence and progress counts the batches completed. Every write is the whole
+page from the device's own counters; the device never reads the page back, so
+a page the guest overwrites is simply rewritten by the next completion.
+
+## Fence queues and interrupts (device -> guest)
+
+`virtio-gpu-rvk-pci` has 66 virtqueues: control (0), cursor (1), and a fence
+queue per doorbell page, queue `2 + n` for doorbell `n`. A fence queue carries
+no requests - a kick is ignored - and exists so the driver can give each
+context's interrupts a vector with `queue_msix_vector`; queues may share a
+vector, and one left at `VIRTIO_MSI_NO_VECTOR` raises nothing. The PCI
+function keeps virtio-gpu's `vectors` property (default 3), so a driver that
+wants a vector per context starts QEMU with more.
+
+When a worker's service completes at least one batch, it writes the page(s)
+and then interrupts once on the context's fence queue. The interrupt goes
+through the queue's guest notifier, connected when the driver sets
+`DRIVER_OK`: with KVM an irqfd on the queue's MSI-X vector, masking handled by
+virtio-pci (a masked vector's pending bit is set); without MSI-X, the ISR's
+queue bit and INTx. A reset destroys every context before the notifiers are
+released. Nothing is raised before `DRIVER_OK`; the page is still written.

@@ -151,6 +151,7 @@ src/device/                       QEMU device core — freestanding C++23, librv
   host/  abi/                       the Host contract; TableHost, rvk_device.h, the C entry points
   gpu/  threading/  context/        host GPU binding; per-context workers and doorbells; the context table
   capset/  memory/  ring/  control/ the capset; blobs and their windows; ring consumption; control answers
+  fence/                            fence pages and the fence queues' interrupts
   module/  support/                 the device object and the module holding every device
   qemu/                             the C glue and meson patch built into QEMU (translation only)
 src/proto/                        the wire protocol, shared by both sides

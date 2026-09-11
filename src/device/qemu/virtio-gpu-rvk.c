@@ -3,8 +3,9 @@
  * virtio-gpu-rvk-device: the base virtio-gpu device handles the 2D protocol;
  * realize, reset, finalize and every control request reach the device core
  * through rvk_device.h first. Beyond stock virtio-gpu, only what the core says
- * it implements is offered: context init, when it has a capset, and the
- * doorbell pages the PCI wrapper maps.
+ * it implements is offered: context init, when it has a capset, the doorbell
+ * pages the PCI wrapper maps, and a fence queue per doorbell whose guest
+ * notifier the core's workers set to interrupt the guest.
  *
  * Installed by accel-virt's tools/build_qemu.sh as hw/display/virtio-gpu-rvk.c.
  */
@@ -15,11 +16,20 @@
 #include "qemu/mmap-alloc.h"
 #include "hw/core/qdev-properties.h"
 #include "hw/virtio/virtio.h"
+#include "hw/virtio/virtio-bus.h"
 #include "hw/virtio/virtio-gpu-bswap.h"
 #include "hw/virtio/virtio-gpu-rvk.h"
 
+static void (*virtio_gpu_rvk_parent_unrealize)(DeviceState *qdev);
+
+/* Fence queues carry no requests: a kick does nothing. */
+static void virtio_gpu_rvk_fence_kick(VirtIODevice *vdev, VirtQueue *vq)
+{
+}
+
 static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
 {
+    ERRP_GUARD();
     VirtIOGPURvk *r = VIRTIO_GPU_RVK(qdev);
     VirtIOGPUBase *b = VIRTIO_GPU_BASE(qdev);
     VirtIOGPU *g = VIRTIO_GPU(qdev);
@@ -50,6 +60,32 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
         b->conf.flags |= 1 << VIRTIO_GPU_FLAG_CONTEXT_INIT_ENABLED;
     }
     virtio_gpu_device_realize(qdev, errp);
+    if (*errp) {
+        return;
+    }
+    for (uint32_t i = 0; i < RVK_DEVICE_DOORBELLS; i++) {
+        r->fence_queues[i] = virtio_add_queue(VIRTIO_DEVICE(qdev), 2, virtio_gpu_rvk_fence_kick);
+    }
+}
+
+/* The workers are joined and the fence interrupts released before the queues go. */
+static void virtio_gpu_rvk_unrealize(DeviceState *qdev)
+{
+    VirtIOGPURvk *r = VIRTIO_GPU_RVK(qdev);
+
+    rvk_device_reset(r->core);
+    for (uint32_t i = 0; i < RVK_DEVICE_DOORBELLS; i++) {
+        virtio_del_queue(VIRTIO_DEVICE(qdev), RVK_DEVICE_FENCE_QUEUE_FIRST + i);
+    }
+    virtio_gpu_rvk_parent_unrealize(qdev);
+}
+
+static int virtio_gpu_rvk_set_status(VirtIODevice *vdev, uint8_t status)
+{
+    VirtIOGPURvk *r = VIRTIO_GPU_RVK(vdev);
+
+    rvk_device_status(r->core, status);
+    return 0;
 }
 
 /* The core answers the requests it owns; the base class answers the rest. */
@@ -121,6 +157,9 @@ static void virtio_gpu_rvk_class_init(ObjectClass *klass, const void *data)
     VirtIOGPUClass *vgc = VIRTIO_GPU_CLASS(klass);
 
     vdc->realize = virtio_gpu_rvk_realize;
+    virtio_gpu_rvk_parent_unrealize = vdc->unrealize;
+    vdc->unrealize = virtio_gpu_rvk_unrealize;
+    vdc->set_status = virtio_gpu_rvk_set_status;
     vgc->process_cmd = virtio_gpu_rvk_process_cmd;
     vdc->reset = virtio_gpu_rvk_reset;
     device_class_set_props(dc, virtio_gpu_rvk_properties);

@@ -23,6 +23,6 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 3: QEMU
 
-- [ ] T006 [US2] Glue: fence queues, set_status, notifier ops, unrealize in src/device/qemu/
-- [ ] T007 [US1] [US2] qtest: MSI-X helpers in tests/qemu/virtio_qtest.py; tests/qemu/test_virtio_gpu_fences.py
-- [ ] T008 Docs: docs/protocol.md, docs/testing.md, README layout; `tools/gate.sh`; merge; push
+- [X] T006 [US2] Glue: fence queues, set_status, notifier ops, unrealize in src/device/qemu/
+- [X] T007 [US1] [US2] qtest: MSI-X helpers in tests/qemu/virtio_qtest.py; tests/qemu/test_virtio_gpu_fences.py
+- [X] T008 Docs: docs/protocol.md, docs/testing.md, README layout; `tools/gate.sh`; merge; push
