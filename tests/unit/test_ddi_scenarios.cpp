@@ -1,7 +1,19 @@
 /* The driver image, registered and driven through its DDI table the way
  * dxgkrnl drives it (docs/ddi-sequences.md), against fake virtio-gpu
  * functions. Nothing here calls a core class directly. */
+#include "../../src/core/ddi/d3dkmdt_shared_primary_surface_data_record.hpp"
+#include "../../src/core/ddi/dxgk_allocation_info_record.hpp"
+#include "../../src/core/ddi/dxgk_open_allocation_info_record.hpp"
+#include "../../src/core/ddi/dxgkarg_close_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_create_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_create_device_record.hpp"
+#include "../../src/core/ddi/dxgkarg_describe_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_destroy_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
+#include "../../src/core/ddi/dxgkarg_open_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
+#include "../../src/proto/allocation_descriptor.hpp"
 #include "../../src/core/ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_escape_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
@@ -13,6 +25,7 @@
 #include "../harness/fake_dxgkrnl.hpp"
 #include "../harness/fake_dxgkrnl_adapter.hpp"
 #include "../harness/fake_dxgkrnl_fdo.hpp"
+#include "../harness/fake_handle_table.hpp"
 #include "../harness/fake_vidmm.hpp"
 #include "../harness/fake_virtio_gpu_function.hpp"
 #include "../harness/mock_platform.hpp"
@@ -37,6 +50,7 @@ namespace {
 
 constexpr std::uint32_t no_memory = 0xC0000017u;
 constexpr std::uint32_t not_supported = 0xC00000BBu;
+constexpr std::uint32_t invalid_device_state = 0xC0000184u;
 constexpr std::int32_t  power_d0 = 1;
 constexpr std::int32_t  power_d3 = 4;
 constexpr std::uint8_t  driver_ok_status = 0x0Fu;
@@ -279,3 +293,168 @@ TEST(ddi_scenario, vidmm_accepts_the_aperture_segment_after_start)
   CHECK(vidmm.failed_rule() == av::SegmentRule::none);
   CHECK(vidmm.segment(0u).Size == std::uint64_t{8} << 30u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
+
+TEST(ddi_scenario, the_render_ddi_set_is_incomplete_until_submission_arrives)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.fdo().dxgadapter().create_render_core(), revision_mismatch);
+  CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::render_ddis_incomplete);
+  CHECK(device.fdo().dxgadapter().missing_render_slot() == DdiSlot::DxgkDdiSubmitCommand);
+  CHECK_EQ(device.fdo().remove_device(), 0); }
+
+namespace {
+
+/* The runtime side of dxgkrnl for one adapter: the calls it makes to create a
+ * primary for DWM and open it on a device, through the registered table. */
+class Runtime {
+public:
+    Runtime(const DdiTable &table, void *adapter) : table_(table), adapter_(adapter), surface_{1024u, 768u, 21, 60u, 1u, 0u},
+        descriptor_{}, info_{}, open_{}, device_(nullptr) {}
+
+    template <typename Routine>
+    Routine routine(DdiSlot slot) const { return reinterpret_cast<Routine>(table_.routine(slot)); }
+
+    std::int32_t create_primary()
+    {
+        av::DxgkargGetStandardAllocationDriverDataRecord describe = {};
+        describe.StandardAllocationType = 1;
+        describe.pCreateSurfaceData = &surface_;
+        std::int32_t status = routine<std::int32_t (*)(void *, av::DxgkargGetStandardAllocationDriverDataRecord *)>(
+            DdiSlot::DxgkDdiGetStandardAllocationDriverData)(adapter_, &describe);
+        if (status < 0) return status;
+        describe.pAllocationPrivateDriverData = descriptor_;
+        status = routine<std::int32_t (*)(void *, av::DxgkargGetStandardAllocationDriverDataRecord *)>(
+            DdiSlot::DxgkDdiGetStandardAllocationDriverData)(adapter_, &describe);
+        if (status < 0) return status;
+        info_.pPrivateDriverData = descriptor_;
+        info_.PrivateDriverDataSize = describe.AllocationPrivateDriverDataSize;
+        av::DxgkargCreateAllocationRecord create = {};
+        create.NumAllocations = 1u;
+        create.pAllocationInfo = &info_;
+        status = routine<std::int32_t (*)(void *, av::DxgkargCreateAllocationRecord *)>(DdiSlot::DxgkDdiCreateAllocation)(
+            adapter_, &create);
+        if (status >= 0) kernel_handle_ = handles_.insert(info_.hAllocation);
+        return status;
+    }
+
+    std::int32_t create_device()
+    {
+        av::DxgkargCreateDeviceRecord create = {};
+        const std::int32_t status =
+            routine<std::int32_t (*)(void *, av::DxgkargCreateDeviceRecord *)>(DdiSlot::DxgkDdiCreateDevice)(adapter_, &create);
+        device_ = create.hDevice;
+        return status;
+    }
+
+    std::int32_t open()
+    {
+        open_.hAllocation = kernel_handle_;
+        av::DxgkargOpenAllocationRecord request = {};
+        request.NumAllocations = 1u;
+        request.pOpenAllocation = &open_;
+        return routine<std::int32_t (*)(void *, av::DxgkargOpenAllocationRecord *)>(DdiSlot::DxgkDdiOpenAllocation)(device_, &request);
+    }
+
+    std::int32_t describe(av::DxgkargDescribeAllocationRecord &request)
+    {
+        request.hAllocation = info_.hAllocation;
+        return routine<std::int32_t (*)(void *, av::DxgkargDescribeAllocationRecord *)>(DdiSlot::DxgkDdiDescribeAllocation)(
+            adapter_, &request);
+    }
+
+    std::int32_t set_private_format(std::uint32_t attribute)
+    {
+        av::DxgkargSetDisplayPrivateDriverFormatRecord request = {};
+        request.PrimaryAllocation = info_.hAllocation;
+        request.PrivateDriverFormatAttribute = attribute;
+        return routine<std::int32_t (*)(void *, const av::DxgkargSetDisplayPrivateDriverFormatRecord *)>(
+            DdiSlot::DxgkDdiSetDisplayPrivateDriverFormat)(adapter_, &request);
+    }
+
+    std::int32_t close()
+    {
+        void *handle = open_.hDeviceSpecificAllocation;
+        av::DxgkargCloseAllocationRecord request = {};
+        request.NumAllocations = 1u;
+        request.pOpenHandleList = &handle;
+        return routine<std::int32_t (*)(void *, const av::DxgkargCloseAllocationRecord *)>(DdiSlot::DxgkDdiCloseAllocation)(
+            device_, &request);
+    }
+
+    std::int32_t destroy_primary()
+    {
+        void *handle = info_.hAllocation;
+        av::DxgkargDestroyAllocationRecord request = {};
+        request.NumAllocations = 1u;
+        request.pAllocationList = &handle;
+        return routine<std::int32_t (*)(void *, const av::DxgkargDestroyAllocationRecord *)>(DdiSlot::DxgkDdiDestroyAllocation)(
+            adapter_, &request);
+    }
+
+    std::int32_t destroy_device()
+    { return routine<std::int32_t (*)(void *)>(DdiSlot::DxgkDdiDestroyDevice)(device_); }
+
+private:
+    const DdiTable                            &table_;
+    void                                      *adapter_;
+    av::D3dkmdtSharedPrimarySurfaceDataRecord  surface_;
+    std::uint8_t                               descriptor_[av::AllocationDescriptor::encoded_size];
+    av::DxgkAllocationInfoRecord               info_;
+    av::DxgkOpenAllocationInfoRecord           open_;
+    void                                      *device_;
+    av::FakeHandleTable                        handles_;
+    std::uint32_t                              kernel_handle_ = 0u;
+};
+
+}  // namespace
+
+TEST(ddi_scenario, a_primary_lives_from_standard_allocation_to_destruction)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  { Runtime runtime(driver.table(), device.fdo().context());
+    CHECK_EQ(runtime.create_primary(), 0);
+    CHECK_EQ(runtime.create_device(), 0);
+    CHECK_EQ(runtime.open(), 0);
+    CHECK_EQ(runtime.set_private_format(0x42u), 0);
+    av::DxgkargDescribeAllocationRecord described = {};
+    CHECK_EQ(runtime.describe(described), 0);
+    CHECK_EQ(described.Width, 1024u);
+    CHECK_EQ(described.RefreshRateNumerator, 60u);
+    CHECK_EQ(described.PrivateDriverFormatAttribute, 0x42u);
+    CHECK_EQ(runtime.close(), 0);
+    CHECK_EQ(runtime.destroy_primary(), 0);
+    CHECK_EQ(runtime.destroy_device(), 0); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+TEST(ddi_scenario, destroy_device_with_an_open_then_the_allocation)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  { Runtime runtime(driver.table(), device.fdo().context());
+    CHECK_EQ(runtime.create_primary(), 0);
+    CHECK_EQ(runtime.create_device(), 0);
+    CHECK_EQ(runtime.open(), 0);
+    CHECK_EQ(nt(runtime.destroy_primary()), invalid_device_state);
+    CHECK_EQ(runtime.destroy_device(), 0);
+    CHECK_EQ(runtime.destroy_primary(), 0); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u); }
+
+TEST(ddi_scenario, remove_device_with_devices_and_allocations_outstanding)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  { Runtime runtime(driver.table(), device.fdo().context());
+    CHECK_EQ(runtime.create_primary(), 0);
+    CHECK_EQ(runtime.create_device(), 0);
+    CHECK_EQ(runtime.open(), 0);
+    CHECK_EQ(device.fdo().remove_device(), 0); }
+  CHECK_EQ(driver.platform().live_allocations(), 0u); }

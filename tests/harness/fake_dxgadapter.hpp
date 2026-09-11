@@ -32,6 +32,15 @@ public:
     /* DXGADAPTER::DdiQueryAdapterInfo at PASSIVE. */
     std::int32_t query(void *context, std::int32_t type, void *input, std::uint32_t input_size, void *output,
                        std::uint32_t output_size);
+    /* ADAPTER_RENDER::CreateRenderCore @ 1401b13d8 over the table and the last
+     * DRIVERCAPS: no render DDI at all is a display-only adapter (success,
+     * render_adapter() false); some but not all fails with
+     * STATUS_REVISION_MISMATCH naming the first missing slot. The later checks
+     * CreateRenderCore makes (WDDM 1.2 render features, node metadata) arrive
+     * with the features that report those levels. */
+    std::int32_t create_render_core();
+    bool         render_adapter() const;
+    DdiSlot      missing_render_slot() const;
     /* The DRIVERCAPS checks alone, so a test can craft an answer. */
     CapabilityRule validate(const DxgkDriverCapsRecord &caps, std::uint32_t children) const;
 
@@ -56,11 +65,15 @@ private:
     CapabilityRule validate_full_adapter(const DxgkDriverCapsRecord &caps) const;
     bool           has(DdiSlot slot) const;
 
+    std::int32_t render_ddi_rule();
+
     MockPlatform         &platform_;
     const DdiTable       &table_;
     DxgkDriverCapsRecord  caps_;
     CapabilityRule        failed_;
     std::uint32_t         queries_;
+    bool                  render_adapter_;
+    DdiSlot               missing_render_slot_;
 };
 
 }  // namespace av

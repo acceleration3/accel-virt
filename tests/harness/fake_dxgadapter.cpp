@@ -60,7 +60,8 @@ bool bit(std::uint32_t word, std::uint32_t mask) { return (word & mask) != 0u; }
 }  // namespace
 
 FakeDxgadapter::FakeDxgadapter(MockPlatform &platform, const DdiTable &table)
-    : platform_(platform), table_(table), caps_{}, failed_(CapabilityRule::none), queries_(0u) {}
+    : platform_(platform), table_(table), caps_{}, failed_(CapabilityRule::none), queries_(0u),
+      render_adapter_(false), missing_render_slot_(DdiSlot::Version) {}
 
 bool FakeDxgadapter::has(DdiSlot slot) const { return table_.routine(slot) != nullptr; }
 
@@ -259,6 +260,87 @@ CapabilityRule FakeDxgadapter::validate_full_adapter(const DxgkDriverCapsRecord 
         return CapabilityRule::wddm_1_3_full_adapter_without_independent_flip;
     return CapabilityRule::none;
 }
+
+/* The render DDIs CreateRenderCore reads from DXGADAPTER+0x1d0..0x300 and
+ * +0x320, in the order it tests them; a slot with an alternative is listed with
+ * it. The internal offsets map to DRIVER_INITIALIZATION_DATA slots through the
+ * default DDIs Initialize installs (DefaultDdiEscape at +0x250 is slot 34,
+ * DefaultDdiStopCapture at +0x2b0 slot 47, DefaultDdiCreateOverlay at +0x2c0
+ * slot 49). */
+std::int32_t FakeDxgadapter::render_ddi_rule()
+{
+    struct Required {
+        DdiSlot slot;
+        DdiSlot alternative;
+    };
+    const bool compute_only = (caps_.MiscCaps & 0x8u) != 0u;
+    const Required required[] = {
+        {DdiSlot::DxgkDdiCreateDevice, DdiSlot::DxgkDdiCreateDevice},
+        {DdiSlot::DxgkDdiDestroyAllocation, DdiSlot::DxgkDdiDestroyAllocation},
+        {DdiSlot::DxgkDdiDescribeAllocation, DdiSlot::DxgkDdiDescribeAllocation},
+        {DdiSlot::DxgkDdiOpenAllocation, DdiSlot::DxgkDdiOpenAllocation},
+        {DdiSlot::DxgkDdiCloseAllocation, DdiSlot::DxgkDdiCloseAllocation},
+        {DdiSlot::DxgkDdiGetStandardAllocationDriverData, DdiSlot::DxgkDdiGetStandardAllocationDriverData},
+        {DdiSlot::DxgkDdiSubmitCommand, DdiSlot::DxgkDdiSubmitCommand},
+        {DdiSlot::DxgkDdiPreemptCommand, DdiSlot::DxgkDdiPreemptCommand},
+        {DdiSlot::DxgkDdiBuildPagingBuffer, DdiSlot::DxgkDdiBuildPagingBuffer},
+        {DdiSlot::DxgkDdiResetFromTimeout, DdiSlot::DxgkDdiResetFromTimeout},
+        {DdiSlot::DxgkDdiRestartFromTimeout, DdiSlot::DxgkDdiRestartFromTimeout},
+        {DdiSlot::DxgkDdiQueryCurrentFence, caps_.WDDMVersion >= wddm_2_0 ? DdiSlot::Version : DdiSlot::DxgkDdiQueryCurrentFence},
+        {DdiSlot::DxgkDdiControlInterrupt, compute_only ? DdiSlot::Version : DdiSlot::DxgkDdiControlInterrupt},
+        {DdiSlot::DxgkDdiDestroyDevice, DdiSlot::DxgkDdiDestroyDevice},
+        {DdiSlot::DxgkDdiCollectDbgInfo, DdiSlot::DxgkDdiCollectDbgInfo2},
+        {DdiSlot::DxgkDdiPresent, DdiSlot::DxgkDdiPresent},
+    };
+    const DdiSlot render_only[] = {
+        DdiSlot::DxgkDdiCreateDevice, DdiSlot::DxgkDdiDestroyAllocation, DdiSlot::DxgkDdiDescribeAllocation,
+        DdiSlot::DxgkDdiOpenAllocation, DdiSlot::DxgkDdiCloseAllocation, DdiSlot::DxgkDdiGetStandardAllocationDriverData,
+        DdiSlot::DxgkDdiSubmitCommand, DdiSlot::DxgkDdiPreemptCommand, DdiSlot::DxgkDdiBuildPagingBuffer,
+        DdiSlot::DxgkDdiResetFromTimeout, DdiSlot::DxgkDdiRestartFromTimeout, DdiSlot::DxgkDdiQueryCurrentFence,
+        DdiSlot::DxgkDdiDestroyDevice, DdiSlot::DxgkDdiPresent, DdiSlot::DxgkDdiCreateAllocation,
+        DdiSlot::DxgkDdiPatch, DdiSlot::DxgkDdiRender, DdiSlot::DxgkDdiRenderKm,
+        DdiSlot::DxgkDdiAcquireSwizzlingRange, DdiSlot::DxgkDdiReleaseSwizzlingRange, DdiSlot::DxgkDdiStopCapture,
+        DdiSlot::DxgkDdiCreateOverlay, DdiSlot::DxgkDdiUpdateOverlay, DdiSlot::DxgkDdiFlipOverlay,
+        DdiSlot::DxgkDdiDestroyOverlay,
+    };
+    render_adapter_ = false;
+    missing_render_slot_ = DdiSlot::Version;
+    bool any = false;
+    for (const DdiSlot slot : render_only) any = any || has(slot);
+    if (!any) return 0;
+    for (const Required &entry : required) {
+        if (has(entry.slot) || entry.alternative == DdiSlot::Version || has(entry.alternative)) continue;
+        missing_render_slot_ = entry.slot;
+        return refuse(CapabilityRule::render_ddis_incomplete, status_revision_mismatch);
+    }
+    const DdiSlot wddm_1_x[] = {DdiSlot::DxgkDdiCreateAllocation, DdiSlot::DxgkDdiPatch, DdiSlot::DxgkDdiRender};
+    for (const DdiSlot slot : wddm_1_x) {
+        if (caps_.WDDMVersion >= wddm_2_0 || has(slot)) continue;
+        missing_render_slot_ = slot;
+        return refuse(CapabilityRule::render_ddis_incomplete, status_revision_mismatch);
+    }
+    render_adapter_ = true;
+    return 0;
+}
+
+std::int32_t FakeDxgadapter::create_render_core()
+{
+    failed_ = CapabilityRule::none;
+    const std::int32_t status = render_ddi_rule();
+    if (status < 0 || !render_adapter_) return status;
+    if (caps_.NumberOfSwizzlingRanges != 0u &&
+        (!has(DdiSlot::DxgkDdiAcquireSwizzlingRange) || !has(DdiSlot::DxgkDdiReleaseSwizzlingRange)))
+        return refuse(CapabilityRule::swizzling_without_ddis, status_revision_mismatch);
+    const bool multi_engine = bit(caps_.SchedulingCaps, scheduling_multi_engine_aware);
+    if (!multi_engine && bit(caps_.SchedulingCaps, scheduling_wddm_1_2_bits))
+        return refuse(CapabilityRule::preemption_without_multi_engine, status_invalid_parameter);
+    if (multi_engine && caps_.WDDMVersion < wddm_2_0 && caps_.GpuEngineTopologyNbAsymetricProcessingNodes == 0u)
+        return refuse(CapabilityRule::multi_engine_without_nodes, status_invalid_parameter);
+    return 0;
+}
+
+bool    FakeDxgadapter::render_adapter() const { return render_adapter_; }
+DdiSlot FakeDxgadapter::missing_render_slot() const { return missing_render_slot_; }
 
 CapabilityRule              FakeDxgadapter::failed_rule() const { return failed_; }
 const DxgkDriverCapsRecord &FakeDxgadapter::driver_caps() const { return caps_; }

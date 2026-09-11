@@ -40,8 +40,10 @@ service owning a collection); nothing here is a namespace with static methods.
 | `ByteRange` | object | A `[base, base + size)` span and whether it is representable |
 | `VirtualRange` | object | One reserved-or-bound span and its binding |
 | `GpuVirtualAddressSpace` | system | Reserve, map, unmap, release, translate; overlap and ordering rules |
-| `Allocation` | object | One allocation: size, flags, residency state, refcount, shared identity |
-| `Segment` | object | One memory segment as reported to VidMm; placement legality |
+| `Allocation` | object | One allocation: its descriptor, page-rounded size, open count |
+| `AllocationTable` | system | The adapter's allocations, created and destroyed all-or-nothing |
+| `DeviceTable` | system | The adapter's devices and what each has open |
+| `ApertureSegment` | object | The memory segment reported to VidMm |
 | `PagingEngine` | system | `BuildPagingBuffer` operation emission and the byte budget |
 | `Context` | object | One execution context: node, engine affinity, priority |
 | `Node` | object | One scheduling queue and its pending packets |
@@ -167,6 +169,10 @@ Each scenario arrives with the DDIs it calls. Since feature 006:
   `NATIVE_FENCE_CAPS`), run by `FakeDxgkrnlFdo` after QueryChildRelations, with
   one `CapabilityRule` per check dxgkrnl applies - so a capability claimed
   without the DDIs it needs fails start in a test, as it would in the guest.
+
+- `FakeVidMm` is VidMm's segment creation for a render adapter (feature 008),
+  and `FakeHandleTable` dxgkrnl's allocation handles behind
+  `DxgkCbGetHandleData`.
 
 `tests/unit/test_ddi_scenarios.cpp` runs the bring-up and teardown plus stop
 twice, remove without stop, an interrupt before start, a failed start, reset at

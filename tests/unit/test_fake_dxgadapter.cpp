@@ -251,3 +251,95 @@ TEST(fake_dxgadapter_initialize, native_gpu_fence_requires_its_caps_and_wddm_3_2
   miniport.fail_query(37, no_memory);
   CHECK_EQ(adapter.initialize(&miniport, 1u), no_memory);
   CHECK(adapter.failed_rule() == CapabilityRule::native_fence_caps_query_failed); }
+
+/* ---- CreateRenderCore's DDI rule -------------------------------------------- */
+
+namespace {
+
+const DdiSlot full_wddm_1_render_set[] = {
+    DdiSlot::DxgkDdiCreateDevice, DdiSlot::DxgkDdiDestroyAllocation, DdiSlot::DxgkDdiDescribeAllocation,
+    DdiSlot::DxgkDdiOpenAllocation, DdiSlot::DxgkDdiCloseAllocation, DdiSlot::DxgkDdiGetStandardAllocationDriverData,
+    DdiSlot::DxgkDdiSubmitCommand, DdiSlot::DxgkDdiPreemptCommand, DdiSlot::DxgkDdiBuildPagingBuffer,
+    DdiSlot::DxgkDdiResetFromTimeout, DdiSlot::DxgkDdiRestartFromTimeout, DdiSlot::DxgkDdiQueryCurrentFence,
+    DdiSlot::DxgkDdiControlInterrupt, DdiSlot::DxgkDdiDestroyDevice, DdiSlot::DxgkDdiCollectDbgInfo,
+    DdiSlot::DxgkDdiPresent, DdiSlot::DxgkDdiCreateAllocation, DdiSlot::DxgkDdiPatch, DdiSlot::DxgkDdiRender,
+};
+
+}  // namespace
+
+TEST(fake_dxgadapter_create_render_core, no_render_ddi_is_a_display_only_adapter)
+{ MockPlatform platform; CraftedMiniport miniport;
+  FakeDxgadapter adapter(platform, miniport.table());
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(adapter.create_render_core(), 0);
+  CHECK(!adapter.render_adapter());
+  CHECK(adapter.missing_render_slot() == DdiSlot::Version); }
+
+TEST(fake_dxgadapter_create_render_core, a_partial_set_names_the_first_missing_slot)
+{ MockPlatform platform; CraftedMiniport miniport;
+  miniport.register_slot(DdiSlot::DxgkDdiCreateDevice);
+  miniport.register_slot(DdiSlot::DxgkDdiDestroyAllocation);
+  FakeDxgadapter adapter(platform, miniport.table());
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(adapter.create_render_core(), revision_mismatch);
+  CHECK(adapter.failed_rule() == CapabilityRule::render_ddis_incomplete);
+  CHECK(adapter.missing_render_slot() == DdiSlot::DxgkDdiDescribeAllocation);
+  CHECK(!adapter.render_adapter()); }
+
+TEST(fake_dxgadapter_create_render_core, each_required_slot_is_required)
+{ for (const DdiSlot left_out : full_wddm_1_render_set) {
+      MockPlatform platform; CraftedMiniport miniport;
+      for (const DdiSlot slot : full_wddm_1_render_set)
+          if (slot != left_out) miniport.register_slot(slot);
+      FakeDxgadapter adapter(platform, miniport.table());
+      CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+      CHECK_EQ(adapter.create_render_core(), revision_mismatch);
+      CHECK(adapter.missing_render_slot() == left_out);
+  } }
+
+TEST(fake_dxgadapter_create_render_core, the_full_wddm_1_set_is_a_render_adapter)
+{ MockPlatform platform; CraftedMiniport miniport;
+  for (const DdiSlot slot : full_wddm_1_render_set) miniport.register_slot(slot);
+  FakeDxgadapter adapter(platform, miniport.table());
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(adapter.create_render_core(), 0);
+  CHECK(adapter.render_adapter()); }
+
+TEST(fake_dxgadapter_create_render_core, alternatives_wddm_2_and_compute_only_relax_the_set)
+{ MockPlatform platform; CraftedMiniport miniport;
+  const DdiSlot relaxed[] = {DdiSlot::DxgkDdiQueryCurrentFence, DdiSlot::DxgkDdiControlInterrupt,
+                             DdiSlot::DxgkDdiCollectDbgInfo, DdiSlot::DxgkDdiCreateAllocation,
+                             DdiSlot::DxgkDdiPatch, DdiSlot::DxgkDdiRender};
+  for (const DdiSlot slot : full_wddm_1_render_set) {
+      bool is_relaxed = false;
+      for (const DdiSlot candidate : relaxed) is_relaxed = is_relaxed || candidate == slot;
+      if (!is_relaxed) miniport.register_slot(slot);
+  }
+  miniport.register_slot(DdiSlot::DxgkDdiCollectDbgInfo2);
+  miniport.caps().WDDMVersion = 0x2000;
+  miniport.caps().SchedulingCaps = 0x1u;
+  miniport.caps().MiscCaps = 0x8u;   /* ComputeOnly */
+  FakeDxgadapter adapter(platform, miniport.table());
+  CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+  CHECK_EQ(adapter.create_render_core(), 0);
+  CHECK(adapter.render_adapter()); }
+
+TEST(fake_dxgadapter_create_render_core, refuses_swizzling_preemption_and_nodes_it_cannot_honour)
+{ struct Case { int knob; std::int32_t status; CapabilityRule rule; };
+  const Case cases[] = {
+      {0, revision_mismatch, CapabilityRule::swizzling_without_ddis},
+      {1, invalid_parameter, CapabilityRule::preemption_without_multi_engine},
+      {2, invalid_parameter, CapabilityRule::multi_engine_without_nodes},
+  };
+  for (const Case &c : cases) {
+      MockPlatform platform; CraftedMiniport miniport;
+      for (const DdiSlot slot : full_wddm_1_render_set) miniport.register_slot(slot);
+      FakeDxgadapter adapter(platform, miniport.table());
+      CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+      if (c.knob == 0) miniport.caps().NumberOfSwizzlingRanges = 1u;
+      if (c.knob == 1) { miniport.caps().WDDMVersion = 0x1200; miniport.caps().SchedulingCaps = 0x10u; }
+      if (c.knob == 2) miniport.caps().SchedulingCaps = 0x1u;
+      CHECK_EQ(adapter.initialize(&miniport, 1u), 0);
+      CHECK_EQ(adapter.create_render_core(), c.status);
+      CHECK(adapter.failed_rule() == c.rule);
+  } }

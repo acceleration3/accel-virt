@@ -41,5 +41,5 @@ description: "Task list for feature 008: WDDM 1.0 devices, allocations and segme
 
 ## Phase 6: Scenarios
 
-- [ ] T013 `FakeDxgadapter::render_core_rule`; scenarios: render core partial naming SubmitCommand, segments after start, a primary's life through the table, DestroyDevice with opens, RemoveDevice with devices outstanding
-- [ ] T014 Docs (`docs/ddi-sequences.md` render core and VidMm segments, `docs/protocol.md`); `tools/gate.sh`; merge
+- [X] T013 `FakeDxgadapter::render_core_rule`; scenarios: render core partial naming SubmitCommand, segments after start, a primary's life through the table, DestroyDevice with opens, RemoveDevice with devices outstanding
+- [X] T014 Docs (`docs/ddi-sequences.md` render core and VidMm segments, `docs/protocol.md`); `tools/gate.sh`; merge

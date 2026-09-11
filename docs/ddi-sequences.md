@@ -212,6 +212,49 @@ requested type is forwarded verbatim to slot 17 (relevant to §5) — and logs
 `STATUS_SUCCESS`, `STATUS_NOT_IMPLEMENTED` (0xC0000002),
 `STATUS_INVALID_PARAMETER` (0xC000000D) or `STATUS_NO_MEMORY` (0xC0000017).
 
+### 2.4a The render core and VidMm's segments
+
+After the capability checks, `DXGADAPTER::Initialize` calls
+`ADAPTER_RENDER::CreateRenderCore @ 1401b13d8`. It reads the render DDIs from
+dxgkrnl's copy of the table (`DXGADAPTER+0x1d0` .. `+0x300`, `+0x320`; slot 34
+`DefaultDdiEscape` at `+0x250`, slot 47 `DefaultDdiStopCapture` at `+0x2b0` and
+slot 49 `DefaultDdiCreateOverlay` at `+0x2c0` pin the mapping):
+
+- With none of CreateDevice, DestroyAllocation, DescribeAllocation,
+  OpenAllocation, CloseAllocation, GetStandardAllocationDriverData,
+  SubmitCommand, PreemptCommand, BuildPagingBuffer, ResetFromTimeout,
+  RestartFromTimeout, QueryCurrentFence, DestroyDevice, Present,
+  CreateAllocation, Patch, Render, RenderKm, the swizzling-range, StopCapture
+  and overlay DDIs registered, there is no render core.
+- Otherwise every one of CreateDevice, DestroyAllocation, DescribeAllocation,
+  OpenAllocation, CloseAllocation, GetStandardAllocationDriverData,
+  SubmitCommand, PreemptCommand, BuildPagingBuffer, ResetFromTimeout,
+  RestartFromTimeout, QueryCurrentFence (not needed from WDDM 2.0),
+  ControlInterrupt (not needed with `MiscCaps.ComputeOnly`), DestroyDevice,
+  CollectDbgInfo or CollectDbgInfo2, and Present must be registered - and for a
+  WDDM 1.x `WDDMVersion` also CreateAllocation, Patch and Render - or start fails
+  with `STATUS_REVISION_MISMATCH`.
+- `NumberOfSwizzlingRanges` needs both swizzling-range DDIs;
+  `PreemptionAware` or `CancelCommandAware` without `MultiEngineAware` fails
+  with `STATUS_INVALID_PARAMETER`, as does `MultiEngineAware` below WDDM 2.0
+  with no asymmetric node.
+
+`FakeDxgadapter::create_render_core` applies this; the scenario tests name the
+first missing slot, so the render DDI set's progress is visible feature by
+feature (SubmitCommand at 008).
+
+A render adapter's VidMm then creates its segments in
+`CreatePhysicalAdapterSegments @ 14009de94` (dxgmms2): `DXGKQAITYPE_QUERYSEGMENT4`
+with a null descriptor array for `NbSegment` (0 fails with
+`STATUS_UNSUCCESSFUL`, "Driver must provide at least one segment"; above 32
+too), then again with `SegmentDescriptorStride` 0x68 and the array.
+`ValidateSegmentDescriptors @ 14009ec8c` then requires page-aligned sizes,
+flags below bit 22 without `Agp`, `PreservedDuringHibernate` or
+`PartiallyPreservedDuringHibernate` only (and not both) with
+`PreservedDuringStandby`, no `Aperture` or `CpuVisible` on a segment with a CPU
+host aperture, at most one UEFI frame-buffer range in at most one segment, and
+`PagingBufferSegmentId <= NbSegment`. `FakeVidMm` applies it.
+
 ### 2.5 QueryChildStatus / QueryDeviceDescriptor
 
 `DxgkDdiQueryChildStatus` (slot 9) is not called from the FDO start path
