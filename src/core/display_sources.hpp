@@ -1,13 +1,13 @@
 /* The adapter's VidPn sources: the private driver format dxgkrnl last set for
  * each, the mode committed to each, the primary each scans out and whether it
  * is visible, and whether dxgkrnl wants vsync interrupts. dxgkrnl serializes
- * the display DDIs that change them; the scanout address alone is also read by
- * the vsync tick, so a spin lock guards it. */
+ * the display DDIs that change them. The scanout address is stored atomically:
+ * with FlipOnVSyncMmIo dxgkrnl sets it at device IRQL, and the vsync tick reads
+ * it at DISPATCH. */
 #ifndef AV_DISPLAY_SOURCES_HPP
 #define AV_DISPLAY_SOURCES_HPP
 
 #include "platform.hpp"
-#include "spin_lock.hpp"
 #include "status.hpp"
 
 #include <stdint.h>
@@ -47,7 +47,6 @@ private:
     uint32_t           private_formats_[source_count];
     const DisplayMode *committed_[source_count];
     bool               vsync_enabled_;
-    SpinLock           scanout_lock_;
     uint64_t           scanout_addresses_[source_count];
     bool               visible_[source_count];
 };

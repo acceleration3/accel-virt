@@ -131,7 +131,7 @@ TEST(allocation_table_create, gives_each_allocation_a_live_handle_and_a_page_rou
       Allocation *allocation = fixture.table().find(fixture.info(i).hAllocation);
       CHECK(allocation != nullptr);
       CHECK(fixture.info(i).Size == 0x1000u);
-      CHECK_EQ(fixture.info(i).SupportedReadSegmentSet, 1u);
+      CHECK_EQ(fixture.info(i).SupportedReadSegmentSet, 2u);
   }
   CHECK(fixture.info(0u).hAllocation != fixture.info(1u).hAllocation); }
 

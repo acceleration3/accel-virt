@@ -14,6 +14,7 @@
 #include "driver_capabilities.hpp"
 #include "edid.hpp"
 #include "execution_node.hpp"
+#include "gpu_mmu_geometry.hpp"
 #include "hardware_cursor.hpp"
 #include "interrupt_notification.hpp"
 #include "dxgkrnl_interface.hpp"
@@ -139,7 +140,7 @@ public:
     int32_t get_scan_line(DxgkargGetScanLineRecord *request);
     /* CRTC_VSYNC starts and stops the synthetic vsync. */
     int32_t control_interrupt(int32_t type, uint8_t enable);
-    /* At most DISPATCH: the vsync tick reads the address it sets. */
+    /* With FlipOnVSyncMmIo, at device IRQL synchronized with the interrupt. */
     int32_t set_vidpn_source_address(const DxgkargSetVidPnSourceAddressRecord *request);
     int32_t set_vidpn_source_visibility(const DxgkargSetVidPnSourceVisibilityRecord *request);
     int32_t present(void *context, DxgkargPresentRecord *request);
@@ -175,7 +176,7 @@ public:
     int32_t power_runtime_control_request(const void *control_code, const void *input, size_t input_size,
                                           void *output, size_t output_size, size_t *returned);
     int32_t set_vidpn_source_address_with_multi_plane_overlay(const void *request);
-    /* As basicrender.sys: one 3D node named 3DNode00. */
+    /* One 3D node named 3DNode00, as basicrender.sys names it, with a GPU MMU. */
     int32_t get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRecord *metadata);
     int32_t set_power_pstate(uint32_t component, uint32_t pstate);
     /* ControlInterrupt with a vsync state; a timer has no phase to keep. */
@@ -189,7 +190,14 @@ private:
     static constexpr uint32_t config_space_bytes = 256u;
     static constexpr uint32_t adapter_device_uid = 0xFFFFFFFFu;  /* DISPLAY_ADAPTER_HW_ID */
     enum : int32_t { power_unspecified = 0, power_d0 = 1, power_d3 = 4 };
-    enum : int32_t { query_driver_caps = 1, query_segment4 = 11, query_wddm_device_caps = 29 };   /* DXGKQAITYPE_* */
+    enum : int32_t {   /* DXGKQAITYPE_* */
+        query_driver_caps = 1,
+        query_segment4 = 11,
+        query_gpu_mmu_caps = 13,
+        query_page_table_level_desc = 14,
+        query_physical_adapter_caps = 15,
+        query_wddm_device_caps = 29,
+    };
     enum : int32_t { removal_hibernation = 0, removal_pnp_notify = 1 };   /* DXGK_SURPRISE_REMOVAL_TYPE */
     enum : int32_t { vsync_enable = 0, vsync_disable_no_phase = 2 };      /* DXGK_CRTC_VSYNC_STATE */
     enum : int32_t { engine_type_3d = 1 };                                /* DXGK_ENGINE_TYPE_3D */
@@ -209,6 +217,7 @@ private:
     VirtioPciLayout                layout_;
     ObjectStorage<VirtioGpuDevice> device_;
     DriverCapabilities             capabilities_;
+    GpuMmuGeometry                 geometry_;
     ApertureSegment                segment_;
     DisplayModeList                modes_;
     Edid                           edid_;

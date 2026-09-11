@@ -1,12 +1,10 @@
 #include "display_sources.hpp"
 
-#include "spin_lock_guard.hpp"
-
 namespace av {
 
 DisplaySources::DisplaySources(Platform &platform)
     : platform_(platform), private_formats_{}, committed_{}, vsync_enabled_(false),
-      scanout_lock_(platform, LockRank::display_scanout), scanout_addresses_{}, visible_{} {}
+      scanout_addresses_{}, visible_{} {}
 
 Status DisplaySources::set_private_format(uint32_t source, uint32_t attribute)
 {
@@ -49,23 +47,18 @@ bool DisplaySources::vsync_enabled() const
     return vsync_enabled_;
 }
 
-/* dxgkrnl calls SetVidPnSourceAddress above DISPATCH only for a driver
- * reporting FlipOnVSyncMmIo, which this one does not. */
 Status DisplaySources::set_scanout(uint32_t source, int64_t address)
 {
-    platform_.require_irql_at_most(Irql::dispatch, "DisplaySources::set_scanout");
+    platform_.require_irql_at_most(Irql::isr, "DisplaySources::set_scanout");
     if (source >= source_count) return Status::invalid_parameter;
-    SpinLockGuard lock(scanout_lock_);
-    scanout_addresses_[source] = static_cast<uint64_t>(address);
+    platform_.store_atomic(scanout_addresses_[source], static_cast<uint64_t>(address));
     return Status::ok;
 }
 
 uint64_t DisplaySources::scanout_address(uint32_t source)
 {
-    platform_.require_irql_at_most(Irql::dispatch, "DisplaySources::scanout_address");
-    if (source >= source_count) return 0u;
-    SpinLockGuard lock(scanout_lock_);
-    return scanout_addresses_[source];
+    platform_.require_irql_at_most(Irql::isr, "DisplaySources::scanout_address");
+    return source < source_count ? platform_.load_atomic(scanout_addresses_[source]) : 0u;
 }
 
 Status DisplaySources::set_visible(uint32_t source, bool visible)

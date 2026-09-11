@@ -24,9 +24,20 @@ public:
     [[nodiscard]] Status report_driver_caps(const AdapterInfoQuery &query) const;
     /* DXGKQAITYPE_WDDMDEVICECAPS, which dxgkrnl may ask before StartDevice. */
     [[nodiscard]] Status report_wddm_device_caps(const AdapterInfoQuery &query) const;
+    /* DXGKQAITYPE_PHYSICALADAPTERCAPS for physical adapter 0, named by dxgkrnl's
+     * device handle. */
+    [[nodiscard]] Status report_physical_adapter_caps(const AdapterInfoQuery &query, void *device_handle) const;
 
 private:
-    static constexpr int32_t wddm_1_0 = 0x1000;   /* DXGKDDI_WDDMv1 */
+    static constexpr int32_t wddm_2_0 = 0x2000;   /* DXGKDDI_WDDMv2 */
+    enum : uint32_t {
+        scheduling_multi_engine_aware = 0x1u,      /* DXGK_VIDSCHCAPS */
+        memory_virtual_addressing = 0x20u,         /* DXGK_VIDMMCAPS: VidMm keys on it */
+        memory_gpu_mmu = 0x40u,                    /* dxgkrnl keys on it */
+        flip_on_vsync_mmio = 0x2u,                 /* DXGK_FLIPCAPS: SetVidPnSourceAddress at device IRQL */
+        physical_gpu_mmu = 0x2u,                   /* DXGK_PHYSICALADAPTERFLAGS */
+    };
+    static constexpr uint32_t node_count = 1u;
     /* The virtio device addresses all of guest physical memory. */
     static constexpr int64_t any_address = -1;
     static constexpr uint32_t interface_version_bytes = 4u;   /* DXGK_WDDMDEVICECAPSIN */

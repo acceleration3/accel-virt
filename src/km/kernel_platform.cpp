@@ -108,6 +108,18 @@ void KernelPlatform::release_mutex(void *storage, LockRank)
 
 uint64_t KernelPlatform::interrupt_time() const { return KeQueryInterruptTime(); }
 
+/* LONG64 and uint64_t may alias: they differ only in signedness. */
+void KernelPlatform::store_atomic(uint64_t &target, uint64_t value)
+{
+    static_cast<void>(InterlockedExchange64(reinterpret_cast<LONG64 *>(&target), static_cast<LONG64>(value)));
+}
+
+/* Adding zero answers the value as one atomic read. */
+uint64_t KernelPlatform::load_atomic(uint64_t &source)
+{
+    return static_cast<uint64_t>(InterlockedExchangeAdd64(reinterpret_cast<LONG64 *>(&source), 0));
+}
+
 uint64_t KernelPlatform::performance_counter(uint64_t &frequency) const
 {
     LARGE_INTEGER ticks_per_second = {};

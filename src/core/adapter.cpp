@@ -74,7 +74,8 @@ enum : int32_t {
 
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
-      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), segment_(platform),
+      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), geometry_(platform),
+      segment_(platform),
       modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_),
       node_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
@@ -277,6 +278,12 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
         return NtStatus(capabilities_.report_wddm_device_caps(request)).value();
     case query_segment4:
         return NtStatus(segment_.report(request)).value();
+    case query_gpu_mmu_caps:
+        return NtStatus(geometry_.report_caps(request)).value();
+    case query_page_table_level_desc:
+        return NtStatus(geometry_.report_level(request)).value();
+    case query_physical_adapter_caps:
+        return NtStatus(capabilities_.report_physical_adapter_caps(request, dxgkrnl_.device_handle())).value();
     default:
         return NtStatus(NtStatus::not_implemented).value();
     }
@@ -525,7 +532,7 @@ int32_t Adapter::control_interrupt(int32_t type, uint8_t enable)
 /* A null allocation leaves the source showing nothing. */
 int32_t Adapter::set_vidpn_source_address(const DxgkargSetVidPnSourceAddressRecord *request)
 {
-    platform_.require_irql_at_most(Irql::dispatch, "Adapter::set_vidpn_source_address");
+    platform_.require_irql_at_most(Irql::isr, "Adapter::set_vidpn_source_address");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (request->hAllocation == nullptr) return NtStatus(sources_.set_scanout(request->VidPnSourceId, 0)).value();
     if (request->PrimarySegment != ApertureSegment::segment_id) return NtStatus(Status::invalid_parameter).value();
@@ -696,6 +703,7 @@ int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRe
     static constexpr char name[] = "3DNode00";
     *metadata = DxgkNodeMetadataRecord{};
     metadata->EngineType = engine_type_3d;
+    metadata->GpuMmuSupported = 1u;
     for (uint32_t index = 0u; index + 1u < sizeof name; index++)
         metadata->FriendlyName[index] = static_cast<uint16_t>(name[index]);
     return NtStatus(Status::ok).value();

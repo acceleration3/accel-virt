@@ -52,7 +52,6 @@ TEST(display_sources_set_scanout, remembers_the_primary_address_until_cleared)
   CHECK_EQ(sources.scanout_address(0u), 0u);
   CHECK_STATUS(sources.set_scanout(0u, 0x123456789000ll), Status::ok);
   CHECK_EQ(sources.scanout_address(0u), 0x123456789000ull);
-  CHECK_EQ(platform.locks_held(), 0u);
   CHECK_STATUS(sources.set_scanout(0u, 0), Status::ok);
   CHECK_EQ(sources.scanout_address(0u), 0u); }
 
@@ -69,16 +68,13 @@ TEST(display_sources_set_visible, remembers_visibility_per_source)
   CHECK_STATUS(sources.set_visible(DisplaySources::source_count, true), Status::invalid_parameter);
   CHECK(!sources.visible(DisplaySources::source_count)); }
 
-TEST(display_sources, scanout_is_readable_and_writable_at_dispatch)
+TEST(display_sources, scanout_is_readable_and_writable_at_device_irql)
 { MockPlatform platform; DisplaySources sources(platform);
-  platform.set_irql(Irql::dispatch);
+  platform.set_irql(Irql::isr);
   CHECK_STATUS(sources.set_scanout(0u, 0x2000), Status::ok);
   CHECK_EQ(sources.scanout_address(0u), 0x2000u);
-  platform.set_irql(Irql::isr);
-  static_cast<void>(sources.set_scanout(0u, 0x2000));
-  static_cast<void>(sources.scanout_address(0u));
   platform.set_irql(Irql::passive);
-  while (platform.claim(Violation::irql_ceiling)) {} }
+  CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
 TEST(display_sources, is_passive_only)
 { MockPlatform platform; DisplaySources sources(platform);

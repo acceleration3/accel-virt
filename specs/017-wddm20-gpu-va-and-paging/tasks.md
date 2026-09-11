@@ -16,11 +16,11 @@ description: "Task list for feature 017: WDDM 2.0 GPU virtual addressing"
 
 ## Phase 3: Scanout at device IRQL
 
-- [ ] T003 Tests then `Platform` atomics; `DisplaySources` scanout atomic
+- [X] T003 Tests then `Platform` atomics; `DisplaySources` scanout atomic
 
 ## Phase 4: Capabilities
 
-- [ ] T004 Tests then `GpuMmuGeometry`; `DriverCapabilities` 2.0 and PHYSICALADAPTERCAPS; adapter queries; node metadata; allocation segments
+- [X] T004 Tests then `GpuMmuGeometry`; `DriverCapabilities` 2.0 and PHYSICALADAPTERCAPS; adapter queries; node metadata; allocation segments
 
 **Checkpoint**: commit.
 

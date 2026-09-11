@@ -169,6 +169,12 @@ TEST(dxgkrnl_interface_initialize, copies_the_table_dxgkrnl_passes)
   CHECK(interface.queue_dpc());
   CHECK_EQ(callbacks.dpcs, 1u); }
 
+TEST(dxgkrnl_interface_device_handle, is_dxgkrnl_s_handle_once_initialized)
+{ MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;
+  CHECK(interface.device_handle() == nullptr);
+  CHECK_STATUS(interface.initialize(&callbacks.record()), Status::ok);
+  CHECK(interface.device_handle() == &callbacks); }
+
 TEST(dxgkrnl_interface_initialize, refuses_a_missing_or_short_table)
 { MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;
   CHECK_STATUS(interface.initialize(nullptr), Status::invalid_parameter);

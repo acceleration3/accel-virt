@@ -1,5 +1,6 @@
 #include "../../src/core/adapter_info_query.hpp"
 #include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
+#include "../../src/core/ddi/dxgk_physical_adapter_caps_record.hpp"
 #include "../../src/core/ddi/dxgk_wddm_device_caps_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
 #include "../../src/core/driver_capabilities.hpp"
@@ -26,7 +27,7 @@ using av::Violation;
 namespace {
 
 constexpr std::uint32_t driver_caps_bytes = 0x250u;   /* GetDriverCapsSizeFromDdiVersion(0x11007) */
-constexpr std::int32_t  wddm_v1 = 0x1000;             /* DXGKDDI_WDDMv1 */
+constexpr std::int32_t  wddm_v2 = 0x2000;             /* DXGKDDI_WDDMv2 */
 
 DxgkargQueryAdapterInfoRecord request(void *input, std::uint32_t input_size, void *output, std::uint32_t output_size)
 {
@@ -48,19 +49,25 @@ TEST(driver_capabilities_report_driver_caps, fills_exactly_the_wddm_3_2_block)
   CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, record)), Status::ok);
   CHECK(output.guards_intact()); }
 
-/* Constitution VI: nothing is claimed before it is implemented. WDDM 1.0, an
- * unrestricted address range and the hardware cursor (feature 013) are the
- * whole answer at this level. */
-TEST(driver_capabilities_report_driver_caps, claims_wddm_1_0_and_the_hardware_cursor)
+/* Constitution VI: nothing is claimed before it is implemented. WDDM 2.0 with a
+ * GPU MMU, MultiEngineAware over one node and flips at device IRQL (017),
+ * per-engine recovery (015), an unrestricted address range and the hardware
+ * cursor (013) are the whole answer at this level. */
+TEST(driver_capabilities_report_driver_caps, claims_wddm_2_0_gpu_mmu_and_what_earlier_features_implement)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
   DxgkDriverCapsRecord caps;
   std::memset(&caps, 0xA5, sizeof caps);
   const DxgkargQueryAdapterInfoRecord record = request(nullptr, 0u, &caps, sizeof caps);
   CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, record)), Status::ok);
-  CHECK_EQ(caps.WDDMVersion, wddm_v1);
+  CHECK_EQ(caps.WDDMVersion, wddm_v2);
   CHECK(caps.HighestAcceptableAddress == -1);
   DxgkDriverCapsRecord expected = {};
-  expected.WDDMVersion = wddm_v1;
+  expected.WDDMVersion = wddm_v2;
+  expected.SchedulingCaps = 0x1u;          /* MultiEngineAware */
+  expected.MemoryManagementCaps = 0x60u;   /* VirtualAddressingSupported | GpuMmuSupported */
+  expected.GpuEngineTopologyNbAsymetricProcessingNodes = 1u;
+  expected.FlipCaps = 0x2u;                /* FlipOnVSyncMmIo */
+  expected.SupportPerEngineTDR = 1u;
   expected.HighestAcceptableAddress = -1;
   expected.MaxPointerWidth = 64u;
   expected.MaxPointerHeight = 64u;
@@ -78,7 +85,7 @@ TEST(driver_capabilities_report_wddm_device_caps, answers_the_same_wddm_version)
   std::uint32_t interface_version = 0x11007u; DxgkWddmDeviceCapsRecord caps = {};
   const DxgkargQueryAdapterInfoRecord record = request(&interface_version, 4u, &caps, sizeof caps);
   CHECK_STATUS(capabilities.report_wddm_device_caps(AdapterInfoQuery(platform, record)), Status::ok);
-  CHECK_EQ(caps.WDDMVersion, wddm_v1); }
+  CHECK_EQ(caps.WDDMVersion, wddm_v2); }
 
 TEST(driver_capabilities_report_wddm_device_caps, a_short_input_or_output_is_invalid)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
@@ -99,4 +106,40 @@ TEST(driver_capabilities, is_passive_only)
   static_cast<void>(capabilities.report_wddm_device_caps(AdapterInfoQuery(platform, device)));
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling));
+  while (platform.claim(Violation::irql_ceiling)) {} }
+
+TEST(driver_capabilities_report_physical_adapter_caps, one_gpu_mmu_node_that_also_pages)
+{ MockPlatform platform; const DriverCapabilities capabilities(platform);
+  std::uint32_t physical_adapter = 0u;
+  av::DxgkPhysicalAdapterCapsRecord caps;
+  std::memset(&caps, 0xEE, sizeof caps);
+  int handle = 0;
+  const DxgkargQueryAdapterInfoRecord record = request(&physical_adapter, 4u, &caps, sizeof caps);
+  CHECK_STATUS(capabilities.report_physical_adapter_caps(AdapterInfoQuery(platform, record), &handle), Status::ok);
+  CHECK_EQ(caps.NumExecutionNodes, 1u);
+  CHECK_EQ(caps.PagingNodeIndex, 0u);
+  CHECK(caps.DxgkPhysicalAdapterHandle == &handle);
+  CHECK_EQ(caps.Flags, 0x2u);   /* GpuMmuSupported */
+  CHECK_EQ(caps.VPRPagingNode, 0u);
+  CHECK_EQ(caps.VirtualCopyNodeIndex, 0u); }
+
+TEST(driver_capabilities_report_physical_adapter_caps, another_adapter_or_short_buffers_are_invalid)
+{ MockPlatform platform; const DriverCapabilities capabilities(platform);
+  std::uint32_t physical_adapter = 1u;
+  av::DxgkPhysicalAdapterCapsRecord caps = {};
+  CHECK_STATUS(capabilities.report_physical_adapter_caps(
+                   AdapterInfoQuery(platform, request(&physical_adapter, 4u, &caps, sizeof caps)), nullptr),
+               Status::invalid_parameter);
+  physical_adapter = 0u;
+  CHECK_STATUS(capabilities.report_physical_adapter_caps(
+                   AdapterInfoQuery(platform, request(&physical_adapter, 3u, &caps, sizeof caps)), nullptr),
+               Status::invalid_parameter);
+  CHECK_STATUS(capabilities.report_physical_adapter_caps(
+                   AdapterInfoQuery(platform, request(&physical_adapter, 4u, &caps, 0x1Fu)), nullptr),
+               Status::invalid_parameter);
+  CHECK_EQ(caps.NumExecutionNodes, 0u);
+  platform.set_irql(Irql::dispatch);
+  static_cast<void>(capabilities.report_physical_adapter_caps(
+      AdapterInfoQuery(platform, request(&physical_adapter, 4u, &caps, sizeof caps)), nullptr));
+  platform.set_irql(Irql::passive);
   while (platform.claim(Violation::irql_ceiling)) {} }

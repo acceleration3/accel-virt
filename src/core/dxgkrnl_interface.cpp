@@ -128,6 +128,12 @@ Status DxgkrnlInterface::query_vidpn_interface(void *vidpn, const DxgkVidPnInter
 
 bool DxgkrnlInterface::initialized() const { return initialized_; }
 
+void *DxgkrnlInterface::device_handle() const
+{
+    platform_.require_irql_at_most(Irql::isr, "DxgkrnlInterface::device_handle");
+    return initialized_ ? record_.DeviceHandle : nullptr;
+}
+
 bool DxgkrnlInterface::invariants_hold() const { return !initialized_ || has_callbacks(record_); }
 
 }  // namespace av

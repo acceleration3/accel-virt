@@ -17,6 +17,9 @@ struct ApertureSegmentProbe;
 class ApertureSegment {
 public:
     static constexpr uint32_t segment_id = 1u;
+    /* The system memory segment VidMm appends after this one for a GPU MMU
+     * adapter (CreatePhysicalAdapterSegments). */
+    static constexpr uint32_t system_memory_segment_id = segment_id + 1u;
     static constexpr uint64_t page_bytes = 0x1000u;
 
     explicit ApertureSegment(Platform &platform);

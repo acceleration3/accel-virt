@@ -231,6 +231,10 @@ void MockPlatform::release_mutex(void *, LockRank rank)
 std::uint64_t MockPlatform::interrupt_time() const { return now_; }
 
 /* A stall busy-waits in the kernel; here it only moves the clock. */
+void MockPlatform::store_atomic(std::uint64_t &target, std::uint64_t value) { target = value; }
+
+std::uint64_t MockPlatform::load_atomic(std::uint64_t &source) { return source; }
+
 std::uint64_t MockPlatform::performance_counter(std::uint64_t &frequency) const
 {
     frequency = 10000000u;

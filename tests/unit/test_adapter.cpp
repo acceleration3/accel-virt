@@ -8,6 +8,10 @@
 #include "../../src/core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
 #include "../../src/core/ddi/dxgk_child_container_id_record.hpp"
 #include "../../src/core/ddi/dxgk_gpu_clock_data_record.hpp"
+#include "../../src/core/ddi/dxgk_gpu_mmu_caps_record.hpp"
+#include "../../src/core/ddi/dxgk_page_table_level_desc_record.hpp"
+#include "../../src/core/ddi/dxgk_physical_adapter_caps_record.hpp"
+#include "../../src/core/ddi/dxgk_query_page_table_level_desc_in_record.hpp"
 #include "../../src/core/ddi/dxgk_node_metadata_record.hpp"
 #include "../../src/core/ddi/dxgk_display_information_record.hpp"
 #include "../../src/core/ddi/dxgkarg_cancel_command_record.hpp"
@@ -621,7 +625,7 @@ TEST(adapter_set_vidpn_source_address, the_vsync_reports_the_primary_it_names)
   request.PrimarySegment = 1u;
   request.PrimaryAddress = 0x7000000000ll;
   request.hAllocation = &primary;
-  fixture.platform().set_irql(Irql::dispatch);
+  fixture.platform().set_irql(Irql::isr);
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&request)), success);
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
@@ -689,10 +693,8 @@ TEST(adapter, the_display_ddis_are_passive_only)
   static_cast<void>(fixture.adapter().control_interrupt(0, 0u));
   static_cast<void>(fixture.adapter().set_vidpn_source_visibility(nullptr));
   static_cast<void>(fixture.adapter().present(nullptr, nullptr));
-  fixture.platform().set_irql(Irql::isr);
-  static_cast<void>(fixture.adapter().set_vidpn_source_address(nullptr));
   fixture.platform().set_irql(Irql::passive);
-  for (int call = 0; call < 12; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
+  for (int call = 0; call < 11; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
 
 /* ---- WDDM 1.3 (feature 016) -------------------------------------------------- */
 
@@ -707,7 +709,7 @@ TEST(adapter_get_node_metadata, one_3d_node_named_as_basicrender_names_it)
       CHECK_EQ(metadata.FriendlyName[index], static_cast<unsigned>(expected[index]));
   CHECK_EQ(metadata.FriendlyName[31], 0u);
   CHECK_EQ(metadata.Flags, 0u);
-  CHECK_EQ(metadata.GpuMmuSupported, 0u);
+  CHECK_EQ(metadata.GpuMmuSupported, 1u);
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(1u, &metadata)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0x10000u, &metadata)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().get_node_metadata(0u, nullptr)), invalid_parameter); }
@@ -1045,11 +1047,43 @@ std::uint32_t query_driver_caps_of(Adapter &adapter, DxgkDriverCapsRecord &caps)
 
 }  // namespace
 
-TEST(adapter_query_adapter_info, answers_driver_caps_with_wddm_1_0)
+TEST(adapter_query_adapter_info, answers_driver_caps_with_wddm_2_0)
 { Fixture fixture; DxgkDriverCapsRecord caps = {};
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(query_driver_caps_of(fixture.adapter(), caps), success);
-  CHECK_EQ(caps.WDDMVersion, 0x1000); }
+  CHECK_EQ(caps.WDDMVersion, 0x2000); }
+
+TEST(adapter_query_adapter_info, answers_the_gpu_mmu_and_physical_adapter_queries)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  std::uint32_t physical_adapter = 0u;
+  av::DxgkGpuMmuCapsRecord mmu = {};
+  DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = 13;
+  query.pInputData = &physical_adapter;
+  query.InputDataSize = sizeof physical_adapter;
+  query.pOutputData = &mmu;
+  query.OutputDataSize = sizeof mmu;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(mmu.PageTableLevelCount, 4u);
+  av::DxgkQueryPageTableLevelDescInRecord level_in = {3u, 0u};
+  av::DxgkPageTableLevelDescRecord level = {};
+  query.Type = 14;
+  query.pInputData = &level_in;
+  query.InputDataSize = sizeof level_in;
+  query.pOutputData = &level;
+  query.OutputDataSize = sizeof level;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(level.PageTableIndexBitCount, 9u);
+  av::DxgkPhysicalAdapterCapsRecord physical = {};
+  query.Type = 15;
+  query.pInputData = &physical_adapter;
+  query.InputDataSize = sizeof physical_adapter;
+  query.pOutputData = &physical;
+  query.OutputDataSize = sizeof physical;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(physical.Flags, 0x2u);
+  CHECK(physical.DxgkPhysicalAdapterHandle == &fixture.dxgkrnl()); }
 
 TEST(adapter_query_adapter_info, driver_caps_do_not_depend_on_the_device_state)
 { Fixture fixture; DxgkDriverCapsRecord before = {}, started = {}, d3 = {}, stopped = {};
@@ -1074,7 +1108,7 @@ TEST(adapter_query_adapter_info, answers_wddm_device_caps_before_start)
   query.pOutputData = &caps;
   query.OutputDataSize = sizeof caps;
   CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
-  CHECK_EQ(caps, 0x1000); }
+  CHECK_EQ(caps, 0x2000); }
 
 TEST(adapter_query_adapter_info, answers_the_segment_query_once_started)
 { Fixture fixture; std::uint32_t physical_adapter = 0u; av::DxgkQuerySegmentOut4Record out = {};
@@ -1095,7 +1129,9 @@ TEST(adapter_query_adapter_info, declines_every_other_type_without_touching_eith
   const std::int32_t out_of_range[] = {-1, last_query_type + 1, 0x7FFFFFFF, static_cast<std::int32_t>(0x80000000u)};
   for (std::int32_t type = 0; type <= last_query_type + 4; type++) {
       const std::int32_t requested = type <= last_query_type ? type : out_of_range[type - last_query_type - 1];
-      if (requested == query_driver_caps || requested == query_wddm_device_caps || requested == 11) continue;
+      if (requested == query_driver_caps || requested == query_wddm_device_caps || requested == 11 ||
+          (requested >= 13 && requested <= 15))
+          continue;
       GuardedBuffer input(64u), output(64u);
       std::memset(input.data(), 0xEE, 64u);
       std::memset(output.data(), 0xEE, 64u);

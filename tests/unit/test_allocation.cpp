@@ -55,9 +55,9 @@ TEST(allocation_report_to, tells_vidmm_the_size_segment_and_cpu_visibility)
   CHECK_EQ(info.Alignment, 0u);
   CHECK(info.PitchAlignedSize == 0u);
   CHECK_EQ(info.HintedBank, 0u);
-  CHECK_EQ(info.PreferredSegment, 1u);
-  CHECK_EQ(info.SupportedReadSegmentSet, 1u);
-  CHECK_EQ(info.SupportedWriteSegmentSet, 1u);
+  CHECK_EQ(info.PreferredSegment, 2u);   /* VidMm's system memory segment */
+  CHECK_EQ(info.SupportedReadSegmentSet, 2u);
+  CHECK_EQ(info.SupportedWriteSegmentSet, 2u);
   CHECK_EQ(info.EvictionSegmentSet, 0u);
   CHECK_EQ(info.MaximumRenamingListLength, 0u);
   CHECK(info.hAllocation == &allocation);

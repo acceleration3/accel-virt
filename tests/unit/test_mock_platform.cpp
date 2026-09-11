@@ -209,6 +209,15 @@ TEST(mock_platform_time, the_performance_counter_is_the_test_clock)
   CHECK_EQ(platform.performance_counter(frequency), 1234u);
   CHECK_EQ(frequency, 10000000u); }
 
+TEST(mock_platform_atomic, stores_and_loads_the_value)
+{ MockPlatform platform;
+  std::uint64_t word = 1u;
+  platform.set_irql(Irql::isr);
+  platform.store_atomic(word, 0x123456789ABCull);
+  CHECK_EQ(platform.load_atomic(word), 0x123456789ABCull);
+  platform.set_irql(Irql::passive);
+  CHECK_EQ(platform.unclaimed_violations(), 0u); }
+
 TEST(mock_platform_time, saturates_instead_of_wrapping)
 { MockPlatform platform;
   platform.advance_time(~std::uint64_t{0});

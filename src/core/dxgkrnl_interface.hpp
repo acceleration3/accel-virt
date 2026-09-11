@@ -45,6 +45,8 @@ public:
     [[nodiscard]] Status query_vidpn_interface(void *vidpn, const DxgkVidPnInterfaceRecord *&vidpn_interface);
 
     bool initialized() const;
+    /* DXGKRNL_INTERFACE.DeviceHandle: null before initialize. */
+    void *device_handle() const;
     bool invariants_hold() const;
 
 private:

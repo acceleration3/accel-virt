@@ -2,13 +2,14 @@
 
 #include "adapter_info_query.hpp"
 #include "ddi/dxgk_driver_caps_record.hpp"
+#include "ddi/dxgk_physical_adapter_caps_record.hpp"
 #include "ddi/dxgk_wddm_device_caps_record.hpp"
 #include "hardware_cursor.hpp"
 
 namespace av {
 
 DriverCapabilities::DriverCapabilities(Platform &platform)
-    : platform_(platform), wddm_version_(wddm_1_0), highest_acceptable_address_(any_address) {}
+    : platform_(platform), wddm_version_(wddm_2_0), highest_acceptable_address_(any_address) {}
 
 Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) const
 {
@@ -16,6 +17,11 @@ Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) con
     DxgkDriverCapsRecord caps = {};
     caps.HighestAcceptableAddress = highest_acceptable_address_;
     caps.WDDMVersion = wddm_version_;
+    caps.SchedulingCaps = scheduling_multi_engine_aware;
+    caps.MemoryManagementCaps = memory_virtual_addressing | memory_gpu_mmu;
+    caps.GpuEngineTopologyNbAsymetricProcessingNodes = node_count;
+    caps.FlipCaps = flip_on_vsync_mmio;
+    caps.SupportPerEngineTDR = 1u;
     caps.MaxPointerWidth = HardwareCursor::max_side;
     caps.MaxPointerHeight = HardwareCursor::max_side;
     caps.PointerCaps = pointer_caps;
@@ -29,6 +35,21 @@ Status DriverCapabilities::report_wddm_device_caps(const AdapterInfoQuery &query
     if (input != Status::ok) return input;
     DxgkWddmDeviceCapsRecord caps = {};
     caps.WDDMVersion = wddm_version_;
+    return query.write_output(&caps, sizeof caps);
+}
+
+Status DriverCapabilities::report_physical_adapter_caps(const AdapterInfoQuery &query, void *device_handle) const
+{
+    platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::report_physical_adapter_caps");
+    uint32_t physical_adapter = 0u;
+    Status   status = query.read_input(&physical_adapter, sizeof physical_adapter);
+    if (status == Status::ok && physical_adapter != 0u) status = Status::invalid_parameter;
+    if (status != Status::ok) return status;
+    DxgkPhysicalAdapterCapsRecord caps = {};
+    caps.NumExecutionNodes = static_cast<uint16_t>(node_count);
+    caps.PagingNodeIndex = 0u;
+    caps.DxgkPhysicalAdapterHandle = device_handle;
+    caps.Flags = physical_gpu_mmu;
     return query.write_output(&caps, sizeof caps);
 }
 

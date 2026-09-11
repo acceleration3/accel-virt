@@ -46,6 +46,9 @@ public:
     std::uint64_t interrupt_time() const override;
     /* The test clock, at 10 000 000 ticks per second. */
     std::uint64_t performance_counter(std::uint64_t &frequency) const override;
+    /* One thread: a plain store and load. */
+    void          store_atomic(std::uint64_t &target, std::uint64_t value) override;
+    std::uint64_t load_atomic(std::uint64_t &source) override;
     void    *create_timer(TimerCallback callback, void *context) override;
     void     start_timer(void *timer, std::uint64_t period) override;
     void     stop_timer(void *timer) override;

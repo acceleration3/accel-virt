@@ -20,9 +20,9 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
     info.Alignment = 0u;
     info.PitchAlignedSize = 0u;
     info.HintedBank = 0u;
-    info.PreferredSegment = ApertureSegment::segment_id;
-    info.SupportedReadSegmentSet = 1u << (ApertureSegment::segment_id - 1u);
-    info.SupportedWriteSegmentSet = 1u << (ApertureSegment::segment_id - 1u);
+    info.PreferredSegment = ApertureSegment::system_memory_segment_id;
+    info.SupportedReadSegmentSet = 1u << (ApertureSegment::system_memory_segment_id - 1u);
+    info.SupportedWriteSegmentSet = 1u << (ApertureSegment::system_memory_segment_id - 1u);
     info.EvictionSegmentSet = 0u;
     info.MaximumRenamingListLength = 0u;
     info.hAllocation = this;
