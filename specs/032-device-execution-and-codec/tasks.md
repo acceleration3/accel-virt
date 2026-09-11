@@ -29,6 +29,6 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 4: QEMU
 
-- [ ] T007 [US1] Glue: `executor` property, dlopen, finalize order; echo executor library and CMake; qtest device strings
-- [ ] T008 [US1] [US2] tests/qemu/test_virtio_gpu_execution.py; smoke realize failures for a bad executor
-- [ ] T009 Docs: docs/protocol.md, docs/testing.md, README; `tools/gate.sh`; merge; push
+- [X] T007 [US1] Glue: `executor` property, dlopen, finalize order; echo executor library and CMake; qtest device strings
+- [X] T008 [US1] [US2] tests/qemu/test_virtio_gpu_execution.py; smoke realize failures for a bad executor
+- [X] T009 Docs: docs/protocol.md, docs/testing.md, README; `tools/gate.sh`; merge; push

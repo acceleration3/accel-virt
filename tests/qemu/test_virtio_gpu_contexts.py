@@ -95,7 +95,7 @@ def last_host_gpu():
 
 @unittest.skipUnless(BUILD, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuContexts(unittest.TestCase):
-    def open(self, device="virtio-gpu-rvk-pci,host-gpu=auto,hostmem=" + str(HOSTMEM)):
+    def open(self, device=rvk_context.rvk_device(f",hostmem={HOSTMEM}")):
         qtest = virtio_qtest.Qtest(BUILD, device)
         self.addCleanup(qtest.close)
         return virtio_qtest.VirtioGpu(qtest, virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID |
@@ -111,6 +111,15 @@ class VirtioGpuContexts(unittest.TestCase):
         rvk_context.GuestRing(gpu.qtest, address)
         self.expect(gpu, rvk_context.guest_blob(RING, address, 2 * PAGE), RESP_OK_NODATA)
         self.expect(gpu, host_blob(FENCE, PAGE), RESP_OK_NODATA)
+
+    def test_without_an_executor_there_is_no_capset_and_no_context(self):
+        qtest = virtio_qtest.Qtest(BUILD, "virtio-gpu-rvk-pci,host-gpu=auto")
+        self.addCleanup(qtest.close)
+        gpu = virtio_qtest.VirtioGpu(qtest, virtio_qtest.FEATURE_VERSION_1 | FEATURE_CONTEXT_INIT)
+        self.assertFalse(gpu.features & FEATURE_CONTEXT_INIT)
+        self.assertEqual(gpu.device.device_config(32, CONFIG_NUM_CAPSETS), 0)
+        self.expect(gpu, header(CMD_GET_CAPSET_INFO) + struct.pack("<II", 0, 0), RESP_ERR_INVALID_PARAMETER, 40)
+        self.expect(gpu, create_context(1), RESP_ERR_INVALID_PARAMETER)
 
     def test_context_init_and_one_capset_are_offered_and_accepted(self):
         stock_qtest = virtio_qtest.Qtest(BUILD, "virtio-gpu-pci")
@@ -140,7 +149,7 @@ class VirtioGpuContexts(unittest.TestCase):
 
     def test_the_capset_describes_the_host_gpu_the_device_is_bound_to(self):
         host = last_host_gpu()
-        gpu = self.open(f"virtio-gpu-rvk-pci,host-gpu={host.uuid},hostmem={HOSTMEM}")
+        gpu = self.open(f"virtio-gpu-rvk-pci,host-gpu={host.uuid},executor={rvk_context.EXECUTOR},hostmem={HOSTMEM}")
         capset = self.capset(gpu)
         magic, major, minor, sub_apis, contexts, min_order, max_order = struct.unpack_from("<IHHIIBB", capset)
         self.assertEqual((magic, major, minor), (CAPSET_MAGIC, 1, 0))
@@ -159,7 +168,7 @@ class VirtioGpuContexts(unittest.TestCase):
         self.assertEqual(name[len(name.rstrip(b"\0")):], bytes(48 - len(name.rstrip(b"\0"))))
 
     def test_host_visible_memory_is_offered_only_with_a_hostmem_region(self):
-        gpu = self.open("virtio-gpu-rvk-pci,host-gpu=auto")
+        gpu = self.open(rvk_context.rvk_device())
         self.assertEqual(struct.unpack_from("<Q", self.capset(gpu), 24)[0], 0)
 
     def test_get_capset_for_another_id_or_version_is_refused(self):

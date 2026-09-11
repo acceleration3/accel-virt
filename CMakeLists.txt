@@ -78,15 +78,19 @@ if(AV_QEMU)
     DEPENDS rvk_device
     USES_TERMINAL
     COMMENT "QEMU with virtio-gpu-rvk")
+  # The executor the qtest suites name: the device's execution path without render-server.
+  add_library(rvk_echo_executor SHARED tests/qemu/echo_executor.cpp)
+  target_include_directories(rvk_echo_executor PRIVATE src/device/abi)
   add_test(NAME qemu_smoke
-           COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tests/qemu/qemu_smoke.py ${CMAKE_BINARY_DIR}/qemu)
+           COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tests/qemu/qemu_smoke.py ${CMAKE_BINARY_DIR}/qemu
+                   $<TARGET_FILE:rvk_echo_executor>)
   # The driver's own request bytes, sent to the real device by tests/qemu.
   add_executable(gpu_request_bytes tests/qemu/gpu_request_bytes.cpp)
   target_link_libraries(gpu_request_bytes PRIVATE av_core)
   add_test(NAME qemu_virtio_gpu
            COMMAND python3 -B -m unittest discover -s ${CMAKE_SOURCE_DIR}/tests/qemu -p "test_*.py")
   set_tests_properties(qemu_virtio_gpu PROPERTIES
-    ENVIRONMENT "AV_QEMU_BUILD=${CMAKE_BINARY_DIR}/qemu;AV_GPU_REQUEST_BYTES=$<TARGET_FILE:gpu_request_bytes>")
+    ENVIRONMENT "AV_QEMU_BUILD=${CMAKE_BINARY_DIR}/qemu;AV_GPU_REQUEST_BYTES=$<TARGET_FILE:gpu_request_bytes>;AV_EXECUTOR=$<TARGET_FILE:rvk_echo_executor>")
   return()
 endif()
 

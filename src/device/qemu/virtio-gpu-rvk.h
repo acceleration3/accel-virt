@@ -10,6 +10,7 @@
 #define HW_VIRTIO_GPU_RVK_H
 
 #include "qemu/iov.h"
+#include <gmodule.h>
 #include "hw/virtio/virtio-gpu.h"
 #include <rvk_device.h>
 
@@ -23,6 +24,9 @@ struct VirtIOGPURvk {
     VirtIOGPU parent_obj;
 
     char *host_gpu;
+    /* The executor library's path (rvk_executor.h); none: no capset. */
+    char *executor;
+    GModule *executor_library;
     RvkHostOps host;
     uint32_t gpu_count;
     RvkGpuProperties gpus[VIRTIO_GPU_RVK_MAX_GPUS];

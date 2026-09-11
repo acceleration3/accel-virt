@@ -3,7 +3,7 @@
 qtest's port I/O reads the PCI function a guest driver would see, and the
 realize failures a bad host-gpu property produces.
 
-  qemu_smoke.py <qemu build directory>
+  qemu_smoke.py <qemu build directory> <echo executor library>
 """
 import os
 import subprocess
@@ -19,16 +19,19 @@ class Qemu:
         self.binary = os.path.join(build, "qemu-system-x86_64")
         self.environment = dict(os.environ, QEMU_MODULE_DIR=build)
 
-    def start(self, host_gpu):
+    def start(self, host_gpu, options=""):
         command = [self.binary, "-M", "pc", "-display", "none", "-nodefaults", "-machine", "accel=qtest",
-                   "-qtest", "stdio", "-device", f"virtio-gpu-rvk-pci,addr={SLOT:02x}.0,host-gpu={host_gpu}"]
+                   "-qtest", "stdio", "-device", f"virtio-gpu-rvk-pci,addr={SLOT:02x}.0,host-gpu={host_gpu}{options}"]
         return subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 text=True, env=self.environment)
 
     def config_registers(self, host_gpu, registers):
+        return self.config_registers_with(host_gpu, "", registers)
+
+    def config_registers_with(self, host_gpu, options, registers):
         """The PCI configuration registers a guest reads, and what QEMU printed.
         QEMU keeps running on qtest's EOF, so it is stopped once they are read."""
-        process = self.start(host_gpu)
+        process = self.start(host_gpu, options)
         values = []
         try:
             for register in registers:
@@ -48,9 +51,9 @@ class Qemu:
             if reply.startswith(("OK", "FAIL")):
                 return reply.split()
 
-    def refused(self, host_gpu):
+    def refused(self, host_gpu, options=""):
         """The exit status and stderr of a device that must fail to realize."""
-        process = self.start(host_gpu)
+        process = self.start(host_gpu, options)
         try:
             _, stderr = process.communicate(timeout=60)
         except subprocess.TimeoutExpired:
@@ -66,7 +69,7 @@ def check(condition, message):
 
 
 def main():
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 3:
         sys.exit(__doc__)
     qemu = Qemu(sys.argv[1])
 
@@ -80,6 +83,13 @@ def main():
         code, stderr = qemu.refused(host_gpu)
         check(code != 0, f"host-gpu={host_gpu} realized")
         check(reason in stderr, f"host-gpu={host_gpu}: {stderr.strip()}")
+    for executor, reason in (("/nonexistent/librvk_codec.so", "could not be loaded"),
+                             ("libc.so.6", "exports no rvk_executor_ops")):
+        code, stderr = qemu.refused("auto", f",executor={executor}")
+        check(code != 0, f"executor={executor} realized")
+        check(reason in stderr, f"executor={executor}: {stderr.strip()}")
+    (identity, _), stderr = qemu.config_registers_with("auto", f",executor={sys.argv[2]}", (0x00, 0x2C))
+    check(identity == VIRTIO_GPU and "virtio-gpu-rvk" not in stderr, f"the echo executor: {stderr}")
     print("qemu_smoke: ok")
 
 

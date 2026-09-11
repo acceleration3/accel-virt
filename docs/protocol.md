@@ -80,7 +80,7 @@ init capset id 0x72. It binds the context to its ring, fence page and doorbell.
 | 17 | u8[3] | reserved | 0 |
 | 20 | u32 | fence_resource | non-zero, different from `ring_resource` |
 | 24 | u32 | doorbell | the doorbell page, below the capset's `max_contexts` |
-| 28 | u32 | reserved | 0 |
+| 28 | u32 | reply_resource | 0 for no reply slot; otherwise different from `ring_resource` and `fence_resource` |
 
 The checks that need the capset (major, sub_api membership, ring order range,
 doorbell index) are a separate validation against a decoded capset; the decoder
@@ -88,9 +88,11 @@ checks what the bytes alone can prove.
 
 ## Capset and context commands (guest -> device)
 
-The device offers `VIRTIO_GPU_F_CONTEXT_INIT` and `num_capsets` 1, and answers
-these virtio-gpu requests itself (virtio 1.2 §5.7.6.8). The capset carries
-protocol 1.0, the Vulkan sub-API only, 64 contexts, ring orders 12 to 24,
+A device realized with an executor library (see Execution) offers
+`VIRTIO_GPU_F_CONTEXT_INIT` and `num_capsets` 1, and answers these virtio-gpu
+requests itself (virtio 1.2 §5.7.6.8); without one it offers neither, and
+refuses every request below with `ERR_INVALID_PARAMETER`. The capset carries
+protocol 1.0, exactly the sub-APIs the executor offers, 64 contexts, ring orders 12 to 24,
 `host_visible_memory` when the device has a hostmem region, and the host GPU the
 device is bound to. The context setup travels as the whole command buffer of a
 `SUBMIT_3D` to the context: `size` is 32 and the buffer is one setup. The ring
@@ -98,7 +100,10 @@ blob must hold at least `32 + 2^ring_order` bytes and the fence blob at least 32
 both stay referenced while the context lives, and `RESOURCE_UNREF` of either is
 refused until `CTX_DESTROY` or a reset. The ring blob's header must already be
 written: magic, the setup's order, head 0 and a tail at most `2^ring_order`.
-A successful setup connects the doorbell page it names to the context.
+A reply blob, when named, must hold at least 64 bytes and stays referenced with
+the others. A successful setup connects the doorbell page it names to the
+context, and holds a copy of the ring's data area and of the reply slot for
+its worker.
 
 | Request | Answer |
 |---|---|
@@ -108,10 +113,10 @@ A successful setup connects the doorbell page it names to the context.
 | `CTX_CREATE` with `context_init` exactly 0x72 and `nlen` at most 64 | `OK_NODATA` |
 | `CTX_CREATE` of context 0 or a live context | `ERR_INVALID_CONTEXT_ID` |
 | `CTX_CREATE` naming another capset, setting reserved bits, `nlen` over 64, or short | `ERR_INVALID_PARAMETER` |
-| `CTX_CREATE` with every context slot taken, or no thread for it | `ERR_OUT_OF_MEMORY` |
+| `CTX_CREATE` with every context slot taken, or no thread for it; a setup the host cannot stage | `ERR_OUT_OF_MEMORY` |
 | `CTX_DESTROY` of a live context / any other | `OK_NODATA` / `ERR_INVALID_CONTEXT_ID` |
 | `SUBMIT_3D` to a context that does not exist | `ERR_INVALID_CONTEXT_ID` |
-| a setup naming a resource that is not a blob | `ERR_INVALID_RESOURCE_ID` |
+| a setup naming a ring, fence or reply resource that is not a blob | `ERR_INVALID_RESOURCE_ID` |
 | `size` not 32, the buffer short or malformed, a setup the capset does not allow, a blob too small for its role, a ring header that is not fresh, a doorbell another context holds, or a context already set up | `ERR_INVALID_PARAMETER` |
 | `RESOURCE_UNREF` of a blob a context is bound to | `ERR_INVALID_PARAMETER`, the blob kept |
 
@@ -155,6 +160,55 @@ that moves backwards or runs more than `2^order` ahead of head, or a batch with
 a bad magic, a length that cannot fit the ring, fence 0 or a fence not greater
 than the last, stops the context: the device logs the reason once and consumes
 nothing more for it until `CTX_DESTROY` or a reset. Other contexts carry on.
+
+## Execution (guest -> device, in batches)
+
+A batch's payload is a sequence of commands, framed as render-server frames its
+command streams (`rvk/wire/command_header.hpp`), filling the payload exactly:
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | id | top 16 bits: the API - 0 transport, 1 Vulkan, 2 OpenCL, 3 OpenGL |
+| 4 | u32 | size | low 24 bits: the command's bytes including this header, at least 8; top 8 bits: flags, bit 0 *generate reply*, the rest 0 |
+
+The device copies the payload once, then walks it: a command of the
+context's sub-API runs through the context's executor; a transport command
+(none is defined yet), another API's, or one the executor does not know is
+skipped. The answer of the last command in the batch whose *generate reply*
+flag is set is written to the reply slot before head passes the batch, so a
+producer waiting for head reads a finished answer. A command framed wrong,
+trailing bytes too short for a header, a reply asked for with no reply slot,
+a payload the executor cannot decode, or a lost host device stops the context
+(see Consumption) and the batch does not complete.
+
+### Reply slot (device -> guest)
+
+Offset 0 of the reply resource; the answer follows at offset 32. 32 bytes.
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | magic | `RVKY` = `0x594B5652` |
+| 4 | u32 | status | 0 ok: `size` bytes follow; 1 too large: nothing follows |
+| 8 | u64 | fence_id | the batch the answer belongs to, >= 1 |
+| 16 | u32 | size | ok: equal to `required`; too large: 0 |
+| 20 | u32 | required | the answer's length (4 GiB and over reads 0xFFFFFFFF); too large: non-zero |
+| 24 | u64 | reserved | 0 |
+
+The slot holds `reply blob size - 32` bytes of answer, at most 16 MiB. A batch
+asking for no answer leaves the slot as it was.
+
+### The executor ABI (device <-> host library)
+
+`src/device/abi/rvk_executor.h`, version 1, is what runs a context's commands on
+the host's API: `sub_apis`, `create(sub_api, gpu_uuid)`, `destroy`, and
+`execute(id, payload, size, reply, capacity, &reply_size)` answering executed,
+unknown, undecodable or device lost. The QEMU device loads the library its
+`executor` property names and calls `rvk_executor_ops` for the table; a library
+that does not load, lacks the symbol, or has another ABI version fails realize.
+Each context's executor is created and destroyed on the context's worker, and
+only that thread calls it. render-server's `librvk_codec` is meant to
+implement this over its API backends; the qemu configuration builds
+`rvk_echo_executor` for the tests.
 
 ## Ring header (shared, both write)
 

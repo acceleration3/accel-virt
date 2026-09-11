@@ -14,7 +14,7 @@ import unittest
 
 import virtio_qtest
 from rvk_context import (DOORBELL_SHM_ID, FEATURE_CONTEXT_INIT, PAGE, RESP_OK_NODATA, GuestRing, create_context,
-                         guest_blob, response_type, setup, submit)
+                         guest_blob, response_type, rvk_device, setup, submit)
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
 FENCE_MAGIC = 0x464B5652
@@ -68,7 +68,7 @@ class Context:
 
 @unittest.skipUnless(BUILD, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuFences(unittest.TestCase):
-    def qtest(self, device="virtio-gpu-rvk-pci,host-gpu=auto,vectors=6"):
+    def qtest(self, device=rvk_device(",vectors=6")):
         qtest = virtio_qtest.Qtest(BUILD, device)
         self.addCleanup(qtest.close)
         return qtest

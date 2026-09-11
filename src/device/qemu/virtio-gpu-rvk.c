@@ -33,6 +33,7 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
     VirtIOGPURvk *r = VIRTIO_GPU_RVK(qdev);
     VirtIOGPUBase *b = VIRTIO_GPU_BASE(qdev);
     VirtIOGPU *g = VIRTIO_GPU(qdev);
+    const RvkExecutorOps *executor = NULL;
     char error[256];
 
     /* Before the core: its capset reports host-visible memory from the region. */
@@ -48,8 +49,23 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
                                    b->conf.hostmem, map);
         memory_region_add_subregion(&b->hostmem, 0, &r->hostmem_background);
     }
+    if (r->executor && r->executor[0]) {
+        RvkExecutorOpsFunction ops = NULL;
+
+        r->executor_library = g_module_open(r->executor, G_MODULE_BIND_LOCAL);
+        if (!r->executor_library) {
+            error_setg(errp, "virtio-gpu-rvk: executor '%s' could not be loaded: %s", r->executor,
+                       g_module_error());
+            return;
+        }
+        if (!g_module_symbol(r->executor_library, RVK_EXECUTOR_OPS_SYMBOL, (gpointer *)&ops) || !ops) {
+            error_setg(errp, "virtio-gpu-rvk: executor '%s' exports no %s", r->executor, RVK_EXECUTOR_OPS_SYMBOL);
+            return;
+        }
+        executor = ops();
+    }
     virtio_gpu_rvk_host_init(r);
-    r->core = rvk_device_create(&r->host, r->host_gpu, virtio_gpu_blob_enabled(g->parent_obj.conf),
+    r->core = rvk_device_create(&r->host, executor, r->host_gpu, virtio_gpu_blob_enabled(g->parent_obj.conf),
                                 error, sizeof(error));
     if (!r->core) {
         error_setg(errp, "%s", error);
@@ -114,12 +130,16 @@ static void virtio_gpu_rvk_reset(VirtIODevice *vdev)
 }
 
 /* After unrealize, or after a realize that failed. The hostmem reservation
- * stays mapped, as virtio-gpu-gl's does: the region may outlive the device. */
+ * stays mapped, as virtio-gpu-gl's does: the region may outlive the device.
+ * The executor library is closed after the core, which calls into it. */
 static void virtio_gpu_rvk_finalize(Object *obj)
 {
     VirtIOGPURvk *r = VIRTIO_GPU_RVK(obj);
 
     (void)rvk_device_destroy(r->core);
+    if (r->executor_library) {
+        g_module_close(r->executor_library);
+    }
 }
 
 /* Stores that are not a connected doorbell's ioeventfd land here and do nothing. */
@@ -148,6 +168,7 @@ static void virtio_gpu_rvk_instance_init(Object *obj)
 
 static const Property virtio_gpu_rvk_properties[] = {
     DEFINE_PROP_STRING("host-gpu", VirtIOGPURvk, host_gpu),
+    DEFINE_PROP_STRING("executor", VirtIOGPURvk, executor),
 };
 
 static void virtio_gpu_rvk_class_init(ObjectClass *klass, const void *data)

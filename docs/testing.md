@@ -143,7 +143,10 @@ destroys contexts. `test_virtio_gpu_ring.py` writes rings as the guest does
 QEMU dispatches the ioeventfd itself under qtest - and checks that a hostile
 ring stops only its own context. `test_virtio_gpu_fences.py` reads fence pages
 and the MSI-X pending bits of masked vectors, and the ISR with MSI-X off, to see
-the fence queues' interrupts arrive.
+the fence queues' interrupts arrive. `test_virtio_gpu_execution.py` runs
+batches through `rvk_echo_executor` (`tests/qemu/echo_executor.cpp`), an executor
+library the qemu configuration builds so the execution path runs on the real
+device without render-server, and reads answers from reply slots.
 
 ### The shape of a test file
 

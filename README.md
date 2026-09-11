@@ -151,7 +151,7 @@ src/device/                       QEMU device core — freestanding C++23, librv
   host/  abi/                       the Host contract; TableHost, rvk_device.h, the C entry points
   gpu/  threading/  context/        host GPU binding; per-context workers and doorbells; the context table
   capset/  memory/  ring/  control/ the capset; blobs and their windows; ring consumption; control answers
-  fence/                            fence pages and the fence queues' interrupts
+  fence/  execution/                fence pages and interrupts; executors, command streams, replies
   module/  support/                 the device object and the module holding every device
   qemu/                             the C glue and meson patch built into QEMU (translation only)
 src/proto/                        the wire protocol, shared by both sides
@@ -163,7 +163,7 @@ tests/harness/                    the adversarial platform mock, fake dxgkrnl
   framework/  platform/             test registry and buffers; MockPlatform and violations
   dxgkrnl/  vidmm/  vidsch/  vidpn/ fake dxgkrnl, VidMm, VidSch and the VidPn/DMM objects
   device/                           fake virtio-gpu PCI function and virtqueue device
-  host/  ring/                      MockHost and request builders; the guest side of a ring
+  host/  ring/  executor/           MockHost and request builders; the guest side of a ring; mock executors
 tests/fuzz/ tests/corpus/         L3: libFuzzer targets and seed corpora
 tests/fixtures/                   bytes captured from real devices (tools/host/capture_pci_config.py)
 tests/qemu/                       the device under qtest: a virtio-gpu driver with no guest, the suites run on it

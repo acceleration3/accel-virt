@@ -15,7 +15,7 @@ import unittest
 import virtio_qtest
 from rvk_context import (DOORBELL_SHM_ID, DOORBELLS, FEATURE_CONTEXT_INIT, PAGE, RESP_ERR_INVALID_PARAMETER,
                          RESP_OK_MAP_INFO, RESP_OK_NODATA, GuestRing, create_context, destroy_context, guest_blob,
-                         host_blob, map_blob, response_type, ring_header, setup, submit, unref)
+                         host_blob, map_blob, response_type, ring_header, rvk_device, setup, submit, unref)
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
 HOSTMEM = 64 << 20
@@ -25,7 +25,7 @@ QUIET = 0.3
 
 @unittest.skipUnless(BUILD, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuRing(unittest.TestCase):
-    def open(self, device=f"virtio-gpu-rvk-pci,host-gpu=auto,hostmem={HOSTMEM}"):
+    def open(self, device=rvk_device(f",hostmem={HOSTMEM}")):
         qtest = virtio_qtest.Qtest(BUILD, device)
         self.addCleanup(qtest.close)
         return virtio_qtest.VirtioGpu(qtest, virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID |
@@ -197,7 +197,7 @@ class VirtioGpuRing(unittest.TestCase):
         self.expect(gpu, unref(51), RESP_OK_NODATA)
         self.expect(gpu, destroy_context(1), RESP_OK_NODATA)
         ring = self.bind(gpu, 3, 7)
-        ring.write_batch(1, 1)
+        ring.write_batch(1, 8)
         ring.publish()
         self.ring_doorbell(gpu, 7)
         self.assertTrue(ring.wait_head(ring.tail))

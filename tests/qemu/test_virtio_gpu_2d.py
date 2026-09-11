@@ -12,6 +12,7 @@ import struct
 import subprocess
 import unittest
 
+import rvk_context
 import virtio_qtest
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
@@ -35,7 +36,8 @@ FEATURE_VIRGL = 1 << 0
 FEATURE_RESOURCE_BLOB = 1 << 3
 FEATURE_CONTEXT_INIT = 1 << 4
 
-DEVICES = {"stock": "virtio-gpu-pci", "rvk": "virtio-gpu-rvk-pci,host-gpu=auto"}
+DEVICES = {"stock": "virtio-gpu-pci", "rvk": "virtio-gpu-rvk-pci,host-gpu=auto",
+           "rvk with an executor": rvk_context.rvk_device()}
 
 
 def header(command):
@@ -64,14 +66,16 @@ class VirtioGpu2d(unittest.TestCase):
             with self.subTest(device=name):
                 yield name, self.open(name)
 
-    def test_the_rvk_device_offers_what_stock_virtio_gpu_offers_and_context_init(self):
+    def test_the_rvk_device_offers_what_stock_offers_and_context_init_only_with_an_executor(self):
         stock = self.open("stock").device.offered_features()
         rvk = self.open("rvk").device.offered_features()
-        self.assertEqual(rvk, stock | FEATURE_CONTEXT_INIT)
+        executing = self.open("rvk with an executor").device.offered_features()
+        self.assertEqual(rvk, stock)
+        self.assertEqual(executing, stock | FEATURE_CONTEXT_INIT)
         self.assertTrue(rvk & virtio_qtest.FEATURE_EDID)
         self.assertTrue(rvk & virtio_qtest.FEATURE_VERSION_1)
         self.assertFalse(stock & FEATURE_CONTEXT_INIT)
-        self.assertFalse(rvk & (FEATURE_VIRGL | FEATURE_RESOURCE_BLOB))
+        self.assertFalse(executing & (FEATURE_VIRGL | FEATURE_RESOURCE_BLOB))
 
     def test_one_output_at_the_drivers_preferred_mode(self):
         for _, gpu in self.each_device():

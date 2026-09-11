@@ -80,7 +80,7 @@ class VirtioGpuBlobs(unittest.TestCase):
     def test_the_rvk_device_offers_the_same_hostmem_region_and_no_blob_feature(self):
         stock = self.open(STOCK)
         rvk = self.open(RVK)
-        self.assertEqual(rvk.device.offered_features(), stock.device.offered_features() | FEATURE_CONTEXT_INIT)
+        self.assertEqual(rvk.device.offered_features(), stock.device.offered_features())
         self.assertEqual(rvk.device.shared_memory[SHM_ID_HOST_VISIBLE][1], HOSTMEM)
         self.assertEqual(stock.device.shared_memory[SHM_ID_HOST_VISIBLE][1], HOSTMEM)
 

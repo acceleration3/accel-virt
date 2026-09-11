@@ -1,7 +1,11 @@
 """The rvk requests a guest driver sends to set a context up, and the guest's
 side of its ring (docs/protocol.md), for the qtest suites."""
+import os
 import struct
 import time
+
+# The echo executor (tests/qemu/echo_executor.cpp) the qemu_virtio_gpu ctest builds.
+EXECUTOR = os.environ.get("AV_EXECUTOR", "")
 
 CMD_RESOURCE_UNREF = 0x0102
 CMD_RESOURCE_CREATE_BLOB = 0x010C
@@ -30,6 +34,11 @@ PAGE = 0x1000
 RING_HEADER = 32
 TAIL_OFFSET = 8
 HEAD_OFFSET = 16
+
+
+def rvk_device(options=""):
+    """virtio-gpu-rvk-pci on the first host GPU, executing with the echo executor."""
+    return f"virtio-gpu-rvk-pci,host-gpu=auto,executor={EXECUTOR}{options}"
 
 
 def header(command, context=0):
@@ -79,9 +88,28 @@ def ring_header(order, tail=0, head=0):
     return struct.pack("<IB3xQQQ", RING_MAGIC, order, tail, head, 0)
 
 
-def batch(fence, length):
-    body = struct.pack("<IIQ", BATCH_MAGIC, length, fence) + bytes((0xB0 + i) & 0xFF for i in range(length))
+ECHO = 0x10001
+UNDECODABLE = 0x10002
+LOSE_DEVICE = 0x10003
+COUNT = 0x10004
+GENERATE_REPLY = 1
+
+
+def command(command_id, payload=b"", flags=0):
+    """One command as the echo executor reads it: id, size with flags in the top byte, payload."""
+    return struct.pack("<II", command_id, (8 + len(payload)) | flags << 24) + payload
+
+
+def batch_of(fence, commands):
+    body = struct.pack("<IIQ", BATCH_MAGIC, len(commands), fence) + commands
     return body + bytes(-len(body) % 8)
+
+
+def batch(fence, length):
+    """A batch of `length` payload bytes: one echo command when it can hold one."""
+    if length < 8:
+        return batch_of(fence, bytes((0xB0 + i) & 0xFF for i in range(length)))
+    return batch_of(fence, command(ECHO, bytes((0xB0 + i) & 0xFF for i in range(length - 8))))
 
 
 class GuestRing:
