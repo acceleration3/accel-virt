@@ -101,7 +101,8 @@ Then follow the spec-kit flow, using the skills, not by hand:
 
 ### Git
 
-There is no remote; `master` is the only long-lived branch and holds only
+`origin` is the private GitHub repository `acceleration3/accel-virt`; `master`
+is the only long-lived branch, pushed there, and holds only
 features that passed every gate.
 
 1. Start each feature from an up-to-date `master` on a branch named for its
@@ -110,7 +111,7 @@ features that passed every gate.
    once `ctest --test-dir build` passes at that point. Conventional-commit
    subject (`feat(scope): ... (NNN)`), a body saying what changed and why.
 3. When every task is `[X]` and `tools/gate.sh` passes, fast-forward it in:
-   `git switch master && git merge --ff-only NNN-short-name && git branch -d NNN-short-name`.
+   `git switch master && git merge --ff-only NNN-short-name && git branch -d NNN-short-name && git push origin master`.
 4. Never commit kit files, `re/`, build directories, or anything the gates
    reject; never rewrite `master` history.
 
