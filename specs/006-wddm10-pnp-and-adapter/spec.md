@@ -73,6 +73,10 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 | `ResourceList` | object | a copy of the translated resource descriptors | Finds BARs and message-signalled interrupts in a CM resource list |
 | `MappedRegisterWindow` | object | platform, mapped base address, length | Reads and writes one mapped register region through the platform |
 | `Adapter` | object | platform, state, dxgkrnl interface, register windows, virtio transport, queues, power state | Carries one PCI device from AddDevice to RemoveDevice |
+| `DxgkrnlInterfaceRecord`, `DxgkDeviceInfoRecord`, `DxgkChildDescriptorRecord`, `DxgkChildStatusRecord`, `LinkedDeviceRecord` | DDI record | the fields of one WDK structure, fixed-width, WDK names | Overlays memory dxgkrnl owns, layout-proven in `src/km/ddi_record_layout.cpp` |
+| `PciBaseAddresses` | object | a copy of the six BAR registers | Resolves a BAR index to the bus address the device decoded |
+| `BarMappings` | object | dxgkrnl interface, the mapped address and length of each BAR | Keeps each BAR mapped exactly once for one adapter's lifetime |
+| `VirtioGpuDevice` | object | register windows, transport, control and cursor queues | Carries one running virtio-gpu function from reset to reset |
 | `FakeDxgkrnl` (extended) | system | registered table, adapter context, fake device, callback records | Drives the real entry points through dxgkrnl's recorded sequences |
 
 ### Test requirements
@@ -125,6 +129,24 @@ Normative headers: `third_party/windows-kit/include/` (fetched by `tools/fetch_w
   "no more descriptor data" until feature 011 synthesizes EDID; QueryAdapterInfo
   is feature 007, so the recorded bring-up sequence runs up to the first
   QueryAdapterInfo call.
+
+- Q (agent, RE): What do LinkDevice and QueryDeviceDescriptor answer? -> A:
+  `DpiAddDevice` calls a non-NULL slot 60 after every successful AddDevice and
+  fails the AddDevice on a failure status; `NumberOfLinksInChain` above 0x100
+  fails it too, and a non-zero count with `LeadLink` FALSE makes the adapter a
+  secondary link. So LinkDevice answers a one-link chain led by this adapter.
+  `basicdisplay.sys` `QueryDeviceDescriptor` answers
+  `STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED` (0xC01E0401) when it has no
+  EDID; its `QueryChildRelations` reports `TypeVideoOutput`,
+  `D3DKMDT_VOT_OTHER`, `D3DKMDT_MOA_NONE`, `HpdAwarenessInterruptible`, and its
+  `QueryChildStatus` answers `STATUS_INVALID_PARAMETER` for rotation and
+  `STATUS_NOT_SUPPORTED` for other types.
+- Q (agent): Are the DDI mirrors classes? -> A: They are DDI records: structs
+  with public fixed-width fields named as in the WDK and no member functions,
+  existing only to be laid over memory dxgkrnl owns. Every field offset is
+  proven in `src/km/ddi_record_layout.cpp`. The CM resource list is not a
+  record: it is variable-length, so `ResourceList` reads it as bytes at offsets
+  the km proofs pin.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -185,7 +207,7 @@ device ends DRIVER_OK after start and reset after stop; nothing leaks.
    output child with interruptible HPD awareness is returned; with no room,
    `STATUS_BUFFER_TOO_SMALL`.
 4. **Given** QueryChildStatus for connectivity, **Then** connected.
-5. **Given** QueryDeviceDescriptor, **Then** `STATUS_MONITOR_NO_MORE_DESCRIPTOR_DATA`.
+5. **Given** QueryDeviceDescriptor, **Then** `STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED`, as `basicdisplay.sys` answers without an EDID.
 
 ### User Story 4 - Everything else in the slot list answers correctly (Priority: P3)
 
@@ -193,7 +215,7 @@ device ends DRIVER_OK after start and reset after stop; nothing leaks.
 
 1. DispatchIoRequest, QueryInterface: `STATUS_NOT_SUPPORTED`.
 2. NotifyAcpiEvent: `STATUS_SUCCESS`, no action; ControlEtwLogging: no action.
-3. LinkDevice: not linked (one adapter, not part of a chain).
+3. LinkDevice: a chain of one with this adapter as lead - dxgkrnl calls a registered LinkDevice from every AddDevice and fails AddDevice if it fails.
 
 ### Edge Cases
 

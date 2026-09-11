@@ -11,7 +11,8 @@ namespace av {
 
 class NtStatus {
 public:
-    static constexpr uint32_t monitor_no_more_descriptor_data = 0xC01D0003u;
+    /* What basicdisplay.sys answers DxgkDdiQueryDeviceDescriptor with no EDID. */
+    static constexpr uint32_t child_descriptor_not_supported = 0xC01E0401u;
     static constexpr uint32_t buffer_too_small = 0xC0000023u;
 
     explicit NtStatus(Status status);
@@ -19,6 +20,8 @@ public:
 
     int32_t value() const;
     bool    succeeded() const;
+    /* A failure core has no name for is invalid_state: the peer refused. */
+    Status  status() const;
 
 private:
     static constexpr uint32_t internal_error = 0xC00000E5u;

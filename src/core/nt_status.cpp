@@ -31,4 +31,15 @@ int32_t NtStatus::value() const { return static_cast<int32_t>(value_); }
 
 bool NtStatus::succeeded() const { return static_cast<int32_t>(value_) >= 0; }
 
+/* Status::malformed shares STATUS_INVALID_PARAMETER and comes back as
+ * invalid_parameter, the first entry with that value. */
+Status NtStatus::status() const
+{
+    if (succeeded()) return Status::ok;
+    for (unsigned index = 0u; index < sizeof mapping / sizeof mapping[0]; index++) {
+        if (mapping[index] == value_) return static_cast<Status>(index);
+    }
+    return Status::invalid_state;
+}
+
 }  // namespace av

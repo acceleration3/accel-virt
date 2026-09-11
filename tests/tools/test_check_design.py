@@ -31,6 +31,29 @@ class DesignRules(unittest.TestCase):
         result = run(CHECK, self.tree.root)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_a_ddi_record_holds_state_in_wdk_named_fields(self):
+        self.tree.write("src/core/ddi/thing_record.hpp",
+                        "struct ThingRecord {\n    uint32_t Size;\n    void *DeviceHandle;\n"
+                        "    DxgkCbQueueDpc DxgkCbQueueDpc;\n    void *LaterCallbacks[49];\n};\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_ddi_record_with_a_member_function_is_reported(self):
+        self.tree.write("src/core/ddi/thing_record.hpp",
+                        "struct ThingRecord {\n    uint32_t Size;\n    uint32_t size() const;\n};\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("src/core/ddi/thing_record.hpp: record ThingRecord declares member functions",
+                      result.stderr)
+
+    def test_wdk_named_fields_are_not_state_outside_a_ddi_record(self):
+        self.tree.write("src/core/loose.hpp", "struct LooseRecord {\n    uint32_t Size;\n};\n")
+        self.tree.write("src/core/ddi/loose.hpp", "struct Loose {\n    uint32_t Size;\n};\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("src/core/loose.hpp: class LooseRecord has no data members", result.stderr)
+        self.assertIn("src/core/ddi/loose.hpp: class Loose has no data members", result.stderr)
+
     def test_does_not_judge_whether_symbols_are_tested(self):
         self.tree.write("src/core/fine.hpp",
                         "class Fine {\npublic:\n    int never_named();\nprivate:\n    int v_;\n};\n")

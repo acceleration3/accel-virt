@@ -13,28 +13,30 @@ description: "Task list for feature 006: WDDM 1.0 PnP, power and adapter lifetim
 
 **Checkpoint**: commit.
 
-## Phase 2: Mirrors and inputs
+## Phase 2: Records and inputs
 
-- [ ] T005 Mirrors + `src/km/ddi_mirror_layout.cpp` offset proofs; tests
-- [ ] T006 `DxgkrnlInterface`, `ResourceList` with hostile tests and `fuzz_resource_list`
+- [X] T005 DDI records in `src/core/ddi/` and `src/km/ddi_record_layout.cpp` (every field offset and size against the WDK); `NtStatus` gains `child_descriptor_not_supported` (0xC01E0401, replacing a wrong 0xC01D0003) and the inverse mapping for callback failures
+- [X] T006 Tests then `DxgkrnlInterface` (Size check, copy, typed callbacks)
+- [X] T007 Hostile tests then `ResourceList` (memory, large memory, message interrupts; bounded counts) and `PciBaseAddresses` (32/64-bit memory BARs, I/O BAR, 64-bit BAR 5); `fuzz_resource_list`; base addresses added to `fuzz_virtio_capabilities`. Found: `tools/header_scan.py` counted only trailing-underscore members, so DDI records (WDK field names) read as stateless; records in `src/core/ddi/` named `*Record` now count their fields and may not declare member functions (test-first)
 
 **Checkpoint**: commit.
 
 ## Phase 3: Adapter lifetime (US2)
 
-- [ ] T007 `Platform` register I/O (+ mock address routing to fake windows), `MappedRegisterWindow`; remove `src/km/mmio_register_window`
-- [ ] T008 Fake dxgkrnl callbacks over MockPlatform and the fake device
-- [ ] T009 Tests then `Adapter` start/stop/remove/power/reset
+- [ ] T008 `Platform` register I/O; mock routes addresses to attached `RegisterWindow`s and records `unmapped_register`; `MappedRegisterWindow`; `src/km/mmio_register_window` removed
+- [ ] T009 `FakeDxgkrnl` callbacks (`tests/harness/fake_dxgkrnl_callbacks.cpp`, one-line `extern "C"` thunks) over a fake virtio-gpu PCI function built from `tests/fixtures/virtio_gpu_pci_config.bin`
+- [ ] T010 Tests then `BarMappings`, `VirtioGpuDevice`
+- [ ] T011 Tests then `Adapter` start/stop/remove/power/reset, with the allocation-failure sweep
 
 **Checkpoint**: commit.
 
 ## Phase 4: Interrupts and children (US3, US4)
 
-- [ ] T010 Tests then ISR, DPC, child DDIs, remaining stubs
+- [ ] T012 Tests then ISR, DPC, QueryChildRelations/Status, QueryDeviceDescriptor, LinkDevice
 
 **Checkpoint**: commit.
 
 ## Phase 5: Scenarios
 
-- [ ] T011 Fake dxgkrnl scenario runner: recorded bring-up/teardown order, abusive variants
-- [ ] T012 `tools/gate.sh`; docs; merge
+- [ ] T013 Fake dxgkrnl scenario runner: recorded bring-up/teardown order, abusive variants
+- [ ] T014 `tools/gate.sh`; docs (`docs/ddi-sequences.md` LinkDevice at AddDevice); merge

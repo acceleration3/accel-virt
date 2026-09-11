@@ -46,6 +46,8 @@ def main():
     for declared in declared_classes(root):
         for method in declared.static_methods:
             violations.append(f"{declared.header}: {declared.name}::{method} is static")
+        if declared.is_record and declared.method_count:
+            violations.append(f"{declared.header}: record {declared.name} declares member functions")
         if not declared.has_state and not declared.is_contract():
             violations.append(f"{declared.header}: class {declared.name} has no data members")
     violations += allocation_expressions(root)

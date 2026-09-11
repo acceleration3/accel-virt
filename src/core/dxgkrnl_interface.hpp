@@ -1,0 +1,54 @@
+/* The callbacks dxgkrnl hands one adapter at DxgkDdiStartDevice, copied once so
+ * a later change to dxgkrnl's table cannot reach core. Each method is one
+ * callback with its fixed arguments filled in. */
+#ifndef AV_DXGKRNL_INTERFACE_HPP
+#define AV_DXGKRNL_INTERFACE_HPP
+
+#include "ddi/dxgk_device_info_record.hpp"
+#include "ddi/dxgkrnl_interface_record.hpp"
+#include "platform.hpp"
+#include "status.hpp"
+
+#include <stdint.h>
+
+namespace av {
+
+struct DxgkrnlInterfaceProbe;
+
+class DxgkrnlInterface {
+public:
+    explicit DxgkrnlInterface(Platform &platform);
+    DxgkrnlInterface(const DxgkrnlInterface &) = delete;
+    DxgkrnlInterface &operator=(const DxgkrnlInterface &) = delete;
+
+    /* not_supported for a table older than WDDM 3.2's; invalid_parameter when a
+     * callback core calls is missing. A failure leaves it uninitialized. */
+    [[nodiscard]] Status initialize(const DxgkrnlInterfaceRecord *table);
+
+    [[nodiscard]] Status get_device_information(DxgkDeviceInfoRecord &info);
+    /* malformed when dxgkrnl reads fewer bytes than asked. */
+    [[nodiscard]] Status read_config_space(uint8_t *buffer, uint32_t length);
+    /* Non-cached, kernel-only memory space. */
+    [[nodiscard]] Status map_memory(uint64_t translated_address, uint32_t length, void *&mapped);
+    [[nodiscard]] Status unmap_memory(void *mapped);
+    bool                 queue_dpc();
+
+    bool initialized() const;
+    bool invariants_hold() const;
+
+private:
+    static constexpr uint32_t config_space = 0u;  /* DXGK_WHICHSPACE_CONFIG */
+    static constexpr int32_t  non_cached   = 0;   /* MmNonCached */
+
+    bool has_callbacks(const DxgkrnlInterfaceRecord &table) const;
+
+    Platform              &platform_;
+    DxgkrnlInterfaceRecord record_;
+    bool                   initialized_;
+
+    friend struct DxgkrnlInterfaceProbe;
+};
+
+}  // namespace av
+
+#endif  // AV_DXGKRNL_INTERFACE_HPP

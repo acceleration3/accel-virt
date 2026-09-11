@@ -23,6 +23,8 @@ STATIC_METHOD_RE = re.compile(r"^\s*static\s+(?!constexpr\b|inline\s+constexpr\b
 MEMBER_RE = re.compile(r"^\s*(?:mutable\s+)?[\w:<>,\s\[\]]+[\s*&]+(\w+_)\s*(?:=[^;]*)?;")
 ACCESS_RE = re.compile(r"^\s*(private|protected|public)\s*:")
 PURE_RE = re.compile(r"=\s*0\s*;")
+RECORD_DIRECTORY = "src/core/ddi/"
+RECORD_FIELD_RE = re.compile(r"^\s*[\w:]+(?:\s*\*+\s*|\s+)[A-Z]\w*(?:\[\w+\])?\s*;")
 
 
 @dataclass
@@ -34,6 +36,7 @@ class DeclaredClass:
     method_count: int = 0
     public_methods: list = field(default_factory=list)
     static_methods: list = field(default_factory=list)
+    is_record: bool = False
 
     def is_contract(self):
         """A pure abstract interface has no state by definition."""
@@ -67,6 +70,9 @@ def classes_in(lines, relative):
                 yield current
             current = DeclaredClass(match.group(1), relative)
             public = line.lstrip().startswith("struct")
+            # A DDI record overlays a WDK structure, so its fields keep the WDK's names.
+            current.is_record = (public and relative.startswith(RECORD_DIRECTORY)
+                                 and current.name.endswith("Record"))
             depth = line.count("{") - line.count("}")
             opened = depth > 0
             continue
@@ -87,6 +93,8 @@ def classes_in(lines, relative):
             public = access.group(1) == "public"
             continue
         if MEMBER_RE.match(line) and "(" not in line:
+            current.has_state = True
+        if current.is_record and RECORD_FIELD_RE.match(line):
             current.has_state = True
         static_match = STATIC_METHOD_RE.match(line)
         if static_match:

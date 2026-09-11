@@ -25,10 +25,28 @@ TEST(nt_status, maps_every_core_status_to_its_ntstatus)
       CHECK_EQ(static_cast<std::uint32_t>(NtStatus(c.status).value()), c.value); }
 
 TEST(nt_status, carries_a_graphics_status_core_has_no_name_for)
-{ const NtStatus status(NtStatus::monitor_no_more_descriptor_data);
-  CHECK_EQ(static_cast<std::uint32_t>(status.value()), 0xC01D0003u);
+{ const NtStatus status(NtStatus::child_descriptor_not_supported);
+  CHECK_EQ(static_cast<std::uint32_t>(status.value()), 0xC01E0401u);
   CHECK(!status.succeeded());
   CHECK(NtStatus(Status::ok).succeeded()); }
+
+TEST(nt_status_status, maps_a_callback_answer_back_to_the_core_status)
+{ struct Case { std::uint32_t value; Status status; };
+  const Case cases[] = {
+      {0x00000000u, Status::ok},
+      {0x00000103u, Status::ok},  /* STATUS_PENDING is a success */
+      {0xC000000Du, Status::invalid_parameter},
+      {0xC0000017u, Status::no_memory},
+      {0xC0000225u, Status::not_found},
+      {0xC0000035u, Status::conflict},
+      {0xC000009Au, Status::no_space},
+      {0xC00000BBu, Status::not_supported},
+      {0xC0000184u, Status::invalid_state},
+      {0xC0000023u, Status::too_large},
+      {0xC0000001u, Status::invalid_state},  /* STATUS_UNSUCCESSFUL: no closer name */
+  };
+  for (const Case &c : cases)
+      CHECK_STATUS(NtStatus(c.value).status(), c.status); }
 
 TEST(nt_status, an_out_of_range_status_is_an_internal_error)
 { CHECK_EQ(static_cast<std::uint32_t>(NtStatus(static_cast<Status>(200u)).value()), 0xC00000E5u); }
