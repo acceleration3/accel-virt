@@ -6,7 +6,11 @@
 #include "../../src/core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
 #include "../../src/core/ddi/dxgkarg_get_scan_line_record.hpp"
 #include "../../src/core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
+#include "../../src/core/ddi/dxgkarg_cancel_command_record.hpp"
 #include "../../src/core/ddi/dxgkarg_present_record.hpp"
+#include "../../src/core/ddi/dxgkarg_query_dependent_engine_group_record.hpp"
+#include "../../src/core/ddi/dxgkarg_query_engine_status_record.hpp"
+#include "../../src/core/ddi/dxgkarg_reset_engine_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_vidpn_hw_capability_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_pointer_position_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_pointer_shape_record.hpp"
@@ -685,6 +689,82 @@ TEST(adapter, the_display_ddis_are_passive_only)
   static_cast<void>(fixture.adapter().set_vidpn_source_address(nullptr));
   fixture.platform().set_irql(Irql::passive);
   for (int call = 0; call < 12; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
+
+/* ---- WDDM 1.2 (feature 015) -------------------------------------------------- */
+
+TEST(adapter_reset_engine, aborts_what_the_node_was_executing_and_keeps_it_running)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargSubmitCommandRecord submit = {};
+  fixture.platform().set_irql(Irql::dispatch);
+  for (std::uint32_t fence = 1u; fence <= 2u; fence++) {
+      submit.SubmissionFenceId = fence;
+      CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), success);
+  }
+  fixture.platform().set_irql(Irql::passive);
+  av::DxgkargResetEngineRecord reset = {0u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().reset_engine(&reset)), success);
+  CHECK_EQ(reset.LastAbortedFenceId, 1u);
+  submit.SubmissionFenceId = 3u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), success);
+  fixture.platform().set_irql(Irql::passive);
+  const av::DxgkargResetEngineRecord refused[] = {{1u, 0u, 0u}, {0u, 1u, 0u}};
+  for (const av::DxgkargResetEngineRecord &request : refused) {
+      av::DxgkargResetEngineRecord copy = request;
+      CHECK_EQ(nt(fixture.adapter().reset_engine(&copy)), invalid_parameter);
+  }
+  CHECK_EQ(nt(fixture.adapter().reset_engine(nullptr)), invalid_parameter); }
+
+TEST(adapter_query_engine_status, the_one_engine_is_responsive)
+{ Fixture fixture;
+  av::DxgkargQueryEngineStatusRecord status = {0u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().query_engine_status(&status)), success);
+  CHECK_EQ(status.EngineStatus, 1u);
+  const av::DxgkargQueryEngineStatusRecord refused[] = {{1u, 0u, 0u}, {0u, 1u, 0u}};
+  for (const av::DxgkargQueryEngineStatusRecord &request : refused) {
+      av::DxgkargQueryEngineStatusRecord copy = request;
+      CHECK_EQ(nt(fixture.adapter().query_engine_status(&copy)), invalid_parameter);
+      CHECK_EQ(copy.EngineStatus, 0u);
+  }
+  CHECK_EQ(nt(fixture.adapter().query_engine_status(nullptr)), invalid_parameter); }
+
+TEST(adapter_query_dependent_engine_group, the_one_node_depends_on_itself)
+{ Fixture fixture;
+  av::DxgkargQueryDependentEngineGroupRecord group = {0u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().query_dependent_engine_group(&group)), success);
+  CHECK_EQ(group.DependentNodeOrdinalMask, 1u);
+  const av::DxgkargQueryDependentEngineGroupRecord refused[] = {{1u, 0u, 0u}, {0u, 1u, 0u}};
+  for (const av::DxgkargQueryDependentEngineGroupRecord &request : refused) {
+      av::DxgkargQueryDependentEngineGroupRecord copy = request;
+      CHECK_EQ(nt(fixture.adapter().query_dependent_engine_group(&copy)), invalid_parameter);
+  }
+  CHECK_EQ(nt(fixture.adapter().query_dependent_engine_group(nullptr)), invalid_parameter); }
+
+TEST(adapter_cancel_command, succeeds_for_a_live_context_only)
+{ Fixture fixture;
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::DxgkargCancelCommandRecord cancel = {};
+  cancel.hContext = context.hContext;
+  CHECK_EQ(nt(fixture.adapter().cancel_command(&cancel)), success);
+  cancel.hContext = &fixture;
+  CHECK_EQ(nt(fixture.adapter().cancel_command(&cancel)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().cancel_command(nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter, the_engine_ddis_are_passive_only)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.adapter().query_dependent_engine_group(nullptr));
+  static_cast<void>(fixture.adapter().query_engine_status(nullptr));
+  static_cast<void>(fixture.adapter().reset_engine(nullptr));
+  static_cast<void>(fixture.adapter().cancel_command(nullptr));
+  fixture.platform().set_irql(Irql::passive);
+  for (int call = 0; call < 4; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
 
 /* ---- WDDM 1.1 (feature 014) -------------------------------------------------- */
 

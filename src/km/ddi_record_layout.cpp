@@ -54,7 +54,13 @@
 #include "ddi/dxgk_wddm_device_caps_record.hpp"
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
+#include "ddi/dxgk_child_container_id_record.hpp"
+#include "ddi/dxgk_display_information_record.hpp"
+#include "ddi/dxgkarg_cancel_command_record.hpp"
 #include "ddi/dxgkarg_present_record.hpp"
+#include "ddi/dxgkarg_query_dependent_engine_group_record.hpp"
+#include "ddi/dxgkarg_query_engine_status_record.hpp"
+#include "ddi/dxgkarg_reset_engine_record.hpp"
 #include "ddi/dxgkarg_query_vidpn_hw_capability_record.hpp"
 #include "ddi/dxgkarg_set_pointer_position_record.hpp"
 #include "ddi/dxgkarg_set_pointer_shape_record.hpp"
@@ -541,6 +547,63 @@ AV_SAME_OFFSET(DxgkargQueryVidPnHwCapabilityRecord, SourceId, DXGKARG_QUERYVIDPN
 AV_SAME_OFFSET(DxgkargQueryVidPnHwCapabilityRecord, TargetId, DXGKARG_QUERYVIDPNHWCAPABILITY, TargetId);
 AV_SAME_OFFSET(DxgkargQueryVidPnHwCapabilityRecord, VidPnHWCaps, DXGKARG_QUERYVIDPNHWCAPABILITY, VidPnHWCaps);
 static_assert(sizeof(D3DKMDT_VIDPN_HW_CAPABILITY) == sizeof(uint32_t), "VidPnHWCaps is one UINT");
+
+AV_SAME_SIZE(DxgkargQueryDependentEngineGroupRecord, DXGKARG_QUERYDEPENDENTENGINEGROUP);
+AV_SAME_OFFSET(DxgkargQueryDependentEngineGroupRecord, NodeOrdinal, DXGKARG_QUERYDEPENDENTENGINEGROUP, NodeOrdinal);
+AV_SAME_OFFSET(DxgkargQueryDependentEngineGroupRecord, EngineOrdinal, DXGKARG_QUERYDEPENDENTENGINEGROUP, EngineOrdinal);
+AV_SAME_OFFSET(DxgkargQueryDependentEngineGroupRecord, DependentNodeOrdinalMask, DXGKARG_QUERYDEPENDENTENGINEGROUP,
+               DependentNodeOrdinalMask);
+
+AV_SAME_SIZE(DxgkargQueryEngineStatusRecord, DXGKARG_QUERYENGINESTATUS);
+AV_SAME_OFFSET(DxgkargQueryEngineStatusRecord, NodeOrdinal, DXGKARG_QUERYENGINESTATUS, NodeOrdinal);
+AV_SAME_OFFSET(DxgkargQueryEngineStatusRecord, EngineOrdinal, DXGKARG_QUERYENGINESTATUS, EngineOrdinal);
+AV_SAME_OFFSET(DxgkargQueryEngineStatusRecord, EngineStatus, DXGKARG_QUERYENGINESTATUS, EngineStatus);
+
+AV_SAME_SIZE(DxgkargResetEngineRecord, DXGKARG_RESETENGINE);
+AV_SAME_OFFSET(DxgkargResetEngineRecord, NodeOrdinal, DXGKARG_RESETENGINE, NodeOrdinal);
+AV_SAME_OFFSET(DxgkargResetEngineRecord, EngineOrdinal, DXGKARG_RESETENGINE, EngineOrdinal);
+AV_SAME_OFFSET(DxgkargResetEngineRecord, LastAbortedFenceId, DXGKARG_RESETENGINE, LastAbortedFenceId);
+
+AV_SAME_SIZE(DxgkargCancelCommandRecord, DXGKARG_CANCELCOMMAND);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, hContext, DXGKARG_CANCELCOMMAND, hContext);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, pDmaBuffer, DXGKARG_CANCELCOMMAND, pDmaBuffer);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, DmaBufferSize, DXGKARG_CANCELCOMMAND, DmaBufferSize);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, DmaBufferSubmissionStartOffset, DXGKARG_CANCELCOMMAND,
+               DmaBufferSubmissionStartOffset);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, DmaBufferSubmissionEndOffset, DXGKARG_CANCELCOMMAND,
+               DmaBufferSubmissionEndOffset);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, pDmaBufferPrivateData, DXGKARG_CANCELCOMMAND, pDmaBufferPrivateData);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, DmaBufferPrivateDataSize, DXGKARG_CANCELCOMMAND, DmaBufferPrivateDataSize);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, DmaBufferPrivateDataSubmissionStartOffset, DXGKARG_CANCELCOMMAND,
+               DmaBufferPrivateDataSubmissionStartOffset);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, DmaBufferPrivateDataSubmissionEndOffset, DXGKARG_CANCELCOMMAND,
+               DmaBufferPrivateDataSubmissionEndOffset);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, pAllocationList, DXGKARG_CANCELCOMMAND, pAllocationList);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, AllocationListSize, DXGKARG_CANCELCOMMAND, AllocationListSize);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, pPatchLocationList, DXGKARG_CANCELCOMMAND, pPatchLocationList);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, PatchLocationListSize, DXGKARG_CANCELCOMMAND, PatchLocationListSize);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, PatchLocationListSubmissionStart, DXGKARG_CANCELCOMMAND,
+               PatchLocationListSubmissionStart);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, PatchLocationListSubmissionLength, DXGKARG_CANCELCOMMAND,
+               PatchLocationListSubmissionLength);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, DmaBufferVirtualAddress, DXGKARG_CANCELCOMMAND, DmaBufferVirtualAddress);
+AV_SAME_OFFSET(DxgkargCancelCommandRecord, DmaBufferUmdPrivateDataSize, DXGKARG_CANCELCOMMAND,
+               DmaBufferUmdPrivateDataSize);
+
+AV_SAME_SIZE(DxgkChildContainerIdRecord, DXGK_CHILD_CONTAINER_ID);
+AV_SAME_OFFSET(DxgkChildContainerIdRecord, ContainerId, DXGK_CHILD_CONTAINER_ID, ContainerId);
+AV_SAME_OFFSET(DxgkChildContainerIdRecord, EldInfoPortId, DXGK_CHILD_CONTAINER_ID, EldInfo.PortId);
+AV_SAME_OFFSET(DxgkChildContainerIdRecord, EldInfoManufacturerName, DXGK_CHILD_CONTAINER_ID, EldInfo.ManufacturerName);
+AV_SAME_OFFSET(DxgkChildContainerIdRecord, EldInfoProductCode, DXGK_CHILD_CONTAINER_ID, EldInfo.ProductCode);
+
+AV_SAME_SIZE(DxgkDisplayInformationRecord, DXGK_DISPLAY_INFORMATION);
+AV_SAME_OFFSET(DxgkDisplayInformationRecord, Width, DXGK_DISPLAY_INFORMATION, Width);
+AV_SAME_OFFSET(DxgkDisplayInformationRecord, Height, DXGK_DISPLAY_INFORMATION, Height);
+AV_SAME_OFFSET(DxgkDisplayInformationRecord, Pitch, DXGK_DISPLAY_INFORMATION, Pitch);
+AV_SAME_OFFSET(DxgkDisplayInformationRecord, ColorFormat, DXGK_DISPLAY_INFORMATION, ColorFormat);
+AV_SAME_OFFSET(DxgkDisplayInformationRecord, PhysicAddress, DXGK_DISPLAY_INFORMATION, PhysicAddress);
+AV_SAME_OFFSET(DxgkDisplayInformationRecord, TargetId, DXGK_DISPLAY_INFORMATION, TargetId);
+AV_SAME_OFFSET(DxgkDisplayInformationRecord, AcpiId, DXGK_DISPLAY_INFORMATION, AcpiId);
 
 AV_SAME_SIZE(DxgkargSetPointerShapeRecord, DXGKARG_SETPOINTERSHAPE);
 AV_SAME_OFFSET(DxgkargSetPointerShapeRecord, Flags, DXGKARG_SETPOINTERSHAPE, Flags);

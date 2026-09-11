@@ -42,6 +42,10 @@ public:
      * dropped without a report, and submissions are refused until restart. */
     void                 reset();
     void                 restart();
+    /* ResetEngine: drops the queue without a report, leaving the node running,
+     * and answers the fence that was executing - the last completed one when
+     * nothing was queued. */
+    uint32_t             abort_pending();
 
     bool invariants_hold() const;
 

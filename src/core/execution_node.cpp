@@ -112,6 +112,18 @@ void ExecutionNode::restart()
     stopped_ = false;
 }
 
+uint32_t ExecutionNode::abort_pending()
+{
+    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::abort_pending");
+    SpinLockGuard lock(lock_);
+    InvariantScope<ExecutionNode> guard(platform_, *this, "abort_pending");
+    const uint32_t executing = count_ != 0u ? pending_[head_] : last_completed_;
+    head_ = 0u;
+    count_ = 0u;
+    preemption_requested_ = false;
+    return executing;
+}
+
 uint32_t ExecutionNode::pending()
 {
     platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::pending");

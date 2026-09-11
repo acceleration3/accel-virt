@@ -33,7 +33,11 @@ struct DxgkChildDescriptorRecord;
 struct DxgkChildStatusRecord;
 struct DxgkDeviceDescriptorRecord;
 struct DxgkrnlInterfaceRecord;
+struct DxgkargCancelCommandRecord;
 struct DxgkargCloseAllocationRecord;
+struct DxgkargQueryDependentEngineGroupRecord;
+struct DxgkargQueryEngineStatusRecord;
+struct DxgkargResetEngineRecord;
 struct DxgkargCommitVidPnRecord;
 struct DxgkargEnumVidPnCofuncModalityRecord;
 struct DxgkargGetScanLineRecord;
@@ -144,6 +148,12 @@ public:
     int32_t create_overlay(void *request);
     /* The driver itself rotates, scales, clones and converts nothing. */
     int32_t query_vidpn_hw_capability(DxgkargQueryVidPnHwCapabilityRecord *request);
+    /* Per-engine recovery for the one node and engine, as basicrender.sys. */
+    int32_t query_dependent_engine_group(DxgkargQueryDependentEngineGroupRecord *request);
+    int32_t query_engine_status(DxgkargQueryEngineStatusRecord *request);
+    int32_t reset_engine(DxgkargResetEngineRecord *request);
+    /* A buffer rendered but never submitted holds nothing of the driver's. */
+    int32_t cancel_command(const DxgkargCancelCommandRecord *request);
 
     bool invariants_hold() const;
 
@@ -153,6 +163,7 @@ private:
     enum : int32_t { power_unspecified = 0, power_d0 = 1, power_d3 = 4 };
     enum : int32_t { query_driver_caps = 1, query_segment4 = 11, query_wddm_device_caps = 29 };   /* DXGKQAITYPE_* */
     enum : int32_t { interrupt_crtc_vsync = 3 };                          /* DXGK_INTERRUPT_CRTC_VSYNC */
+    static constexpr uint32_t engine_responsive = 1u;   /* DXGK_ENGINESTATUS.Responsive */
     enum : int32_t { transformation_identity = 1 };   /* D3DKMDT_VPPS_IDENTITY, D3DKMDT_VPPR_IDENTITY */
 
     [[nodiscard]] Status discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface);

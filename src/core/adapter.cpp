@@ -27,7 +27,11 @@
 #include "ddi/d3dkmdt_vidpn_present_path_record.hpp"
 #include "ddi/dxgkarg_get_scan_line_record.hpp"
 #include "debug_report.hpp"
+#include "ddi/dxgkarg_cancel_command_record.hpp"
 #include "ddi/dxgkarg_present_record.hpp"
+#include "ddi/dxgkarg_query_dependent_engine_group_record.hpp"
+#include "ddi/dxgkarg_query_engine_status_record.hpp"
+#include "ddi/dxgkarg_reset_engine_record.hpp"
 #include "ddi/dxgkarg_query_vidpn_hw_capability_record.hpp"
 #include "ddi/dxgkarg_set_pointer_position_record.hpp"
 #include "ddi/dxgkarg_set_pointer_shape_record.hpp"
@@ -586,6 +590,41 @@ int32_t Adapter::query_vidpn_hw_capability(DxgkargQueryVidPnHwCapabilityRecord *
         request->SourceId >= DisplaySources::source_count || request->TargetId >= DisplaySources::target_count)
         return NtStatus(Status::invalid_parameter).value();
     request->VidPnHWCaps = 0u;
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::query_dependent_engine_group(DxgkargQueryDependentEngineGroupRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::query_dependent_engine_group");
+    if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
+        return NtStatus(Status::invalid_parameter).value();
+    request->DependentNodeOrdinalMask = uint64_t{1} << request->NodeOrdinal;
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::query_engine_status(DxgkargQueryEngineStatusRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::query_engine_status");
+    if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
+        return NtStatus(Status::invalid_parameter).value();
+    request->EngineStatus |= engine_responsive;
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::reset_engine(DxgkargResetEngineRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::reset_engine");
+    if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
+        return NtStatus(Status::invalid_parameter).value();
+    request->LastAbortedFenceId = node_.abort_pending();
+    return NtStatus(Status::ok).value();
+}
+
+int32_t Adapter::cancel_command(const DxgkargCancelCommandRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::cancel_command");
+    if (request == nullptr || contexts_.find(request->hContext) == nullptr)
+        return NtStatus(Status::invalid_parameter).value();
     return NtStatus(Status::ok).value();
 }
 

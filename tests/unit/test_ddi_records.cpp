@@ -25,7 +25,13 @@
 #include "../../src/core/ddi/dxgkarg_preempt_command_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_current_fence_record.hpp"
 #include "../../src/core/ddi/dxgkarg_render_record.hpp"
+#include "../../src/core/ddi/dxgk_child_container_id_record.hpp"
+#include "../../src/core/ddi/dxgk_display_information_record.hpp"
+#include "../../src/core/ddi/dxgkarg_cancel_command_record.hpp"
 #include "../../src/core/ddi/dxgkarg_present_record.hpp"
+#include "../../src/core/ddi/dxgkarg_query_dependent_engine_group_record.hpp"
+#include "../../src/core/ddi/dxgkarg_query_engine_status_record.hpp"
+#include "../../src/core/ddi/dxgkarg_reset_engine_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_vidpn_hw_capability_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_pointer_position_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_pointer_shape_record.hpp"
@@ -240,3 +246,18 @@ TEST(ddi_records, query_vidpn_hw_capability_record_matches_the_x64_layout)
 { CHECK_EQ(sizeof(av::DxgkargQueryVidPnHwCapabilityRecord), 0x18u);
   CHECK_EQ(offsetof(av::DxgkargQueryVidPnHwCapabilityRecord, TargetId), 0x0Cu);
   CHECK_EQ(offsetof(av::DxgkargQueryVidPnHwCapabilityRecord, VidPnHWCaps), 0x10u); }
+
+/* WDDM 1.2 (feature 015). */
+TEST(ddi_records, win8_records_match_the_x64_layout)
+{ CHECK_EQ(sizeof(av::DxgkargQueryDependentEngineGroupRecord), 0x10u);
+  CHECK_EQ(offsetof(av::DxgkargQueryDependentEngineGroupRecord, DependentNodeOrdinalMask), 0x08u);
+  CHECK_EQ(sizeof(av::DxgkargQueryEngineStatusRecord), 0x0Cu);
+  CHECK_EQ(sizeof(av::DxgkargResetEngineRecord), 0x0Cu);
+  CHECK_EQ(sizeof(av::DxgkargCancelCommandRecord), 0x70u);
+  CHECK_EQ(offsetof(av::DxgkargCancelCommandRecord, DmaBufferSubmissionStartOffset), 0x14u);
+  CHECK_EQ(offsetof(av::DxgkargCancelCommandRecord, DmaBufferSubmissionEndOffset), 0x18u);
+  CHECK_EQ(offsetof(av::DxgkargCancelCommandRecord, DmaBufferUmdPrivateDataSize), 0x68u);
+  CHECK_EQ(sizeof(av::DxgkChildContainerIdRecord), 0x20u);
+  CHECK_EQ(offsetof(av::DxgkChildContainerIdRecord, EldInfoManufacturerName), 0x18u);
+  CHECK_EQ(sizeof(av::DxgkDisplayInformationRecord), 0x20u);
+  CHECK_EQ(offsetof(av::DxgkDisplayInformationRecord, TargetId), 0x18u); }

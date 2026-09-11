@@ -180,6 +180,26 @@ TEST(execution_node_reset, drops_the_queue_silently_and_refuses_submissions_unti
   CHECK_EQ(fixture.node().current_fence(), 3u);
   CHECK_EQ(fixture.node().last_submitted(), 3u); }
 
+TEST(execution_node_abort_pending, drops_the_queue_and_names_what_was_executing)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.node().submit(1u), Status::ok);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.node().abort_pending(), 1u);
+  CHECK_STATUS(fixture.node().submit(2u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(3u), Status::ok);
+  CHECK_EQ(fixture.node().abort_pending(), 2u);
+  CHECK(fixture.node().invariants_hold());
+  CHECK_EQ(fixture.node().pending(), 0u);
+  CHECK_EQ(fixture.node().current_fence(), 1u);
+  CHECK_STATUS(fixture.node().submit(4u), Status::ok);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.node().current_fence(), 4u);
+  fixture.platform().set_irql(Irql::isr);
+  static_cast<void>(fixture.node().abort_pending());
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  while (fixture.platform().claim(Violation::irql_ceiling)) {} }
+
 TEST(execution_node_progress_time, moves_on_a_submission_to_an_idle_queue_and_on_each_completion)
 { Fixture fixture;
   CHECK(fixture.node().progress_time() == 0u);
