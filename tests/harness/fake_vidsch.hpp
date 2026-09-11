@@ -21,13 +21,16 @@ namespace av {
 class FakeVidSch {
 public:
     static constexpr std::uint32_t dma_bytes = 0x10000u;
+    /* The implicit system memory segment VidMm adds for a GPU MMU adapter. */
+    static constexpr std::uint32_t root_segment_id = 2u;
 
     FakeVidSch(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlAdapter &dxgkrnl, void *adapter);
     ~FakeVidSch();
     FakeVidSch(const FakeVidSch &) = delete;
     FakeVidSch &operator=(const FakeVidSch &) = delete;
 
-    std::int32_t create_context();
+    /* CreateDevice, then CreateContext with DXGK_CREATECONTEXTFLAGS. */
+    std::int32_t create_context(std::uint32_t flags);
     /* Render then Patch one command buffer whose patch location `patch_offset`
      * references an allocation at `address`; answers the first failure. */
     std::int32_t render(const std::uint8_t *command, std::uint32_t length, std::uint32_t patch_offset,
@@ -37,6 +40,11 @@ public:
     std::int32_t present_blt(std::int64_t source, std::int64_t destination, const RectRecord *sub_rects,
                              std::uint32_t count);
     std::int32_t submit();
+    /* VidSchiEnsureRootPageTableUpdated @ dxgmms2 1400fcb40: the context's root,
+     * before a virtual submission. */
+    void         set_root_page_table(std::uint64_t segment_offset, std::uint32_t entries);
+    /* SubmitCommandVirtual at PASSIVE_LEVEL, as its annotation requires. */
+    std::int32_t submit_virtual(std::uint64_t dma_address);
     std::int32_t preempt();
     void         run_dpc();
     /* TdrResetFromTimeout: VidSch aborts every packet it had submitted. */

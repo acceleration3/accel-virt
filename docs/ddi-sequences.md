@@ -206,6 +206,16 @@ one of the two diagnostic DDIs (WDDM >= 2.4). Each of these returns
 `STATUS_INVALID_PARAMETER` from start. After the cores are created, a full
 adapter at 1.2 must set `SupportDirectFlip` and at 1.3 `FlipIndependent`.
 
+Correction (feature 017): the below-1.2 and below-1.3 capability checks and the
+full-adapter `SupportDirectFlip` / `FlipIndependent` checks run only when the
+`ValidateWDDMCaps` registry value is set, which it is not by default;
+`HybridIntegrated` below 2.0 is checked always. From 2.0, `CreateRenderCore`
+also requires `FlipCaps.FlipOnVSyncMmIo` unless `MiscCaps.ComputeOnly`
+("Driver reports WDDM version 2.0 or higher but does not support
+FlipOnVSyncMmIo cap"), and an answered `PHYSICALADAPTERCAPS` makes
+`MultiEngineAware` mandatory. `FakeDxgadapter::validate_wddm_caps()` turns the
+gated checks on.
+
 `DdiQueryAdapterInfo @ 1402f4e90` does **not** filter the `Type` — every
 requested type is forwarded verbatim to slot 17 (relevant to §5) — and logs
 `"Driver returned an invalid NTSTATUS code"` for any answer other than
@@ -254,6 +264,33 @@ flags below bit 22 without `Agp`, `PreservedDuringHibernate` or
 `PreservedDuringStandby`, no `Aperture` or `CpuVisible` on a segment with a CPU
 host aperture, at most one UEFI frame-buffer range in at most one segment, and
 `PagingBufferSegmentId <= NbSegment`. `FakeVidMm` applies it.
+
+### 2.4b The GPU MMU (feature 017)
+
+For a physical adapter whose `PHYSICALADAPTERCAPS.Flags` sets `GpuMmuSupported`
+(bit 1), `ADAPTER_RENDER::Initialize @ 1401b3d4c` asks `DXGKQAITYPE_GPUMMUCAPS`
+(13; input the physical adapter index, 4 bytes; output 0x18) and, per level,
+`DXGKQAITYPE_PAGETABLELEVELDESC` (14; input `{WORD level, WORD adapter}`;
+output 0x14). A failed query, a virtual address width outside 13..63 or a
+level count outside 2..6 fails start with `STATUS_DEVICE_CONFIGURATION_ERROR`
+(0xC0000182); a level's page table size must be a power of two. Every node's
+`DXGK_NODEMETADATA` must then set `GpuMmuSupported` and no reserved flag (0xFFE0).
+VidMm keys on `MemoryManagementCaps.VirtualAddressingSupported` (0x20) and
+dxgkrnl on `GpuMmuSupported` (0x40); both are set.
+
+VidMm's `InitializeGpuVaState @ 1400972cc` (dxgmms2) runs once segments exist
+and adds an implicit system memory segment, id `NbSegment + 1`. It checks the
+leaf table size, that every `PageTableSegmentId` and `PagingProcessPageTableSegmentId`
+names a segment (the implicit one included), the leaf index bits, the update
+mode (at most 2), and that directory levels agree for a level count other than
+2; any failure fails start with `STATUS_NO_MEMORY`. `FakeGpuMmu` applies both
+halves. `SetRootPageTable`, `GetRootPageTableSize` and `SubmitCommandVirtual`
+are then called without a NULL check; `CreateProcess` is checked. The paging
+operations `TRANSFER`, `FILL` and `DISCARD_CONTENT` are WDDMv1 only
+(`d3dkmddi.h`), and `BuildPagingBuffer` may answer only `STATUS_SUCCESS`,
+`STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER` or `STATUS_GRAPHICS_ALLOCATION_BUSY`.
+`basicrender.sys` uses the IoMmu model instead and implements none of the root
+page table DDIs.
 
 ### 2.5 QueryChildStatus / QueryDeviceDescriptor
 
@@ -564,6 +601,35 @@ WDDM 1.2 (with GPU VA, feature 017): a 1.2 claim below `DXGKDDI_WDDMv1_2` fails
 - `SetPowerPState` refuses every component; `CheckMultiPlaneOverlaySupport` and
   `FormatHistoryBuffer` stay NULL.
 
+## 4i. WDDM 2.0 GPU virtual addressing (feature 017)
+
+- `DRIVERCAPS`: `WDDMVersion` 2.0, `MultiEngineAware`, one asymmetric node,
+  `VirtualAddressingSupported` and `GpuMmuSupported`, `FlipOnVSyncMmIo`,
+  `SupportPerEngineTDR`. `PHYSICALADAPTERCAPS`: one node, paging node 0,
+  `GpuMmuSupported`. `GPUMMUCAPS`: 48 bits, four levels, CPU-virtual updates,
+  cache-coherent memory. Each `PAGETABLELEVELDESC`: 9 index bits, segment 0,
+  4096 bytes. Node metadata sets `GpuMmuSupported`.
+- With `FlipOnVSyncMmIo`, dxgkrnl calls `SetVidPnSourceAddress` synchronized
+  with the interrupt, at device IRQL: the scanout address is stored with
+  `InterlockedExchange64` and read the same way at vsync.
+- `BuildPagingBuffer`: `UPDATE_PAGE_TABLE` writes the device's page table
+  entries through VidMm's CPU mapping; `FLUSH_TLB`, `VIRTUAL_FILL`,
+  `VIRTUAL_TRANSFER` and `COPY_PAGE_TABLE_ENTRIES` become paging commands
+  (docs/protocol.md), a copy running multipass over its ranges;
+  `NOTIFY_RESIDENCY` and the aperture operations need nothing.
+- `CreateContext` accepts `VirtualAddressing`. `VidSchiEnsureRootPageTableUpdated
+  @ 1400fcb40` (dxgmms2) calls `SetRootPageTable` before a submission when the
+  process's root changed - except for contexts with flag 0x1000 of its own
+  context object, which it skips - so a context without a root admits any DMA
+  buffer address. `SubmitCommandVirtual` (PASSIVE) queues the fence and asks for
+  the DPC; dxgkrnl accepts only `STATUS_SUCCESS` and `STATUS_INVALID_PARAMETER`
+  from it, and only `STATUS_SUCCESS` from `CreateProcess` and `DestroyProcess`.
+- `GetRootPageTableSize` answers 8 bytes per entry; `CreateProcess` keeps no
+  driver process (as `basicrender.sys`); `SetStablePowerState` does nothing.
+  `RenderGdi`, `MapCpuHostAperture`, `UnmapCpuHostAperture`,
+  `CheckMultiPlaneOverlaySupport2`, `SetVidPnSourceAddressWithMultiPlaneOverlay2`,
+  `PowerRuntimeSetDeviceHandle` and `SetVideoProtectedRegion` stay NULL.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the
@@ -632,3 +698,8 @@ shipping stack. Scheduler/paging DDIs live in `dxgmms2.sys` (same project).
   `DdiRestartFromTimeout` inside the TDR `Reset` object — the orchestration was
   confirmed via xrefs (`TdrResetFromTimeout` -> `Reset` -> `DdiRestartFromTimeout`)
   but the interleaving of the two DDIs within `Reset` was not decompiled.
+- Which paging operations VidMm issues to a GPU MMU adapter whose only
+  segments are an aperture and the implicit system memory segment, and in which
+  order; what flag 0x1000 of dxgmms2's context object means; and whether
+  `DxgkPhysicalAdapterHandle` in `PHYSICALADAPTERCAPS` must be the
+  `DeviceHandle` dxgkrnl passed at start (it is answered as that).

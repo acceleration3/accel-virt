@@ -25,6 +25,11 @@
 #include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_reset_engine_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_vidpn_hw_capability_record.hpp"
+#include "../../src/core/ddi/dxgk_build_paging_buffer_flush_tlb_record.hpp"
+#include "../../src/core/ddi/dxgk_build_paging_buffer_update_page_table_record.hpp"
+#include "../../src/core/ddi/dxgk_pte_record.hpp"
+#include "../../src/core/ddi/dxgkarg_build_paging_buffer_record.hpp"
+#include "../../src/core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "../../src/core/ddi_slot.hpp"
 #include "../../src/core/ddi_table.hpp"
 #include "../../src/core/driver_image.hpp"
@@ -34,6 +39,8 @@
 #include "../harness/fake_dxgkrnl.hpp"
 #include "../harness/fake_dxgkrnl_adapter.hpp"
 #include "../harness/fake_dxgkrnl_fdo.hpp"
+#include "../harness/fake_gpu_mmu.hpp"
+#include "../harness/gpu_mmu_rule.hpp"
 #include "../harness/fake_handle_table.hpp"
 #include "../harness/fake_vidmm.hpp"
 #include "../harness/fake_vidpn.hpp"
@@ -480,7 +487,7 @@ TEST(ddi_scenario, render_patch_submit_and_three_fences_complete_through_the_dpc
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
-    CHECK_EQ(vidsch.create_context(), 0);
+    CHECK_EQ(vidsch.create_context(0u), 0);
     std::uint8_t command[32] = {0x52, 0x56, 0x4B, 0x53};
     for (int packet = 0; packet < 3; packet++) {
         CHECK_EQ(vidsch.render(command, sizeof command, 8u, 0xC0002000 + static_cast<std::int64_t>(packet)), 0);
@@ -506,7 +513,7 @@ TEST(ddi_scenario, a_preemption_is_reported_after_what_was_pending_and_again_wit
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
-    CHECK_EQ(vidsch.create_context(), 0);
+    CHECK_EQ(vidsch.create_context(0u), 0);
     std::uint8_t command[16] = {};
     CHECK_EQ(vidsch.render(command, sizeof command, 0u, 0), 0);
     CHECK_EQ(vidsch.submit(), 0);
@@ -525,7 +532,7 @@ TEST(ddi_scenario, a_render_that_overruns_is_refused_and_nothing_is_submitted)
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
-    CHECK_EQ(vidsch.create_context(), 0);
+    CHECK_EQ(vidsch.create_context(0u), 0);
     std::uint8_t command[16] = {};
     CHECK_EQ(nt(vidsch.render(command, sizeof command, 9u, 0)), 0xC000000Du);
     vidsch.run_dpc();
@@ -540,7 +547,7 @@ TEST(ddi_scenario, a_timeout_is_recovered_from_twice)
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
   { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
-    CHECK_EQ(vidsch.create_context(), 0);
+    CHECK_EQ(vidsch.create_context(0u), 0);
     std::uint8_t command[16] = {};
     for (int round = 0; round < 2; round++) {
         CHECK_EQ(vidsch.render(command, sizeof command, 0u, 0), 0);
@@ -637,7 +644,7 @@ TEST(ddi_scenario, a_primary_scans_out_at_vsync_while_presents_complete)
   CHECK_EQ(device.dxgkrnl().interrupt(1u).InterruptType, 3);
   CHECK_EQ(device.dxgkrnl().interrupt(1u).Argument3, 2u);
   { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
-    CHECK_EQ(vidsch.create_context(), 0);
+    CHECK_EQ(vidsch.create_context(0u), 0);
     const av::RectRecord dirty[2] = {{0, 0, 16, 16}, {32, 32, 64, 64}};
     CHECK_EQ(vidsch.present_blt(0x0000000200000000ll, 0x0000000300000000ll, dirty, 2u), 0);
     CHECK_EQ(vidsch.dma()[av::PresentCommand::source_address_offset + 4u], 2u);
@@ -757,7 +764,7 @@ TEST(ddi_scenario, an_engine_reset_then_the_device_disappears)
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().SupportPerEngineTDR, 1u);
   { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
-    CHECK_EQ(vidsch.create_context(), 0);
+    CHECK_EQ(vidsch.create_context(0u), 0);
     std::uint8_t command[16] = {};
     CHECK_EQ(vidsch.render(command, sizeof command, 0u, 0), 0);
     CHECK_EQ(vidsch.submit(), 0);
@@ -809,4 +816,80 @@ TEST(ddi_scenario, node_metadata_clock_calibration_and_vsync_state_through_the_t
   driver.platform().run_timers(10000000u);
   CHECK_EQ(device.dxgkrnl().interrupts(), 1u);
   CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- WDDM 2.0 GPU virtual addressing (feature 017) ----------------------------- */
+
+TEST(ddi_scenario, a_gpu_mmu_adapter_pages_submits_by_virtual_address_and_flips_at_device_irql)
+{ LoadedDriver driver;
+  CHECK(driver.table().routine(DdiSlot::DxgkDdiRenderGdi) == nullptr);
+  CHECK(driver.table().routine(DdiSlot::DxgkDdiMapCpuHostAperture) == nullptr);
+  CHECK(driver.table().routine(DdiSlot::DxgkDdiSetVideoProtectedRegion) == nullptr);
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  void *const adapter = device.fdo().context();
+  const DdiTable &table = driver.table();
+  CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
+  av::FakeGpuMmu mmu(device.fdo().dxgadapter());
+  CHECK_EQ(mmu.query(adapter), 0);
+  CHECK(mmu.supported());
+  av::FakeVidMm vidmm(device.fdo().dxgadapter());
+  CHECK_EQ(vidmm.create_segments(adapter), 0);
+  CHECK_EQ(vidmm.segment_count(), 2u);
+  CHECK_EQ(mmu.initialize_va_state(vidmm.segment_count()), 0);
+  CHECK(mmu.failed_rule() == av::GpuMmuRule::none);
+
+  av::DxgkargGetRootPageTableSizeRecord size = {512u, 0u};
+  CHECK_EQ(reinterpret_cast<std::size_t (*)(void *, av::DxgkargGetRootPageTableSizeRecord *)>(
+               table.routine(DdiSlot::DxgkDdiGetRootPageTableSize))(adapter, &size), 4096u);
+  const auto build = reinterpret_cast<std::int32_t (*)(void *, av::DxgkargBuildPagingBufferRecord *)>(
+      table.routine(DdiSlot::DxgkDdiBuildPagingBuffer));
+  std::uint8_t page_table[4096] = {};
+  const av::DxgkPteRecord entry = {0x1u | (2u << 5u), 0x12345u};
+  av::DxgkBuildPagingBufferUpdatePageTableRecord update = {};
+  update.PageTableAddress = page_table;
+  update.pPageTableEntries = &entry;
+  update.StartIndex = 16u;
+  update.NumPageTableEntries = 1u;
+  std::uint8_t paging[64] = {};
+  av::DxgkargBuildPagingBufferRecord request = {};
+  request.pDmaBuffer = paging;
+  request.DmaSize = sizeof paging;
+  request.Operation = 11;
+  std::memcpy(request.Reserved, &update, sizeof update);
+  CHECK_EQ(build(adapter, &request), 0);
+  CHECK_EQ(page_table[128], 0x21u);
+  CHECK_EQ(page_table[129], 0x50u);
+  const av::DxgkBuildPagingBufferFlushTlbRecord flush = {2u, 0u, 0x7000u, nullptr, 0x10000u, 0x11000u};
+  request.Operation = 12;
+  std::memcpy(request.Reserved, &flush, sizeof flush);
+  CHECK_EQ(build(adapter, &request), 0);
+  CHECK_EQ(paging[0], 0x52u);
+  CHECK_EQ(paging[4], 1u);
+  CHECK(request.pDmaBuffer == paging + 40);
+
+  { av::FakeVidSch vidsch(driver.platform(), table, device.dxgkrnl(), adapter);
+    CHECK_EQ(vidsch.create_context(0x4u), 0);
+    vidsch.set_root_page_table(0x7000u, 512u);
+    CHECK_EQ(vidsch.submit_virtual(0x10000u), 0);
+    CHECK_EQ(vidsch.submit_virtual(0x1000000000000ull), static_cast<std::int32_t>(0xC000000Du));
+    vidsch.run_dpc();
+    CHECK_EQ(vidsch.completed(), 1u); }
+
+  av::FakeDisplayModeManager dmm(driver.platform(), table, adapter);
+  { av::FakeVidPn vidpn;
+    CHECK_EQ(dmm.set_mode(vidpn, 1280u, 800u), 0); }
+  int primary = 0;
+  CHECK_EQ(dmm.set_visible(true), 0);
+  CHECK_EQ(dmm.control_vsync(true), 0);
+  driver.platform().set_irql(av::Irql::isr);
+  CHECK_EQ(dmm.show_primary(&primary, 0x0000000400000000ll), 0);
+  driver.platform().set_irql(av::Irql::passive);
+  const std::uint32_t reported = device.dxgkrnl().interrupts();
+  driver.platform().run_timers(10000000u / 60u);
+  CHECK_EQ(device.dxgkrnl().interrupts(), reported + 1u);
+  CHECK_EQ(device.dxgkrnl().interrupt(reported).Argument3, 4u);
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }

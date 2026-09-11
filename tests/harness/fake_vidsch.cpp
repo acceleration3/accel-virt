@@ -8,7 +8,9 @@
 #include "../../src/core/ddi/dxgkarg_preempt_command_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_current_fence_record.hpp"
 #include "../../src/core/ddi/dxgkarg_render_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_root_page_table_record.hpp"
 #include "../../src/core/ddi/dxgkarg_submit_command_record.hpp"
+#include "../../src/core/ddi/dxgkarg_submit_command_virtual_record.hpp"
 #include "test_registry.hpp"
 
 #include <cstring>
@@ -34,7 +36,7 @@ FakeVidSch::~FakeVidSch()
     if (device_ != nullptr) reinterpret_cast<std::int32_t (*)(void *)>(table_.routine(DdiSlot::DxgkDdiDestroyDevice))(device_);
 }
 
-std::int32_t FakeVidSch::create_context()
+std::int32_t FakeVidSch::create_context(std::uint32_t flags)
 {
     platform_.set_irql(Irql::passive);
     DxgkargCreateDeviceRecord device = {};
@@ -43,6 +45,7 @@ std::int32_t FakeVidSch::create_context()
     if (status < 0) return status;
     device_ = device.hDevice;
     DxgkargCreateContextRecord context = {};
+    context.Flags = flags;
     status = reinterpret_cast<std::int32_t (*)(void *, DxgkargCreateContextRecord *)>(
         table_.routine(DdiSlot::DxgkDdiCreateContext))(device_, &context);
     if (status >= 0) context_ = context.hContext;
@@ -132,6 +135,28 @@ std::int32_t FakeVidSch::submit()
     const std::int32_t status = reinterpret_cast<std::int32_t (*)(void *, const DxgkargSubmitCommandRecord *)>(
         table_.routine(DdiSlot::DxgkDdiSubmitCommand))(adapter_, &submit);
     platform_.set_irql(Irql::passive);
+    if (status >= 0) submitted_++;
+    return status;
+}
+
+void FakeVidSch::set_root_page_table(std::uint64_t segment_offset, std::uint32_t entries)
+{
+    platform_.set_irql(Irql::passive);
+    const DxgkargSetRootPageTableRecord root = {context_, root_segment_id, 0u, segment_offset, entries, 0u};
+    reinterpret_cast<void (*)(void *, const DxgkargSetRootPageTableRecord *)>(
+        table_.routine(DdiSlot::DxgkDdiSetRootPageTable))(adapter_, &root);
+}
+
+std::int32_t FakeVidSch::submit_virtual(std::uint64_t dma_address)
+{
+    platform_.set_irql(Irql::passive);
+    DxgkargSubmitCommandVirtualRecord submit = {};
+    submit.hContext = context_;
+    submit.DmaBufferVirtualAddress = dma_address;
+    submit.DmaBufferSize = dma_bytes;
+    submit.SubmissionFenceId = submitted_ + 1u;
+    const std::int32_t status = reinterpret_cast<std::int32_t (*)(void *, const DxgkargSubmitCommandVirtualRecord *)>(
+        table_.routine(DdiSlot::DxgkDdiSubmitCommandVirtual))(adapter_, &submit);
     if (status >= 0) submitted_++;
     return status;
 }
