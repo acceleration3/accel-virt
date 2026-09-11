@@ -127,13 +127,16 @@ TEST(present_request_present, a_colour_fill_patches_only_the_destination)
   CHECK(present.patches_untouched_from(1u)); }
 
 TEST(present_request_present, a_flip_patches_only_the_source)
-{ Present present(flip | flip_with_no_wait);
-  CHECK_EQ(present.run(), 0u);
-  CHECK_EQ(u32(present.dma(), 4u), 3u);
-  CHECK_EQ(u32(present.dma(), 64u), 1u);
-  CHECK_EQ(present.patched(), 1u);
-  CHECK_EQ(present.patch(0u).AllocationIndex, 1u);
-  CHECK_EQ(present.patch(0u).PatchOffset, PresentCommand::source_address_offset); }
+{ const std::uint32_t flips[] = {flip, flip | flip_with_no_wait};
+  for (std::uint32_t flags : flips) {
+      Present present(flags);
+      CHECK_EQ(present.run(), 0u);
+      CHECK_EQ(u32(present.dma(), 4u), 3u);
+      CHECK_EQ(u32(present.dma(), 64u), 1u);
+      CHECK_EQ(present.patched(), 1u);
+      CHECK_EQ(present.patch(0u).AllocationIndex, 1u);
+      CHECK_EQ(present.patch(0u).PatchOffset, PresentCommand::source_address_offset);
+  } }
 
 TEST(present_request_present, sub_rectangles_that_do_not_fit_go_in_the_next_pass)
 { Present first(blt, PresentCommand::header_size + PresentCommand::sub_rectangle_size + 15u);

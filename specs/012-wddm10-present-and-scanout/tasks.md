@@ -29,4 +29,4 @@ description: "Task list for feature 012: WDDM 1.0 present and scanout"
 ## Phase 4: Scenarios
 
 - [X] T008 Scenarios through the table; fuzz_present with corpus
-- [ ] T009 Docs; gate; merge; push
+- [X] T009 Docs; gate; merge; push
