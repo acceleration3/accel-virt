@@ -122,7 +122,10 @@ bugcheck in a VM.
 
 **Tests**: see `.specify/memory/constitution.md`, Principle IV. Every branch,
 invariants after every mutation, hostile input, and a fuzz target for anything
-that reads bytes it did not write. This is not aspirational; `tools/gate.sh`
+that reads bytes it did not write. Coverage is the floor, not the goal: a test
+asserts the outcome a caller would care about, at the values that are actually
+interesting, and must fail if a comparison is flipped or a line deleted. A test
+that only walks a branch without judging what it produced is not a test. This is not aspirational; `tools/gate.sh`
 runs every gate - `tools/check_design.py`, `tools/check_symbol_tests.py`, the
 kernel cross-build, 100% branch coverage and fuzz smoke - and fails the build.
 

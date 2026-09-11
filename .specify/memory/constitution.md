@@ -1,6 +1,6 @@
 # accel-virt Constitution
 
-**Version**: 2.3.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-11
+**Version**: 2.4.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-12
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
 display miniport (`rvkgpu.sys`), a custom in-process QEMU device
@@ -117,6 +117,24 @@ exercise every branch, assert the module's invariants, and feed it garbage.**
 5. **The build enforces it.** `tools/check_symbol_tests.py` fails the build if
    any exported core symbol has no test referencing it. Coverage and fuzz
    smoke runs are gates, not reports.
+
+6. **A test states a behaviour, not a line number.** 100% branch coverage is
+   the floor, never the goal. Every test exists to fail when the code is
+   wrong: it asserts the observable outcome, and the invariant that outcome
+   implies, at values chosen because they are the interesting ones - the
+   boundary, the wrap, the overflow, the refusal, the sequence a real caller
+   performs. The question to ask of a test is "if I flipped this comparison or
+   deleted this line, would it fail?" If not, it is not a test.
+
+   These turn the gate green and catch nothing, and are rejected at review:
+   calling a function and asserting only that it returned; sweeping arguments
+   to walk branches without judging what each one produced; asserting a value
+   the test computed the same way the implementation does; a `invariants_hold`
+   that cannot return false; a hostile-input case whose expected outcome was
+   read off the implementation instead of decided from the contract.
+
+   If a branch cannot be made to matter to a caller, that is evidence about
+   the branch, not about the test. Delete the branch rather than decorate it.
 
 Tests are written before the implementation, and they must fail before they
 pass.
