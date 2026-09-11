@@ -37,7 +37,7 @@ public:
     void                 answer_mode_behavior(DxgkargControlModeBehaviorRecord &request) const;
 
 private:
-    static constexpr int32_t wddm_2_4 = 0x2400;   /* DXGKDDI_WDDMv2_4 */
+    static constexpr int32_t wddm_2_9 = 0x2900;   /* DXGKDDI_WDDMv2_9 */
     enum : uint32_t {
         scheduling_multi_engine_aware = 0x1u,      /* DXGK_VIDSCHCAPS */
         memory_virtual_addressing = 0x20u,         /* DXGK_VIDMMCAPS: VidMm keys on it */

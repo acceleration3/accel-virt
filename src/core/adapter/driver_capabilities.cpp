@@ -10,7 +10,7 @@
 namespace av {
 
 DriverCapabilities::DriverCapabilities(Platform &platform)
-    : platform_(platform), wddm_version_(wddm_2_4), highest_acceptable_address_(any_address),
+    : platform_(platform), wddm_version_(wddm_2_9), highest_acceptable_address_(any_address),
       mode_behaviors_(0u), display_extension_(0u) {}
 
 Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) const

@@ -762,6 +762,22 @@ WDDM 1.2 (with GPU VA, feature 017): a 1.2 claim below `DXGKDDI_WDDMv1_2` fails
   `SignalMonitoredFence`, `DxgkCbInvalidateHwContext` (`+0x148`) inside
   ResetHwEngine, and a user-mode driver submitting to hardware queues.
 
+## 4n. WDDM 2.9 flip queue logs (feature 022)
+
+- Slots 154-157 are copied from DDI interface 0xE002 (`DpiGetAdapterInfo
+  @ 14024eb50`). Every flip queue path checks `VIDSCH_GLOBAL+0x3b`, set by
+  `VidSchInitializeAdapter @ 1400a8a30` only when the driver requested
+  `DXGK_FEATURE_HWFLIPQUEUE` and reports `MaxHwQueuedFlips` above 1.
+  `SetFlipQueueLogBuffer` (NULL-checked, PASSIVE) gets a 0x400-byte log of 0x40
+  entries; `UpdateFlipQueueLog`, `CancelQueuedFlips` (the fallback when
+  `CancelFlips` answers NOT_IMPLEMENTED) and `SetInterruptTargetPresentId` run at
+  device IRQL, are not NULL-checked and must answer SUCCESS;
+  `VidSchiCommitFlipQueueLogUpdate @ 14003d168` bugchecks 0x119 on a bad index or
+  a present id going backwards.
+- From 2.6 the version needs DDI interface 0xA00C or later. 2.9 accepts
+  `MapApertureCpuVisible` and honours `VirtualRefreshRateSupport`; nothing is
+  mandatory. The driver reports 2.9 and leaves the four slots NULL.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the
@@ -848,3 +864,5 @@ shipping stack. Scheduler/paging DDIs live in `dxgmms2.sys` (same project).
 - Where the flip entry flag 0x100 that also selects `FlipImmediate` comes from;
   the offset part of an implicit-segment address; whether non-virtual contexts
   are allowed on a GPU MMU adapter.
+- Whether dxgkrnl enables the hardware flip queue on an adapter without
+  hardware scheduling; what flip queue field +0x50 means.
