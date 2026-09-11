@@ -1,4 +1,4 @@
-/* Binds a new context to its ring and fence page (docs/protocol.md). */
+/* Binds a new context to its ring, fence page and doorbell (docs/protocol.md). */
 #ifndef AV_CONTEXT_SETUP_HPP
 #define AV_CONTEXT_SETUP_HPP
 
@@ -19,18 +19,20 @@ public:
 
     ContextSetup();
     ContextSetup(const ProtocolVersion &version, SubApi sub_api, uint32_t ring_resource,
-                 uint8_t ring_order, uint32_t fence_resource);
+                 uint8_t ring_order, uint32_t fence_resource, uint32_t doorbell);
 
     const ProtocolVersion &version() const;
     SubApi                 sub_api() const;
     uint32_t               ring_resource() const;
     uint8_t                ring_order() const;
     uint32_t               fence_resource() const;
+    uint32_t               doorbell() const;
 
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
     /* Checks what the bytes alone can prove; unchanged unless ok. */
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
-    /* Checks what needs the device's capset: major, sub-API, ring order. */
+    /* Checks what needs the device's capset: major, sub-API, ring order, and a
+     * doorbell index below its context count. */
     [[nodiscard]] Status validate_against(const CapsetInfo &capset) const;
 
 private:
@@ -45,6 +47,7 @@ private:
     uint32_t        ring_resource_;
     uint8_t         ring_order_;
     uint32_t        fence_resource_;
+    uint32_t        doorbell_;
 };
 
 }  // namespace av

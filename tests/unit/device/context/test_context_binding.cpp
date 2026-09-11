@@ -43,7 +43,7 @@ CapsetInfo capset(std::uint16_t minor = 0u, std::uint8_t max_order = 24u)
 ContextSetup setup(std::uint32_t ring_id = ring, std::uint32_t fence_id = fence, std::uint8_t order = 12u,
                    ProtocolVersion version = ProtocolVersion(1u, 0u), SubApi api = SubApi::vulkan)
 {
-    return ContextSetup(version, api, ring_id, order, fence_id);
+    return ContextSetup(version, api, ring_id, order, fence_id, 0u);
 }
 
 class Fixture {

@@ -7,18 +7,19 @@
 namespace av {
 
 ContextSetup::ContextSetup()
-    : version_(0u, 0u), sub_api_(0u), ring_resource_(0u), ring_order_(0u), fence_resource_(0u) {}
+    : version_(0u, 0u), sub_api_(0u), ring_resource_(0u), ring_order_(0u), fence_resource_(0u), doorbell_(0u) {}
 
 ContextSetup::ContextSetup(const ProtocolVersion &version, SubApi sub_api, uint32_t ring_resource,
-                           uint8_t ring_order, uint32_t fence_resource)
+                           uint8_t ring_order, uint32_t fence_resource, uint32_t doorbell)
     : version_(version), sub_api_(static_cast<uint32_t>(sub_api)), ring_resource_(ring_resource),
-      ring_order_(ring_order), fence_resource_(fence_resource) {}
+      ring_order_(ring_order), fence_resource_(fence_resource), doorbell_(doorbell) {}
 
 const ProtocolVersion &ContextSetup::version() const        { return version_; }
 SubApi                 ContextSetup::sub_api() const        { return static_cast<SubApi>(sub_api_); }
 uint32_t               ContextSetup::ring_resource() const  { return ring_resource_; }
 uint8_t                ContextSetup::ring_order() const     { return ring_order_; }
 uint32_t               ContextSetup::fence_resource() const { return fence_resource_; }
+uint32_t               ContextSetup::doorbell() const       { return doorbell_; }
 
 Status ContextSetup::encode(uint8_t *bytes, size_t capacity) const
 {
@@ -32,7 +33,8 @@ Status ContextSetup::encode(uint8_t *bytes, size_t capacity) const
     writer.write_u8(ring_order_);
     writer.write_zeros(3u);
     writer.write_u32(fence_resource_);
-    writer.write_zeros(8u);
+    writer.write_u32(doorbell_);
+    writer.write_zeros(4u);
     return writer.status();
 }
 
@@ -59,7 +61,8 @@ Status ContextSetup::decode(const uint8_t *bytes, size_t length)
     candidate.ring_order_    = reader.read_u8();
     reader.expect_zero(3u);
     candidate.fence_resource_ = reader.read_u32();
-    reader.expect_zero(8u);
+    candidate.doorbell_       = reader.read_u32();
+    reader.expect_zero(4u);
     if (reader.status() != Status::ok) return reader.status();
     if (found_magic != magic || !candidate.fields_valid()) return Status::malformed;
     *this = candidate;
@@ -69,7 +72,7 @@ Status ContextSetup::decode(const uint8_t *bytes, size_t length)
 Status ContextSetup::validate_against(const CapsetInfo &capset) const
 {
     if (!version_.compatible_with(capset.version()) || !capset.offers(sub_api()) ||
-        !capset.accepts_ring_order(ring_order_))
+        !capset.accepts_ring_order(ring_order_) || doorbell_ >= capset.max_contexts())
         return Status::not_supported;
     return Status::ok;
 }
