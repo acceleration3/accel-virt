@@ -123,6 +123,18 @@ the worker tests run under ASan and UBSan:
 The glue itself is exercised by the `qemu` gate configuration: the patched
 QEMU is built and `tests/qemu/qemu_smoke.py` reads the PCI function over qtest.
 
+### The device under qtest
+
+`tests/qemu/virtio_qtest.py` is a virtio-gpu driver that needs no guest: over
+qtest it assigns the function's BARs, walks the virtio capabilities, negotiates
+features, lays split virtqueues out in guest RAM and polls their used rings.
+The `qemu_virtio_gpu` ctest runs `tests/qemu/test_*.py` with it against the
+patched QEMU's stock `virtio-gpu-pci` and `virtio-gpu-rvk-pci` side by side, so
+a behaviour the rvk device changes shows up as a difference from stock. Where
+the driver already sends a request, the test sends the driver's own bytes:
+`gpu_request_bytes` prints what `GpuRequestWriter` writes. Device features past
+the base class extend this suite.
+
 ### The shape of a test file
 
 Every core class `X` has `tests/unit/test_x.cpp` with three sections:

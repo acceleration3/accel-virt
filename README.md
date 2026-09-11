@@ -88,7 +88,7 @@ tools/gate.sh                   # the full verdict, four configurations
 | default | `build/` | unit tests under ASan+UBSan, `design_rules`, `symbol_tests`, `driver_image`, `self_contained`, `tools_tests` |
 | coverage | `build-coverage/` | the above, plus `coverage_gate`: 100% branches of `src/core`, `src/device`, `src/proto`, and the `AV_UNTESTABLE` ratchet |
 | fuzz | `build-fuzz/` | the above, plus `fuzz_<target>_smoke`: 60 s per target (`AV_FUZZ_SECONDS`) |
-| qemu | `build-qemu/` | `librvk_device.a`, QEMU 11.1.1 patched with `virtio-gpu-rvk-pci` (`tools/fetch_qemu.sh`, `tools/build_qemu.sh`), and `qemu_smoke`: the PCI function a guest sees and the realize failures |
+| qemu | `build-qemu/` | `librvk_device.a`, QEMU 11.1.1 patched with `virtio-gpu-rvk-pci` (`tools/fetch_qemu.sh`, `tools/build_qemu.sh`), `qemu_smoke` (the PCI function a guest sees, the realize failures) and `qemu_virtio_gpu` (the virtio-gpu suites, stock and rvk side by side) |
 
 ### Running the device
 
@@ -163,7 +163,7 @@ tests/harness/                    the adversarial platform mock, fake dxgkrnl
   device/                           fake virtio-gpu PCI function and virtqueue device
 tests/fuzz/ tests/corpus/         L3: libFuzzer targets and seed corpora
 tests/fixtures/                   bytes captured from real devices (tools/host/capture_pci_config.py)
-tests/qemu/                       the smoke test run against the patched QEMU
+tests/qemu/                       the device under qtest: a virtio-gpu driver with no guest, the suites run on it
 tests/loopback/                   L4: guest core ↔ device core in one process
 tests/tools/                      tests for the gate scripts themselves
 tools/                            gates, kit fetch, spec/roadmap generators

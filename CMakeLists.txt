@@ -80,6 +80,13 @@ if(AV_QEMU)
     COMMENT "QEMU with virtio-gpu-rvk")
   add_test(NAME qemu_smoke
            COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tests/qemu/qemu_smoke.py ${CMAKE_BINARY_DIR}/qemu)
+  # The driver's own request bytes, sent to the real device by tests/qemu.
+  add_executable(gpu_request_bytes tests/qemu/gpu_request_bytes.cpp)
+  target_link_libraries(gpu_request_bytes PRIVATE av_core)
+  add_test(NAME qemu_virtio_gpu
+           COMMAND python3 -B -m unittest discover -s ${CMAKE_SOURCE_DIR}/tests/qemu -p "test_*.py")
+  set_tests_properties(qemu_virtio_gpu PROPERTIES
+    ENVIRONMENT "AV_QEMU_BUILD=${CMAKE_BINARY_DIR}/qemu;AV_GPU_REQUEST_BYTES=$<TARGET_FILE:gpu_request_bytes>")
   return()
 endif()
 
