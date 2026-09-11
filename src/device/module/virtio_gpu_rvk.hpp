@@ -14,6 +14,7 @@ namespace av {
 
 class Host;
 class TextBuffer;
+struct VirtioGpuRvkProbe;
 
 class VirtioGpuRvk {
 public:
@@ -37,6 +38,8 @@ private:
     Host              &host_;
     GpuBinding         binding_;
     DeviceContextTable contexts_;
+
+    friend struct VirtioGpuRvkProbe;
 };
 
 }  // namespace av

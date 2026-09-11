@@ -40,6 +40,17 @@ TEST(device_module_create, realizes_a_device_on_the_named_gpu)
   CHECK_EQ(host.live_threads(), 0u);
   CHECK_STATUS(module.destroy(instance), Status::invalid_parameter); }
 
+TEST(device_module_destroy, finds_the_device_named_among_others)
+{ MockHost host; MockHostOps ops(host);
+  host.add_gpu(gpu);
+  DeviceModule module;
+  char error[96] = {};
+  DeviceInstance *const first = module.create(&ops.table(), "auto", error, sizeof error);
+  DeviceInstance *const second = module.create(&ops.table(), "auto", error, sizeof error);
+  CHECK_STATUS(module.destroy(second), Status::ok);
+  CHECK_EQ(module.live(), 1u);
+  CHECK_STATUS(module.destroy(first), Status::ok); }
+
 TEST(device_module_create, a_failed_realize_or_missing_table_leaves_no_device)
 { MockHost host; MockHostOps ops(host);
   DeviceModule module;
