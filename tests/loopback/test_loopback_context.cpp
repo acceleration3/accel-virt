@@ -202,3 +202,33 @@ TEST(loopback_reset, after_a_device_reset_serving_finds_nothing_more_and_a_new_c
   CHECK_STATUS(rig.submit(0u, 1u, 0u, fresh.tail()), Status::ok);
   CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 1u));
   CHECK(rig.context(0u).invariants_hold()); }
+
+/* A driver that stops clears DRIVER_OK without resetting the device, so a
+ * fence its worker raises afterwards must reach no notifier - and the driver
+ * that replaces it must still be able to connect them. */
+TEST(loopback_status, a_fence_raised_after_driver_ok_is_cleared_reaches_no_notifier)
+{ LoopbackRig rig;
+  CHECK(rig.read_capset());
+  CHECK(rig.establish(0u));
+  GuestRing ring(rig.context(0u).ring(), LoopbackRig::ring_order);
+  ring.write_batch(1u, 64u);
+  CHECK_STATUS(rig.submit(0u, 1u, 0u, ring.tail()), Status::ok);
+  CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 1u));
+  const std::uint64_t first_end = ring.tail();
+  const std::uint32_t raised = rig.device().host().raised(rig.line(0u));
+  rig.device().executor().hold();
+  ring.write_batch(2u, 64u);
+  CHECK_STATUS(rig.submit(0u, 2u, first_end, ring.tail()), Status::ok);
+  CHECK(rig.device().holding(1u));
+  rig.device().device().status(0x0Bu);   /* acknowledge, driver, features ok: it stopped */
+  rig.device().executor().release();
+  CHECK(!rig.device().raised_past(rig.line(0u), raised));
+  CHECK_STATUS(rig.serve(0u), Status::ok);
+  CHECK_EQ(rig.context(0u).completed(), 2u);   /* the page moved; the interrupt did not */
+  CHECK(rig.device().device().invariants_hold());
+  rig.device().device().status(av::DriverStatus::driver_ok);
+  const std::uint64_t second_end = ring.tail();
+  ring.write_batch(3u, 64u);
+  CHECK_STATUS(rig.submit(0u, 3u, second_end, ring.tail()), Status::ok);
+  CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 3u));
+  CHECK(rig.context(0u).invariants_hold()); }

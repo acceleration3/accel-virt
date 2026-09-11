@@ -143,7 +143,12 @@ destroys contexts. `test_virtio_gpu_ring.py` writes rings as the guest does
 QEMU dispatches the ioeventfd itself under qtest - and checks that a hostile
 ring stops only its own context. `test_virtio_gpu_fences.py` reads fence pages
 and the MSI-X pending bits of masked vectors, and the ISR with MSI-X off, to see
-the fence queues' interrupts arrive. `test_virtio_gpu_execution.py` runs
+the fence queues' interrupts arrive; it also drives the sequences a restarting
+Windows display driver performs - MSI-X toggled while `DRIVER_OK` stands, a
+driver that stops by clearing `DRIVER_OK` without a reset and is replaced by one
+that toggles MSI-X, MSI-X enabled only after `DRIVER_OK`, and a sweep of toggles
+that must leak no descriptor - because that sequence aborted QEMU on 035's first
+live run. `test_virtio_gpu_execution.py` runs
 batches through `rvk_echo_executor` (`tests/qemu/echo_executor.cpp`), an executor
 library the qemu configuration builds so the execution path runs on the real
 device without render-server, and reads answers from reply slots.
@@ -324,6 +329,9 @@ What it covers today (M2's rvk contexts):
 - a hostile device: malformed or refused answers at each step, a fence page
   moving backwards, completing an unsubmitted fence or clearing a fault, a head
   past the tail
+- a driver that stops: `DRIVER_OK` cleared while a worker holds a batch, so the
+  fence it raises afterwards reaches no notifier while the fence page still
+  advances, and the next `DRIVER_OK` connects them again
 
 Still to come with the DDI wiring (M3): allocate → map GPU VA → submit through
 dxgkrnl's path, and a shared allocation opened by a second simulated process.

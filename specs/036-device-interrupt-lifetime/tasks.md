@@ -25,8 +25,8 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 3: Loopback, docs and the live guest
 
-- [ ] T008 [US1] tests/loopback/: `DRIVER_OK` cleared while a worker raises - the raise reaches no notifier, the context still tears down, and a later `DRIVER_OK` connects once
-- [ ] T009 Docs: docs/testing.md (the MSI-X lifetime suite under "The device under qtest"), docs/roadmap.md status; `tools/gate.sh`; merge; push
+- [X] T008 [US1] tests/loopback/: `DRIVER_OK` cleared while a worker raises - the raise reaches no notifier, the context still tears down, and a later `DRIVER_OK` connects once
+- [X] T009 Docs: docs/testing.md (the MSI-X lifetime suite under "The device under qtest"), docs/roadmap.md status; `tools/gate.sh`; merge; push
 - [ ] T010 [US1] The live run with `AV_GUEST_IMAGE`: the install stage passes where 035's run aborted, `--trace 'kvm_irqchip_*'` shows one route added per vector per connect, and 035's T016 closes
 
 **Checkpoint**: commit.
