@@ -12,6 +12,8 @@
 #include "../../src/core/ddi/dxgkarg_destroy_allocation_record.hpp"
 #include "../../src/core/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
 #include "../../src/core/ddi/dxgkarg_open_allocation_record.hpp"
+#include "../../src/core/ddi/dxgkarg_patch_record.hpp"
+#include "../../src/core/ddi/dxgkarg_render_record.hpp"
 #include "../../src/core/ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
 #include "../../src/proto/allocation_descriptor.hpp"
@@ -819,3 +821,31 @@ TEST(adapter_create_context, answers_a_context_on_a_device_and_destroys_it)
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, nullptr)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_render, needs_a_live_context_then_renders)
+{ Fixture fixture;
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  std::uint8_t command[16] = {1, 2, 3}, dma[16] = {};
+  av::DxgkargRenderRecord render = {};
+  render.pCommand = command;
+  render.CommandLength = sizeof command;
+  render.pDmaBuffer = dma;
+  render.DmaSize = sizeof dma;
+  CHECK_EQ(nt(fixture.adapter().render(&fixture, &render)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().render(context.hContext, nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().render(context.hContext, &render)), success);
+  CHECK_EQ(dma[2], 3u);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+TEST(adapter_patch, patches_or_refuses_a_missing_block)
+{ Fixture fixture;
+  std::uint8_t dma[8] = {};
+  av::DxgkargPatchRecord patch = {};
+  patch.pDmaBuffer = dma;
+  patch.DmaBufferSize = sizeof dma;
+  CHECK_EQ(nt(fixture.adapter().patch(&patch)), success);
+  CHECK_EQ(nt(fixture.adapter().patch(nullptr)), invalid_parameter); }

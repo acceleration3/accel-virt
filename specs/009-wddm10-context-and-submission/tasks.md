@@ -17,8 +17,8 @@ description: "Task list for feature 009: WDDM 1.0 contexts and packet submission
 
 ## Phase 3: Render and Patch (US2)
 
-- [ ] T004 Tests then `RenderRequest` (hostile table)
-- [ ] T005 Tests then `PatchRequest` (hostile table); adapter Render/Patch, entry points, slots; `fuzz_submission` with corpus
+- [X] T004 Tests then `RenderRequest` (hostile table)
+- [X] T005 Tests then `PatchRequest` (hostile table); adapter Render/Patch, entry points, slots; `fuzz_submission` with corpus
 
 **Checkpoint**: commit.
 

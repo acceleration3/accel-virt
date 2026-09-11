@@ -106,4 +106,10 @@ int32_t AvDdiCreateContext(void *device, av::DxgkargCreateContextRecord *request
 int32_t AvDdiDestroyContext(void *context)
 { return static_cast<av::Context *>(context)->device().adapter().destroy_context(context); }
 
+int32_t AvDdiRender(void *context, av::DxgkargRenderRecord *request)
+{ return static_cast<av::Context *>(context)->device().adapter().render(context, request); }
+
+int32_t AvDdiPatch(void *context, const av::DxgkargPatchRecord *request)
+{ return static_cast<av::Adapter *>(context)->patch(request); }
+
 }

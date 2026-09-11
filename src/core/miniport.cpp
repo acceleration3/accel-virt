@@ -43,6 +43,8 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiSetDisplayPrivateDriverFormat, reinterpret_cast<DdiRoutine>(&AvDdiSetDisplayPrivateDriverFormat)},
         {DdiSlot::DxgkDdiCreateContext, reinterpret_cast<DdiRoutine>(&AvDdiCreateContext)},
         {DdiSlot::DxgkDdiDestroyContext, reinterpret_cast<DdiRoutine>(&AvDdiDestroyContext)},
+        {DdiSlot::DxgkDdiRender, reinterpret_cast<DdiRoutine>(&AvDdiRender)},
+        {DdiSlot::DxgkDdiPatch, reinterpret_cast<DdiRoutine>(&AvDdiPatch)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

@@ -34,6 +34,8 @@ struct DxgkargDescribeAllocationRecord;
 struct DxgkargDestroyAllocationRecord;
 struct DxgkargGetStandardAllocationDriverDataRecord;
 struct DxgkargOpenAllocationRecord;
+struct DxgkargPatchRecord;
+struct DxgkargRenderRecord;
 struct DxgkargSetDisplayPrivateDriverFormatRecord;
 struct DxgkargEscapeRecord;
 struct DxgkargQueryAdapterInfoRecord;
@@ -79,6 +81,8 @@ public:
     int32_t set_display_private_driver_format(const DxgkargSetDisplayPrivateDriverFormatRecord *request);
     int32_t create_context(void *device, DxgkargCreateContextRecord *request);
     int32_t destroy_context(void *context);
+    int32_t render(void *context, DxgkargRenderRecord *request);
+    int32_t patch(const DxgkargPatchRecord *request);
 
     bool invariants_hold() const;
 

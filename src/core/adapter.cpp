@@ -12,6 +12,8 @@
 #include "ddi/dxgkarg_destroy_allocation_record.hpp"
 #include "ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
 #include "ddi/dxgkarg_open_allocation_record.hpp"
+#include "ddi/dxgkarg_patch_record.hpp"
+#include "ddi/dxgkarg_render_record.hpp"
 #include "ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "ddi/dxgkarg_escape_record.hpp"
@@ -20,7 +22,9 @@
 #include "ddi/linked_device_record.hpp"
 #include "invariant_scope.hpp"
 #include "nt_status.hpp"
+#include "patch_request.hpp"
 #include "pci_base_addresses.hpp"
+#include "render_request.hpp"
 #include "scope_exit.hpp"
 #include "standard_allocation.hpp"
 #include "virtio_capability_walk.hpp"
@@ -330,6 +334,20 @@ int32_t Adapter::destroy_context(void *context)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_context");
     return NtStatus(contexts_.destroy(context)).value();
+}
+
+int32_t Adapter::render(void *context, DxgkargRenderRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::render");
+    if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(RenderRequest(platform_, *request).render()).value();
+}
+
+int32_t Adapter::patch(const DxgkargPatchRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::patch");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(PatchRequest(platform_, *request).patch()).value();
 }
 
 bool Adapter::invariants_hold() const

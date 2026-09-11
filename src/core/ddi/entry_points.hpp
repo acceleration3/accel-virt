@@ -20,6 +20,8 @@
 #include "dxgkarg_destroy_allocation_record.hpp"
 #include "dxgkarg_get_standard_allocation_driver_data_record.hpp"
 #include "dxgkarg_open_allocation_record.hpp"
+#include "dxgkarg_patch_record.hpp"
+#include "dxgkarg_render_record.hpp"
 #include "dxgkarg_set_display_private_driver_format_record.hpp"
 #include "dxgkarg_escape_record.hpp"
 #include "dxgkarg_query_adapter_info_record.hpp"
@@ -70,6 +72,8 @@ int32_t AvDdiCloseAllocation(void *device, const av::DxgkargCloseAllocationRecor
 int32_t AvDdiSetDisplayPrivateDriverFormat(void *context, const av::DxgkargSetDisplayPrivateDriverFormatRecord *request);
 int32_t AvDdiCreateContext(void *device, av::DxgkargCreateContextRecord *request);
 int32_t AvDdiDestroyContext(void *context);
+int32_t AvDdiRender(void *context, av::DxgkargRenderRecord *request);
+int32_t AvDdiPatch(void *context, const av::DxgkargPatchRecord *request);
 
 }
 
