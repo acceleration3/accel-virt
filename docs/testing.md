@@ -136,11 +136,19 @@ A unit test proves `GpuVirtualAddressSpace::map` is correct. It does not prove t
 survives the sequence `dxgkrnl` actually performs, at the IRQLs it actually
 uses, with the reentrancy it actually allows.
 
-So `tests/harness/fake_dxgkrnl.cpp` is a fake `dxgkrnl`: it builds a
-`DRIVER_INITIALIZATION_DATA`, calls `DriverEntry`, and then drives the DDI
-table through scripted scenarios — start the adapter, query every
-`DXGKQAITYPE`, create a device, create allocations, create a context, render,
-submit, complete a fence, preempt, time out, reset, stop, remove.
+So `tests/harness/fake_dxgkrnl.cpp` is a fake `dxgkrnl`. It registers the
+driver's DDI table - applying the checks `DpiInitializeInternal` applies - and
+then drives the table through scripted scenarios: start the adapter, query
+every `DXGKQAITYPE`, create a device, create allocations, create a context,
+render, submit, complete a fence, preempt, time out, reset, stop, remove.
+Registration exists now; each scenario arrives with the DDIs it calls,
+starting with adapter bring-up in feature 006.
+
+This runs natively on Linux because the table is core's `DdiTable`, a mirror of
+`DRIVER_INITIALIZATION_DATA` built from fixed-width types. The driver build
+proves, per slot, that its layout is byte-for-byte the WDK's
+(`src/km/ddi_table_layout.cpp`, generated), so the table the harness drives is
+the table `dxgkrnl` reads.
 
 **The scenarios are derived from reverse engineering, not from guesswork.**
 `dxgkrnl.sys` 10.0.26100.9444 is imported into Ghidra with 106k symbols in

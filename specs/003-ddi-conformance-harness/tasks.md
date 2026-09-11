@@ -17,7 +17,7 @@ description: "Task list for feature 003: DDI conformance harness"
 
 ## Phase 2: Evidence (US3, P2)
 
-- [ ] T005 [US3] From `re/ghidra-proj`, recover the registration validation path (`DpiInitialize*`), adapter bring-up and teardown order with IRQLs, and the abusive sequences listed in `docs/testing.md`; write `docs/ddi-sequences.md` with a citation per rule and step; record in `research.md`
+- [X] T005 [US3] From `re/ghidra-proj`, recover the registration validation path (`DpiInitialize*`), adapter bring-up and teardown order with IRQLs, and the abusive sequences listed in `docs/testing.md`; write `docs/ddi-sequences.md` with a citation per rule and step; record in `research.md`
 
 ## Phase 3: Fake dxgkrnl registration (US2, P1)
 
@@ -28,4 +28,4 @@ description: "Task list for feature 003: DDI conformance harness"
 
 ## Phase 4: Polish
 
-- [ ] T008 `docs/testing.md` L2 section: registration now, scenarios with 006; `tools/gate.sh`; merge to `master`
+- [X] T008 `docs/testing.md` L2 section: registration now, scenarios with 006; `tools/gate.sh`; merge to `master`
