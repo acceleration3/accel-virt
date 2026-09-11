@@ -133,7 +133,9 @@ patched QEMU's stock `virtio-gpu-pci` and `virtio-gpu-rvk-pci` side by side, so
 a behaviour the rvk device changes shows up as a difference from stock. Where
 the driver already sends a request, the test sends the driver's own bytes:
 `gpu_request_bytes` prints what `GpuRequestWriter` writes. Device features past
-the base class extend this suite.
+the base class extend this suite: `test_virtio_gpu_blobs.py` finds the
+host-visible shared memory region among the capabilities and reads and writes
+mapped blobs through BAR 4 with qtest's memory commands.
 
 ### The shape of a test file
 

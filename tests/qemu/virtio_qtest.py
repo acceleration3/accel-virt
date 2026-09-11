@@ -30,6 +30,7 @@ VIRTIO_PCI_CAP_COMMON = 1
 VIRTIO_PCI_CAP_NOTIFY = 2
 VIRTIO_PCI_CAP_ISR = 3
 VIRTIO_PCI_CAP_DEVICE = 4
+VIRTIO_PCI_CAP_SHARED_MEMORY = 8
 
 STATUS_ACKNOWLEDGE = 1
 STATUS_DRIVER = 2
@@ -144,11 +145,16 @@ class PciFunction:
                 self.write(32, register, original)
                 index += 1
                 continue
-            size = (~(mask & ~0xF) & 0xFFFFFFFF) + 1
+            if is_64:
+                self.write(32, register + 4, 0xFFFFFFFF)
+                mask |= self.read(32, register + 4) << 32
+            else:
+                mask |= 0xFFFFFFFF << 32
+            size = (~(mask & ~0xF) & 0xFFFFFFFFFFFFFFFF) + 1
             address = (next_address + size - 1) & ~(size - 1)
             self.write(32, register, address & 0xFFFFFFFF)
             if is_64:
-                self.write(32, register + 4, 0)
+                self.write(32, register + 4, address >> 32)
             self.bars[index] = address
             next_address = address + size
             index += 2 if is_64 else 1
@@ -216,7 +222,8 @@ class SplitQueue:
 
 
 class VirtioPciDevice:
-    """A modern virtio-pci function: capability walk, reset, negotiation, queues."""
+    """A modern virtio-pci function: capability walk, reset, negotiation, queues,
+    and shared memory regions by id as (guest address, length)."""
 
     def __init__(self, qtest):
         self.qtest = qtest
@@ -224,6 +231,7 @@ class VirtioPciDevice:
         self.pci = PciFunction(qtest)
         self.pci.assign_bars()
         self.regions = {}
+        self.shared_memory = {}
         self.notify_multiplier = 0
         for position, capability in self.pci.capabilities():
             if capability != PCI_CAPABILITY_VENDOR:
@@ -231,6 +239,11 @@ class VirtioPciDevice:
             kind = self.pci.read(8, position + 3)
             bar = self.pci.read(8, position + 4)
             offset = self.pci.read(32, position + 8)
+            if kind == VIRTIO_PCI_CAP_SHARED_MEMORY and bar in self.pci.bars:
+                offset |= self.pci.read(32, position + 16) << 32
+                length = self.pci.read(32, position + 12) | self.pci.read(32, position + 20) << 32
+                self.shared_memory[self.pci.read(8, position + 5)] = (self.pci.bars[bar] + offset, length)
+                continue
             if kind in (VIRTIO_PCI_CAP_COMMON, VIRTIO_PCI_CAP_NOTIFY, VIRTIO_PCI_CAP_ISR, VIRTIO_PCI_CAP_DEVICE) \
                     and kind not in self.regions and bar in self.pci.bars:
                 self.regions[kind] = self.pci.bars[bar] + offset

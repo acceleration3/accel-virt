@@ -28,10 +28,14 @@ struct VirtIOGPURvk {
     uint32_t gpu_count;
     uint8_t gpu_uuids[VIRTIO_GPU_RVK_MAX_GPUS][VIRTIO_GPU_RVK_UUID_BYTES];
     RvkDevice *core;
+    /* The hostmem BAR's backing: private anonymous memory that blobs are
+     * placed over with MAP_FIXED, as virtio-gpu-gl does for virgl. */
+    MemoryRegion hostmem_background;
+    void *hostmem_mmap;
 };
 
-/* Fills r->host with QEMU's threads, events, locks and main loop, and the GPU
- * catalog with the host's Vulkan physical devices. */
+/* Fills r->host with QEMU's threads, events, locks, main loop, memory and
+ * control queue, and the GPU catalog with the host's Vulkan physical devices. */
 void virtio_gpu_rvk_host_init(VirtIOGPURvk *r);
 
 #endif

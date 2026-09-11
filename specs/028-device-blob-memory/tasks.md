@@ -24,4 +24,4 @@ description: "Task list for feature 028: QEMU device blob resources and host-vis
 
 ## Phase 4: QEMU
 
-- [ ] T004 Glue: process_cmd routing, host operations, background hostmem; qtest blob suite; docs; gate; merge; push
+- [X] T004 Glue: process_cmd routing, host operations, background hostmem; qtest blob suite; docs; gate; merge; push

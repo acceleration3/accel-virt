@@ -271,6 +271,39 @@ Control requests travel with a 24-byte response the device answers with
 `VIRTIO_GPU_RESP_OK_NODATA`; anything else is logged. Cursor requests carry no
 response. The driver does not wait for either.
 
+## Blob resources (guest -> device)
+
+The device answers the virtio-gpu blob requests (virtio 1.2 §5.7.6.1) itself,
+with `VIRTIO_GPU_F_RESOURCE_BLOB` not offered and the base class's `blob`
+property refused at realize. Two kinds of blob exist; every other combination is
+`VIRTIO_GPU_RESP_ERR_INVALID_PARAMETER`.
+
+| `blob_mem` | Flags | Entries | `blob_id` | Backing |
+|---|---|---|---|---|
+| `GUEST` (1) | any | at least one, covering `size` | 0 | the guest pages, mapped by the device once at creation and held until unreferenced |
+| `HOST3D` (2) | `MAPPABLE` | none | 0 | a zeroed, device-allocated page multiple; the guest reaches it through the host-visible shared memory region (id 1, BAR 4) once mapped |
+
+`RESOURCE_MAP_BLOB` places a `HOST3D` blob at a page-aligned offset of the
+region, wholly inside it and overlapping no other mapping, and answers
+`VIRTIO_GPU_RESP_OK_MAP_INFO` with `map_info` `VIRTIO_GPU_MAP_CACHE_CACHED`. The
+contents survive `RESOURCE_UNMAP_BLOB` and a later map elsewhere; unmapped
+offsets read as zero. `RESOURCE_UNREF` of a blob releases it, mapped or not.
+
+| Request | Answer |
+|---|---|
+| `RESOURCE_CREATE_BLOB` shorter than its 56 bytes, or its entries | `ERR_INVALID_PARAMETER` |
+| id 0, or an id a 2D resource or blob holds | `ERR_INVALID_RESOURCE_ID` |
+| guest entries shorter than `size` | `ERR_INVALID_PARAMETER` |
+| guest entries that are not guest RAM (the device would see a copy) | `ERR_UNSPEC` |
+| host memory or blob slots exhausted | `ERR_OUT_OF_MEMORY` |
+| `RESOURCE_MAP_BLOB` of an unknown id | `ERR_INVALID_RESOURCE_ID` |
+| a guest blob, a blob already mapped, a misaligned offset, one past the region, or an overlap | `ERR_INVALID_PARAMETER` |
+| `RESOURCE_UNMAP_BLOB` of an unknown id / an unmapped blob | `ERR_INVALID_RESOURCE_ID` / `ERR_INVALID_PARAMETER` |
+| `RESOURCE_CREATE_2D` over a blob id | `ERR_INVALID_RESOURCE_ID` |
+| `SET_SCANOUT_BLOB` | `ERR_INVALID_PARAMETER` |
+
+A device reset releases every blob and mapping.
+
 ## Fence page (device -> guest)
 
 Offset 0 of the fence resource. The device updates it from its worker thread;
