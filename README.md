@@ -146,6 +146,7 @@ src/core/                         portable driver logic — no platform headers
   display/                          modes, EDID, scanout sources, vsync, the hardware cursor
   vidpn/                            VidPn topology, mode sets, cofunctional modality, commit
   present/                          Present and how it addresses allocations
+  rvk/                              rvk contexts as the driver drives them: capset, setup, ring, fences
 src/km/                           Windows kernel shim — translation only; builds rvkgpu.sys
 src/device/                       QEMU device core — freestanding C++23, librvk_device.a
   host/  abi/                       the Host contract; TableHost, rvk_device.h, the C entry points
@@ -164,6 +165,7 @@ tests/harness/                    the adversarial platform mock, fake dxgkrnl
   dxgkrnl/  vidmm/  vidsch/  vidpn/ fake dxgkrnl, VidMm, VidSch and the VidPn/DMM objects
   device/                           fake virtio-gpu PCI function and virtqueue device
   host/  ring/  executor/           MockHost and request builders; the guest side of a ring; mock executors
+  loopback/                         the rig holding guest core and device core together (L4)
 tests/fuzz/ tests/corpus/         L3: libFuzzer targets and seed corpora
 tests/fixtures/                   bytes captured from real devices (tools/host/capture_pci_config.py)
 tests/qemu/                       the device under qtest: a virtio-gpu driver with no guest, the suites run on it

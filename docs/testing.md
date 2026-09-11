@@ -294,20 +294,39 @@ with corpus minimization committed back.
 ## L4 — Loopback: the whole protocol, one process, no VM
 
 `tests/loopback/` links the guest core and the device core into a single Linux
-binary and connects them with an in-memory transport that mimics the real one:
-a ring in a shared buffer, a doorbell that is a function call, an interrupt
-that is a callback.
+binary and connects them with an in-memory transport that mimics the real one.
+`LoopbackRig` (`tests/harness/loopback/`) holds both sides:
 
-That gives end-to-end tests of everything except the actual hardware
-mechanisms:
+- the guest's `MockPlatform`, whose contiguous blocks are the guest memory;
+- the device core (`VirtioGpuRvk`) over a `MockHost` whose `map_guest` returns
+  those blocks directly, running commands through a `MockExecutorOps` on real
+  worker threads;
+- control requests passed as bytes by `LoopbackDriver`, which can cut an answer
+  short or rewrite one of its bytes on the way - a hostile device;
+- a doorbell store (`LoopbackDoorbells`) that rings the worker's event, as a
+  KVM ioeventfd would;
+- an interrupt that is `MockHost` counting a raise on a fence line; the test
+  waits for it and serves the context on its own thread, as the DPC would.
 
-- allocate → map GPU VA → submit → fence → complete
-- shared allocation opened by a second simulated process
-- ring full, backpressure, and recovery
-- a context faulting and being torn down without disturbing another context
-- protocol version mismatch handled on both sides
-- a hostile guest driving the device core with malformed commands
-- a hostile device driving the guest core with malformed completions
+The thread that builds the rig is both the guest and the device's main loop.
+The executor can be held, so a test keeps a worker busy for as long as it
+needs a full ring.
+
+What it covers today (M2's rvk contexts):
+
+- capset read and judged; a version mismatch refused on both sides
+- setup → submit → doorbell → execute → fence → complete, with a reply
+- ring full, backpressure, and recovery once the head moves
+- a context faulting beside a healthy one, torn down and set up again
+- a device reset, after which a new context sets up
+- a hostile guest: a tail skipped or rewound, a fence repeated, commands
+  misframed
+- a hostile device: malformed or refused answers at each step, a fence page
+  moving backwards, completing an unsubmitted fence or clearing a fault, a head
+  past the tail
+
+Still to come with the DDI wiring (M3): allocate → map GPU VA → submit through
+dxgkrnl's path, and a shared allocation opened by a second simulated process.
 
 Loopback tests are the cheapest place to find protocol design errors, and
 protocol design errors are the expensive kind. Write the loopback test for a

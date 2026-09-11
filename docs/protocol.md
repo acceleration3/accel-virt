@@ -484,6 +484,36 @@ An adapter reset is a virtio reset: every context is destroyed and a new
 driver starts from nothing. A context the guest wants to stop without a fault
 (preemption) needs no command: the guest stops publishing its tail.
 
+## The driver's sequence
+
+The order a guest driver follows (`src/core/rvk/`), checked end to end against
+the device core by the loopback suite (`tests/loopback/`):
+
+1. **Capset.** `GET_CAPSET_INFO` for index 0, then `GET_CAPSET` for the id and
+   version it names. A capset that does not decode, is not `0x72`, or is of
+   another major ends the query; nothing below starts without one.
+2. **Memory.** A ring of `32 + 2^order` bytes rounded up to pages with a fresh
+   header, a fence page and a reply page, each physically contiguous, zeroed.
+3. **Setup.** `CTX_CREATE` with capset `0x72`, then `RESOURCE_CREATE_BLOB`
+   (guest memory, one entry) for the ring, the fence page and the reply slot,
+   then the context setup in `SUBMIT_3D`. Each is sent when the one before is
+   answered. Any answer other than `OK_NODATA`, or one that does not decode,
+   fails the setup; a step whose answer did not decode is counted as done,
+   since the device may have acted on it.
+4. **Submission.** The producer writes batches past the tail; the driver checks
+   the descriptor starts at its tail, fits the ring, carries a fence greater
+   than the last, and that the device's head is not past the tail it published
+   and leaves room (`no_space` otherwise, nothing published). Then it stores
+   the tail and writes the doorbell page.
+5. **Completion.** On the context's fence interrupt the driver copies the fence
+   page once and judges it against what it submitted (the rules under "Fence
+   page"). A page or head that breaks a rule fails the context: it submits and
+   serves nothing more until torn down.
+6. **Teardown.** `CTX_DESTROY` if the context was created, then
+   `RESOURCE_UNREF` for each blob created, in order; then the memory is freed.
+   After a virtio reset the driver abandons its contexts - the device holds
+   none - and frees their memory without requests.
+
 ## Fence queues and interrupts (device -> guest)
 
 `virtio-gpu-rvk-pci` has 66 virtqueues: control (0), cursor (1), and a fence
