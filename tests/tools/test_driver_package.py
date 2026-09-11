@@ -57,3 +57,23 @@ class DriverPackage(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Provisioning(unittest.TestCase):
+    """provision.ps1 is run only in a guest; what it shares with the package and
+    the runner is held still here."""
+
+    def test_checks_the_hardware_id_the_package_installs_on(self):
+        script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
+        hardware = re.search(r"\$HardwareId = '([^']+)'", script).group(1)
+        self.assertIn(f"= Rvkgpu_Install, {hardware}", INF.read_text())
+        self.assertIn("service -ne 'rvkgpu'", script)
+
+    def test_offers_exactly_the_stages_the_runner_calls(self):
+        script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
+        offered = re.search(r"ValidateSet\(([^)]*)\)", script).group(1)
+        runner = (ROOT / "tools" / "guest" / "run_guest_suite.py").read_text()
+        called = re.findall(r'self\.stage\("(\w+)"', runner)
+        self.assertEqual(sorted(called), sorted(name.strip(" '") for name in offered.split(",")))
+        self.assertIn("-CatalogFilePath \"$Package\\rvkgpu.cat\"", script)
+        self.assertIn('PACKAGE_DIRECTORY = GUEST_DIRECTORY + "\\\\package"', runner)

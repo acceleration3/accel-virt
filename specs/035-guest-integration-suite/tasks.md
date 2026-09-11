@@ -32,8 +32,8 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 4: The runner
 
-- [ ] T010 [US1] Tests then tools/guest/guest_agent.py (QGA client)
-- [ ] T011 [US1] Tests then tools/guest/run_guest_suite.py with tools/guest/provision.ps1; fake QEMU, fake qemu-img, fake agent in tests/tools
+- [X] T010 [US1] Tests then tools/guest/guest_agent.py (guest agent and QMP clients); tests/tools/test_guest_agent.py
+- [X] T011 [US1] Tests then tools/guest/run_guest_suite.py with tools/guest/provision.ps1; fake QEMU, fake qemu-img, fake agent in tests/tools
 
 **Checkpoint**: commit.
 
