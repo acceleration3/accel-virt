@@ -36,7 +36,14 @@ public:
      * region, a mapping over another, or a blob that cannot be mapped. */
     [[nodiscard]] Status map(uint32_t id, uint64_t offset);
     [[nodiscard]] Status unmap(uint32_t id);
+    /* not_found for an unknown id; invalid_parameter for a blob smaller than
+     * `minimum_size`. */
+    [[nodiscard]] Status pin(uint32_t id, uint64_t minimum_size);
+    /* A pin taken by pin(); an unknown id is ignored, as reset releases pinned blobs. */
+    void                 unpin(uint32_t id);
+    /* not_found for an unknown id; invalid_state while pinned. */
     [[nodiscard]] Status release(uint32_t id);
+    /* Pinned or not: a reset. */
     void                 release_all();
     bool                 contains(uint32_t id);
     uint32_t             live() const;

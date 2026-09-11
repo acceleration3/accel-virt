@@ -27,7 +27,7 @@ public:
     void     unlock_mutex(void *mutex) override;
     void     run_on_main_loop(HostRoutine routine, void *context) override;
     uint32_t gpu_count() override;
-    void     gpu_uuid(uint32_t index, uint8_t *uuid) override;
+    GpuIdentity gpu_identity(uint32_t index) override;
     void    *allocate(size_t bytes) override;
     void     release(void *block) override;
     void    *map_guest(uint64_t address, uint64_t &length, bool &direct) override;

@@ -44,8 +44,9 @@ public:
 private:
     Host              &host_;
     GpuBinding         binding_;
-    DeviceContextTable contexts_;
+    /* Before the contexts, which unpin blobs as they are destroyed. */
     BlobTable          blobs_;
+    DeviceContextTable contexts_;
 
     friend struct VirtioGpuRvkProbe;
 };

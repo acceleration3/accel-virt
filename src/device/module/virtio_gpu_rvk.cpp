@@ -7,7 +7,7 @@
 
 namespace av {
 
-VirtioGpuRvk::VirtioGpuRvk(Host &host) : host_(host), binding_(host), contexts_(host), blobs_(host) {}
+VirtioGpuRvk::VirtioGpuRvk(Host &host) : host_(host), binding_(host), blobs_(host), contexts_(host, blobs_) {}
 
 Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, TextBuffer &message)
 {

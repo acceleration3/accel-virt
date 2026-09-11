@@ -3,6 +3,7 @@
 #include "device/gpu/device_uuid.hpp"
 #include "device/host/host.hpp"
 #include "device/support/text_buffer.hpp"
+#include "proto/context/gpu_identity.hpp"
 
 namespace av {
 
@@ -41,9 +42,7 @@ Status GpuBinding::bind_uuid(const char *selection, TextBuffer &message)
     }
     const uint32_t count = host_.gpu_count();
     for (uint32_t index = 0u; index < count; index++) {
-        uint8_t uuid[DeviceUuid::bytes] = {};
-        host_.gpu_uuid(index, uuid);
-        if (!wanted.equals(uuid)) continue;
+        if (!wanted.equals(host_.gpu_identity(index).uuid())) continue;
         index_ = index;
         bound_ = true;
         return Status::ok;

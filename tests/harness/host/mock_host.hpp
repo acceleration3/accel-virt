@@ -9,6 +9,7 @@
 
 #include "device/host/host.hpp"
 #include "harness/host/host_violation.hpp"
+#include "proto/context/gpu_identity.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -44,7 +45,7 @@ public:
     void     unlock_mutex(void *mutex) override;
     void     run_on_main_loop(HostRoutine routine, void *context) override;
     std::uint32_t gpu_count() override;
-    void     gpu_uuid(std::uint32_t index, std::uint8_t *uuid) override;
+    GpuIdentity gpu_identity(std::uint32_t index) override;
     void    *allocate(std::size_t bytes) override;
     void     release(void *block) override;
     void    *map_guest(std::uint64_t address, std::uint64_t &length, bool &direct) override;
@@ -58,7 +59,9 @@ public:
     void     respond(void *request, const std::uint8_t *bytes, std::size_t size) override;
     bool     resource_exists(std::uint32_t id) override;
 
+    /* A discrete GPU named "mock gpu" with this UUID. */
     void add_gpu(const std::uint8_t *uuid);
+    void add_gpu(const GpuIdentity &identity);
     /* Fail the Nth call from now (1-based); 0 disables. */
     void fail_thread_start_at(std::uint32_t nth);
     void fail_event_at(std::uint32_t nth);
@@ -167,7 +170,7 @@ private:
     Thread          threads_[max_threads];
     Event           events_[max_events];
     Mutex           mutexes_[max_mutexes];
-    std::uint8_t    gpus_[max_gpus][uuid_bytes];
+    GpuIdentity     gpus_[max_gpus];
     std::uint32_t   gpu_count_;
     MainLoopWork    work_[max_main_loop_work];
     std::uint32_t   work_count_;

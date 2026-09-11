@@ -129,6 +129,30 @@ TEST(blob_table_release, frees_one_blob_or_all_of_them)
   CHECK(!fixture.table().contains(2u));
   CHECK_EQ(fixture.host().live_host_memory(), 0u); }
 
+TEST(blob_table_pin, keeps_a_blob_large_enough_alive_until_every_pin_is_let_go)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.table().create_host(1u, 0x2000u), Status::ok);
+  CHECK_STATUS(fixture.table().pin(2u, 0u), Status::not_found);
+  CHECK_STATUS(fixture.table().pin(1u, 0x2001u), Status::invalid_parameter);
+  CHECK_STATUS(fixture.table().release(1u), Status::ok);
+  CHECK_STATUS(fixture.table().create_host(1u, 0x2000u), Status::ok);
+  CHECK_STATUS(fixture.table().pin(1u, 0x2000u), Status::ok);
+  CHECK_STATUS(fixture.table().pin(1u, 32u), Status::ok);
+  CHECK_STATUS(fixture.table().release(1u), Status::invalid_state);
+  fixture.table().unpin(1u);
+  CHECK_STATUS(fixture.table().release(1u), Status::invalid_state);
+  fixture.table().unpin(1u);
+  fixture.table().unpin(7u);   /* unknown: nothing */
+  CHECK_STATUS(fixture.table().release(1u), Status::ok); }
+
+TEST(blob_table_unpin, a_pinned_blob_is_still_released_by_release_all)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.table().create_host(1u, 0x1000u), Status::ok);
+  CHECK_STATUS(fixture.table().pin(1u, 0x1000u), Status::ok);
+  fixture.table().release_all();
+  CHECK_EQ(fixture.table().live(), 0u);
+  fixture.table().unpin(1u); }
+
 TEST(blob_table, is_main_loop_only)
 { Fixture fixture;
   struct Call {
@@ -140,11 +164,13 @@ TEST(blob_table, is_main_loop_only)
                    [](void *context) {
                        auto *const c = static_cast<Call *>(context);
                        c->status = c->table->release(5u);
+                       static_cast<void>(c->table->pin(5u, 0u));
+                       c->table->unpin(5u);
                    },
                    &call, thread),
                Status::ok);
   fixture.host().join_thread(thread);
-  CHECK(fixture.host().claim(HostViolation::main_loop_required));
+  for (int call_count = 0; call_count < 3; call_count++) CHECK(fixture.host().claim(HostViolation::main_loop_required));
   CHECK_STATUS(call.status, Status::not_found); }
 
 TEST(blob_table_invariants, a_duplicate_id_or_overlapping_mappings_are_detected)

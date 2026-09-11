@@ -16,12 +16,12 @@
 
 namespace av {
 
+class GpuIdentity;
+
 using HostRoutine = void (*)(void *context);
 
 class Host {
 public:
-    static constexpr uint32_t uuid_bytes = 16u;
-
     virtual void log(const char *message) = 0;
     /* A violation is logged in QEMU and recorded by the mock. */
     virtual void require_main_loop(const char *function) = 0;
@@ -46,8 +46,8 @@ public:
     virtual void run_on_main_loop(HostRoutine routine, void *context) = 0;
 
     /* The host's Vulkan physical devices, in enumeration order. */
-    virtual uint32_t gpu_count() = 0;
-    virtual void     gpu_uuid(uint32_t index, uint8_t *uuid) = 0;
+    virtual uint32_t    gpu_count() = 0;
+    virtual GpuIdentity gpu_identity(uint32_t index) = 0;
 
     /* Any thread: zeroed memory, or null. */
     virtual void *allocate(size_t bytes) = 0;

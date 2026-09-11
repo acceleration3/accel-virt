@@ -7,6 +7,7 @@
 #include "device/threading/work_item.hpp"
 #include "device/threading/worker.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/context/gpu_identity.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_host_ops.hpp"
 #include "harness/host/mock_request.hpp"
@@ -14,6 +15,7 @@
 #include <cstdint>
 #include <cstring>
 
+using av::GpuIdentity;
 using av::Host;
 using av::MockHost;
 using av::MockHostOps;
@@ -39,12 +41,18 @@ TEST(table_host, a_worker_runs_over_the_c_table)
 
 TEST(table_host, forwards_the_catalog_and_the_log)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
-  const std::uint8_t uuid[Host::uuid_bytes] = {9, 8, 7};
-  mock.add_gpu(uuid);
+  const std::uint8_t uuid[GpuIdentity::uuid_bytes] = {9, 8, 7};
+  mock.add_gpu(GpuIdentity(0x8086u, 0x46A6u, GpuIdentity::integrated_gpu, uuid, 3u, 4u,
+                           "a name long enough to fill every one of the forty-eight bytes"));
   CHECK_EQ(host.gpu_count(), 1u);
-  std::uint8_t read[Host::uuid_bytes] = {};
-  host.gpu_uuid(0u, read);
-  CHECK(std::memcmp(read, uuid, sizeof uuid) == 0);
+  const GpuIdentity identity = host.gpu_identity(0u);
+  CHECK(std::memcmp(identity.uuid(), uuid, sizeof uuid) == 0);
+  CHECK_EQ(identity.vendor_id(), 0x8086u);
+  CHECK_EQ(identity.device_id(), 0x46A6u);
+  CHECK_EQ(identity.device_type(), GpuIdentity::integrated_gpu);
+  CHECK_EQ(identity.local_memory(), 3u);
+  CHECK_EQ(identity.shared_memory(), 4u);
+  CHECK_EQ(std::strlen(identity.name()), GpuIdentity::name_bytes - 1u);
   host.log("hello");
   CHECK_EQ(mock.logged(), 1u); }
 

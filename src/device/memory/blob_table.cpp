@@ -65,11 +65,29 @@ Status BlobTable::unmap(uint32_t id)
     return slot != nullptr ? slot->object().unmap() : Status::not_found;
 }
 
+Status BlobTable::pin(uint32_t id, uint64_t minimum_size)
+{
+    host_.require_main_loop("BlobTable::pin");
+    ObjectStorage<BlobResource> *const slot = slot_of(id);
+    if (slot == nullptr) return Status::not_found;
+    if (slot->object().size() < minimum_size) return Status::invalid_parameter;
+    slot->object().pin();
+    return Status::ok;
+}
+
+void BlobTable::unpin(uint32_t id)
+{
+    host_.require_main_loop("BlobTable::unpin");
+    ObjectStorage<BlobResource> *const slot = slot_of(id);
+    if (slot != nullptr) slot->object().unpin();
+}
+
 Status BlobTable::release(uint32_t id)
 {
     host_.require_main_loop("BlobTable::release");
     ObjectStorage<BlobResource> *const slot = slot_of(id);
     if (slot == nullptr) return Status::not_found;
+    if (slot->object().pinned()) return Status::invalid_state;
     slot->destroy();
     return Status::ok;
 }

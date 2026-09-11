@@ -5,7 +5,7 @@
 namespace av {
 
 BlobResource::BlobResource(Host &host, uint32_t id)
-    : host_(host), id_(id), guest_(host), block_(host), offset_(0u), mapped_(false) {}
+    : host_(host), id_(id), guest_(host), block_(host), offset_(0u), mapped_(false), pins_(0u) {}
 
 /* A mapping is removed before its block is destroyed. */
 BlobResource::~BlobResource()
@@ -70,6 +70,21 @@ uint64_t BlobResource::offset() const
 bool BlobResource::overlaps(uint64_t offset, uint64_t size) const
 {
     return mapped_ && offset < offset_ + block_.size() && offset_ < offset + size;
+}
+
+void BlobResource::pin()
+{
+    pins_++;
+}
+
+void BlobResource::unpin()
+{
+    pins_--;
+}
+
+bool BlobResource::pinned() const
+{
+    return pins_ != 0u;
 }
 
 }  // namespace av

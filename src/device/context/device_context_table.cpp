@@ -4,7 +4,7 @@
 
 namespace av {
 
-DeviceContextTable::DeviceContextTable(Host &host) : host_(host), slots_{} {}
+DeviceContextTable::DeviceContextTable(Host &host, BlobTable &blobs) : host_(host), blobs_(blobs), slots_{} {}
 
 DeviceContextTable::~DeviceContextTable() { destroy_all(); }
 
@@ -21,7 +21,7 @@ Status DeviceContextTable::create(uint32_t id)
     if (id == 0u) return Status::invalid_parameter;
     if (slot_of(id) != nullptr) return Status::conflict;
     for (ObjectStorage<DeviceContext> &slot : slots_) {
-        if (slot.construct(host_, id) != Status::ok) continue;   /* occupied */
+        if (slot.construct(host_, blobs_, id) != Status::ok) continue;   /* occupied */
         const Status status = slot.object().start();
         if (status != Status::ok) slot.destroy();
         return status;

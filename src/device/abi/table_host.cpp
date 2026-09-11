@@ -1,5 +1,7 @@
 #include "device/abi/table_host.hpp"
 
+#include "proto/context/gpu_identity.hpp"
+
 namespace av {
 
 TableHost::TableHost(const RvkHostOps &ops) : ops_(ops) {}
@@ -88,9 +90,14 @@ uint32_t TableHost::gpu_count()
     return ops_.gpu_count(ops_.opaque);
 }
 
-void TableHost::gpu_uuid(uint32_t index, uint8_t *uuid)
+/* The name is cut at the field's end whatever the glue left there. */
+GpuIdentity TableHost::gpu_identity(uint32_t index)
 {
-    ops_.gpu_uuid(ops_.opaque, index, uuid);
+    RvkGpuProperties properties = {};
+    ops_.gpu_properties(ops_.opaque, index, &properties);
+    properties.name[sizeof properties.name - 1u] = '\0';
+    return GpuIdentity(properties.vendor_id, properties.device_id, properties.device_type, properties.uuid,
+                       properties.local_memory, properties.shared_memory, properties.name);
 }
 
 void *TableHost::allocate(size_t bytes)

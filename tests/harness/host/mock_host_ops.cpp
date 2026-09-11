@@ -1,6 +1,9 @@
 #include "harness/host/mock_host_ops.hpp"
 
 #include "harness/host/mock_host.hpp"
+#include "proto/context/gpu_identity.hpp"
+
+#include <cstring>
 
 namespace av {
 
@@ -40,7 +43,13 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
         host_of(opaque).run_on_main_loop(routine, context);
     };
     table_.gpu_count = [](void *opaque) { return host_of(opaque).gpu_count(); };
-    table_.gpu_uuid = [](void *opaque, std::uint32_t index, std::uint8_t *uuid) { host_of(opaque).gpu_uuid(index, uuid); };
+    table_.gpu_properties = [](void *opaque, std::uint32_t index, RvkGpuProperties *properties) {
+        const GpuIdentity identity = host_of(opaque).gpu_identity(index);
+        *properties = RvkGpuProperties{identity.vendor_id(), identity.device_id(), identity.device_type(), {},
+                                       identity.local_memory(), identity.shared_memory(), {}};
+        std::memcpy(properties->uuid, identity.uuid(), sizeof properties->uuid);
+        std::memcpy(properties->name, identity.name(), std::strlen(identity.name()) + 1u);
+    };
     table_.allocate = [](void *opaque, std::size_t size) { return host_of(opaque).allocate(size); };
     table_.release = [](void *opaque, void *block) { host_of(opaque).release(block); };
     table_.map_guest = [](void *opaque, std::uint64_t address, std::uint64_t *length, int *direct) {

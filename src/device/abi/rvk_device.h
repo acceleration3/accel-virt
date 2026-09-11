@@ -14,6 +14,17 @@ extern "C" {
 
 typedef void (*RvkHostRoutine)(void *context);
 
+/* One host Vulkan physical device, as the glue read it at realize. */
+typedef struct RvkGpuProperties {
+    uint32_t vendor_id;     /* VkPhysicalDeviceProperties::vendorID */
+    uint32_t device_id;     /* ::deviceID */
+    uint32_t device_type;   /* ::deviceType */
+    uint8_t uuid[16];       /* VkPhysicalDeviceIDProperties::deviceUUID */
+    uint64_t local_memory;  /* bytes in heaps with VK_MEMORY_HEAP_DEVICE_LOCAL_BIT */
+    uint64_t shared_memory; /* bytes in the other heaps */
+    char name[256];         /* ::deviceName */
+} RvkGpuProperties;
+
 /* Every member is required. `opaque` comes back as each call's first argument. */
 typedef struct RvkHostOps {
     void *opaque;
@@ -35,8 +46,7 @@ typedef struct RvkHostOps {
     /* Runs routine(context) later on the main loop, in call order. */
     void (*run_on_main_loop)(void *opaque, RvkHostRoutine routine, void *context);
     uint32_t (*gpu_count)(void *opaque);
-    /* Writes the 16-byte VkPhysicalDeviceIDProperties::deviceUUID of device `index`. */
-    void (*gpu_uuid)(void *opaque, uint32_t index, uint8_t *uuid);
+    void (*gpu_properties)(void *opaque, uint32_t index, RvkGpuProperties *properties);
     /* Zeroed memory, or NULL; any thread. */
     void *(*allocate)(void *opaque, size_t size);
     void (*release)(void *opaque, void *block);

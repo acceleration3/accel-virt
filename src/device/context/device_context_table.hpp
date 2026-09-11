@@ -1,6 +1,7 @@
 /* A device's contexts, by the ids the guest gives them. Context 0 is
  * virtio-gpu's "no context" and is never created. Destroying a context stops
- * and joins its worker; reset destroys every context. Main loop only. */
+ * and joins its worker, and lets go of its blobs; reset destroys every context.
+ * Main loop only. */
 #ifndef AV_DEVICE_CONTEXT_TABLE_HPP
 #define AV_DEVICE_CONTEXT_TABLE_HPP
 
@@ -12,6 +13,7 @@
 
 namespace av {
 
+class BlobTable;
 class Host;
 struct DeviceContextTableProbe;
 
@@ -20,7 +22,7 @@ public:
     /* One worker thread each, so a bound on threads as much as on contexts. */
     static constexpr uint32_t max_contexts = 64u;
 
-    explicit DeviceContextTable(Host &host);
+    DeviceContextTable(Host &host, BlobTable &blobs);
     ~DeviceContextTable();
     DeviceContextTable(const DeviceContextTable &) = delete;
     DeviceContextTable &operator=(const DeviceContextTable &) = delete;
@@ -39,6 +41,7 @@ private:
     ObjectStorage<DeviceContext> *slot_of(uint32_t id);
 
     Host                        &host_;
+    BlobTable                   &blobs_;
     ObjectStorage<DeviceContext> slots_[max_contexts];
 
     friend struct DeviceContextTableProbe;

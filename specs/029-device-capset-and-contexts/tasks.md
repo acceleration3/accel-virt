@@ -12,7 +12,7 @@ description: "Task list for feature 029: rvk capset and context lifetime"
 
 ## Phase 2: Capset and bindings
 
-- [ ] T002 Tests then `Host::gpu_identity` (C ABI, TableHost, MockHost, GpuBinding), `DeviceCapset`, blob pins, `ContextBinding`
+- [X] T002 Tests then `Host::gpu_identity` (C ABI, TableHost, MockHost, GpuBinding), `DeviceCapset`, blob pins, `ContextBinding`
 
 **Checkpoint**: commit.
 

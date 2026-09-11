@@ -137,3 +137,15 @@ TEST(blob_resource, is_main_loop_only)
   for (int violation = 0; violation < 3; violation++)   /* unmap, then both releases */
       CHECK(host.claim(HostViolation::main_loop_required));
   CHECK_STATUS(call.status, Status::invalid_state); }
+
+TEST(blob_resource_pin, counts_pins_until_the_last_is_let_go)
+{ MockHost host;
+  BlobResource blob(host, 1u);
+  CHECK(!blob.pinned());
+  blob.pin();
+  blob.pin();
+  CHECK(blob.pinned());
+  blob.unpin();
+  CHECK(blob.pinned());
+  blob.unpin();
+  CHECK(!blob.pinned()); }

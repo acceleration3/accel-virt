@@ -39,6 +39,10 @@ public:
     uint64_t offset() const;
     /* Whether this blob, mapped, covers part of [offset, offset + size). */
     bool     overlaps(uint64_t offset, uint64_t size) const;
+    /* A context bound to this blob holds a pin; a pinned blob is not released. */
+    void     pin();
+    void     unpin();
+    bool     pinned() const;
 
 private:
     Host            &host_;
@@ -47,6 +51,7 @@ private:
     HostMemoryBlock  block_;
     uint64_t         offset_;
     bool             mapped_;
+    uint32_t         pins_;
 };
 
 }  // namespace av

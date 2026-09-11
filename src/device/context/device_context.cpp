@@ -2,7 +2,8 @@
 
 namespace av {
 
-DeviceContext::DeviceContext(Host &host, uint32_t id) : id_(id), worker_(host) {}
+DeviceContext::DeviceContext(Host &host, BlobTable &blobs, uint32_t id)
+    : id_(id), worker_(host), binding_(host, blobs) {}
 
 Status DeviceContext::start()
 {
@@ -12,6 +13,16 @@ Status DeviceContext::start()
 Status DeviceContext::post(const WorkItem &item)
 {
     return worker_.post(item);
+}
+
+Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
+{
+    return binding_.bind(setup, capset);
+}
+
+const ContextBinding &DeviceContext::binding() const
+{
+    return binding_;
 }
 
 uint32_t DeviceContext::id() const

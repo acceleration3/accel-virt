@@ -295,23 +295,28 @@ std::uint32_t MockHost::gpu_count()
     return gpu_count_;
 }
 
-void MockHost::gpu_uuid(std::uint32_t index, std::uint8_t *uuid)
+GpuIdentity MockHost::gpu_identity(std::uint32_t index)
 {
     if (index >= gpu_count()) {
-        record(HostViolation::unknown_handle, "MockHost::gpu_uuid");
-        return;
+        record(HostViolation::unknown_handle, "MockHost::gpu_identity");
+        return GpuIdentity();
     }
-    std::memcpy(uuid, gpus_[index], uuid_bytes);
+    return gpus_[index];
 }
 
 void MockHost::add_gpu(const std::uint8_t *uuid)
+{
+    add_gpu(GpuIdentity(0x10DEu, 0x2684u, GpuIdentity::discrete_gpu, uuid, 24ull << 30, 32ull << 30, "mock gpu"));
+}
+
+void MockHost::add_gpu(const GpuIdentity &identity)
 {
     StateLock lock(state_);
     if (gpu_count_ == max_gpus) {
         TestRegistry::instance().record_failure(__FILE__, __LINE__, "too many GPUs");
         return;
     }
-    std::memcpy(gpus_[gpu_count_++], uuid, uuid_bytes);
+    gpus_[gpu_count_++] = identity;
 }
 
 void MockHost::fail_thread_start_at(std::uint32_t nth) { StateLock lock(state_); fail_thread_ = nth; }

@@ -3,6 +3,7 @@
  * violations and failures it must catch. */
 #include "device/host/host.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/context/gpu_identity.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
@@ -11,6 +12,7 @@
 #include <cstdint>
 #include <cstring>
 
+using av::GpuIdentity;
 using av::Host;
 using av::HostViolation;
 using av::MockHost;
@@ -112,8 +114,7 @@ TEST(mock_host, unknown_handles_are_violations)
   mock.destroy_mutex(&stranger);
   mock.lock_mutex(&stranger);
   mock.unlock_mutex(&stranger);
-  std::uint8_t uuid[Host::uuid_bytes] = {};
-  mock.gpu_uuid(0u, uuid);
+  static_cast<void>(mock.gpu_identity(0u));
   for (int count = 0; count < 8; count++) CHECK(mock.claim(HostViolation::unknown_handle));
   CHECK(!mock.claim(HostViolation::unknown_handle));
   CHECK_EQ(mock.unclaimed_violations(), 0u); }
@@ -142,12 +143,13 @@ TEST(mock_host, every_create_can_be_failed_and_the_catalog_answers_what_was_adde
   mock.destroy_event(first);
   mock.fail_mutex_at(1u);
   CHECK_STATUS(mock.create_mutex(handle), Status::no_memory);
-  const std::uint8_t uuid[Host::uuid_bytes] = {0xAB, 1, 2, 3};
+  const std::uint8_t uuid[GpuIdentity::uuid_bytes] = {0xAB, 1, 2, 3};
   mock.add_gpu(uuid);
-  CHECK_EQ(mock.gpu_count(), 1u);
-  std::uint8_t read[Host::uuid_bytes] = {};
-  mock.gpu_uuid(0u, read);
-  CHECK(std::memcmp(read, uuid, sizeof uuid) == 0); }
+  mock.add_gpu(GpuIdentity(0x1002u, 0x744Cu, GpuIdentity::integrated_gpu, uuid, 1u, 2u, "second"));
+  CHECK_EQ(mock.gpu_count(), 2u);
+  CHECK(std::memcmp(mock.gpu_identity(0u).uuid(), uuid, sizeof uuid) == 0);
+  CHECK(std::strcmp(mock.gpu_identity(0u).name(), "mock gpu") == 0);
+  CHECK_EQ(mock.gpu_identity(1u).vendor_id(), 0x1002u); }
 
 TEST(mock_host_memory, allocations_are_tracked_and_can_fail)
 { MockHost mock;
