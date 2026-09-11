@@ -37,6 +37,9 @@ public:
     std::int32_t recommend_vidpn_topology();
     std::int32_t scan_line(DxgkargGetScanLineRecord &scan);
     std::int32_t control_vsync(bool enable);
+    /* SetVidPnSourceAddress for source 0: the primary at `address` in segment 1, or none. */
+    std::int32_t show_primary(void *allocation, std::int64_t address);
+    std::int32_t set_visible(bool visible);
 
 private:
     static constexpr std::int32_t no_pivot = 5;       /* D3DKMDT_EPT_NOPIVOT */

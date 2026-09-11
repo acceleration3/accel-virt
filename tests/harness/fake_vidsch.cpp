@@ -1,5 +1,7 @@
 #include "fake_vidsch.hpp"
 
+#include "../../src/core/ddi/dxgkarg_present_record.hpp"
+
 #include "../../src/core/ddi/dxgkarg_create_context_record.hpp"
 #include "../../src/core/ddi/dxgkarg_create_device_record.hpp"
 #include "../../src/core/ddi/dxgkarg_patch_record.hpp"
@@ -21,7 +23,8 @@ constexpr std::int32_t dma_completed = 1, dma_preempted = 2;
 
 FakeVidSch::FakeVidSch(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlAdapter &dxgkrnl, void *adapter)
     : platform_(platform), table_(table), dxgkrnl_(dxgkrnl), adapter_(adapter), device_(nullptr), context_(nullptr),
-      dma_{}, rendered_(0u), allocation_{}, patch_in_{}, patch_out_{}, submitted_(0u), completed_(0u),
+      dma_{}, rendered_(0u), allocation_{}, patch_in_{}, patch_out_{}, present_allocations_{}, present_patches_{},
+      submitted_(0u), completed_(0u),
       preemption_fence_(0x80000000u), preemptions_(0u), seen_(dxgkrnl.interrupts()) {}
 
 FakeVidSch::~FakeVidSch()
@@ -77,6 +80,42 @@ std::int32_t FakeVidSch::render(const std::uint8_t *command, std::uint32_t lengt
     patch.pPatchLocationList = &patch_out_;
     patch.PatchLocationListSize = 1u;
     patch.PatchLocationListSubmissionLength = 1u;
+    patch.SubmissionFenceId = submitted_ + 1u;
+    return reinterpret_cast<std::int32_t (*)(void *, const DxgkargPatchRecord *)>(table_.routine(DdiSlot::DxgkDdiPatch))(
+        adapter_, &patch);
+}
+
+std::int32_t FakeVidSch::present_blt(std::int64_t source, std::int64_t destination, const RectRecord *sub_rects,
+                                     std::uint32_t count)
+{
+    platform_.set_irql(Irql::passive);
+    present_allocations_[1].PhysicalAddress = source;
+    present_allocations_[2].PhysicalAddress = destination;
+    DxgkargPresentRecord present = {};
+    present.pDmaBuffer = dma_;
+    present.DmaSize = dma_bytes;
+    present.pAllocationList = present_allocations_;
+    present.pPatchLocationListOut = present_patches_;
+    present.PatchLocationListOutSize = 2u;
+    present.SrcRect = {0, 0, 1, 1};
+    present.DstRect = {0, 0, 1, 1};
+    present.SubRectCnt = count;
+    present.pDstSubRects = sub_rects;
+    present.Flags = 1u;   /* Blt */
+    const std::int32_t status = reinterpret_cast<std::int32_t (*)(void *, DxgkargPresentRecord *)>(
+        table_.routine(DdiSlot::DxgkDdiPresent))(context_, &present);
+    if (status < 0) return status;
+    rendered_ = static_cast<std::uint32_t>(static_cast<std::uint8_t *>(present.pDmaBuffer) - dma_);
+    DxgkargPatchRecord patch = {};
+    patch.hDevice = device_;
+    patch.pDmaBuffer = dma_;
+    patch.DmaBufferSize = dma_bytes;
+    patch.DmaBufferSubmissionEndOffset = rendered_;
+    patch.pAllocationList = present_allocations_;
+    patch.AllocationListSize = 3u;
+    patch.pPatchLocationList = present_patches_;
+    patch.PatchLocationListSize = 2u;
+    patch.PatchLocationListSubmissionLength = static_cast<std::uint32_t>(present.pPatchLocationListOut - present_patches_);
     patch.SubmissionFenceId = submitted_ + 1u;
     return reinterpret_cast<std::int32_t (*)(void *, const DxgkargPatchRecord *)>(table_.routine(DdiSlot::DxgkDdiPatch))(
         adapter_, &patch);

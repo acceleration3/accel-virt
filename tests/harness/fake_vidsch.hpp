@@ -9,6 +9,7 @@
 
 #include "../../src/core/ddi/d3dddi_patch_location_list_record.hpp"
 #include "../../src/core/ddi/dxgk_allocation_list_record.hpp"
+#include "../../src/core/ddi/rect_record.hpp"
 #include "../../src/core/ddi_table.hpp"
 #include "fake_dxgkrnl_adapter.hpp"
 #include "mock_platform.hpp"
@@ -31,6 +32,10 @@ public:
      * references an allocation at `address`; answers the first failure. */
     std::int32_t render(const std::uint8_t *command, std::uint32_t length, std::uint32_t patch_offset,
                         std::int64_t address);
+    /* Present a Blt from the allocation at `source` to the one at `destination`,
+     * then Patch it, as dxgkrnl's present path does; answers the first failure. */
+    std::int32_t present_blt(std::int64_t source, std::int64_t destination, const RectRecord *sub_rects,
+                             std::uint32_t count);
     std::int32_t submit();
     std::int32_t preempt();
     void         run_dpc();
@@ -58,6 +63,8 @@ private:
     DxgkAllocationListRecord       allocation_;
     D3dddiPatchLocationListRecord  patch_in_;
     D3dddiPatchLocationListRecord  patch_out_;
+    DxgkAllocationListRecord       present_allocations_[3];
+    D3dddiPatchLocationListRecord  present_patches_[2];
     std::uint32_t                  submitted_;
     std::uint32_t                  completed_;
     std::uint32_t                  preemption_fence_;

@@ -14,6 +14,7 @@ enum class LockRank : uint16_t {
     device_table = 100u,       /* DeviceTable, which calls into AllocationTable */
     allocation_table = 110u,
     execution_node = 200u,     /* spin lock: SubmitCommand, PreemptCommand and the DPC */
+    display_scanout = 210u,    /* spin lock: SetVidPnSourceAddress and the vsync tick */
 };
 
 }  // namespace av

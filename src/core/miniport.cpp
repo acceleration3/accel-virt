@@ -61,6 +61,9 @@ Miniport::Miniport(Platform &platform)
         {DdiSlot::DxgkDdiRecommendVidPnTopology, reinterpret_cast<DdiRoutine>(&AvDdiRecommendVidPnTopology)},
         {DdiSlot::DxgkDdiGetScanLine, reinterpret_cast<DdiRoutine>(&AvDdiGetScanLine)},
         {DdiSlot::DxgkDdiControlInterrupt, reinterpret_cast<DdiRoutine>(&AvDdiControlInterrupt)},
+        {DdiSlot::DxgkDdiSetVidPnSourceAddress, reinterpret_cast<DdiRoutine>(&AvDdiSetVidPnSourceAddress)},
+        {DdiSlot::DxgkDdiSetVidPnSourceVisibility, reinterpret_cast<DdiRoutine>(&AvDdiSetVidPnSourceVisibility)},
+        {DdiSlot::DxgkDdiPresent, reinterpret_cast<DdiRoutine>(&AvDdiPresent)},
         {DdiSlot::DxgkDdiLinkDevice, reinterpret_cast<DdiRoutine>(&AvDdiLinkDevice)},
     };
     for (const Entry &entry : entries)

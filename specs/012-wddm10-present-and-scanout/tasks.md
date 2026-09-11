@@ -21,12 +21,12 @@ description: "Task list for feature 012: WDDM 1.0 present and scanout"
 
 ## Phase 3: Scanout and vsync (US2)
 
-- [ ] T006 Tests then `SourceScanout`, `DisplaySources`, `InterruptNotification::report_vsync`
-- [ ] T007 Tests then `SyntheticVsync`; adapter DDIs, entry points, three slots
+- [X] T006 Tests then scanout state in `DisplaySources`, `InterruptNotification::report_vsync`
+- [X] T007 Tests then `SyntheticVsync`; adapter DDIs, entry points, three slots
 
 **Checkpoint**: commit.
 
 ## Phase 4: Scenarios
 
-- [ ] T008 Scenarios through the table; fuzz_present with corpus
+- [X] T008 Scenarios through the table; fuzz_present with corpus
 - [ ] T009 Docs; gate; merge; push

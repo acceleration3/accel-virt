@@ -157,7 +157,19 @@ int32_t AvDdiGetScanLine(void *context, av::DxgkargGetScanLineRecord *request)
 int32_t AvDdiControlInterrupt(void *context, int32_t type, uint8_t enable)
 { return static_cast<av::Adapter *>(context)->control_interrupt(type, enable); }
 
+int32_t AvDdiSetVidPnSourceAddress(void *context, const av::DxgkargSetVidPnSourceAddressRecord *request)
+{ return static_cast<av::Adapter *>(context)->set_vidpn_source_address(request); }
+
+int32_t AvDdiSetVidPnSourceVisibility(void *context, const av::DxgkargSetVidPnSourceVisibilityRecord *request)
+{ return static_cast<av::Adapter *>(context)->set_vidpn_source_visibility(request); }
+
+int32_t AvDdiPresent(void *context, av::DxgkargPresentRecord *request)
+{ return static_cast<av::Context *>(context)->device().adapter().present(context, request); }
+
 uint8_t AvSynchronizedNotify(void *notification)
 { return static_cast<av::InterruptNotification *>(notification)->notify(); }
+
+void AvVsyncTick(void *, void *vsync)
+{ static_cast<av::SyntheticVsync *>(vsync)->tick(); }
 
 }

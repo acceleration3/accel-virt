@@ -87,3 +87,21 @@ TEST(interrupt_notification, reports_are_dispatch_at_most)
   fixture.platform().set_irql(Irql::passive);
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   while (fixture.platform().claim(Violation::irql_ceiling)) {} }
+
+TEST(interrupt_notification_report_vsync, notifies_crtc_vsync_with_the_target_and_address)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.notification().report_vsync(0u, 0x0000000123456000ull), Status::ok);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);
+  const av::DxgkargcbNotifyInterruptDataRecord &data = fixture.dxgkrnl().interrupt(0u);
+  CHECK_EQ(data.InterruptType, 3);   /* DXGK_INTERRUPT_CRTC_VSYNC */
+  CHECK_EQ(data.FenceId, 0u);        /* VidPnTargetId */
+  CHECK_EQ(data.Argument2, 0x23456000u);
+  CHECK_EQ(data.Argument3, 0x1u);
+  CHECK_EQ(data.UnionRemainder[0], 1u);   /* PhysicalAdapterMask */
+  CHECK_EQ(data.Flags, 0u);
+  fixture.platform().set_irql(Irql::isr);
+  static_cast<void>(fixture.notification().report_vsync(0u, 0u));
+  fixture.platform().set_irql(Irql::passive);
+  while (fixture.platform().claim(Violation::irql_ceiling)) {} }

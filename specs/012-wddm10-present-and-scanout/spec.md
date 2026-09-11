@@ -51,9 +51,9 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 | `PeriodicTimer` | object | platform, callback, context, the platform timer | Owns one periodic kernel timer from creation to deletion |
 | `SyntheticVsync` | object | platform, dxgkrnl, display sources, its own interrupt notification, a `PeriodicTimer` | Raises CRTC_VSYNC for target 0 at the refresh rate while dxgkrnl wants it |
 | `PresentRequest` | object | platform, one `DXGKARG_PRESENT` | Encodes one present into its DMA buffer and patch list |
-| `PresentCommand` (proto) | object | flags, colour, rectangles, sub-rectangle count | The wire form of one present in a DMA buffer |
-| `SourceScanout` | object | platform, spin lock, primary allocation, segment, address, visibility | Remembers what one source scans out, readable at DISPATCH |
-| `DisplaySources` (extended) | object | + one `SourceScanout` per source | Remembers each source's display state |
+| `PresentCommand` (proto) | object | operation, colour, rectangles, flip interval, sub-rectangle count | The wire form of one present's header in a DMA buffer |
+| `Rectangle` (proto) | object | left, top, right, bottom | The wire form of one rectangle |
+| `DisplaySources` (extended) | object | + a spin lock, each source's scanout address and visibility | Remembers each source's display state |
 | `InterruptNotification` (extended) | object | + CRTC_VSYNC data | Reports one interrupt to dxgkrnl from outside the ISR |
 | DDI records | DDI record | `DXGKARG_PRESENT`, `DXGKARG_SETVIDPNSOURCEADDRESS`, `DXGKARG_SETVIDPNSOURCEVISIBILITY` | Overlays memory dxgkrnl owns, layout-proven |
 

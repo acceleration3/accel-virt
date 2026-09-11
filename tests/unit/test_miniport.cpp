@@ -58,7 +58,8 @@ constexpr DdiSlot implemented[] = {
     DdiSlot::DxgkDdiEnumVidPnCofuncModality, DdiSlot::DxgkDdiCommitVidPn,
     DdiSlot::DxgkDdiUpdateActiveVidPnPresentPath, DdiSlot::DxgkDdiRecommendMonitorModes,
     DdiSlot::DxgkDdiRecommendVidPnTopology, DdiSlot::DxgkDdiGetScanLine,
-    DdiSlot::DxgkDdiControlInterrupt,
+    DdiSlot::DxgkDdiControlInterrupt,    DdiSlot::DxgkDdiSetVidPnSourceAddress,
+    DdiSlot::DxgkDdiSetVidPnSourceVisibility, DdiSlot::DxgkDdiPresent,
 };
 
 bool is_implemented(std::uint16_t index)

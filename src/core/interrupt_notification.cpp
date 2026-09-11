@@ -32,6 +32,19 @@ Status InterruptNotification::report_preempted(uint32_t preemption_fence, uint32
     return report();
 }
 
+/* CRTC_VSYNC's PhysicalAddress spans the two UINTs after the target. */
+Status InterruptNotification::report_vsync(uint32_t target, uint64_t address)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "InterruptNotification::report_vsync");
+    data_ = DxgkargcbNotifyInterruptDataRecord{};
+    data_.InterruptType = crtc_vsync;
+    data_.FenceId = target;
+    data_.Argument2 = static_cast<uint32_t>(address);
+    data_.Argument3 = static_cast<uint32_t>(address >> 32u);
+    data_.UnionRemainder[0] = physical_adapter_mask;
+    return report();
+}
+
 uint8_t InterruptNotification::notify()
 {
     platform_.require_irql_at_most(Irql::isr, "InterruptNotification::notify");

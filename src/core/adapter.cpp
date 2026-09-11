@@ -27,7 +27,11 @@
 #include "ddi/d3dkmdt_vidpn_present_path_record.hpp"
 #include "ddi/dxgkarg_get_scan_line_record.hpp"
 #include "debug_report.hpp"
+#include "ddi/dxgkarg_present_record.hpp"
+#include "ddi/dxgkarg_set_vidpn_source_address_record.hpp"
+#include "ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "monitor_modes.hpp"
+#include "present_request.hpp"
 #include "vidpn_commit.hpp"
 #include "vidpn_support_check.hpp"
 #include "ddi/linked_device_record.hpp"
@@ -62,7 +66,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), segment_(platform),
       modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_),
-      node_(platform), notification_(platform, dxgkrnl_), started_(false) {}
+      node_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_), started_(false) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
 
@@ -112,11 +116,15 @@ int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_inte
     if (started_) return NtStatus(Status::invalid_state).value();
     if (dxgkrnl_interface == nullptr || sources == nullptr || children == nullptr)
         return NtStatus(Status::invalid_parameter).value();
-    ScopeExit unmap([this] { mappings_.unmap_all(); });
+    ScopeExit undo([this] {
+        vsync_.destroy();
+        mappings_.unmap_all();
+    });
     Status status = discover_and_map(dxgkrnl_interface);
+    if (status == Status::ok) status = vsync_.initialize();
     if (status == Status::ok) status = power_up();
     if (status != Status::ok) return NtStatus(status).value();
-    unmap.dismiss();
+    undo.dismiss();
     *sources = DisplaySources::source_count;
     *children = DisplaySources::target_count;
     started_ = true;
@@ -127,6 +135,7 @@ int32_t Adapter::stop_device()
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::stop_device");
     InvariantScope<Adapter> guard(platform_, *this, "stop_device");
+    vsync_.destroy();
     const Status status = power_down();
     mappings_.unmap_all();
     started_ = false;
@@ -481,13 +490,39 @@ int32_t Adapter::get_scan_line(DxgkargGetScanLineRecord *request)
     return NtStatus(Status::ok).value();
 }
 
-/* Only recorded: the scan-out timer that raises vsync arrives with presentation. */
+/* Before StartDevice there is no timer to start. */
 int32_t Adapter::control_interrupt(int32_t type, uint8_t enable)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::control_interrupt");
     if (type != interrupt_crtc_vsync) return NtStatus(Status::not_supported).value();
-    sources_.set_vsync(enable != 0u);
-    return NtStatus(Status::ok).value();
+    const Status status = enable != 0u ? vsync_.enable() : Status::ok;
+    if (enable == 0u) vsync_.disable();
+    if (status == Status::ok) sources_.set_vsync(enable != 0u);
+    return NtStatus(status).value();
+}
+
+/* A null allocation leaves the source showing nothing. */
+int32_t Adapter::set_vidpn_source_address(const DxgkargSetVidPnSourceAddressRecord *request)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "Adapter::set_vidpn_source_address");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    if (request->hAllocation == nullptr) return NtStatus(sources_.set_scanout(request->VidPnSourceId, 0)).value();
+    if (request->PrimarySegment != ApertureSegment::segment_id) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(sources_.set_scanout(request->VidPnSourceId, request->PrimaryAddress)).value();
+}
+
+int32_t Adapter::set_vidpn_source_visibility(const DxgkargSetVidPnSourceVisibilityRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::set_vidpn_source_visibility");
+    if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return NtStatus(sources_.set_visible(request->VidPnSourceId, request->Visible != 0u)).value();
+}
+
+int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::present");
+    if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
+    return PresentRequest(platform_, *request).present().value();
 }
 
 bool Adapter::invariants_hold() const

@@ -2,7 +2,8 @@
  * data is built once, and DxgkCbNotifyInterrupt is called from a routine
  * DxgkCbSynchronizeExecution runs at device IRQL - the recipe basicrender.sys
  * uses (WARPKMADAPTER::WarpSynchronizeNotifyInterrupt), with a data block
- * reused for every report rather than allocated. */
+ * reused for every report rather than allocated. Reporters that can run at
+ * once - the adapter's DPC and the vsync timer - each own one. */
 #ifndef AV_INTERRUPT_NOTIFICATION_HPP
 #define AV_INTERRUPT_NOTIFICATION_HPP
 
@@ -24,11 +25,15 @@ public:
 
     [[nodiscard]] Status report_completed(uint32_t fence);
     [[nodiscard]] Status report_preempted(uint32_t preemption_fence, uint32_t last_completed_fence);
+    /* The address is the primary the target shows at this vsync. */
+    [[nodiscard]] Status report_vsync(uint32_t target, uint64_t address);
     /* The synchronized routine: runs at device IRQL. */
     uint8_t              notify();
 
 private:
-    enum : int32_t { dma_completed = 1, dma_preempted = 2 };   /* DXGK_INTERRUPT_TYPE */
+    enum : int32_t { dma_completed = 1, dma_preempted = 2, crtc_vsync = 3 };   /* DXGK_INTERRUPT_TYPE */
+    /* One adapter, not linked: physical adapter 0. */
+    static constexpr uint32_t physical_adapter_mask = 1u;
 
     [[nodiscard]] Status report();
 

@@ -10,12 +10,16 @@
 #include "../device.hpp"
 #include "../interrupt_notification.hpp"
 #include "../miniport_binding.hpp"
+#include "../synthetic_vsync.hpp"
 #include "d3dkmdt_vidpn_present_path_record.hpp"
 #include "dxgk_child_descriptor_record.hpp"
 #include "dxgkarg_commit_vidpn_record.hpp"
 #include "dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
 #include "dxgkarg_get_scan_line_record.hpp"
 #include "dxgkarg_is_supported_vidpn_record.hpp"
+#include "dxgkarg_present_record.hpp"
+#include "dxgkarg_set_vidpn_source_address_record.hpp"
+#include "dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "dxgkarg_recommend_functional_vidpn_record.hpp"
 #include "dxgkarg_recommend_monitor_modes_record.hpp"
 #include "dxgkarg_recommend_vidpn_topology_record.hpp"
@@ -103,8 +107,13 @@ int32_t AvDdiRecommendMonitorModes(void *context, const av::DxgkargRecommendMoni
 int32_t AvDdiRecommendVidPnTopology(void *context, const av::DxgkargRecommendVidPnTopologyRecord *request);
 int32_t AvDdiGetScanLine(void *context, av::DxgkargGetScanLineRecord *request);
 int32_t AvDdiControlInterrupt(void *context, int32_t type, uint8_t enable);
+int32_t AvDdiSetVidPnSourceAddress(void *context, const av::DxgkargSetVidPnSourceAddressRecord *request);
+int32_t AvDdiSetVidPnSourceVisibility(void *context, const av::DxgkargSetVidPnSourceVisibilityRecord *request);
+int32_t AvDdiPresent(void *context, av::DxgkargPresentRecord *request);
 /* The KSYNCHRONIZE_ROUTINE DxgkCbSynchronizeExecution runs at device IRQL. */
 uint8_t AvSynchronizedNotify(void *notification);
+/* The platform timer's EXT_CALLBACK, at DISPATCH. */
+void AvVsyncTick(void *timer, void *vsync);
 
 }
 

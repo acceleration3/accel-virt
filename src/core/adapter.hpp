@@ -19,6 +19,7 @@
 #include "platform.hpp"
 #include "resource_list.hpp"
 #include "status.hpp"
+#include "synthetic_vsync.hpp"
 #include "virtio_gpu_device.hpp"
 #include "virtio_pci_layout.hpp"
 
@@ -50,6 +51,9 @@ struct DxgkargGetStandardAllocationDriverDataRecord;
 struct DxgkargOpenAllocationRecord;
 struct DxgkargPatchRecord;
 struct DxgkargPreemptCommandRecord;
+struct DxgkargPresentRecord;
+struct DxgkargSetVidPnSourceAddressRecord;
+struct DxgkargSetVidPnSourceVisibilityRecord;
 struct DxgkargQueryCurrentFenceRecord;
 struct DxgkargRenderRecord;
 struct DxgkargSetDisplayPrivateDriverFormatRecord;
@@ -119,7 +123,12 @@ public:
     /* Declines: dxgkrnl then joins the one source to the one target itself. */
     int32_t recommend_vidpn_topology(const DxgkargRecommendVidPnTopologyRecord *request);
     int32_t get_scan_line(DxgkargGetScanLineRecord *request);
+    /* CRTC_VSYNC starts and stops the synthetic vsync. */
     int32_t control_interrupt(int32_t type, uint8_t enable);
+    /* At most DISPATCH: the vsync tick reads the address it sets. */
+    int32_t set_vidpn_source_address(const DxgkargSetVidPnSourceAddressRecord *request);
+    int32_t set_vidpn_source_visibility(const DxgkargSetVidPnSourceVisibilityRecord *request);
+    int32_t present(void *context, DxgkargPresentRecord *request);
 
     bool invariants_hold() const;
 
@@ -152,6 +161,7 @@ private:
     ContextTable                   contexts_;
     ExecutionNode                  node_;
     InterruptNotification          notification_;
+    SyntheticVsync                 vsync_;
     bool                           started_;
 
     friend struct AdapterProbe;

@@ -454,6 +454,38 @@ successes. A mode info `pfnAddMode` accepts belongs to dxgkrnl; one it refuses
 is released by the driver. The modes are 640x480 up to 1920x1080, until the
 device reports its displays (feature 027).
 
+## 4d. Present, scanout and vsync (feature 012)
+
+`DxgkDdiPresent` (PASSIVE, on a context) builds a DMA buffer the way
+`basicrender.sys`'s `WARPKMCONTEXT::Present` does: one command (docs/protocol.md,
+"Present command") with patch locations for allocation-list entries 1 (source)
+and 2 (destination), `pDmaBuffer` and `pPatchLocationListOut` advanced past
+what was written. Exactly one of `Blt`, `ColorFill`, `Flip` (with or without
+`FlipWithNoWait`) is accepted; anything else is `STATUS_INVALID_PARAMETER`. A
+buffer too small for the remaining sub-rectangles holds as many as fit and
+answers `STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER` (0xC01E0001) with
+`MultipassOffset` at the first one left; dxgkrnl patches, submits and calls
+again. dxgkrnl then patches and submits it like any render (§4a).
+
+`DxgkDdiSetVidPnSourceAddress` remembers the primary's address for source 0 (a
+null allocation clears it; a segment other than 1 is refused); it is callable
+up to DISPATCH because the address is read by the vsync tick under a spin
+lock. dxgkrnl calls it above DISPATCH only for a driver reporting
+`FlipOnVSyncMmIo`, which this one does not. `DxgkDdiSetVidPnSourceVisibility`
+records visibility.
+
+Vsync is synthetic. `DxgkDdiControlInterrupt(DXGK_INTERRUPT_CRTC_VSYNC, TRUE)`
+starts a high-resolution platform timer (`ExAllocateTimer`, created at
+StartDevice, deleted at StopDevice) at 60 Hz; each tick, at DISPATCH, reports
+`CRTC_VSYNC` for target 0 with the scanout address and `PhysicalAdapterMask`
+1 through `DxgkCbSynchronizeExecution`, then calls `DxgkCbNotifyDpc`.
+dxgmms2's `VidSchiProcessIsrVSync` maps the target to its source and completes
+flips whose address matches. The tick has its own notification data, so it
+never races the DPC's completion reports. `FALSE` stops the timer.
+
+With Present in the table, `DXGADAPTER::CreateRenderCore`'s required DDI set is
+complete: the adapter becomes a render adapter.
+
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 
 Brief confirmation that each sequence the harness injects is reachable in the

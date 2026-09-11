@@ -7,6 +7,8 @@
 #include "../../src/core/ddi/dxgkarg_recommend_functional_vidpn_record.hpp"
 #include "../../src/core/ddi/dxgkarg_recommend_monitor_modes_record.hpp"
 #include "../../src/core/ddi/dxgkarg_recommend_vidpn_topology_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 
 namespace av {
 
@@ -114,6 +116,24 @@ std::int32_t FakeDisplayModeManager::control_vsync(bool enable)
 {
     return reinterpret_cast<ControlInterrupt>(table_.routine(DdiSlot::DxgkDdiControlInterrupt))(adapter_, crtc_vsync,
                                                                                                  enable ? 1u : 0u);
+}
+
+std::int32_t FakeDisplayModeManager::show_primary(void *allocation, std::int64_t address)
+{
+    DxgkargSetVidPnSourceAddressRecord request = {};
+    request.PrimarySegment = 1u;
+    request.PrimaryAddress = address;
+    request.hAllocation = allocation;
+    request.Flags = 0x4u;   /* FlipOnNextVSync */
+    return reinterpret_cast<std::int32_t (*)(void *, const DxgkargSetVidPnSourceAddressRecord *)>(
+        table_.routine(DdiSlot::DxgkDdiSetVidPnSourceAddress))(adapter_, &request);
+}
+
+std::int32_t FakeDisplayModeManager::set_visible(bool visible)
+{
+    const DxgkargSetVidPnSourceVisibilityRecord request = {0u, visible ? std::uint8_t{1u} : std::uint8_t{0u}, {}};
+    return reinterpret_cast<std::int32_t (*)(void *, const DxgkargSetVidPnSourceVisibilityRecord *)>(
+        table_.routine(DdiSlot::DxgkDdiSetVidPnSourceVisibility))(adapter_, &request);
 }
 
 std::int32_t FakeDisplayModeManager::enumerate(FakeVidPn &vidpn, std::int32_t pivot)

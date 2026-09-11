@@ -6,6 +6,9 @@
 #include "../../src/core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
 #include "../../src/core/ddi/dxgkarg_get_scan_line_record.hpp"
 #include "../../src/core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
+#include "../../src/core/ddi/dxgkarg_present_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_vidpn_source_address_record.hpp"
+#include "../../src/core/ddi/dxgkarg_set_vidpn_source_visibility_record.hpp"
 #include "../../src/core/ddi/dxgkarg_recommend_functional_vidpn_record.hpp"
 #include "../../src/core/ddi/dxgkarg_recommend_monitor_modes_record.hpp"
 #include "../../src/core/ddi/dxgkarg_recommend_vidpn_topology_record.hpp"
@@ -572,11 +575,93 @@ TEST(adapter, recommend_functional_vidpn_and_recommend_vidpn_topology_decline)
   CHECK_EQ(nt(fixture.adapter().recommend_functional_vidpn(&functional)), no_recommended_functional_vidpn);
   CHECK_EQ(nt(fixture.adapter().recommend_vidpn_topology(&topology)), no_recommended_vidpn_topology); }
 
-TEST(adapter_control_interrupt, records_vsync_and_refuses_other_types)
+TEST(adapter_control_interrupt, vsync_runs_between_enable_and_disable)
 { Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  const std::uint64_t frame = 10000000u / 60u;
   CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
+  fixture.platform().run_timers(frame * 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).InterruptType, interrupt_crtc_vsync);
   CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 0u)), success);
+  fixture.platform().run_timers(frame * 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);
   CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_dpc_log, 1u)), not_supported); }
+
+TEST(adapter_control_interrupt, before_start_there_is_no_vsync)
+{ Fixture fixture;
+  CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), invalid_device_state);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 0u)), success); }
+
+TEST(adapter_stop_device, stops_the_vsync)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
+  CHECK_EQ(nt(fixture.adapter().stop_device()), success);
+  fixture.platform().run_timers(10000000u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u); }
+
+TEST(adapter_set_vidpn_source_address, the_vsync_reports_the_primary_it_names)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  int primary = 0;
+  av::DxgkargSetVidPnSourceAddressRecord request = {};
+  request.PrimarySegment = 1u;
+  request.PrimaryAddress = 0x7000000000ll;
+  request.hAllocation = &primary;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&request)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(nt(fixture.adapter().control_interrupt(interrupt_crtc_vsync, 1u)), success);
+  fixture.platform().run_timers(10000000u / 60u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument3, 0x70u);
+  request.hAllocation = nullptr;
+  request.PrimarySegment = 9u;
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&request)), success);
+  fixture.platform().run_timers(10000000u / 60u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).Argument3, 0u); }
+
+TEST(adapter_set_vidpn_source_address, another_segment_or_source_is_invalid)
+{ Fixture fixture;
+  int primary = 0;
+  av::DxgkargSetVidPnSourceAddressRecord request = {};
+  request.hAllocation = &primary;
+  request.PrimarySegment = 2u;
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&request)), invalid_parameter);
+  request.PrimarySegment = 1u;
+  request.VidPnSourceId = 1u;
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&request)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(nullptr)), invalid_parameter); }
+
+TEST(adapter_set_vidpn_source_visibility, records_it_for_the_source)
+{ Fixture fixture;
+  av::DxgkargSetVidPnSourceVisibilityRecord request = {0u, 1u, {}};
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&request)), success);
+  request.VidPnSourceId = 1u;
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&request)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(nullptr)), invalid_parameter); }
+
+TEST(adapter_present, needs_a_live_context_then_presents)
+{ Fixture fixture;
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  std::uint8_t dma[128] = {};
+  av::D3dddiPatchLocationListRecord patches[2] = {};
+  av::DxgkargPresentRecord present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.pPatchLocationListOut = patches;
+  present.PatchLocationListOutSize = 2u;
+  present.Flags = 1u;   /* Blt */
+  CHECK_EQ(nt(fixture.adapter().present(&fixture, &present)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(dma[0], 0x52u);
+  CHECK_EQ(patches[1].AllocationIndex, 2u);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
 TEST(adapter, the_display_ddis_are_passive_only)
 { Fixture fixture;
@@ -590,8 +675,12 @@ TEST(adapter, the_display_ddis_are_passive_only)
   static_cast<void>(fixture.adapter().recommend_vidpn_topology(nullptr));
   static_cast<void>(fixture.adapter().get_scan_line(nullptr));
   static_cast<void>(fixture.adapter().control_interrupt(0, 0u));
+  static_cast<void>(fixture.adapter().set_vidpn_source_visibility(nullptr));
+  static_cast<void>(fixture.adapter().present(nullptr, nullptr));
+  fixture.platform().set_irql(Irql::isr);
+  static_cast<void>(fixture.adapter().set_vidpn_source_address(nullptr));
   fixture.platform().set_irql(Irql::passive);
-  for (int call = 0; call < 9; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
+  for (int call = 0; call < 12; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
 
 /* ---- The rest of the slot list --------------------------------------------- */
 

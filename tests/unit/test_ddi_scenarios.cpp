@@ -14,6 +14,7 @@
 #include "../../src/core/ddi/dxgkarg_set_display_private_driver_format_record.hpp"
 #include "../../src/core/ddi/dxgk_driver_caps_record.hpp"
 #include "../../src/proto/allocation_descriptor.hpp"
+#include "../../src/proto/present_command.hpp"
 #include "../../src/core/ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "../../src/core/ddi/dxgkarg_escape_record.hpp"
 #include "../../src/core/ddi/dxgkarg_query_adapter_info_record.hpp"
@@ -297,14 +298,15 @@ TEST(ddi_scenario, vidmm_accepts_the_aperture_segment_after_start)
   CHECK(vidmm.segment(0u).Size == std::uint64_t{8} << 30u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
-TEST(ddi_scenario, the_render_ddi_set_is_incomplete_until_present_arrives)
+TEST(ddi_scenario, the_render_core_is_created_once_present_arrives)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
   CHECK_EQ(device.fdo().start_device(), 0);
-  CHECK_EQ(device.fdo().dxgadapter().create_render_core(), revision_mismatch);
-  CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::render_ddis_incomplete);
-  CHECK(device.fdo().dxgadapter().missing_render_slot() == DdiSlot::DxgkDdiPresent);
+  CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
+  CHECK(device.fdo().dxgadapter().render_adapter());
+  CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
+  CHECK(device.fdo().dxgadapter().missing_render_slot() == DdiSlot::Version);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 namespace {
@@ -605,4 +607,47 @@ TEST(ddi_scenario, a_second_path_is_refused_and_a_mode_off_the_list_is_never_off
     av::DxgkargGetScanLineRecord scan = {0u, 0u, {}, 0u};
     CHECK_EQ(nt(dmm.scan_line(scan)), invalid_device_state); }
   CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- Present and scanout (feature 012) --------------------------------------- */
+
+TEST(ddi_scenario, a_primary_scans_out_at_vsync_while_presents_complete)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  av::FakeDisplayModeManager dmm(driver.platform(), driver.table(), device.fdo().context());
+  { av::FakeVidPn vidpn;
+    CHECK_EQ(dmm.set_mode(vidpn, 1280u, 800u), 0); }
+  int primary = 0;
+  const std::uint64_t frame = 10000000u / 60u;
+  CHECK_EQ(dmm.show_primary(&primary, 0x0000000200000000ll), 0);
+  CHECK_EQ(dmm.set_visible(true), 0);
+  CHECK_EQ(dmm.control_vsync(true), 0);
+  driver.platform().run_timers(frame * 2u);
+  CHECK_EQ(device.dxgkrnl().interrupts(), 2u);
+  CHECK_EQ(device.dxgkrnl().interrupt(1u).InterruptType, 3);
+  CHECK_EQ(device.dxgkrnl().interrupt(1u).Argument3, 2u);
+  { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
+    CHECK_EQ(vidsch.create_context(), 0);
+    const av::RectRecord dirty[2] = {{0, 0, 16, 16}, {32, 32, 64, 64}};
+    CHECK_EQ(vidsch.present_blt(0x0000000200000000ll, 0x0000000300000000ll, dirty, 2u), 0);
+    CHECK_EQ(vidsch.dma()[av::PresentCommand::source_address_offset + 4u], 2u);
+    CHECK_EQ(vidsch.dma()[av::PresentCommand::destination_address_offset + 4u], 3u);
+    CHECK_EQ(vidsch.submit(), 0);
+    vidsch.run_dpc();
+    CHECK_EQ(vidsch.completed(), 1u); }
+  CHECK_EQ(dmm.show_primary(nullptr, 0), 0);
+  driver.platform().run_timers(frame);
+  CHECK_EQ(device.dxgkrnl().interrupt(device.dxgkrnl().interrupts() - 1u).Argument3, 0u);
+  CHECK_EQ(dmm.control_vsync(false), 0);
+  const std::uint32_t reported = device.dxgkrnl().interrupts();
+  driver.platform().run_timers(frame * 4u);
+  CHECK_EQ(device.dxgkrnl().interrupts(), reported);
+  CHECK_EQ(dmm.control_vsync(true), 0);
+  CHECK_EQ(device.fdo().stop_device(), 0);
+  driver.platform().run_timers(frame * 4u);
+  CHECK_EQ(device.dxgkrnl().interrupts(), reported);
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
