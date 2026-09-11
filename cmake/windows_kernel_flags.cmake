@@ -23,11 +23,14 @@ endforeach()
 
 # CMake links every executable with /subsystem:console after these flags,
 # which overrides /SUBSYSTEM:NATIVE. GsDriverEntry (BufferOverflowK.lib) seeds
-# the /GS cookie, then calls DriverEntry.
+# the /GS cookie, then calls DriverEntry. lld-link marks every executable
+# terminal-server aware even with /DRIVER, and ntoskrnl's
+# MiObtainSectionForDriver refuses a native image carrying that bit with
+# STATUS_CONFLICTING_ADDRESSES before DriverEntry runs: Code 39 in the guest.
 set(CMAKE_CXX_CREATE_CONSOLE_EXE "")
 string(JOIN " " CMAKE_EXE_LINKER_FLAGS_INIT
   /DRIVER /SUBSYSTEM:NATIVE /ENTRY:GsDriverEntry /NODEFAULTLIB /MANIFEST:NO
-  /OPT:REF /DEBUG)
+  /TSAWARE:NO /OPT:REF /DEBUG)
 
 set(AV_WINDOWS_KIT_LIBRARIES ntoskrnl.lib hal.lib BufferOverflowK.lib displib.lib)
 list(TRANSFORM AV_WINDOWS_KIT_LIBRARIES PREPEND "\"${AV_WINDOWS_KIT_DIR}/lib/x64/")

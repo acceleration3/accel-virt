@@ -86,6 +86,29 @@ names the argument struct even though its layout is absent. Demangle with
 `llvm-cxxfilt --format=auto` or read them directly — MSVC mangling puts
 `PEAU_NAME@@` for `struct _NAME *`.
 
+**Where does a status come from?** When the guest reports an NTSTATUS with no
+log line - a driver that fails to load before `DriverEntry`, say - take the
+guest's own kernel, not a pinned one, since builds move code. Pull it from a
+guest held by `run_guest_suite.py --hold`, fetch its PDB by the GUID in its
+debug directory, find every function that loads the constant, and read the
+branch that reaches it:
+
+```bash
+tools/guest/guest_shell.py pull 'C:\Windows\System32\ntoskrnl.exe' re/guest-26200/ntoskrnl.exe
+llvm-readobj --coff-debug-directory re/guest-26200/ntoskrnl.exe | grep -E 'PDBGUID|PDBAge'
+curl -sSfL -o re/guest-26200/ntoskrnl.pdb \
+    https://msdl.microsoft.com/download/symbols/ntkrnlmp.pdb/<GUID without dashes><Age>/ntkrnlmp.pdb
+llvm-objdump -d --no-show-raw-insn re/guest-26200/ntoskrnl.exe | grep -i '0xc0000018'
+```
+
+Map each address to the public symbol below it (`llvm-pdbutil dump --publics`
+gives `section:offset`; add the section's `VirtualAddress` from
+`llvm-readobj --sections`). This found `STATUS_CONFLICTING_ADDRESSES` from
+`MiObtainSectionForDriver`, which refuses a native image whose
+`DllCharacteristics` has `IMAGE_DLL_CHARACTERISTICS_TERMINAL_SERVER_AWARE` -
+lld-link's default, now `/TSAWARE:NO` in `cmake/windows_kernel_flags.cmake` and
+rejected by the `driver_image` gate.
+
 ## Regenerating the reference tables
 
 ```bash

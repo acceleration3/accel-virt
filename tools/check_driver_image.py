@@ -3,7 +3,8 @@
 
 Linking proves every symbol resolved; it does not prove they resolved to the
 kernel. A user-mode import library on the link line links cleanly and then
-fails to load in the guest.
+fails to load in the guest; so does a header flag a user-mode linker default
+sets.
 
   check_driver_image.py build/driver/rvkgpu.sys [--require-import NAME ...]
 
@@ -18,6 +19,7 @@ import sys
 
 MACHINE = "IMAGE_FILE_MACHINE_AMD64"
 SUBSYSTEM = "IMAGE_SUBSYSTEM_NATIVE"
+TERMINAL_SERVER_AWARE = "IMAGE_DLL_CHARACTERISTICS_TERMINAL_SERVER_AWARE"
 KERNEL_MODULES = {"ntoskrnl.exe", "hal.dll"}
 
 
@@ -43,6 +45,10 @@ def main():
     subsystem = re.search(r"^\s*Subsystem: (\w+)", dump.stdout, re.M)
     if not subsystem or subsystem.group(1) != SUBSYSTEM:
         violations.append(f"subsystem {subsystem.group(1) if subsystem else 'unknown'}, want {SUBSYSTEM}")
+    # ntoskrnl's MiObtainSectionForDriver refuses such a native image with
+    # STATUS_CONFLICTING_ADDRESSES before DriverEntry runs.
+    if TERMINAL_SERVER_AWARE in dump.stdout:
+        violations.append(f"{TERMINAL_SERVER_AWARE} set, which the kernel will not load")
     for module in re.findall(r"^\s*Name: (\S+)", dump.stdout, re.M):
         if module.lower() not in KERNEL_MODULES:
             violations.append(f"imports {module}, not a kernel module")

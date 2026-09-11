@@ -69,6 +69,13 @@ class DriverImageCheck(unittest.TestCase):
         self.assertIn("subsystem IMAGE_SUBSYSTEM_WINDOWS_CUI, want IMAGE_SUBSYSTEM_NATIVE",
                       result.stderr)
 
+    def test_rejects_a_terminal_server_aware_image(self):
+        result = run(CHECK, self.user.path)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("IMAGE_DLL_CHARACTERISTICS_TERMINAL_SERVER_AWARE set, which the kernel will not load",
+                      result.stderr)
+        self.assertNotIn("TERMINAL_SERVER_AWARE", run(CHECK, self.project.image("driver")).stderr)
+
     def test_rejects_a_non_kernel_import(self):
         result = run(CHECK, self.user.path)
         self.assertEqual(result.returncode, 1)
