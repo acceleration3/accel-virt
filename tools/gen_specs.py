@@ -179,22 +179,25 @@ def body(feat, rows):
     return "\n".join(out)
 
 
-def class_rows(block):
-    """The rows a plan wrote into the classes table. They live inside the
-    generated block, so regeneration must carry them over or it erases the
-    plan's design decisions."""
+def classes_written(block):
+    """What a plan wrote under the classes heading: the table's rows and any
+    prose after them. It lives inside the generated block, so regeneration must
+    carry it over or it erases the plan's design decisions."""
     if CLASSES_HEADING not in block:
-        return []
-    section = block.split(CLASSES_HEADING, 1)[1].split("\n### ", 1)[0]
-    rows = [ln for ln in section.split("\n") if ln.startswith("|")]
-    return [r for r in rows[2:] if r != CLASSES_PLACEHOLDER]
+        return None
+    lines = block.split(CLASSES_HEADING, 1)[1].split("\n### ", 1)[0].split("\n")
+    rule = next((i for i, ln in enumerate(lines) if ln.startswith("|---")), None)
+    if rule is None:
+        return None
+    written = "\n".join(lines[rule + 1:]).strip("\n")
+    return None if written in ("", CLASSES_PLACEHOLDER) else written
 
 
 def carry_class_rows(new_block, old_block):
-    rows = class_rows(old_block)
-    if not rows:
+    written = classes_written(old_block)
+    if written is None:
         return new_block
-    return new_block.replace(CLASSES_PLACEHOLDER, "\n".join(rows), 1)
+    return new_block.replace(CLASSES_PLACEHOLDER, written, 1)
 
 
 def main():

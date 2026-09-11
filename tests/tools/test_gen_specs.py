@@ -8,6 +8,7 @@ from tool_run import ROOT, run
 GEN_SPECS = ROOT / "tools" / "gen_specs.py"
 PLACEHOLDER = "| | object / system | | |"
 FILLED = "| Foo | object | `a_` | Owns one foo |"
+CLASS_NOTE = "No other class: the adapter answers from state it owns."
 
 
 class GenSpecsPreservesClassDecisions(unittest.TestCase):
@@ -23,7 +24,7 @@ class GenSpecsPreservesClassDecisions(unittest.TestCase):
         self.untouched = next((self.root / "specs").glob("002-*")) / "spec.md"
         text = self.filled.read_text()
         self.assertEqual(text.count(PLACEHOLDER), 1)
-        self.filled.write_text(text.replace(PLACEHOLDER, FILLED)
+        self.filled.write_text(text.replace(PLACEHOLDER, FILLED + "\n\n" + CLASS_NOTE)
                                + "\nprose written by hand\n")
 
     def regenerate(self):
@@ -35,6 +36,12 @@ class GenSpecsPreservesClassDecisions(unittest.TestCase):
         text = self.filled.read_text()
         self.assertIn(FILLED, text)
         self.assertNotIn(PLACEHOLDER, text)
+
+    def test_a_note_written_after_the_rows_survives_regeneration(self):
+        self.regenerate()
+        text = self.filled.read_text()
+        self.assertIn(FILLED + "\n\n" + CLASS_NOTE + "\n\n### Test requirements", text)
+        self.assertEqual(text.count(CLASS_NOTE), 1)
 
     def test_an_unfilled_table_keeps_only_the_placeholder(self):
         self.regenerate()
