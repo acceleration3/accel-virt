@@ -62,6 +62,11 @@ struct VirtioGpuRvkProbe {
     /* Interrupts connected with no lock to hold them apart. */
     static void break_interrupts(VirtioGpuRvk &device) { FenceInterruptsProbe::connect_without_lock(device.interrupts_); }
     static void repair_interrupts(VirtioGpuRvk &device) { FenceInterruptsProbe::repair(device.interrupts_); }
+    /* Interrupts properly connected, but behind the status byte's back: the
+     * state 035's abort left the device in, where a connection outlives the
+     * driver that asked for it. */
+    static Status connect_behind_the_status(VirtioGpuRvk &device) { return device.interrupts_.connect(); }
+    static void   disconnect_behind_the_status(VirtioGpuRvk &device) { device.interrupts_.disconnect(); }
     /* The ring header a guest writes before its setup. */
     static void write_ring_header(VirtioGpuRvk &device, std::uint32_t id)
     {
@@ -350,3 +355,21 @@ TEST(virtio_gpu_rvk_invariants, a_context_on_an_unrealized_device_or_a_broken_ta
   av::VirtioGpuRvkProbe::break_interrupts(broken_interrupts);
   CHECK(!broken_interrupts.invariants_hold());
   av::VirtioGpuRvkProbe::repair_interrupts(broken_interrupts); }
+
+/* A connection the status byte does not account for is the state 035's run
+ * aborted from: the driver has gone and its notifiers are still registered. */
+TEST(virtio_gpu_rvk_invariants, fence_interrupts_connected_without_driver_ok_are_detected)
+{ MockHost host;
+  host.add_gpu(first);
+  VirtioGpuRvk device(host);
+  char bytes[64];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::ok);
+  device.status(DriverStatus::driver_ok);
+  CHECK(device.invariants_hold());
+  device.status(0x0Bu);                    /* the driver stopped: nothing may stay connected */
+  CHECK(device.invariants_hold());
+  CHECK_STATUS(av::VirtioGpuRvkProbe::connect_behind_the_status(device), Status::ok);
+  CHECK(!device.invariants_hold());
+  av::VirtioGpuRvkProbe::disconnect_behind_the_status(device);
+  CHECK(device.invariants_hold()); }
