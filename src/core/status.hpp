@@ -14,7 +14,10 @@ enum class Status : unsigned {
     no_space,
     not_supported,
     invalid_state,
-    too_large
+    too_large,
+    /* Bytes no valid peer can produce: short, bad magic, non-zero reserved,
+     * a field out of range. */
+    malformed
 };
 
 }  // namespace av
