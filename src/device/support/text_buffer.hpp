@@ -5,6 +5,7 @@
 #define AV_TEXT_BUFFER_HPP
 
 #include <stddef.h>
+#include <stdint.h>
 
 namespace av {
 
@@ -15,6 +16,7 @@ public:
     TextBuffer &operator=(const TextBuffer &) = delete;
 
     void        append(const char *text);
+    void        append_decimal(uint64_t value);
     const char *text() const;
     size_t      length() const;
 

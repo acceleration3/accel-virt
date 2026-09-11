@@ -1,5 +1,6 @@
 #include "core/support/status.hpp"
 #include "device/control/control_request.hpp"
+#include "device/memory/blob_window.hpp"
 #include "device/memory/guest_page_mapping.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
@@ -166,6 +167,25 @@ TEST(guest_page_mapping_map, the_host_running_out_of_memory_holds_nothing)
   CHECK_STATUS(growth.map(list, 1u), Status::no_memory);
   CHECK_EQ(growth.host().live_guest_mappings(), 0u);
   CHECK_EQ(growth.host().live_allocations(), 0u); }
+
+TEST(guest_page_mapping_window, reaches_the_guest_bytes_across_extents)
+{ Fixture fixture;
+  fixture.host().split_guest_memory_at(ram + 0x1000u);
+  EntryList list(1u);
+  list.add(ram + 0x800u, 0x1000u);
+  CHECK(fixture.mapping().window().length() == 0u);
+  CHECK_STATUS(fixture.map(list, 1u), Status::ok);
+  const av::BlobWindow window = fixture.mapping().window();
+  CHECK(window.invariants_hold());
+  CHECK_EQ(window.length(), 0x1000u);
+  const std::uint8_t pattern[4] = {1u, 2u, 3u, 4u};
+  CHECK_STATUS(window.write(0x7FEu, pattern, sizeof pattern), Status::ok);
+  CHECK_EQ(fixture.host().guest_ram(ram + 0xFFEu)[0], 1u);
+  CHECK_EQ(fixture.host().guest_ram(ram + 0x1001u)[0], 4u);
+  fixture.host().guest_ram(ram + 0x800u)[0] = 0x5Au;
+  std::uint8_t first = 0u;
+  CHECK_STATUS(window.read(0u, &first, 1u), Status::ok);
+  CHECK_EQ(first, 0x5Au); }
 
 TEST(guest_page_mapping, maps_on_the_main_loop)
 { Fixture fixture;

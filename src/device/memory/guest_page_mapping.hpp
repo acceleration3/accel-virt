@@ -13,6 +13,7 @@
 
 namespace av {
 
+class BlobWindow;
 class ControlRequest;
 class Host;
 struct GuestPageMappingProbe;
@@ -36,6 +37,8 @@ public:
     void                 release();
     uint64_t             length() const;
     uint32_t             extents() const;
+    /* The mapped pages, for a worker; empty until mapped. */
+    BlobWindow           window() const;
 
     bool invariants_hold() const;
 

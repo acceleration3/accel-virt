@@ -1,6 +1,7 @@
 #include "device/memory/guest_page_mapping.hpp"
 
 #include "device/control/control_request.hpp"
+#include "device/memory/blob_window.hpp"
 #include "device/host/host.hpp"
 #include "proto/wire/wire_reader.hpp"
 
@@ -99,6 +100,11 @@ uint64_t GuestPageMapping::length() const
 uint32_t GuestPageMapping::extents() const
 {
     return count_;
+}
+
+BlobWindow GuestPageMapping::window() const
+{
+    return BlobWindow(pointers_, lengths_, count_, length_);
 }
 
 /* The length is the extents' sum; nothing is held without a table. */

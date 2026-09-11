@@ -2,6 +2,7 @@
 #include "device/control/control_request.hpp"
 #include "device/memory/blob_resource.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/memory/blob_window.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/host_violation.hpp"
@@ -144,6 +145,18 @@ TEST(blob_table_pin, keeps_a_blob_large_enough_alive_until_every_pin_is_let_go)
   fixture.table().unpin(1u);
   fixture.table().unpin(7u);   /* unknown: nothing */
   CHECK_STATUS(fixture.table().release(1u), Status::ok); }
+
+TEST(blob_table_window, is_handed_out_only_for_a_pinned_blob)
+{ Fixture fixture;
+  av::BlobWindow window;
+  CHECK_STATUS(fixture.table().window(1u, window), Status::not_found);
+  CHECK_STATUS(fixture.table().create_host(1u, 0x2000u), Status::ok);
+  CHECK_STATUS(fixture.table().window(1u, window), Status::invalid_state);
+  CHECK_EQ(window.length(), 0u);
+  CHECK_STATUS(fixture.table().pin(1u, 0x2000u), Status::ok);
+  CHECK_STATUS(fixture.table().window(1u, window), Status::ok);
+  CHECK_EQ(window.length(), 0x2000u);
+  fixture.table().unpin(1u); }
 
 TEST(blob_table_unpin, a_pinned_blob_is_still_released_by_release_all)
 { Fixture fixture;

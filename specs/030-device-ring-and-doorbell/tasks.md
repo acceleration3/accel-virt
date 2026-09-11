@@ -15,9 +15,9 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 2: Reading a ring
 
-- [ ] T003 [US1] Tests then `BlobWindow` in src/device/memory/blob_window.{hpp,cpp}; `GuestPageMapping::window`, `HostMemoryBlock` keeps its device view, `BlobResource::window`, `BlobTable::window`
-- [ ] T004 [US1] Tests then `RingWindow` in src/device/ring/ring_window.{hpp,cpp}: header snapshot, wrapped copies, head publication, reads bounded by the window
-- [ ] T005 [US1] [US2] Tests then `RingConsumer` in src/device/ring/ring_consumer.{hpp,cpp}: prepare, attach, service over complete, partial, wrapped and hostile rings, log once on stop; fuzz_ring with corpus
+- [X] T003 [US1] Tests then `BlobWindow` in src/device/memory/blob_window.{hpp,cpp}; `GuestPageMapping::window`, `HostMemoryBlock` keeps its device view, `BlobResource::window`, `BlobTable::window`
+- [X] T004 [US1] Tests then `RingWindow` in src/device/ring/ring_window.{hpp,cpp}: header snapshot, wrapped copies, head publication, reads bounded by the window
+- [X] T005 [US1] [US2] Tests then `RingConsumer` in src/device/ring/ring_consumer.{hpp,cpp}: prepare, attach, service over complete, partial, wrapped and hostile rings, log once on stop; fuzz_ring with corpus
 
 **Checkpoint**: commit.
 

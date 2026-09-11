@@ -12,6 +12,7 @@
 
 namespace av {
 
+class BlobWindow;
 class ControlRequest;
 class Host;
 
@@ -43,6 +44,8 @@ public:
     void     pin();
     void     unpin();
     bool     pinned() const;
+    /* The blob's memory for a worker: valid while pinned. */
+    BlobWindow window() const;
 
 private:
     Host            &host_;

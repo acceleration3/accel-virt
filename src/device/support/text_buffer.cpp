@@ -14,6 +14,17 @@ void TextBuffer::append(const char *text)
     if (capacity_ != 0u) destination_[length_] = '\0';
 }
 
+void TextBuffer::append_decimal(uint64_t value)
+{
+    char   digits[21] = {};
+    size_t first = sizeof digits - 1u;
+    do {
+        digits[--first] = static_cast<char>('0' + value % 10u);
+        value /= 10u;
+    } while (value != 0u);
+    append(digits + first);
+}
+
 const char *TextBuffer::text() const
 {
     return capacity_ != 0u ? destination_ : "";

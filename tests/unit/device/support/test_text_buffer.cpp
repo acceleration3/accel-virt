@@ -42,3 +42,16 @@ TEST(text_buffer, without_room_writes_nothing)
   TextBuffer only_terminator(bytes, 1u);
   only_terminator.append("ignored");
   CHECK_EQ(bytes[0], '\0'); }
+
+TEST(text_buffer_append_decimal, writes_every_digit_and_truncates_like_text)
+{ char bytes[32];
+  TextBuffer text(bytes, sizeof bytes);
+  text.append("tail ");
+  text.append_decimal(0u);
+  text.append(" ");
+  text.append_decimal(18446744073709551615ull);
+  CHECK(std::strcmp(text.text(), "tail 0 18446744073709551615") == 0);
+  char small[4];
+  TextBuffer cut(small, sizeof small);
+  cut.append_decimal(98765u);
+  CHECK(std::strcmp(cut.text(), "987") == 0); }

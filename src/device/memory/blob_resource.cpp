@@ -1,6 +1,7 @@
 #include "device/memory/blob_resource.hpp"
 
 #include "device/host/host.hpp"
+#include "device/memory/blob_window.hpp"
 
 namespace av {
 
@@ -85,6 +86,11 @@ void BlobResource::unpin()
 bool BlobResource::pinned() const
 {
     return pins_ != 0u;
+}
+
+BlobWindow BlobResource::window() const
+{
+    return block_.created() ? block_.window() : guest_.window();
 }
 
 }  // namespace av

@@ -1,6 +1,7 @@
 #include "core/support/status.hpp"
 #include "device/control/control_request.hpp"
 #include "device/memory/blob_resource.hpp"
+#include "device/memory/blob_window.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/host_violation.hpp"
@@ -62,6 +63,24 @@ TEST(blob_resource_back_with_guest, pages_short_of_its_size_or_a_mapping_failure
   BlobResource unmappable(host, 2u);
   CHECK(unmappable.back_with_guest(request, entries_at, 2u, 0x1000u) != Status::ok);   /* entries missing */
   CHECK_EQ(host.live_guest_mappings(), 0u); }
+
+TEST(blob_resource_window, is_its_guest_pages_or_its_host_block)
+{ MockHost host;
+  host.add_guest_ram(ram, 0x10000u);
+  GpuRequestBuilder request_bytes = entries(1u);
+  MockRequest mock(request_bytes.bytes(), request_bytes.size());
+  ControlRequest request(host, &mock);
+  BlobResource guest(host, 1u);
+  CHECK_EQ(guest.window().length(), 0u);
+  CHECK_STATUS(guest.back_with_guest(request, entries_at, 1u, 0x1000u), Status::ok);
+  CHECK_EQ(guest.window().length(), 0x1000u);
+  const std::uint8_t byte = 0x77u;
+  CHECK_STATUS(guest.window().write(5u, &byte, 1u), Status::ok);
+  CHECK_EQ(host.guest_ram(ram + 5u)[0], 0x77u);
+  BlobResource block(host, 2u);
+  CHECK_STATUS(block.back_with_host(0x3000u), Status::ok);
+  CHECK_EQ(block.window().length(), 0x3000u);
+  CHECK(block.window().invariants_hold()); }
 
 TEST(blob_resource_back_with_host, maps_once_and_unmaps)
 { MockHost host;

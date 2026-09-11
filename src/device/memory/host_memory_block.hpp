@@ -10,6 +10,7 @@
 
 namespace av {
 
+class BlobWindow;
 class Host;
 
 class HostMemoryBlock {
@@ -29,10 +30,13 @@ public:
     uint64_t             size() const;
     /* The host's handle, for placing the block. */
     void                *handle() const;
+    /* The device's own view of the block; empty until created. */
+    BlobWindow           window() const;
 
 private:
     Host    &host_;
     void    *handle_;
+    void    *view_;
     uint64_t size_;
 };
 

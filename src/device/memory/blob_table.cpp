@@ -1,6 +1,7 @@
 #include "device/memory/blob_table.hpp"
 
 #include "device/host/host.hpp"
+#include "device/memory/blob_window.hpp"
 
 namespace av {
 
@@ -72,6 +73,16 @@ Status BlobTable::pin(uint32_t id, uint64_t minimum_size)
     if (slot == nullptr) return Status::not_found;
     if (slot->object().size() < minimum_size) return Status::invalid_parameter;
     slot->object().pin();
+    return Status::ok;
+}
+
+Status BlobTable::window(uint32_t id, BlobWindow &window)
+{
+    host_.require_main_loop("BlobTable::window");
+    ObjectStorage<BlobResource> *const slot = slot_of(id);
+    if (slot == nullptr) return Status::not_found;
+    if (!slot->object().pinned()) return Status::invalid_state;
+    window = slot->object().window();
     return Status::ok;
 }
 

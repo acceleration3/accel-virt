@@ -1,4 +1,5 @@
 #include "core/support/status.hpp"
+#include "device/memory/blob_window.hpp"
 #include "device/memory/host_memory_block.hpp"
 #include "device/memory/hostmem_space.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -23,6 +24,22 @@ TEST(host_memory_block_create, holds_a_page_multiple_until_released)
   CHECK(!block.created());
   CHECK_EQ(host.live_host_memory(), 0u);
   block.release(); }
+
+TEST(host_memory_block_window, reaches_the_device_view_of_the_block)
+{ MockHost host;
+  HostMemoryBlock block(host);
+  CHECK_EQ(block.window().length(), 0u);
+  CHECK_STATUS(block.create(0x2000u), Status::ok);
+  const av::BlobWindow window = block.window();
+  CHECK(window.invariants_hold());
+  CHECK_EQ(window.length(), 0x2000u);
+  const std::uint8_t pattern[2] = {0xC3u, 0x3Cu};
+  CHECK_STATUS(window.write(0x1FFEu, pattern, sizeof pattern), Status::ok);
+  std::uint8_t back[2] = {};
+  CHECK_STATUS(block.window().read(0x1FFEu, back, sizeof back), Status::ok);
+  CHECK_EQ(back[1], 0x3Cu);
+  block.release();
+  CHECK_EQ(block.window().length(), 0u); }
 
 TEST(host_memory_block_create, an_empty_or_partial_page_size_or_no_host_memory_is_refused)
 { MockHost host;

@@ -14,6 +14,7 @@
 
 namespace av {
 
+class BlobWindow;
 class ControlRequest;
 class Host;
 struct BlobTableProbe;
@@ -41,6 +42,9 @@ public:
     [[nodiscard]] Status pin(uint32_t id, uint64_t minimum_size);
     /* A pin taken by pin(); an unknown id is ignored, as reset releases pinned blobs. */
     void                 unpin(uint32_t id);
+    /* not_found for an unknown id; invalid_state unless pinned, since a
+     * window outlives nothing it does not pin. */
+    [[nodiscard]] Status window(uint32_t id, BlobWindow &window);
     /* not_found for an unknown id; invalid_state while pinned. */
     [[nodiscard]] Status release(uint32_t id);
     /* Pinned or not: a reset. */
