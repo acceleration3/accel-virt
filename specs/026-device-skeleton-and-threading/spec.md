@@ -10,9 +10,11 @@
 
 **Feature ID**: 026 · **Status**: `implement` · **Depends on**: 004
 
-virtio-gpu-rvk-pci as a VirtIOGPU subclass in a patched QEMU package. The
-threading contract: no decode or execution on the main loop, one worker per
-context, virtqueue state only under the BQL.
+virtio-gpu-rvk-pci as a VirtIOGPU subclass in a patched QEMU package, one
+instance per host GPU bound by Vulkan device UUID (host-gpu property), and
+tools/host/list_gpus to discover host GPUs and generate the per-machine QEMU
+or libvirt configuration. The threading contract: no decode or execution on
+the main loop, one worker per context, virtqueue state only under the BQL.
 
 ### Status meaning
 
