@@ -1,0 +1,65 @@
+/* The virtio-gpu requests a driver sends to use rvk contexts (virtio 1.2
+ * 5.7.6, docs/protocol.md): the capset queries, context creation and
+ * destruction, a guest blob of one entry and its release, and the context
+ * setup carried by SUBMIT_3D. Each request replaces what the destination held;
+ * one that does not fit writes nothing. The device's decoders read them. */
+#ifndef AV_RVK_REQUEST_WRITER_HPP
+#define AV_RVK_REQUEST_WRITER_HPP
+
+#include "core/support/status.hpp"
+
+#include <stddef.h>
+#include <stdint.h>
+
+namespace av {
+
+class ContextSetup;
+class WireWriter;
+
+class RvkRequestWriter {
+public:
+    static constexpr size_t max_request_size = 96u;
+
+    RvkRequestWriter(uint8_t *bytes, size_t capacity);
+
+    [[nodiscard]] Status capset_info(uint32_t index);
+    [[nodiscard]] Status capset(uint32_t capset_id, uint32_t version);
+    /* No debug name. */
+    [[nodiscard]] Status create_context(uint32_t context_id, uint32_t capset_id);
+    [[nodiscard]] Status destroy_context(uint32_t context_id);
+    /* Guest memory at `address` of `length` bytes, one entry covering the blob. */
+    [[nodiscard]] Status guest_blob(uint32_t resource_id, uint64_t address, uint32_t length);
+    [[nodiscard]] Status unref(uint32_t resource_id);
+    [[nodiscard]] Status setup(uint32_t context_id, const ContextSetup &setup);
+    /* Bytes of the last request written; zero after one that did not fit. */
+    size_t               length() const;
+
+private:
+    enum : uint32_t {
+        get_capset_info = 0x0108u,
+        get_capset = 0x0109u,
+        resource_unref = 0x0102u,
+        resource_create_blob = 0x010Cu,
+        ctx_create = 0x0200u,
+        ctx_destroy = 0x0201u,
+        submit_3d = 0x0207u,
+    };
+    static constexpr size_t   header_size = 24u;
+    static constexpr size_t   short_request_size = 32u;
+    static constexpr size_t   create_context_size = 96u;
+    static constexpr size_t   guest_blob_size = 72u;
+    static constexpr size_t   setup_size = 64u;
+    static constexpr uint32_t name_bytes = 64u;
+    static constexpr uint32_t blob_memory_guest = 1u;
+
+    /* Starts a request of `size` bytes with its header; false when it cannot fit. */
+    bool begin(WireWriter &writer, uint32_t type, uint32_t context_id, size_t size);
+
+    uint8_t *bytes_;
+    size_t   capacity_;
+    size_t   length_;
+};
+
+}  // namespace av
+
+#endif  // AV_RVK_REQUEST_WRITER_HPP

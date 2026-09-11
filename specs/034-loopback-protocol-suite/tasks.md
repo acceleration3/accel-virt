@@ -8,8 +8,8 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 1: The driver's requests and answers
 
-- [ ] T001 [US1] Tests then `RvkRequestWriter` in src/proto/virtio_gpu/rvk_request_writer.{hpp,cpp}: capset info, capset, create and destroy context, guest blob of one entry, unref, setup submit
-- [ ] T002 [US3] Tests then `GpuResponseReader` in src/proto/virtio_gpu/gpu_response_reader.{hpp,cpp}; hostile table; fuzz_gpu_response with corpus
+- [X] T001 [US1] Tests then `RvkRequestWriter` in src/proto/virtio_gpu/rvk_request_writer.{hpp,cpp}: capset info, capset, create and destroy context, guest blob of one entry, unref, setup submit
+- [X] T002 [US3] Tests then `GpuResponseReader` in src/proto/virtio_gpu/gpu_response_reader.{hpp,cpp}; hostile table; fuzz_gpu_response with corpus
 
 **Checkpoint**: commit.
 
