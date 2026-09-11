@@ -32,6 +32,8 @@ public:
      * header that is malformed, of another order, with head other than 0 or a
      * tail more than a ring ahead; invalid_state once prepared. */
     [[nodiscard]] Status prepare(const RingWindow &ring);
+    /* Main loop: forgets a prepared ring whose attachment was never posted. */
+    void                 withdraw();
     /* Worker: serving begins, if prepared. */
     void                 attach();
     /* Worker: every complete batch the guest has published is consumed. */

@@ -1,6 +1,7 @@
 /* What one context's setup bound it to (docs/protocol.md, Context setup): the
- * negotiated protocol version, its sub-API, its ring and fence resources, and
- * the ring's order. The bound blobs stay pinned until the binding lets go. */
+ * negotiated protocol version, its sub-API, its ring and fence resources, the
+ * ring's order and its doorbell. The bound blobs stay pinned until the binding
+ * lets go. */
 #ifndef AV_CONTEXT_BINDING_HPP
 #define AV_CONTEXT_BINDING_HPP
 
@@ -13,6 +14,7 @@
 namespace av {
 
 class BlobTable;
+class RingWindow;
 class CapsetInfo;
 class ContextSetup;
 class Host;
@@ -38,6 +40,9 @@ public:
     uint32_t               ring_resource() const;
     uint8_t                ring_order() const;
     uint32_t               fence_resource() const;
+    uint32_t               doorbell() const;
+    /* Main loop. The bound ring blob as a ring; a window over no ring unbound. */
+    RingWindow             ring_window();
 
 private:
     Host           &host_;
@@ -47,6 +52,7 @@ private:
     uint32_t        ring_resource_;
     uint8_t         ring_order_;
     uint32_t        fence_resource_;
+    uint32_t        doorbell_;
     bool            bound_;
 };
 

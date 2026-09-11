@@ -2,6 +2,12 @@
 #include "device/context/device_context.hpp"
 #include "device/context/device_context_table.hpp"
 #include "device/memory/blob_table.hpp"
+#include "harness/ring/ring_blob_writer.hpp"
+#include "proto/context/capset_info.hpp"
+#include "proto/context/context_setup.hpp"
+#include "proto/context/gpu_identity.hpp"
+#include "proto/context/protocol_version.hpp"
+#include "proto/context/sub_api.hpp"
 #include "device/threading/work_item.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
@@ -84,6 +90,25 @@ TEST(device_context_table_destroy, stops_the_worker_once)
   CHECK_EQ(host.live_threads(), 0u);
   CHECK_STATUS(table.destroy(4u), Status::not_found); }
 
+TEST(device_context_table_holds_doorbell, only_a_bound_context_holds_its_doorbell)
+{ MockHost host; BlobTable blobs(host); DeviceContextTable table(host, blobs);
+  host.set_hostmem_size(0x10000u);
+  CHECK_STATUS(blobs.create_host(1u, 0x2000u), Status::ok);
+  CHECK_STATUS(blobs.create_host(2u, 0x1000u), Status::ok);
+  av::RingBlobWriter(blobs).write_header(1u, 12u);
+  CHECK_STATUS(table.create(1u), Status::ok);
+  CHECK_STATUS(table.create(2u), Status::ok);
+  CHECK(!table.holds_doorbell(5u));
+  const std::uint8_t uuid[av::GpuIdentity::uuid_bytes] = {};
+  const av::CapsetInfo capset(av::ProtocolVersion(1u, 0u), 1u, 64u, 12u, 24u, 0u,
+                              av::GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, ""));
+  const av::ContextSetup setup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 1u, 12u, 2u, 5u);
+  CHECK_STATUS(table.find(2u)->bind(setup, capset), Status::ok);
+  CHECK(table.holds_doorbell(5u));
+  CHECK(!table.holds_doorbell(0u));
+  CHECK_STATUS(table.destroy(2u), Status::ok);
+  CHECK(!table.holds_doorbell(5u)); }
+
 TEST(device_context_table, is_main_loop_only)
 { MockHost host; BlobTable blobs(host); DeviceContextTable table(host, blobs);
   void *thread = nullptr;
@@ -93,11 +118,12 @@ TEST(device_context_table, is_main_loop_only)
                        static_cast<void>(t->create(0u));
                        static_cast<void>(t->destroy(1u));
                        static_cast<void>(t->find(1u));
+                       static_cast<void>(t->holds_doorbell(1u));
                    },
                    &table, thread),
                Status::ok);
   host.join_thread(thread);
-  for (int call = 0; call < 3; call++) CHECK(host.claim(HostViolation::main_loop_required)); }
+  for (int call = 0; call < 4; call++) CHECK(host.claim(HostViolation::main_loop_required)); }
 
 TEST(device_context_table_invariants, a_duplicate_id_a_zero_id_or_a_stopped_worker_is_detected)
 { MockHost host;

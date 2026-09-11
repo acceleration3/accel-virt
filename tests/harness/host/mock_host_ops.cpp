@@ -73,6 +73,12 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.remove_from_hostmem = [](void *opaque, std::uint64_t offset, std::uint64_t size) {
         host_of(opaque).remove_from_hostmem(offset, size);
     };
+    table_.connect_doorbell = [](void *opaque, void *event, std::uint32_t index) {
+        host_of(opaque).connect_doorbell(event, index);
+    };
+    table_.disconnect_doorbell = [](void *opaque, void *event, std::uint32_t index) {
+        host_of(opaque).disconnect_doorbell(event, index);
+    };
     table_.read_request = [](void *opaque, void *request, std::size_t offset, std::uint8_t *buffer, std::size_t size) {
         return host_of(opaque).read_request(request, offset, buffer, size);
     };

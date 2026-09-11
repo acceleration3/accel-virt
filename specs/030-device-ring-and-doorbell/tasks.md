@@ -23,9 +23,9 @@ Tests come first in every task and must fail before the code they cover exists.
 
 ## Phase 3: Doorbells
 
-- [ ] T006 [US1] Tests then `Host::connect_doorbell`/`disconnect_doorbell` in `Host`, `TableHost`, `rvk_device.h`, `MockHost` (`ring_doorbell`, violations for a double connect, an unknown disconnect, an event destroyed while connected, a connection left at destruction), `MockHostOps`
-- [ ] T007 [US1] Tests then `Doorbell` in src/device/threading/doorbell.{hpp,cpp}; `WorkItem` without completion; `Worker` serving its `RingConsumer` after posted work and disconnecting before join
-- [ ] T008 [US3] Tests then `DeviceContext::bind` (pin, prepare, connect, attach, all-or-nothing), member order, `DeviceContextTable::holds_doorbell`, `ContextCommands` refusing a held doorbell; `VirtioGpuRvk` reset
+- [X] T006 [US1] Tests then `Host::connect_doorbell`/`disconnect_doorbell` in `Host`, `TableHost`, `rvk_device.h`, `MockHost` (`ring_doorbell`, violations for a double connect, an unknown disconnect, an event destroyed while connected, a connection left at destruction), `MockHostOps`
+- [X] T007 [US1] Tests then `Doorbell` in src/device/threading/doorbell.{hpp,cpp}; `WorkItem` without completion; `Worker` serving its `RingConsumer` after posted work and disconnecting before join
+- [X] T008 [US3] Tests then `DeviceContext::bind` (pin, prepare, connect, attach, all-or-nothing), member order, `DeviceContextTable::holds_doorbell`, `ContextCommands` refusing a held doorbell; `VirtioGpuRvk` reset
 
 **Checkpoint**: commit.
 

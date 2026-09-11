@@ -2,11 +2,12 @@
 
 #include "device/abi/entry_points.hpp"
 #include "device/host/host.hpp"
+#include "device/ring/ring_consumer.hpp"
 
 namespace av {
 
-Worker::Worker(Host &host)
-    : host_(host), thread_(nullptr), wake_(nullptr), lock_(nullptr), queue_{}, head_(0u), count_(0u),
+Worker::Worker(Host &host, RingConsumer &ring)
+    : host_(host), ring_(ring), doorbell_(host), thread_(nullptr), wake_(nullptr), lock_(nullptr), queue_{}, head_(0u), count_(0u),
       stopping_(false) {}
 
 Worker::~Worker() { stop(); }
@@ -36,10 +37,24 @@ Status Worker::post(const WorkItem &item)
     return Status::ok;
 }
 
+Status Worker::connect_doorbell(uint32_t index)
+{
+    host_.require_main_loop("Worker::connect_doorbell");
+    if (thread_ == nullptr) return Status::invalid_state;
+    return doorbell_.connect(wake_, index);
+}
+
+void Worker::disconnect_doorbell()
+{
+    host_.require_main_loop("Worker::disconnect_doorbell");
+    doorbell_.disconnect();
+}
+
 void Worker::stop()
 {
     host_.require_main_loop("Worker::stop");
     if (thread_ == nullptr) return;
+    doorbell_.disconnect();
     host_.lock_mutex(lock_);
     stopping_ = true;
     host_.unlock_mutex(lock_);
@@ -107,12 +122,15 @@ void Worker::run()
             item.run();
             item.complete_on(host_);
         }
+        ring_.service();
     }
 }
 
+/* A doorbell rings only a running worker's event. */
 bool Worker::invariants_hold() const
 {
-    return count_ <= queue_capacity && head_ < queue_capacity;
+    return count_ <= queue_capacity && head_ < queue_capacity && doorbell_.invariants_hold() &&
+           (thread_ != nullptr || !doorbell_.connected());
 }
 
 }  // namespace av

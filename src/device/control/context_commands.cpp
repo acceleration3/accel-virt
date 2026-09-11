@@ -98,7 +98,8 @@ uint32_t ContextCommands::submit(ControlRequest &request)
     uint8_t      command[ContextSetup::encoded_size] = {};
     ContextSetup setup;
     if (submit.command_size() != ContextSetup::encoded_size ||
-        setup.decode(command, request.read(ContextRequest::submit_size, command, sizeof command)) != Status::ok)
+        setup.decode(command, request.read(ContextRequest::submit_size, command, sizeof command)) != Status::ok ||
+        contexts_.holds_doorbell(setup.doorbell()))
         return GpuResponse::err_invalid_parameter;
     switch (context->bind(setup, capset_.info())) {
     case Status::ok: return GpuResponse::ok_nodata;

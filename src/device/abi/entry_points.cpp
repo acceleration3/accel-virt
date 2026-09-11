@@ -2,6 +2,7 @@
 
 #include "device/module/device_instance.hpp"
 #include "device/module/device_module.hpp"
+#include "device/ring/ring_consumer.hpp"
 #include "device/threading/worker.hpp"
 
 namespace av {
@@ -35,5 +36,8 @@ int rvk_device_destroy(RvkDevice *device)
 
 void RvkWorkerRun(void *worker)
 { static_cast<av::Worker *>(worker)->run(); }
+
+void RvkRingAttach(void *ring)
+{ static_cast<av::RingConsumer *>(ring)->attach(); }
 
 }

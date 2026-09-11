@@ -107,4 +107,5 @@ TEST(ring_window, a_blob_too_small_for_its_order_refuses_what_it_cannot_reach)
   CHECK_STATUS(tiny.publish_head(1u), Status::invalid_parameter);
   const RingWindow empty;
   CHECK_EQ(empty.capacity(), 0u);
-  CHECK(!empty.invariants_hold()); }
+  CHECK(!empty.invariants_hold());
+  CHECK(!RingWindow(blob.blob(), 25u).invariants_hold()); }

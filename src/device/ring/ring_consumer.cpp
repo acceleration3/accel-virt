@@ -27,6 +27,14 @@ Status RingConsumer::prepare(const RingWindow &ring)
     return Status::ok;
 }
 
+void RingConsumer::withdraw()
+{
+    host_.require_main_loop("RingConsumer::withdraw");
+    ring_ = RingWindow();
+    progress_ = RingProgress();
+    prepared_ = false;
+}
+
 void RingConsumer::attach()
 {
     host_.require_worker("RingConsumer::attach");
@@ -96,7 +104,7 @@ uint64_t RingConsumer::batches() const    { return batches_; }
  * before it, starting from 1; nothing is consumed that was not published. */
 bool RingConsumer::invariants_hold() const
 {
-    if (!prepared_) return !attached_ && !stopped_ && head_ == 0u && batches_ == 0u;
+    if (!prepared_) return !attached_ && head_ == 0u;
     return progress_.invariants_hold() && head_ <= progress_.tail() &&
            batches_ <= head_ / BatchHeader::encoded_size && batches_ <= last_fence_;
 }

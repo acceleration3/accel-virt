@@ -3,6 +3,7 @@
  * are proven with real threads. */
 #include "core/support/status.hpp"
 #include "device/abi/table_host.hpp"
+#include "device/ring/ring_consumer.hpp"
 #include "device/host/host.hpp"
 #include "device/threading/work_item.hpp"
 #include "device/threading/worker.hpp"
@@ -26,7 +27,8 @@ using av::Worker;
 
 TEST(table_host, a_worker_runs_over_the_c_table)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
-  Worker worker(host);
+  av::RingConsumer ring(host);
+  Worker worker(host, ring);
   CHECK_STATUS(worker.start(), Status::ok);
   std::uint32_t ran = 0u;
   CHECK_STATUS(worker.post(WorkItem([](void *count) { (*static_cast<std::uint32_t *>(count))++; },
@@ -120,3 +122,15 @@ TEST(table_host, forwards_memory_hostmem_and_requests)
   mock.add_resource(9u);
   CHECK(host.resource_exists(9u));
   CHECK(!host.resource_exists(10u)); }
+
+TEST(table_host, forwards_doorbell_connections)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  void *event = nullptr;
+  CHECK_STATUS(host.create_event(event), Status::ok);
+  host.connect_doorbell(event, 63u);
+  CHECK_EQ(mock.live_doorbells(), 1u);
+  CHECK(mock.ring_doorbell(63u));
+  host.wait_event(event);
+  host.disconnect_doorbell(event, 63u);
+  CHECK_EQ(mock.live_doorbells(), 0u);
+  host.destroy_event(event); }

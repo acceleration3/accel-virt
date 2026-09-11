@@ -1,27 +1,43 @@
 #include "core/support/status.hpp"
 #include "device/host/host.hpp"
+#include "device/memory/blob_window.hpp"
+#include "device/ring/ring_consumer.hpp"
+#include "device/ring/ring_window.hpp"
 #include "device/threading/work_item.hpp"
+#include "device/threading/doorbell.hpp"
 #include "device/threading/worker.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
+#include "harness/ring/guest_ring.hpp"
 
 #include <atomic>
 #include <cstdint>
 #include <sched.h>
 
+using av::BlobWindow;
+using av::GuestRing;
 using av::Host;
 using av::HostViolation;
 using av::MockHost;
+using av::RingConsumer;
+using av::RingWindow;
 using av::Status;
 using av::WorkItem;
 using av::Worker;
 
 namespace av {
 
+struct DoorbellProbe {
+    static void forge(Doorbell &doorbell, void *event) { doorbell.event_ = event; doorbell.connected_ = true; }
+    static void forget_event(Doorbell &doorbell) { doorbell.event_ = nullptr; }
+    static void repair(Doorbell &doorbell) { doorbell.event_ = nullptr; doorbell.connected_ = false; }
+};
+
 struct WorkerProbe {
     static void overfill(Worker &worker) { worker.count_ = Worker::queue_capacity + 1u; }
     static void misplace_head(Worker &worker) { worker.head_ = Worker::queue_capacity; }
+    static Doorbell &doorbell(Worker &worker) { return worker.doorbell_; }
 };
 
 }  // namespace av
@@ -62,20 +78,48 @@ void completion(void *context)
     entry->journal->completion_order[entry->journal->completed++] = entry->number;
 }
 
-class Fixture {
+/* A ring of order 12 the worker's consumer serves once prepared and attached. */
+class RingMemory {
 public:
-    Fixture() : worker_(host_) { journal_.host = &host_; }
-    ~Fixture() { worker_.stop(); }
-
-    MockHost &host() { return host_; }
-    Worker   &worker() { return worker_; }
-    Journal  &journal() { return journal_; }
-    Entry     entry(std::uint32_t number, void *gate = nullptr) { return Entry{&journal_, number, gate}; }
+    RingMemory() : bytes_{}, pointer_(bytes_), length_(sizeof bytes_), guest_(bytes_, 12u) {}
+    RingWindow window() const { return RingWindow(BlobWindow(&pointer_, &length_, 1u, length_), 12u); }
+    GuestRing &guest() { return guest_; }
 
 private:
-    MockHost host_;
-    Worker   worker_;
-    Journal  journal_;
+    std::uint8_t  bytes_[32u + 4096u];
+    void         *pointer_;
+    std::uint64_t length_;
+    GuestRing     guest_;
+};
+
+void attach(void *consumer) { static_cast<RingConsumer *>(consumer)->attach(); }
+
+class Fixture {
+public:
+    Fixture() : ring_(host_), worker_(host_, ring_) { journal_.host = &host_; }
+    ~Fixture() { worker_.stop(); }
+
+    MockHost     &host() { return host_; }
+    Worker       &worker() { return worker_; }
+    Journal      &journal() { return journal_; }
+    RingConsumer &ring() { return ring_; }
+    GuestRing    &guest() { return memory_.guest(); }
+    RingWindow    window() const { return memory_.window(); }
+    Entry         entry(std::uint32_t number, void *gate = nullptr) { return Entry{&journal_, number, gate}; }
+
+    /* Whether the worker published `head` before patience ran out. */
+    bool published(std::uint64_t head)
+    {
+        for (std::uint32_t spins = 0u; spins < 50000000u && memory_.guest().head() != head; spins++) sched_yield();
+        return memory_.guest().head() == head;
+    }
+
+private:
+    MockHost     host_;
+    RingConsumer ring_;
+    Worker       worker_;
+    Journal      journal_;
+    RingMemory   memory_;
 };
 
 }  // namespace
@@ -207,11 +251,72 @@ TEST(worker, lifecycle_is_main_loop_only_and_work_is_worker_only)
   work(&entry);   /* worker work run on the main loop */
   CHECK(fixture.host().claim(HostViolation::worker_required)); }
 
+TEST(worker_connect_doorbell, a_store_wakes_the_worker_to_serve_its_ring)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.worker().connect_doorbell(3u), Status::invalid_state);
+  CHECK_STATUS(fixture.worker().start(), Status::ok);
+  CHECK_STATUS(fixture.ring().prepare(fixture.window()), Status::ok);
+  CHECK_STATUS(fixture.worker().connect_doorbell(3u), Status::ok);
+  CHECK_STATUS(fixture.worker().connect_doorbell(4u), Status::invalid_state);
+  CHECK_STATUS(fixture.worker().post(WorkItem(&attach, nullptr, &fixture.ring())), Status::ok);
+  for (std::uint64_t fence = 1u; fence <= 3u; fence++) {
+      fixture.guest().write_batch(fence, 20u);
+      fixture.guest().publish();
+      CHECK(fixture.host().ring_doorbell(3u));
+      CHECK(fixture.published(fixture.guest().tail()));
+  }
+  CHECK(!fixture.host().ring_doorbell(4u));
+  fixture.worker().stop();
+  CHECK_EQ(fixture.host().live_doorbells(), 0u);
+  CHECK_EQ(fixture.ring().batches(), 3u);
+  CHECK(fixture.worker().invariants_hold()); }
+
+TEST(worker_run, a_doorbell_that_raced_the_attachment_is_not_lost)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.worker().start(), Status::ok);
+  CHECK_STATUS(fixture.ring().prepare(fixture.window()), Status::ok);
+  CHECK_STATUS(fixture.worker().connect_doorbell(0u), Status::ok);
+  fixture.guest().write_batch(1u, 0u);
+  fixture.guest().publish();
+  CHECK(fixture.host().ring_doorbell(0u));   /* served before the ring is attached: nothing */
+  CHECK_STATUS(fixture.worker().post(WorkItem(&attach, nullptr, &fixture.ring())), Status::ok);
+  CHECK(fixture.published(16u));
+  CHECK_EQ(fixture.host().run_main_loop(), 0u); }
+
+TEST(worker_disconnect_doorbell, a_disconnected_page_rings_nothing_and_can_be_connected_again)
+{ Fixture fixture;
+  fixture.worker().disconnect_doorbell();
+  CHECK_STATUS(fixture.worker().start(), Status::ok);
+  CHECK_STATUS(fixture.worker().connect_doorbell(2u), Status::ok);
+  fixture.worker().disconnect_doorbell();
+  CHECK(!fixture.host().ring_doorbell(2u));
+  CHECK(fixture.worker().invariants_hold());
+  CHECK_STATUS(fixture.worker().connect_doorbell(5u), Status::ok);
+  CHECK(fixture.host().ring_doorbell(5u)); }
+
+TEST(worker_connect_doorbell, a_page_past_the_region_is_refused)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.worker().start(), Status::ok);
+  CHECK_STATUS(fixture.worker().connect_doorbell(av::Doorbell::pages), Status::invalid_parameter);
+  CHECK_EQ(fixture.host().live_doorbells(), 0u);
+  fixture.worker().stop();
+  CHECK_STATUS(fixture.worker().start(), Status::ok);
+  CHECK_STATUS(fixture.worker().connect_doorbell(1u), Status::ok);   /* restarted: connectable again */
+  fixture.worker().stop(); }
+
 TEST(worker_invariants, a_queue_past_capacity_or_a_head_outside_it_is_detected)
 { MockHost host;
-  Worker overfilled(host);
+  RingConsumer ring(host);
+  Worker overfilled(host, ring);
   av::WorkerProbe::overfill(overfilled);
   CHECK(!overfilled.invariants_hold());
-  Worker misplaced(host);
+  Worker misplaced(host, ring);
   av::WorkerProbe::misplace_head(misplaced);
-  CHECK(!misplaced.invariants_hold()); }
+  CHECK(!misplaced.invariants_hold());
+  int event = 0;
+  Worker stopped(host, ring);
+  av::DoorbellProbe::forge(av::WorkerProbe::doorbell(stopped), &event);   /* connected, never started */
+  CHECK(!stopped.invariants_hold());
+  av::DoorbellProbe::forget_event(av::WorkerProbe::doorbell(stopped));   /* and inconsistent */
+  CHECK(!stopped.invariants_hold());
+  av::DoorbellProbe::repair(av::WorkerProbe::doorbell(stopped)); }

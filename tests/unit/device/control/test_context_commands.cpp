@@ -12,6 +12,7 @@
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
+#include "harness/ring/ring_blob_writer.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/context/protocol_version.hpp"
@@ -42,7 +43,7 @@ namespace {
 constexpr std::uint32_t ok_nodata = 0x1100u, ok_capset_info = 0x1102u, ok_capset = 0x1103u,
                         err_unanswered = 0u, err_out_of_memory = 0x1201u, err_invalid_resource_id = 0x1203u,
                         err_invalid_context_id = 0x1204u, err_invalid_parameter = 0x1205u;
-constexpr std::uint32_t ring = 20u, fence = 21u, small_ring = 22u;
+constexpr std::uint32_t ring = 20u, fence = 21u, small_ring = 22u, headless_ring = 23u, second_ring = 24u;
 constexpr std::uint8_t  uuid[16] = {0x7b, 0x7a};
 
 GpuRequestBuilder capset_info(std::uint32_t index)
@@ -83,9 +84,10 @@ GpuRequestBuilder submit(std::uint32_t id, const ContextSetup &setup, std::uint3
     return request;
 }
 
-ContextSetup setup(std::uint32_t ring_id = ring, std::uint8_t order = 12u, std::uint16_t major = 1u)
+ContextSetup setup(std::uint32_t ring_id = ring, std::uint8_t order = 12u, std::uint16_t major = 1u,
+                   std::uint32_t doorbell = 0u)
 {
-    return ContextSetup(ProtocolVersion(major, 0u), SubApi::vulkan, ring_id, order, fence, 0u);
+    return ContextSetup(ProtocolVersion(major, 0u), SubApi::vulkan, ring_id, order, fence, doorbell);
 }
 
 class Fixture {
@@ -98,6 +100,12 @@ public:
         static_cast<void>(blobs_.create_host(ring, 0x2000u));
         static_cast<void>(blobs_.create_host(fence, 0x1000u));
         static_cast<void>(blobs_.create_host(small_ring, 0x1000u));
+        static_cast<void>(blobs_.create_host(headless_ring, 0x2000u));
+        static_cast<void>(blobs_.create_host(second_ring, 0x2000u));
+        av::RingBlobWriter writer(blobs_);
+        writer.write_header(ring, 12u);
+        writer.write_header(small_ring, 12u);
+        writer.write_header(second_ring, 12u);
     }
 
     /* The response type, or 0 when the core left the request to the base class. */
@@ -232,10 +240,22 @@ TEST(context_commands_submit, refuses_every_setup_it_cannot_bind)
       {submit(5u, setup(99u)), err_invalid_resource_id},
       {submit(5u, setup(small_ring)), err_invalid_parameter},
       {submit(5u, setup(ring, 12u, 2u)), err_invalid_parameter},        /* another major */
+      {submit(5u, setup(ring, 12u, 1u, 64u)), err_invalid_parameter},   /* no such doorbell */
+      {submit(5u, setup(headless_ring)), err_invalid_parameter},        /* the guest wrote no ring header */
   };
   for (Case &c : cases) CHECK_EQ(fixture.send(c.request), c.answer);
   CHECK(!fixture.contexts().find(5u)->binding().bound());
   CHECK_EQ(fixture.send(submit(5u, setup())), ok_nodata); }
+
+TEST(context_commands_submit, a_doorbell_another_context_holds_is_refused)
+{ Fixture fixture;
+  CHECK_EQ(fixture.send(create(1u)), ok_nodata);
+  CHECK_EQ(fixture.send(create(2u)), ok_nodata);
+  CHECK_EQ(fixture.send(submit(1u, setup(ring, 12u, 1u, 7u))), ok_nodata);
+  CHECK_EQ(fixture.send(submit(2u, setup(second_ring, 12u, 1u, 7u))), err_invalid_parameter);
+  CHECK(!fixture.contexts().find(2u)->binding().bound());
+  CHECK_EQ(fixture.send(destroy(1u)), ok_nodata);
+  CHECK_EQ(fixture.send(submit(2u, setup(second_ring, 12u, 1u, 7u))), ok_nodata); }
 
 TEST(context_commands, leaves_every_other_request_to_the_base_class)
 { Fixture fixture;

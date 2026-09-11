@@ -149,6 +149,16 @@ void TableHost::remove_from_hostmem(uint64_t offset, uint64_t size)
     ops_.remove_from_hostmem(ops_.opaque, offset, size);
 }
 
+void TableHost::connect_doorbell(void *event, uint32_t index)
+{
+    ops_.connect_doorbell(ops_.opaque, event, index);
+}
+
+void TableHost::disconnect_doorbell(void *event, uint32_t index)
+{
+    ops_.disconnect_doorbell(ops_.opaque, event, index);
+}
+
 size_t TableHost::read_request(void *request, size_t offset, uint8_t *buffer, size_t size)
 {
     return ops_.read_request(ops_.opaque, request, offset, buffer, size);

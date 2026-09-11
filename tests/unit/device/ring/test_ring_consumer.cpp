@@ -5,76 +5,63 @@
 #include "device/memory/blob_window.hpp"
 #include "device/ring/ring_consumer.hpp"
 #include "device/ring/ring_window.hpp"
-#include "harness/framework/byte_layout.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
-#include "proto/submission/batch_header.hpp"
+#include "harness/ring/guest_ring.hpp"
 #include "proto/submission/ring_header.hpp"
+#include "proto/submission/ring_progress.hpp"
 
 #include <cstdint>
 #include <cstring>
 
-using av::BatchHeader;
 using av::BlobWindow;
-using av::ByteLayout;
+using av::GuestRing;
 using av::HostViolation;
 using av::MockHost;
 using av::RingConsumer;
 using av::RingHeader;
+using av::RingProgress;
 using av::RingWindow;
 using av::Status;
 
 namespace av {
+
+struct RingProgressProbe {
+    static void forget_order(RingProgress &progress) { progress.order_ = 0u; }
+};
 
 struct RingConsumerProbe {
     static void replace_ring(RingConsumer &consumer, const RingWindow &ring) { consumer.ring_ = ring; }
     static void overcount(RingConsumer &consumer) { consumer.batches_ = consumer.head_ + 1u; }
     static void pass_tail(RingConsumer &consumer) { consumer.head_ = consumer.progress_.tail() + 16u; }
     static void attach_unprepared(RingConsumer &consumer) { consumer.attached_ = true; consumer.prepared_ = false; }
+    static void move_unprepared(RingConsumer &consumer) { consumer.head_ = 8u; }
+    static void break_progress(RingConsumer &consumer) { RingProgressProbe::forget_order(consumer.progress_); }
+    static void lose_fence(RingConsumer &consumer) { consumer.batches_ = 1u; consumer.head_ = 16u; consumer.last_fence_ = 0u; }
 };
+
+
 
 }  // namespace av
 
 namespace {
 
 constexpr std::uint64_t capacity = 4096u;
-constexpr std::uint64_t head_offset = 16u;
-constexpr std::uint64_t tail_offset = 8u;
+constexpr std::uint64_t head_offset = GuestRing::head_offset;
 
-/* A guest's ring of order 12 and the producer side writing into it. */
-class GuestRing {
+/* A ring of order 12 in a buffer, and the guest writing it. */
+class RingMemory {
 public:
-    GuestRing() : bytes_{}, pointer_(bytes_), length_(sizeof bytes_), tail_(0u)
-    {
-        static_cast<void>(RingHeader(12u, 0u, 0u).encode(bytes_, sizeof bytes_));
-    }
+    RingMemory() : bytes_{}, pointer_(bytes_), length_(sizeof bytes_), guest_(bytes_, 12u) {}
     RingWindow window() const { return RingWindow(BlobWindow(&pointer_, &length_, 1u, length_), 12u); }
-
-    /* A batch at the tail: header, a payload of `length` bytes, padding. The
-     * tail is only published by publish(). */
-    void write_batch(std::uint64_t fence, std::uint32_t length)
-    {
-        const BatchHeader batch(length, fence);
-        std::uint8_t      header[BatchHeader::encoded_size] = {};
-        static_cast<void>(batch.encode(header, sizeof header));
-        for (std::uint64_t i = 0u; i < batch.span(); i++)
-            data(tail_ + i) = i < sizeof header ? header[i] : static_cast<std::uint8_t>(0xB0u + i);
-        tail_ += batch.span();
-    }
-    void          publish() { publish(tail_); }
-    void          publish(std::uint64_t tail) { store(tail_offset, tail); }
-    void          store(std::uint64_t offset, std::uint64_t value) { std::memcpy(bytes_ + offset, &value, 8u); }
-    std::uint64_t head() const { return ByteLayout(bytes_, 32u).at(head_offset, 8u); }
-    std::uint64_t tail() const { return tail_; }
-    std::uint8_t &data(std::uint64_t counter) { return bytes_[32u + (counter & (capacity - 1u))]; }
-    std::uint8_t *bytes() { return bytes_; }
+    GuestRing &guest() { return guest_; }
 
 private:
     std::uint8_t  bytes_[32u + capacity];
     void         *pointer_;
     std::uint64_t length_;
-    std::uint64_t tail_;
+    GuestRing     guest_;
 };
 
 class Fixture {
@@ -83,12 +70,13 @@ public:
 
     MockHost     &host() { return host_; }
     RingConsumer &consumer() { return consumer_; }
-    GuestRing    &ring() { return ring_; }
+    RingWindow    window() const { return memory_.window(); }
+    GuestRing    &ring() { return memory_.guest(); }
 
     /* Prepared on the main loop, attached on a worker. */
     void bind()
     {
-        CHECK_STATUS(consumer_.prepare(ring_.window()), Status::ok);
+        CHECK_STATUS(consumer_.prepare(memory_.window()), Status::ok);
         CHECK(consumer_.invariants_hold());
         on_worker([](RingConsumer &consumer) { consumer.attach(); });
         CHECK(consumer_.attached());
@@ -119,7 +107,7 @@ private:
 
     MockHost     host_;
     RingConsumer consumer_;
-    GuestRing    ring_;
+    RingMemory   memory_;
 };
 
 }  // namespace
@@ -233,8 +221,7 @@ TEST(ring_consumer_service, a_hostile_ring_stops_the_context_logs_once_and_ignor
       if (!fixture.consumer().stopped()) av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
       CHECK_EQ(fixture.host().logged(), 1u);
       CHECK_EQ(fixture.consumer().head(), 16u);
-      GuestRing fresh;
-      std::memcpy(fixture.ring().bytes(), fresh.bytes(), 32u);
+      static_cast<void>(RingHeader(12u, 0u, 0u).encode(fixture.ring().bytes(), 32u));
       fixture.ring().store(head_offset, 16u);
       fixture.serve();
       CHECK_EQ(fixture.host().logged(), 1u);
@@ -283,16 +270,16 @@ TEST(ring_consumer_prepare, accepts_a_fresh_header_of_the_setup_order_only)
   for (const Case &c : cases) {
       Fixture fixture;
       static_cast<void>(RingHeader(c.order, c.tail, c.head).encode(fixture.ring().bytes(), 32u));
-      if (fixture.consumer().prepare(fixture.ring().window()) != c.status)
+      if (fixture.consumer().prepare(fixture.window()) != c.status)
           av::TestRegistry::instance().record_failure(__FILE__, __LINE__, c.name);
       CHECK(fixture.consumer().invariants_hold());
   }
   Fixture malformed;
   malformed.ring().bytes()[1] = 0u;
-  CHECK_STATUS(malformed.consumer().prepare(malformed.ring().window()), Status::invalid_parameter);
+  CHECK_STATUS(malformed.consumer().prepare(malformed.window()), Status::invalid_parameter);
   Fixture again;
-  CHECK_STATUS(again.consumer().prepare(again.ring().window()), Status::ok);
-  CHECK_STATUS(again.consumer().prepare(again.ring().window()), Status::invalid_state); }
+  CHECK_STATUS(again.consumer().prepare(again.window()), Status::ok);
+  CHECK_STATUS(again.consumer().prepare(again.window()), Status::invalid_state); }
 
 TEST(ring_consumer_prepare, a_blob_too_small_for_the_order_is_refused)
 { Fixture fixture;
@@ -301,6 +288,19 @@ TEST(ring_consumer_prepare, a_blob_too_small_for_the_order_is_refused)
   CHECK_STATUS(fixture.consumer().prepare(RingWindow(BlobWindow(&pointer, &length, 1u, length), 12u)),
                Status::invalid_parameter);
   CHECK(!fixture.consumer().attached()); }
+
+TEST(ring_consumer_withdraw, forgets_a_ring_whose_attachment_was_never_posted)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.consumer().prepare(fixture.window()), Status::ok);
+  fixture.consumer().withdraw();
+  CHECK(fixture.consumer().invariants_hold());
+  fixture.ring().write_batch(1u, 0u);
+  fixture.ring().publish();
+  fixture.serve();
+  CHECK(!fixture.consumer().attached());
+  CHECK_EQ(fixture.ring().head(), 0u);
+  fixture.ring().publish(0u);
+  CHECK_STATUS(fixture.consumer().prepare(fixture.window()), Status::ok); }
 
 TEST(ring_consumer_attach, an_unprepared_consumer_serves_nothing)
 { Fixture fixture;
@@ -322,11 +322,13 @@ TEST(ring_consumer, prepares_on_the_main_loop_and_serves_on_a_worker)
   CHECK_STATUS(fixture.host().start_thread(
                    [](void *context) {
                        auto *const f = static_cast<Fixture *>(context);
-                       static_cast<void>(f->consumer().prepare(f->ring().window()));
+                       static_cast<void>(f->consumer().prepare(f->window()));
+                       f->consumer().withdraw();
                    },
                    &fixture, thread),
                Status::ok);
   fixture.host().join_thread(thread);
+  CHECK(fixture.host().claim(HostViolation::main_loop_required));
   CHECK(fixture.host().claim(HostViolation::main_loop_required)); }
 
 TEST(ring_consumer_invariants, more_batches_than_bytes_or_a_head_past_the_tail_is_detected)
@@ -340,4 +342,17 @@ TEST(ring_consumer_invariants, more_batches_than_bytes_or_a_head_past_the_tail_i
   CHECK(!passed.consumer().invariants_hold());
   Fixture unprepared;
   av::RingConsumerProbe::attach_unprepared(unprepared.consumer());
-  CHECK(!unprepared.consumer().invariants_hold()); }
+  CHECK(!unprepared.consumer().invariants_hold());
+  Fixture moved;
+  av::RingConsumerProbe::move_unprepared(moved.consumer());
+  CHECK(!moved.consumer().invariants_hold());
+  Fixture broken;
+  broken.bind();
+  av::RingConsumerProbe::break_progress(broken.consumer());
+  CHECK(!broken.consumer().invariants_hold());
+  Fixture fenceless;
+  fenceless.ring().write_batch(1u, 0u);
+  fenceless.ring().publish();
+  fenceless.bind();
+  av::RingConsumerProbe::lose_fence(fenceless.consumer());
+  CHECK(!fenceless.consumer().invariants_hold()); }

@@ -37,6 +37,8 @@ public:
     uint64_t hostmem_size() override;
     Status   place_in_hostmem(void *memory, uint64_t offset) override;
     void     remove_from_hostmem(uint64_t offset, uint64_t size) override;
+    void     connect_doorbell(void *event, uint32_t index) override;
+    void     disconnect_doorbell(void *event, uint32_t index) override;
     size_t   read_request(void *request, size_t offset, uint8_t *buffer, size_t size) override;
     void     respond(void *request, const uint8_t *bytes, size_t size) override;
     bool     resource_exists(uint32_t id) override;

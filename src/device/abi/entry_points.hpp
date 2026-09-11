@@ -18,6 +18,7 @@ extern constinit DeviceModule device_module;
 extern "C" {
 
 void RvkWorkerRun(void *worker);
+void RvkRingAttach(void *ring);
 
 }
 

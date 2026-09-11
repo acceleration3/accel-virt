@@ -2,6 +2,7 @@
 #include "device/context/context_binding.hpp"
 #include "device/control/control_request.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/ring/ring_window.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/host_violation.hpp"
@@ -41,9 +42,10 @@ CapsetInfo capset(std::uint16_t minor = 0u, std::uint8_t max_order = 24u)
 }
 
 ContextSetup setup(std::uint32_t ring_id = ring, std::uint32_t fence_id = fence, std::uint8_t order = 12u,
-                   ProtocolVersion version = ProtocolVersion(1u, 0u), SubApi api = SubApi::vulkan)
+                   ProtocolVersion version = ProtocolVersion(1u, 0u), SubApi api = SubApi::vulkan,
+                   std::uint32_t doorbell = 9u)
 {
-    return ContextSetup(version, api, ring_id, order, fence_id, 0u);
+    return ContextSetup(version, api, ring_id, order, fence_id, doorbell);
 }
 
 class Fixture {
@@ -79,11 +81,15 @@ TEST(context_binding_bind, records_the_setup_at_the_negotiated_version_and_pins_
   CHECK_EQ(fixture.binding().ring_resource(), ring);
   CHECK_EQ(fixture.binding().ring_order(), 12u);
   CHECK_EQ(fixture.binding().fence_resource(), fence);
+  CHECK_EQ(fixture.binding().doorbell(), 9u);
+  CHECK_EQ(fixture.binding().ring_window().capacity(), 0x1000u);
+  CHECK(fixture.binding().ring_window().invariants_hold());
   CHECK_STATUS(fixture.blobs().release(ring), Status::invalid_state);
   CHECK_STATUS(fixture.blobs().release(fence), Status::invalid_state);
   CHECK_STATUS(fixture.binding().bind(setup(), capset()), Status::invalid_state);
   fixture.binding().unbind();
   CHECK(!fixture.binding().bound());
+  CHECK_EQ(fixture.binding().ring_window().capacity(), 0u);
   fixture.binding().unbind();
   CHECK_STATUS(fixture.blobs().release(ring), Status::ok);
   CHECK_STATUS(fixture.blobs().release(fence), Status::ok); }

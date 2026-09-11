@@ -33,6 +33,8 @@ public:
     [[nodiscard]] Status destroy(uint32_t id);
     void                 destroy_all();
     DeviceContext       *find(uint32_t id);
+    /* Whether a bound context holds doorbell page `index`. */
+    bool                 holds_doorbell(uint32_t index);
     uint32_t             live() const;
 
     bool invariants_hold() const;

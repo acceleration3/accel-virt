@@ -10,6 +10,7 @@
 #include "harness/host/host_violation.hpp"
 #include "harness/host/mock_host.hpp"
 #include "harness/host/mock_request.hpp"
+#include "harness/ring/ring_blob_writer.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/sub_api.hpp"
@@ -50,6 +51,11 @@ struct BlobTableProbe {
 };
 
 struct VirtioGpuRvkProbe {
+    /* The ring header a guest writes before its setup. */
+    static void write_ring_header(VirtioGpuRvk &device, std::uint32_t id)
+    {
+        RingBlobWriter(device.blobs_).write_header(id, 12u);
+    }
     /* Two blobs claiming one id. */
     static void duplicate_blob(VirtioGpuRvk &device, std::uint32_t id)
     {
@@ -177,6 +183,7 @@ TEST(virtio_gpu_rvk_control, answers_context_requests_and_reset_destroys_context
       MockRequest blob_request(blob.bytes(), blob.size());
       CHECK(device.control(&blob_request, 0x010Cu));
   }
+  av::VirtioGpuRvkProbe::write_ring_header(device, 1u);
   GpuRequestBuilder create(0x0200u);
   create.context(7u).u32(0u).u32(0x72u).zeros(64u);
   MockRequest create_request(create.bytes(), create.size());

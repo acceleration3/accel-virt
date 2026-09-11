@@ -70,6 +70,12 @@ public:
     [[nodiscard]] virtual Status place_in_hostmem(void *memory, uint64_t offset) = 0;
     virtual void                 remove_from_hostmem(uint64_t offset, uint64_t size) = 0;
 
+    /* Main loop. A 4-byte store at offset 0 of doorbell page `index` signals
+     * `event` without the main loop (a KVM ioeventfd) until disconnected; the
+     * event must outlive the connection. */
+    virtual void connect_doorbell(void *event, uint32_t index) = 0;
+    virtual void disconnect_doorbell(void *event, uint32_t index) = 0;
+
     /* Main loop. A control request's bytes, up to `size` from `offset`: the
      * count copied. */
     virtual size_t read_request(void *request, size_t offset, uint8_t *buffer, size_t size) = 0;

@@ -14,6 +14,12 @@ extern "C" {
 
 typedef void (*RvkHostRoutine)(void *context);
 
+/* The doorbell region: one page per context, a BAR of its own located by a
+ * virtio shared memory capability with this id. */
+#define RVK_DEVICE_DOORBELLS 64u
+#define RVK_DEVICE_DOORBELL_PAGE 4096u
+#define RVK_DEVICE_DOORBELL_SHM_ID 0x72u
+
 /* One host Vulkan physical device, as the glue read it at realize. */
 typedef struct RvkGpuProperties {
     uint32_t vendor_id;     /* VkPhysicalDeviceProperties::vendorID */
@@ -61,6 +67,10 @@ typedef struct RvkHostOps {
     /* Nonzero when the block cannot be placed at `offset` of the hostmem region. */
     int (*place_in_hostmem)(void *opaque, void *memory, uint64_t offset);
     void (*remove_from_hostmem)(void *opaque, uint64_t offset, uint64_t size);
+    /* A 4-byte store at offset 0 of doorbell page `index` signals the event
+     * (memory_region_add_eventfd); disconnect removes it. */
+    void (*connect_doorbell)(void *opaque, void *event, uint32_t index);
+    void (*disconnect_doorbell)(void *opaque, void *event, uint32_t index);
     /* Up to `size` bytes of a control request from `offset`: the count copied. */
     size_t (*read_request)(void *opaque, void *request, size_t offset, uint8_t *buffer, size_t size);
     /* The request's response; the host copies fence, flags and context from the request. */

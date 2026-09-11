@@ -14,7 +14,7 @@ namespace av {
 namespace {
 
 const char *const violation_names[] = {"main_loop_required", "worker_required", "unknown_handle", "held_mutex",
-                                       "second_response", "overlapping_placement"};
+                                       "second_response", "overlapping_placement", "doorbell_misuse"};
 
 class StateLock {
 public:
@@ -35,7 +35,7 @@ MockHost::MockHost()
       fail_allocation_(0u), fail_host_memory_(0u), fail_placement_(0u), empty_mapping_(0u), allocations_{}, regions_{}, region_count_(0u),
       splits_{}, split_count_(0u),
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
-      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u)
+      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}
 {
     pthread_mutex_init(&state_, nullptr);
     pthread_cond_init(&work_queued_, nullptr);
@@ -61,6 +61,8 @@ MockHost::~MockHost()
         registry.record_failure(__FILE__, __LINE__, "%u host memory block(s) leaked", live_host_memory());
     if (live_placements() != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u hostmem placement(s) left", live_placements());
+    if (live_doorbells() != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u doorbell(s) left connected", live_doorbells());
     for (void *block : allocations_) std::free(block);
     for (std::uint32_t index = 0u; index < max_guest_mappings; index++)
         if (guest_mappings_[index].bounce) std::free(guest_mappings_[index].pointer);
@@ -187,6 +189,10 @@ void MockHost::destroy_event(void *event)
         record(HostViolation::unknown_handle, "MockHost::destroy_event");
         return;
     }
+    if (doorbell_of(event) != max_doorbells) {
+        record(HostViolation::doorbell_misuse, "MockHost::destroy_event");
+        return;
+    }
     pthread_cond_destroy(&slot->signalled);
     pthread_mutex_destroy(&slot->lock);
     StateLock lock(state_);
@@ -217,6 +223,48 @@ void MockHost::wait_event(void *event)
     while (!slot->set) pthread_cond_wait(&slot->signalled, &slot->lock);
     slot->set = false;
     pthread_mutex_unlock(&slot->lock);
+}
+
+std::uint32_t MockHost::doorbell_of(void *event)
+{
+    StateLock lock(state_);
+    for (std::uint32_t index = 0u; index < max_doorbells; index++)
+        if (doorbells_[index] == event) return index;
+    return max_doorbells;
+}
+
+void MockHost::connect_doorbell(void *event, std::uint32_t index)
+{
+    require_main_loop("MockHost::connect_doorbell");
+    bool connected = false;
+    if (event_of(event) != nullptr && index < max_doorbells && doorbell_of(event) == max_doorbells) {
+        StateLock lock(state_);
+        connected = doorbells_[index] == nullptr;
+        if (connected) doorbells_[index] = event;
+    }
+    if (!connected) record(HostViolation::doorbell_misuse, "MockHost::connect_doorbell");
+}
+
+void MockHost::disconnect_doorbell(void *event, std::uint32_t index)
+{
+    require_main_loop("MockHost::disconnect_doorbell");
+    if (index >= max_doorbells || event == nullptr || doorbell_of(event) != index) {
+        record(HostViolation::doorbell_misuse, "MockHost::disconnect_doorbell");
+        return;
+    }
+    StateLock lock(state_);
+    doorbells_[index] = nullptr;
+}
+
+bool MockHost::ring_doorbell(std::uint32_t index)
+{
+    void *event = nullptr;
+    {
+        StateLock lock(state_);
+        if (index < max_doorbells) event = doorbells_[index];
+    }
+    if (event != nullptr) signal_event(event);
+    return event != nullptr;
 }
 
 Status MockHost::create_mutex(void *&mutex)
@@ -640,6 +688,14 @@ std::uint32_t MockHost::live_threads()
     StateLock lock(state_);
     std::uint32_t live = 0u;
     for (const Thread &thread : threads_) live += thread.live ? 1u : 0u;
+    return live;
+}
+
+std::uint32_t MockHost::live_doorbells()
+{
+    StateLock lock(state_);
+    std::uint32_t live = 0u;
+    for (void *event : doorbells_) live += event != nullptr ? 1u : 0u;
     return live;
 }
 

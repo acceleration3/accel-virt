@@ -239,3 +239,39 @@ TEST(mock_host_requests, answers_once_and_knows_the_base_class_resources)
   mock.add_resource(3u);
   CHECK(mock.resource_exists(3u));
   CHECK(!mock.resource_exists(4u)); }
+
+TEST(mock_host_doorbells, a_connected_doorbell_wakes_its_event_and_misuse_is_caught)
+{ MockHost mock;
+  void *event = nullptr;
+  void *other = nullptr;
+  CHECK_STATUS(mock.create_event(event), Status::ok);
+  CHECK_STATUS(mock.create_event(other), Status::ok);
+  CHECK(!mock.ring_doorbell(3u));
+  mock.connect_doorbell(event, 3u);
+  CHECK_EQ(mock.live_doorbells(), 1u);
+  CHECK(mock.ring_doorbell(3u));
+  mock.wait_event(event);   /* the ring was kept */
+  CHECK(!mock.ring_doorbell(4u));
+  CHECK(!mock.ring_doorbell(MockHost::max_doorbells));
+  mock.connect_doorbell(other, 3u);          /* the page is taken */
+  mock.connect_doorbell(event, 5u);          /* the event already has one */
+  mock.connect_doorbell(other, MockHost::max_doorbells);
+  int stranger = 0;
+  mock.connect_doorbell(&stranger, 6u);
+  mock.disconnect_doorbell(other, 3u);       /* not its page */
+  mock.destroy_event(event);                 /* still connected */
+  for (int count = 0; count < 6; count++) CHECK(mock.claim(HostViolation::doorbell_misuse));
+  CHECK_EQ(mock.live_events(), 2u);
+  mock.disconnect_doorbell(event, 3u);
+  CHECK_EQ(mock.live_doorbells(), 0u);
+  mock.destroy_event(event);
+  mock.destroy_event(other);
+  void *thread = nullptr;
+  CHECK_STATUS(mock.start_thread([](void *host) {
+                   static_cast<MockHost *>(host)->disconnect_doorbell(nullptr, 1u);
+               },
+                                 &mock, thread),
+               Status::ok);
+  mock.join_thread(thread);
+  CHECK(mock.claim(HostViolation::main_loop_required));
+  CHECK(mock.claim(HostViolation::doorbell_misuse)); }

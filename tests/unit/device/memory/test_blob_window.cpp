@@ -16,6 +16,7 @@ namespace av {
 struct BlobWindowProbe {
     static void miscount(BlobWindow &window) { window.length_ += 1u; }
     static void lose_pointers(BlobWindow &window) { window.pointers_ = nullptr; }
+    static void lose_lengths(BlobWindow &window) { window.lengths_ = nullptr; }
 };
 
 }  // namespace av
@@ -97,4 +98,7 @@ TEST(blob_window_invariants, a_length_other_than_the_extents_sum_is_detected)
   CHECK(!window.invariants_hold());
   BlobWindow lost = extents.window();
   av::BlobWindowProbe::lose_pointers(lost);
-  CHECK(!lost.invariants_hold()); }
+  CHECK(!lost.invariants_hold());
+  BlobWindow lengthless = extents.window();
+  av::BlobWindowProbe::lose_lengths(lengthless);
+  CHECK(!lengthless.invariants_hold()); }

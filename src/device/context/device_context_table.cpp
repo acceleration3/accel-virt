@@ -51,6 +51,15 @@ DeviceContext *DeviceContextTable::find(uint32_t id)
     return slot != nullptr ? &slot->object() : nullptr;
 }
 
+bool DeviceContextTable::holds_doorbell(uint32_t index)
+{
+    host_.require_main_loop("DeviceContextTable::holds_doorbell");
+    for (const ObjectStorage<DeviceContext> &slot : slots_)
+        if (slot.constructed() && slot.object().binding().bound() && slot.object().binding().doorbell() == index)
+            return true;
+    return false;
+}
+
 uint32_t DeviceContextTable::live() const
 {
     uint32_t count = 0u;

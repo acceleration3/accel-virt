@@ -24,6 +24,7 @@ public:
     static constexpr std::uint32_t max_mutexes = 256u;
     static constexpr std::uint32_t max_gpus = 8u;
     static constexpr std::uint32_t max_main_loop_work = 1024u;
+    static constexpr std::uint32_t max_doorbells = 64u;
 
     MockHost();
     ~MockHost();
@@ -55,6 +56,8 @@ public:
     std::uint64_t hostmem_size() override;
     Status   place_in_hostmem(void *memory, std::uint64_t offset) override;
     void     remove_from_hostmem(std::uint64_t offset, std::uint64_t size) override;
+    void     connect_doorbell(void *event, std::uint32_t index) override;
+    void     disconnect_doorbell(void *event, std::uint32_t index) override;
     std::size_t read_request(void *request, std::size_t offset, std::uint8_t *buffer, std::size_t size) override;
     void     respond(void *request, const std::uint8_t *bytes, std::size_t size) override;
     bool     resource_exists(std::uint32_t id) override;
@@ -82,6 +85,8 @@ public:
     std::uint8_t *guest_ram(std::uint64_t address);
     void          set_hostmem_size(std::uint64_t size);
     void          add_resource(std::uint32_t id);
+    /* A guest store to doorbell page `index`: whether an event was connected to it. */
+    bool          ring_doorbell(std::uint32_t index);
     /* The device view of the block placed at `offset`, or null. */
     void         *placed_at(std::uint64_t offset);
 
@@ -104,6 +109,7 @@ public:
     std::uint32_t live_guest_mappings();
     std::uint32_t live_host_memory();
     std::uint32_t live_placements();
+    std::uint32_t live_doorbells();
 
 private:
     static constexpr std::uint32_t violation_kinds = static_cast<std::uint32_t>(HostViolation::count);
@@ -160,6 +166,8 @@ private:
     bool    fail_now(std::uint32_t &countdown);
     Thread *thread_of(void *thread);
     Event  *event_of(void *event);
+    /* The page `event` is connected to, or max_doorbells. */
+    std::uint32_t doorbell_of(void *event);
     Mutex  *mutex_of(void *mutex);
 
     pthread_t       main_loop_;
@@ -191,6 +199,7 @@ private:
     std::uint64_t   hostmem_size_;
     std::uint32_t   resources_[max_resources];
     std::uint32_t   resource_count_;
+    void           *doorbells_[max_doorbells];
 };
 
 }  // namespace av
