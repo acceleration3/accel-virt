@@ -18,7 +18,6 @@ OBJECT_DECLARE_SIMPLE_TYPE(VirtIOGPURvk, VIRTIO_GPU_RVK)
 
 /* Host GPUs remembered from the Vulkan loader at realize. */
 #define VIRTIO_GPU_RVK_MAX_GPUS 16
-#define VIRTIO_GPU_RVK_UUID_BYTES 16
 
 struct VirtIOGPURvk {
     VirtIOGPU parent_obj;
@@ -26,7 +25,7 @@ struct VirtIOGPURvk {
     char *host_gpu;
     RvkHostOps host;
     uint32_t gpu_count;
-    uint8_t gpu_uuids[VIRTIO_GPU_RVK_MAX_GPUS][VIRTIO_GPU_RVK_UUID_BYTES];
+    RvkGpuProperties gpus[VIRTIO_GPU_RVK_MAX_GPUS];
     RvkDevice *core;
     /* The hostmem BAR's backing: private anonymous memory that blobs are
      * placed over with MAP_FIXED, as virtio-gpu-gl does for virgl. */

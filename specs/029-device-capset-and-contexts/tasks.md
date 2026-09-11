@@ -24,4 +24,4 @@ description: "Task list for feature 029: rvk capset and context lifetime"
 
 ## Phase 4: QEMU
 
-- [ ] T004 Glue: CONTEXT_INIT and num_capsets, identity catalog, larger responses; qtest context suite; docs; gate; merge; push
+- [X] T004 Glue: CONTEXT_INIT and num_capsets, identity catalog, larger responses; qtest context suite; docs; gate; merge; push

@@ -64,13 +64,14 @@ class VirtioGpu2d(unittest.TestCase):
             with self.subTest(device=name):
                 yield name, self.open(name)
 
-    def test_the_rvk_device_offers_exactly_what_stock_virtio_gpu_offers(self):
+    def test_the_rvk_device_offers_what_stock_virtio_gpu_offers_and_context_init(self):
         stock = self.open("stock").device.offered_features()
         rvk = self.open("rvk").device.offered_features()
-        self.assertEqual(rvk, stock)
+        self.assertEqual(rvk, stock | FEATURE_CONTEXT_INIT)
         self.assertTrue(rvk & virtio_qtest.FEATURE_EDID)
         self.assertTrue(rvk & virtio_qtest.FEATURE_VERSION_1)
-        self.assertFalse(rvk & (FEATURE_VIRGL | FEATURE_RESOURCE_BLOB | FEATURE_CONTEXT_INIT))
+        self.assertFalse(stock & FEATURE_CONTEXT_INIT)
+        self.assertFalse(rvk & (FEATURE_VIRGL | FEATURE_RESOURCE_BLOB))
 
     def test_one_output_at_the_drivers_preferred_mode(self):
         for _, gpu in self.each_device():

@@ -2,8 +2,8 @@
 /*
  * virtio-gpu-rvk-device: the base virtio-gpu device handles the 2D protocol;
  * realize, reset, finalize and every control request reach the device core
- * through rvk_device.h first. No feature beyond stock virtio-gpu is advertised
- * until the core implements it.
+ * through rvk_device.h first. Beyond stock virtio-gpu, only what the core says
+ * it implements is offered: context init, when it has a capset.
  *
  * Installed by accel-virt's tools/build_qemu.sh as hw/display/virtio-gpu-rvk.c.
  */
@@ -24,13 +24,7 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
     VirtIOGPU *g = VIRTIO_GPU(qdev);
     char error[256];
 
-    virtio_gpu_rvk_host_init(r);
-    r->core = rvk_device_create(&r->host, r->host_gpu, virtio_gpu_blob_enabled(g->parent_obj.conf),
-                                error, sizeof(error));
-    if (!r->core) {
-        error_setg(errp, "%s", error);
-        return;
-    }
+    /* Before the core: its capset reports host-visible memory from the region. */
     if (virtio_gpu_hostmem_enabled(b->conf)) {
         void *map = qemu_ram_mmap(-1, b->conf.hostmem, qemu_real_host_page_size(), 0, 0);
 
@@ -42,6 +36,17 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
         memory_region_init_ram_ptr(&r->hostmem_background, NULL, "virtio-gpu-rvk-hostmem-background",
                                    b->conf.hostmem, map);
         memory_region_add_subregion(&b->hostmem, 0, &r->hostmem_background);
+    }
+    virtio_gpu_rvk_host_init(r);
+    r->core = rvk_device_create(&r->host, r->host_gpu, virtio_gpu_blob_enabled(g->parent_obj.conf),
+                                error, sizeof(error));
+    if (!r->core) {
+        error_setg(errp, "%s", error);
+        return;
+    }
+    b->virtio_config.num_capsets = cpu_to_le32(rvk_device_capsets(r->core));
+    if (rvk_device_capsets(r->core)) {
+        b->conf.flags |= 1 << VIRTIO_GPU_FLAG_CONTEXT_INIT_ENABLED;
     }
     virtio_gpu_device_realize(qdev, errp);
 }

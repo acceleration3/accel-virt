@@ -1,8 +1,8 @@
 """Blob resources against the real device: guest-backed blobs held by the
 device, and device-allocated blobs the guest reads and writes through the
 hostmem BAR once mapped. Stock virtio-gpu-pci with blob=off refuses every blob
-request; virtio-gpu-rvk-pci answers them itself while offering the same
-features.
+request; virtio-gpu-rvk-pci answers them itself without offering
+VIRTIO_GPU_F_RESOURCE_BLOB.
 
 Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
 AV_QEMU_BUILD.
@@ -31,6 +31,7 @@ BLOB_MEM_HOST3D = 2
 BLOB_FLAG_MAPPABLE = 1
 MAP_CACHE_CACHED = 1
 SHM_ID_HOST_VISIBLE = 1
+FEATURE_CONTEXT_INIT = 1 << 4
 HOSTMEM = 64 << 20
 PAGE = 0x1000
 UNASSIGNED = 0xD0000000
@@ -76,10 +77,10 @@ class VirtioGpuBlobs(unittest.TestCase):
         self.assertEqual(length, HOSTMEM)
         return address
 
-    def test_the_rvk_device_offers_what_stock_offers_and_the_same_hostmem_region(self):
+    def test_the_rvk_device_offers_the_same_hostmem_region_and_no_blob_feature(self):
         stock = self.open(STOCK)
         rvk = self.open(RVK)
-        self.assertEqual(rvk.device.offered_features(), stock.device.offered_features())
+        self.assertEqual(rvk.device.offered_features(), stock.device.offered_features() | FEATURE_CONTEXT_INIT)
         self.assertEqual(rvk.device.shared_memory[SHM_ID_HOST_VISIBLE][1], HOSTMEM)
         self.assertEqual(stock.device.shared_memory[SHM_ID_HOST_VISIBLE][1], HOSTMEM)
 

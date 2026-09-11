@@ -84,6 +84,35 @@ The checks that need the capset (major, sub_api membership, ring order range)
 are a separate validation against a decoded capset; the decoder checks what the
 bytes alone can prove.
 
+## Capset and context commands (guest -> device)
+
+The device offers `VIRTIO_GPU_F_CONTEXT_INIT` and `num_capsets` 1, and answers
+these virtio-gpu requests itself (virtio 1.2 §5.7.6.8). The capset carries
+protocol 1.0, the Vulkan sub-API only, 64 contexts, ring orders 12 to 24,
+`host_visible_memory` when the device has a hostmem region, and the host GPU the
+device is bound to. The context setup travels as the whole command buffer of a
+`SUBMIT_3D` to the context: `size` is 32 and the buffer is one setup. The ring
+blob must hold at least `32 + 2^ring_order` bytes and the fence blob at least 32;
+both stay referenced while the context lives, and `RESOURCE_UNREF` of either is
+refused until `CTX_DESTROY` or a reset.
+
+| Request | Answer |
+|---|---|
+| `GET_CAPSET_INFO` index 0 | `OK_CAPSET_INFO`: id 0x72, max version 1, max size 128 |
+| `GET_CAPSET` id 0x72, version 1 | `OK_CAPSET` with the 128-byte capset |
+| any other index, id or version; a short request | `ERR_INVALID_PARAMETER` |
+| `CTX_CREATE` with `context_init` exactly 0x72 and `nlen` at most 64 | `OK_NODATA` |
+| `CTX_CREATE` of context 0 or a live context | `ERR_INVALID_CONTEXT_ID` |
+| `CTX_CREATE` naming another capset, setting reserved bits, `nlen` over 64, or short | `ERR_INVALID_PARAMETER` |
+| `CTX_CREATE` with every context slot taken, or no thread for it | `ERR_OUT_OF_MEMORY` |
+| `CTX_DESTROY` of a live context / any other | `OK_NODATA` / `ERR_INVALID_CONTEXT_ID` |
+| `SUBMIT_3D` to a context that does not exist | `ERR_INVALID_CONTEXT_ID` |
+| a setup naming a resource that is not a blob | `ERR_INVALID_RESOURCE_ID` |
+| `size` not 32, the buffer short or malformed, a setup the capset does not allow, a blob too small for its role, or a context already set up | `ERR_INVALID_PARAMETER` |
+| `RESOURCE_UNREF` of a blob a context is bound to | `ERR_INVALID_PARAMETER`, the blob kept |
+
+A device reset destroys every context, then releases every blob.
+
 ## Ring header (shared, both write)
 
 Offset 0 of the ring resource; the ring's data area follows at offset 32 and

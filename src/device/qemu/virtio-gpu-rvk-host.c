@@ -134,11 +134,11 @@ static uint32_t rvk_gpu_count(void *opaque)
     return r->gpu_count;
 }
 
-static void rvk_gpu_uuid(void *opaque, uint32_t index, uint8_t *uuid)
+static void rvk_gpu_properties(void *opaque, uint32_t index, RvkGpuProperties *properties)
 {
     VirtIOGPURvk *r = opaque;
 
-    memcpy(uuid, r->gpu_uuids[index], VIRTIO_GPU_RVK_UUID_BYTES);
+    *properties = r->gpus[index];
 }
 
 static void *rvk_allocate(void *opaque, size_t size)
@@ -240,7 +240,7 @@ static void rvk_respond(void *opaque, void *request, const uint8_t *bytes, size_
     VirtIOGPURvk *r = opaque;
     struct {
         struct virtio_gpu_ctrl_hdr header;
-        uint8_t body[40];
+        uint8_t body[232];
     } response = { 0 };
 
     g_assert(size >= sizeof(response.header) && size <= sizeof(response));
@@ -285,8 +285,25 @@ static void rvk_read_gpus(VirtIOGPURvk *r)
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
             .pNext = &id,
         };
+        VkPhysicalDeviceMemoryProperties memory;
+        RvkGpuProperties *gpu = &r->gpus[i];
+
         vkGetPhysicalDeviceProperties2(devices[i], &properties);
-        memcpy(r->gpu_uuids[i], id.deviceUUID, VIRTIO_GPU_RVK_UUID_BYTES);
+        vkGetPhysicalDeviceMemoryProperties(devices[i], &memory);
+        *gpu = (RvkGpuProperties) {
+            .vendor_id = properties.properties.vendorID,
+            .device_id = properties.properties.deviceID,
+            .device_type = properties.properties.deviceType,
+        };
+        memcpy(gpu->uuid, id.deviceUUID, sizeof(gpu->uuid));
+        g_strlcpy(gpu->name, properties.properties.deviceName, sizeof(gpu->name));
+        for (uint32_t heap = 0; heap < memory.memoryHeapCount; heap++) {
+            if (memory.memoryHeaps[heap].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+                gpu->local_memory += memory.memoryHeaps[heap].size;
+            } else {
+                gpu->shared_memory += memory.memoryHeaps[heap].size;
+            }
+        }
     }
     r->gpu_count = count;
     vkDestroyInstance(instance, NULL);
@@ -310,7 +327,7 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .unlock_mutex = rvk_unlock_mutex,
         .run_on_main_loop = rvk_run_on_main_loop,
         .gpu_count = rvk_gpu_count,
-        .gpu_uuid = rvk_gpu_uuid,
+        .gpu_properties = rvk_gpu_properties,
         .allocate = rvk_allocate,
         .release = rvk_release,
         .map_guest = rvk_map_guest,
