@@ -13,8 +13,13 @@ constinit DeviceModule device_module;
 extern "C" {
 
 __attribute__((visibility("default")))
-RvkDevice *rvk_device_create(const RvkHostOps *ops, const char *host_gpu, char *error, size_t error_size)
-{ return reinterpret_cast<RvkDevice *>(av::device_module.create(ops, host_gpu, error, error_size)); }
+RvkDevice *rvk_device_create(const RvkHostOps *ops, const char *host_gpu, int base_blobs, char *error,
+                             size_t error_size)
+{ return reinterpret_cast<RvkDevice *>(av::device_module.create(ops, host_gpu, base_blobs != 0, error, error_size)); }
+
+__attribute__((visibility("default")))
+int rvk_device_control(RvkDevice *device, void *request, uint32_t type)
+{ return reinterpret_cast<av::DeviceInstance *>(device)->device().control(request, type) ? 1 : 0; }
 
 __attribute__((visibility("default")))
 void rvk_device_reset(RvkDevice *device)

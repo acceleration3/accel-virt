@@ -18,7 +18,7 @@ description: "Task list for feature 028: QEMU device blob resources and host-vis
 
 ## Phase 3: Blobs
 
-- [ ] T003 Tests then `BlobResource`, `BlobTable`, `ControlRequest`, `BlobCommands`; `VirtioGpuRvk::control`, `rvk_device_control`, `blob=on` refusal
+- [X] T003 Tests then `BlobResource`, `BlobTable`, `ControlRequest`, `BlobCommands`; `VirtioGpuRvk::control`, `rvk_device_control`, `blob=on` refusal
 
 **Checkpoint**: commit.
 

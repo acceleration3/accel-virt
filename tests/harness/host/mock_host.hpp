@@ -127,7 +127,7 @@ private:
         void       *context;
     };
 
-    static constexpr std::uint32_t max_allocations = 256u;
+    static constexpr std::uint32_t max_allocations = 2048u;
     static constexpr std::uint32_t max_guest_mappings = 20000u;
     static constexpr std::uint32_t max_regions = 8u;
     static constexpr std::uint32_t max_host_memory = 64u;

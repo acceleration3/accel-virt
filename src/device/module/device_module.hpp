@@ -29,7 +29,8 @@ public:
     DeviceModule &operator=(const DeviceModule &) = delete;
 
     /* A realized device, or null with the reason in `error`. */
-    DeviceInstance      *create(const RvkHostOps *ops, const char *host_gpu, char *error, size_t error_size);
+    DeviceInstance      *create(const RvkHostOps *ops, const char *host_gpu, bool base_blobs, char *error,
+                                size_t error_size);
     [[nodiscard]] Status destroy(DeviceInstance *instance);
     uint32_t             live() const;
 

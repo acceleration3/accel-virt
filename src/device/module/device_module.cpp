@@ -4,7 +4,8 @@
 
 namespace av {
 
-DeviceInstance *DeviceModule::create(const RvkHostOps *ops, const char *host_gpu, char *error, size_t error_size)
+DeviceInstance *DeviceModule::create(const RvkHostOps *ops, const char *host_gpu, bool base_blobs, char *error,
+                                     size_t error_size)
 {
     TextBuffer message(error, error_size);
     if (ops == nullptr) {
@@ -13,7 +14,7 @@ DeviceInstance *DeviceModule::create(const RvkHostOps *ops, const char *host_gpu
     }
     for (ObjectStorage<DeviceInstance> &slot : slots_) {
         if (slot.construct(*ops) != Status::ok) continue;   /* occupied */
-        if (slot.object().device().realize(host_gpu, message) == Status::ok) return &slot.object();
+        if (slot.object().device().realize(host_gpu, base_blobs, message) == Status::ok) return &slot.object();
         slot.destroy();
         return nullptr;
     }

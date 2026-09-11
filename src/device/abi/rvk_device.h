@@ -62,9 +62,13 @@ typedef struct RvkHostOps {
 typedef struct RvkDevice RvkDevice;
 
 /* Realizes a device on the host GPU `host_gpu` names ("auto", a UUID, or NULL
- * for auto). NULL on failure, with the reason in `error`. `ops` must outlive
- * the device. Main loop. */
-RvkDevice *rvk_device_create(const RvkHostOps *ops, const char *host_gpu, char *error, size_t error_size);
+ * for auto); `base_blobs` is the base class's blob property. NULL on failure,
+ * with the reason in `error`. `ops` must outlive the device. Main loop. */
+RvkDevice *rvk_device_create(const RvkHostOps *ops, const char *host_gpu, int base_blobs, char *error,
+                             size_t error_size);
+/* Nonzero when the core answered the control request (a
+ * struct virtio_gpu_ctrl_command *); zero leaves it to the base class. Main loop. */
+int rvk_device_control(RvkDevice *device, void *request, uint32_t type);
 /* A virtio reset: every context is destroyed. Main loop. */
 void rvk_device_reset(RvkDevice *device);
 /* Nonzero for a device this module never created. Main loop. */
