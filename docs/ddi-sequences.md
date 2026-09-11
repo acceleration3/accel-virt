@@ -272,7 +272,10 @@ What a miniport answers, from `basicdisplay.sys` (the same image set): its
 - 1` children; `QueryChildStatus` answers `StatusConnection` with
 `HotPlug.Connected`, `StatusRotation` with `STATUS_INVALID_PARAMETER`, anything
 else `STATUS_NOT_SUPPORTED`; `QueryDeviceDescriptor` without an EDID answers
-`STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED` (0xC01E0401).
+`STATUS_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED` (0xC01E0401). This driver
+answers a synthesized EDID 1.3 base block instead (feature 011, §4c): the window
+`DescriptorOffset`/`DescriptorLength` is copied up to byte 128, and an offset at
+or past 128 answers `STATUS_MONITOR_NO_MORE_DESCRIPTOR_DATA` (0xC01D0008).
 
 ### 2.6 Failure and cleanup within start
 
@@ -424,6 +427,32 @@ drops its queue without reporting them; `basicrender.sys`'s reset flags its
 worker and waits for it to stop. This driver also resets the virtio device on
 reset and brings it back on restart. `FakeVidSch::reset_from_timeout` treats
 every submitted fence as settled, and the scenario recovers twice.
+
+## 4c. Display modes (feature 011)
+
+All nine DDIs are PASSIVE. The driver reaches each VidPn through
+`DxgkCbQueryVidPnInterface` (version 1) and its topology through
+`pfnGetTopology`; every path info, mode set and mode info it acquires is
+released before the DDI returns. The minimum `basicdisplay.sys` implements,
+and this driver follows, for one source and one target:
+
+| DDI | Answer |
+|---|---|
+| `IsSupportedVidPn` | a null VidPn, or at most one path joining source 0 to target 0, is supported; anything else is not (still `STATUS_SUCCESS`) |
+| `EnumVidPnCofuncModality` | per path: a source mode set that is neither pinned nor the pivot is replaced (`pfnCreateNewSourceModeSet`, `pfnAddMode` per mode, `pfnAssignSourceModeSet`) by every mode; a target mode set likewise, narrowed to the pinned source mode's size when one is pinned; unset scaling and rotation (not the pivot) get identity-only support through `pfnUpdatePathSupportInfo` |
+| `CommitVidPn` | `PathPoweredOff` changes nothing; no path from the affected source, or no pinned source mode, leaves it without a mode; a pinned mode not in the list or not X8R8G8B8 is `STATUS_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE` (0xC01E0310) |
+| `UpdateActiveVidPnPresentPath` | identity scaling and rotation only, else `STATUS_GRAPHICS_PATH_CONTENT_GEOMETRY_TRANSFORMATION_NOT_SUPPORTED` (0xC01E0346) |
+| `RecommendMonitorModes` | every mode as a driver-origin monitor source mode, 1280x800 preferred; `STATUS_GRAPHICS_MODE_ALREADY_IN_MODESET` (0xC01E0314) from `pfnAddMode` is not a failure |
+| `RecommendFunctionalVidPn` | `STATUS_GRAPHICS_NO_RECOMMENDED_FUNCTIONAL_VIDPN` (0xC01E0323) |
+| `RecommendVidPnTopology` | `STATUS_GRAPHICS_NO_RECOMMENDED_VIDPN_TOPOLOGY` (0xC01E031A) |
+| `ControlInterrupt` | `DXGK_INTERRUPT_CRTC_VSYNC` recorded; any other type `STATUS_NOT_SUPPORTED` |
+| `GetScanLine` | from interrupt time at 60 Hz over the committed mode's total lines (one blank line per 24 active, 1080p's ratio); no committed mode is `STATUS_INVALID_DEVICE_STATE` |
+
+Mode enumeration ends on `STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET`
+(0x401E034C) and `STATUS_GRAPHICS_DATASET_IS_EMPTY` (0x401E034B), both
+successes. A mode info `pfnAddMode` accepts belongs to dxgkrnl; one it refuses
+is released by the driver. The modes are 640x480 up to 1920x1080, until the
+device reports its displays (feature 027).
 
 ## 5. Abusive-but-legal sequences (from `docs/testing.md` §L2)
 

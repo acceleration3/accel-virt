@@ -22,11 +22,13 @@
 #include "../../src/core/driver_image.hpp"
 #include "../../src/core/status.hpp"
 #include "../harness/capability_rule.hpp"
+#include "../harness/fake_display_mode_manager.hpp"
 #include "../harness/fake_dxgkrnl.hpp"
 #include "../harness/fake_dxgkrnl_adapter.hpp"
 #include "../harness/fake_dxgkrnl_fdo.hpp"
 #include "../harness/fake_handle_table.hpp"
 #include "../harness/fake_vidmm.hpp"
+#include "../harness/fake_vidpn.hpp"
 #include "../harness/fake_vidsch.hpp"
 #include "../harness/fake_virtio_gpu_function.hpp"
 #include "../harness/mock_platform.hpp"
@@ -548,4 +550,59 @@ TEST(ddi_scenario, a_timeout_is_recovered_from_twice)
     CHECK_EQ(fence, 4u); }
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- Modes (feature 011) --------------------------------------------------- */
+
+TEST(ddi_scenario, a_mode_change_from_edid_to_commit)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  av::FakeDisplayModeManager dmm(driver.platform(), driver.table(), device.fdo().context());
+  { std::uint8_t edid[128] = {};
+    CHECK_EQ(dmm.read_edid(edid), 0);
+    unsigned sum = 0u;
+    for (std::uint8_t byte : edid) sum += byte;
+    CHECK_EQ(sum % 256u, 0u);
+    CHECK_EQ(edid[56] | (edid[58] >> 4u) << 8u, 1280u);
+    av::FakeVidPn vidpn;
+    CHECK_EQ(dmm.read_monitor_modes(vidpn), 0);
+    CHECK_EQ(vidpn.monitor_modes().modes(), 11u);
+    CHECK_EQ(nt(dmm.recommend_functional_vidpn()), 0xC01E0323u);
+    CHECK_EQ(nt(dmm.recommend_vidpn_topology()), 0xC01E031Au);
+    CHECK_EQ(dmm.set_mode(vidpn, 1024u, 768u), 0);
+    CHECK(vidpn.source_modes(0u).pinned());
+    CHECK_EQ(vidpn.path(0u).ContentTransformationScalingSupport, 1u);
+    av::D3dkmdtVidPnPresentPathRecord path = vidpn.path(0u);
+    path.ContentTransformationScaling = 1;
+    path.ContentTransformationRotation = 1;
+    CHECK_EQ(dmm.update_active_path(path), 0);
+    CHECK_EQ(dmm.control_vsync(true), 0);
+    av::DxgkargGetScanLineRecord scan = {0u, 0u, {}, 0u};
+    CHECK_EQ(dmm.scan_line(scan), 0);
+    CHECK(scan.ScanLine < 768u + 32u);
+    CHECK_EQ(dmm.control_vsync(false), 0);
+    CHECK_EQ(dmm.commit(vidpn, 2u), 0); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+TEST(ddi_scenario, a_second_path_is_refused_and_a_mode_off_the_list_is_never_offered)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  av::FakeDisplayModeManager dmm(driver.platform(), driver.table(), device.fdo().context());
+  { av::FakeVidPn clone;
+    clone.add_path(0u, 0u);
+    clone.add_path(0u, 1u);
+    bool supported = true;
+    CHECK_EQ(dmm.is_supported(clone, supported), 0);
+    CHECK(!supported);
+    av::FakeVidPn vidpn;
+    CHECK_EQ(dmm.set_mode(vidpn, 1000u, 700u), 0x001E0310);
+    av::DxgkargGetScanLineRecord scan = {0u, 0u, {}, 0u};
+    CHECK_EQ(nt(dmm.scan_line(scan)), invalid_device_state); }
+  CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }

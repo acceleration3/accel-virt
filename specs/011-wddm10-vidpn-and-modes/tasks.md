@@ -28,5 +28,5 @@ description: "Task list for feature 011: WDDM 1.0 VidPn topology and mode enumer
 
 ## Phase 5: Scenarios
 
-- [ ] T007 Scenarios through the table; render core rule now missing Present
-- [ ] T008 Docs; gate; merge; push
+- [X] T007 Scenarios through the table; render core rule now missing Present
+- [X] T008 Docs; gate; merge; push
