@@ -515,7 +515,9 @@ int32_t Adapter::is_supported_vidpn(DxgkargIsSupportedVidPnRecord *request)
 int32_t Adapter::recommend_functional_vidpn(const DxgkargRecommendFunctionalVidPnRecord *)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::recommend_functional_vidpn");
-    return NtStatus(NtStatus::no_recommended_functional_vidpn).value();
+    const int32_t declined = NtStatus(NtStatus::no_recommended_functional_vidpn).value();
+    log_status("rvkgpu: RecommendFunctionalVidPn", declined);
+    return declined;
 }
 
 /* dxgkrnl repeats the VidPn DDIs while it settles a topology, so these lines
@@ -565,13 +567,17 @@ int32_t Adapter::recommend_monitor_modes(const DxgkargRecommendMonitorModesRecor
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::recommend_monitor_modes");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return MonitorModes(platform_, modes_, *request).recommend().value();
+    const int32_t recommended = MonitorModes(platform_, modes_, *request).recommend().value();
+    log_status("rvkgpu: RecommendMonitorModes", recommended);
+    return recommended;
 }
 
 int32_t Adapter::recommend_vidpn_topology(const DxgkargRecommendVidPnTopologyRecord *)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::recommend_vidpn_topology");
-    return NtStatus(NtStatus::no_recommended_vidpn_topology).value();
+    const int32_t declined = NtStatus(NtStatus::no_recommended_vidpn_topology).value();
+    log_status("rvkgpu: RecommendVidPnTopology", declined);
+    return declined;
 }
 
 /* Target 0 shows source 0. */
