@@ -1482,6 +1482,38 @@ TEST(adapter_create_allocation, before_start_there_is_no_segment_to_place_it_in)
   ShadowSurface shadow(fixture.adapter());
   CHECK_EQ(shadow.create(), invalid_parameter); }
 
+/* A bring-up that never reaches a committable VidPn is read back from the log,
+ * so each step of the display path says what it answered (FR-003). The lines
+ * are asserted in the order dxgkrnl walks them. */
+TEST(adapter, each_step_of_the_display_path_says_what_it_answered)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  ShadowSurface shadow(fixture.adapter());
+  CHECK(std::strcmp(fixture.platform().last_log(),
+                    "rvkgpu: GetStandardAllocationDriverData status 0x00000000") == 0);
+  CHECK_EQ(shadow.create(), success);
+  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: CreateAllocation status 0x00000000") == 0);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: CreateDevice status 0x00000000") == 0);
+  av::DxgkargDescribeAllocationRecord describe = {};
+  describe.hAllocation = shadow.handle();
+  CHECK_EQ(nt(fixture.adapter().describe_allocation(&describe)), success);
+  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: DescribeAllocation status 0x00000000") == 0);
+  av::DxgkargSetDisplayPrivateDriverFormatRecord format = {};
+  format.PrimaryAllocation = shadow.handle();
+  CHECK_EQ(nt(fixture.adapter().set_display_private_driver_format(&format)), success);
+  CHECK(std::strcmp(fixture.platform().last_log(),
+                    "rvkgpu: SetDisplayPrivateDriverFormat status 0x00000000") == 0);
+  av::DxgkargSetVidPnSourceVisibilityRecord visibility = {};
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&visibility)), success);
+  CHECK(std::strcmp(fixture.platform().last_log(),
+                    "rvkgpu: SetVidPnSourceVisibility status 0x00000000") == 0);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success);
+  CHECK_EQ(shadow.destroy(), success);
+  CHECK_EQ(nt(fixture.adapter().stop_device()), success);
+  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: StopDevice status 0x00000000") == 0); }
+
 TEST(adapter_set_display_private_driver_format, takes_no_primary_or_one_of_ours)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);

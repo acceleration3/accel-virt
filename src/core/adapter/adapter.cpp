@@ -178,7 +178,9 @@ int32_t Adapter::stop_device()
     cursor_.release();
     mappings_.unmap_all();
     started_ = false;
-    return NtStatus(status).value();
+    const int32_t stopped = NtStatus(status).value();
+    log_status("rvkgpu: StopDevice", stopped);
+    return stopped;
 }
 
 int32_t Adapter::dispatch_io_request(uint32_t, void *)
@@ -371,7 +373,9 @@ int32_t Adapter::create_device(DxgkargCreateDeviceRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_device");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(devices_.create(*this, *request)).value();
+    const int32_t created = NtStatus(devices_.create(*this, *request)).value();
+    log_status("rvkgpu: CreateDevice", created);
+    return created;
 }
 
 int32_t Adapter::destroy_device(void *device)
@@ -384,7 +388,9 @@ int32_t Adapter::create_allocation(DxgkargCreateAllocationRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(allocations_.create(*request)).value();
+    const int32_t created = NtStatus(allocations_.create(*request)).value();
+    log_status("rvkgpu: CreateAllocation", created);
+    return created;
 }
 
 int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *request)
@@ -398,14 +404,18 @@ int32_t Adapter::describe_allocation(DxgkargDescribeAllocationRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::describe_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(allocations_.describe(*request, sources_)).value();
+    const int32_t described = NtStatus(allocations_.describe(*request, sources_)).value();
+    log_status("rvkgpu: DescribeAllocation", described);
+    return described;
 }
 
 int32_t Adapter::get_standard_allocation_driver_data(DxgkargGetStandardAllocationDriverDataRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::get_standard_allocation_driver_data");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(StandardAllocation(platform_, *request).describe()).value();
+    const int32_t described = NtStatus(StandardAllocation(platform_, *request).describe()).value();
+    log_status("rvkgpu: GetStandardAllocationDriverData", described);
+    return described;
 }
 
 int32_t Adapter::open_allocation(void *device, DxgkargOpenAllocationRecord *request)
@@ -428,7 +438,10 @@ int32_t Adapter::set_display_private_driver_format(const DxgkargSetDisplayPrivat
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (request->PrimaryAllocation != nullptr && allocations_.find(request->PrimaryAllocation) == nullptr)
         return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(sources_.set_private_format(request->VidPnSourceId, request->PrivateDriverFormatAttribute)).value();
+    const int32_t set =
+        NtStatus(sources_.set_private_format(request->VidPnSourceId, request->PrivateDriverFormatAttribute)).value();
+    log_status("rvkgpu: SetDisplayPrivateDriverFormat", set);
+    return set;
 }
 
 int32_t Adapter::create_context(void *device, DxgkargCreateContextRecord *request)
@@ -632,7 +645,9 @@ int32_t Adapter::set_vidpn_source_visibility(const DxgkargSetVidPnSourceVisibili
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::set_vidpn_source_visibility");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(sources_.set_visible(request->VidPnSourceId, request->Visible != 0u)).value();
+    const int32_t set = NtStatus(sources_.set_visible(request->VidPnSourceId, request->Visible != 0u)).value();
+    log_status("rvkgpu: SetVidPnSourceVisibility", set);
+    return set;
 }
 
 int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
