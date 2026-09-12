@@ -29,7 +29,8 @@ MockPlatform::MockPlatform()
       irql_(Irql::passive), held_{}, held_count_(0u), violations_{}, now_(0u),
       verbose_(std::getenv("AV_TEST_VERBOSE") != nullptr), logged_(0u), registration_status_(0u),
       registered_driver_object_(nullptr), registered_registry_path_(nullptr), registered_table_(nullptr),
-      timers_{}, register_windows_{}, register_window_count_(0u) {}
+      timers_{}, page_frames_{}, page_frame_count_(0u), register_windows_{},
+      register_window_count_(0u) {}
 
 MockPlatform::MockPlatform(std::uint32_t registration_status, LogRecord &record)
     : MockPlatform(registration_status)
@@ -152,6 +153,32 @@ std::uint64_t MockPlatform::physical_address(void *block)
         if (contiguous_[i].block == block) return contiguous_[i].physical_address;
     std::fprintf(stderr, "\n    physical address of untracked block %p\n", block);
     std::abort();
+}
+
+void *MockPlatform::attach_page_frames(const std::uint64_t *frames, std::uint32_t page_count)
+{
+    if (page_frame_count_ == max_page_frames) {
+        std::fprintf(stderr, "\n    more than %u MDLs attached\n", max_page_frames);
+        std::abort();
+    }
+    page_frames_[page_frame_count_] = PageFrames{frames, page_count};
+    return &page_frames_[page_frame_count_++];
+}
+
+/* A real MDL bounds the read by the span it describes; this one by the page
+ * count it was attached with, and an unknown pointer is no MDL at all. */
+Status MockPlatform::read_page_frames(void *mdl, std::uint32_t first, std::uint32_t count, std::uint64_t *frames)
+{
+    require_irql_at_most(Irql::apc, "Platform::read_page_frames");
+    if (mdl == nullptr || frames == nullptr || count == 0u) return Status::invalid_parameter;
+    for (std::uint32_t i = 0u; i < page_frame_count_; i++) {
+        if (mdl != &page_frames_[i]) continue;
+        const PageFrames &attached = page_frames_[i];
+        if (first > attached.count || count > attached.count - first) return Status::invalid_parameter;
+        for (std::uint32_t page = 0u; page < count; page++) frames[page] = attached.frames[first + page];
+        return Status::ok;
+    }
+    return Status::invalid_parameter;
 }
 
 void *MockPlatform::translate_physical(std::uint64_t physical_address, std::size_t bytes) const

@@ -13,11 +13,14 @@
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace av {
 
 class DisplayMode;
+class GuestPageList;
+class LogBudget;
 class VirtioGpuDevice;
 struct ScanoutResourceProbe;
 
@@ -27,7 +30,8 @@ public:
     static constexpr uint32_t first_resource_id = HardwareCursor::resource_id + 1u;
     static constexpr uint32_t bytes_per_pixel = 4u;
 
-    ScanoutResource(Platform &platform, ObjectStorage<VirtioGpuDevice> &device, uint32_t source);
+    ScanoutResource(Platform &platform, LogBudget &budget, ObjectStorage<VirtioGpuDevice> &device, uint32_t source);
+    ~ScanoutResource();
     ScanoutResource(const ScanoutResource &) = delete;
     ScanoutResource &operator=(const ScanoutResource &) = delete;
 
@@ -39,27 +43,50 @@ public:
     void                 release();
     /* A new device holds none of the old one's resources. */
     void                 forget_device();
-    /* The primary at `address`, and whether a frame was presented since the
-     * last call: attaches and scans out an address the host has not been told,
-     * and asks the host to read the pixels again when there is a new frame. */
-    [[nodiscard]] Status refresh(uint64_t address, bool presented);
+    /* The primary at `address`, backed by `pages`, and whether a frame was
+     * presented since the last call: attaches and scans out an address the host
+     * has not been told, and asks the host to read the pixels again when there
+     * is a new frame. An address with pages the driver never recorded is not
+     * scanned out: the host would read memory that is not the primary's. */
+    [[nodiscard]] Status refresh(uint64_t address, const GuestPageList &pages, bool presented);
+    /* Whether a refresh at `address` would have to attach a backing, which is
+     * the only time the primary's pages are needed. Dispatch at most: it is
+     * what keeps the DPC from looking them up every idle frame. */
+    bool                 needs_pages(uint64_t address) const;
+    /* Pages of the frame the committed mode needs. Dispatch at most: it is
+     * what the DPC asks the primary's allocation for. */
+    uint32_t             page_count() const;
 
     bool invariants_hold() const;
 
 private:
     [[nodiscard]] Status create(VirtioGpuDevice &device);
-    [[nodiscard]] Status attach(VirtioGpuDevice &device, uint64_t address);
+    [[nodiscard]] Status attach(VirtioGpuDevice &device, const GuestPageList &pages);
+    /* Room for a backing request covering the mode, at worst one memory entry
+     * per page; grown as the mode grows, never shrunk. */
+    [[nodiscard]] Status reserve();
     [[nodiscard]] Status show(VirtioGpuDevice &device, uint32_t resource);
     [[nodiscard]] Status flush(VirtioGpuDevice &device);
     /* SET_SCANOUT 0 then RESOURCE_UNREF: the host holds nothing afterwards. */
     [[nodiscard]] Status unref();
+    /* Where dxgkrnl says the primary is and what the driver knows about its
+     * pages, logged once per address that could not be carried: a working
+     * desktop says nothing, and one that never arrives says why. */
+    void                 report(uint64_t address, const GuestPageList &pages, Status status);
 
     Platform                       &platform_;
+    LogBudget                      &budget_;
     ObjectStorage<VirtioGpuDevice> &device_;
     uint32_t                        source_;
     uint32_t                        width_;
     uint32_t                        height_;
     uint64_t                        attached_address_;
+    /* The last address report() spoke about, so a frame that cannot be carried
+     * is explained once instead of every DPC. */
+    uint64_t                        reported_address_;
+    bool                            reported_;
+    uint8_t                        *backing_request_;
+    size_t                          backing_request_bytes_;
     bool                            created_;
     bool                            scanning_out_;
 

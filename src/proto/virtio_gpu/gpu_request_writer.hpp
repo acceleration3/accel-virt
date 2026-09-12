@@ -12,6 +12,7 @@
 
 namespace av {
 
+class GuestPageList;
 class WireWriter;
 
 class GpuRequestWriter {
@@ -21,12 +22,23 @@ public:
     static constexpr size_t   response_size = 24u;      /* a response the driver reads: its header */
     static constexpr uint32_t response_ok_nodata = 0x1100u;
     static constexpr uint32_t format_b8g8r8a8 = 1u;     /* VIRTIO_GPU_FORMAT_B8G8R8A8_UNORM */
+    /* An attach_backing_pages request: the fixed part, then one memory entry
+     * per run, so a caller can size the destination it hands the writer. */
+    static constexpr size_t   backing_header_size = 32u;
+    static constexpr size_t   memory_entry_size = 16u;
+    /* The widest request this driver sends: a backing with one memory entry per
+     * page of a 1920x1080 frame, which is the largest mode it offers and the
+     * worst case when no two of its pages are adjacent. Rounded up to a page. */
+    static constexpr size_t   max_backing_request_size = 0x9000u;
 
     GpuRequestWriter(uint8_t *bytes, size_t capacity);
 
     [[nodiscard]] Status create_2d(uint32_t resource_id, uint32_t format, uint32_t width, uint32_t height);
     /* One memory entry covering the whole backing. */
     [[nodiscard]] Status attach_backing(uint32_t resource_id, uint64_t address, uint32_t length);
+    /* One memory entry per run of adjacent pages. A list with a page that was
+     * never mapped is refused: the host would read the wrong memory. */
+    [[nodiscard]] Status attach_backing_pages(uint32_t resource_id, const GuestPageList &pages);
     /* The whole resource, from offset 0. */
     [[nodiscard]] Status transfer_to_host_2d(uint32_t resource_id, uint32_t width, uint32_t height);
     /* What `scanout` shows, from the top left of `resource_id`; resource 0

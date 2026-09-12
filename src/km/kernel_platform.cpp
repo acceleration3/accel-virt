@@ -46,6 +46,22 @@ uint64_t KernelPlatform::physical_address(void *block)
     return static_cast<uint64_t>(MmGetPhysicalAddress(block).QuadPart);
 }
 
+/* MmGetMdlPfnArray is the only way to the pages of a locked MDL; the span the
+ * MDL describes bounds the read, because dxgkrnl's page count and ours coming
+ * apart would have the device read memory the allocation does not own. */
+Status KernelPlatform::read_page_frames(void *mdl, uint32_t first, uint32_t count, uint64_t *frames)
+{
+    auto *const descriptor = static_cast<MDL *>(mdl);
+    if (descriptor == nullptr || frames == nullptr || count == 0u) return Status::invalid_parameter;
+    const SIZE_T pages = ADDRESS_AND_SIZE_TO_SPAN_PAGES(MmGetMdlVirtualAddress(descriptor),
+                                                       MmGetMdlByteCount(descriptor));
+    if (first > pages || count > pages - first) return Status::invalid_parameter;
+    const PFN_NUMBER *const page_frames = MmGetMdlPfnArray(descriptor);
+    for (uint32_t page = 0u; page < count; page++)
+        frames[page] = static_cast<uint64_t>(page_frames[first + page]) << PAGE_SHIFT;
+    return Status::ok;
+}
+
 void KernelPlatform::release_contiguous(void *block, size_t bytes)
 {
     MmFreeContiguousMemorySpecifyCache(block, bytes, MmCached);

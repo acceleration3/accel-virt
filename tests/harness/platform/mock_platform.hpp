@@ -38,6 +38,8 @@ public:
     void    *allocate_contiguous(std::size_t bytes) override;
     void     release_contiguous(void *block, std::size_t bytes) override;
     std::uint64_t physical_address(void *block) override;
+    Status        read_page_frames(void *mdl, std::uint32_t first, std::uint32_t count,
+                                   std::uint64_t *frames) override;
     void     zero(void *dst, std::size_t bytes) override;
     void     copy(void *dst, const void *src, std::size_t bytes) override;
     Irql     current_irql() const override;
@@ -90,6 +92,11 @@ public:
     void          detach_register_windows(void *base, std::uint64_t length);
     std::uint32_t attached_register_windows() const;
 
+    /* An MDL of `page_count` pages with those frame addresses, as dxgkrnl hands
+     * one to BuildPagingBuffer. The frames must outlive this platform; any
+     * other pointer is an MDL this platform never made, and is refused. */
+    void *attach_page_frames(const std::uint64_t *frames, std::uint32_t page_count);
+
     /* What a device sees at a fake physical address: the host pointer, if the
      * whole range lies inside one contiguous block. */
     void *translate_physical(std::uint64_t physical_address, std::size_t bytes) const;
@@ -111,6 +118,7 @@ public:
 private:
     static constexpr std::uint32_t max_live = 4096u;
     static constexpr std::uint32_t max_contiguous = 256u;
+    static constexpr std::uint32_t max_page_frames = 4u;
     static constexpr std::uint64_t first_physical_address = 0x100000000ull;
     static constexpr std::uint32_t violation_kinds =
         static_cast<std::uint32_t>(Violation::count);
@@ -119,6 +127,11 @@ private:
         void         *block;
         std::uint64_t physical_address;
         std::size_t   bytes;
+    };
+
+    struct PageFrames {
+        const std::uint64_t *frames;
+        std::uint32_t        count;
     };
 
     struct AttachedWindow {
@@ -170,6 +183,8 @@ private:
     void         *registered_registry_path_;
     const DdiTable *registered_table_;
     Timer          timers_[max_timers];
+    PageFrames     page_frames_[max_page_frames];
+    std::uint32_t  page_frame_count_;
     AttachedWindow register_windows_[max_register_windows];
     std::uint32_t  register_window_count_;
 };

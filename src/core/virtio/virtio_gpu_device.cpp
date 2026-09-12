@@ -15,8 +15,9 @@ VirtioGpuDevice::VirtioGpuDevice(Platform &platform, const BarMappings &mappings
       isr_(platform, mappings.address_of(layout.isr()), layout.isr().length()),
       device_(platform, mappings.address_of(layout.device()), layout.device().length()),
       transport_(platform, common_, notify_, isr_, device_, layout.notify_multiplier()),
-      control_(platform, transport_, control_queue, GpuRequestWriter::response_size, LockRank::control_queue),
-      cursor_(platform, transport_, cursor_queue, 0u, LockRank::cursor_queue), running_(false) {}
+      control_(platform, transport_, control_queue, GpuRequestWriter::response_size,
+               GpuRequestWriter::max_backing_request_size, LockRank::control_queue),
+      cursor_(platform, transport_, cursor_queue, 0u, 0u, LockRank::cursor_queue), running_(false) {}
 
 /* The device must stop using the rings before the members release them. */
 VirtioGpuDevice::~VirtioGpuDevice() { transport_.abandon(); }

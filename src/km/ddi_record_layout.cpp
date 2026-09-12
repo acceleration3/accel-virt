@@ -21,6 +21,8 @@
 #include "core/ddi/dxgk_build_paging_buffer_copy_page_table_entries_record.hpp"
 #include "core/ddi/dxgk_build_paging_buffer_copy_range_record.hpp"
 #include "core/ddi/dxgk_build_paging_buffer_fill_virtual_record.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_map_aperture_segment_record.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_unmap_aperture_segment_record.hpp"
 #include "core/ddi/dxgk_build_paging_buffer_flush_tlb_record.hpp"
 #include "core/ddi/dxgk_build_paging_buffer_transfer_virtual_record.hpp"
 #include "core/ddi/dxgk_build_paging_buffer_update_page_table_record.hpp"
@@ -101,6 +103,13 @@
 
 #define AV_SAME_SIZE(record, wdk) \
     static_assert(sizeof(av::record) == sizeof(wdk), #record " size differs from " #wdk)
+/* An anonymous struct in DXGKARG_BUILDPAGINGBUFFER's operation union: offsets
+ * are relative to the union, which is where the record is copied from. */
+#define AV_SAME_UNION_SIZE(record, wdk, group) \
+    static_assert(sizeof(av::record) == sizeof(static_cast<wdk *>(nullptr)->group), #record " size differs from " #wdk "::" #group)
+#define AV_SAME_UNION_OFFSET(record, field, wdk, group, wdk_field)                          \
+    static_assert(offsetof(av::record, field) == offsetof(wdk, group.wdk_field) - offsetof(wdk, group), \
+                  #record "::" #field " is not at " #wdk "::" #group "." #wdk_field)
 #define AV_SAME_OFFSET(record, field, wdk, wdk_field)                            \
     static_assert(offsetof(av::record, field) == offsetof(wdk, wdk_field),     \
                   #record "::" #field " is not at " #wdk "::" #wdk_field)
@@ -703,6 +712,24 @@ AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, hProcess, DXGK_BUILDP
 AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, UpdateMode, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, UpdateMode);
 AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, pPageTableEntries64KB, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, pPageTableEntries64KB);
 AV_SAME_OFFSET(DxgkBuildPagingBufferUpdatePageTableRecord, FirstPteVirtualAddress, DXGK_BUILDPAGINGBUFFER_UPDATEPAGETABLE, FirstPteVirtualAddress);
+
+AV_SAME_UNION_SIZE(DxgkBuildPagingBufferMapApertureSegmentRecord, DXGKARG_BUILDPAGINGBUFFER, MapApertureSegment);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferMapApertureSegmentRecord, hDevice, DXGKARG_BUILDPAGINGBUFFER, MapApertureSegment, hDevice);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferMapApertureSegmentRecord, hAllocation, DXGKARG_BUILDPAGINGBUFFER, MapApertureSegment, hAllocation);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferMapApertureSegmentRecord, SegmentId, DXGKARG_BUILDPAGINGBUFFER, MapApertureSegment, SegmentId);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferMapApertureSegmentRecord, OffsetInPages, DXGKARG_BUILDPAGINGBUFFER, MapApertureSegment, OffsetInPages);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferMapApertureSegmentRecord, NumberOfPages, DXGKARG_BUILDPAGINGBUFFER, MapApertureSegment, NumberOfPages);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferMapApertureSegmentRecord, pMdl, DXGKARG_BUILDPAGINGBUFFER, MapApertureSegment, pMdl);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferMapApertureSegmentRecord, Flags, DXGKARG_BUILDPAGINGBUFFER, MapApertureSegment, Flags);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferMapApertureSegmentRecord, MdlOffset, DXGKARG_BUILDPAGINGBUFFER, MapApertureSegment, MdlOffset);
+
+AV_SAME_UNION_SIZE(DxgkBuildPagingBufferUnmapApertureSegmentRecord, DXGKARG_BUILDPAGINGBUFFER, UnmapApertureSegment);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferUnmapApertureSegmentRecord, hDevice, DXGKARG_BUILDPAGINGBUFFER, UnmapApertureSegment, hDevice);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferUnmapApertureSegmentRecord, hAllocation, DXGKARG_BUILDPAGINGBUFFER, UnmapApertureSegment, hAllocation);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferUnmapApertureSegmentRecord, SegmentId, DXGKARG_BUILDPAGINGBUFFER, UnmapApertureSegment, SegmentId);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferUnmapApertureSegmentRecord, OffsetInPages, DXGKARG_BUILDPAGINGBUFFER, UnmapApertureSegment, OffsetInPages);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferUnmapApertureSegmentRecord, NumberOfPages, DXGKARG_BUILDPAGINGBUFFER, UnmapApertureSegment, NumberOfPages);
+AV_SAME_UNION_OFFSET(DxgkBuildPagingBufferUnmapApertureSegmentRecord, DummyPage, DXGKARG_BUILDPAGINGBUFFER, UnmapApertureSegment, DummyPage);
 
 AV_SAME_SIZE(DxgkBuildPagingBufferFlushTlbRecord, DXGK_BUILDPAGINGBUFFER_FLUSHTLB);
 AV_SAME_OFFSET(DxgkBuildPagingBufferFlushTlbRecord, RootPageTableAddressSegmentId, DXGK_BUILDPAGINGBUFFER_FLUSHTLB, RootPageTableAddress.SegmentId);

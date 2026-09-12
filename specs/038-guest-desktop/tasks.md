@@ -24,16 +24,18 @@ from, before it is fixed (FR-007).
 - [X] T006 [US1] Tests then `DisplayScanout` in src/core/display/display_scanout.{hpp,cpp}: one `ScanoutResource` per source, distinct resource ids, a source out of range refused, teardown releasing every resource
 - [X] T007 [US1] `DisplayScanout` wired into src/core/adapter/adapter.cpp: `commit_vidpn` configures the committed source, `dpc_routine` flushes a source the host is behind on, `stop_device` tears the resources down; L1 tests over the fake virtio-gpu function assert the requests and their order
 - [X] T008 [US1] An L2 scenario in tests/unit/scenarios/test_ddi_scenarios.cpp: commit a VidPn, set the source address, run the DPC, and assert the device saw `CREATE_2D`, `ATTACH_BACKING`, `SET_SCANOUT`, `TRANSFER_TO_HOST_2D` and `RESOURCE_FLUSH` for that source
-- [ ] T009 [US1] A guest run: screendumps before and after the guest opens a window differ, `dwm.exe` runs, the adapter is `rvkgpu` with status OK, Basic Display is not bound, and no display TDR is logged; record what it found here
+- [X] T009 [US1] A guest run: screendumps before and after the guest opens a window differ, `dwm.exe` runs, the adapter is `rvkgpu` with status OK, Basic Display is not bound, and no display TDR is logged; record what it found here
 
   **What the first run found.** Three of the four hold on the real guest:
   `dwm=1`, `services=rvkgpu` - nothing else is bound to a display - status OK,
-  problem 0, and no display TDR. A frame does reach the host: QMP `screendump`
-  answers a 1280x800 PPM where before this feature it answered nothing.
+  problem 0, and no display TDR. QMP `screendump` answers a 1280x800 PPM where
+  before this feature it answered nothing.
 
-  The frame is the wrong memory. The dump holds two colours - 1,023,316 black
-  pixels and 684 grey - so what the host reads is not the composited desktop.
-  The cause is in the driver, not the path: `PagingRequest::build` answers
+  No frame reaches the host. The dump holds two colours - 1,023,316 black pixels
+  and 684 grey - which is QEMU's own "display output is not active" text, not
+  our scanout: T009a proved it by reading the same two counts again from a run
+  whose `SET_SCANOUT` never went out. The cause is in the driver:
+  `PagingRequest::build` answers
   `DXGK_OPERATION_MAP_APERTURE_SEGMENT` with `Status::ok` and records nothing,
   so the only address the scanout has is the one `SetVidPnSourceAddress` gives -
   an aperture segment address, `ApertureSegment::base_address + offset` - and
@@ -43,11 +45,65 @@ from, before it is fixed (FR-007).
   The window-and-cursor half of the acceptance cannot be tested the way it is
   written: the guest agent is a session 0 service and cannot open a window on
   the interactive desktop. The step asserts what an arriving frame proves
-  instead - the committed size, and that no single colour covers 95% of it,
-  which is exactly what the near-blank frame above fails - and US2's mode switch
-  covers "the dump follows what the guest did".
+  instead - the committed size, and that the dump is not QEMU's placeholder -
+  and US2's mode switch covers "the dump follows what the guest did". T009a
+  says what the content of the frame waits on.
 
-- [ ] T009a [US1] The aperture the primary really lives in: `map_aperture_segment` and `unmap_aperture_segment` record the pages dxgkrnl gives for each segment offset, in src/core/memory/; `ScanoutResource` attaches those pages, with `ATTACH_BACKING` carrying one memory entry per run of contiguous pages; hostile-input tests for the operation's MDL and a fuzz target
+- [X] T009a [US1] The aperture the primary really lives in: `map_aperture_segment` and `unmap_aperture_segment` record the pages dxgkrnl gives for each segment offset, in src/core/memory/; `ScanoutResource` attaches those pages, with `ATTACH_BACKING` carrying one memory entry per run of contiguous pages; hostile-input tests for the operation's MDL and a fuzz target
+
+  **What it took.** `GuestPageList` (object class, src/proto/resources) is a view
+  over page frame addresses that knows how they group into runs;
+  `AperturePages` (object class, src/core/memory) is the window of frames one
+  allocation is mapped into the aperture with, owned by `Allocation` and filled
+  from the operation's MDL through a new `Platform::read_page_frames`;
+  `GpuRequestWriter::attach_backing_pages` writes one memory entry per run;
+  `DisplaySources` records the primary's handle beside its address and forgets
+  it when the allocation is destroyed, and `DisplayScanout` asks that
+  allocation for the pages of the address it is about to attach. Each of the
+  three guest runs below ended in one defect, each in our own driver.
+
+  **10th defect: a primary VidMm never pins.** Without
+  `DXGK_ALLOCATIONINFOFLAGS.AccessedPhysically` (0x8000) VidMm leaves a primary
+  in its own implicit system memory segment and `DxgkDdiSetVidPnSourceAddress`
+  answers `PrimarySegment` 0, `PrimaryAddress` 0 - an address with no pages
+  behind it, and no `DXGK_OPERATION_MAP_APERTURE_SEGMENT` ever arrives. Three
+  consecutive runs logged `rvkgpu: SetVidPnSourceAddress source 0 segment 0
+  address 0x0000000000000000`, including one with the primary reported as not
+  CPU visible and one with the aperture as its only supported segment set: the
+  placement does not follow `PreferredSegment`. With the flag set the same line
+  reads `segment 1 address 0x00000000C0000000` and the mapping arrives with a
+  1000-page MDL. The display has no GPU MMU to read through, so an allocation
+  it scans out has to be pinned in a physical segment, and that flag is how a
+  WDDM 2.0 GPU-MMU driver says which allocations those are.
+
+  **11th defect: a request wider than a queue slot.** `GpuCommandQueue::send`
+  refused anything longer than `GpuRequestWriter::max_request_size` (64 bytes)
+  with `invalid_parameter`, and the backing of a 1280x800 primary is 12 memory
+  entries - 224 bytes. The driver said so itself:
+  `rvkgpu: scanout 0 address 0x00000000C0000000 pages 1000 runs 12 needs 1000
+  status 1`. The control queue now has one *wide* slot beside its 16 narrow
+  ones, sized for one memory entry per page of the largest mode the driver
+  offers; a narrow request never takes it, so a burst of small requests cannot
+  keep a primary off the screen.
+
+  **12th defect: a frame that could not be carried said nothing.** The DPC
+  logged only through `LogBudget`, which takes a spin lock and so cannot be
+  reached from `SetVidPnSourceAddress` at device IRQL, and the scanout path
+  logged nothing at all. `ScanoutResource::report` now explains, once per
+  address, any frame whose pages do not cover it or that the host refused, and
+  `Adapter::log_scanout` says where dxgkrnl points a source whenever the IRQL
+  allows the budget's lock. Every finding above was read out of those two lines.
+
+  **What the run proves now, and what it cannot.** The host scans out the
+  guest's own primary: the screendump is 1280x800, QEMU's "display output is
+  not active" placeholder is gone, the driver recorded 1000 aperture pages in 12
+  runs and refused no frame. The picture is all zeros, because nothing writes
+  the primary: DWM composites with the GPU, and no GPU work is executed until
+  the host executor and the guest transport land (features 042-044). So US1's
+  "the screendump changes when the guest's desktop does" belongs to 044, and
+  the runner's `display` step asserts what an arriving frame proves today - the
+  committed size, a scanout that is not QEMU's placeholder, the primary's pages
+  recorded, and no refused frame.
 
 **Checkpoint**: commit.
 

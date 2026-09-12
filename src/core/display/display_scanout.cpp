@@ -1,6 +1,7 @@
 #include "core/display/display_scanout.hpp"
 
 #include "core/display/display_mode.hpp"
+#include "core/memory/allocation.hpp"
 #include "core/support/invariant_scope.hpp"
 
 namespace av {
@@ -13,8 +14,8 @@ static_assert(DisplaySources::source_count == 1u, "give each source its resource
 
 }  // namespace
 
-DisplayScanout::DisplayScanout(Platform &platform, ObjectStorage<VirtioGpuDevice> &device)
-    : platform_(platform), resources_{ScanoutResource(platform, device, 0u)} {}
+DisplayScanout::DisplayScanout(Platform &platform, LogBudget &budget, ObjectStorage<VirtioGpuDevice> &device)
+    : platform_(platform), resources_{ScanoutResource(platform, budget, device, 0u)} {}
 
 Status DisplayScanout::configure(uint32_t source, const DisplayMode &mode)
 {
@@ -33,7 +34,13 @@ Status DisplayScanout::disable(uint32_t source)
 }
 
 /* A source that is not visible is not carried: dxgkrnl has told us nothing is
- * on it, and the host was already told to scan out nothing. */
+ * on it, and the host was already told to scan out nothing.
+ *
+ * The primary handle is the one this driver gave dxgkrnl for its own
+ * allocation, so it is cast back rather than looked up: the allocation table
+ * is reached under a mutex, which this path may not take, and
+ * DisplaySources::forget_primary clears the handle before the allocation is
+ * destroyed. */
 Status DisplayScanout::refresh(DisplaySources &sources, bool presented)
 {
     platform_.require_irql_at_most(Irql::dispatch, "DisplayScanout::refresh");
@@ -41,7 +48,13 @@ Status DisplayScanout::refresh(DisplaySources &sources, bool presented)
     Status carried = Status::ok;
     for (uint32_t source = 0u; source < DisplaySources::source_count; source++) {
         if (!sources.visible(source)) continue;
-        carried = resources_[source].refresh(sources.scanout_address(source), presented);
+        const uint64_t address = sources.scanout_address(source);
+        GuestPageList  pages;
+        if (resources_[source].needs_pages(address)) {
+            auto *const primary = static_cast<Allocation *>(sources.primary(source));
+            if (primary != nullptr) pages = primary->pages_at(address, resources_[source].page_count());
+        }
+        carried = resources_[source].refresh(address, pages, presented);
     }
     return carried;
 }

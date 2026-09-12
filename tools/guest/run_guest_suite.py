@@ -164,6 +164,12 @@ def describe_panic(data):
     return f"bugcheck {code:#x} {BUGCHECKS.get(code, 'unnamed')} ({parameters})"
 
 
+DISPLAY_SIZE = (1280, 800)
+"""The mode the guest commits with QEMU's default -display size."""
+PLACEHOLDER_GREY = b"\xaa\xaa\xaa"
+"""The grey QEMU draws its "display output is not active" text in."""
+
+
 class Screendump:
     """One QMP screendump: the device's scanout as QEMU writes it, in PPM.
 
@@ -347,13 +353,16 @@ class GuestRun:
         self.say(f"report ok: {int(summary.group(1))} passed")
 
     def display(self):
-        """The composited desktop, as the host sees it (feature 038, US1).
+        """The frame the host scans out of the guest's primary (feature 038, US1).
 
-        The agent is a session 0 service and cannot open a window on the
-        interactive desktop, so what is asserted is what a frame arriving
-        actually proves: the host is scanning out a picture of the committed
-        size which is not one flat colour. A blank or absent scanout is all one
-        byte; a composited Windows desktop is not.
+        What a screendump can prove today is that the host reads *our* resource:
+        the dump is the committed mode's size, and it is no longer QEMU's "no
+        output" placeholder. What it cannot prove is that the picture is a
+        desktop - DWM composites with the GPU, and nothing executes GPU work
+        until the host executor and the guest transport land (features 042-044),
+        so the primary's pages are still all zeros. The driver's own log carries
+        the rest of the proof: the primary's aperture pages were recorded, and no
+        frame was refused for want of a backing.
         """
         dump = Screendump(self.work / "screen.ppm").capture(self.qmp)
         width, height = dump.size()
@@ -363,12 +372,24 @@ class GuestRun:
         body = pixels[pixels.index(b"255\n") + 4:]
         if len(body) < width * height * 3:
             raise StepFailed("display", f"the screendump holds {len(body)} bytes for {width}x{height}")
-        pixels_seen = width * height
-        common = max(collections.Counter(body[at:at + 3] for at in range(0, pixels_seen * 3, 3)).values())
-        if common * 100 >= pixels_seen * 95:
-            raise StepFailed("display", f"{common * 100 // pixels_seen}% of the {width}x{height} scanout is one "
-                                        "colour: the desktop is not reaching the host")
-        self.say(f"display ok: {width}x{height} composited")
+        if (width, height) != DISPLAY_SIZE:
+            raise StepFailed("display", f"the host scans out {width}x{height}, not "
+                                        f"{DISPLAY_SIZE[0]}x{DISPLAY_SIZE[1]}")
+        colours = collections.Counter(body[at:at + 3] for at in range(0, width * height * 3, 3))
+        if len(colours) != 1 and PLACEHOLDER_GREY in colours:
+            raise StepFailed("display", "the scanout is QEMU's placeholder, not the guest's primary")
+        driver = self.driver_log()
+        if "rvkgpu: aperture map segment 1" not in driver:
+            raise StepFailed("display", "the primary's aperture pages were never recorded")
+        refused = [line for line in driver.splitlines() if line.startswith("rvkgpu: scanout ")]
+        if refused:
+            raise StepFailed("display", f"a frame was not carried: {refused[0]}")
+        self.say(f"display ok: {width}x{height} scanned out of the guest's primary, "
+                 f"{len(colours)} colour(s)")
+
+    def driver_log(self):
+        path = self.work / "rvkgpu.log"
+        return path.read_text(errors="replace") if path.exists() else ""
 
     def install_and_test(self):
         if self.stage("sign"):

@@ -43,6 +43,13 @@ public:
     /* Of a block allocate_contiguous returned; never of null. */
     virtual uint64_t physical_address(void *block) = 0;
 
+    /* The physical addresses of `count` pages of the MDL `mdl`, from its page
+     * `first`, into `frames`. The MDL comes from dxgkrnl, so its extent is
+     * checked: invalid_parameter unless it covers those pages. Never at
+     * DISPATCH. */
+    [[nodiscard]] virtual Status read_page_frames(void *mdl, uint32_t first, uint32_t count,
+                                                  uint64_t *frames) = 0;
+
     virtual void zero(void *dst, size_t bytes) = 0;
     virtual void copy(void *dst, const void *src, size_t bytes) = 0;
 

@@ -26,6 +26,28 @@ invent a fake local VRAM segment with no storage behind it — VidMm will place
 allocations there and then ask you to `DXGK_OPERATION_TRANSFER` bytes into a
 place that does not exist.
 
+### What a primary's placement really turns on
+
+Reported and tested in feature 038 on a real Windows 11 guest: **an allocation
+the display scans out must be marked
+`DXGK_ALLOCATIONINFOFLAGS.AccessedPhysically` (0x8000) in
+`DxgkDdiCreateAllocation`.** Without it VidMm leaves the primary in its own
+implicit system-memory segment whatever `PreferredSegment` and
+`SupportedRead/WriteSegmentSet` say, `DXGK_OPERATION_MAP_APERTURE_SEGMENT` is
+never called for it, and `DxgkDdiSetVidPnSourceAddress` answers
+`PrimarySegment` 0, `PrimaryAddress` 0 - an address with no pages behind it.
+With it, VidMm pins the allocation in the segment you prefer, maps it into the
+aperture with an MDL of its guest pages, and the source address becomes
+`BaseAddress + offset`. The display has no GPU MMU to read through, which is
+what the flag is telling VidMm.
+
+The corollary for a paravirtual driver: **the pages are the only thing worth
+recording.** An aperture address means nothing to a device that reads guest
+physical memory, so `DXGK_OPERATION_MAP_APERTURE_SEGMENT` is where the driver
+learns where a frame is - one MDL per mapping, read with `MmGetMdlPfnArray`,
+kept per allocation and turned back into memory entries when the host is told
+to read it.
+
 ## Residency and the paging queue
 
 WDDM 2.0 made this asynchronous and it has not changed since. The flow:

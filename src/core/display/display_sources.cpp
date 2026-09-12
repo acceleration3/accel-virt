@@ -4,7 +4,7 @@ namespace av {
 
 DisplaySources::DisplaySources(Platform &platform)
     : platform_(platform), private_formats_{}, committed_{}, vsync_enabled_(false),
-      scanout_addresses_{}, visible_{} {}
+      scanout_addresses_{}, primaries_{}, visible_{} {}
 
 Status DisplaySources::set_private_format(uint32_t source, uint32_t attribute)
 {
@@ -47,12 +47,30 @@ bool DisplaySources::vsync_enabled() const
     return vsync_enabled_;
 }
 
-Status DisplaySources::set_scanout(uint32_t source, int64_t address)
+Status DisplaySources::set_scanout(uint32_t source, int64_t address, void *primary)
 {
     platform_.require_irql_at_most(Irql::isr, "DisplaySources::set_scanout");
     if (source >= source_count) return Status::invalid_parameter;
+    platform_.store_atomic(primaries_[source], reinterpret_cast<uintptr_t>(primary));
     platform_.store_atomic(scanout_addresses_[source], static_cast<uint64_t>(address));
     return Status::ok;
+}
+
+void *DisplaySources::primary(uint32_t source)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "DisplaySources::primary");
+    if (source >= source_count) return nullptr;
+    return reinterpret_cast<void *>(static_cast<uintptr_t>(platform_.load_atomic(primaries_[source])));
+}
+
+void DisplaySources::forget_primary(void *primary)
+{
+    platform_.require_irql_at_most(Irql::passive, "DisplaySources::forget_primary");
+    for (uint32_t source = 0u; source < source_count; source++) {
+        if (platform_.load_atomic(primaries_[source]) != reinterpret_cast<uintptr_t>(primary)) continue;
+        platform_.store_atomic(scanout_addresses_[source], 0u);
+        platform_.store_atomic(primaries_[source], 0u);
+    }
 }
 
 uint64_t DisplaySources::scanout_address(uint32_t source)

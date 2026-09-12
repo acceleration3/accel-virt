@@ -86,13 +86,13 @@ enum : int32_t {
 }  // namespace
 
 Adapter::Adapter(Platform &platform, void *physical_device_object)
-    : platform_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
+    : platform_(platform), budget_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
       resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), geometry_(platform),
       segment_(platform),
       modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
-      cursor_(platform, device_), scanout_(platform, device_), presented_fence_(0u), budget_(platform),
+      cursor_(platform, device_), scanout_(platform, budget_, device_), presented_fence_(0u),
       started_(false), present_(true) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
@@ -407,10 +407,15 @@ int32_t Adapter::create_allocation(DxgkargCreateAllocationRecord *request)
     return created;
 }
 
+/* A source showing one of these must stop before the allocation goes: the DPC
+ * follows the handle to find the primary's pages. */
 int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    if (request->pAllocationList != nullptr)
+        for (uint32_t index = 0u; index < request->NumAllocations; index++)
+            sources_.forget_primary(request->pAllocationList[index]);
     return NtStatus(allocations_.destroy(*request)).value();
 }
 
@@ -517,7 +522,7 @@ int32_t Adapter::build_paging_buffer(DxgkargBuildPagingBufferRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::build_paging_buffer");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return PagingRequest(platform_, *request).build().value();
+    return PagingRequest(platform_, allocations_, budget_, *request).build().value();
 }
 
 int32_t Adapter::reset_from_timeout()
@@ -672,10 +677,27 @@ int32_t Adapter::set_vidpn_source_address(const DxgkargSetVidPnSourceAddressReco
 {
     platform_.require_irql_at_most(Irql::isr, "Adapter::set_vidpn_source_address");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    if (request->hAllocation == nullptr) return NtStatus(sources_.set_scanout(request->VidPnSourceId, 0)).value();
+    if (request->hAllocation == nullptr)
+        return NtStatus(sources_.set_scanout(request->VidPnSourceId, 0, nullptr)).value();
     if (request->PrimarySegment != ApertureSegment::segment_id && request->PrimarySegment != system_memory_driver_segment)
         return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(sources_.set_scanout(request->VidPnSourceId, request->PrimaryAddress)).value();
+    log_scanout(*request);
+    return NtStatus(sources_.set_scanout(request->VidPnSourceId, request->PrimaryAddress, request->hAllocation))
+        .value();
+}
+
+void Adapter::log_scanout(const DxgkargSetVidPnSourceAddressRecord &request)
+{
+    if (platform_.current_irql() >= Irql::dispatch || !budget_.allows()) return;
+    char       bytes[96];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append("rvkgpu: SetVidPnSourceAddress source ");
+    message.append_decimal(request.VidPnSourceId);
+    message.append(" segment ");
+    message.append_decimal(request.PrimarySegment);
+    message.append(" address 0x");
+    message.append_hex(static_cast<uint64_t>(request.PrimaryAddress), 16u);
+    platform_.log(message.text());
 }
 
 int32_t Adapter::set_vidpn_source_visibility(const DxgkargSetVidPnSourceVisibilityRecord *request)
@@ -691,7 +713,9 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::present");
     if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return PresentRequest(platform_, *request).present().value();
+    const int32_t presented = PresentRequest(platform_, *request).present().value();
+    log_status("rvkgpu: Present", presented);
+    return presented;
 }
 
 int32_t Adapter::set_pointer_shape(const DxgkargSetPointerShapeRecord *request)

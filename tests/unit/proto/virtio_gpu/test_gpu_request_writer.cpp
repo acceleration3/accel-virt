@@ -1,5 +1,6 @@
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/resources/guest_page_list.hpp"
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
 
 #include <cstdint>
@@ -29,6 +30,12 @@ struct Buffer {
     std::uint8_t bytes[GpuRequestWriter::max_request_size + 8u];
 };
 
+/* Room for a backing request with several memory entries. */
+struct BigBuffer {
+    BigBuffer() { std::memset(bytes, 0xEE, sizeof bytes); }
+    std::uint8_t bytes[256u];
+};
+
 }  // namespace
 
 TEST(gpu_request_writer_create_2d, is_virtio_gpu_resource_create_2d)
@@ -55,6 +62,45 @@ TEST(gpu_request_writer_attach_backing, is_one_memory_entry)
   CHECK_EQ(u32(buffer.bytes, 36u), 1u);
   CHECK_EQ(u32(buffer.bytes, 40u), 16384u);
   CHECK_EQ(u32(buffer.bytes, 44u), 0u); }
+
+/* One memory entry per run of adjacent pages, each covering the whole run. */
+TEST(gpu_request_writer_attach_backing_pages, joins_adjacent_pages_into_one_entry)
+{ BigBuffer buffer;
+  GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  const std::uint64_t frames[] = {0x1000u, 0x2000u, 0x9000u};
+  CHECK_STATUS(writer.attach_backing_pages(3u, av::GuestPageList(frames, 3u)), Status::ok);
+  CHECK_EQ(writer.length(), 64u);
+  CHECK(plain_header(buffer.bytes, 0x0106u));
+  CHECK_EQ(u32(buffer.bytes, 24u), 3u);
+  CHECK_EQ(u32(buffer.bytes, 28u), 2u);
+  CHECK_EQ(u32(buffer.bytes, 32u), 0x1000u);
+  CHECK_EQ(u32(buffer.bytes, 36u), 0u);
+  CHECK_EQ(u32(buffer.bytes, 40u), 0x2000u);
+  CHECK_EQ(u32(buffer.bytes, 44u), 0u);
+  CHECK_EQ(u32(buffer.bytes, 48u), 0x9000u);
+  CHECK_EQ(u32(buffer.bytes, 52u), 0u);
+  CHECK_EQ(u32(buffer.bytes, 56u), 0x1000u);
+  CHECK_EQ(u32(buffer.bytes, 60u), 0u); }
+
+TEST(gpu_request_writer_attach_backing_pages, refuses_a_list_with_a_page_that_was_never_mapped)
+{ BigBuffer buffer;
+  GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  const std::uint64_t frames[] = {0x1000u, 0u};
+  CHECK_STATUS(writer.attach_backing_pages(3u, av::GuestPageList(frames, 2u)), Status::invalid_parameter);
+  CHECK_EQ(writer.length(), 0u); }
+
+TEST(gpu_request_writer_attach_backing_pages, refuses_an_empty_list)
+{ BigBuffer buffer;
+  GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  CHECK_STATUS(writer.attach_backing_pages(3u, av::GuestPageList()), Status::invalid_parameter);
+  CHECK_EQ(writer.length(), 0u); }
+
+TEST(gpu_request_writer_attach_backing_pages, refuses_more_runs_than_the_destination_holds)
+{ BigBuffer buffer;
+  const std::uint64_t frames[] = {0x1000u, 0x3000u, 0x5000u};
+  GpuRequestWriter narrow(buffer.bytes, 64u);
+  CHECK_STATUS(narrow.attach_backing_pages(3u, av::GuestPageList(frames, 3u)), Status::too_large);
+  CHECK_EQ(narrow.length(), 0u); }
 
 TEST(gpu_request_writer_transfer_to_host_2d, covers_the_whole_resource)
 { Buffer buffer;

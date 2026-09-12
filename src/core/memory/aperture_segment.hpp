@@ -26,6 +26,9 @@ public:
      * adapter (CreatePhysicalAdapterSegments). */
     static constexpr uint32_t system_memory_segment_id = segment_id + 1u;
     static constexpr uint64_t page_bytes = 0x1000u;
+    /* Where the segment starts, as basicrender.sys reports it: the addresses
+     * dxgkrnl hands back for an allocation in it are offsets from here. */
+    static constexpr int64_t  base_address = 0xC0000000;
 
     explicit ApertureSegment(Platform &platform);
     ApertureSegment(const ApertureSegment &) = delete;
@@ -47,7 +50,6 @@ public:
 
 private:
     static constexpr uint32_t flags = 0x15u;                 /* Aperture | CpuVisible | CacheCoherent */
-    static constexpr int64_t  base_address = 0xC0000000;     /* as basicrender.sys */
     static constexpr uint32_t physical_adapter_bytes = 4u;   /* DXGK_QUERYSEGMENTIN4 */
 
     Platform &platform_;

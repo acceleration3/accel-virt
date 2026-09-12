@@ -96,7 +96,7 @@ class GuestSuiteRun(unittest.TestCase):
                           "powerdown"])
         self.assertEqual((self.work / "report.txt").read_text(), PASSING_REPORT)
         self.assertIn("service=rvkgpu", (self.work / "device.txt").read_text())
-        self.assertEqual((self.work / "rvkgpu.log").read_text(), "rvkgpu: DriverEntry\n")
+        self.assertIn("rvkgpu: DriverEntry", (self.work / "rvkgpu.log").read_text())
         self.assertEqual((self.work / "diag" / "system.txt").read_text(), "System events\n")
         self.assertEqual((self.work / "diag" / "dumps" / "WD-1.dmp").read_text(), "live dump")
         self.assertEqual(sorted(p.name for p in (self.work / "symbols").iterdir()), ["rvkgpu.pdb", "rvkgpu.sys"])
@@ -304,28 +304,50 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("absent.exe does not exist", missing.stdout)
         self.assert_clean()
 
-    def test_the_display_step_asserts_the_host_is_scanning_out_a_picture(self):
-        """A frame arriving is what the screendump proves; a flat one is not one.
+    def test_the_display_step_asserts_the_host_scans_out_the_guest_s_primary(self):
+        """What a screendump can prove is that the host reads our resource.
 
-        The agent is a session 0 service and cannot open a window on the
-        interactive desktop, so the run asserts what the dump can show: the
-        committed size, and pixels that are not all one byte.
+        The picture itself is not a desktop yet - nothing executes GPU work
+        until features 042-044 - so the step asserts the committed size, that
+        the dump is not QEMU's placeholder, and that the driver recorded the
+        primary's aperture pages and refused no frame.
         """
         self.script(screendump=[1280, 800])
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("display ok: 1280x800 composited", result.stdout)
+        self.assertIn("display ok: 1280x800 scanned out of the guest's primary", result.stdout)
         self.assertEqual(Screendump(self.work / "screen.ppm").size(), (1280, 800))
         self.assertIn("screendump 1280x800", self.journal_lines())
 
-    def test_a_blank_scanout_fails_the_run(self):
-        """A frame of one colour is what an unattached or wrong backing looks
-        like: mostly zeros, which must not read as a desktop."""
-        self.script(screendump=[640, 480], screendump_flat=True)
+    def test_a_scanout_of_the_wrong_size_fails_the_run(self):
+        self.script(screendump=[640, 480])
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("is one colour: the desktop is not reaching the host",
-                      (self.work / "verdict.txt").read_text())
+        self.assertIn("the host scans out 640x480, not 1280x800", (self.work / "verdict.txt").read_text())
+
+    def test_qemus_placeholder_is_not_a_scanout(self):
+        """QEMU draws "display output is not active" in grey on black when no
+        scanout is programmed; that is the absence of a frame, not a frame."""
+        self.script(screendump=[1280, 800], screendump_placeholder=True)
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("QEMU's placeholder, not the guest's primary", (self.work / "verdict.txt").read_text())
+
+    def test_a_primary_with_no_recorded_pages_fails_the_run(self):
+        """Without DXGK_OPERATION_MAP_APERTURE_SEGMENT the driver has no pages
+        to attach, and the host reads whatever sits at the aperture address."""
+        self.script(screendump=[1280, 800], driver_log=["rvkgpu: DriverEntry"])
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("aperture pages were never recorded", (self.work / "verdict.txt").read_text())
+
+    def test_a_refused_frame_fails_the_run(self):
+        self.script(screendump=[1280, 800],
+                    driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
+                                "rvkgpu: scanout 0 address 0x00000000c0000000 pages 0 runs 0 needs 1000 status 1"])
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("a frame was not carried: rvkgpu: scanout 0", (self.work / "verdict.txt").read_text())
 
     def test_without_an_image_it_says_how_to_name_one(self):
         environment = {key: value for key, value in self.environment.items() if key != "AV_GUEST_IMAGE"}

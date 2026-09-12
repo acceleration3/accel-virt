@@ -10,6 +10,7 @@
 #include "core/ddi/dxgk_node_metadata_record.hpp"
 #include "core/ddi/dxgk_open_allocation_info_record.hpp"
 #include "core/ddi/dxgk_pte_record.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_map_aperture_segment_record.hpp"
 #include "core/ddi/dxgkarg_build_paging_buffer_record.hpp"
 #include "core/ddi/dxgkarg_close_allocation_record.hpp"
 #include "core/ddi/dxgkarg_collect_dbg_info_record.hpp"
@@ -310,51 +311,6 @@ TEST(ddi_scenario, escape_and_debug_collection_through_the_table)
 
 /* ---- The desktop on the host (feature 038) ------------------------------------ */
 
-/* The whole display path through the DDI table dxgkrnl calls: a committed mode
- * makes the host's resource, the primary dxgkrnl hands over at device IRQL is
- * attached and scanned out, and the frame is carried once. */
-TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
-{ LoadedDriver driver;
-  Device device(driver, 0u);
-  CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
-  void          *adapter = device.fdo().context();
-  const DdiTable &table = driver.table();
-  av::FakeVidPn   vidpn;
-  vidpn.add_path(0u, 0u);
-  av::D3dkmdtVidPnSourceModeRecord pinned = {};
-  av::DisplayMode(1280u, 800u).describe(pinned);
-  vidpn.source_modes(0u).seed(pinned, true);
-  const av::DxgkargCommitVidPnRecord commit = {&vidpn, 0u, 0, nullptr, 0u, 0u};
-  const auto commit_vidpn = reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargCommitVidPnRecord *)>(
-      table.routine(DdiSlot::DxgkDdiCommitVidPn));
-  CHECK_EQ(commit_vidpn(adapter, &commit), 0);
-  const av::DxgkargSetVidPnSourceVisibilityRecord visible = {0u, 1u, {}};
-  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSetVidPnSourceVisibilityRecord *)>(
-               table.routine(DdiSlot::DxgkDdiSetVidPnSourceVisibility))(adapter, &visible),
-           0);
-  av::DxgkargSetVidPnSourceAddressRecord address = {};
-  address.PrimaryAddress = 0x700000;
-  address.PrimarySegment = av::ApertureSegment::segment_id;
-  address.hAllocation = adapter;
-  driver.platform().set_irql(av::Irql::isr);
-  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSetVidPnSourceAddressRecord *)>(
-               table.routine(DdiSlot::DxgkDdiSetVidPnSourceAddress))(adapter, &address),
-           0);
-  driver.platform().set_irql(av::Irql::dispatch);
-  reinterpret_cast<void (*)(void *)>(table.routine(DdiSlot::DxgkDdiDpcRoutine))(adapter);
-  driver.platform().set_irql(av::Irql::passive);
-  const av::FakeCommonConfig::Queue &control_queue = device.function().common().queue(0u);
-  av::FakeVirtqueueDevice control(driver.platform(), control_queue.desc, control_queue.driver, control_queue.device,
-                                  control_queue.size);
-  CHECK_EQ(control.respond_all(0x1100u), 5u);
-  CHECK_EQ(control.request_type(0u), 0x0101u);        /* RESOURCE_CREATE_2D */
-  CHECK_EQ(control.request_type(1u), 0x0106u);        /* RESOURCE_ATTACH_BACKING */
-  CHECK_EQ(control.request_type(2u), 0x0103u);        /* SET_SCANOUT */
-  CHECK_EQ(control.request_type(3u), 0x0105u);        /* TRANSFER_TO_HOST_2D */
-  CHECK_EQ(control.request_type(4u), 0x0104u);        /* RESOURCE_FLUSH */
-  CHECK_EQ(device.fdo().remove_device(), 0); }
-
 /* ---- Memory model (feature 008) ---------------------------------------------- */
 
 TEST(ddi_scenario, vidmm_accepts_the_aperture_segment_after_start)
@@ -381,12 +337,19 @@ TEST(ddi_scenario, the_render_core_is_created_once_present_arrives)
 
 namespace {
 
+std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
+{
+    return std::uint32_t{bytes[offset]} | std::uint32_t{bytes[offset + 1u]} << 8u |
+           std::uint32_t{bytes[offset + 2u]} << 16u | std::uint32_t{bytes[offset + 3u]} << 24u;
+}
+
 /* The runtime side of dxgkrnl for one adapter: the calls it makes to create a
  * primary for DWM and open it on a device, through the registered table. */
 class Runtime {
 public:
-    Runtime(const DdiTable &table, void *adapter) : table_(table), adapter_(adapter), surface_{1024u, 768u, 21, 60u, 1u, 0u},
-        descriptor_{}, info_{}, open_{}, device_(nullptr) {}
+    Runtime(const DdiTable &table, void *adapter, std::uint32_t width = 1024u, std::uint32_t height = 768u)
+        : table_(table), adapter_(adapter), surface_{width, height, 21, 60u, 1u, 0u}, descriptor_{}, info_{},
+          open_{}, device_(nullptr), frames_{} {}
 
     template <typename Routine>
     Routine routine(DdiSlot slot) const { return reinterpret_cast<Routine>(table_.routine(slot)); }
@@ -416,6 +379,27 @@ public:
     }
 
     std::uint32_t flags2() const { return info_.Flags2; }
+    void         *primary() const { return info_.hAllocation; }
+
+    /* VidMm putting the primary in the aperture segment, which is where the
+     * driver learns the guest pages the host must read it from. */
+    std::int32_t map_aperture(av::MockPlatform &platform, std::uint32_t pages)
+    {
+        for (std::uint32_t index = 0u; index < pages; index++) frames_[index] = first_frame + index * page_bytes;
+        av::DxgkBuildPagingBufferMapApertureSegmentRecord mapping = {};
+        mapping.hAllocation = info_.hAllocation;
+        mapping.SegmentId = av::ApertureSegment::segment_id;
+        mapping.NumberOfPages = pages;
+        mapping.pMdl = platform.attach_page_frames(frames_, pages);
+        std::uint8_t                       dma[64] = {};
+        av::DxgkargBuildPagingBufferRecord paging = {};
+        paging.pDmaBuffer = dma;
+        paging.DmaSize = sizeof dma;
+        paging.Operation = 5;   /* DXGK_OPERATION_MAP_APERTURE_SEGMENT */
+        std::memcpy(paging.Reserved, &mapping, sizeof mapping);
+        return routine<std::int32_t (*)(void *, av::DxgkargBuildPagingBufferRecord *)>(
+            DdiSlot::DxgkDdiBuildPagingBuffer)(adapter_, &paging);
+    }
 
     std::int32_t create_device()
     {
@@ -484,9 +468,66 @@ private:
     void                                      *device_;
     av::FakeHandleTable                        handles_;
     std::uint32_t                              kernel_handle_ = 0u;
+    static constexpr std::uint64_t             page_bytes = 0x1000u;
+    static constexpr std::uint64_t             first_frame = 0x40000000u;
+    static constexpr std::uint32_t             max_pages = 1024u;
+    std::uint64_t                              frames_[max_pages];
 };
 
 }  // namespace
+
+/* The whole display path through the DDI table dxgkrnl calls: a committed mode
+ * makes the host's resource, the primary dxgkrnl hands over at device IRQL is
+ * attached and scanned out, and the frame is carried once. */
+TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  void          *adapter = device.fdo().context();
+  const DdiTable &table = driver.table();
+  Runtime         runtime(table, adapter, 1280u, 800u);
+  CHECK_EQ(runtime.create_primary(), 0);
+  CHECK_EQ(runtime.map_aperture(driver.platform(), 1000u), 0);
+  av::FakeVidPn   vidpn;
+  vidpn.add_path(0u, 0u);
+  av::D3dkmdtVidPnSourceModeRecord pinned = {};
+  av::DisplayMode(1280u, 800u).describe(pinned);
+  vidpn.source_modes(0u).seed(pinned, true);
+  const av::DxgkargCommitVidPnRecord commit = {&vidpn, 0u, 0, nullptr, 0u, 0u};
+  const auto commit_vidpn = reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargCommitVidPnRecord *)>(
+      table.routine(DdiSlot::DxgkDdiCommitVidPn));
+  CHECK_EQ(commit_vidpn(adapter, &commit), 0);
+  const av::DxgkargSetVidPnSourceVisibilityRecord visible = {0u, 1u, {}};
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSetVidPnSourceVisibilityRecord *)>(
+               table.routine(DdiSlot::DxgkDdiSetVidPnSourceVisibility))(adapter, &visible),
+           0);
+  av::DxgkargSetVidPnSourceAddressRecord address = {};
+  address.PrimaryAddress = av::ApertureSegment::base_address;
+  address.PrimarySegment = av::ApertureSegment::segment_id;
+  address.hAllocation = runtime.primary();
+  driver.platform().set_irql(av::Irql::isr);
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSetVidPnSourceAddressRecord *)>(
+               table.routine(DdiSlot::DxgkDdiSetVidPnSourceAddress))(adapter, &address),
+           0);
+  driver.platform().set_irql(av::Irql::dispatch);
+  reinterpret_cast<void (*)(void *)>(table.routine(DdiSlot::DxgkDdiDpcRoutine))(adapter);
+  driver.platform().set_irql(av::Irql::passive);
+  const av::FakeCommonConfig::Queue &control_queue = device.function().common().queue(0u);
+  av::FakeVirtqueueDevice control(driver.platform(), control_queue.desc, control_queue.driver, control_queue.device,
+                                  control_queue.size);
+  CHECK_EQ(control.respond_all(0x1100u), 5u);
+  CHECK_EQ(control.request_type(0u), 0x0101u);        /* RESOURCE_CREATE_2D */
+  CHECK_EQ(control.request_type(1u), 0x0106u);        /* RESOURCE_ATTACH_BACKING */
+  CHECK_EQ(control.request_type(2u), 0x0103u);        /* SET_SCANOUT */
+  CHECK_EQ(control.request_type(3u), 0x0105u);        /* TRANSFER_TO_HOST_2D */
+  CHECK_EQ(control.request_type(4u), 0x0104u);        /* RESOURCE_FLUSH */
+  /* One memory entry, because the pages VidMm gave are adjacent, and it is the
+   * guest physical address of the first one - not the aperture address. */
+  CHECK_EQ(u32(control.request(1u), 28u), 1u);
+  CHECK_EQ(u32(control.request(1u), 32u), 0x40000000u);
+  CHECK_EQ(u32(control.request(1u), 40u), 1280u * 800u * 4u);
+  CHECK_EQ(device.fdo().remove_device(), 0); }
 
 TEST(ddi_scenario, a_primary_lives_from_standard_allocation_to_destruction)
 { LoadedDriver driver;
@@ -692,9 +733,10 @@ TEST(ddi_scenario, a_primary_scans_out_at_vsync_while_presents_complete)
   av::FakeDisplayModeManager dmm(driver.platform(), driver.table(), device.fdo().context());
   { av::FakeVidPn vidpn;
     CHECK_EQ(dmm.set_mode(vidpn, 1280u, 800u), 0); }
-  int primary = 0;
+  Runtime runtime(driver.table(), device.fdo().context(), 1280u, 800u);
+  CHECK_EQ(runtime.create_primary(), 0);
   const std::uint64_t frame = 10000000u / 60u;
-  CHECK_EQ(dmm.show_primary(&primary, 0x0000000200000000ll), 0);
+  CHECK_EQ(dmm.show_primary(runtime.primary(), 0x0000000200000000ll), 0);
   CHECK_EQ(dmm.set_visible(true), 0);
   CHECK_EQ(dmm.control_vsync(true), 0);
   driver.platform().run_timers(frame * 2u);

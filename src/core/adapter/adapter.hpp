@@ -251,12 +251,18 @@ private:
      * nothing when the path is gone. */
     [[nodiscard]] Status follow_commit(uint32_t source);
     void                 log_status(const char *step, int32_t status);
+    /* Where dxgkrnl points a source, which is the only place the scanout can
+     * look for a frame. Skipped at device IRQL, where the budget's lock is
+     * illegal; dxgkrnl only calls there for an MMIO flip on vsync, which this
+     * driver does not report. */
+    void                 log_scanout(const DxgkargSetVidPnSourceAddressRecord &request);
     /* A step whose answer is only meaningful next to the handle it was given -
      * DxgkDdiCreateDevice receives the runtime's handle and answers with the
      * driver's, and a guest that ends up with neither needs both in the log. */
     void                 log_handle(const char *step, const void *handle, int32_t status);
 
     Platform                      &platform_;
+    LogBudget                      budget_;
     void                          *physical_device_object_;
     DxgkrnlInterface               dxgkrnl_;
     ResourceList                   resources_;
@@ -281,7 +287,6 @@ private:
     DisplayScanout                 scanout_;
     /* The node fence the host was last shown a frame for. */
     uint32_t                       presented_fence_;
-    LogBudget                      budget_;
     bool                           started_;
     bool                           present_;
 

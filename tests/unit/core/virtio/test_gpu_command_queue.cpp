@@ -47,8 +47,9 @@ public:
           device_(mapped_.platform(), mapped_.mappings().address_of(mapped_.layout().device()),
                   mapped_.layout().device().length()),
           transport_(mapped_.platform(), common_, notify_, isr_, device_, mapped_.layout().notify_multiplier()),
-          control_(mapped_.platform(), transport_, 0u, GpuRequestWriter::response_size, LockRank::control_queue),
-          cursor_(mapped_.platform(), transport_, 1u, 0u, LockRank::cursor_queue)
+          control_(mapped_.platform(), transport_, 0u, GpuRequestWriter::response_size,
+                   GpuRequestWriter::max_backing_request_size, LockRank::control_queue),
+          cursor_(mapped_.platform(), transport_, 1u, 0u, 0u, LockRank::cursor_queue)
     {
         CHECK_STATUS(mapped_status_, Status::ok);
         CHECK_STATUS(transport_.negotiate(0u, VirtioPciTransport::feature_version_1), Status::ok);
@@ -79,6 +80,8 @@ private:
 };
 
 std::uint8_t request_bytes[GpuRequestWriter::max_request_size];
+/* A backing request with more memory entries than a narrow slot could hold. */
+std::uint8_t wide_request_bytes[GpuRequestWriter::max_backing_request_size];
 
 std::size_t move_request(std::int32_t x)
 {
@@ -163,7 +166,10 @@ TEST(gpu_command_queue_send, refuses_before_activation_and_out_of_bounds_request
   CHECK_STATUS(fixture.start(), Status::ok);
   CHECK_STATUS(fixture.control().send(request_bytes, 0u), Status::invalid_parameter);
   CHECK_STATUS(fixture.control().send(nullptr, 8u), Status::invalid_parameter);
-  CHECK_STATUS(fixture.control().send(request_bytes, GpuRequestWriter::max_request_size + 1u), Status::invalid_parameter);
+  /* Wider than the one wide slot, and wider than any slot of a queue that has
+   * none: refused, not truncated. */
+  CHECK_STATUS(fixture.control().send(wide_request_bytes, sizeof wide_request_bytes + 1u), Status::too_large);
+  CHECK_STATUS(fixture.cursor().send(request_bytes, GpuRequestWriter::max_request_size + 1u), Status::too_large);
   CHECK_STATUS(fixture.control().activate(0u), Status::invalid_state);
   CHECK_EQ(fixture.control().in_flight(), 0u); }
 
@@ -208,4 +214,27 @@ TEST(gpu_command_queue_send, a_queue_smaller_than_its_slots_runs_out_of_descript
       CHECK_STATUS(fixture.control().send(request_bytes, move_request(1)), Status::ok);
   CHECK_STATUS(fixture.control().send(request_bytes, move_request(1)), Status::no_space);
   CHECK_EQ(fixture.control().in_flight(), 4u);
+  CHECK(fixture.control().invariants_hold()); }
+
+/* The backing of a primary is the one request that does not fit a narrow slot:
+ * it goes in the wide one, and a second cannot start until the first is done. */
+TEST(gpu_command_queue_send, a_wide_request_uses_the_wide_slot_alone)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  const std::size_t wide = GpuRequestWriter::max_request_size + 16u;
+  std::memset(wide_request_bytes, 0xA5, sizeof wide_request_bytes);
+  CHECK_STATUS(fixture.control().send(wide_request_bytes, wide), Status::ok);
+  CHECK_EQ(fixture.control().in_flight(), 1u);
+  CHECK_STATUS(fixture.control().send(wide_request_bytes, wide), Status::no_space);
+  /* A narrow request still has its own slots. */
+  CHECK_STATUS(fixture.control().send(request_bytes, move_request(1)), Status::ok);
+  FakeVirtqueueDevice device = fixture.device(0u);
+  CHECK_EQ(device.respond_all(ok_nodata), 2u);
+  CHECK_EQ(device.seen(0u).length, wide);
+  CHECK_EQ(device.request(0u)[FakeVirtqueueDevice::request_bytes - 1u], 0xA5u);
+  std::uint32_t completed = 0u, refused = 0u;
+  CHECK_STATUS(fixture.control().harvest(completed, refused), Status::ok);
+  CHECK_EQ(completed, 2u);
+  CHECK_EQ(refused, 0u);
+  CHECK_STATUS(fixture.control().send(wide_request_bytes, wide), Status::ok);
   CHECK(fixture.control().invariants_hold()); }

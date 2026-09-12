@@ -14,12 +14,13 @@
 namespace av {
 
 class DisplayMode;
+class LogBudget;
 class VirtioGpuDevice;
 struct DisplayScanoutProbe;
 
 class DisplayScanout {
 public:
-    DisplayScanout(Platform &platform, ObjectStorage<VirtioGpuDevice> &device);
+    DisplayScanout(Platform &platform, LogBudget &budget, ObjectStorage<VirtioGpuDevice> &device);
     DisplayScanout(const DisplayScanout &) = delete;
     DisplayScanout &operator=(const DisplayScanout &) = delete;
 

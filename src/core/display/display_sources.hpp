@@ -35,10 +35,18 @@ public:
     const DisplayMode   *committed_mode(uint32_t source) const;
     void                 set_vsync(bool enabled);
     bool                 vsync_enabled() const;
-    /* The primary's segment address; zero when the source shows none. */
-    [[nodiscard]] Status set_scanout(uint32_t source, int64_t address);
+    /* The primary's segment address and the allocation it belongs to; a null
+     * allocation means the source shows none. */
+    [[nodiscard]] Status set_scanout(uint32_t source, int64_t address, void *primary);
     /* Zero for a source with no primary, or not the adapter's. */
     uint64_t             scanout_address(uint32_t source);
+    /* The allocation handle the driver gave dxgkrnl for the primary, which is
+     * what knows where its pages are; null when the source shows none.
+     * Dispatch at most: the DPC asks before it carries the frame. */
+    void                *primary(uint32_t source);
+    /* DestroyAllocation: a source showing that allocation shows nothing, so
+     * the DPC never reads a handle that has been freed. */
+    void                 forget_primary(void *primary);
     [[nodiscard]] Status set_visible(uint32_t source, bool visible);
     /* Dispatch at most: the DPC asks before carrying a frame. */
     bool                 visible(uint32_t source);
@@ -49,6 +57,9 @@ private:
     const DisplayMode *committed_[source_count];
     bool               vsync_enabled_;
     uint64_t           scanout_addresses_[source_count];
+    /* The primary's allocation handle, stored as an integer because it is
+     * written at device IRQL and read from the DPC. */
+    uint64_t           primaries_[source_count];
     /* Written at PASSIVE, read from the DPC that carries the frame, so it is
      * atomic rather than a bool the reader might tear. */
     uint64_t           visible_[source_count];

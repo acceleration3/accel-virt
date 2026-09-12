@@ -55,7 +55,7 @@ private:
 TEST(synthetic_vsync_enable, reports_crtc_vsync_with_the_scanout_every_frame)
 { Fixture fixture;
   CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
-  CHECK_STATUS(fixture.sources().set_scanout(0u, 0x40000000), Status::ok);
+  CHECK_STATUS(fixture.sources().set_scanout(0u, 0x40000000, nullptr), Status::ok);
   CHECK_STATUS(fixture.vsync().enable(), Status::ok);
   fixture.platform().run_timers(frame * 3u);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 3u);

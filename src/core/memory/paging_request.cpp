@@ -3,18 +3,26 @@
 #include "core/ddi/dxgk_build_paging_buffer_copy_page_table_entries_record.hpp"
 #include "core/ddi/dxgk_build_paging_buffer_copy_range_record.hpp"
 #include "core/ddi/dxgk_build_paging_buffer_fill_virtual_record.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_map_aperture_segment_record.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_unmap_aperture_segment_record.hpp"
 #include "core/ddi/dxgk_build_paging_buffer_flush_tlb_record.hpp"
 #include "core/ddi/dxgk_build_paging_buffer_transfer_virtual_record.hpp"
 #include "core/ddi/dxgk_build_paging_buffer_update_page_table_record.hpp"
 #include "core/ddi/dxgkarg_build_paging_buffer_record.hpp"
+#include "core/memory/allocation.hpp"
+#include "core/memory/allocation_table.hpp"
+#include "core/memory/aperture_segment.hpp"
 #include "core/memory/gpu_mmu_geometry.hpp"
 #include "core/memory/page_table_update.hpp"
+#include "core/platform/log_budget.hpp"
+#include "core/support/text_buffer.hpp"
 #include "proto/commands/paging_command_writer.hpp"
 
 namespace av {
 
-PagingRequest::PagingRequest(Platform &platform, DxgkargBuildPagingBufferRecord &request)
-    : platform_(platform), request_(request) {}
+PagingRequest::PagingRequest(Platform &platform, AllocationTable &allocations, LogBudget &budget,
+                             DxgkargBuildPagingBufferRecord &request)
+    : platform_(platform), allocations_(allocations), budget_(budget), request_(request) {}
 
 template <typename Operation> void PagingRequest::read_operation(Operation &operation) const
 {
@@ -27,16 +35,73 @@ NtStatus PagingRequest::build()
     PagingCommandWriter writer(static_cast<uint8_t *>(request_.pDmaBuffer), request_.DmaSize);
     switch (request_.Operation) {
     case discard_content:
-    case map_aperture_segment:
-    case unmap_aperture_segment:
     case notify_residency: return NtStatus(Status::ok);
+    case map_aperture_segment: return NtStatus(map_aperture());
+    case unmap_aperture_segment: return NtStatus(unmap_aperture());
     case update_page_table: return NtStatus(update_table());
     case flush_tlb: return finish(write_flush(writer), writer.length());
     case virtual_fill: return finish(write_fill(writer), writer.length());
     case virtual_transfer: return finish(write_transfer(writer), writer.length());
     case copy_page_table_entries: return copy_entries(writer);
-    default: return NtStatus(Status::invalid_parameter);
+    default: return refuse();
     }
+}
+
+Status PagingRequest::map_aperture()
+{
+    DxgkBuildPagingBufferMapApertureSegmentRecord map;
+    read_operation(map);
+    Allocation *const allocation = map.SegmentId == ApertureSegment::segment_id
+                                       ? allocations_.find(map.hAllocation)
+                                       : nullptr;
+    const Status recorded = allocation != nullptr ? allocation->map_aperture(map) : Status::not_found;
+    log_aperture("map", map.SegmentId, map.OffsetInPages, map.NumberOfPages, recorded);
+    return Status::ok;
+}
+
+Status PagingRequest::unmap_aperture()
+{
+    DxgkBuildPagingBufferUnmapApertureSegmentRecord unmap;
+    read_operation(unmap);
+    Allocation *const allocation = unmap.SegmentId == ApertureSegment::segment_id
+                                      ? allocations_.find(unmap.hAllocation)
+                                      : nullptr;
+    if (allocation != nullptr) allocation->unmap_aperture(unmap);
+    log_aperture("unmap", unmap.SegmentId, unmap.OffsetInPages, unmap.NumberOfPages,
+                 allocation != nullptr ? Status::ok : Status::not_found);
+    return Status::ok;
+}
+
+NtStatus PagingRequest::refuse()
+{
+    if (budget_.allows()) {
+        char       bytes[64];
+        TextBuffer line(bytes, sizeof bytes);
+        line.append("rvkgpu: paging operation ");
+        line.append_decimal(static_cast<uint64_t>(request_.Operation));
+        line.append(" refused");
+        platform_.log(line.text());
+    }
+    return NtStatus(Status::invalid_parameter);
+}
+
+void PagingRequest::log_aperture(const char *operation, uint32_t segment, uint64_t offset, uint64_t pages,
+                                 Status status)
+{
+    if (!budget_.allows()) return;
+    char       bytes[128];
+    TextBuffer line(bytes, sizeof bytes);
+    line.append("rvkgpu: aperture ");
+    line.append(operation);
+    line.append(" segment ");
+    line.append_decimal(segment);
+    line.append(" offset ");
+    line.append_decimal(offset);
+    line.append(" pages ");
+    line.append_decimal(pages);
+    line.append(" status ");
+    line.append_decimal(static_cast<uint64_t>(status));
+    platform_.log(line.text());
 }
 
 Status PagingRequest::update_table() const

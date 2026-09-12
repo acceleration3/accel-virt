@@ -16,6 +16,7 @@
 #include "core/ddi/dxgk_physical_adapter_caps_record.hpp"
 #include "core/ddi/dxgk_query_page_table_level_desc_in_record.hpp"
 #include "core/ddi/dxgk_query_segment_out4_record.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_map_aperture_segment_record.hpp"
 #include "core/ddi/dxgkarg_build_paging_buffer_record.hpp"
 #include "core/ddi/dxgkarg_cancel_command_record.hpp"
 #include "core/ddi/dxgkarg_close_allocation_record.hpp"
@@ -157,6 +158,62 @@ private:
     Adapter               adapter_;
     std::uint32_t         sources_;
     std::uint32_t         children_;
+};
+
+/* A primary the adapter created and VidMm mapped into the aperture: the handle
+ * and address dxgkrnl hands back to SetVidPnSourceAddress, and the pages the
+ * host will be told to read. `spare_pages` are mapped past the frame, so a test
+ * can move the address a page at a time and still be fully backed. */
+class Primary {
+public:
+    Primary(Fixture &fixture, std::uint32_t width, std::uint32_t height, std::uint32_t spare_pages = 0u)
+        : frames_{}, encoded_{}, handle_(nullptr)
+    {
+        const std::uint64_t frame_bytes = std::uint64_t{width} * height * 4u;
+        const auto          frame_pages = static_cast<std::uint32_t>((frame_bytes + page - 1u) / page);
+        const std::uint32_t pages = frame_pages + spare_pages;
+        for (std::uint32_t index = 0u; index < pages; index++) frames_[index] = first_frame + index * page;
+        const av::AllocationDescriptor descriptor(av::AllocationKind::shared_primary, true,
+                                                  av::SurfaceLayout(width, height, 21u, width * 4u),
+                                                  std::uint64_t{pages} * page, av::ScanoutTarget(0u, 60u, 1u));
+        CHECK_STATUS(descriptor.encode(encoded_, sizeof encoded_), av::Status::ok);
+        av::DxgkAllocationInfoRecord info = {};
+        info.pPrivateDriverData = encoded_;
+        info.PrivateDriverDataSize = av::AllocationDescriptor::encoded_size;
+        av::DxgkargCreateAllocationRecord create = {};
+        create.NumAllocations = 1u;
+        create.pAllocationInfo = &info;
+        CHECK_EQ(nt(fixture.adapter().create_allocation(&create)), success);
+        handle_ = info.hAllocation;
+        av::DxgkBuildPagingBufferMapApertureSegmentRecord mapping = {};
+        mapping.hAllocation = handle_;
+        mapping.SegmentId = av::ApertureSegment::segment_id;
+        mapping.NumberOfPages = pages;
+        mapping.pMdl = fixture.platform().attach_page_frames(frames_, pages);
+        std::uint8_t                        dma[64] = {};
+        av::DxgkargBuildPagingBufferRecord paging = {};
+        paging.pDmaBuffer = dma;
+        paging.DmaSize = sizeof dma;
+        paging.Operation = 5;   /* DXGK_OPERATION_MAP_APERTURE_SEGMENT */
+        std::memcpy(paging.Reserved, &mapping, sizeof mapping);
+        CHECK_EQ(nt(fixture.adapter().build_paging_buffer(&paging)), success);
+    }
+
+    void        *handle() const { return handle_; }
+    /* The address of the frame `offset_in_pages` into the mapping. */
+    std::int64_t address(std::uint64_t offset_in_pages = 0u) const
+    {
+        return av::ApertureSegment::base_address + static_cast<std::int64_t>(offset_in_pages * page);
+    }
+
+private:
+    static constexpr std::uint64_t page = 0x1000u;
+    static constexpr std::uint64_t first_frame = 0x40000000u;
+    static constexpr std::uint32_t max_pages = 1024u;
+
+    std::uint64_t frames_[max_pages];
+    std::uint8_t  encoded_[av::AllocationDescriptor::encoded_size];
+    void         *handle_;
 };
 
 }  // namespace
@@ -577,10 +634,11 @@ TEST(adapter_commit_vidpn, the_committed_source_reaches_the_host_scanout)
   CHECK_EQ(commit(fixture, 1280u, 800u), success);
   const av::DxgkargSetVidPnSourceVisibilityRecord visible = {0u, 1u, {}};
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&visible)), success);
+  const Primary primary(fixture, 1280u, 800u);
   av::DxgkargSetVidPnSourceAddressRecord address = {};
-  address.PrimaryAddress = 0x500000;
+  address.PrimaryAddress = primary.address();
   address.PrimarySegment = av::ApertureSegment::segment_id;
-  address.hAllocation = &fixture;
+  address.hAllocation = primary.handle();
   fixture.platform().set_irql(Irql::isr);
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
   fixture.platform().set_irql(Irql::dispatch);
@@ -607,13 +665,14 @@ TEST(adapter_dpc_routine, a_refused_scanout_refresh_is_logged)
   CHECK_EQ(commit(fixture, 640u, 480u), success);
   const av::DxgkargSetVidPnSourceVisibilityRecord visible = {0u, 1u, {}};
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&visible)), success);
+  const Primary primary(fixture, 640u, 480u, 200u);
   const std::uint32_t logged = fixture.platform().logged();
   bool refused = false;
   for (std::uint32_t frame = 0u; frame < 200u && !refused; frame++) {
       av::DxgkargSetVidPnSourceAddressRecord address = {};
-      address.PrimaryAddress = static_cast<std::int64_t>(0x800000u + frame * 0x1000u);
+      address.PrimaryAddress = primary.address(frame);
       address.PrimarySegment = av::ApertureSegment::segment_id;
-      address.hAllocation = &fixture;
+      address.hAllocation = primary.handle();
       fixture.platform().set_irql(Irql::isr);
       CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
       fixture.platform().set_irql(Irql::dispatch);
@@ -629,9 +688,9 @@ TEST(adapter_dpc_routine, a_refused_scanout_refresh_is_logged)
       static_cast<void>(fixture.adapter().recommend_vidpn_topology(&topology));
   const std::uint32_t spent = fixture.platform().logged();
   av::DxgkargSetVidPnSourceAddressRecord moved = {};
-  moved.PrimaryAddress = 0xF00000;
+  moved.PrimaryAddress = primary.address(199u);
   moved.PrimarySegment = av::ApertureSegment::segment_id;
-  moved.hAllocation = &fixture;
+  moved.hAllocation = primary.handle();
   fixture.platform().set_irql(Irql::isr);
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&moved)), success);
   fixture.platform().set_irql(Irql::dispatch);
@@ -2051,3 +2110,34 @@ TEST(adapter_restart_from_timeout, a_device_that_will_not_come_back_is_reported_
   CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), invalid_device_state);
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(fixture.platform().live_allocations(), 1u);   /* the cursor's backing, held while started */ }
+
+/* An empty list destroys nothing and leaves every source's primary alone. */
+TEST(adapter_destroy_allocation, an_empty_list_is_accepted)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  const av::DxgkargDestroyAllocationRecord empty = {};
+  CHECK_EQ(nt(fixture.adapter().destroy_allocation(&empty)), success); }
+
+/* Where a source points is worth a line, but not at the cost of the window,
+ * and never at device IRQL where the budget's lock may not be taken. */
+TEST(adapter_set_vidpn_source_address, says_where_a_source_points_while_the_window_lasts)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  const Primary primary(fixture, 64u, 64u);
+  av::DxgkargSetVidPnSourceAddressRecord address = {};
+  address.PrimaryAddress = primary.address();
+  address.PrimarySegment = av::ApertureSegment::segment_id;
+  address.hAllocation = primary.handle();
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
+  CHECK(std::strstr(fixture.platform().last_log(),
+                    "SetVidPnSourceAddress source 0 segment 1 address 0x00000000C0000000") != nullptr);
+  const av::DxgkargRecommendVidPnTopologyRecord topology = {};
+  for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++)
+      static_cast<void>(fixture.adapter().recommend_vidpn_topology(&topology));
+  const std::uint32_t spent = fixture.platform().logged();
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
+  CHECK_EQ(fixture.platform().logged(), spent);
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.platform().logged(), spent); }

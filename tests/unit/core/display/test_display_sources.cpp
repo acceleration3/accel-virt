@@ -47,18 +47,36 @@ TEST(display_sources_set_vsync, records_whether_vsync_interrupts_are_wanted)
   sources.set_vsync(false);
   CHECK(!sources.vsync_enabled()); }
 
-TEST(display_sources_set_scanout, remembers_the_primary_address_until_cleared)
+TEST(display_sources_set_scanout, remembers_the_primary_address_and_allocation_until_cleared)
 { MockPlatform platform; DisplaySources sources(platform);
+  std::uint32_t allocation = 0u;
   CHECK_EQ(sources.scanout_address(0u), 0u);
-  CHECK_STATUS(sources.set_scanout(0u, 0x123456789000ll), Status::ok);
+  CHECK(sources.primary(0u) == nullptr);
+  CHECK_STATUS(sources.set_scanout(0u, 0x123456789000ll, &allocation), Status::ok);
   CHECK_EQ(sources.scanout_address(0u), 0x123456789000ull);
-  CHECK_STATUS(sources.set_scanout(0u, 0), Status::ok);
-  CHECK_EQ(sources.scanout_address(0u), 0u); }
+  CHECK(sources.primary(0u) == &allocation);
+  CHECK_STATUS(sources.set_scanout(0u, 0, nullptr), Status::ok);
+  CHECK_EQ(sources.scanout_address(0u), 0u);
+  CHECK(sources.primary(0u) == nullptr); }
 
 TEST(display_sources_set_scanout, a_source_the_adapter_does_not_have_is_invalid)
 { MockPlatform platform; DisplaySources sources(platform);
-  CHECK_STATUS(sources.set_scanout(DisplaySources::source_count, 0x1000), Status::invalid_parameter);
-  CHECK_EQ(sources.scanout_address(DisplaySources::source_count), 0u); }
+  CHECK_STATUS(sources.set_scanout(DisplaySources::source_count, 0x1000, nullptr), Status::invalid_parameter);
+  CHECK_EQ(sources.scanout_address(DisplaySources::source_count), 0u);
+  CHECK(sources.primary(DisplaySources::source_count) == nullptr); }
+
+/* The DPC reads the handle; an allocation being destroyed must not leave one
+ * behind for it to follow. */
+TEST(display_sources_forget_primary, clears_the_source_showing_that_allocation)
+{ MockPlatform platform; DisplaySources sources(platform);
+  std::uint32_t allocation = 0u;
+  std::uint32_t other = 0u;
+  CHECK_STATUS(sources.set_scanout(0u, 0x4000, &allocation), Status::ok);
+  sources.forget_primary(&other);
+  CHECK_EQ(sources.scanout_address(0u), 0x4000u);
+  sources.forget_primary(&allocation);
+  CHECK_EQ(sources.scanout_address(0u), 0u);
+  CHECK(sources.primary(0u) == nullptr); }
 
 TEST(display_sources_set_visible, remembers_visibility_per_source)
 { MockPlatform platform; DisplaySources sources(platform);
@@ -71,7 +89,7 @@ TEST(display_sources_set_visible, remembers_visibility_per_source)
 TEST(display_sources, scanout_is_readable_and_writable_at_device_irql)
 { MockPlatform platform; DisplaySources sources(platform);
   platform.set_irql(Irql::isr);
-  CHECK_STATUS(sources.set_scanout(0u, 0x2000), Status::ok);
+  CHECK_STATUS(sources.set_scanout(0u, 0x2000, nullptr), Status::ok);
   CHECK_EQ(sources.scanout_address(0u), 0x2000u);
   platform.set_irql(Irql::passive);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }

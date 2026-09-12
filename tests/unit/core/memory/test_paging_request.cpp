@@ -6,7 +6,17 @@
 #include "core/ddi/dxgk_build_paging_buffer_update_page_table_record.hpp"
 #include "core/ddi/dxgk_pte_record.hpp"
 #include "core/ddi/dxgkarg_build_paging_buffer_record.hpp"
+#include "core/ddi/dxgk_allocation_info_record.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_map_aperture_segment_record.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_unmap_aperture_segment_record.hpp"
+#include "core/ddi/dxgkarg_create_allocation_record.hpp"
+#include "core/memory/allocation.hpp"
+#include "core/memory/allocation_table.hpp"
+#include "core/memory/aperture_segment.hpp"
 #include "core/memory/paging_request.hpp"
+#include "core/platform/log_budget.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/guest_page_list.hpp"
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
@@ -15,7 +25,20 @@
 #include <cstdint>
 #include <cstring>
 
+using av::Allocation;
+using av::AllocationDescriptor;
+using av::AllocationKind;
+using av::AllocationTable;
+using av::ApertureSegment;
+using av::DxgkAllocationInfoRecord;
 using av::DxgkargBuildPagingBufferRecord;
+using av::DxgkargCreateAllocationRecord;
+using av::DxgkBuildPagingBufferMapApertureSegmentRecord;
+using av::DxgkBuildPagingBufferUnmapApertureSegmentRecord;
+using av::GuestPageList;
+using av::LogBudget;
+using av::ScanoutTarget;
+using av::SurfaceLayout;
 using av::DxgkBuildPagingBufferCopyPageTableEntriesRecord;
 using av::DxgkBuildPagingBufferCopyRangeRecord;
 using av::DxgkBuildPagingBufferFillVirtualRecord;
@@ -51,10 +74,20 @@ std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
 
 /* A paging request over a poisoned DMA buffer, its operation record placed in
  * the union the way dxgkrnl places it. */
+constexpr std::int64_t segment_bytes = std::int64_t{1} << 30u;
+constexpr std::uint64_t page = GuestPageList::page_bytes;
+
+/* A four-page allocation: enough for a mapping to describe every page of it. */
+const AllocationDescriptor four_pages(AllocationKind::shadow, true, SurfaceLayout(16u, 16u, 21u, 1024u),
+                                      4u * page, ScanoutTarget());
+
 class Paging {
 public:
-    explicit Paging(std::int32_t operation, std::uint32_t dma_size = 128u) : dma_{}, request_{}
+    explicit Paging(std::int32_t operation, std::uint32_t dma_size = 128u)
+        : segment_(platform_), allocations_(platform_, segment_), budget_(platform_), dma_{}, request_{}
     {
+        if (segment_.initialize(segment_bytes) != Status::ok)
+            av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "segment");
         std::memset(dma_, poison, sizeof dma_);
         request_.pDmaBuffer = dma_;
         request_.DmaSize = dma_size;
@@ -66,8 +99,27 @@ public:
     }
     std::int32_t build()
     {
-        return PagingRequest(platform_, request_).build().value();
+        return PagingRequest(platform_, allocations_, budget_, request_).build().value();
     }
+
+    /* One allocation of four pages, as CreateAllocation would leave it. */
+    Allocation *allocate()
+    {
+        std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
+        if (four_pages.encode(bytes, sizeof bytes) != Status::ok)
+            av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "encode");
+        info_ = {};
+        info_.pPrivateDriverData = bytes;
+        info_.PrivateDriverDataSize = AllocationDescriptor::encoded_size;
+        DxgkargCreateAllocationRecord create = {};
+        create.NumAllocations = 1u;
+        create.pAllocationInfo = &info_;
+        if (allocations_.create(create) != Status::ok)
+            av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "create");
+        return static_cast<Allocation *>(info_.hAllocation);
+    }
+
+    MockPlatform &platform() { return platform_; }
     DxgkargBuildPagingBufferRecord &request() { return request_; }
     const std::uint8_t             *dma() const { return dma_; }
     std::size_t written() const { return static_cast<std::size_t>(static_cast<std::uint8_t *>(request_.pDmaBuffer) - dma_); }
@@ -80,6 +132,10 @@ public:
 
 private:
     MockPlatform                   platform_;
+    ApertureSegment                segment_;
+    AllocationTable                allocations_;
+    LogBudget                      budget_;
+    DxgkAllocationInfoRecord       info_ = {};
     std::uint8_t                   dma_[160];
     DxgkargBuildPagingBufferRecord request_;
 };
@@ -258,6 +314,147 @@ TEST(paging_request, is_passive_only)
 { MockPlatform platform; DxgkargBuildPagingBufferRecord request = {};
   request.Operation = 5;
   platform.set_irql(Irql::dispatch);
-  static_cast<void>(PagingRequest(platform, request).build());
+  ApertureSegment segment(platform);
+  AllocationTable allocations(platform, segment);
+  LogBudget budget(platform);
+  static_cast<void>(PagingRequest(platform, allocations, budget, request).build());
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling)); }
+
+namespace {
+
+/* The address the aperture segment gives an allocation mapped at `offset`. */
+std::uint64_t aperture_address(std::uint64_t offset_in_pages)
+{
+    return static_cast<std::uint64_t>(ApertureSegment::base_address) + offset_in_pages * page;
+}
+
+DxgkBuildPagingBufferMapApertureSegmentRecord aperture_map(void *allocation, void *mdl, std::uint64_t offset,
+                                                           std::uint64_t pages)
+{
+    DxgkBuildPagingBufferMapApertureSegmentRecord request = {};
+    request.hAllocation = allocation;
+    request.SegmentId = ApertureSegment::segment_id;
+    request.OffsetInPages = offset;
+    request.NumberOfPages = pages;
+    request.pMdl = mdl;
+    return request;
+}
+
+}  // namespace
+
+TEST(paging_request_map_aperture, records_the_pages_the_allocation_is_mapped_from)
+{ Paging paging(5);
+  Allocation *allocation = paging.allocate();
+  const std::uint64_t frames[] = {5u * page, 6u * page, 9u * page, 0x20000u};
+  void *mdl = paging.platform().attach_page_frames(frames, 4u);
+  paging.place(aperture_map(allocation, mdl, 0x30u, 4u));
+  CHECK_EQ(paging.build(), 0);
+  const GuestPageList pages = allocation->pages_at(aperture_address(0x30u), 4u);
+  CHECK_EQ(pages.count(), 4u);
+  CHECK_EQ(pages.frame(0u), 5u * page);
+  CHECK_EQ(pages.frame(3u), 0x20000u);
+  CHECK_EQ(pages.runs(), 3u); }
+
+TEST(paging_request_map_aperture, has_no_pages_for_an_address_outside_the_mapping)
+{ Paging paging(5);
+  Allocation *allocation = paging.allocate();
+  const std::uint64_t frames[] = {5u * page, 6u * page, 7u * page, 8u * page};
+  void *mdl = paging.platform().attach_page_frames(frames, 4u);
+  paging.place(aperture_map(allocation, mdl, 0x30u, 4u));
+  CHECK_EQ(paging.build(), 0);
+  CHECK_EQ(allocation->pages_at(aperture_address(0x31u), 4u).count(), 0u);
+  CHECK_EQ(allocation->pages_at(aperture_address(0x30u) + 1u, 4u).count(), 0u);
+  CHECK_EQ(allocation->pages_at(0x1000u, 4u).count(), 0u); }
+
+TEST(paging_request_map_aperture, records_nothing_for_a_segment_that_is_not_the_aperture)
+{ Paging paging(5);
+  Allocation *allocation = paging.allocate();
+  const std::uint64_t frames[] = {5u * page};
+  void *mdl = paging.platform().attach_page_frames(frames, 1u);
+  DxgkBuildPagingBufferMapApertureSegmentRecord request = aperture_map(allocation, mdl, 0u, 1u);
+  request.SegmentId = ApertureSegment::system_memory_segment_id;
+  paging.place(request);
+  CHECK_EQ(paging.build(), 0);
+  CHECK_EQ(allocation->pages_at(aperture_address(0u), 1u).count(), 0u); }
+
+TEST(paging_request_map_aperture, answers_a_mapping_of_an_allocation_it_never_made)
+{ Paging paging(5);
+  const std::uint64_t frames[] = {5u * page};
+  void *mdl = paging.platform().attach_page_frames(frames, 1u);
+  std::uint64_t not_an_allocation = 0u;
+  paging.place(aperture_map(&not_an_allocation, mdl, 0u, 1u));
+  CHECK_EQ(paging.build(), 0); }
+
+/* dxgkrnl has no answer for a driver that refuses to map a segment it
+ * reported, so a mapping we cannot record is logged and left unrecorded. */
+TEST(paging_request_map_aperture, answers_a_mapping_whose_mdl_does_not_cover_it)
+{ Paging paging(5);
+  Allocation *allocation = paging.allocate();
+  const std::uint64_t frames[] = {5u * page};
+  void *mdl = paging.platform().attach_page_frames(frames, 1u);
+  paging.place(aperture_map(allocation, mdl, 0x30u, 4u));
+  CHECK_EQ(paging.build(), 0);
+  CHECK_EQ(allocation->pages_at(aperture_address(0x30u), 4u).count(), 0u);
+  paging.place(aperture_map(allocation, nullptr, 0x30u, 4u));
+  CHECK_EQ(paging.build(), 0);
+  CHECK_EQ(allocation->pages_at(aperture_address(0x30u), 4u).count(), 0u); }
+
+TEST(paging_request_map_aperture, says_what_it_recorded)
+{ Paging paging(5);
+  Allocation *allocation = paging.allocate();
+  const std::uint64_t frames[] = {5u * page, 6u * page, 7u * page, 8u * page};
+  void *mdl = paging.platform().attach_page_frames(frames, 4u);
+  paging.place(aperture_map(allocation, mdl, 0x30u, 4u));
+  CHECK_EQ(paging.build(), 0);
+  CHECK(std::strstr(paging.platform().last_log(), "aperture map segment 1 offset 48 pages 4 status 0") != nullptr); }
+
+TEST(paging_request_unmap_aperture, forgets_the_pages_the_allocation_is_leaving)
+{ Paging paging(5);
+  Allocation *allocation = paging.allocate();
+  const std::uint64_t frames[] = {5u * page, 6u * page, 7u * page, 8u * page};
+  void *mdl = paging.platform().attach_page_frames(frames, 4u);
+  paging.place(aperture_map(allocation, mdl, 0x30u, 4u));
+  CHECK_EQ(paging.build(), 0);
+  DxgkBuildPagingBufferUnmapApertureSegmentRecord unmap = {};
+  unmap.hAllocation = allocation;
+  unmap.SegmentId = ApertureSegment::segment_id;
+  unmap.OffsetInPages = 0x30u;
+  unmap.NumberOfPages = 4u;
+  paging.request().Operation = 6;
+  paging.place(unmap);
+  CHECK_EQ(paging.build(), 0);
+  CHECK_EQ(allocation->pages_at(aperture_address(0x30u), 4u).count(), 0u);
+  CHECK(std::strstr(paging.platform().last_log(), "aperture unmap segment 1 offset 48 pages 4 status 0") != nullptr); }
+
+TEST(paging_request_unmap_aperture, answers_an_unmapping_of_an_allocation_it_never_made)
+{ Paging paging(6);
+  std::uint64_t not_an_allocation = 0u;
+  DxgkBuildPagingBufferUnmapApertureSegmentRecord unmap = {};
+  unmap.hAllocation = &not_an_allocation;
+  unmap.SegmentId = ApertureSegment::segment_id;
+  unmap.NumberOfPages = 1u;
+  paging.place(unmap);
+  CHECK_EQ(paging.build(), 0); }
+
+/* A storm of mappings the driver cannot record spends the window and then goes
+ * quiet: the log is evidence, not a flood. */
+TEST(paging_request_map_aperture, stops_talking_once_the_window_is_spent)
+{ Paging paging(5);
+  paging.place(aperture_map(nullptr, nullptr, 0x30u, 1u));
+  for (std::uint32_t line = 0u; line < LogBudget::lines_per_window; line++) CHECK_EQ(paging.build(), 0);
+  const std::uint32_t spent = paging.platform().logged();
+  CHECK_EQ(paging.build(), 0);
+  CHECK_EQ(paging.platform().logged(), spent); }
+
+/* An operation this phase does not implement is named once, then the window is
+ * spent and the refusal goes on being silent. */
+TEST(paging_request_build, names_an_operation_it_refuses_until_the_window_is_spent)
+{ Paging paging(17);   /* DXGK_OPERATION_MAP_APERTURE_SEGMENT2 */
+  CHECK_EQ(paging.build(), invalid_parameter);
+  CHECK(std::strstr(paging.platform().last_log(), "paging operation 17 refused") != nullptr);
+  for (std::uint32_t line = 0u; line < LogBudget::lines_per_window; line++)
+      CHECK_EQ(paging.build(), invalid_parameter);
+  const std::uint32_t spent = paging.platform().logged();
+  CHECK_EQ(paging.build(), invalid_parameter);
+  CHECK_EQ(paging.platform().logged(), spent); }

@@ -1,5 +1,6 @@
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
 
+#include "proto/resources/guest_page_list.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
@@ -47,6 +48,26 @@ Status GpuRequestWriter::attach_backing(uint32_t resource_id, uint64_t address, 
     writer.write_u64(address);
     writer.write_u32(length);
     writer.write_zeros(4u);
+    return Status::ok;
+}
+
+Status GpuRequestWriter::attach_backing_pages(uint32_t resource_id, const GuestPageList &pages)
+{
+    length_ = 0u;
+    if (!pages.complete()) return Status::invalid_parameter;
+    WireWriter     writer(bytes_, capacity_);
+    const uint32_t runs = pages.runs();
+    if (!begin(writer, resource_attach_backing, backing_header_size + size_t{runs} * memory_entry_size))
+        return Status::too_large;
+    writer.write_u32(resource_id);
+    writer.write_u32(runs);
+    for (uint32_t page = 0u; page < pages.count();) {
+        const uint32_t run = pages.run_length(page);
+        writer.write_u64(pages.frame(page));
+        writer.write_u32(static_cast<uint32_t>(run * GuestPageList::page_bytes));
+        writer.write_zeros(4u);
+        page += run;
+    }
     return Status::ok;
 }
 

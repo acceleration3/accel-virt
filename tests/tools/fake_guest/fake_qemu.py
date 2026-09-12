@@ -199,16 +199,21 @@ class Guest:
         """screendump writes a PPM of the scripted size, as QEMU would."""
         if request.get("execute") != "screendump":
             return
-        width, height = self.script.get("screendump", [64, 48])[:2]
+        width, height = self.script.get("screendump", [1280, 800])[:2]
         frame = self.script.get("screendump_frame", 0)
         path = request.get("arguments", {})["filename"]
         with open(path, "wb") as dump:
             dump.write(f"P6\n{width} {height}\n255\n".encode())
-            if self.script.get("screendump_flat"):
-                dump.write(bytes([frame & 0xFF]) * (width * height * 3))
+            if self.script.get("screendump_placeholder"):
+                # QEMU's "display output is not active": grey text on black.
+                pixels = bytearray(b"\x00" * (width * height * 3))
+                pixels[:2052] = b"\xaa" * 2052
+                dump.write(bytes(pixels))
             else:
-                # A composited desktop is not one flat colour; vary per pixel.
-                dump.write(bytes((frame + i) & 0xFF for i in range(width * height * 3)))
+                # Not one flat colour: vary per pixel, as a real frame does.
+                bytes_needed = width * height * 3
+                ramp = bytes(range(frame & 0xFF, 256)) + bytes(range(frame & 0xFF))
+                dump.write((ramp * (bytes_needed // len(ramp) + 1))[:bytes_needed])
         self.note(f"screendump {width}x{height}")
 
     def serve_qmp(self, path):
@@ -251,7 +256,9 @@ def main():
     if not os.path.isfile(disk):
         sys.exit(f"fake qemu: no disk at {disk}")
     with open(debug, "w") as log:
-        log.write("rvkgpu: DriverEntry\n" if device else "")
+        lines = script.get("driver_log", ["rvkgpu: DriverEntry",
+                                          "rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0"])
+        log.write("".join(line + "\n" for line in lines) if device else "")
     threading.Thread(target=guest.serve_agent, args=(agent,), daemon=True).start()
     guest.serve_qmp(qmp)
 
