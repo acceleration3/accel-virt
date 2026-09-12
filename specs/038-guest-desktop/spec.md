@@ -39,7 +39,10 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `ScanoutResource` | object | its virtio resource id, the mode it was created for, the backing address the host was told, whether `SET_SCANOUT` was issued | Keep one host scanout resource matching its source's committed mode |
+| `DisplayScanout` | system | one `ScanoutResource` per source, and the next resource id | Put each source's committed frame on the host's scanout |
+| `DisplayInfoResponse` | object | the per-scanout rectangles and enabled flags it validated, and how many the device reported | Answer what the device's display info says |
+| `VsyncScenario` | object | the vertical blanks it counted and the window it counted them in | Judge whether vertical blanks arrive at the committed rate |
 
 ### Test requirements
 
