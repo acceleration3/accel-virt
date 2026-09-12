@@ -507,7 +507,9 @@ int32_t Adapter::is_supported_vidpn(DxgkargIsSupportedVidPnRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::is_supported_vidpn");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return VidPnSupportCheck(platform_, dxgkrnl_, *request).decide().value();
+    const int32_t decided = VidPnSupportCheck(platform_, dxgkrnl_, *request).decide().value();
+    log_status("rvkgpu: IsSupportedVidPn", decided);
+    return decided;
 }
 
 int32_t Adapter::recommend_functional_vidpn(const DxgkargRecommendFunctionalVidPnRecord *)
@@ -516,18 +518,35 @@ int32_t Adapter::recommend_functional_vidpn(const DxgkargRecommendFunctionalVidP
     return NtStatus(NtStatus::no_recommended_functional_vidpn).value();
 }
 
+/* dxgkrnl repeats the VidPn DDIs while it settles a topology, so these lines
+ * come out of the budget rather than one per call forever. */
+void Adapter::log_status(const char *step, int32_t status)
+{
+    if (!budget_.allows()) return;
+    char       bytes[96];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append(step);
+    message.append(" status 0x");
+    message.append_hex(static_cast<uint32_t>(status), 8u);
+    platform_.log(message.text());
+}
+
 int32_t Adapter::enum_vidpn_cofunc_modality(const DxgkargEnumVidPnCofuncModalityRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::enum_vidpn_cofunc_modality");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return CofuncModality(platform_, dxgkrnl_, modes_, *request).enumerate().value();
+    const int32_t enumerated = CofuncModality(platform_, dxgkrnl_, modes_, *request).enumerate().value();
+    log_status("rvkgpu: EnumVidPnCofuncModality", enumerated);
+    return enumerated;
 }
 
 int32_t Adapter::commit_vidpn(const DxgkargCommitVidPnRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::commit_vidpn");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return VidPnCommit(platform_, dxgkrnl_, modes_, sources_, *request).apply().value();
+    const int32_t applied = VidPnCommit(platform_, dxgkrnl_, modes_, sources_, *request).apply().value();
+    log_status("rvkgpu: CommitVidPn", applied);
+    return applied;
 }
 
 int32_t Adapter::update_active_vidpn_present_path(const D3dkmdtVidPnPresentPathRecord *path)

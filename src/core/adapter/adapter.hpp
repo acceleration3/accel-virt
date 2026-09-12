@@ -245,6 +245,8 @@ private:
     [[nodiscard]] Status discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface);
     [[nodiscard]] Status power_up();
     [[nodiscard]] Status power_down();
+    /* One line naming a DDI and the status it answered, spent from the budget. */
+    void                 log_status(const char *step, int32_t status);
 
     Platform                      &platform_;
     void                          *physical_device_object_;
