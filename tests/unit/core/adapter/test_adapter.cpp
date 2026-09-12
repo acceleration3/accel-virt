@@ -168,6 +168,17 @@ TEST(adapter, remembers_its_physical_device_object)
 
 /* ---- StartDevice ---------------------------------------------------------- */
 
+/* US1 acceptance 2 asks the guest log to show the driver's steps in order, so
+ * each line is asserted where it is written rather than only counted. Feature
+ * 036's live run stopped after DriverEntry and said nothing more. */
+TEST(adapter_start_device, logs_the_step_it_reached)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: StartDevice") == 0);
+  av::DxgkChildDescriptorRecord relations = {};
+  CHECK_EQ(nt(fixture.adapter().query_child_relations(&relations, sizeof relations)), success);
+  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: QueryChildRelations") == 0); }
+
 TEST(adapter_start_device, brings_the_device_to_driver_ok_and_reports_one_source_and_child)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
@@ -1096,6 +1107,21 @@ TEST(adapter_query_adapter_info, answers_driver_caps_with_wddm_3_2)
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(query_driver_caps_of(fixture.adapter(), caps), success);
   CHECK_EQ(caps.WDDMVersion, 0x3200); }
+
+/* dxgkrnl asks for types the driver declines, so the line carries the status
+ * as well as the type: in the guest that is how the order of the capability
+ * queries, and which of them were refused, is read back (US1 acceptance 2). */
+TEST(adapter_query_adapter_info, logs_each_type_with_the_status_it_answered)
+{ Fixture fixture; DxgkDriverCapsRecord caps = {};
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(query_driver_caps_of(fixture.adapter(), caps), success);
+  CHECK(std::strcmp(fixture.platform().last_log(),
+                    "rvkgpu: QueryAdapterInfo type 1 status 0x00000000") == 0);
+  DxgkargQueryAdapterInfoRecord declined = {};
+  declined.Type = 999;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&declined)), not_implemented);
+  CHECK(std::strcmp(fixture.platform().last_log(),
+                    "rvkgpu: QueryAdapterInfo type 999 status 0xC0000002") == 0); }
 
 TEST(adapter_query_adapter_info, answers_the_gpu_mmu_and_physical_adapter_queries)
 { Fixture fixture;

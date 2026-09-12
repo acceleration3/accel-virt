@@ -10,6 +10,7 @@
 #include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 using av::DdiSlot;
 using av::FakeDxgkrnl;
@@ -134,6 +135,23 @@ TEST(miniport_add_device, gives_each_device_its_own_context_up_to_the_limit)
   CHECK_EQ(miniport.adapter_count(), Miniport::max_adapters);
   for (void *context : contexts) CHECK_STATUS(miniport.remove_device(context), Status::ok);
   CHECK_EQ(miniport.adapter_count(), 0u); }
+
+/* The guest log's first line after DriverEntry, and the one that says why a
+ * device was refused (feature 037, FR-003). */
+TEST(miniport_add_device, logs_the_device_it_added_and_the_one_it_refused)
+{ MockPlatform platform; Miniport miniport(platform);
+  int pdo = 0; void *context = nullptr;
+  CHECK_STATUS(miniport.add_device(&pdo, context), Status::ok);
+  CHECK(std::strcmp(platform.last_log(), "rvkgpu: AddDevice") == 0);
+  void *contexts[Miniport::max_adapters] = {};
+  for (std::uint32_t i = 1u; i < Miniport::max_adapters; i++)
+      CHECK_STATUS(miniport.add_device(&pdo, contexts[i]), Status::ok);
+  void *overflow = &pdo;
+  CHECK_STATUS(miniport.add_device(&pdo, overflow), Status::no_memory);
+  CHECK(std::strstr(platform.last_log(), "no free adapter slot") != nullptr);
+  CHECK_STATUS(miniport.remove_device(context), Status::ok);
+  for (std::uint32_t i = 1u; i < Miniport::max_adapters; i++)
+      CHECK_STATUS(miniport.remove_device(contexts[i]), Status::ok); }
 
 TEST(miniport_add_device, is_passive_only)
 { MockPlatform platform; Miniport miniport(platform);
