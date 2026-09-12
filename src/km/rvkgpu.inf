@@ -32,6 +32,16 @@ rvkgpu.sys = 1
 [Rvkgpu_Install]
 FeatureScore = F8
 CopyFiles    = Rvkgpu_Files
+AddReg       = Rvkgpu_SoftwareSettings
+
+; dxgkrnl refuses the adapter outright without this value. DXGADAPTER::Initialize
+; returns STATUS_OBJECT_NAME_NOT_FOUND when DpiGetAdapterInfo could not read
+; UserModeDriverName from the software key - the key HKR reaches from here, not
+; from .HW - and the adapter does not claim to be compute only. Nothing loads the
+; DLL at adapter start; only the string is read, so this names rvkumd.dll before
+; feature 055 builds it.
+[Rvkgpu_SoftwareSettings]
+HKR,, UserModeDriverName, 0x00010000, "rvkumd.dll"
 
 [Rvkgpu_Files]
 rvkgpu.sys

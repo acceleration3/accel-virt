@@ -48,6 +48,20 @@ class DriverPackage(unittest.TestCase):
         self.assertEqual(service["ServiceType"], "1")
         self.assertEqual(self.inf["Rvkgpu_Install.Services"]["AddService"], "rvkgpu, 0x00000002, Rvkgpu_Service")
 
+    def test_declares_a_user_mode_driver_name_in_the_software_key(self):
+        """dxgkrnl refuses the adapter without it. DXGADAPTER::Initialize
+        (dxgkrnl.sys @1401a2818) returns STATUS_OBJECT_NAME_NOT_FOUND when
+        UmdNameMissing is set and MiscCaps & 0xC is clear; DpiGetAdapterInfo
+        (@14024eb50) sets UmdNameMissing when DxgkRetrieveStringFromRegistry
+        (@140250b00) cannot read UserModeDriverName from the software key -
+        DpiOpenPnpRegistryKey(dev, 2, ...), which is HKR under the install
+        section, not under .HW. Feature 036's live run hit exactly this."""
+        software = self.inf["Rvkgpu_Install"]["AddReg"]
+        self.assertRegex(
+            self.text,
+            rf"\[{re.escape(software)}\][\s\S]*?HKR,+\s*UserModeDriverName,\s*0x00010000,\s*\"?rvkumd\.dll",
+            "rvkgpu.inf must add UserModeDriverName (REG_MULTI_SZ) under the install section's AddReg")
+
     def test_asks_for_message_signalled_interrupts(self):
         self.assertIn('"Interrupt Management\\MessageSignaledInterruptProperties", MSISupported, 0x00010001, 1',
                       self.text)
