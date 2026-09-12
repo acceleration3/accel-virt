@@ -8,6 +8,11 @@ namespace {
 
 constexpr std::int32_t source_not_in_topology = static_cast<std::int32_t>(0xC01E0339u);
 constexpr std::int32_t invalid_parameter = static_cast<std::int32_t>(0xC000000Du);
+/* D3DKMDT_VPPS_UNPINNED / D3DKMDT_VPPR_UNPINNED, the value dxgkrnl's own
+ * AcquirePathInfo writes into an unpinned path's transform fields. */
+constexpr std::int32_t unpinned_transformation = 254;
+constexpr std::int32_t empty_source_mode_set = static_cast<std::int32_t>(0xC01E0308u);
+constexpr std::int32_t empty_target_mode_set = static_cast<std::int32_t>(0xC01E0309u);
 constexpr std::int32_t no_more_elements = 0x401E034C;
 constexpr std::int32_t gamma_default = 1;   /* D3DDDI_GAMMARAMP_DEFAULT */
 
@@ -294,6 +299,12 @@ D3dkmdtVidPnPresentPathRecord &FakeVidPn::add_path(std::uint32_t source, std::ui
     path.VidPnTargetId = target;
     path.ImportanceOrdinal = 1;
     path.GammaRampType = gamma_default;
+    /* Unpinned is 254, not 0: DXGDMM AcquirePathInfo (dxgkrnl.sys @1403a6b10)
+     * builds the default path with 0xFE in both transform fields, and
+     * PinPathContentScaling (@1403052c0) treats 0xFE as "was unpinned" when it
+     * rolls back. A zeroed record is a value the real dxgkrnl never presents. */
+    path.ContentTransformationScaling = unpinned_transformation;
+    path.ContentTransformationRotation = unpinned_transformation;
     return path;
 }
 
@@ -375,20 +386,30 @@ std::int32_t FakeVidPn::release_set(void *)
     return 0;
 }
 
-/* AssignSourceModeSet makes a new set current and releases it. */
+/* AssignSourceModeSet makes a new set current and releases it.
+ * DMMVIDPNSOURCE::SetCofuncModeSet (dxgkrnl.sys @14002fffc) refuses an empty
+ * cofunctional set with STATUS_GRAPHICS_EMPTY_MONITOR_MODE_SUPPORT_INTERSECTION. */
 std::int32_t FakeVidPn::assign_source(std::uint32_t source, void *mode_set)
 {
     if (source >= max_owners) return invalid_parameter;
     for (std::uint32_t slot = 0u; slot < 2u; slot++)
-        if (mode_set == &source_handles_[source][slot]) current_source_[source] = slot;
+        if (mode_set == &source_handles_[source][slot]) {
+            if (sources_[source][slot].modes() == 0u) return empty_source_mode_set;
+            current_source_[source] = slot;
+        }
     return release_set(mode_set);
 }
 
+/* DMMVIDPNTARGET::SetCofuncModeSet (dxgkrnl.sys @14005004c) refuses an empty one
+ * with STATUS_GRAPHICS_EMPTY_ADAPTER_MONITOR_MODE_SUPPORT_INTERSECTION. */
 std::int32_t FakeVidPn::assign_target(std::uint32_t target, void *mode_set)
 {
     if (target >= max_owners) return invalid_parameter;
     for (std::uint32_t slot = 0u; slot < 2u; slot++)
-        if (mode_set == &target_handles_[target][slot]) current_target_[target] = slot;
+        if (mode_set == &target_handles_[target][slot]) {
+            if (targets_[target][slot].modes() == 0u) return empty_target_mode_set;
+            current_target_[target] = slot;
+        }
     return release_set(mode_set);
 }
 

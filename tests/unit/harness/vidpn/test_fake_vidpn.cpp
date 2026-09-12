@@ -22,6 +22,8 @@ constexpr std::uint32_t no_more_elements = 0x401E034Cu;
 constexpr std::uint32_t dataset_is_empty = 0x401E034Bu;
 constexpr std::uint32_t mode_already_in_mode_set = 0xC01E0314u;
 constexpr std::uint32_t mode_not_in_mode_set = 0xC01E034Au;
+constexpr std::uint32_t empty_source_mode_set = 0xC01E0308u;
+constexpr std::uint32_t empty_target_mode_set = 0xC01E0309u;
 
 std::uint32_t nt(std::int32_t status) { return static_cast<std::uint32_t>(status); }
 
@@ -170,6 +172,25 @@ TEST(fake_vidpn_source_mode_set, a_new_set_replaces_the_current_one_when_assigne
   CHECK_EQ(vidpn.source_modes(0u).modes(), 1u);
   CHECK_EQ(vidpn.source_modes(0u).mode(0u).PrimSurfSizeCx, 1920u);
   CHECK(!vidpn.source_modes(0u).pinned()); }
+
+/* SetCofuncModeSet refuses an empty cofunctional set, on either end, and leaves
+ * it to the driver to release - so the current set is unchanged. */
+TEST(fake_vidpn_source_mode_set, an_empty_set_is_refused_and_still_held)
+{ FakeVidPn vidpn;
+  vidpn.source_modes(0u).seed(source_mode(800u, 600u), false);
+  void *source_set = nullptr;
+  void *target_set = nullptr;
+  const DxgkVidPnSourceModeSetInterfaceRecord *source_interface = nullptr;
+  const DxgkVidPnTargetModeSetInterfaceRecord *target_interface = nullptr;
+  CHECK_EQ(table(vidpn).pfnCreateNewSourceModeSet(&vidpn, 0u, &source_set, &source_interface), 0);
+  CHECK_EQ(table(vidpn).pfnCreateNewTargetModeSet(&vidpn, 0u, &target_set, &target_interface), 0);
+  CHECK_EQ(nt(table(vidpn).pfnAssignSourceModeSet(&vidpn, 0u, source_set)), empty_source_mode_set);
+  CHECK_EQ(nt(table(vidpn).pfnAssignTargetModeSet(&vidpn, 0u, target_set)), empty_target_mode_set);
+  CHECK_EQ(vidpn.source_modes(0u).modes(), 1u);
+  CHECK_EQ(vidpn.source_modes(0u).mode(0u).PrimSurfSizeCx, 800u);
+  CHECK_EQ(vidpn.target_modes(0u).modes(), 0u);
+  CHECK_EQ(table(vidpn).pfnReleaseSourceModeSet(&vidpn, source_set), 0);
+  CHECK_EQ(table(vidpn).pfnReleaseTargetModeSet(&vidpn, target_set), 0); }
 
 TEST(fake_vidpn_source_mode_set, a_source_the_fake_does_not_have_is_invalid)
 { FakeVidPn vidpn;

@@ -1,4 +1,6 @@
 #include "core/ddi/d3dkmdt_vidpn_present_path_record.hpp"
+#include "core/ddi/d3dkmdt_vidpn_source_mode_record.hpp"
+#include "core/ddi/d3dkmdt_vidpn_target_mode_record.hpp"
 #include "core/ddi/dxgk_vidpn_interface_records.hpp"
 #include "core/vidpn/path_visitor.hpp"
 #include "core/vidpn/vidpn.hpp"
@@ -9,6 +11,8 @@
 #include <cstdint>
 
 using av::D3dkmdtVidPnPresentPathRecord;
+using av::D3dkmdtVidPnSourceModeRecord;
+using av::D3dkmdtVidPnTargetModeRecord;
 using av::DxgkVidPnSourceModeSetInterfaceRecord;
 using av::DxgkVidPnTargetModeSetInterfaceRecord;
 using av::Irql;
@@ -202,7 +206,9 @@ TEST(vidpn_acquire_mode_set, a_refusal_or_a_missing_set_fails)
   CHECK_STATUS(vidpn.acquire_mode_set(0u, set, target_interface), Status::malformed);
   CHECK(set == nullptr); }
 
-TEST(vidpn_create_mode_set, answers_empty_sets_to_assign)
+/* A created set is empty, and dxgkrnl refuses an empty one to assign - so the
+ * round trip a caller performs is create, add one mode, assign. */
+TEST(vidpn_create_mode_set, answers_fresh_sets_to_fill_and_assign)
 { VidPnFixture fixture;
   VidPn vidpn(fixture.platform(), fixture.dxgkrnl(), fixture.handle());
   CHECK_STATUS(vidpn.initialize(), Status::ok);
@@ -212,8 +218,16 @@ TEST(vidpn_create_mode_set, answers_empty_sets_to_assign)
   const DxgkVidPnTargetModeSetInterfaceRecord *target_interface = nullptr;
   CHECK_STATUS(vidpn.create_mode_set(0u, source_set, source_interface), Status::ok);
   CHECK_STATUS(vidpn.create_mode_set(0u, target_set, target_interface), Status::ok);
+  D3dkmdtVidPnSourceModeRecord *source_mode = nullptr;
+  D3dkmdtVidPnTargetModeRecord *target_mode = nullptr;
+  CHECK_EQ(source_interface->pfnCreateNewModeInfo(source_set, &source_mode), 0);
+  CHECK_EQ(target_interface->pfnCreateNewModeInfo(target_set, &target_mode), 0);
+  CHECK_EQ(source_interface->pfnAddMode(source_set, source_mode), 0);
+  CHECK_EQ(target_interface->pfnAddMode(target_set, target_mode), 0);
   CHECK_STATUS(vidpn.assign_mode_set(0u, source_set, source_interface), Status::ok);
   CHECK_STATUS(vidpn.assign_mode_set(0u, target_set, target_interface), Status::ok);
+  CHECK_EQ(fixture.vidpn().source_modes(0u).modes(), 1u);
+  CHECK_EQ(fixture.vidpn().target_modes(0u).modes(), 1u);
   fixture.vidpn().refuse(VidPnCall::create_source_mode_set, 0);
   fixture.vidpn().refuse(VidPnCall::create_target_mode_set, no_memory);
   CHECK_STATUS(vidpn.create_mode_set(0u, source_set, source_interface), Status::malformed);

@@ -66,11 +66,15 @@ Status CofuncModality::offer_sources(uint32_t source)
     return status != Status::ok ? status : set.assign();
 }
 
+/* A pinned source mode the adapter does not have leaves the target set alone:
+ * DMMVIDPNTARGET::SetCofuncModeSet (dxgkrnl.sys @14005004c) refuses an empty
+ * cofunctional set with STATUS_GRAPHICS_EMPTY_ADAPTER_MONITOR_MODE_SUPPORT_INTERSECTION. */
 Status CofuncModality::offer_targets(uint32_t target, const D3dkmdtVidPnSourceModeRecord *pinned_source)
 {
-    TargetModeSet      set(platform_, vidpn_, target);
     const DisplayMode *only = pinned_source != nullptr ? modes_.find(*pinned_source) : nullptr;
-    Status             status = set.create();
+    if (pinned_source != nullptr && only == nullptr) return Status::ok;
+    TargetModeSet set(platform_, vidpn_, target);
+    Status        status = set.create();
     for (uint32_t index = 0u; status == Status::ok && index < modes_.count(); index++) {
         const DisplayMode &mode = modes_.mode(index);
         if (pinned_source != nullptr && &mode != only) continue;
@@ -83,15 +87,22 @@ Status CofuncModality::offer_targets(uint32_t target, const D3dkmdtVidPnSourceMo
     return status != Status::ok ? status : set.assign();
 }
 
-/* Zero scaling or rotation is D3DKMDT_VPPS_UNINITIALIZED / D3DKMDT_VPPR_UNINITIALIZED. */
+/* Every path is updated exactly once per enumeration, whatever it supports:
+ * UpdatePathSupportInfo (dxgkrnl.sys @1403ab840) counts the paths down and only
+ * ends the enumeration when the count reaches zero, and PinContentScaling
+ * (@140013e5c) fails 0xC01E0306 forever on a path whose support mask is still 0. */
 Status CofuncModality::update_support(const D3dkmdtVidPnPresentPathRecord &path)
 {
     D3dkmdtVidPnPresentPathRecord update = path;
-    const bool offer_scaling = path.ContentTransformationScaling == 0 && request_.EnumPivotType != pivot_scaling;
-    const bool offer_rotation = path.ContentTransformationRotation == 0 && request_.EnumPivotType != pivot_rotation;
-    if (offer_scaling) update.ContentTransformationScalingSupport = identity_supported;
-    if (offer_rotation) update.ContentTransformationRotationSupport = identity_supported;
-    return offer_scaling || offer_rotation ? vidpn_.update_path_support(update) : Status::ok;
+    const bool scaling_unchosen = (path.ContentTransformationScaling == transformation_uninitialized ||
+                                   path.ContentTransformationScaling == transformation_unpinned) &&
+                                  request_.EnumPivotType != pivot_scaling;
+    const bool rotation_unchosen = (path.ContentTransformationRotation == transformation_uninitialized ||
+                                    path.ContentTransformationRotation == transformation_unpinned) &&
+                                   request_.EnumPivotType != pivot_rotation;
+    if (scaling_unchosen) update.ContentTransformationScalingSupport = identity_supported;
+    if (rotation_unchosen) update.ContentTransformationRotationSupport = identity_supported;
+    return vidpn_.update_path_support(update);
 }
 
 }  // namespace av

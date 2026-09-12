@@ -115,24 +115,24 @@ countdown at `@1403ab840` only calls `DisallowModifyingAction` when it hits 0.
 @`14005004c` refuses an empty set with `0xC01E0309` (the source side,
 @`14002fffc`, refuses with `0xC01E0308`).
 
-Both are reproduced in the harness and **both fixes are still to be written**:
+Both were reproduced in the harness first - `add_path` now presents `254` as
+dxgkrnl does, and `assign_source`/`assign_target` refuse an empty set with
+`0xC01E0308`/`0xC01E0309`, leaving it to the driver to release - which failed 4
+of 10 cofunc modality tests, and both are now fixed:
 
-- `tests/harness/vidpn/fake_vidpn.cpp` is modified and **uncommitted**: `add_path`
-  now presents `254` as dxgkrnl does, and `assign_target` refuses an empty set
-  with `0xC01E0309`. That makes `test_cofunc_modality` fail 4 of 10 - the
-  fail-first evidence - at `test_cofunc_modality.cpp:82,83,84` (support 0 want
-  1, updates 0 want 1) and `:101` (target modes 1 want 0).
-- The fix for the fourth: treat both `0` and `254` as unpinned, and call
-  `vidpn_.update_path_support` on **every** path, not only when something was
-  offered. `ContentTransformationScaling`/`Rotation` are `int32_t`.
-- The fix for the fifth: when a pinned source has no matching mode, leave the
-  target set alone instead of creating and assigning an empty one.
-- Two tests encode the wrong belief and must be rewritten with the fixes:
-  `a_path_with_both_transformations_chosen_is_not_updated` (dxgkrnl wants one
-  update per path per enumeration, so a pinned path *is* updated - only the
-  support values differ) and
-  `a_pinned_source_mode_the_adapter_lacks_leaves_no_target_mode` (it asserts the
-  set ends empty, which is exactly what dxgkrnl refuses).
+- The fourth: `update_support` treats both `0` (UNINITIALIZED) and `254`
+  (UNPINNED) as unpinned, and calls `vidpn_.update_path_support` on **every**
+  path, not only when something was offered.
+- The fifth: `offer_targets` returns without creating a set when the pinned
+  source mode has no match, instead of assigning an empty one.
+
+Three tests encoded the wrong belief and were rewritten:
+`a_path_with_both_transformations_chosen_is_updated_offering_nothing` (dxgkrnl
+counts one update per path per enumeration, so a pinned path is updated - it
+just offers nothing), `a_pinned_source_mode_the_adapter_lacks_leaves_the_target_set_alone`,
+and `vidpn_create_mode_set.answers_fresh_sets_to_fill_and_assign`, which used to
+assign the empty sets it had just created. `an_uninitialized_transformation_is_offered_identity`
+covers the other unpinned value.
 
 ## Phase 3: The suite passes
 

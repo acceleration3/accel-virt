@@ -31,6 +31,8 @@ constexpr std::int32_t no_pivot = 5;
 constexpr std::uint32_t preferred = 1u;         /* D3DKMDT_MP_PREFERRED */
 constexpr std::uint32_t not_preferred = 2u;
 constexpr std::uint32_t rgb_8_bits = 0x02u << 2u;
+constexpr std::int32_t identity = 1;        /* D3DKMDT_VPPS_IDENTITY / D3DKMDT_VPPR_IDENTITY */
+constexpr std::int32_t uninitialized = 0;   /* D3DKMDT_VPPS_UNINITIALIZED */
 
 D3dkmdtVidPnSourceModeRecord source_mode(std::uint32_t width, std::uint32_t height)
 {
@@ -41,13 +43,13 @@ D3dkmdtVidPnSourceModeRecord source_mode(std::uint32_t width, std::uint32_t heig
 
 class Enumeration {
 public:
-    Enumeration() : fixture_(), modes_(), request_{}
+    Enumeration() : fixture_(), modes_(), request_{}, path_(fixture_.vidpn().add_path(0u, 0u))
     {
         request_.hConstrainingVidPn = fixture_.handle();
         request_.EnumPivotType = no_pivot;
-        fixture_.vidpn().add_path(0u, 0u);
     }
     VidPnFixture                          &fixture() { return fixture_; }
+    av::D3dkmdtVidPnPresentPathRecord     &path() { return path_; }
     av::FakeVidPn                         &vidpn() { return fixture_.vidpn(); }
     DxgkargEnumVidPnCofuncModalityRecord &request() { return request_; }
     std::uint32_t run()
@@ -57,9 +59,10 @@ public:
     }
 
 private:
-    VidPnFixture                         fixture_;
-    DisplayModeList                      modes_;
-    DxgkargEnumVidPnCofuncModalityRecord request_;
+    VidPnFixture                          fixture_;
+    DisplayModeList                       modes_;
+    DxgkargEnumVidPnCofuncModalityRecord  request_;
+    av::D3dkmdtVidPnPresentPathRecord     &path_;
 };
 
 }  // namespace
@@ -93,12 +96,19 @@ TEST(cofunc_modality_visit, a_pinned_source_mode_leaves_its_set_and_constrains_t
   CHECK_EQ(targets.mode(0u).VideoSignalInfo.ActiveSizeCx, 1024u);
   CHECK_EQ(targets.mode(0u).WireFormatAndPreference, not_preferred | rgb_8_bits); }
 
-TEST(cofunc_modality_visit, a_pinned_source_mode_the_adapter_lacks_leaves_no_target_mode)
+/* Assigning the empty set that would otherwise be built is what SetCofuncModeSet
+ * refuses with STATUS_GRAPHICS_EMPTY_ADAPTER_MONITOR_MODE_SUPPORT_INTERSECTION. */
+TEST(cofunc_modality_visit, a_pinned_source_mode_the_adapter_lacks_leaves_the_target_set_alone)
 { Enumeration enumeration;
+  D3dkmdtVidPnTargetModeRecord existing = {};
+  DisplayMode(800u, 600u).describe(existing.VideoSignalInfo);
   enumeration.vidpn().source_modes(0u).seed(source_mode(1000u, 700u), true);
-  enumeration.vidpn().target_modes(0u).seed(D3dkmdtVidPnTargetModeRecord{}, false);
+  enumeration.vidpn().target_modes(0u).seed(existing, false);
   CHECK_EQ(enumeration.run(), 0u);
-  CHECK_EQ(enumeration.vidpn().target_modes(0u).modes(), 0u); }
+  const auto &targets = enumeration.vidpn().target_modes(0u);
+  CHECK_EQ(targets.modes(), 1u);
+  CHECK_EQ(targets.mode(0u).VideoSignalInfo.ActiveSizeCx, 800u);
+  CHECK_EQ(enumeration.vidpn().path_support_updates(), 1u); }
 
 TEST(cofunc_modality_visit, a_pinned_target_mode_leaves_its_set)
 { Enumeration enumeration;
@@ -142,15 +152,28 @@ TEST(cofunc_modality_visit, a_pivoting_transformation_keeps_its_support)
   CHECK_EQ(rotation.vidpn().path(0u).ContentTransformationScalingSupport, 1u);
   CHECK_EQ(rotation.vidpn().path(0u).ContentTransformationRotationSupport, 0u); }
 
-TEST(cofunc_modality_visit, a_path_with_both_transformations_chosen_is_not_updated)
-{ VidPnFixture fixture;
-  DisplayModeList modes;
-  auto &path = fixture.vidpn().add_path(0u, 0u);
-  path.ContentTransformationScaling = 1;
-  path.ContentTransformationRotation = 1;
-  DxgkargEnumVidPnCofuncModalityRecord request = {fixture.handle(), no_pivot, 0u, 0u, 0u};
-  CHECK_EQ(CofuncModality(fixture.platform(), fixture.dxgkrnl(), modes, request).enumerate().value(), 0);
-  CHECK_EQ(fixture.vidpn().path_support_updates(), 0u); }
+/* dxgkrnl counts one pfnUpdatePathSupportInfo per path per enumeration, so a
+ * path whose transformations are already pinned is still updated - it just
+ * offers nothing. */
+TEST(cofunc_modality_visit, a_path_with_both_transformations_chosen_is_updated_offering_nothing)
+{ Enumeration enumeration;
+  enumeration.path().ContentTransformationScaling = identity;
+  enumeration.path().ContentTransformationRotation = identity;
+  CHECK_EQ(enumeration.run(), 0u);
+  CHECK_EQ(enumeration.vidpn().path_support_updates(), 1u);
+  CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationScalingSupport, 0u);
+  CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationRotationSupport, 0u); }
+
+/* A record built by a caller rather than acquired from dxgkrnl carries
+ * UNINITIALIZED, which is unpinned too. */
+TEST(cofunc_modality_visit, an_uninitialized_transformation_is_offered_identity)
+{ Enumeration enumeration;
+  enumeration.path().ContentTransformationScaling = uninitialized;
+  enumeration.path().ContentTransformationRotation = uninitialized;
+  CHECK_EQ(enumeration.run(), 0u);
+  CHECK_EQ(enumeration.vidpn().path_support_updates(), 1u);
+  CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationScalingSupport, 1u);
+  CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationRotationSupport, 1u); }
 
 TEST(cofunc_modality_visit, a_path_to_another_source_or_target_is_invalid)
 { const std::uint32_t ends[][2] = {{1u, 0u}, {0u, 1u}};
