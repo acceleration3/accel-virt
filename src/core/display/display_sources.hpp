@@ -40,7 +40,8 @@ public:
     /* Zero for a source with no primary, or not the adapter's. */
     uint64_t             scanout_address(uint32_t source);
     [[nodiscard]] Status set_visible(uint32_t source, bool visible);
-    bool                 visible(uint32_t source) const;
+    /* Dispatch at most: the DPC asks before carrying a frame. */
+    bool                 visible(uint32_t source);
 
 private:
     Platform          &platform_;
@@ -48,7 +49,9 @@ private:
     const DisplayMode *committed_[source_count];
     bool               vsync_enabled_;
     uint64_t           scanout_addresses_[source_count];
-    bool               visible_[source_count];
+    /* Written at PASSIVE, read from the DPC that carries the frame, so it is
+     * atomic rather than a bool the reader might tear. */
+    uint64_t           visible_[source_count];
 };
 
 }  // namespace av

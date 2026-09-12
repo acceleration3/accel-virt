@@ -23,11 +23,15 @@ geometry and never gets asked.
 - **The scanout is programmed at PASSIVE and refreshed from the DPC.**
   `DxgkDdiSetVidPnSourceAddress` is reachable at device IRQL, where a virtqueue
   submission may not block, so it keeps recording the address as it does now.
-  `CommitVidPn` creates the resource and issues `SET_SCANOUT`; the DPC, which
-  already runs to harvest both queues, notices an address the host has not been
-  told about and issues `TRANSFER_TO_HOST_2D` plus `RESOURCE_FLUSH`. One frame
-  of latency is M1's price, and it is the same structure that already works for
-  the cursor.
+  `CommitVidPn` creates the resource; the DPC, which already runs to harvest both
+  queues, attaches and scans out an address the host has not been told about, and
+  carries the pixels with `TRANSFER_TO_HOST_2D` plus `RESOURCE_FLUSH`. What makes
+  it carry them again is a *completed submission*, read from the execution node's
+  fence: not the control queue answering, because the scanout requests complete
+  there and taking those for presents would flush forever, and not vsync, because
+  an idle desktop would then flush sixty times a second for nothing. One frame of
+  latency is M1's price, and it is the same structure that already works for the
+  cursor.
 - **Modes come from the device's display info, not from the host's EDID.**
   `GET_DISPLAY_INFO` answers each scanout's rectangle, which is what QEMU's own
   `-display` size and any later display-configuration change report. The EDID

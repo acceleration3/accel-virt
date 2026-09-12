@@ -73,6 +73,16 @@ TEST(gpu_request_writer_transfer_to_host_2d, covers_the_whole_resource)
 
 /* struct virtio_gpu_set_scanout: the rectangle the host shows, then which
  * scanout shows it and from which resource. */
+TEST(gpu_request_writer_resource_unref, names_the_resource_the_host_may_forget)
+{ Buffer buffer;
+  GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  CHECK_STATUS(writer.resource_unref(7u), Status::ok);
+  CHECK_EQ(writer.length(), 32u);
+  CHECK(plain_header(buffer.bytes, 0x0102u));
+  CHECK_EQ(u32(buffer.bytes, 24u), 7u);
+  CHECK_EQ(u32(buffer.bytes, 28u), 0u);
+  CHECK_EQ(buffer.bytes[32], 0xEEu); }
+
 TEST(gpu_request_writer_set_scanout, names_the_scanout_the_resource_and_the_rectangle)
 { Buffer buffer;
   GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
@@ -156,8 +166,12 @@ TEST(gpu_request_writer, a_request_that_does_not_fit_writes_nothing)
   CHECK_STATUS(tiny.set_scanout(0u, 1u, 1u, 1u), Status::too_large);
   CHECK_STATUS(tiny.resource_flush(1u, 1u, 1u), Status::too_large);
   CHECK_EQ(tiny.length(), 0u);
+  /* An unref is 32 bytes, so it fits where the bigger requests do not. */
+  CHECK_STATUS(tiny.resource_unref(1u), Status::ok);
+  CHECK_EQ(tiny.length(), 32u);
   GpuRequestWriter header_only(buffer.bytes, GpuRequestWriter::header_size - 1u);
   CHECK_STATUS(header_only.get_display_info(), Status::too_large);
+  CHECK_STATUS(header_only.resource_unref(1u), Status::too_large);
   CHECK_EQ(header_only.length(), 0u);
   GpuRequestWriter none(nullptr, 64u);
   CHECK_STATUS(none.attach_backing(1u, 0u, 0u), Status::too_large); }

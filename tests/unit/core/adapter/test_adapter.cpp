@@ -566,6 +566,110 @@ TEST(adapter_commit_vidpn, records_the_mode_scan_lines_follow)
   CHECK_EQ(commit(fixture, 1000u, 700u), invalid_source_mode);
   CHECK_EQ(nt(fixture.adapter().commit_vidpn(nullptr)), invalid_parameter); }
 
+/* A commit makes the resource the mode needs; the DPC attaches the primary,
+ * scans it out and carries its first frame; a present carries another
+ * (feature 038, US1). */
+TEST(adapter_commit_vidpn, the_committed_source_reaches_the_host_scanout)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(0u);
+  av::FakeVirtqueueDevice control(fixture.platform(), queue.desc, queue.driver, queue.device, queue.size);
+  CHECK_EQ(commit(fixture, 1280u, 800u), success);
+  const av::DxgkargSetVidPnSourceVisibilityRecord visible = {0u, 1u, {}};
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&visible)), success);
+  av::DxgkargSetVidPnSourceAddressRecord address = {};
+  address.PrimaryAddress = 0x500000;
+  address.PrimarySegment = av::ApertureSegment::segment_id;
+  address.hAllocation = &fixture;
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  const std::uint32_t after_commit = control.respond_all(0x1100u);
+  CHECK_EQ(after_commit, 5u);                         /* create, attach, set_scanout, transfer, flush */
+  CHECK_EQ(control.request_type(0u), 0x0101u);
+  CHECK_EQ(control.request_type(1u), 0x0106u);
+  CHECK_EQ(control.request_type(2u), 0x0103u);
+  CHECK_EQ(control.request_type(3u), 0x0105u);
+  CHECK_EQ(control.request_type(4u), 0x0104u);
+  /* Nothing presented since: the host is not asked to read again. */
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(control.respond_all(0x1100u), 0u); }
+
+/* A host that answers nothing fills the control queue, and the DPC says once
+ * that a refresh was refused rather than silently dropping the frame. */
+TEST(adapter_dpc_routine, a_refused_scanout_refresh_is_logged)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(commit(fixture, 640u, 480u), success);
+  const av::DxgkargSetVidPnSourceVisibilityRecord visible = {0u, 1u, {}};
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&visible)), success);
+  const std::uint32_t logged = fixture.platform().logged();
+  bool refused = false;
+  for (std::uint32_t frame = 0u; frame < 200u && !refused; frame++) {
+      av::DxgkargSetVidPnSourceAddressRecord address = {};
+      address.PrimaryAddress = static_cast<std::int64_t>(0x800000u + frame * 0x1000u);
+      address.PrimarySegment = av::ApertureSegment::segment_id;
+      address.hAllocation = &fixture;
+      fixture.platform().set_irql(Irql::isr);
+      CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
+      fixture.platform().set_irql(Irql::dispatch);
+      fixture.adapter().dpc_routine();
+      fixture.platform().set_irql(Irql::passive);
+      refused = fixture.platform().logged() != logged;
+  }
+  CHECK(refused);
+  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: a scanout refresh was refused in the DPC") == 0);
+  /* Spent budget: the refusal goes on being refused, and says nothing more. */
+  const av::DxgkargRecommendVidPnTopologyRecord topology = {};
+  for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++)
+      static_cast<void>(fixture.adapter().recommend_vidpn_topology(&topology));
+  const std::uint32_t spent = fixture.platform().logged();
+  av::DxgkargSetVidPnSourceAddressRecord moved = {};
+  moved.PrimaryAddress = 0xF00000;
+  moved.PrimarySegment = av::ApertureSegment::segment_id;
+  moved.hAllocation = &fixture;
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&moved)), success);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.platform().logged(), spent); }
+
+/* A commit whose resource the host refuses says so, and the commit still
+ * answers what dxgkrnl asked about the VidPn. */
+TEST(adapter_commit_vidpn, a_refused_scanout_resource_is_logged)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  bool refused = false;
+  for (std::uint32_t attempt = 0u; attempt < 200u && !refused; attempt++) {
+      const std::uint32_t width = (attempt % 2u) == 0u ? 1280u : 1024u;
+      const std::uint32_t height = (attempt % 2u) == 0u ? 800u : 768u;
+      const std::uint32_t before = fixture.platform().logged();
+      CHECK_EQ(commit(fixture, width, height), success);
+      /* A commit logs its own status; one whose resource was refused logs the
+       * refusal as well, which is the second line. */
+      refused = fixture.platform().logged() > before + 1u;
+  }
+  CHECK(refused); }
+
+/* Committing a source with no path takes it off the host. */
+TEST(adapter_commit_vidpn, a_path_that_is_gone_scans_out_nothing)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(0u);
+  av::FakeVirtqueueDevice control(fixture.platform(), queue.desc, queue.driver, queue.device, queue.size);
+  CHECK_EQ(commit(fixture, 1280u, 800u), success);
+  CHECK_EQ(control.respond_all(0x1100u), 1u);
+  av::FakeVidPn empty;
+  const av::DxgkargCommitVidPnRecord request = {&empty, 0u, 0, nullptr, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().commit_vidpn(&request)), success);
+  CHECK_EQ(control.respond_all(0x1100u), 0u);         /* it was never scanning out */
+  CHECK(fixture.adapter().invariants_hold()); }
+
 TEST(adapter_get_scan_line, needs_a_committed_mode_on_the_one_target)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);

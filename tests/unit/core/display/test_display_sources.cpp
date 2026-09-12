@@ -86,7 +86,9 @@ TEST(display_sources, is_passive_only)
   sources.set_vsync(true);
   static_cast<void>(sources.vsync_enabled());
   static_cast<void>(sources.set_visible(0u, true));
+  /* visible() is asked from the DPC that carries the frame, so DISPATCH is its
+   * ceiling and this one is not a violation. */
   static_cast<void>(sources.visible(0u));
   platform.set_irql(Irql::passive);
-  for (int call = 0; call < 7; call++) CHECK(platform.claim(Violation::irql_ceiling));
+  for (int call = 0; call < 6; call++) CHECK(platform.claim(Violation::irql_ceiling));
   CHECK(!platform.claim(Violation::irql_ceiling)); }

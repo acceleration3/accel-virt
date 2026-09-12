@@ -9,6 +9,7 @@ namespace {
 constexpr size_t create_2d_size = 40u;
 constexpr size_t attach_backing_size = 48u;
 constexpr size_t transfer_size = 56u;
+constexpr size_t resource_unref_size = 32u;
 constexpr size_t set_scanout_size = 48u;
 constexpr size_t resource_flush_size = 48u;
 
@@ -57,6 +58,15 @@ Status GpuRequestWriter::transfer_to_host_2d(uint32_t resource_id, uint32_t widt
     writer.write_u32(width);
     writer.write_u32(height);
     writer.write_u64(0u);
+    writer.write_u32(resource_id);
+    writer.write_zeros(4u);
+    return Status::ok;
+}
+
+Status GpuRequestWriter::resource_unref(uint32_t resource_id)
+{
+    WireWriter writer(bytes_, capacity_);
+    if (!begin(writer, resource_unref_type, resource_unref_size)) return Status::too_large;
     writer.write_u32(resource_id);
     writer.write_zeros(4u);
     return Status::ok;

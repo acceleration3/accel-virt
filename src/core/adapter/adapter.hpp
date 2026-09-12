@@ -6,6 +6,7 @@
 #include "core/adapter/driver_capabilities.hpp"
 #include "core/ddi/dxgkarg_control_interrupt2_record.hpp"
 #include "core/display/display_mode_list.hpp"
+#include "core/display/display_scanout.hpp"
 #include "core/display/display_sources.hpp"
 #include "core/display/edid.hpp"
 #include "core/display/hardware_cursor.hpp"
@@ -246,6 +247,9 @@ private:
     [[nodiscard]] Status power_up();
     [[nodiscard]] Status power_down();
     /* One line naming a DDI and the status it answered, spent from the budget. */
+    /* The host's scanout follows what was committed: the mode's resource, or
+     * nothing when the path is gone. */
+    [[nodiscard]] Status follow_commit(uint32_t source);
     void                 log_status(const char *step, int32_t status);
     /* A step whose answer is only meaningful next to the handle it was given -
      * DxgkDdiCreateDevice receives the runtime's handle and answers with the
@@ -274,6 +278,9 @@ private:
     InterruptNotification          notification_;
     SyntheticVsync                 vsync_;
     HardwareCursor                 cursor_;
+    DisplayScanout                 scanout_;
+    /* The node fence the host was last shown a frame for. */
+    uint32_t                       presented_fence_;
     LogBudget                      budget_;
     bool                           started_;
     bool                           present_;

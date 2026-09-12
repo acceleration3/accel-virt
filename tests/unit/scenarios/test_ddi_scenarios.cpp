@@ -35,6 +35,7 @@
 #include "core/miniport/driver_image.hpp"
 #include "core/support/status.hpp"
 #include "harness/device/fake_virtio_gpu_function.hpp"
+#include "core/display/display_mode.hpp"
 #include "harness/device/fake_virtqueue_device.hpp"
 #include "harness/dxgkrnl/capability_rule.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl.hpp"
@@ -305,6 +306,53 @@ TEST(ddi_scenario, escape_and_debug_collection_through_the_table)
       driver.table().routine(DdiSlot::DxgkDdiCollectDbgInfo));
   CHECK_EQ(collect_routine(device.fdo().context(), &collect), 0);
   CHECK_EQ(report[6], 1u);
+  CHECK_EQ(device.fdo().remove_device(), 0); }
+
+/* ---- The desktop on the host (feature 038) ------------------------------------ */
+
+/* The whole display path through the DDI table dxgkrnl calls: a committed mode
+ * makes the host's resource, the primary dxgkrnl hands over at device IRQL is
+ * attached and scanned out, and the frame is carried once. */
+TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.fdo().start_device(), 0);
+  void          *adapter = device.fdo().context();
+  const DdiTable &table = driver.table();
+  av::FakeVidPn   vidpn;
+  vidpn.add_path(0u, 0u);
+  av::D3dkmdtVidPnSourceModeRecord pinned = {};
+  av::DisplayMode(1280u, 800u).describe(pinned);
+  vidpn.source_modes(0u).seed(pinned, true);
+  const av::DxgkargCommitVidPnRecord commit = {&vidpn, 0u, 0, nullptr, 0u, 0u};
+  const auto commit_vidpn = reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargCommitVidPnRecord *)>(
+      table.routine(DdiSlot::DxgkDdiCommitVidPn));
+  CHECK_EQ(commit_vidpn(adapter, &commit), 0);
+  const av::DxgkargSetVidPnSourceVisibilityRecord visible = {0u, 1u, {}};
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSetVidPnSourceVisibilityRecord *)>(
+               table.routine(DdiSlot::DxgkDdiSetVidPnSourceVisibility))(adapter, &visible),
+           0);
+  av::DxgkargSetVidPnSourceAddressRecord address = {};
+  address.PrimaryAddress = 0x700000;
+  address.PrimarySegment = av::ApertureSegment::segment_id;
+  address.hAllocation = adapter;
+  driver.platform().set_irql(av::Irql::isr);
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSetVidPnSourceAddressRecord *)>(
+               table.routine(DdiSlot::DxgkDdiSetVidPnSourceAddress))(adapter, &address),
+           0);
+  driver.platform().set_irql(av::Irql::dispatch);
+  reinterpret_cast<void (*)(void *)>(table.routine(DdiSlot::DxgkDdiDpcRoutine))(adapter);
+  driver.platform().set_irql(av::Irql::passive);
+  const av::FakeCommonConfig::Queue &control_queue = device.function().common().queue(0u);
+  av::FakeVirtqueueDevice control(driver.platform(), control_queue.desc, control_queue.driver, control_queue.device,
+                                  control_queue.size);
+  CHECK_EQ(control.respond_all(0x1100u), 5u);
+  CHECK_EQ(control.request_type(0u), 0x0101u);        /* RESOURCE_CREATE_2D */
+  CHECK_EQ(control.request_type(1u), 0x0106u);        /* RESOURCE_ATTACH_BACKING */
+  CHECK_EQ(control.request_type(2u), 0x0103u);        /* SET_SCANOUT */
+  CHECK_EQ(control.request_type(3u), 0x0105u);        /* TRANSFER_TO_HOST_2D */
+  CHECK_EQ(control.request_type(4u), 0x0104u);        /* RESOURCE_FLUSH */
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 /* ---- Memory model (feature 008) ---------------------------------------------- */

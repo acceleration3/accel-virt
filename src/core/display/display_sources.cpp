@@ -65,14 +65,14 @@ Status DisplaySources::set_visible(uint32_t source, bool visible)
 {
     platform_.require_irql_at_most(Irql::passive, "DisplaySources::set_visible");
     if (source >= source_count) return Status::invalid_parameter;
-    visible_[source] = visible;
+    platform_.store_atomic(visible_[source], visible ? 1u : 0u);
     return Status::ok;
 }
 
-bool DisplaySources::visible(uint32_t source) const
+bool DisplaySources::visible(uint32_t source)
 {
-    platform_.require_irql_at_most(Irql::apc, "DisplaySources::visible");
-    return source < source_count && visible_[source];
+    platform_.require_irql_at_most(Irql::dispatch, "DisplaySources::visible");
+    return source < source_count && platform_.load_atomic(visible_[source]) != 0u;
 }
 
 }  // namespace av

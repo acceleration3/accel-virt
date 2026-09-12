@@ -19,6 +19,7 @@
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/ddi/dxgkarg_create_device_record.hpp"
 #include "core/ddi/dxgkarg_create_hw_queue_record.hpp"
+#include "core/ddi/dxgkarg_commit_vidpn_record.hpp"
 #include "core/ddi/dxgkarg_create_process_record.hpp"
 #include "core/ddi/dxgkarg_describe_allocation_record.hpp"
 #include "core/ddi/dxgkarg_destroy_allocation_record.hpp"
@@ -91,7 +92,8 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
-      cursor_(platform, device_), budget_(platform), started_(false), present_(true) {}
+      cursor_(platform, device_), scanout_(platform, device_), presented_fence_(0u), budget_(platform),
+      started_(false), present_(true) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
 
@@ -123,6 +125,7 @@ Status Adapter::power_up()
     const Status status = device_.object().start(resources_.message_interrupts());
     if (status != Status::ok) device_.destroy();
     cursor_.forget_device();
+    scanout_.forget_device();
     return status;
 }
 
@@ -146,6 +149,7 @@ int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_inte
     present_ = true;
     ScopeExit undo([this] {
         cursor_.release();
+        scanout_.release();
         vsync_.destroy();
         mappings_.unmap_all();
     });
@@ -175,6 +179,7 @@ int32_t Adapter::stop_device()
     InvariantScope<Adapter> guard(platform_, *this, "stop_device");
     vsync_.destroy();
     const Status status = power_down();
+    scanout_.release();
     cursor_.release();
     mappings_.unmap_all();
     started_ = false;
@@ -215,6 +220,14 @@ void Adapter::dpc_routine()
         platform_.log("rvkgpu: a completion was refused in the DPC");
     if (hw_submissions_.complete(notification_) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: a progress fence signal was refused in the DPC");
+    /* A frame is carried when a submission completed since the last DPC, never
+     * because the control queue answered: our own scanout requests complete
+     * there, and taking those for presents would flush forever. */
+    const uint32_t fence = node_.current_fence();
+    const bool     presented = fence != presented_fence_;
+    presented_fence_ = fence;
+    if (harvest && scanout_.refresh(sources_, presented) != Status::ok && budget_.allows())
+        platform_.log("rvkgpu: a scanout refresh was refused in the DPC");
     dxgkrnl_.notify_dpc();
 }
 
@@ -582,8 +595,18 @@ int32_t Adapter::commit_vidpn(const DxgkargCommitVidPnRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::commit_vidpn");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t applied = VidPnCommit(platform_, dxgkrnl_, modes_, sources_, *request).apply().value();
+    if (applied >= 0) {
+        const Status followed = follow_commit(request->AffectedVidPnSourceId);
+        if (followed != Status::ok) log_status("rvkgpu: CommitVidPn scanout", NtStatus(followed).value());
+    }
     log_status("rvkgpu: CommitVidPn", applied);
     return applied;
+}
+
+Status Adapter::follow_commit(uint32_t source)
+{
+    const DisplayMode *mode = sources_.committed_mode(source);
+    return mode != nullptr ? scanout_.configure(source, *mode) : scanout_.disable(source);
 }
 
 int32_t Adapter::update_active_vidpn_present_path(const D3dkmdtVidPnPresentPathRecord *path)

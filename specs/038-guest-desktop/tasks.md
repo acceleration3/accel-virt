@@ -20,10 +20,10 @@ from, before it is fixed (FR-007).
 
 ## Phase 2 (US1): the committed frame reaches the host
 
-- [ ] T005 [US1] Tests then `ScanoutResource` in src/core/display/scanout_resource.{hpp,cpp}: `CREATE_2D` and `ATTACH_BACKING` once per mode, `SET_SCANOUT` once per backing, `TRANSFER_TO_HOST_2D` plus `RESOURCE_FLUSH` only when the address the host was told differs from the recorded one, `invariants_hold` after every mutation, `Irql::dispatch` ceiling on the flush path
-- [ ] T006 [US1] Tests then `DisplayScanout` in src/core/display/display_scanout.{hpp,cpp}: one `ScanoutResource` per source, distinct resource ids, a source out of range refused, teardown releasing every resource
-- [ ] T007 [US1] `DisplayScanout` wired into src/core/adapter/adapter.cpp: `commit_vidpn` configures the committed source, `dpc_routine` flushes a source the host is behind on, `stop_device` tears the resources down; L1 tests over the fake virtio-gpu function assert the requests and their order
-- [ ] T008 [US1] An L2 scenario in tests/unit/scenarios/test_ddi_scenarios.cpp: commit a VidPn, set the source address, run the DPC, and assert the device saw `CREATE_2D`, `ATTACH_BACKING`, `SET_SCANOUT`, `TRANSFER_TO_HOST_2D` and `RESOURCE_FLUSH` for that source
+- [X] T005 [US1] Tests then `ScanoutResource` in src/core/display/scanout_resource.{hpp,cpp}: `CREATE_2D` and `ATTACH_BACKING` once per mode, `SET_SCANOUT` once per backing, `TRANSFER_TO_HOST_2D` plus `RESOURCE_FLUSH` only when the address the host was told differs from the recorded one, `invariants_hold` after every mutation, `Irql::dispatch` ceiling on the flush path
+- [X] T006 [US1] Tests then `DisplayScanout` in src/core/display/display_scanout.{hpp,cpp}: one `ScanoutResource` per source, distinct resource ids, a source out of range refused, teardown releasing every resource
+- [X] T007 [US1] `DisplayScanout` wired into src/core/adapter/adapter.cpp: `commit_vidpn` configures the committed source, `dpc_routine` flushes a source the host is behind on, `stop_device` tears the resources down; L1 tests over the fake virtio-gpu function assert the requests and their order
+- [X] T008 [US1] An L2 scenario in tests/unit/scenarios/test_ddi_scenarios.cpp: commit a VidPn, set the source address, run the DPC, and assert the device saw `CREATE_2D`, `ATTACH_BACKING`, `SET_SCANOUT`, `TRANSFER_TO_HOST_2D` and `RESOURCE_FLUSH` for that source
 - [ ] T009 [US1] A guest run: screendumps before and after the guest opens a window differ, `dwm.exe` runs, the adapter is `rvkgpu` with status OK, Basic Display is not bound, and no display TDR is logged; record what it found here
 
 **Checkpoint**: commit.

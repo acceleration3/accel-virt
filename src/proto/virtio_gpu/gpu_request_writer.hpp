@@ -34,6 +34,8 @@ public:
     [[nodiscard]] Status set_scanout(uint32_t scanout, uint32_t resource_id, uint32_t width, uint32_t height);
     /* The host reads the resource's pixels again, over that rectangle. */
     [[nodiscard]] Status resource_flush(uint32_t resource_id, uint32_t width, uint32_t height);
+    /* The host may forget the resource; a mode change makes a new one. */
+    [[nodiscard]] Status resource_unref(uint32_t resource_id);
     /* Asks for every scanout's rectangle; the answer is a DisplayInfoResponse. */
     [[nodiscard]] Status get_display_info();
     /* Resource 0 hides the cursor. */
@@ -47,6 +49,7 @@ private:
     enum : uint32_t {
         resource_create_2d = 0x0101u,
         get_display_info_type = 0x0100u,
+        resource_unref_type = 0x0102u,
         set_scanout_type = 0x0103u,
         resource_flush_type = 0x0104u,
         transfer_to_host_2d_type = 0x0105u,
