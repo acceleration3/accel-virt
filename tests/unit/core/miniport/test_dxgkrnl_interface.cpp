@@ -31,6 +31,8 @@ using av::Violation;
 namespace {
 
 int handle_data_marker = 0;
+int release_marker = 0;
+unsigned released = 0u;
 
 /* The dxgkrnl side of each callback: records its arguments, answers what the
  * test configured. */
@@ -81,9 +83,14 @@ public:
             *table = self->vidpn_table;
             return self->answer;
         };
-        record_.DxgkCbGetHandleData = +[](const av::DxgkargcbGetHandleDataRecord *arguments) -> void * {
-            const bool known = arguments->hObject == 0x40000042u && arguments->Type == 1 && arguments->Flags == 0u;
-            return known ? &handle_data_marker : nullptr;
+        record_.DxgkCbAcquireHandleData =
+            +[](const av::DxgkargcbGetHandleDataRecord *arguments, void **release_handle) -> void * {
+                const bool known = arguments->hObject == 0x40000042u && arguments->Type == 1 && arguments->Flags == 0u;
+                *release_handle = known ? &release_marker : nullptr;
+                return known ? &handle_data_marker : nullptr;
+            };
+        record_.DxgkCbReleaseHandleData = +[](av::DxgkargcbReleaseHandleDataRecord arguments) {
+            if (arguments.ReleaseHandle == &release_marker && arguments.Type == 1) released++;
         };
     }
 
@@ -190,13 +197,14 @@ TEST(dxgkrnl_interface_initialize, refuses_a_table_missing_a_callback_core_calls
       if (which == 2) record.DxgkCbQueueDpc = nullptr;
       if (which == 3) record.DxgkCbReadDeviceSpace = nullptr;
       if (which == 4) record.DxgkCbUnmapMemory = nullptr;
-      if (which == 5) record.DxgkCbGetHandleData = nullptr;
+      if (which == 5) record.DxgkCbAcquireHandleData = nullptr;
       if (which == 6) record.DxgkCbSynchronizeExecution = nullptr;
       if (which == 7) record.DxgkCbNotifyInterrupt = nullptr;
       if (which == 8) record.DxgkCbNotifyDpc = nullptr;
       if (which == 9) record.DxgkCbQueryVidPnInterface = nullptr;
+      if (which == 10) record.DxgkCbReleaseHandleData = nullptr;
   };
-  for (int which = 0; which < 10; which++) {
+  for (int which = 0; which < 11; which++) {
       Callbacks callbacks;
       clear(callbacks.record(), which);
       CHECK_STATUS(interface.initialize(&callbacks.record()), Status::invalid_parameter);
@@ -287,24 +295,36 @@ TEST(dxgkrnl_interface_invariants, an_initialized_table_missing_a_callback_is_de
   DxgkrnlInterfaceProbe(interface).clear_callback();
   CHECK(!interface.invariants_hold()); }
 
-TEST(dxgkrnl_interface_get_handle_data, resolves_an_allocation_handle_to_the_driver_data)
+/* An unknown handle answers invalid_parameter, never STATUS_NOT_FOUND, which
+ * dxgkrnl logs as an invalid NTSTATUS and hands to the caller. */
+TEST(dxgkrnl_interface_acquire_handle_data, lends_the_driver_data_behind_an_allocation_handle)
 { MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;
   void *data = &callbacks;
-  CHECK_STATUS(interface.get_handle_data(0x40000042u, data), Status::invalid_state);
+  void *release = &callbacks;
+  CHECK_STATUS(interface.acquire_handle_data(0x40000042u, data, release), Status::invalid_state);
   CHECK(data == nullptr);
+  CHECK(release == nullptr);
   CHECK_STATUS(interface.initialize(&callbacks.record()), Status::ok);
-  CHECK_STATUS(interface.get_handle_data(0x40000042u, data), Status::ok);
+  CHECK_STATUS(interface.acquire_handle_data(0x40000042u, data, release), Status::ok);
   CHECK(data == &handle_data_marker);
-  CHECK_STATUS(interface.get_handle_data(0x40000043u, data), Status::not_found);
-  CHECK(data == nullptr); }
+  CHECK(release == &release_marker);
+  const unsigned before = released;
+  interface.release_handle_data(release);
+  CHECK_EQ(released, before + 1u);
+  CHECK_STATUS(interface.acquire_handle_data(0x40000043u, data, release), Status::invalid_parameter);
+  CHECK(data == nullptr);
+  CHECK(release == nullptr); }
 
-TEST(dxgkrnl_interface_get_handle_data, is_passive_only)
+TEST(dxgkrnl_interface_acquire_handle_data, is_apc_at_most)
 { MockPlatform platform; DxgkrnlInterface interface(platform); Callbacks callbacks;
   CHECK_STATUS(interface.initialize(&callbacks.record()), Status::ok);
   void *data = nullptr;
+  void *release = nullptr;
   platform.set_irql(Irql::dispatch);
-  static_cast<void>(interface.get_handle_data(1u, data));
+  static_cast<void>(interface.acquire_handle_data(1u, data, release));
+  interface.release_handle_data(nullptr);
   platform.set_irql(Irql::passive);
+  CHECK(platform.claim(Violation::irql_ceiling));
   CHECK(platform.claim(Violation::irql_ceiling)); }
 
 namespace {

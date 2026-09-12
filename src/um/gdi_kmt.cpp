@@ -13,6 +13,12 @@ typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, hAdapter) == 0x00u);
 static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, Flags) == 0x08u);
 static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, hDevice) == 0x0Cu);
+static_assert(__builtin_offsetof(D3DKMT_CREATEALLOCATION, hDevice) == 0x00u);
+static_assert(__builtin_offsetof(D3DKMT_CREATEALLOCATION, NumAllocations) == 0x2Cu);
+static_assert(__builtin_offsetof(D3DKMT_CREATEALLOCATION, pAllocationInfo2) == 0x30u);
+static_assert(__builtin_offsetof(D3DDDI_ALLOCATIONINFO2, hAllocation) == 0x00u);
+static_assert(__builtin_offsetof(D3DDDI_ALLOCATIONINFO2, pPrivateDriverData) == 0x10u);
+static_assert(__builtin_offsetof(D3DDDI_ALLOCATIONINFO2, PrivateDriverDataSize) == 0x18u);
 
 namespace av {
 
@@ -132,6 +138,22 @@ Status GdiKmt::create_allocation(uint32_t device, const uint8_t *descriptor, uin
     request.pAllocationInfo2 = &info;
     const Status status = answer(D3DKMTCreateAllocation2(&request));
     allocation = status == Status::ok ? info.hAllocation : 0u;
+    {
+        char line[512];
+        unsigned n = 0u;
+        const char *hex = "0123456789ABCDEF";
+        const unsigned char *req = reinterpret_cast<const unsigned char *>(&request);
+        const unsigned char *inf = reinterpret_cast<const unsigned char *>(&info);
+        line[n++] = 'C'; line[n++] = '='; 
+        for (int i = 28; i >= 0; i -= 4) line[n++] = hex[(last_code_ >> i) & 0xFu];
+        line[n++] = ' '; line[n++] = 'Q'; line[n++] = '=';
+        for (unsigned b = 0u; b < 64u; b++) { line[n++] = hex[req[b] >> 4]; line[n++] = hex[req[b] & 0xFu]; }
+        line[n++] = ' '; line[n++] = 'I'; line[n++] = '=';
+        for (unsigned b = 0u; b < 48u; b++) { line[n++] = hex[inf[b] >> 4]; line[n++] = hex[inf[b] & 0xFu]; }
+        line[n++] = '\n';
+        DWORD written = 0u;
+        static_cast<void>(WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), line, n, &written, nullptr));
+    }
     return status;
 }
 

@@ -40,7 +40,8 @@ FakeDxgkrnlAdapter::FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunc
     record_.DxgkCbUnmapMemory = +[](void *handle, void *mapped) {
         return static_cast<FakeDxgkrnlAdapter *>(handle)->unmap_memory(mapped);
     };
-    record_.DxgkCbGetHandleData = &AvFakeGetHandleData;
+    record_.DxgkCbAcquireHandleData = &AvFakeAcquireHandleData;
+    record_.DxgkCbReleaseHandleData = &AvFakeReleaseHandleData;
     record_.DxgkCbQueryVidPnInterface = &AvFakeQueryVidPnInterface;
     record_.DxgkCbSynchronizeExecution = +[](void *handle, SynchronizeRoutine routine, void *context,
                                              std::uint32_t message, std::uint8_t *returned) {

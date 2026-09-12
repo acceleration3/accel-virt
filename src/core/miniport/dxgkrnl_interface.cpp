@@ -12,7 +12,8 @@ bool DxgkrnlInterface::has_callbacks(const DxgkrnlInterfaceRecord &table) const
 {
     return table.DxgkCbGetDeviceInformation != nullptr && table.DxgkCbMapMemory != nullptr &&
            table.DxgkCbQueueDpc != nullptr && table.DxgkCbReadDeviceSpace != nullptr &&
-           table.DxgkCbUnmapMemory != nullptr && table.DxgkCbGetHandleData != nullptr &&
+           table.DxgkCbUnmapMemory != nullptr && table.DxgkCbAcquireHandleData != nullptr &&
+           table.DxgkCbReleaseHandleData != nullptr &&
            table.DxgkCbSynchronizeExecution != nullptr && table.DxgkCbNotifyInterrupt != nullptr &&
            table.DxgkCbNotifyDpc != nullptr && table.DxgkCbQueryVidPnInterface != nullptr;
 }
@@ -80,16 +81,26 @@ bool DxgkrnlInterface::queue_dpc()
     return record_.DxgkCbQueueDpc(record_.DeviceHandle) != 0u;
 }
 
-Status DxgkrnlInterface::get_handle_data(uint32_t allocation_handle, void *&data)
+Status DxgkrnlInterface::acquire_handle_data(uint32_t allocation_handle, void *&data, void *&release_handle)
 {
-    platform_.require_irql_at_most(Irql::passive, "DxgkrnlInterface::get_handle_data");
+    platform_.require_irql_at_most(Irql::apc, "DxgkrnlInterface::acquire_handle_data");
     data = nullptr;
+    release_handle = nullptr;
     if (!initialized_) return Status::invalid_state;
     DxgkargcbGetHandleDataRecord arguments = {};
     arguments.hObject = allocation_handle;
     arguments.Type = handle_allocation;
-    data = record_.DxgkCbGetHandleData(&arguments);
-    return data != nullptr ? Status::ok : Status::not_found;
+    data = record_.DxgkCbAcquireHandleData(&arguments, &release_handle);
+    return data != nullptr ? Status::ok : Status::invalid_parameter;
+}
+
+void DxgkrnlInterface::release_handle_data(void *release_handle)
+{
+    platform_.require_irql_at_most(Irql::apc, "DxgkrnlInterface::release_handle_data");
+    DxgkargcbReleaseHandleDataRecord arguments = {};
+    arguments.ReleaseHandle = release_handle;
+    arguments.Type = handle_allocation;
+    record_.DxgkCbReleaseHandleData(arguments);
 }
 
 Status DxgkrnlInterface::synchronize_execution(SynchronizeRoutine routine, void *context)

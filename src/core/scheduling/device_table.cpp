@@ -6,6 +6,7 @@
 #include "core/ddi/dxgkarg_open_allocation_record.hpp"
 #include "core/memory/allocation.hpp"
 #include "core/memory/allocation_table.hpp"
+#include "core/miniport/acquired_handle_data.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
 #include "core/platform/mutex_guard.hpp"
 #include "core/support/invariant_scope.hpp"
@@ -43,16 +44,17 @@ Status DeviceTable::destroy(void *device)
     return devices_.destroy(target);
 }
 
-/* DxgkCbGetHandleData is a PASSIVE callback, so each handle is resolved before
- * the mutex raises to APC; hDeviceSpecificAllocation holds the answer until the
- * open replaces it. */
+/* Each handle is resolved before the mutex raises to APC, and the borrowed data
+ * is released as each AcquiredHandleData goes out of scope - the pointer it
+ * answered is this driver's own allocation, which outlives the loan.
+ * hDeviceSpecificAllocation holds it until the open replaces it. */
 Status DeviceTable::resolve(DxgkargOpenAllocationRecord &request)
 {
     for (uint32_t index = 0u; index < request.NumAllocations; index++) {
         DxgkOpenAllocationInfoRecord &info = request.pOpenAllocation[index];
-        void *data = nullptr;
-        const Status status = dxgkrnl_.get_handle_data(info.hAllocation, data);
-        info.hDeviceSpecificAllocation = data;
+        AcquiredHandleData acquired(dxgkrnl_, info.hAllocation);
+        const Status       status = acquired.acquire();
+        info.hDeviceSpecificAllocation = acquired.data();
         if (status != Status::ok) return status;
     }
     return Status::ok;

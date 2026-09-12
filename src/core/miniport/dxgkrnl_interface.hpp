@@ -32,9 +32,12 @@ public:
     [[nodiscard]] Status map_memory(uint64_t translated_address, uint32_t length, void *&mapped);
     [[nodiscard]] Status unmap_memory(void *mapped);
     bool                 queue_dpc();
-    /* DxgkCbGetHandleData for an allocation, legal only inside the DDI dxgkrnl
-     * is calling; not_found when dxgkrnl knows no such handle. */
-    [[nodiscard]] Status get_handle_data(uint32_t allocation_handle, void *&data);
+    /* DxgkCbAcquireHandleData for an allocation, legal only inside the DDI
+     * dxgkrnl is calling, and paired with release_handle_data: WDDM 2.0
+     * replaced DxgkCbGetHandleData, which answers null for an allocation being
+     * opened. AcquiredHandleData owns the pair; prefer it to calling these. */
+    [[nodiscard]] Status acquire_handle_data(uint32_t allocation_handle, void *&data, void *&release_handle);
+    void                 release_handle_data(void *release_handle);
     /* Runs `routine` at the adapter's device IRQL, synchronized with its ISR. */
     [[nodiscard]] Status synchronize_execution(SynchronizeRoutine routine, void *context);
     /* Only inside the ISR or a synchronized routine. */

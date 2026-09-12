@@ -92,6 +92,7 @@
 #include "core/ddi/dxgkarg_submit_command_virtual_record.hpp"
 #include "core/ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "core/ddi/dxgkargcb_get_handle_data_record.hpp"
+#include "core/ddi/dxgkargcb_release_handle_data_record.hpp"
 #include "core/ddi/dxgkargcb_notify_interrupt_data_record.hpp"
 #include "core/ddi/dxgkrnl_interface_record.hpp"
 #include "core/ddi/linked_device_record.hpp"
@@ -130,10 +131,17 @@ AV_SAME_OFFSET(DxgkrnlInterfaceRecord, DxgkCbGetCaptureAddress, DXGKRNL_INTERFAC
 AV_SAME_OFFSET(DxgkrnlInterfaceRecord, DxgkCbLogEtwEvent, DXGKRNL_INTERFACE, DxgkCbLogEtwEvent);
 AV_SAME_OFFSET(DxgkrnlInterfaceRecord, DxgkCbExcludeAdapterAccess, DXGKRNL_INTERFACE, DxgkCbExcludeAdapterAccess);
 AV_SAME_OFFSET(DxgkrnlInterfaceRecord, LaterCallbacks, DXGKRNL_INTERFACE, DxgkCbCreateContextAllocation);
-static_assert(offsetof(av::DxgkrnlInterfaceRecord, LaterCallbacks) +
-                      sizeof(av::DxgkrnlInterfaceRecord::LaterCallbacks) ==
+AV_SAME_OFFSET(DxgkrnlInterfaceRecord, DxgkCbAcquireHandleData, DXGKRNL_INTERFACE, DxgkCbAcquireHandleData);
+AV_SAME_OFFSET(DxgkrnlInterfaceRecord, DxgkCbReleaseHandleData, DXGKRNL_INTERFACE, DxgkCbReleaseHandleData);
+AV_SAME_OFFSET(DxgkrnlInterfaceRecord, RemainingCallbacks, DXGKRNL_INTERFACE,
+               DxgkCbHardwareContentProtectionTeardown);
+AV_SAME_SIZE(DxgkargcbReleaseHandleDataRecord, DXGKARGCB_RELEASEHANDLEDATA);
+AV_SAME_OFFSET(DxgkargcbReleaseHandleDataRecord, ReleaseHandle, DXGKARGCB_RELEASEHANDLEDATA, ReleaseHandle);
+AV_SAME_OFFSET(DxgkargcbReleaseHandleDataRecord, Type, DXGKARGCB_RELEASEHANDLEDATA, Type);
+static_assert(offsetof(av::DxgkrnlInterfaceRecord, RemainingCallbacks) +
+                      sizeof(av::DxgkrnlInterfaceRecord::RemainingCallbacks) ==
                   offsetof(DXGKRNL_INTERFACE, DxgkCbDisconnectDoorbell) + sizeof(void *),
-              "LaterCallbacks does not end at DxgkCbDisconnectDoorbell");
+              "RemainingCallbacks does not end at DxgkCbDisconnectDoorbell");
 
 AV_SAME_SIZE(DxgkDeviceInfoRecord, DXGK_DEVICE_INFO);
 AV_SAME_OFFSET(DxgkDeviceInfoRecord, MiniportDeviceContext, DXGK_DEVICE_INFO, MiniportDeviceContext);

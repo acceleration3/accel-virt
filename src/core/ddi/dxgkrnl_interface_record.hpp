@@ -11,6 +11,7 @@
 #include "core/ddi/dxgk_device_info_record.hpp"
 #include "core/ddi/dxgk_vidpn_interface_records.hpp"
 #include "core/ddi/dxgkargcb_get_handle_data_record.hpp"
+#include "core/ddi/dxgkargcb_release_handle_data_record.hpp"
 #include "core/ddi/dxgkargcb_notify_interrupt_data_record.hpp"
 
 #include <stdint.h>
@@ -27,6 +28,12 @@ using DxgkCbReadDeviceSpace = int32_t (*)(void *device_handle, uint32_t data_typ
 using DxgkCbUnmapMemory = int32_t (*)(void *device_handle, void *virtual_address);
 /* No device handle: dxgkrnl resolves the handle in the calling thread's DDI. */
 using DxgkCbGetHandleData = void *(*)(const DxgkargcbGetHandleDataRecord *arguments);
+/* WDDM 2.0's replacement pair for DxgkCbGetHandleData, which answers null for an
+ * allocation being opened: the data is borrowed until the release handle the
+ * acquire answers is handed back. basicrender.sys's WarpKMOpenAllocation
+ * (@1400021c0) acquires, reads, and releases inside the one DDI. */
+using DxgkCbAcquireHandleData = void *(*)(const DxgkargcbGetHandleDataRecord *arguments, void **release_handle);
+using DxgkCbReleaseHandleData = void (*)(DxgkargcbReleaseHandleDataRecord arguments);
 /* PKSYNCHRONIZE_ROUTINE: runs at the adapter's device IRQL. */
 using SynchronizeRoutine = uint8_t (*)(void *context);
 using DxgkCbSynchronizeExecution = int32_t (*)(void *device_handle, SynchronizeRoutine routine, void *context,
@@ -61,8 +68,12 @@ struct DxgkrnlInterfaceRecord {
     void                      *DxgkCbGetCaptureAddress;
     void                      *DxgkCbLogEtwEvent;
     void                      *DxgkCbExcludeAdapterAccess;
-    /* DxgkCbCreateContextAllocation through DxgkCbDisconnectDoorbell. */
-    void                      *LaterCallbacks[49];
+    /* DxgkCbCreateContextAllocation through DxgkCbReserveGpuVirtualAddressRange. */
+    void                      *LaterCallbacks[13];
+    DxgkCbAcquireHandleData    DxgkCbAcquireHandleData;
+    DxgkCbReleaseHandleData    DxgkCbReleaseHandleData;
+    /* DxgkCbHardwareContentProtectionTeardown through DxgkCbDisconnectDoorbell. */
+    void                      *RemainingCallbacks[34];
 };
 
 }  // namespace av
