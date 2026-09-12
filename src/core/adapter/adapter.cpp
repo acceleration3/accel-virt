@@ -237,16 +237,24 @@ int32_t Adapter::query_child_status(DxgkChildStatusRecord *status, uint8_t)
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_child_status");
     if (status == nullptr || status->ChildUid != 0u) return NtStatus(Status::invalid_parameter).value();
     if (status->Type == status_rotation) return NtStatus(Status::invalid_parameter).value();
-    if (status->Type != status_connection) return NtStatus(Status::not_supported).value();
-    status->HotPlugConnected = 1u;
-    return NtStatus(Status::ok).value();
+    int32_t answered = NtStatus(Status::not_supported).value();
+    if (status->Type == status_connection) {
+        status->HotPlugConnected = 1u;
+        answered = NtStatus(Status::ok).value();
+    }
+    log_status("rvkgpu: QueryChildStatus", answered);
+    return answered;
 }
 
 int32_t Adapter::query_device_descriptor(uint32_t child, DxgkDeviceDescriptorRecord *descriptor)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_device_descriptor");
     if (child != 0u || descriptor == nullptr) return NtStatus(Status::invalid_parameter).value();
-    return edid_.copy(*descriptor).value();
+    /* The monitor's mode set is built from this EDID, so a bring-up that never
+     * reaches a committable VidPn needs the answer visible. */
+    const int32_t copied = edid_.copy(*descriptor).value();
+    log_status("rvkgpu: QueryDeviceDescriptor", copied);
+    return copied;
 }
 
 int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)
