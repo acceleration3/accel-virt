@@ -247,6 +247,10 @@ private:
     [[nodiscard]] Status power_down();
     /* One line naming a DDI and the status it answered, spent from the budget. */
     void                 log_status(const char *step, int32_t status);
+    /* A step whose answer is only meaningful next to the handle it was given -
+     * DxgkDdiCreateDevice receives the runtime's handle and answers with the
+     * driver's, and a guest that ends up with neither needs both in the log. */
+    void                 log_handle(const char *step, const void *handle, int32_t status);
 
     Platform                      &platform_;
     void                          *physical_device_object_;

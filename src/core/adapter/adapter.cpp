@@ -373,8 +373,9 @@ int32_t Adapter::create_device(DxgkargCreateDeviceRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_device");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    const void   *runtime = request->hDevice;
     const int32_t created = NtStatus(devices_.create(*this, *request)).value();
-    log_status("rvkgpu: CreateDevice", created);
+    log_handle("rvkgpu: CreateDevice runtime", runtime, created);
     return created;
 }
 
@@ -543,6 +544,19 @@ int32_t Adapter::recommend_functional_vidpn(const DxgkargRecommendFunctionalVidP
 
 /* dxgkrnl repeats the VidPn DDIs while it settles a topology, so these lines
  * come out of the budget rather than one per call forever. */
+void Adapter::log_handle(const char *step, const void *handle, int32_t status)
+{
+    if (!budget_.allows()) return;
+    char       bytes[96];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append(step);
+    message.append(" 0x");
+    message.append_hex(reinterpret_cast<uint64_t>(handle), 16u);
+    message.append(" status 0x");
+    message.append_hex(static_cast<uint32_t>(status), 8u);
+    platform_.log(message.text());
+}
+
 void Adapter::log_status(const char *step, int32_t status)
 {
     if (!budget_.allows()) return;

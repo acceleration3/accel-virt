@@ -7,6 +7,13 @@
 typedef _Return_type_success_(return >= 0) LONG NTSTATUS;
 #include <d3dkmthk.h>
 
+/* The offsets dxgkrnl writes its answers at, so a header subset that widened a
+ * union cannot make a zero handle look like the runtime's answer:
+ * DxgkCreateDeviceImpl writes the device handle at +0x0c of D3DKMT_CREATEDEVICE. */
+static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, hAdapter) == 0x00u);
+static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, Flags) == 0x08u);
+static_assert(__builtin_offsetof(D3DKMT_CREATEDEVICE, hDevice) == 0x0Cu);
+
 namespace av {
 
 namespace {

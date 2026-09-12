@@ -1494,8 +1494,15 @@ TEST(adapter, each_step_of_the_display_path_says_what_it_answered)
   CHECK_EQ(shadow.create(), success);
   CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: CreateAllocation status 0x00000000") == 0);
   av::DxgkargCreateDeviceRecord device = {};
+  device.hDevice = &fixture;   /* the runtime's handle, which the driver replaces with its own */
   CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
-  CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: CreateDevice status 0x00000000") == 0);
+  const char *line = fixture.platform().last_log();
+  CHECK(std::strncmp(line, "rvkgpu: CreateDevice runtime 0x", 31u) == 0);
+  CHECK(std::strcmp(line + 47, " status 0x00000000") == 0);
+  CHECK(std::strncmp(line + 31, "0000000000000000", 16u) != 0);   /* the handle it was given */
+  av::DxgkargCreateDeviceRecord second = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&second)), success);
+  CHECK(std::strncmp(fixture.platform().last_log() + 31, "0000000000000000", 16u) == 0);
   av::DxgkargDescribeAllocationRecord describe = {};
   describe.hAllocation = shadow.handle();
   CHECK_EQ(nt(fixture.adapter().describe_allocation(&describe)), success);
@@ -1854,6 +1861,9 @@ TEST(adapter_dpc_routine, a_storm_of_refusals_is_silent_once_the_window_is_spent
   DxgkDriverCapsRecord caps = {};
   CHECK_EQ(query_driver_caps_of(fixture.adapter(), caps), success);
   CHECK_EQ(fixture.platform().logged(), spent);   /* the QueryAdapterInfo line too */
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  CHECK_EQ(fixture.platform().logged(), spent);   /* and the handle line */
   for (std::uint16_t index = 0u; index < 2u; index++) {
       const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(index);
       const auto used = static_cast<std::uint8_t *>(fixture.platform().translate_physical(queue.device, 4u));
