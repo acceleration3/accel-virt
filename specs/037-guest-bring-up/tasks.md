@@ -91,6 +91,49 @@ on has to be serialized: the platform owns the log device, so the write belongs
 under a lock there. `LogBudget` cannot cover it - it releases its lock before
 the write, and the lines outside the budget never take it.
 
+**The fourth and fifth defects, found by reading dxgkrnl for the commit loop.**
+The live trace ends with `IsSupportedVidPn` and `EnumVidPnCofuncModality`
+alternating forever and `CommitVidPn` never called. Each pair is a *fresh
+mutation attempt*, not a retry: `VIDPN_MGR::FormalizeVidPnChange` @`1403056f4`
+runs after every VidPn mutation and calls both.
+
+*Fourth*: `CofuncModality::update_support` gates `pfnUpdatePathSupportInfo` on
+`ContentTransformationScaling/Rotation == 0` (UNINITIALIZED), but a live path
+carries **254** - `D3DKMDT_VPPS_UNPINNED` / `D3DKMDT_VPPR_UNPINNED`. Proven
+twice: `AcquirePathInfo` @`1403a6b10` builds the default path with `0xFE` in
+both fields, and `PinPathContentScaling` @`1403052c0` rolls back with
+`if (saved == 0xfe) UnpinContentScaling()`. So we never call
+`pfnUpdatePathSupportInfo`, the support mask at `DMMVIDPNPRESENTPATH+0x78`
+stays 0 (written only from `UpdatePathSupportInfo` @`1403ab840`), and
+`PinContentScaling` @`140013e5c` fails `0xC01E0306` forever, so
+`CommitVidPnOnAdapter` @`1402f82a4` never reaches `CommitVidPn`. dxgkrnl also
+expects **one** `pfnUpdatePathSupportInfo` per path per enumeration: the
+countdown at `@1403ab840` only calls `DisallowModifyingAction` when it hits 0.
+
+*Fifth*: `offer_targets` assigns an **empty** target mode set whenever
+`modes_.find(*pinned_source)` answers null. `DMMVIDPNTARGET::SetCofuncModeSet`
+@`14005004c` refuses an empty set with `0xC01E0309` (the source side,
+@`14002fffc`, refuses with `0xC01E0308`).
+
+Both are reproduced in the harness and **both fixes are still to be written**:
+
+- `tests/harness/vidpn/fake_vidpn.cpp` is modified and **uncommitted**: `add_path`
+  now presents `254` as dxgkrnl does, and `assign_target` refuses an empty set
+  with `0xC01E0309`. That makes `test_cofunc_modality` fail 4 of 10 - the
+  fail-first evidence - at `test_cofunc_modality.cpp:82,83,84` (support 0 want
+  1, updates 0 want 1) and `:101` (target modes 1 want 0).
+- The fix for the fourth: treat both `0` and `254` as unpinned, and call
+  `vidpn_.update_path_support` on **every** path, not only when something was
+  offered. `ContentTransformationScaling`/`Rotation` are `int32_t`.
+- The fix for the fifth: when a pinned source has no matching mode, leave the
+  target set alone instead of creating and assigning an empty one.
+- Two tests encode the wrong belief and must be rewritten with the fixes:
+  `a_path_with_both_transformations_chosen_is_not_updated` (dxgkrnl wants one
+  update per path per enumeration, so a pinned path *is* updated - only the
+  support values differ) and
+  `a_pinned_source_mode_the_adapter_lacks_leaves_no_target_mode` (it asserts the
+  set ends empty, which is exactly what dxgkrnl refuses).
+
 ## Phase 3: The suite passes
 
 - [ ] T008 [US2] Each `rvktest.exe` scenario that fails - adapter, allocation, GPU mapping, submission - reproduced at L2, fixed in core, re-run, one commit per defect
