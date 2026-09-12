@@ -249,51 +249,41 @@ rvkgpu: SetVidPnSourceVisibility status 0x00000000
 
 ## Phase 3: The suite passes
 
-- [ ] T008 [US2] Each `rvktest.exe` scenario that fails - adapter, allocation, GPU mapping, submission - reproduced at L2, fixed in core, re-run, one commit per defect
+- [X] T008 [US2] Each `rvktest.exe` scenario that fails - adapter, allocation, GPU mapping, submission - reproduced at L2, fixed in core, re-run, one commit per defect
 
-  **Where the suite stands: 9 passed, 3 failed.** `adapter.find`,
-  `adapter.driver_version`, every `*.adapter` and every `*.teardown` pass, and
-  `suite.close_adapter` passes. The three failures are the same step in each
-  scenario:
+  **The suite passes: 23 passed, 0 failed.** Two defects, both found by making
+  the guest say what it knew rather than by guessing.
+
+  *The zero device handle.* Every `*.device` step failed with
+  `status=9 code=0x00000000` - `Status::malformed`, which `GuestSession::accept`
+  answers when a call succeeds and hands back nothing. `D3DKMTCreateDevice` was
+  answering correctly: dumping the request straight after the call showed the
+  handle where `DxgkCreateDeviceImpl` writes it, and a PowerShell control proved
+  every adapter in the guest, ours included, returns one. The fault was
+  `accept(kmt_.create_device(adapter_, device), device)` - a call that fills an
+  out parameter beside a read of that same parameter, indeterminately sequenced,
+  and clang-cl read it first. The same source passes on Linux, which is why no
+  L1 or L4 test caught it. `accept` takes the handle by reference now and reads
+  it in the callee.
+
+  *The refused allocation.* `D3DKMTCreateAllocation2` then failed with
+  `0xC0000225`, which neither dxgkrnl nor dxgmms2 contains on that path in the
+  guest's own build. dxgkrnl's ETW provider named it:
 
   ```
-  FAIL allocation.device status=9 code=0x00000000
-  FAIL mapping.device    status=9 code=0x00000000
-  FAIL submission.device status=9 code=0x00000000
+  EventDescription  Driver returned an invalid NTSTATUS code: 0x%I64x
+  EventData1        18446744072635810341    = 0xFFFFFFFFC0000225
   ```
 
-  Status 9 is `Status::malformed`, which `GuestSession::accept` answers when a
-  call succeeds and hands back a zero handle, and code 0 is the NTSTATUS: so
-  `D3DKMTCreateDevice` returns `STATUS_SUCCESS` with `hDevice` still zero.
+  The status was ours. `DeviceTable::resolve` asked `DxgkCbGetHandleData` to turn
+  the handle `DxgkDdiOpenAllocation` was given back into our allocation, and that
+  callback answers null there: WDDM 2.0 replaced it with
+  `DxgkCbAcquireHandleData`, which lends the data against a release handle, as
+  `basicrender.sys`'s `WarpKMOpenAllocation` (@`1400021c0`) does at interface
+  offsets `0x128` and `0x130`. `AcquiredHandleData` owns the loan and releases it
+  in its destructor; `FakeHandleTable` fails the test on a loan never handed
+  back.
 
-  What is established, and what is not:
-
-  - The layout is not the cause. `src/um/gdi_kmt.cpp` pins `hAdapter` at `0x00`,
-    `Flags` at `0x08` and `hDevice` at `0x0c`, which is where
-    `DxgkCreateDeviceImpl` writes the handle, and the asserts pass.
-  - dxgkrnl reached the driver three times for rvktest, with three distinct
-    device objects: the log carries `CreateDevice runtime 0xFFFFBA0BF2074010`,
-    `...F23F5010` and `...F20C1370`, all answering `0x00000000`, at the point
-    rvktest runs. That field is dxgkrnl's own DXGDEVICE pointer, not the
-    32-bit D3DKMT handle, so it says the call arrived - not where the handle
-    went.
-  - The handle the runtime receives is `DXGDEVICE + 0x1d4`, which
-    `DxgkCreateDeviceImpl` reads on the success path and copies to user memory.
-  - `DXGDEVICE::Initialize` (the write at `1403146f6`) fills it from
-    `HMGRTABLE::AllocHandle(process->table, device, 3, 0, 0)` and, when that
-    answers zero, logs `STATUS_NO_MEMORY` at severity 3 - a warning - and
-    carries on, so the call can succeed with no handle.
-  - `DestroyAllDeviceState` also writes `DXGDEVICE + 0x1d4` (at `1402e0b9e`),
-    so a partial failure that tears the device state down and is then swallowed
-    would leave the same zero.
-
-  Reading cannot separate those last two. The experiment that does is a control:
-  create a device on an adapter that is not ours, in the same process and
-  session, and see whether that handle is zero too. `AdapterSearch::find` closes
-  every non-matching adapter as it goes, so the control needs the suite to keep
-  one. If every adapter answers zero the fault is in the environment rvktest
-  runs in - it is launched by the guest agent, a session 0 service - and not in
-  this driver.
 - [ ] T009 [US2] `D3DKMTEnumAdapters2` lists the adapter at WDDM 3.2 with its PCI identity; no Verifier violation, no TDR, no live kernel report caused by `rvkgpu`
 
 **Checkpoint**: commit.

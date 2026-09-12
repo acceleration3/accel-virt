@@ -138,22 +138,6 @@ Status GdiKmt::create_allocation(uint32_t device, const uint8_t *descriptor, uin
     request.pAllocationInfo2 = &info;
     const Status status = answer(D3DKMTCreateAllocation2(&request));
     allocation = status == Status::ok ? info.hAllocation : 0u;
-    {
-        char line[512];
-        unsigned n = 0u;
-        const char *hex = "0123456789ABCDEF";
-        const unsigned char *req = reinterpret_cast<const unsigned char *>(&request);
-        const unsigned char *inf = reinterpret_cast<const unsigned char *>(&info);
-        line[n++] = 'C'; line[n++] = '='; 
-        for (int i = 28; i >= 0; i -= 4) line[n++] = hex[(last_code_ >> i) & 0xFu];
-        line[n++] = ' '; line[n++] = 'Q'; line[n++] = '=';
-        for (unsigned b = 0u; b < 64u; b++) { line[n++] = hex[req[b] >> 4]; line[n++] = hex[req[b] & 0xFu]; }
-        line[n++] = ' '; line[n++] = 'I'; line[n++] = '=';
-        for (unsigned b = 0u; b < 48u; b++) { line[n++] = hex[inf[b] >> 4]; line[n++] = hex[inf[b] & 0xFu]; }
-        line[n++] = '\n';
-        DWORD written = 0u;
-        static_cast<void>(WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), line, n, &written, nullptr));
-    }
     return status;
 }
 
