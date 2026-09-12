@@ -180,6 +180,21 @@ scenario raising fences while the guest side masks and unmasks.
 - **SC-004**: A stress of 10,000 MSI-X enable toggles leaves QEMU's open file
   descriptors and KVM route count where they started.
 
+SC-001, SC-002 and SC-004 are met. The live run of 2026-09-12 reached
+`install ok`, `install.reset ok` and `install.reboot ok` - past the point
+035's run aborted - with no `msix_fire_vector_notifier` assertion and nine
+`kvm_irqchip_add_msi_route` matched by nine `kvm_irqchip_release_virq`, in
+add-three/release-three sets, one per connect. The suite runs 1,000 toggles
+rather than SC-004's 10,000, which is 40k qtest round trips; the live sweep
+carries the rest.
+
+**SC-003 is deferred to 037.** It needs an adapter to disable and enable 20
+times, and that run's adapter failed `StartAdapter` with
+`STATUS_OBJECT_NAME_NOT_FOUND` (device problem 43,
+`StartAdapter_AddAdapterFailed`, logged twice by dxgkrnl), with the driver's
+own log stopping after `DriverEntry`. That defect is 037's subject, not this
+feature's: the path 036 changed is unreachable while no adapter exists.
+
 ## Assumptions
 
 - KVM with an in-kernel irqchip, as the in-guest runner uses.

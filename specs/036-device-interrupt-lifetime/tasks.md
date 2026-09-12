@@ -27,6 +27,6 @@ Tests come first in every task and must fail before the code they cover exists.
 
 - [X] T008 [US1] tests/loopback/: `DRIVER_OK` cleared while a worker raises - the raise reaches no notifier, the context still tears down, and a later `DRIVER_OK` connects once
 - [X] T009 Docs: docs/testing.md (the MSI-X lifetime suite under "The device under qtest"), docs/roadmap.md status; `tools/gate.sh`; merge; push
-- [ ] T010 [US1] The live run with `AV_GUEST_IMAGE`: the install stage passes where 035's run aborted, `--trace 'kvm_irqchip_*'` shows one route added per vector per connect, and 035's T016 closes
+- [X] T010 [US1] The live run with `AV_GUEST_IMAGE`: the install stage passes where 035's run aborted, and `--trace 'kvm_irqchip_*'` shows one route added per vector per connect, released with it. 035's T016 stays open, and SC-003 with it: the adapter fails `StartAdapter` with `STATUS_OBJECT_NAME_NOT_FOUND` (problem 43), which is 037's defect
 
 **Checkpoint**: commit.
