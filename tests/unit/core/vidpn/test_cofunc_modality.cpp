@@ -147,24 +147,18 @@ TEST(cofunc_modality_visit, the_pivot_mode_set_is_left_alone)
   CHECK_EQ(other_ids.run(), 0u);
   CHECK_EQ(other_ids.vidpn().target_modes(0u).modes(), DisplayModeList::mode_count); }
 
-/* One call carries both supports, so the only way to leave a pivoting
- * transformation alone is to leave the whole path alone - and a pivot on
- * another path's ends is not this path's pivot. */
-TEST(cofunc_modality_visit, a_path_pivoting_on_a_transformation_is_left_alone)
-{ const std::int32_t pivots[] = {pivot_scaling, pivot_rotation};
+/* dxgkrnl closes an enumeration only when it has been told about every path -
+ * UpdatePathSupportInfo's countdown - so a pivot does not buy the path a skip.
+ * A pivot changes what is pinned, never what the adapter supports. */
+TEST(cofunc_modality_visit, a_pivot_does_not_stop_the_path_being_told_what_is_supported)
+{ const std::int32_t pivots[] = {pivot_source, pivot_target, pivot_scaling, pivot_rotation, no_pivot};
   for (std::int32_t pivot : pivots) {
       Enumeration enumeration;
       enumeration.request().EnumPivotType = pivot;
       CHECK_EQ(enumeration.run(), 0u);
-      CHECK_EQ(enumeration.vidpn().path_support_updates(), 0u);
-      CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationScalingSupport, 0u);
-      CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationRotationSupport, 0u);
-      Enumeration elsewhere;
-      elsewhere.request().EnumPivotType = pivot;
-      elsewhere.request().EnumPivotVidPnTargetId = 1u;
-      CHECK_EQ(elsewhere.run(), 0u);
-      CHECK_EQ(elsewhere.vidpn().path_support_updates(), 1u);
-      CHECK_EQ(elsewhere.vidpn().path(0u).ContentTransformationRotationSupport, rotation_supported);
+      CHECK_EQ(enumeration.vidpn().path_support_updates(), 1u);
+      CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationScalingSupport, identity_supported);
+      CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationRotationSupport, rotation_supported);
   } }
 
 /* What the path already carries does not change the answer: identity is all the

@@ -160,6 +160,32 @@ call writes both supports and there is no way to update one and not the other.
 `FakeVidPn::update_path` fails the test on a mask dxgkrnl would bugcheck on, so
 this cannot come back as a guest bugcheck.
 
+**The seventh defect, and the instrument that found it.** The sixth fix removed
+the bugcheck but the loop came back, and the log could not explain it because
+`LogBudget`'s window was 32 lines while one adapter start answers around thirty
+DDIs - the trace stopped mid-sequence. The window is 256 now, and
+`CofuncModality` logs per path what dxgkrnl asked and what it had pinned. That
+made the loop legible:
+
+```
+cofunc path 0->0 pivot 5 scaling 254 rotation 254 source unpinned target unpinned
+cofunc path 0->0 pivot 1 scaling 254 rotation 254 source 1280x800 target unpinned
+cofunc path 0->0 pivot 2 scaling 254 rotation 254 source 1280x800 target pinned
+cofunc path 0->0 pivot 3 scaling 1   rotation 254 source 1280x800 target pinned
+cofunc path 0->0 pivot 4 scaling 1   rotation 1   source 1280x800 target pinned
+cofunc path 0->0 pivot 5 scaling 254 rotation 254 source unpinned target unpinned
+```
+
+DMM walks its whole pivot sequence - source, target, scaling, rotation - pins
+1280x800, pins identity scaling and identity rotation, and then throws the VidPn
+away and starts again, never calling `CommitVidPn`. The sixth fix had made
+`update_support` skip a path pivoting on scaling or rotation, which is the two
+enumerations in the middle: `UpdatePathSupportInfo` (@`1403ab840`) decrements a
+countdown and only calls `DisallowModifyingAction` when it reaches zero, so a
+skipped path leaves the topology modifiable and the enumeration unclosed. Every
+path is now told what is supported on every enumeration, pivot or not, always
+with a mask carrying `Offset0`.
+
 `a_storm_of_refusals_is_silent_once_the_window_is_spent` closes T003's last
 uncovered branches: with the window spent, the four DPC refusal lines and every
 `log_status` line say nothing. The one line the DPC still writes is

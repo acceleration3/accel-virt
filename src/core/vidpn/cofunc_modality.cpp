@@ -93,24 +93,22 @@ Status CofuncModality::offer_targets(uint32_t target, const D3dkmdtVidPnSourceMo
 }
 
 /* What the adapter can do with a path is identity scaling and identity rotation
- * at offset zero, and that is what every path is told, in one call.
+ * at offset zero, and every path is told so on every enumeration, pivot or not.
  *
- * Offset0 is not optional: IsDriverSupportPathIndependentRotation (dxgkrnl.sys
- * @1403d9d78) answers yes for any driver whose declared interface version is
- * above 0x4002, which is every WDDM 2 driver and so always us, and
- * SetRotationSupport (@14004b80c) then bugchecks 0x113 subcode 0x1C on a
- * test-signed machine when the mask for a primary clone path - the only path we
- * have - lacks it.
+ * Once per path per enumeration is what dxgkrnl counts: UpdatePathSupportInfo
+ * (dxgkrnl.sys @1403ab840) decrements a countdown and only calls
+ * DisallowModifyingAction when it reaches zero, which is what closes the
+ * enumeration. Skip a path and the topology stays modifiable, and DMM walks its
+ * pivots - source, target, scaling, rotation - and then throws the VidPn away
+ * and starts again, which is the loop the guest log shows.
  *
- * A pivoting transformation is left alone by not calling at all, as
- * basicdisplay.sys does: pfnUpdatePathSupportInfo writes both supports, so
- * there is no way to update one and leave the other. */
+ * Offset0 is not optional either: IsDriverSupportPathIndependentRotation
+ * (@1403d9d78) answers yes for any driver whose declared interface version is
+ * above 0x4002, so always for us, and SetRotationSupport (@14004b80c) then
+ * bugchecks 0x113 subcode 0x1C on a test-signed machine when the mask for a
+ * primary clone path - the only path we have - lacks it. */
 Status CofuncModality::update_support(const D3dkmdtVidPnPresentPathRecord &path)
 {
-    const bool pivots_here = request_.EnumPivotVidPnSourceId == path.VidPnSourceId &&
-                             request_.EnumPivotVidPnTargetId == path.VidPnTargetId;
-    if (pivots_here && (request_.EnumPivotType == pivot_scaling || request_.EnumPivotType == pivot_rotation))
-        return Status::ok;
     D3dkmdtVidPnPresentPathRecord update = path;
     update.ContentTransformationScalingSupport = identity_supported;
     update.ContentTransformationRotationSupport = identity_supported | rotation_offset_zero;
