@@ -35,7 +35,7 @@ constexpr std::int32_t unsuccessful = static_cast<std::int32_t>(0xC0000001u);
 
 class CraftedSegments {
 public:
-    CraftedSegments() : count_(1u), paging_segment_(0u), fail_pass_(0), descriptors_{}
+    CraftedSegments() : count_(1u), paging_segment_(1u), fail_pass_(0), descriptors_{}
     {
         descriptors_[0].Flags = 0x15u;
         descriptors_[0].Size = 0x100000u;
@@ -123,6 +123,8 @@ TEST(fake_vidmm_validate, refuses_each_descriptor_validate_segment_descriptors_r
       {[](CraftedSegments &m) { m.descriptor(0).Flags = 0x380u; }, SegmentRule::invalid_flags},
       {[](CraftedSegments &m) { m.descriptor(0).Flags = 0x2004u; }, SegmentRule::cpu_host_aperture_with_aperture},
       {[](CraftedSegments &m) { m.set_paging_segment(2u); }, SegmentRule::paging_buffer_segment_out_of_range},
+      /* Zero is not a segment: identifiers are one-based. */
+      {[](CraftedSegments &m) { m.set_paging_segment(0u); }, SegmentRule::paging_buffer_segment_out_of_range},
   };
   for (const Case &c : cases) {
       MockPlatform platform; CraftedSegments miniport;

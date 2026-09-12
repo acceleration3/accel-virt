@@ -36,7 +36,7 @@ Status ApertureSegment::report(const AdapterInfoQuery &query) const
         descriptor.Size = size_;
         descriptor.CommitLimit = size_;
         platform_.copy(out.pSegmentDescriptor, &descriptor, sizeof descriptor);
-        out.PagingBufferSegmentId = 0u;
+        out.PagingBufferSegmentId = segment_id;
         out.PagingBufferSize = static_cast<uint32_t>(page_bytes);
         out.PagingBufferPrivateDataSize = 0u;
     }

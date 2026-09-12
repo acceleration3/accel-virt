@@ -61,7 +61,13 @@ SegmentRule FakeVidMm::validate(const std::uint8_t *descriptors, std::uint32_t c
         if ((flags & flag_cpu_host_aperture) != 0u && (flags & (flag_aperture | flag_cpu_visible)) != 0u)
             return SegmentRule::cpu_host_aperture_with_aperture;
     }
-    return paging_segment > count ? SegmentRule::paging_buffer_segment_out_of_range : SegmentRule::none;
+    /* Segment identifiers are one-based, so the paging buffer's must name a real
+     * segment: VidMmInitDmaPool turns it into a segment set and indexes the
+     * adapter's segment pointers by bit position, so zero reaches a segment
+     * that was never created and the guest bugchecks rather than refusing. */
+    if (paging_segment == 0u || paging_segment > count)
+        return SegmentRule::paging_buffer_segment_out_of_range;
+    return SegmentRule::none;
 }
 
 std::uint32_t FakeVidMm::segment_count() const

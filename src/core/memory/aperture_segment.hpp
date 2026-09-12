@@ -29,7 +29,12 @@ public:
     /* DXGK_DEVICE_INFO.SystemMemorySize, rounded down to a page. */
     [[nodiscard]] Status initialize(int64_t system_memory_bytes);
     /* DXGKQAITYPE_QUERYSEGMENT4: the count when no descriptor array is given
-     * (CreatePhysicalAdapterSegments' first pass), otherwise the descriptor. */
+     * (CreatePhysicalAdapterSegments' first pass), otherwise the descriptor and
+     * the paging buffer. The paging buffer names this segment, never zero:
+     * segment identifiers are one-based, and VidMmInitDmaPool (dxgmms2.sys
+     * @1400c7990) turns the identifier into a segment set and indexes the
+     * adapter's segment pointers by bit position, so zero reaches a segment that
+     * was never created. basicrender.sys answers 1 for the same reason. */
     [[nodiscard]] Status report(const AdapterInfoQuery &query) const;
     uint64_t             size() const;
 

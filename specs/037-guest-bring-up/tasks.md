@@ -186,6 +186,38 @@ skipped path leaves the topology modifiable and the enumeration unclosed. Every
 path is now told what is supported on every enumeration, pivot or not, always
 with a mask carrying `Offset0`.
 
+**The eighth defect: the paging buffer named segment zero.** With the
+enumeration closing, dxgkrnl stops re-formalizing and gets as far as creating a
+device - `CreateDevice` answers `0x00000000` - and then bugchecks `0x3B`
+(SYSTEM_SERVICE_EXCEPTION, `0xC0000005`) with no dump.
+
+Read from the guest paused at the bugcheck, and this time without trusting a
+pinned binary: the guest's `dxgmms2` has PDB GUID
+`972FB219580D95B33AD86DFC9DF9652B` where `re/bin/dxgmms2.sys` has
+`BA94EDB8FE377E804DB357F645624DF6`, so the pinned copy is a different build and
+its function offsets are meaningless here - the first attribution off it landed
+mid-instruction. Fetching the guest's own PDB by GUID (docs/kb/12-re-cookbook.md)
+and mapping the frames gives the real stack:
+
+```
+DxgkApplyPathsModality -> CCD_TOPOLOGY::ApplyTopology -> ApplyTopologyWorker
+  -> ADAPTER_RENDER::CreateDevice -> DXGDEVICE::CreateContext
+  -> DXGCONTEXT::Initialize -> DXGCONTEXT::EnsurePriviledgedDmaPool
+  -> dxgmms2!VidMmInitDmaPool +0x5ff        <- mov rax,[rdx+8], rdx = [rsi+0x38] = 0
+```
+
+`VidMmInitDmaPool` (@`1400c7990` in the pinned build, same logic) turns the
+paging buffer's segment identifier into a segment *set* and indexes the
+adapter's segment pointers by bit position. `ApertureSegment::report` answered
+`PagingBufferSegmentId = 0`, and zero is not a segment - identifiers are
+one-based - so VidMm reached a segment that was never created.
+`basicrender.sys`'s own `QUERYSEGMENT` handler answers `1`, its only segment,
+for exactly this reason.
+
+`FakeVidMm` refuses a paging segment of zero now, which is what makes the two L2
+scenarios that drive the real driver through `CreatePhysicalAdapterSegments`
+fail before the fix - the guest defect reproduced on Linux.
+
 `a_storm_of_refusals_is_silent_once_the_window_is_spent` closes T003's last
 uncovered branches: with the window spent, the four DPC refusal lines and every
 `log_status` line say nothing. The one line the DPC still writes is

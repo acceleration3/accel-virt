@@ -101,7 +101,7 @@ TEST(aperture_segment_report, the_second_pass_describes_guest_system_memory_as_a
   CHECK(descriptor.CommitLimit == 8u * gib);
   CHECK(descriptor.CpuTranslatedAddress == 0);
   CHECK_EQ(query.out().NbSegment, 1u);
-  CHECK_EQ(query.out().PagingBufferSegmentId, 0u);
+  CHECK_EQ(query.out().PagingBufferSegmentId, av::ApertureSegment::segment_id);
   CHECK_EQ(query.out().PagingBufferSize, 0x1000u);
   CHECK_EQ(query.out().PagingBufferPrivateDataSize, 0u);
   CHECK(descriptors.guards_intact()); }
