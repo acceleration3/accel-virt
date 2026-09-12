@@ -40,7 +40,17 @@ public:
     bool invariants_hold() const;
 
 private:
-    [[nodiscard]] Status accept(Status status, uint64_t value) const;
+    /* The handle is taken by reference and read here, not at the call site: a
+     * call that fills an out parameter and a read of that same parameter are
+     * indeterminately sequenced as arguments of one call, and clang-cl read the
+     * handle before the call that filled it - every handle step failed in the
+     * guest while the same code passed on Linux. Reading inside the callee is
+     * sequenced after every argument is evaluated. */
+    template <typename Handle>
+    [[nodiscard]] Status accept(Status status, const Handle &value) const
+    {
+        return status == Status::ok && value == 0u ? Status::malformed : status;
+    }
     void                 note(Status &first, Status status);
 
     Kmt     &kmt_;

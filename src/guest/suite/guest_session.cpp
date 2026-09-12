@@ -11,11 +11,6 @@ GuestSession::GuestSession(Kmt &kmt, uint32_t adapter)
 /* A scenario reports its own teardown; a destructor has no one to tell. */
 GuestSession::~GuestSession() { static_cast<void>(tear_down()); }
 
-Status GuestSession::accept(Status status, uint64_t value) const
-{
-    return status == Status::ok && value == 0u ? Status::malformed : status;
-}
-
 Status GuestSession::open_device()
 {
     if (adapter_ == 0u || device_ != 0u) return Status::invalid_state;

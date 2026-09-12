@@ -472,6 +472,40 @@ tools/guest/guest_shell.py pull 'C:\Windows\INF\setupapi.dev.log' setupapi.dev.l
 socat - UNIX-CONNECT:build-guest/qmp.sock    # QMP: {"execute":"qmp_capabilities"} then e.g. cont
 ```
 
+**A bugcheck with no dump.** Windows sometimes cannot write one - "Crash dump
+initialization failed" in `diag/system.txt`, or a panic so early that the crash
+MSRs carry no parameters and `verdict.txt` says *panicked without bugcheck
+parameters*. The code and its parameters are still in the running kernel, so
+pause the guest and read them:
+
+```bash
+tools/guest/run_guest_suite.py --on-panic pause --gdb 1234 --hold
+gdb -q -batch -ex 'target remote 127.0.0.1:1234' -x read_bugcheck.py
+```
+
+Find `ntoskrnl`'s base by walking pages down from any kernel `$rip` to the
+`MZ` header, read `nt!KiBugCheckData` - five `ULONG64`: the code and its four
+parameters - and walk `nt!PsLoadedModuleList` to attribute every address on the
+faulting stack to a module. `re/guest-26200/publics.txt` holds the guest
+kernel's public symbols and their section offsets.
+
+Two things bite here:
+
+- **`gdb` detaching resumes the guest.** End the script with
+  `gdb.execute("monitor stop")`, or the guest finishes dying and reboots before
+  the next read.
+- **A `--gdb` run leaves QEMU holding the port.** The next run then fails with
+  *gdbstub: couldn't create chardev*; kill the held QEMU first.
+
+**Never map an address with a pinned binary.** `re/bin/` is pinned to the build
+`docs/kb/` was derived from, and the guest's is usually a different one: a
+`dxgmms2` offset read off the pinned copy landed mid-instruction and named the
+wrong function. Take the faulting module's PDB GUID from its debug directory in
+guest memory, fetch that PDB (`docs/kb/12-re-cookbook.md`), and map the RVA
+against the section headers the PDB itself carries
+(`llvm-pdbutil dump --section-headers --publics`). Disassemble the bytes read
+out of guest memory, not the pinned file.
+
 The application suites join with the drivers they test: Vulkan with the CTS,
 vkd3d-proton and DXVK samples in feature 048, OpenGL and OpenCL conformance in
 054, and Direct3D through the Microsoft runtime in 059.
