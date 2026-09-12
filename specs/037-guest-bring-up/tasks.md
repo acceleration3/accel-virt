@@ -301,6 +301,14 @@ rvkgpu: SetVidPnSourceVisibility status 0x00000000
 
   Three back-to-back runs of `run_guest_suite.py`, each on its own overlay, all
   exited 0 with `rvktest: 23 passed, 0 failed` and no live kernel report.
-- [ ] T011 `tools/gate.sh` with `AV_GUEST_IMAGE` set becomes the merge gate from this feature on (FR-006); docs/testing.md and docs/roadmap.md; 035's T016 closes; merge; push
+- [X] T011 `tools/gate.sh` with `AV_GUEST_IMAGE` set becomes the merge gate from this feature on (FR-006); docs/testing.md and docs/roadmap.md; 035's T016 closes; merge; push
+
+  `AV_GUEST_IMAGE=... tools/gate.sh` answers `gate: every configuration passed`
+  with the guest among them. `tools/gate.sh` says a skipped guest is not a pass,
+  README lists the guest configuration beside the other four, docs/testing.md
+  says a feature does not merge until the suite has run live and why, and the
+  constitution's definition of done gains it as item 10 (2.5.0). The roadmap
+  needed no change: its Status column is what to build, not what is done.
+  Feature 035's T016 closed with the same evidence.
 
 **Checkpoint**: commit.
