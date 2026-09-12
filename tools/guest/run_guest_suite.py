@@ -79,6 +79,10 @@ def arguments():
     parser.add_argument("--image", default=os.environ.get("AV_GUEST_IMAGE"),
                         help="the prepared Windows qcow2 (default: $AV_GUEST_IMAGE)")
     parser.add_argument("--work", type=pathlib.Path, default=ROOT / "build-guest")
+    parser.add_argument("--memory-dump", action="store_true",
+                        help="also collect C:\\Windows\\MEMORY.DMP. It is copied through the guest agent in "
+                             "base64 chunks, so a kernel dump routinely outlasts the step timeout and takes "
+                             "the rest of the manifest - the minidumps - down with it")
     parser.add_argument("--prepare-image", action="store_true",
                         help="boot the image itself and ready it for runs, instead of running the suite")
     parser.add_argument("--qemu", default=str(ROOT / "build-qemu" / "qemu" / "qemu-system-x86_64"))
@@ -371,7 +375,7 @@ class GuestRun:
         if not self.reach_guest(panicked):
             return
         try:
-            self.collect(memory_dump=panicked)
+            self.collect(memory_dump=self.args.memory_dump)
         except StepFailed as failed:
             self.say(f"{failed.step} failed: {failed.reason}")
 

@@ -437,7 +437,7 @@ Everything a run leaves is in its work directory (`build-guest/` by default):
 | `report.txt`, `device.txt` | `rvktest.exe`'s report; the device's status, problem code and verifier settings |
 | `panic.txt` | each bugcheck: code, name, and its four parameters |
 | `diag/` | pulled from the guest after the run: `system.txt`, `dxgkrnl-admin.txt`, `dxgkrnl-operational.txt`, `kernel-pnp.txt` (the last events of each log), `setupapi.dev.log`, `device.txt` (every device property), `verifier.txt` (`verifier /query`) |
-| `diag/dumps/` | minidumps, `LiveKernelReports` (TDR live dumps), and after a bugcheck `MEMORY.DMP` |
+| `diag/dumps/` | minidumps and `LiveKernelReports` (TDR live dumps); `MEMORY.DMP` only with `--memory-dump`, because a kernel dump copied through the agent outlasts the step timeout and its failure takes the minidumps with it |
 | `symbols/` | the `rvkgpu.sys` and `rvkgpu.pdb` the run installed, to open the dumps with |
 
 **Bugchecks.** QEMU runs Windows with `hv-crash`, so Windows reports its
@@ -457,6 +457,7 @@ tools/guest/run_guest_suite.py --hold             # on failure, keep the guest r
 tools/guest/run_guest_suite.py --vnc 1            # the guest's display on 127.0.0.1:5901
 tools/guest/run_guest_suite.py --gdb 1234         # QEMU's gdbstub: gdb -ex 'target remote :1234'
 tools/guest/run_guest_suite.py --on-panic pause   # stop at the bugcheck instead, for --gdb (no dump)
+tools/guest/run_guest_suite.py --memory-dump      # also pull C:\Windows\MEMORY.DMP, in base64 through the agent
 tools/guest/run_guest_suite.py --trace 'virtio_gpu_*' --trace 'virtio_queue_*'   # QEMU trace events into qemu.log
 ```
 

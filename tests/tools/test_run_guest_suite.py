@@ -151,7 +151,7 @@ class GuestSuiteRun(unittest.TestCase):
     def test_a_bugcheck_is_named_and_its_kernel_dump_pulled_after_the_guest_reboots(self):
         self.script(panic={"during": "rvktest", "code": 0xD1},
                     outputs={"check": "", "rvktest": PASSING_REPORT, "collect": WITH_MEMORY_DUMP})
-        result = self.run_suite()
+        result = self.run_suite("--memory-dump")
         self.assertEqual(result.returncode, 1)
         self.assertIn("guest: rvktest failed: timed out waiting for an answer", result.stdout)
         named = "bugcheck 0xd1 DRIVER_IRQL_NOT_LESS_OR_EQUAL (0x10, 0x2, 0x0, 0xfffff80)"
@@ -167,7 +167,7 @@ class GuestSuiteRun(unittest.TestCase):
     def test_a_guest_that_bugchecks_on_every_boot_is_rescued_without_the_device_for_its_dumps(self):
         self.script(panic={"during": "check", "code": 0x3B, "loop": True},
                     outputs={"collect": WITH_MEMORY_DUMP})
-        result = self.run_suite()
+        result = self.run_suite("--memory-dump")
         self.assertEqual(result.returncode, 1)
         self.assertIn("guest: check failed: timed out waiting for an answer", result.stdout)
         self.assertIn("guest: panic: bugcheck 0x3b SYSTEM_SERVICE_EXCEPTION", result.stdout)
@@ -182,6 +182,20 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: rescue.boot ok", result.stdout)
         self.assertEqual((self.work / "diag" / "dumps" / "MEMORY.DMP").read_text(), "kernel dump")
         self.assertEqual(self.journal_lines()[-1], "powerdown")
+        self.assert_clean()
+
+    def test_the_kernel_dump_is_left_alone_unless_it_is_asked_for(self):
+        """MEMORY.DMP is copied through the agent in base64 chunks, so on a real
+        guest it outlasts the step timeout and the failing pull takes the rest of
+        the manifest with it. Four bring-up runs of feature 037 lost their
+        minidumps that way; the kernel dump is now opt-in."""
+        self.script(panic={"during": "rvktest", "code": 0xD1},
+                    outputs={"check": "", "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.stage_calls()[-1], "collect")
+        self.assertFalse((self.work / "diag" / "dumps" / "MEMORY.DMP").exists())
+        self.assertEqual((self.work / "diag" / "dumps" / "WD-1.dmp").read_text(), "live dump")
         self.assert_clean()
 
     def test_a_rescue_that_cannot_boot_either_is_reported(self):
