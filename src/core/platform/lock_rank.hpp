@@ -19,6 +19,7 @@ enum class LockRank : uint16_t {
     control_queue = 220u,      /* spin lock: virtio-gpu control requests and the DPC's harvest */
     cursor_queue = 230u,       /* spin lock: virtio-gpu cursor requests and the DPC's harvest */
     rvk_context = 240u,        /* spin lock: an rvk context's submission, answers and the DPC's serve */
+    log_budget = 250u,         /* spin lock: a leaf, taken while the DPC already holds the locks above */
 };
 
 }  // namespace av

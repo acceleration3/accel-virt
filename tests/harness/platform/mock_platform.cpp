@@ -335,6 +335,7 @@ void MockPlatform::advance_time(std::uint64_t ticks)
 void MockPlatform::log(const char *message)
 {
     logged_++;
+    std::snprintf(last_log_, sizeof last_log_, "%s", message);
     if (verbose_) std::fprintf(stderr, "%s\n", message);
 }
 
@@ -378,6 +379,7 @@ std::uint32_t MockPlatform::live_allocations() const { return live_count_ + cont
 std::uint32_t MockPlatform::allocations_made() const { return allocation_sequence_; }
 std::uint32_t MockPlatform::locks_held() const       { return held_count_; }
 std::uint32_t MockPlatform::logged() const           { return logged_; }
+const char   *MockPlatform::last_log() const         { return last_log_; }
 void         *MockPlatform::registered_driver_object() const { return registered_driver_object_; }
 void         *MockPlatform::registered_registry_path() const { return registered_registry_path_; }
 const DdiTable *MockPlatform::registered_table() const { return registered_table_; }

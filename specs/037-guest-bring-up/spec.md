@@ -39,7 +39,12 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `LogBudget` | object | Lines written in the current window, the window's start, its `Platform` | Answers whether another log line may be written now |
+
+The rest of this feature is not new classes: it is log lines at decisions that
+already exist, L2 scenarios reproducing what Windows exposes, and fixes inside
+the classes features 006 to 025 already introduced. A fix that does need a new
+class adds its row here before the code is written.
 
 ### Test requirements
 

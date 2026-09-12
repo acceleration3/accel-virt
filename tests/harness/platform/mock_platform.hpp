@@ -98,6 +98,8 @@ public:
     std::uint32_t allocations_made() const;
     std::uint32_t locks_held() const;
     std::uint32_t logged() const;
+    /* The last message logged, empty before the first, cut at its capacity. */
+    const char   *last_log() const;
     void         *registered_driver_object() const;
     void         *registered_registry_path() const;
     const DdiTable *registered_table() const;
@@ -157,6 +159,7 @@ private:
     std::uint64_t now_;
     bool          verbose_;
     std::uint32_t logged_;
+    char          last_log_[192] = {};
     std::uint32_t registration_status_;
     void         *registered_driver_object_;
     void         *registered_registry_path_;

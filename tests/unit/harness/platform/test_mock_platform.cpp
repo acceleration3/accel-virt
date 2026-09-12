@@ -4,6 +4,7 @@
 #include "harness/platform/violation.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 using av::FakeRegisterBytes;
 using av::Irql;
@@ -253,7 +254,9 @@ TEST(mock_platform_destruction, a_clean_mock_does_not_fail_the_test)
 
 TEST(mock_platform_log, logging_is_not_a_violation)
 { MockPlatform platform;
+  CHECK_EQ(std::strlen(platform.last_log()), 0u);
   platform.log("a line");
+  CHECK(std::strcmp(platform.last_log(), "a line") == 0);
   CHECK_EQ(platform.unclaimed_violations(), 0u); }
 
 TEST(mock_platform_memory, zero_and_copy_touch_only_their_bytes)
