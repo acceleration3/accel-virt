@@ -24,6 +24,7 @@
 namespace av {
 
 class VirtioPciTransport;
+struct GpuCommandQueueProbe;
 
 class GpuCommandQueue {
 public:
@@ -44,6 +45,13 @@ public:
     [[nodiscard]] Status activate(uint16_t vector);
     /* no_space while every slot is in flight. */
     [[nodiscard]] Status send(const uint8_t *request, size_t length);
+    /* Sends `request` and waits for the device's answer to it, copying at most
+     * `capacity` bytes into `response` and counting them in `written`. Passive
+     * only: it stalls between polls, and harvests the queue itself, so it
+     * answers before dxgkrnl has connected the interrupt. One exchange at a
+     * time; not_found when the device never answers. */
+    [[nodiscard]] Status exchange(const uint8_t *request, size_t length, uint8_t *response, size_t capacity,
+                                  uint32_t &written);
     /* Reclaims every used request; `refused` counts responses shorter than a
      * header or not VIRTIO_GPU_RESP_OK_NODATA. A used element the queue never
      * published is invalid_state. */
@@ -60,10 +68,16 @@ private:
     size_t offset_of(uint32_t slot) const;
     size_t request_bytes_of(uint32_t slot) const;
     static constexpr uint32_t no_slot = slot_count + 1u;
+    /* A hundred milliseconds of polling: far longer than a control request
+     * takes, short enough that a dead device does not hang StartDevice. */
+    static constexpr uint32_t poll_microseconds = 100u;
+    static constexpr uint32_t polls = 1000u;
 
     /* The slot a request of `length` bytes goes in, or no_slot when none is
      * free or none is wide enough. */
     uint32_t slot_for(size_t length) const;
+    /* Publishes one request; the caller holds the lock and notifies. */
+    [[nodiscard]] Status send_locked(const uint8_t *request, size_t length, uint32_t &slot);
     void   release_slots();
 
     Platform           &platform_;
@@ -74,9 +88,16 @@ private:
     uint8_t            *slots_;
     uint64_t            slots_address_;
     uint32_t            wide_bytes_;
+    /* The slot an exchange is waiting on, and where its answer goes. */
+    uint32_t            awaited_slot_;
+    uint8_t            *awaited_response_;
+    size_t              awaited_capacity_;
+    uint32_t            awaited_written_;
     bool                busy_[slot_count + 1u];
     uint8_t             slot_of_head_[VirtQueue::max_size];
     uint32_t            in_flight_;
+
+    friend struct GpuCommandQueueProbe;
 };
 
 }  // namespace av

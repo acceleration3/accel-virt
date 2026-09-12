@@ -238,3 +238,177 @@ TEST(gpu_command_queue_send, a_wide_request_uses_the_wide_slot_alone)
   CHECK_EQ(refused, 0u);
   CHECK_STATUS(fixture.control().send(wide_request_bytes, wide), Status::ok);
   CHECK(fixture.control().invariants_hold()); }
+
+namespace {
+
+/* The device answering while the driver waits: an exchange blocks, so the only
+ * point a test can answer is the stall between its polls. */
+class Answering {
+public:
+    Answering(Fixture &fixture, std::uint32_t type, std::uint32_t after_polls)
+        : fixture_(fixture), device_(fixture.device(0u)), type_(type), left_(after_polls)
+    {
+        fixture_.platform().on_stall(&Answering::stall, this);
+    }
+    ~Answering() { fixture_.platform().on_stall(nullptr, nullptr); }
+
+    std::uint16_t answered() const { return answered_; }
+    FakeVirtqueueDevice &device() { return device_; }
+
+private:
+    static void stall(void *context)
+    {
+        auto *const self = static_cast<Answering *>(context);
+        if (self->left_ != 0u) {
+            self->left_--;
+            return;
+        }
+        self->answered_ = static_cast<std::uint16_t>(self->answered_ + self->device_.respond_all(self->type_));
+    }
+
+    Fixture             &fixture_;
+    FakeVirtqueueDevice  device_;
+    std::uint32_t        type_;
+    std::uint32_t        left_;
+    std::uint16_t        answered_ = 0u;
+};
+
+}  // namespace
+
+/* GET_DISPLAY_INFO is asked and answered before dxgkrnl has connected the
+ * interrupt, so the exchange harvests the queue itself. */
+TEST(gpu_command_queue_exchange, waits_for_the_answer_to_its_own_request)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Answering host(fixture, ok_nodata, 2u);
+  std::uint8_t answer[GpuRequestWriter::max_response_size] = {};
+  std::uint32_t written = 0u;
+  CHECK_STATUS(fixture.control().exchange(request_bytes, move_request(7), answer, sizeof answer, written),
+               Status::ok);
+  CHECK_EQ(written, GpuRequestWriter::response_size);
+  CHECK_EQ(answer[0], 0x00u);
+  CHECK_EQ(answer[1], 0x11u);
+  CHECK_EQ(host.answered(), 1u);
+  CHECK_EQ(fixture.control().in_flight(), 0u);
+  CHECK(fixture.control().invariants_hold()); }
+
+TEST(gpu_command_queue_exchange, answers_not_found_when_the_device_never_does)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  std::uint8_t answer[GpuRequestWriter::max_response_size] = {};
+  std::uint32_t written = 0u;
+  CHECK_STATUS(fixture.control().exchange(request_bytes, move_request(7), answer, sizeof answer, written),
+               Status::not_found);
+  CHECK_EQ(written, 0u);
+  CHECK(fixture.control().invariants_hold()); }
+
+TEST(gpu_command_queue_exchange, refuses_a_second_exchange_while_one_is_waiting)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  struct Reentry {
+      Fixture      *fixture;
+      Status        status = Status::ok;
+      std::uint32_t written = 0u;
+      std::uint8_t  answer[GpuRequestWriter::response_size] = {};
+  } reentry{&fixture};
+  fixture.platform().on_stall([](void *context) {
+      auto *const state = static_cast<Reentry *>(context);
+      state->status = state->fixture->control().exchange(request_bytes, 32u, state->answer,
+                                                         sizeof state->answer, state->written);
+  }, &reentry);
+  std::uint8_t answer[GpuRequestWriter::response_size] = {};
+  std::uint32_t written = 0u;
+  CHECK_STATUS(fixture.control().exchange(request_bytes, move_request(7), answer, sizeof answer, written),
+               Status::not_found);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK_STATUS(reentry.status, Status::conflict); }
+
+TEST(gpu_command_queue_exchange, refuses_what_it_cannot_send_or_answer)
+{ Fixture fixture;
+  std::uint8_t answer[GpuRequestWriter::response_size] = {};
+  std::uint32_t written = 0u;
+  CHECK_STATUS(fixture.control().exchange(request_bytes, 32u, answer, sizeof answer, written), Status::invalid_state);
+  CHECK_STATUS(fixture.start(), Status::ok);
+  CHECK_STATUS(fixture.control().exchange(nullptr, 32u, answer, sizeof answer, written), Status::invalid_parameter);
+  CHECK_STATUS(fixture.control().exchange(request_bytes, 0u, answer, sizeof answer, written), Status::invalid_parameter);
+  CHECK_STATUS(fixture.control().exchange(request_bytes, 32u, nullptr, sizeof answer, written),
+               Status::invalid_parameter);
+  CHECK_STATUS(fixture.control().exchange(request_bytes, 32u, answer, 0u, written), Status::invalid_parameter);
+  CHECK_STATUS(fixture.control().exchange(wide_request_bytes, sizeof wide_request_bytes + 1u, answer, sizeof answer,
+                                          written), Status::too_large);
+  /* A queue with no answers to give cannot be asked. */
+  CHECK_STATUS(fixture.cursor().exchange(request_bytes, 32u, answer, sizeof answer, written),
+               Status::invalid_parameter); }
+
+namespace av {
+
+/* The states the invariant guards, which correct code never reaches. */
+struct GpuCommandQueueProbe {
+    static void lose_a_completion(GpuCommandQueue &queue) { queue.in_flight_++; }
+    static void wait_on_a_free_slot(GpuCommandQueue &queue) { queue.awaited_slot_ = 0u; }
+};
+
+}  // namespace av
+
+TEST(gpu_command_queue_invariants, a_lost_completion_and_a_free_awaited_slot_are_detected)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  CHECK(fixture.control().invariants_hold());
+  av::GpuCommandQueueProbe::wait_on_a_free_slot(fixture.control());
+  CHECK(!fixture.control().invariants_hold());
+  Fixture other;
+  CHECK_STATUS(other.start(), Status::ok);
+  av::GpuCommandQueueProbe::lose_a_completion(other.control());
+  CHECK(!other.control().invariants_hold()); }
+
+/* A wide request is asked and answered like any other. */
+TEST(gpu_command_queue_exchange, carries_a_wide_request)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Answering host(fixture, ok_nodata, 0u);
+  std::uint8_t answer[GpuRequestWriter::max_response_size] = {};
+  std::uint32_t written = 0u;
+  CHECK_STATUS(fixture.control().exchange(wide_request_bytes, GpuRequestWriter::max_request_size + 16u, answer,
+                                          sizeof answer, written), Status::ok);
+  CHECK_EQ(written, GpuRequestWriter::response_size); }
+
+/* No room to publish the request: the exchange says so instead of waiting. */
+TEST(gpu_command_queue_exchange, answers_a_queue_with_no_room)
+{ Fixture fixture(2u);
+  CHECK_STATUS(fixture.start(), Status::ok);
+  CHECK_STATUS(fixture.control().send(request_bytes, move_request(1)), Status::ok);
+  std::uint8_t answer[GpuRequestWriter::response_size] = {};
+  std::uint32_t written = 0u;
+  CHECK(fixture.control().exchange(request_bytes, move_request(2), answer, sizeof answer, written) != Status::ok); }
+
+/* A device that publishes a completion for nothing fails the harvest, and the
+ * exchange answers that rather than waiting out its polls. */
+TEST(gpu_command_queue_exchange, answers_a_harvest_that_failed)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  struct Lying {
+      Fixture *fixture;
+      bool     lied = false;
+  } lying{&fixture};
+  fixture.platform().on_stall([](void *context) {
+      auto *const state = static_cast<Lying *>(context);
+      if (state->lied) return;
+      state->lied = true;
+      state->fixture->device(0u).set_used_index(9u);
+  }, &lying);
+  std::uint8_t answer[GpuRequestWriter::response_size] = {};
+  std::uint32_t written = 0u;
+  CHECK(fixture.control().exchange(request_bytes, move_request(3), answer, sizeof answer, written) != Status::ok);
+  fixture.platform().on_stall(nullptr, nullptr); }
+
+/* Anything outside virtio-gpu's OK range is a refusal, whatever it is. */
+TEST(gpu_command_queue_harvest, counts_an_answer_that_is_not_an_ok_as_refused)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  CHECK_STATUS(fixture.control().send(request_bytes, move_request(1)), Status::ok);
+  FakeVirtqueueDevice device = fixture.device(0u);
+  CHECK_EQ(device.respond_all(0x1000u), 1u);   /* a command type, not an answer */
+  std::uint32_t completed = 0u, refused = 0u;
+  CHECK_STATUS(fixture.control().harvest(completed, refused), Status::ok);
+  CHECK_EQ(completed, 1u);
+  CHECK_EQ(refused, 1u); }

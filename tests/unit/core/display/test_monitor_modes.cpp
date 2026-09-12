@@ -41,7 +41,7 @@ TEST(monitor_modes_recommend, adds_every_mode_from_the_driver_the_preferred_one_
 { MockPlatform platform;
   FakeVidPn vidpn;
   CHECK_EQ(recommend(platform, vidpn), 0u);
-  CHECK_EQ(vidpn.monitor_modes().modes(), DisplayModeList::mode_count);
+  CHECK_EQ(vidpn.monitor_modes().modes(), DisplayModeList::standard_count);
   for (std::uint32_t index = 0u; index < vidpn.monitor_modes().modes(); index++) {
       const D3dkmdtMonitorSourceModeRecord &mode = vidpn.monitor_modes().mode(index);
       const bool is_preferred = mode.VideoSignalInfo.ActiveSizeCx == 1280u && mode.VideoSignalInfo.ActiveSizeCy == 800u;
@@ -59,7 +59,7 @@ TEST(monitor_modes_add, a_mode_the_monitor_already_has_is_not_a_failure)
   FakeVidPn vidpn;
   CHECK_EQ(recommend(platform, vidpn), 0u);
   CHECK_EQ(recommend(platform, vidpn), 0u);
-  CHECK_EQ(vidpn.monitor_modes().modes(), DisplayModeList::mode_count);
+  CHECK_EQ(vidpn.monitor_modes().modes(), DisplayModeList::standard_count);
   CHECK_EQ(vidpn.monitor_modes().outstanding(), 0u); }
 
 TEST(monitor_modes_add, a_refused_mode_info_or_add_fails_without_a_leak)

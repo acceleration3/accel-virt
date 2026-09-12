@@ -40,6 +40,17 @@ constexpr uint8_t  digital_separate_sync_positive_hsync = 0x1Au;
 
 Edid::Edid(Platform &platform, const DisplayMode &preferred) : platform_(platform), bytes_{}
 {
+    build(preferred);
+}
+
+void Edid::follow(const DisplayMode &preferred)
+{
+    platform_.require_irql_at_most(Irql::passive, "Edid::follow");
+    build(preferred);
+}
+
+void Edid::build(const DisplayMode &preferred)
+{
     const uint32_t width_mm = preferred.width() * millimetres_per_inch_tenths / dots_per_inch_tenths;
     const uint32_t height_mm = preferred.height() * millimetres_per_inch_tenths / dots_per_inch_tenths;
     WireWriter writer(bytes_, timing_offset);

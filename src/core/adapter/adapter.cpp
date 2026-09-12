@@ -63,6 +63,7 @@
 #include "core/support/invariant_scope.hpp"
 #include "core/support/nt_status.hpp"
 #include "core/support/text_buffer.hpp"
+#include "proto/virtio_gpu/gpu_request_writer.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/vidpn/cofunc_modality.hpp"
 #include "core/vidpn/vidpn_commit.hpp"
@@ -89,11 +90,11 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), budget_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
       resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), geometry_(platform),
       segment_(platform),
-      modes_(), edid_(platform, modes_.preferred()), sources_(platform),
+      display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, device_), scanout_(platform, budget_, device_), presented_fence_(0u),
-      started_(false), present_(true) {}
+      display_changed_(0u), started_(false), present_(true) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
 
@@ -166,6 +167,11 @@ int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_inte
         return NtStatus(status).value();
     }
     undo.dismiss();
+    /* A device that will not say what its displays are leaves the standard
+     * mode list standing, which is a working display, so this never fails the
+     * start - but it is logged, because the modes offered are then not the
+     * host's. */
+    log_status("rvkgpu: display info", NtStatus(follow_display_info()).value());
     *sources = DisplaySources::source_count;
     *children = DisplaySources::target_count;
     started_ = true;
@@ -196,11 +202,18 @@ int32_t Adapter::dispatch_io_request(uint32_t, void *)
 
 /* A message interrupt is ours by construction; a line interrupt only if the
  * device set an ISR bit, since the line may be shared. */
-uint8_t Adapter::interrupt_routine(uint32_t)
+/* A configuration change is how the device says its displays moved: with
+ * message interrupts it is the config vector, and on a line interrupt it is a
+ * bit of the ISR, which is read to clear and so must be noticed here. */
+uint8_t Adapter::interrupt_routine(uint32_t message)
 {
     platform_.require_irql_at_most(Irql::isr, "Adapter::interrupt_routine");
     if (!device_.constructed() || !present_) return 0u;
-    if (resources_.message_interrupts() == 0u && device_.object().read_isr() == 0u) return 0u;
+    const bool    messages = resources_.message_interrupts() != 0u;
+    const uint8_t isr = messages ? 0u : device_.object().read_isr();
+    if (!messages && isr == 0u) return 0u;
+    if (messages ? message == config_message : (isr & isr_configuration_changed) != 0u)
+        platform_.store_atomic(display_changed_, 1u);
     static_cast<void>(dxgkrnl_.queue_dpc());
     return 1u;
 }
@@ -265,6 +278,7 @@ int32_t Adapter::query_device_descriptor(uint32_t child, DxgkDeviceDescriptorRec
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_device_descriptor");
     if (child != 0u || descriptor == nullptr) return NtStatus(Status::invalid_parameter).value();
+    follow_display_change();
     /* The monitor's mode set is built from this EDID, so a bring-up that never
      * reaches a committable VidPn needs the answer visible. */
     const int32_t copied = edid_.copy(*descriptor).value();
@@ -575,6 +589,36 @@ void Adapter::log_handle(const char *step, const void *handle, int32_t status)
     platform_.log(message.text());
 }
 
+Status Adapter::follow_display_info()
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::follow_display_info");
+    if (!device_.constructed()) return Status::invalid_state;
+    /* The request fits a max_request_size buffer, so the writer cannot refuse
+     * it and its answer is voided as the scanout's are. */
+    uint8_t          request[GpuRequestWriter::max_request_size] = {};
+    GpuRequestWriter writer(request, sizeof request);
+    static_cast<void>(writer.get_display_info());
+    uint8_t  answer[GpuRequestWriter::max_response_size] = {};
+    uint32_t written = 0u;
+    const Status exchanged =
+        device_.object().ask_control(request, writer.length(), answer, sizeof answer, written);
+    if (exchanged != Status::ok) return exchanged;
+    const Status decoded = display_info_.decode(answer, written);
+    if (decoded != Status::ok) return decoded;
+    const Status followed = modes_.follow(display_info_, 0u);
+    if (followed != Status::ok) return followed;
+    edid_.follow(modes_.preferred());
+    return Status::ok;
+}
+
+void Adapter::follow_display_change()
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::follow_display_change");
+    if (platform_.load_atomic(display_changed_) == 0u) return;
+    platform_.store_atomic(display_changed_, 0u);
+    log_status("rvkgpu: display info", NtStatus(follow_display_info()).value());
+}
+
 void Adapter::log_status(const char *step, int32_t status)
 {
     if (!budget_.allows()) return;
@@ -630,6 +674,7 @@ int32_t Adapter::recommend_monitor_modes(const DxgkargRecommendMonitorModesRecor
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::recommend_monitor_modes");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    follow_display_change();
     const int32_t recommended = MonitorModes(platform_, modes_, *request).recommend().value();
     log_status("rvkgpu: RecommendMonitorModes", recommended);
     return recommended;

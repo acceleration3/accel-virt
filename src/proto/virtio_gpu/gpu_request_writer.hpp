@@ -21,6 +21,13 @@ public:
     static constexpr size_t   max_request_size = 64u;
     static constexpr size_t   response_size = 24u;      /* a response the driver reads: its header */
     static constexpr uint32_t response_ok_nodata = 0x1100u;
+    /* The OK range of virtio-gpu answers (virtio 1.2 5.7.6.7): anything below
+     * is not an answer, anything from the error range is a refusal. */
+    static constexpr uint32_t response_ok_first = 0x1100u;
+    static constexpr uint32_t response_error_first = 0x1200u;
+    /* The largest answer the driver reads: display info, one rectangle per
+     * scanout after the header. */
+    static constexpr size_t   max_response_size = 24u + 16u * 24u;
     static constexpr uint32_t format_b8g8r8a8 = 1u;     /* VIRTIO_GPU_FORMAT_B8G8R8A8_UNORM */
     /* An attach_backing_pages request: the fixed part, then one memory entry
      * per run, so a caller can size the destination it hands the writer. */

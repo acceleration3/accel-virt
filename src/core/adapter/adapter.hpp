@@ -5,6 +5,7 @@
 
 #include "core/adapter/driver_capabilities.hpp"
 #include "core/ddi/dxgkarg_control_interrupt2_record.hpp"
+#include "core/display/display_info_response.hpp"
 #include "core/display/display_mode_list.hpp"
 #include "core/display/display_scanout.hpp"
 #include "core/display/display_sources.hpp"
@@ -241,6 +242,10 @@ private:
     enum : int32_t { interrupt_crtc_vsync = 3 };                          /* DXGK_INTERRUPT_CRTC_VSYNC */
     static constexpr uint32_t engine_responsive = 1u;   /* DXGK_ENGINESTATUS.Responsive */
     static constexpr uint32_t system_memory_driver_segment = 0u;
+    /* VIRTIO_PCI_ISR_CONFIG, and the message the device's configuration vector
+     * raises when the driver was granted one per source. */
+    static constexpr uint8_t  isr_configuration_changed = 0x2u;
+    static constexpr uint32_t config_message = 0u;
     enum : int32_t { transformation_identity = 1 };   /* D3DKMDT_VPPS_IDENTITY, D3DKMDT_VPPR_IDENTITY */
 
     [[nodiscard]] Status discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface);
@@ -250,6 +255,13 @@ private:
     /* The host's scanout follows what was committed: the mode's resource, or
      * nothing when the path is gone. */
     [[nodiscard]] Status follow_commit(uint32_t source);
+    /* The device's own display info, followed into the mode list and the EDID.
+     * Passive only: it waits for the device's answer. */
+    [[nodiscard]] Status follow_display_info();
+    /* The same, but only once for each configuration change the device
+     * signalled: the interrupt notices, and the next DDI that describes the
+     * monitor asks, because asking waits and the DPC may not. */
+    void                 follow_display_change();
     void                 log_status(const char *step, int32_t status);
     /* Where dxgkrnl points a source, which is the only place the scanout can
      * look for a frame. Skipped at device IRQL, where the budget's lock is
@@ -272,6 +284,7 @@ private:
     DriverCapabilities             capabilities_;
     GpuMmuGeometry                 geometry_;
     ApertureSegment                segment_;
+    DisplayInfoResponse            display_info_;
     DisplayModeList                modes_;
     Edid                           edid_;
     DisplaySources                 sources_;
@@ -287,6 +300,9 @@ private:
     DisplayScanout                 scanout_;
     /* The node fence the host was last shown a frame for. */
     uint32_t                       presented_fence_;
+    /* Set from the interrupt when the device says its configuration changed,
+     * cleared by the DDI that follows it. */
+    uint64_t                       display_changed_;
     bool                           started_;
     bool                           present_;
 

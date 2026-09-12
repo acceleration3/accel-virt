@@ -79,8 +79,8 @@ TEST(cofunc_modality_enumerate, nothing_pinned_offers_every_mode_on_both_ends)
   CHECK_EQ(enumeration.run(), 0u);
   const auto &sources = enumeration.vidpn().source_modes(0u);
   const auto &targets = enumeration.vidpn().target_modes(0u);
-  CHECK_EQ(sources.modes(), DisplayModeList::mode_count);
-  CHECK_EQ(targets.modes(), DisplayModeList::mode_count);
+  CHECK_EQ(sources.modes(), DisplayModeList::standard_count);
+  CHECK_EQ(targets.modes(), DisplayModeList::standard_count);
   CHECK_EQ(sources.mode(0u).PrimSurfSizeCx, 640u);
   CHECK_EQ(sources.mode(0u).PixelFormat, 22);
   for (std::uint32_t index = 0u; index < targets.modes(); index++) {
@@ -124,28 +124,28 @@ TEST(cofunc_modality_visit, a_pinned_target_mode_leaves_its_set)
   enumeration.vidpn().target_modes(0u).seed(pinned, true);
   CHECK_EQ(enumeration.run(), 0u);
   CHECK_EQ(enumeration.vidpn().target_modes(0u).modes(), 1u);
-  CHECK_EQ(enumeration.vidpn().source_modes(0u).modes(), DisplayModeList::mode_count); }
+  CHECK_EQ(enumeration.vidpn().source_modes(0u).modes(), DisplayModeList::standard_count); }
 
 TEST(cofunc_modality_visit, the_pivot_mode_set_is_left_alone)
 { Enumeration source_pivot;
   source_pivot.request().EnumPivotType = pivot_source;
   CHECK_EQ(source_pivot.run(), 0u);
   CHECK_EQ(source_pivot.vidpn().source_modes(0u).modes(), 0u);
-  CHECK_EQ(source_pivot.vidpn().target_modes(0u).modes(), DisplayModeList::mode_count);
+  CHECK_EQ(source_pivot.vidpn().target_modes(0u).modes(), DisplayModeList::standard_count);
   Enumeration target_pivot;
   target_pivot.request().EnumPivotType = pivot_target;
   CHECK_EQ(target_pivot.run(), 0u);
-  CHECK_EQ(target_pivot.vidpn().source_modes(0u).modes(), DisplayModeList::mode_count);
+  CHECK_EQ(target_pivot.vidpn().source_modes(0u).modes(), DisplayModeList::standard_count);
   CHECK_EQ(target_pivot.vidpn().target_modes(0u).modes(), 0u);
   Enumeration other_ids;
   other_ids.request().EnumPivotType = pivot_source;
   other_ids.request().EnumPivotVidPnSourceId = 1u;
   CHECK_EQ(other_ids.run(), 0u);
-  CHECK_EQ(other_ids.vidpn().source_modes(0u).modes(), DisplayModeList::mode_count);
+  CHECK_EQ(other_ids.vidpn().source_modes(0u).modes(), DisplayModeList::standard_count);
   other_ids.request().EnumPivotType = pivot_target;
   other_ids.request().EnumPivotVidPnTargetId = 1u;
   CHECK_EQ(other_ids.run(), 0u);
-  CHECK_EQ(other_ids.vidpn().target_modes(0u).modes(), DisplayModeList::mode_count); }
+  CHECK_EQ(other_ids.vidpn().target_modes(0u).modes(), DisplayModeList::standard_count); }
 
 /* dxgkrnl closes an enumeration only when it has been told about every path -
  * UpdatePathSupportInfo's countdown - so a pivot does not buy the path a skip.

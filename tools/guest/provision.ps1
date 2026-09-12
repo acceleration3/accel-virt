@@ -12,11 +12,18 @@
 #            standard checks on rvkgpu.sys
 #   check    the adapter started on rvkgpu with no problem code; the verifier's
 #            settings
+#   modes    every display mode the driver offers, one "mode: WxH" line each,
+#            and the one in force as "current: WxH"
+#   setmode  switch the display to -Width by -Height; "set: <result>", where 0
+#            is DISP_CHANGE_SUCCESSFUL and anything else is a refusal
 #   collect  diagnostics into C:\rvk\diag, then one "file <path>" or
 #            "dump <path>" line per file for the runner to pull
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('prepare', 'sign', 'install', 'check', 'collect')][string]$Stage,
+    [Parameter(Mandatory = $true)]
+    [ValidateSet('prepare', 'sign', 'install', 'check', 'modes', 'setmode', 'collect')][string]$Stage,
     [string]$Package = 'C:\rvk\package',
+    [int]$Width = 0,
+    [int]$Height = 0,
     [switch]$MemoryDump
 )
 $ErrorActionPreference = 'Stop'
@@ -77,6 +84,63 @@ function SaveEvents($Log, $Count, $Name) {
         "no events from ${Log}: $($_.Exception.Message)" | Out-File $path -Encoding utf8
     }
 }
+
+# EnumDisplaySettings and ChangeDisplaySettings: what the control panel uses,
+# without a desktop session to open one in.
+$DisplayApi = @'
+using System;
+using System.Runtime.InteropServices;
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+public struct DEVMODE {
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+    public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra;
+    public int dmFields;
+    public int dmPositionX, dmPositionY, dmDisplayOrientation, dmDisplayFixedOutput;
+    public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+    public short dmLogPixels;
+    public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+    public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2;
+    public int dmPanningWidth, dmPanningHeight;
+}
+
+public class Display {
+    [DllImport("user32.dll", CharSet = CharSet.Ansi)]
+    private static extern bool EnumDisplaySettings(string device, int mode, ref DEVMODE devmode);
+    [DllImport("user32.dll", CharSet = CharSet.Ansi)]
+    private static extern int ChangeDisplaySettings(ref DEVMODE devmode, int flags);
+
+    private const int CurrentSettings = -1;
+    private const int FieldsSize = 0x00180000;   // DM_PELSWIDTH | DM_PELSHEIGHT
+    private const int UpdateRegistry = 0x00000001;
+
+    private static DEVMODE Empty() {
+        DEVMODE devmode = new DEVMODE();
+        devmode.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+        return devmode;
+    }
+
+    /* "WxH" of the mode `index`, or "" past the last one. */
+    public static string Mode(int index) {
+        DEVMODE devmode = Empty();
+        if (!EnumDisplaySettings(null, index, ref devmode)) return "";
+        return devmode.dmPelsWidth + "x" + devmode.dmPelsHeight;
+    }
+
+    public static string Current() { return Mode(CurrentSettings); }
+
+    /* What ChangeDisplaySettings answered: 0 is the switch. */
+    public static int Switch(int width, int height) {
+        DEVMODE devmode = Empty();
+        if (!EnumDisplaySettings(null, CurrentSettings, ref devmode)) return int.MinValue;
+        devmode.dmPelsWidth = width;
+        devmode.dmPelsHeight = height;
+        devmode.dmFields = FieldsSize;
+        return ChangeDisplaySettings(ref devmode, UpdateRegistry);
+    }
+}
+'@
 
 switch ($Stage) {
     'prepare' {
@@ -141,6 +205,24 @@ switch ($Stage) {
         # Last, so a failure's tail - all the runner reports - names the problem.
         Write-Output "device: $($device.InstanceId) status=$($device.Status) problem=$problem problem-status=$status service=$service"
         if ($device.Status -ne 'OK' -or $service -ne 'rvkgpu') { exit 1 }
+        exit 0
+    }
+    'modes' {
+        Add-Type -TypeDefinition $DisplayApi -ErrorAction Stop
+        $seen = @{}
+        for ($index = 0; ; $index++) {
+            $size = [Display]::Mode($index)
+            if ($size -eq '') { break }
+            if (-not $seen.ContainsKey($size)) { $seen[$size] = $true; Write-Output "mode: $size" }
+        }
+        $current = [Display]::Current()
+        if ($current -eq '') { Write-Output 'current: none'; exit 1 }
+        Write-Output "current: $current"
+        exit 0
+    }
+    'setmode' {
+        Add-Type -TypeDefinition $DisplayApi -ErrorAction Stop
+        Write-Output "set: $([Display]::Switch($Width, $Height))"
         exit 0
     }
     'collect' {

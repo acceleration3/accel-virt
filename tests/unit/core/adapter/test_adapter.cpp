@@ -1,5 +1,6 @@
 #include "core/adapter/adapter.hpp"
 #include "core/adapter/debug_report.hpp"
+#include "core/display/display_info_response.hpp"
 #include "core/ddi/d3dkmdt_shadow_surface_data_record.hpp"
 #include "core/ddi/dxgk_allocation_info_record.hpp"
 #include "core/ddi/dxgk_child_container_id_record.hpp"
@@ -79,6 +80,7 @@
 #include "proto/resources/allocation_descriptor.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <cstring>
 
 namespace av {
@@ -133,15 +135,77 @@ constexpr std::uint8_t  failed_bit = 0x80u;
 
 std::uint32_t nt(std::int32_t status) { return static_cast<std::uint32_t>(status); }
 
+/* The display info a host with one 1280x800 scanout answers. */
+class DisplayInfoAnswer {
+public:
+    DisplayInfoAnswer() : bytes_{} { describe(0u, 1280u, 800u); }
+
+    void describe(std::uint32_t scanout, std::uint32_t width, std::uint32_t height)
+    {
+        write(0u, av::DisplayInfoResponse::response_type);
+        const std::size_t at = av::DisplayInfoResponse::header_size +
+                               scanout * av::DisplayInfoResponse::scanout_size;
+        write(at + 8u, width);
+        write(at + 12u, height);
+        write(at + 16u, 1u);
+    }
+
+    /* A scanout the device reports as off. */
+    void disable(std::uint32_t scanout)
+    {
+        write(av::DisplayInfoResponse::header_size + scanout * av::DisplayInfoResponse::scanout_size + 16u, 0u);
+    }
+
+    const std::uint8_t *bytes() const { return bytes_; }
+    std::uint32_t       length() const { return sizeof bytes_; }
+
+private:
+    void write(std::size_t offset, std::uint32_t value)
+    {
+        for (unsigned byte = 0u; byte < 4u; byte++)
+            bytes_[offset + byte] = static_cast<std::uint8_t>(value >> (8u * byte));
+    }
+
+    std::uint8_t bytes_[av::DisplayInfoResponse::encoded_size];
+};
+
 /* One adapter as dxgkrnl sees it: AddDevice done, StartDevice not yet. */
 class Fixture {
 public:
     Fixture() : dxgkrnl_(platform_, function_), adapter_(platform_, &function_), sources_(9u), children_(9u) {}
     ~Fixture() { static_cast<void>(adapter_.stop_device()); }
 
+    /* StartDevice asks the device what its displays are and waits for the
+     * answer, so the host answers from the stall between its polls. */
     std::uint32_t start()
     {
-        return nt(adapter_.start_device(nullptr, &dxgkrnl_.record(), &sources_, &children_));
+        /* A start builds new rings, so the device side of the old ones is gone. */
+        control_.reset();
+        platform_.on_stall(&Fixture::answer_display_info, this);
+        const std::uint32_t started = nt(adapter_.start_device(nullptr, &dxgkrnl_.record(), &sources_, &children_));
+        platform_.on_stall(nullptr, nullptr);
+        return started;
+    }
+
+    DisplayInfoAnswer &display_info() { return display_info_; }
+
+    /* What the host answers StartDevice's ask: nothing at all unless a test
+     * says otherwise. */
+    enum class Answer { display_info, none, wrong_type, no_scanout };
+    void answer_with(Answer answer) { answer_ = answer; }
+
+    /* The host answering a later ask, for a test that changes the display. */
+    static void answer_display_info_from(void *context) { answer_display_info(context); }
+
+    /* The device side of the control queue, shared with the answer StartDevice
+     * waits for, so a test sees the requests made after it and no others. */
+    av::FakeVirtqueueDevice &control()
+    {
+        if (!control_.has_value()) {
+            const av::FakeCommonConfig::Queue &queue = function_.common().queue(0u);
+            control_.emplace(platform_, queue.desc, queue.driver, queue.device, queue.size);
+        }
+        return *control_;
     }
 
     MockPlatform          &platform() { return platform_; }
@@ -152,10 +216,26 @@ public:
     std::uint32_t          children() const { return children_; }
 
 private:
+    static void answer_display_info(void *context)
+    {
+        auto *const fixture = static_cast<Fixture *>(context);
+        if (fixture->answer_ == Answer::none) return;
+        if (fixture->answer_ == Answer::wrong_type) {
+            static_cast<void>(fixture->control().respond_all(0x1100u));   /* OK_NODATA, not display info */
+            return;
+        }
+        if (fixture->answer_ == Answer::no_scanout) fixture->display_info_.disable(0u);
+        static_cast<void>(fixture->control().respond_all(fixture->display_info_.bytes(),
+                                                         fixture->display_info_.length()));
+    }
+
     MockPlatform          platform_;
     FakeVirtioGpuFunction function_;
     FakeDxgkrnlAdapter    dxgkrnl_;
     Adapter               adapter_;
+    DisplayInfoAnswer     display_info_;
+    Answer                answer_ = Answer::display_info;
+    std::optional<av::FakeVirtqueueDevice> control_;
     std::uint32_t         sources_;
     std::uint32_t         children_;
 };
@@ -479,7 +559,7 @@ TEST(adapter_dpc_routine, a_device_lying_about_a_completion_is_failed_and_logged
   CHECK_EQ(fixture.start(), success);
   const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(0u);
   const auto used = static_cast<std::uint8_t *>(fixture.platform().translate_physical(queue.device, 4u));
-  used[2] = 1u;   /* used.idx: one completion nothing was submitted for */
+  used[2] = 9u;   /* used.idx: completions nothing was submitted for */
   const std::uint32_t logged = fixture.platform().logged();
   fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
@@ -597,7 +677,8 @@ TEST(adapter_enum_vidpn_cofunc_modality, offers_the_modes_on_the_path)
   vidpn.add_path(0u, 0u);
   const av::DxgkargEnumVidPnCofuncModalityRecord request = {&vidpn, no_pivot, 0u, 0u, 0u};
   CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(&request)), success);
-  CHECK_EQ(vidpn.source_modes(0u).modes(), 11u);
+  /* The five standard modes that fit the 1280x800 display the device reports. */
+  CHECK_EQ(vidpn.source_modes(0u).modes(), 5u);
   CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(nullptr)), invalid_parameter); }
 
 TEST(adapter_enum_vidpn_cofunc_modality, before_start_dxgkrnl_cannot_be_reached)
@@ -609,16 +690,16 @@ TEST(adapter_enum_vidpn_cofunc_modality, before_start_dxgkrnl_cannot_be_reached)
 TEST(adapter_commit_vidpn, records_the_mode_scan_lines_follow)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
-  CHECK_EQ(commit(fixture, 1920u, 1080u), success);
+  CHECK_EQ(commit(fixture, 1280u, 800u), success);
   av::DxgkargGetScanLineRecord scan = {0u, 0u, {}, 0u};
   const std::uint64_t second = 10000000u;
   fixture.platform().advance_time(second - fixture.platform().interrupt_time() % second + 163000u);
   CHECK_EQ(nt(fixture.adapter().get_scan_line(&scan)), success);
-  CHECK_EQ(scan.ScanLine, 1100u);
+  CHECK_EQ(scan.ScanLine, 814u);
   CHECK_EQ(scan.InVerticalBlank, 1u);
   fixture.platform().advance_time(second - 163000u + 83333u);
   CHECK_EQ(nt(fixture.adapter().get_scan_line(&scan)), success);
-  CHECK_EQ(scan.ScanLine, 562u);
+  CHECK_EQ(scan.ScanLine, 416u);
   CHECK_EQ(scan.InVerticalBlank, 0u);
   CHECK_EQ(commit(fixture, 1000u, 700u), invalid_source_mode);
   CHECK_EQ(nt(fixture.adapter().commit_vidpn(nullptr)), invalid_parameter); }
@@ -629,8 +710,7 @@ TEST(adapter_commit_vidpn, records_the_mode_scan_lines_follow)
 TEST(adapter_commit_vidpn, the_committed_source_reaches_the_host_scanout)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
-  const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(0u);
-  av::FakeVirtqueueDevice control(fixture.platform(), queue.desc, queue.driver, queue.device, queue.size);
+  av::FakeVirtqueueDevice &control = fixture.control();
   CHECK_EQ(commit(fixture, 1280u, 800u), success);
   const av::DxgkargSetVidPnSourceVisibilityRecord visible = {0u, 1u, {}};
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&visible)), success);
@@ -646,11 +726,12 @@ TEST(adapter_commit_vidpn, the_committed_source_reaches_the_host_scanout)
   fixture.platform().set_irql(Irql::passive);
   const std::uint32_t after_commit = control.respond_all(0x1100u);
   CHECK_EQ(after_commit, 5u);                         /* create, attach, set_scanout, transfer, flush */
-  CHECK_EQ(control.request_type(0u), 0x0101u);
-  CHECK_EQ(control.request_type(1u), 0x0106u);
-  CHECK_EQ(control.request_type(2u), 0x0103u);
-  CHECK_EQ(control.request_type(3u), 0x0105u);
-  CHECK_EQ(control.request_type(4u), 0x0104u);
+  /* Request 0 was StartDevice's display info. */
+  CHECK_EQ(control.request_type(1u), 0x0101u);
+  CHECK_EQ(control.request_type(2u), 0x0106u);
+  CHECK_EQ(control.request_type(3u), 0x0103u);
+  CHECK_EQ(control.request_type(4u), 0x0105u);
+  CHECK_EQ(control.request_type(5u), 0x0104u);
   /* Nothing presented since: the host is not asked to read again. */
   fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
@@ -719,8 +800,7 @@ TEST(adapter_commit_vidpn, a_refused_scanout_resource_is_logged)
 TEST(adapter_commit_vidpn, a_path_that_is_gone_scans_out_nothing)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
-  const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(0u);
-  av::FakeVirtqueueDevice control(fixture.platform(), queue.desc, queue.driver, queue.device, queue.size);
+  av::FakeVirtqueueDevice &control = fixture.control();
   CHECK_EQ(commit(fixture, 1280u, 800u), success);
   CHECK_EQ(control.respond_all(0x1100u), 1u);
   av::FakeVidPn empty;
@@ -1166,8 +1246,7 @@ TEST(adapter_set_pointer_shape, reaches_the_device_once_started)
   CHECK_EQ(nt(fixture.adapter().set_pointer_position(&position)), success);
   CHECK_EQ(nt(fixture.adapter().set_pointer_shape(nullptr)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().set_pointer_position(nullptr)), invalid_parameter);
-  const av::FakeCommonConfig::Queue &control = fixture.function().common().queue(0u);
-  av::FakeVirtqueueDevice device(fixture.platform(), control.desc, control.driver, control.device, control.size);
+  av::FakeVirtqueueDevice &device = fixture.control();
   CHECK_EQ(device.respond_all(0x1100u), 3u);
   const std::uint32_t quiet = fixture.platform().logged();
   fixture.platform().set_irql(Irql::dispatch);
@@ -1185,8 +1264,9 @@ TEST(adapter_set_pointer_shape, a_power_cycle_creates_the_cursor_resource_again)
   CHECK_EQ(nt(fixture.adapter().set_pointer_shape(&shape)), invalid_device_state);
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
   CHECK_EQ(nt(fixture.adapter().set_pointer_shape(&shape)), success);
-  const av::FakeCommonConfig::Queue &control = fixture.function().common().queue(0u);
-  av::FakeVirtqueueDevice device(fixture.platform(), control.desc, control.driver, control.device, control.size);
+  /* The power cycle built new rings, so the device side is new too. */
+  const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(0u);
+  av::FakeVirtqueueDevice device(fixture.platform(), queue.desc, queue.driver, queue.device, queue.size);
   CHECK_EQ(device.respond_all(0x1100u), 3u);
   CHECK_EQ(device.request_type(0u), 0x0101u); }
 
@@ -2141,3 +2221,99 @@ TEST(adapter_set_vidpn_source_address, says_where_a_source_points_while_the_wind
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(fixture.platform().logged(), spent); }
+
+/* The device's own display info decides what the driver offers: the modes that
+ * fit its scanout, and an EDID whose preferred timing is its size. */
+TEST(adapter_start_device, offers_the_modes_the_device_s_display_holds)
+{ Fixture fixture;
+  fixture.display_info().describe(0u, 1024u, 768u);
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkDeviceDescriptorRecord descriptor = {};
+  std::uint8_t edid[av::Edid::block_bytes] = {};
+  descriptor.DescriptorOffset = 0u;
+  descriptor.DescriptorLength = sizeof edid;
+  descriptor.DescriptorBuffer = edid;
+  CHECK_EQ(nt(fixture.adapter().query_device_descriptor(0u, &descriptor)), success);
+  CHECK_EQ(edid[56] | (edid[58] >> 4u) << 8u, 1024u);
+  av::FakeVidPn vidpn;
+  vidpn.add_path(0u, 0u);
+  const av::DxgkargEnumVidPnCofuncModalityRecord request = {&vidpn, no_pivot, 0u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(&request)), success);
+  CHECK_EQ(vidpn.source_modes(0u).modes(), 3u);   /* 640x480, 800x600, 1024x768 */
+  CHECK_EQ(commit(fixture, 1280u, 800u), invalid_source_mode); }
+
+/* A host that resizes the display raises a configuration change; the next DDI
+ * that describes the monitor asks the device again, because asking waits and
+ * the interrupt may not. */
+TEST(adapter_interrupt_routine, a_configuration_change_is_followed_by_the_next_monitor_ddi)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  fixture.display_info().describe(0u, 1600u, 900u);
+  fixture.platform().on_stall(&Fixture::answer_display_info_from, &fixture);
+  fixture.platform().set_irql(Irql::isr);
+  /* With message interrupts the device's configuration vector is message 0. */
+  CHECK_EQ(fixture.adapter().interrupt_routine(0u), 1u);
+  fixture.platform().set_irql(Irql::passive);
+  av::DxgkDeviceDescriptorRecord descriptor = {};
+  std::uint8_t edid[av::Edid::block_bytes] = {};
+  descriptor.DescriptorLength = sizeof edid;
+  descriptor.DescriptorBuffer = edid;
+  CHECK_EQ(nt(fixture.adapter().query_device_descriptor(0u, &descriptor)), success);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK_EQ(edid[56] | (edid[58] >> 4u) << 8u, 1600u);
+  /* Asked once: the second descriptor is answered from what it learned. */
+  const std::uint32_t asked = fixture.control().requests();
+  CHECK_EQ(nt(fixture.adapter().query_device_descriptor(0u, &descriptor)), success);
+  CHECK_EQ(fixture.control().requests(), asked); }
+
+/* Nothing the device says about its displays can leave the driver unable to
+ * offer one: the standard modes stand, and the refusal is logged. */
+TEST(adapter_start_device, keeps_its_modes_when_the_device_says_nothing_useful)
+{ const char *const answers[] = {"none", "not display info", "no enabled scanout"};
+  for (const char *const answer : answers) {
+      Fixture fixture;
+      fixture.answer_with(std::strcmp(answer, "none") == 0          ? Fixture::Answer::none
+                          : std::strcmp(answer, "not display info") == 0 ? Fixture::Answer::wrong_type
+                                                                         : Fixture::Answer::no_scanout);
+      CHECK_EQ(fixture.start(), success);
+      av::FakeVidPn vidpn;
+      vidpn.add_path(0u, 0u);
+      const av::DxgkargEnumVidPnCofuncModalityRecord request = {&vidpn, no_pivot, 0u, 0u, 0u};
+      CHECK_EQ(nt(fixture.adapter().enum_vidpn_cofunc_modality(&request)), success);
+      CHECK_EQ(vidpn.source_modes(0u).modes(), av::DisplayModeList::standard_count);
+  } }
+
+/* A device that went away cannot be asked what its displays are, and the
+ * change it signalled before it went is not followed into nothing. */
+TEST(adapter_query_device_descriptor, asks_no_device_that_is_gone)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(fixture.adapter().interrupt_routine(0u), 1u);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(nt(fixture.adapter().stop_device()), success);
+  av::DxgkDeviceDescriptorRecord descriptor = {};
+  std::uint8_t edid[av::Edid::block_bytes] = {};
+  descriptor.DescriptorLength = sizeof edid;
+  descriptor.DescriptorBuffer = edid;
+  CHECK_EQ(nt(fixture.adapter().query_device_descriptor(0u, &descriptor)), success);
+  CHECK_EQ(edid[56] | (edid[58] >> 4u) << 8u, 1280u); }
+
+/* A harvest that fails every DPC would otherwise log every DPC. */
+TEST(adapter_dpc_routine, a_failing_harvest_is_silent_once_the_window_is_spent)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  const av::DxgkargRecommendVidPnTopologyRecord topology = {};
+  for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++)
+      static_cast<void>(fixture.adapter().recommend_vidpn_topology(&topology));
+  const std::uint32_t spent = fixture.platform().logged();
+  const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(0u);
+  const auto used = static_cast<std::uint8_t *>(fixture.platform().translate_physical(queue.device, 4u));
+  used[2] = 9u;   /* used.idx: completions nothing was submitted for */
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  /* The queue says once, without the budget, that the device lied; the DPC's
+   * own line about it is what the spent window keeps quiet. */
+  CHECK_EQ(fixture.platform().logged(), spent + 1u);
+  CHECK(std::strstr(fixture.platform().last_log(), "harvest failed in the DPC") == nullptr); }

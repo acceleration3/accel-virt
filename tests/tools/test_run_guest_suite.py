@@ -84,7 +84,9 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("-msg timestamp=on", argv)
         self.assertNotIn("-gdb", argv)
         events = [line.split(" ")[0] if line.startswith(("exec", "file", "pull")) else line for line in lines[1:]]
-        self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
+        self.assertEqual(self.stage_calls(),
+                         ["sign", "install", "check", "modes", "setmode -Width 1024 -Height 768",
+                          "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800", "collect"])
         self.assertEqual(events.count("file"), 4)
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.sys 1000", lines)
@@ -92,8 +94,8 @@ class GuestSuiteRun(unittest.TestCase):
         order = [line for line in lines
                  if line in ("reboot", "powerdown") or (line.startswith("exec") and ("-Stage" in line or "rvktest" in line))]
         self.assertEqual([o if o in ("reboot", "powerdown") else o.split()[-1] for o in order],
-                         ["sign", "reboot", "install", "reboot", "check", "C:\\rvk\\rvktest.exe", "collect",
-                          "powerdown"])
+                         ["sign", "reboot", "install", "reboot", "check", "modes", "768", "1600", "800",
+                          "C:\\rvk\\rvktest.exe", "collect", "powerdown"])
         self.assertEqual((self.work / "report.txt").read_text(), PASSING_REPORT)
         self.assertIn("service=rvkgpu", (self.work / "device.txt").read_text())
         self.assertIn("rvkgpu: DriverEntry", (self.work / "rvkgpu.log").read_text())
@@ -318,6 +320,42 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("display ok: 1280x800 scanned out of the guest's primary", result.stdout)
         self.assertEqual(Screendump(self.work / "screen.ppm").size(), (1280, 800))
         self.assertIn("screendump 1280x800", self.journal_lines())
+
+    def test_a_mode_the_driver_offers_must_reach_the_guest(self):
+        """US2: the modes the run works with are ones the guest can choose.
+        What Windows adds of its own is not the driver's, so only the absence
+        of one of ours fails the run."""
+        self.script(screendump=[1280, 800], modes=["1280x800", "1920x1080"])
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the guest is not offered ['1024x768']", (self.work / "verdict.txt").read_text())
+
+    def test_a_switch_the_guest_refuses_must_leave_the_scanout_alone(self):
+        """The console session's display is not the session 0 service's to
+        change; a refusal must not disturb what the host scans out."""
+        self.script(screendump=[1280, 800], setmode_refused=True)
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("setmode ok: 1024x768 refused, and the console session kept", result.stdout)
+
+    def test_a_switch_the_host_does_not_follow_fails_the_run(self):
+        """The guest took the mode; if the host still scans out the old size,
+        the driver never told it."""
+        self.script(screendump=[1280, 800], screendump_fixed=True)
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the host scans out 1280x800 after a switch to 1024x768",
+                      (self.work / "verdict.txt").read_text())
+
+    def test_a_mode_the_driver_never_offered_must_be_refused(self):
+        """A guest that takes 2560x1600 committed a mode the driver does not
+        have, and the host would scan out a rectangle it does not have."""
+        self.script(screendump=[1280, 800],
+                    modes=["640x480", "800x600", "1024x768", "1280x720", "1280x800", "2560x1600"])
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the guest took 2560x1600, which the driver never offered",
+                      (self.work / "verdict.txt").read_text())
 
     def test_a_scanout_of_the_wrong_size_fails_the_run(self):
         self.script(screendump=[640, 480])

@@ -168,6 +168,23 @@ DISPLAY_SIZE = (1280, 800)
 """The mode the guest commits with QEMU's default -display size."""
 PLACEHOLDER_GREY = b"\xaa\xaa\xaa"
 """The grey QEMU draws its "display output is not active" text in."""
+SETTLE_SECONDS = 1.0
+"""Long enough for the DPC that follows a commit to have run."""
+OFFERED_MODES = ["1024x768", "1280x800"]
+"""The modes this run works with, both of which
+src/core/display/display_mode_list.cpp offers for a 1280x800 display.
+EnumDisplaySettings is not the driver's list - Windows adds sizes of its own
+above the display (1920x1200, 2560x1600) and drops some of the driver's
+(1280x720) - so the run asserts that these two are offered, not that the list
+is the driver's."""
+SWITCH_MODE = "1024x768"
+"""The mode the run asks for. The agent is a session 0 service, and the display
+the host scans out belongs to the console session, so Windows may refuse the
+switch outright; what must hold either way is that the host's scanout follows
+a switch that was taken and does not move for one that was not."""
+UNOFFERED_MODE = "2560x1600"
+"""Larger than the display: the driver never offers it, so it must be refused
+rather than committed and scanned out."""
 
 
 class Screendump:
@@ -387,6 +404,69 @@ class GuestRun:
         self.say(f"display ok: {width}x{height} scanned out of the guest's primary, "
                  f"{len(colours)} colour(s)")
 
+    def guest_modes(self):
+        """Every mode the driver offers the guest, and the one in force."""
+        code, out, error = self.provision("modes")
+        if code != 0:
+            raise StepFailed("modes", f"exited {code}: {(out + error).decode(errors='replace').strip()[-400:]}")
+        lines = out.decode(errors="replace").splitlines()
+        offered = [line.split(":", 1)[1].strip() for line in lines if line.startswith("mode:")]
+        current = next((line.split(":", 1)[1].strip() for line in lines if line.startswith("current:")), "")
+        return offered, current
+
+    def set_guest_mode(self, size):
+        """What ChangeDisplaySettings answered: 0 is the switch, anything else
+        a refusal (DISP_CHANGE_BADMODE is -2)."""
+        width, height = size.split("x")
+        code, out, error = self.provision("setmode", ("-Width", width, "-Height", height))
+        if code != 0:
+            raise StepFailed("setmode", f"exited {code}: {(out + error).decode(errors='replace').strip()[-400:]}")
+        answer = next((line.split(":", 1)[1].strip() for line in out.decode(errors="replace").splitlines()
+                       if line.startswith("set:")), "")
+        if not answer.lstrip("-").isdigit():
+            raise StepFailed("setmode", f"the guest said {answer!r} switching to {size}")
+        return int(answer)
+
+    def scanout_size(self, name):
+        """The host's scanout, once the driver has had a frame to follow a
+        commit: the address is programmed from the DPC, not from the switch."""
+        time.sleep(SETTLE_SECONDS)
+        dump = Screendump(self.work / "screen.ppm").capture(self.qmp)
+        width, height = dump.size()
+        if width == 0 or height == 0:
+            raise StepFailed(name, f"the screendump is not a PPM: {dump.path}")
+        return f"{width}x{height}"
+
+    def mode_switch(self):
+        """US2: the modes the device's display holds are offered, a switch to
+        one of them moves the host's scanout, and one it does not hold is
+        refused with the mode in force left alone."""
+        committed = f"{DISPLAY_SIZE[0]}x{DISPLAY_SIZE[1]}"
+        offered, current = self.guest_modes()
+        missing = [size for size in OFFERED_MODES if size not in offered]
+        if missing:
+            raise StepFailed("modes", f"the guest is not offered {missing}: {offered}")
+        self.say(f"modes ok: {len(offered)} listed, all {len(OFFERED_MODES)} the driver offers among them, "
+                 f"{current} in force")
+        taken = self.set_guest_mode(SWITCH_MODE) == 0
+        expected = SWITCH_MODE if taken else committed
+        switched = self.scanout_size("setmode")
+        if switched != expected:
+            raise StepFailed("setmode", f"the host scans out {switched} after a switch to {SWITCH_MODE} the guest "
+                                        f"{'took' if taken else 'refused'}")
+        if self.set_guest_mode(UNOFFERED_MODE) == 0:
+            raise StepFailed("setmode", f"the guest took {UNOFFERED_MODE}, which the driver never offered")
+        kept = self.scanout_size("setmode")
+        if kept != expected:
+            raise StepFailed("setmode", f"a refused switch left the host scanning out {kept}, not {expected}")
+        if taken and self.set_guest_mode(committed) != 0:
+            raise StepFailed("setmode", f"the guest refused {committed} going back")
+        back = self.scanout_size("setmode")
+        if back != committed:
+            raise StepFailed("setmode", f"the host scans out {back} after going back to {committed}")
+        self.say(f"setmode ok: {SWITCH_MODE} {'taken' if taken else 'refused, and the console session kept'}, "
+                 f"{UNOFFERED_MODE} refused, {committed} scanned out")
+
     def driver_log(self):
         path = self.work / "rvkgpu.log"
         return path.read_text(errors="replace") if path.exists() else ""
@@ -398,6 +478,7 @@ class GuestRun:
             self.reboot("install")
         self.stage("check", saved="device.txt")
         self.display()
+        self.mode_switch()
         self.suite()
 
     def prepare_guest(self):

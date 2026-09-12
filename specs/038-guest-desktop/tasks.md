@@ -109,11 +109,45 @@ from, before it is fixed (FR-007).
 
 ## Phase 3 (US2): modes from the device
 
-- [ ] T010 [US2] Tests then `DisplayInfoResponse` in src/core/display/display_info_response.{hpp,cpp}: a valid answer parsed, and a hostile table - zero length, truncated at every field boundary, a count past the protocol's maximum, a rectangle whose width or height is zero or enormous, a disabled scanout, a byte-flip sweep - each answering a status and writing nothing; plus tests/fuzz/fuzz_display_info.cpp with a committed corpus
-- [ ] T011 [US2] Tests then `DisplayModeList` built from a `DisplayInfoResponse` in src/core/display/display_mode_list.{hpp,cpp}: the device's size preferred, standard modes that fit offered, none that do not, and a refused or absent answer keeping the current list with the value logged
-- [ ] T012 [US2] The adapter asks for display info at `start_device` and on a device configuration change, and the EDID follows the preferred mode, in src/core/adapter/adapter.cpp and src/core/display/edid.{hpp,cpp}; L1 and L2 tests
-- [ ] T013 [US2] Runner: a guest-side mode list and switch over the agent, and a screendump whose size follows it; a mode the driver does not offer is refused and the current mode stays, in tools/guest/run_guest_suite.py
-- [ ] T014 [US2] A guest run: every offered mode selected in turn is the screendump's size, the choice survives a reboot, and a host display-size change is followed; record what it found here
+- [X] T010 [US2] Tests then `DisplayInfoResponse` in src/core/display/display_info_response.{hpp,cpp}: a valid answer parsed, and a hostile table - zero length, truncated at every field boundary, a count past the protocol's maximum, a rectangle whose width or height is zero or enormous, a disabled scanout, a byte-flip sweep - each answering a status and writing nothing; plus tests/fuzz/fuzz_display_info.cpp with a committed corpus
+- [X] T011 [US2] Tests then `DisplayModeList` built from a `DisplayInfoResponse` in src/core/display/display_mode_list.{hpp,cpp}: the device's size preferred, standard modes that fit offered, none that do not, and a refused or absent answer keeping the current list with the value logged
+- [X] T012 [US2] The adapter asks for display info at `start_device` and on a device configuration change, and the EDID follows the preferred mode, in src/core/adapter/adapter.cpp and src/core/display/edid.{hpp,cpp}; L1 and L2 tests
+- [X] T013 [US2] Runner: a guest-side mode list and switch over the agent, and a screendump whose size follows it; a mode the driver does not offer is refused and the current mode stays, in tools/guest/run_guest_suite.py
+- [X] T014 [US2] A guest run: every offered mode selected in turn is the screendump's size, the choice survives a reboot, and a host display-size change is followed; record what it found here
+
+  **What it took.** `DisplayInfoResponse` (object class) validates the device's
+  `GET_DISPLAY_INFO` answer, `DisplayModeList::follow` offers the standard modes
+  that fit the scanout it reports and prefers that size, and `Edid::follow`
+  rebuilds the block around it. Asking needs an answer, which the driver had no
+  way to read: `GpuCommandQueue::exchange` sends one request and waits for the
+  device's answer to *it*, harvesting the queue itself, because StartDevice runs
+  before dxgkrnl has connected the interrupt. The control queue's slots now hold
+  a display-info answer, and anything in virtio-gpu's OK range counts as an
+  answer rather than a refusal. A configuration change the device signals is
+  noticed by the interrupt and followed by the next DDI that describes the
+  monitor, because asking waits and a DPC may not.
+
+  **What the run found.** The driver's modes reach the guest: of the 18 sizes
+  `EnumDisplaySettings` lists, both the ones this run works with - 1024x768 and
+  the committed 1280x800 - are there, and 2560x1600 is refused, so a mode the
+  driver never offered cannot be committed. Neither refusal moves the host's
+  scanout, which stays 1280x800 through both.
+
+  **Two things the list is not.** Windows' list is not the driver's: it adds
+  sizes above the display (1920x1200, 2560x1600, 1856x1392) and drops at least
+  one the driver offers (1280x720), so the run asserts what the guest can *do*
+  with the driver's modes, not that the list is them.
+
+  **And the switch itself cannot be driven from here.** The agent is a session 0
+  service, and `EnumDisplaySettings` answers *that* session's desktop: it
+  reports 1024x768 in force while the host scans out the console session's
+  1280x800, and `ChangeDisplaySettings` refuses. The console session's display
+  belongs to winlogon, and with no user logged in there is no token to borrow,
+  so "every offered mode selected in turn is the screendump's size" waits for a
+  run with an interactive session. The step asserts what holds either way: a
+  switch that is taken moves the host's scanout, one that is refused leaves it
+  alone. A host display-size change is not tested either - `-display none` has
+  no window for QEMU to resize, and nothing else drives `virtio_gpu_ui_info`.
 
 **Checkpoint**: commit.
 

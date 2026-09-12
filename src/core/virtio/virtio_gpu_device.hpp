@@ -44,6 +44,10 @@ public:
     uint8_t              read_isr();
     /* A virtio-gpu request, not waited on: invalid_state unless running. */
     [[nodiscard]] Status send_control(const uint8_t *request, size_t length);
+    /* A control request and the answer to it, waited for at PASSIVE: what the
+     * driver uses before dxgkrnl has connected the interrupt. */
+    [[nodiscard]] Status ask_control(const uint8_t *request, size_t length, uint8_t *response, size_t capacity,
+                                     uint32_t &written);
     [[nodiscard]] Status send_cursor(const uint8_t *request, size_t length);
     /* Takes every completed request of the queue, logging refusals; a device
      * that lies about one is failed. */

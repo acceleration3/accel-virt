@@ -33,6 +33,9 @@ public:
      * the chain's writable buffer, and reports that as written (nothing
      * written for a chain without one). */
     std::uint16_t respond_all(std::uint32_t type);
+    /* The same, with a payload: copies as much of `answer` as the chain's
+     * writable buffer holds and reports that as written. */
+    std::uint16_t respond_all(const std::uint8_t *answer, std::uint32_t length);
     static constexpr std::uint32_t max_requests = 64u;
     static constexpr std::uint32_t request_bytes = 64u;
     std::uint32_t        requests() const;

@@ -12,7 +12,8 @@ namespace av {
 GpuCommandQueue::GpuCommandQueue(Platform &platform, VirtioPciTransport &transport, uint16_t index,
                                  uint32_t response_bytes, uint32_t wide_bytes, LockRank rank)
     : platform_(platform), transport_(transport), queue_(platform, index), lock_(platform, rank),
-      response_bytes_(response_bytes), slots_(nullptr), slots_address_(0u), wide_bytes_(wide_bytes), busy_{},
+      response_bytes_(response_bytes), slots_(nullptr), slots_address_(0u), wide_bytes_(wide_bytes),
+      awaited_slot_(no_slot), awaited_response_(nullptr), awaited_capacity_(0u), awaited_written_(0u), busy_{},
       slot_of_head_{}, in_flight_(0u) {}
 
 GpuCommandQueue::~GpuCommandQueue() { release_slots(); }
@@ -64,6 +65,28 @@ Status GpuCommandQueue::activate(uint16_t vector)
     return status;
 }
 
+Status GpuCommandQueue::send_locked(const uint8_t *request, size_t length, uint32_t &slot)
+{
+    InvariantScope<GpuCommandQueue> guard(platform_, *this, "send");
+    slot = slot_for(length);
+    if (slot == no_slot) return Status::no_space;
+    const size_t   offset = offset_of(slot);
+    uint8_t *const bytes = slots_ + offset;
+    platform_.copy(bytes, request, length);
+    const uint64_t address = slots_address_ + offset;
+    const VirtqSegment segments[] = {
+        VirtqSegment(address, static_cast<uint32_t>(length), SegmentDirection::device_reads),
+        VirtqSegment(address + request_bytes_of(slot), response_bytes_, SegmentDirection::device_writes),
+    };
+    uint16_t head = 0u;
+    const Status status = queue_.add(segments, response_bytes_ != 0u ? 2u : 1u, head);
+    if (status != Status::ok) return status;
+    busy_[slot] = true;
+    slot_of_head_[head] = static_cast<uint8_t>(slot);
+    in_flight_++;
+    return Status::ok;
+}
+
 Status GpuCommandQueue::send(const uint8_t *request, size_t length)
 {
     platform_.require_irql_at_most(Irql::dispatch, "GpuCommandQueue::send");
@@ -72,26 +95,59 @@ Status GpuCommandQueue::send(const uint8_t *request, size_t length)
     if (length > GpuRequestWriter::max_request_size && length > wide_bytes_) return Status::too_large;
     {
         SpinLockGuard lock(lock_);
-        InvariantScope<GpuCommandQueue> guard(platform_, *this, "send");
-        const uint32_t slot = slot_for(length);
-        if (slot == no_slot) return Status::no_space;
-        const size_t   offset = offset_of(slot);
-        uint8_t *const bytes = slots_ + offset;
-        platform_.copy(bytes, request, length);
-        const uint64_t address = slots_address_ + offset;
-        const VirtqSegment segments[] = {
-            VirtqSegment(address, static_cast<uint32_t>(length), SegmentDirection::device_reads),
-            VirtqSegment(address + request_bytes_of(slot), response_bytes_, SegmentDirection::device_writes),
-        };
-        uint16_t head = 0u;
-        const Status status = queue_.add(segments, response_bytes_ != 0u ? 2u : 1u, head);
+        uint32_t     slot = no_slot;
+        const Status status = send_locked(request, length, slot);
         if (status != Status::ok) return status;
-        busy_[slot] = true;
-        slot_of_head_[head] = static_cast<uint8_t>(slot);
-        in_flight_++;
     }
     transport_.notify(queue_);
     return Status::ok;
+}
+
+/* The answer a request carries is only read here: the DPC's harvest counts and
+ * drops the rest, so an exchange records the slot it is waiting on and takes
+ * the bytes out of whichever caller harvests it first. */
+Status GpuCommandQueue::exchange(const uint8_t *request, size_t length, uint8_t *response, size_t capacity,
+                                 uint32_t &written)
+{
+    platform_.require_irql_at_most(Irql::passive, "GpuCommandQueue::exchange");
+    written = 0u;
+    if (slots_ == nullptr) return Status::invalid_state;
+    if (request == nullptr || length == 0u || response == nullptr || capacity == 0u || response_bytes_ == 0u)
+        return Status::invalid_parameter;
+    if (length > GpuRequestWriter::max_request_size && length > wide_bytes_) return Status::too_large;
+    {
+        SpinLockGuard lock(lock_);
+        if (awaited_slot_ != no_slot) return Status::conflict;
+        uint32_t     slot = no_slot;
+        const Status status = send_locked(request, length, slot);
+        if (status != Status::ok) return status;
+        awaited_slot_ = slot;
+        awaited_response_ = response;
+        awaited_capacity_ = capacity;
+        awaited_written_ = 0u;
+    }
+    transport_.notify(queue_);
+    for (uint32_t poll = 0u; poll < polls; poll++) {
+        uint32_t     completed = 0u;
+        uint32_t     refused = 0u;
+        const Status harvested = harvest(completed, refused);
+        bool         answered = false;
+        {
+            /* The lock is dropped before the stall: a spin lock raises to
+             * DISPATCH, and this path waits at PASSIVE. */
+            SpinLockGuard lock(lock_);
+            if (harvested != Status::ok) awaited_slot_ = no_slot;
+            answered = awaited_slot_ == no_slot;
+            written = awaited_written_;
+        }
+        if (harvested != Status::ok) return harvested;
+        if (answered) return Status::ok;
+        platform_.stall(poll_microseconds);
+    }
+    SpinLockGuard lock(lock_);
+    awaited_slot_ = no_slot;
+    written = 0u;
+    return Status::not_found;
 }
 
 /* take_used frees a chain only after proving the queue published it, so its
@@ -115,8 +171,17 @@ Status GpuCommandQueue::harvest(uint32_t &completed, uint32_t &refused)
         in_flight_--;
         completed++;
         if (response_bytes_ == 0u) continue;
-        const uint32_t type = WireReader(slots_ + offset_of(slot) + request_bytes_of(slot), written).read_u32();
-        if (written < GpuRequestWriter::response_size || type != GpuRequestWriter::response_ok_nodata) refused++;
+        const uint8_t *const answer = slots_ + offset_of(slot) + request_bytes_of(slot);
+        if (slot == awaited_slot_) {
+            const uint32_t taken = written < awaited_capacity_ ? written : static_cast<uint32_t>(awaited_capacity_);
+            platform_.copy(awaited_response_, answer, taken);
+            awaited_written_ = taken;
+            awaited_slot_ = no_slot;
+        }
+        const uint32_t type = WireReader(answer, written).read_u32();
+        if (written < GpuRequestWriter::response_size || type < GpuRequestWriter::response_ok_first ||
+            type >= GpuRequestWriter::response_error_first)
+            refused++;
     }
 }
 
@@ -130,7 +195,7 @@ bool GpuCommandQueue::invariants_hold() const
 {
     uint32_t busy = 0u;
     for (bool slot : busy_) busy += slot ? 1u : 0u;
-    return busy == in_flight_;
+    return busy == in_flight_ && (awaited_slot_ == no_slot || busy_[awaited_slot_]);
 }
 
 }  // namespace av

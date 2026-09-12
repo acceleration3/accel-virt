@@ -1,22 +1,34 @@
-/* The resolutions the adapter's one output supports, until the device reports
- * its displays (feature 027): common modes up to 1920x1080, 1280x800 preferred
- * because it is QEMU virtio-gpu's default. */
+/* The resolutions this output offers: the size the device reports for its
+ * scanout, and the standard modes that fit inside it. Until the device is
+ * asked, the standard list stands on its own with 1280x800 preferred, which is
+ * QEMU virtio-gpu's default. */
 #ifndef AV_DISPLAY_MODE_LIST_HPP
 #define AV_DISPLAY_MODE_LIST_HPP
 
 #include "core/display/display_mode.hpp"
+#include "core/support/status.hpp"
 
 #include <stdint.h>
 
 namespace av {
 
+class DisplayInfoResponse;
+struct DisplayModeListProbe;
+
 class DisplayModeList {
 public:
-    static constexpr uint32_t mode_count = 11u;
+    static constexpr uint32_t standard_count = 11u;
+    /* The standard modes, and the device's own size when it is none of them. */
+    static constexpr uint32_t max_modes = standard_count + 1u;
 
     DisplayModeList();
     DisplayModeList(const DisplayModeList &) = delete;
     DisplayModeList &operator=(const DisplayModeList &) = delete;
+
+    /* Offers what fits the rectangle `scanout` reports, and prefers that
+     * rectangle. not_found for a scanout the device does not report, which
+     * leaves the list as it was: a driver with no modes offers no display. */
+    [[nodiscard]] Status follow(const DisplayInfoResponse &info, uint32_t scanout);
 
     uint32_t           count() const;
     /* The first mode for an index past the end. */
@@ -27,10 +39,20 @@ public:
     const DisplayMode *find(const D3dkmdtVidPnSourceModeRecord &source) const;
     const DisplayMode *find(const D3dkmdtVideoSignalInfoRecord &signal) const;
 
-private:
-    static constexpr uint32_t preferred_index = 4u;
+    bool invariants_hold() const;
 
-    DisplayMode modes_[mode_count];
+private:
+    static constexpr uint32_t default_preferred_index = 4u;
+
+    /* Pixels of a mode, which is how the list stays in ascending order. */
+    uint64_t area_of(const DisplayMode &mode) const;
+
+    DisplayMode standard_[standard_count];
+    DisplayMode modes_[max_modes];
+    uint32_t    count_;
+    uint32_t    preferred_index_;
+
+    friend struct DisplayModeListProbe;
 };
 
 }  // namespace av

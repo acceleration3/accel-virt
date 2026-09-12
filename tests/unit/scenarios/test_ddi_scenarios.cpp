@@ -36,6 +36,7 @@
 #include "core/miniport/driver_image.hpp"
 #include "core/support/status.hpp"
 #include "harness/device/fake_virtio_gpu_function.hpp"
+#include "core/display/display_info_response.hpp"
 #include "core/display/display_mode.hpp"
 #include "harness/device/fake_virtqueue_device.hpp"
 #include "harness/dxgkrnl/capability_rule.hpp"
@@ -58,6 +59,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <optional>
 
 using av::CapabilityRule;
 using av::DdiRoutine;
@@ -105,20 +107,75 @@ private:
     int32_t                   entered_;
 };
 
+/* The display info a host with one 1280x800 scanout answers. */
+class DisplayInfoAnswer {
+public:
+    DisplayInfoAnswer() : bytes_{}
+    {
+        write(0u, av::DisplayInfoResponse::response_type);
+        write(av::DisplayInfoResponse::header_size + 8u, 1280u);
+        write(av::DisplayInfoResponse::header_size + 12u, 800u);
+        write(av::DisplayInfoResponse::header_size + 16u, 1u);
+    }
+
+    const std::uint8_t *bytes() const { return bytes_; }
+    std::uint32_t       length() const { return sizeof bytes_; }
+
+private:
+    void write(std::size_t offset, std::uint32_t value)
+    {
+        for (unsigned byte = 0u; byte < 4u; byte++)
+            bytes_[offset + byte] = static_cast<std::uint8_t>(value >> (8u * byte));
+    }
+
+    std::uint8_t bytes_[av::DisplayInfoResponse::encoded_size];
+};
+
 /* One PCI function dxgkrnl found, with its FDO. */
 class Device {
 public:
     Device(LoadedDriver &driver, std::uint8_t index)
-        : dxgkrnl_(driver.platform(), function_, index), fdo_(driver.platform(), driver.table(), dxgkrnl_) {}
+        : platform_(driver.platform()), dxgkrnl_(driver.platform(), function_, index),
+          fdo_(driver.platform(), driver.table(), dxgkrnl_) {}
 
     FakeVirtioGpuFunction &function() { return function_; }
     FakeDxgkrnlAdapter    &dxgkrnl() { return dxgkrnl_; }
     FakeDxgkrnlFdo        &fdo() { return fdo_; }
 
+    /* StartDevice asks the device what its displays are and waits for it, so
+     * the host answers from the stall between the driver's polls. */
+    std::int32_t start_device()
+    {
+        platform_.on_stall(&Device::answer_display_info, this);
+        const std::int32_t started = fdo_.start_device();
+        platform_.on_stall(nullptr, nullptr);
+        return started;
+    }
+
+    /* The device side of the control queue, shared with that answer. */
+    av::FakeVirtqueueDevice &control()
+    {
+        if (!control_.has_value()) {
+            const av::FakeCommonConfig::Queue &queue = function_.common().queue(0u);
+            control_.emplace(platform_, queue.desc, queue.driver, queue.device, queue.size);
+        }
+        return *control_;
+    }
+
 private:
+    static void answer_display_info(void *context)
+    {
+        auto *const device = static_cast<Device *>(context);
+        static_cast<void>(device->control().respond_all(device->display_info_.bytes(),
+                                                        device->display_info_.length()));
+    }
+
+    av::MockPlatform      &platform_;
     FakeVirtioGpuFunction function_;
     FakeDxgkrnlAdapter    dxgkrnl_;
     FakeDxgkrnlFdo        fdo_;
+    DisplayInfoAnswer     display_info_;
+    std::optional<av::FakeVirtqueueDevice> control_;
 };
 
 }  // namespace
@@ -131,7 +188,7 @@ TEST(ddi_scenario, the_recorded_bring_up_and_teardown)
   { Device device(driver, 0u);
     CHECK_EQ(device.fdo().add_device(), 0);
     CHECK(device.fdo().context() != nullptr);
-    CHECK_EQ(device.fdo().start_device(), 0);
+    CHECK_EQ(device.start_device(), 0);
     CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
     CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
     CHECK_EQ(device.fdo().dxgadapter().display_caps_extension(), 0u);
@@ -156,7 +213,7 @@ TEST(ddi_scenario, stop_device_twice)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   CHECK_EQ(device.fdo().stop_device(), 0);
   CHECK_EQ(device.fdo().stop_device(), 0);
   CHECK_EQ(device.fdo().remove_device(), 0); }
@@ -165,7 +222,7 @@ TEST(ddi_scenario, remove_device_without_stop_device)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   const std::int32_t remove = reinterpret_cast<std::int32_t (*)(void *)>(
       driver.table().routine(DdiSlot::DxgkDdiRemoveDevice))(device.fdo().context());
   CHECK_EQ(remove, 0);
@@ -186,7 +243,7 @@ TEST(ddi_scenario, a_failed_start_is_stopped_then_removed)
   Device device(driver, 0u);
   device.function().common().offer_features(FakeVirtioGpuFunction::feature_edid);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(nt(device.fdo().start_device()), not_supported);
+  CHECK_EQ(nt(device.start_device()), not_supported);
   CHECK(!device.fdo().started());
   CHECK_EQ(device.dxgkrnl().live_mappings(), 0u);
   CHECK_EQ(device.fdo().remove_device(), 0);
@@ -196,7 +253,7 @@ TEST(ddi_scenario, reset_device_at_bugcheck_then_teardown)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   const std::uint32_t allocations = driver.platform().allocations_made();
   device.fdo().reset_device();
   CHECK_EQ(device.function().common().status(), 0u);
@@ -263,7 +320,7 @@ TEST(ddi_scenario, every_query_adapter_info_type_answers_a_status_dxgkrnl_accept
   for (std::int32_t type = -1; type <= 49; type++)
       static_cast<void>(device.fdo().dxgadapter().query(device.fdo().context(), type, input, sizeof input,
                                                         output, sizeof output));
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   for (std::int32_t type = -1; type <= 49; type++)
       static_cast<void>(device.fdo().dxgadapter().query(device.fdo().context(), type, input, 0u, output, 0u));
   CHECK_EQ(device.fdo().remove_device(), 0); }
@@ -291,7 +348,7 @@ TEST(ddi_scenario, escape_and_debug_collection_through_the_table)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   std::uint8_t data[16] = {};
   av::DxgkargEscapeRecord escape = {};
   escape.pPrivateDriverData = data;
@@ -317,7 +374,7 @@ TEST(ddi_scenario, vidmm_accepts_the_aperture_segment_after_start)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   av::FakeVidMm vidmm(device.fdo().dxgadapter());
   CHECK_EQ(vidmm.create_segments(device.fdo().context()), 0);
   CHECK(vidmm.failed_rule() == av::SegmentRule::none);
@@ -328,7 +385,7 @@ TEST(ddi_scenario, the_render_core_is_created_once_present_arrives)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
   CHECK(device.fdo().dxgadapter().render_adapter());
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
@@ -483,7 +540,7 @@ TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   void          *adapter = device.fdo().context();
   const DdiTable &table = driver.table();
   Runtime         runtime(table, adapter, 1280u, 800u);
@@ -513,27 +570,26 @@ TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
   driver.platform().set_irql(av::Irql::dispatch);
   reinterpret_cast<void (*)(void *)>(table.routine(DdiSlot::DxgkDdiDpcRoutine))(adapter);
   driver.platform().set_irql(av::Irql::passive);
-  const av::FakeCommonConfig::Queue &control_queue = device.function().common().queue(0u);
-  av::FakeVirtqueueDevice control(driver.platform(), control_queue.desc, control_queue.driver, control_queue.device,
-                                  control_queue.size);
+  av::FakeVirtqueueDevice &control = device.control();
   CHECK_EQ(control.respond_all(0x1100u), 5u);
-  CHECK_EQ(control.request_type(0u), 0x0101u);        /* RESOURCE_CREATE_2D */
-  CHECK_EQ(control.request_type(1u), 0x0106u);        /* RESOURCE_ATTACH_BACKING */
-  CHECK_EQ(control.request_type(2u), 0x0103u);        /* SET_SCANOUT */
-  CHECK_EQ(control.request_type(3u), 0x0105u);        /* TRANSFER_TO_HOST_2D */
-  CHECK_EQ(control.request_type(4u), 0x0104u);        /* RESOURCE_FLUSH */
+  /* Request 0 was StartDevice's GET_DISPLAY_INFO. */
+  CHECK_EQ(control.request_type(1u), 0x0101u);        /* RESOURCE_CREATE_2D */
+  CHECK_EQ(control.request_type(2u), 0x0106u);        /* RESOURCE_ATTACH_BACKING */
+  CHECK_EQ(control.request_type(3u), 0x0103u);        /* SET_SCANOUT */
+  CHECK_EQ(control.request_type(4u), 0x0105u);        /* TRANSFER_TO_HOST_2D */
+  CHECK_EQ(control.request_type(5u), 0x0104u);        /* RESOURCE_FLUSH */
   /* One memory entry, because the pages VidMm gave are adjacent, and it is the
    * guest physical address of the first one - not the aperture address. */
-  CHECK_EQ(u32(control.request(1u), 28u), 1u);
-  CHECK_EQ(u32(control.request(1u), 32u), 0x40000000u);
-  CHECK_EQ(u32(control.request(1u), 40u), 1280u * 800u * 4u);
+  CHECK_EQ(u32(control.request(2u), 28u), 1u);
+  CHECK_EQ(u32(control.request(2u), 32u), 0x40000000u);
+  CHECK_EQ(u32(control.request(2u), 40u), 1280u * 800u * 4u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 TEST(ddi_scenario, a_primary_lives_from_standard_allocation_to_destruction)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   { Runtime runtime(driver.table(), device.fdo().context());
     CHECK_EQ(runtime.create_primary(), 0);
     CHECK_EQ(runtime.create_device(), 0);
@@ -555,7 +611,7 @@ TEST(ddi_scenario, destroy_device_with_an_open_then_the_allocation)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   { Runtime runtime(driver.table(), device.fdo().context());
     CHECK_EQ(runtime.create_primary(), 0);
     CHECK_EQ(runtime.create_device(), 0);
@@ -570,7 +626,7 @@ TEST(ddi_scenario, remove_device_with_devices_and_allocations_outstanding)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   { Runtime runtime(driver.table(), device.fdo().context());
     CHECK_EQ(runtime.create_primary(), 0);
     CHECK_EQ(runtime.create_device(), 0);
@@ -584,7 +640,7 @@ TEST(ddi_scenario, render_patch_submit_and_three_fences_complete_through_the_dpc
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
     CHECK_EQ(vidsch.create_context(0u), 0);
     std::uint8_t command[32] = {0x52, 0x56, 0x4B, 0x53};
@@ -610,7 +666,7 @@ TEST(ddi_scenario, a_preemption_is_reported_after_what_was_pending_and_again_wit
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
     CHECK_EQ(vidsch.create_context(0u), 0);
     std::uint8_t command[16] = {};
@@ -629,7 +685,7 @@ TEST(ddi_scenario, a_render_that_overruns_is_refused_and_nothing_is_submitted)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
     CHECK_EQ(vidsch.create_context(0u), 0);
     std::uint8_t command[16] = {};
@@ -644,7 +700,7 @@ TEST(ddi_scenario, a_timeout_is_recovered_from_twice)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
     CHECK_EQ(vidsch.create_context(0u), 0);
     std::uint8_t command[16] = {};
@@ -674,7 +730,7 @@ TEST(ddi_scenario, a_mode_change_from_edid_to_commit)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   av::FakeDisplayModeManager dmm(driver.platform(), driver.table(), device.fdo().context());
   { std::uint8_t edid[128] = {};
     CHECK_EQ(dmm.read_edid(edid), 0);
@@ -684,7 +740,8 @@ TEST(ddi_scenario, a_mode_change_from_edid_to_commit)
     CHECK_EQ(edid[56] | (edid[58] >> 4u) << 8u, 1280u);
     av::FakeVidPn vidpn;
     CHECK_EQ(dmm.read_monitor_modes(vidpn), 0);
-    CHECK_EQ(vidpn.monitor_modes().modes(), 11u);
+    /* The five standard modes that fit the display the device reports. */
+    CHECK_EQ(vidpn.monitor_modes().modes(), 5u);
     CHECK_EQ(nt(dmm.recommend_functional_vidpn()), 0xC01E0323u);
     CHECK_EQ(nt(dmm.recommend_vidpn_topology()), 0xC01E031Au);
     CHECK_EQ(dmm.set_mode(vidpn, 1024u, 768u), 0);
@@ -708,7 +765,7 @@ TEST(ddi_scenario, a_second_path_is_refused_and_a_mode_off_the_list_is_never_off
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   av::FakeDisplayModeManager dmm(driver.platform(), driver.table(), device.fdo().context());
   { av::FakeVidPn clone;
     clone.add_path(0u, 0u);
@@ -729,7 +786,7 @@ TEST(ddi_scenario, a_primary_scans_out_at_vsync_while_presents_complete)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   av::FakeDisplayModeManager dmm(driver.platform(), driver.table(), device.fdo().context());
   { av::FakeVidPn vidpn;
     CHECK_EQ(dmm.set_mode(vidpn, 1280u, 800u), 0); }
@@ -773,7 +830,7 @@ TEST(ddi_scenario, the_pointer_reaches_the_cursor_queue_and_the_legacy_surface_d
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().PointerCaps, 7u);
   const std::uint32_t logged = driver.platform().logged();
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
@@ -802,9 +859,7 @@ TEST(ddi_scenario, the_pointer_reaches_the_cursor_queue_and_the_legacy_surface_d
   CHECK_EQ(cursor.request_type(1u), 0x0301u);
   CHECK_EQ(cursor.request_type(2u), 0x0301u);
   CHECK_EQ(cursor.request_type(3u), 0x0300u);
-  const av::FakeCommonConfig::Queue &control_queue = device.function().common().queue(0u);
-  av::FakeVirtqueueDevice control(driver.platform(), control_queue.desc, control_queue.driver, control_queue.device,
-                                  control_queue.size);
+  av::FakeVirtqueueDevice &control = device.control();
   CHECK_EQ(control.respond_all(0x1100u), 3u);
   CHECK_EQ(device.fdo().interrupt(2u), 1u);
   CHECK_EQ(driver.platform().logged(), logged);
@@ -841,7 +896,7 @@ TEST(ddi_scenario, the_committed_path_reports_no_driver_transformation_and_the_p
   for (DdiSlot slot : skipped) CHECK(driver.table().routine(slot) == nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   av::FakeDisplayModeManager dmm(driver.platform(), driver.table(), device.fdo().context());
   { av::FakeVidPn vidpn;
     CHECK_EQ(dmm.set_mode(vidpn, 800u, 600u), 0);
@@ -860,7 +915,7 @@ TEST(ddi_scenario, an_engine_reset_then_the_device_disappears)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().SupportPerEngineTDR, 1u);
   { av::FakeVidSch vidsch(driver.platform(), driver.table(), device.dxgkrnl(), device.fdo().context());
@@ -894,7 +949,7 @@ TEST(ddi_scenario, node_metadata_clock_calibration_and_vsync_state_through_the_t
   CHECK(driver.table().routine(DdiSlot::DxgkDdiFormatHistoryBuffer) == nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   void *const adapter = device.fdo().context();
   const DdiTable &table = driver.table();
   av::DxgkNodeMetadataRecord metadata = {};
@@ -927,7 +982,7 @@ TEST(ddi_scenario, a_gpu_mmu_adapter_pages_submits_by_virtual_address_and_flips_
   CHECK(driver.table().routine(DdiSlot::DxgkDdiSetVideoProtectedRegion) == nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   void *const adapter = device.fdo().context();
   const DdiTable &table = driver.table();
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
@@ -1005,7 +1060,7 @@ TEST(ddi_scenario, start_declines_hdr_priority_and_the_monitor_link_is_plain)
   CHECK(table.routine(DdiSlot::DxgkDdiValidateUpdateAllocationProperty) == nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   CHECK_EQ(device.fdo().dxgadapter().mode_behavior().Request, 0x1u);
   CHECK_EQ(device.fdo().dxgadapter().mode_behavior().Satisfied, 0u);
   CHECK_EQ(device.fdo().dxgadapter().mode_behavior().NotSatisfied, 0x1u);
@@ -1040,7 +1095,7 @@ TEST(ddi_scenario, hardware_queues_submit_complete_through_progress_fences_and_r
   for (const DdiSlot slot : skipped) CHECK(table.routine(slot) == nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   CHECK_EQ(device.fdo().dxgadapter().display_caps_extension(), 0u);
   void *const adapter = device.fdo().context();
   { av::FakeVidSch vidsch(driver.platform(), table, device.dxgkrnl(), adapter);
@@ -1080,7 +1135,7 @@ TEST(ddi_scenario, a_wddm_2_3_adapter_starts_and_scans_out_with_the_later_slots_
   for (const DdiSlot slot : skipped) CHECK(table.routine(slot) == nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
   CHECK_EQ(device.fdo().dxgadapter().create_render_core(), 0);
@@ -1115,7 +1170,7 @@ TEST(ddi_scenario, a_system_memory_primary_flips_immediately_and_gpu_va_presents
   for (const DdiSlot slot : skipped) CHECK(table.routine(slot) == nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
   void *const adapter = device.fdo().context();
@@ -1164,7 +1219,7 @@ TEST(ddi_scenario, a_wddm_2_9_adapter_flips_without_a_hardware_flip_queue)
   for (const DdiSlot slot : skipped) CHECK(table.routine(slot) == nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().MaxHwQueuedFlips, 0u);
@@ -1192,7 +1247,7 @@ TEST(ddi_scenario, a_wddm_3_0_adapter_allocates_a_primary_with_the_later_slots_n
   for (const DdiSlot slot : skipped) CHECK(table.routine(slot) == nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
   { Runtime runtime(table, device.fdo().context());
@@ -1216,7 +1271,7 @@ TEST(ddi_scenario, a_wddm_3_1_adapter_starts_without_native_fences_or_doorbells)
   for (const DdiSlot slot : skipped) CHECK(table.routine(slot) == nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().SchedulingCaps & 0x800u, 0u);   /* no NativeGpuFence */
@@ -1238,7 +1293,7 @@ TEST(ddi_scenario, a_wddm_3_2_display_adapter_starts_with_the_3_2_slots_null)
       CHECK(table.routine(static_cast<DdiSlot>(slot)) == nullptr);
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
-  CHECK_EQ(device.fdo().start_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
   CHECK(device.fdo().dxgadapter().failed_rule() == CapabilityRule::none);
   CHECK_EQ(device.fdo().dxgadapter().driver_caps().WDDMVersion, 0x3200);
   std::uint32_t dirty_bits = 0u;

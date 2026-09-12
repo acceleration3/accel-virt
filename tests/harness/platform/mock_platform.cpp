@@ -276,7 +276,17 @@ std::uint64_t MockPlatform::performance_counter(std::uint64_t &frequency) const
     return now_;
 }
 
-void MockPlatform::stall(std::uint32_t microseconds) { advance_time(std::uint64_t{microseconds} * 10u); }
+void MockPlatform::on_stall(StallCallback callback, void *context)
+{
+    stall_callback_ = callback;
+    stall_context_ = context;
+}
+
+void MockPlatform::stall(std::uint32_t microseconds)
+{
+    advance_time(std::uint64_t{microseconds} * 10u);
+    if (stall_callback_ != nullptr) stall_callback_(stall_context_);
+}
 
 void *MockPlatform::create_timer(TimerCallback callback, void *context)
 {

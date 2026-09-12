@@ -37,6 +37,11 @@ def option(argv, flag, kind=None):
     return None
 
 
+def argument(arguments, name):
+    """The value after `name` in a provision.ps1 argument list."""
+    return arguments[arguments.index(name) + 1] if name in arguments else ""
+
+
 def field(spec, name):
     for part in spec.split(","):
         if part.startswith(name + "="):
@@ -88,6 +93,26 @@ class Guest:
             self.bugcheck()
             self.emit("RESET")
 
+    def display_modes(self):
+        """Every mode the guest is offered; the default is what a 1280x800
+        display holds."""
+        return self.script.get("modes", ["640x480", "800x600", "1024x768", "1280x720", "1280x800",
+                                         "1920x1080"])   # Windows lists more than the driver offers
+
+    def mode_stage(self, name, arguments):
+        """The display stages: what the guest's mode list says, and what a
+        switch does to the scanout the host sees."""
+        if name == "modes":
+            width, height = self.script.get("screendump", [1280, 800])[:2]
+            lines = [f"mode: {mode}" for mode in self.display_modes()]
+            return 0, "\n".join(lines + [f"current: {width}x{height}"]) + "\n"
+        size = f"{argument(arguments, '-Width')}x{argument(arguments, '-Height')}"
+        if size not in self.display_modes() or self.script.get("setmode_refused"):
+            return 0, "set: -2\n"   # DISP_CHANGE_BADMODE
+        if not self.script.get("screendump_fixed"):
+            self.script["screendump"] = [int(part) for part in size.split("x")]
+        return 0, "set: 0\n"
+
     def process(self, path, arguments):
         name = "rvktest" if path.endswith("rvktest.exe") else None
         if "-Stage" in arguments:
@@ -103,6 +128,10 @@ class Guest:
         if self.device and panic is not None and name == panic["during"] and count == 0:
             threading.Thread(target=self.crash, daemon=True).start()
             return {"exited": False}
+        if name in ("modes", "setmode") and name not in self.script.get("outputs", {}):
+            code, text = self.mode_stage(name, arguments)
+            return {"exited": True, "exitcode": code,
+                    "out-data": base64.b64encode(text.encode()).decode(), "err-data": ""}
         if name == "rvktest":
             code = self.script.get("rvktest", 0)
         else:

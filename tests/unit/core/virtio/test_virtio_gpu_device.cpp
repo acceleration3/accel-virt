@@ -295,3 +295,16 @@ TEST(virtio_gpu_device_invariants, running_without_negotiated_features_is_detect
   CHECK(device.invariants_hold());
   VirtioGpuDeviceProbe(device).set_running();
   CHECK(!device.invariants_hold()); }
+
+/* A device that is not running has nothing to ask. */
+TEST(virtio_gpu_device_ask_control, needs_a_running_device)
+{ MappedFunction mapped;
+  CHECK_STATUS(mapped.map(), Status::ok);
+  VirtioGpuDevice device(mapped.platform(), mapped.mappings(), mapped.layout());
+  std::uint8_t  request[24] = {};
+  std::uint8_t  answer[64] = {};
+  std::uint32_t written = 0u;
+  CHECK_STATUS(device.ask_control(request, sizeof request, answer, sizeof answer, written), Status::invalid_state);
+  CHECK_STATUS(device.start(3u), Status::ok);
+  /* Running, but the device answers nothing. */
+  CHECK_STATUS(device.ask_control(request, sizeof request, answer, sizeof answer, written), Status::not_found); }

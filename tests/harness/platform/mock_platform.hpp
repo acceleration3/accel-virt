@@ -92,6 +92,11 @@ public:
     void          detach_register_windows(void *base, std::uint64_t length);
     std::uint32_t attached_register_windows() const;
 
+    /* What the device does while the driver stalls waiting for it: the only
+     * point a test can answer a request the driver is blocked on. */
+    using StallCallback = void (*)(void *context);
+    void on_stall(StallCallback callback, void *context);
+
     /* An MDL of `page_count` pages with those frame addresses, as dxgkrnl hands
      * one to BuildPagingBuffer. The frames must outlive this platform; any
      * other pointer is an MDL this platform never made, and is refused. */
@@ -183,6 +188,8 @@ private:
     void         *registered_registry_path_;
     const DdiTable *registered_table_;
     Timer          timers_[max_timers];
+    StallCallback  stall_callback_ = nullptr;
+    void          *stall_context_ = nullptr;
     PageFrames     page_frames_[max_page_frames];
     std::uint32_t  page_frame_count_;
     AttachedWindow register_windows_[max_register_windows];

@@ -21,6 +21,8 @@ public:
     static constexpr uint32_t block_bytes = 128u;
 
     Edid(Platform &platform, const DisplayMode &preferred);
+    /* The block again, for the mode the device's display info made preferred. */
+    void follow(const DisplayMode &preferred);
     Edid(const Edid &) = delete;
     Edid &operator=(const Edid &) = delete;
 
@@ -46,6 +48,7 @@ private:
     /* STATUS_MONITOR_NO_MORE_DESCRIPTOR_DATA */
     static constexpr uint32_t no_more_descriptor_data = 0xC01D0008u;
 
+    void build(const DisplayMode &preferred);
     void write_preferred_timing(const DisplayMode &mode, uint32_t width_mm, uint32_t height_mm);
     void write_display_descriptors();
     void write_checksum();

@@ -103,6 +103,25 @@ std::uint16_t FakeVirtqueueDevice::complete_all(std::uint32_t written)
     return completed;
 }
 
+std::uint16_t FakeVirtqueueDevice::respond_all(const std::uint8_t *answer, std::uint32_t length)
+{
+    std::uint16_t       completed = 0u;
+    const std::uint16_t available = available_index();
+    while (last_available_ != available) {
+        const std::uint16_t chain = head(last_available_);
+        std::uint64_t       writable = 0u;
+        std::uint32_t       writable_length = 0u;
+        walk(chain, true, writable, writable_length);
+        const std::uint32_t written = writable_length < length ? writable_length : length;
+        for (std::uint32_t byte = 0u; byte < written; byte++) write(writable + byte, answer[byte], 1u);
+        write_used(used_index_, chain, written);
+        set_used_index(static_cast<std::uint16_t>(used_index_ + 1u));
+        last_available_++;
+        completed++;
+    }
+    return completed;
+}
+
 std::uint16_t FakeVirtqueueDevice::respond_all(std::uint32_t type)
 {
     constexpr std::uint32_t header = 24u;
