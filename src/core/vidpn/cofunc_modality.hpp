@@ -17,12 +17,13 @@ namespace av {
 
 class DisplayModeList;
 class DxgkrnlInterface;
+class LogBudget;
 struct DxgkargEnumVidPnCofuncModalityRecord;
 
 class CofuncModality final : public PathVisitor {
 public:
-    CofuncModality(Platform &platform, DxgkrnlInterface &dxgkrnl, const DisplayModeList &modes,
-                   const DxgkargEnumVidPnCofuncModalityRecord &request);
+    CofuncModality(Platform &platform, DxgkrnlInterface &dxgkrnl, LogBudget &budget,
+                   const DisplayModeList &modes, const DxgkargEnumVidPnCofuncModalityRecord &request);
 
     NtStatus enumerate();
     [[nodiscard]] Status visit(const D3dkmdtVidPnPresentPathRecord &path) override;
@@ -43,8 +44,13 @@ private:
     /* Every mode, or only the one matching `pinned_source` when it is not null. */
     [[nodiscard]] Status offer_targets(uint32_t target, const D3dkmdtVidPnSourceModeRecord *pinned_source);
     [[nodiscard]] Status update_support(const D3dkmdtVidPnPresentPathRecord &path);
+    /* What dxgkrnl asked about this path and what it already had pinned, which
+     * is the only way to see from the guest why a topology will not settle. */
+    void                 log_path(const D3dkmdtVidPnPresentPathRecord &path,
+                                  const D3dkmdtVidPnSourceModeRecord *pinned_source, bool target_pinned);
 
     Platform                                   &platform_;
+    LogBudget                                  &budget_;
     const DisplayModeList                      &modes_;
     const DxgkargEnumVidPnCofuncModalityRecord &request_;
     VidPn                                       vidpn_;

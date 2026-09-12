@@ -12,6 +12,7 @@
 #include "core/display/display_sources.hpp"
 #include "core/display/edid.hpp"
 #include "core/display/monitor_modes.hpp"
+#include "core/platform/log_budget.hpp"
 #include "core/vidpn/cofunc_modality.hpp"
 #include "core/vidpn/vidpn_commit.hpp"
 #include "core/vidpn/vidpn_support_check.hpp"
@@ -64,6 +65,7 @@ void shape(av::WireReader &reader, av::FakeVidPn &vidpn)
 void drive(av::WireReader &reader)
 {
     av::VidPnFixture      fixture;
+    av::LogBudget         budget(fixture.platform());
     const av::DisplayModeList modes;
     av::DisplaySources    sources(fixture.platform());
     shape(reader, fixture.vidpn());
@@ -75,7 +77,7 @@ void drive(av::WireReader &reader)
     const std::uint32_t pivot_source = reader.read_u8() % 3u;
     const std::uint32_t pivot_target = reader.read_u8() % 3u;
     const av::DxgkargEnumVidPnCofuncModalityRecord cofunc = {fixture.handle(), pivot, pivot_source, pivot_target, 0u};
-    static_cast<void>(av::CofuncModality(fixture.platform(), fixture.dxgkrnl(), modes, cofunc).enumerate());
+    static_cast<void>(av::CofuncModality(fixture.platform(), fixture.dxgkrnl(), budget, modes, cofunc).enumerate());
 
     const std::uint32_t commit_source = reader.read_u8() % 2u;
     const std::uint32_t commit_flags = reader.read_u8() & 3u;

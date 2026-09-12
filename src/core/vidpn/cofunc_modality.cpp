@@ -4,13 +4,16 @@
 #include "core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
 #include "core/display/display_mode_list.hpp"
 #include "core/display/display_sources.hpp"
+#include "core/platform/log_budget.hpp"
+#include "core/support/text_buffer.hpp"
 #include "core/vidpn/vidpn_mode_set.hpp"
 
 namespace av {
 
-CofuncModality::CofuncModality(Platform &platform, DxgkrnlInterface &dxgkrnl, const DisplayModeList &modes,
-                               const DxgkargEnumVidPnCofuncModalityRecord &request)
-    : platform_(platform), modes_(modes), request_(request), vidpn_(platform, dxgkrnl, request.hConstrainingVidPn) {}
+CofuncModality::CofuncModality(Platform &platform, DxgkrnlInterface &dxgkrnl, LogBudget &budget,
+                               const DisplayModeList &modes, const DxgkargEnumVidPnCofuncModalityRecord &request)
+    : platform_(platform), budget_(budget), modes_(modes), request_(request),
+      vidpn_(platform, dxgkrnl, request.hConstrainingVidPn) {}
 
 NtStatus CofuncModality::enumerate()
 {
@@ -36,7 +39,9 @@ Status CofuncModality::visit(const D3dkmdtVidPnPresentPathRecord &path)
     const bool target_pivot = request_.EnumPivotType == pivot_target && request_.EnumPivotVidPnTargetId == path.VidPnTargetId;
     if (target_pin == Status::not_found && !target_pivot)
         status = offer_targets(path.VidPnTargetId, source_pin == Status::ok ? &pinned : nullptr);
-    return status != Status::ok ? status : update_support(path);
+    if (status != Status::ok) return status;
+    log_path(path, source_pin == Status::ok ? &pinned : nullptr, target_pin == Status::ok);
+    return update_support(path);
 }
 
 Status CofuncModality::copy_pinned_source(uint32_t source, D3dkmdtVidPnSourceModeRecord &mode)
@@ -110,6 +115,34 @@ Status CofuncModality::update_support(const D3dkmdtVidPnPresentPathRecord &path)
     update.ContentTransformationScalingSupport = identity_supported;
     update.ContentTransformationRotationSupport = identity_supported | rotation_offset_zero;
     return vidpn_.update_path_support(update);
+}
+
+void CofuncModality::log_path(const D3dkmdtVidPnPresentPathRecord &path,
+                              const D3dkmdtVidPnSourceModeRecord *pinned_source, bool target_pinned)
+{
+    if (!budget_.allows()) return;
+    char       bytes[128];
+    TextBuffer line(bytes, sizeof bytes);
+    line.append("rvkgpu: cofunc path ");
+    line.append_decimal(path.VidPnSourceId);
+    line.append("->");
+    line.append_decimal(path.VidPnTargetId);
+    line.append(" pivot ");
+    line.append_decimal(static_cast<uint64_t>(request_.EnumPivotType));
+    line.append(" scaling ");
+    line.append_decimal(static_cast<uint64_t>(path.ContentTransformationScaling));
+    line.append(" rotation ");
+    line.append_decimal(static_cast<uint64_t>(path.ContentTransformationRotation));
+    if (pinned_source != nullptr) {
+        line.append(" source ");
+        line.append_decimal(pinned_source->PrimSurfSizeCx);
+        line.append("x");
+        line.append_decimal(pinned_source->PrimSurfSizeCy);
+    } else {
+        line.append(" source unpinned");
+    }
+    line.append(target_pinned ? " target pinned" : " target unpinned");
+    platform_.log(line.text());
 }
 
 }  // namespace av

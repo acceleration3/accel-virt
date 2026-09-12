@@ -1819,6 +1819,9 @@ TEST(adapter_dpc_routine, a_storm_of_refusals_is_silent_once_the_window_is_spent
   const std::uint32_t spent = fixture.platform().logged();
   CHECK_EQ(nt(fixture.adapter().recommend_vidpn_topology(&topology)), no_recommended_vidpn_topology);
   CHECK_EQ(fixture.platform().logged(), spent);
+  DxgkDriverCapsRecord caps = {};
+  CHECK_EQ(query_driver_caps_of(fixture.adapter(), caps), success);
+  CHECK_EQ(fixture.platform().logged(), spent);   /* the QueryAdapterInfo line too */
   for (std::uint16_t index = 0u; index < 2u; index++) {
       const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(index);
       const auto used = static_cast<std::uint8_t *>(fixture.platform().translate_physical(queue.device, 4u));

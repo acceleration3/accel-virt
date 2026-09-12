@@ -1,5 +1,6 @@
 #include "core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
 #include "core/display/display_mode_list.hpp"
+#include "core/platform/log_budget.hpp"
 #include "core/support/nt_status.hpp"
 #include "core/vidpn/cofunc_modality.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -7,6 +8,7 @@
 #include "harness/vidpn/vidpn_fixture.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 using av::CofuncModality;
 using av::D3dkmdtVidPnSourceModeRecord;
@@ -45,23 +47,26 @@ D3dkmdtVidPnSourceModeRecord source_mode(std::uint32_t width, std::uint32_t heig
 
 class Enumeration {
 public:
-    Enumeration() : fixture_(), modes_(), request_{}, path_(fixture_.vidpn().add_path(0u, 0u))
+    Enumeration() : fixture_(), budget_(fixture_.platform()), modes_(), request_{},
+                    path_(fixture_.vidpn().add_path(0u, 0u))
     {
         request_.hConstrainingVidPn = fixture_.handle();
         request_.EnumPivotType = no_pivot;
     }
     VidPnFixture                          &fixture() { return fixture_; }
+    av::LogBudget                         &budget() { return budget_; }
     av::D3dkmdtVidPnPresentPathRecord     &path() { return path_; }
     av::FakeVidPn                         &vidpn() { return fixture_.vidpn(); }
     DxgkargEnumVidPnCofuncModalityRecord &request() { return request_; }
     std::uint32_t run()
     {
         return static_cast<std::uint32_t>(
-            CofuncModality(fixture_.platform(), fixture_.dxgkrnl(), modes_, request_).enumerate().value());
+            CofuncModality(fixture_.platform(), fixture_.dxgkrnl(), budget_, modes_, request_).enumerate().value());
     }
 
 private:
     VidPnFixture                          fixture_;
+    av::LogBudget                         budget_;
     DisplayModeList                       modes_;
     DxgkargEnumVidPnCofuncModalityRecord  request_;
     av::D3dkmdtVidPnPresentPathRecord     &path_;
@@ -178,15 +183,41 @@ TEST(cofunc_modality_visit, every_path_is_offered_identity_whatever_it_carries)
       CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationRotationSupport, rotation_supported);
   } }
 
+/* The line is the only way to see, from a guest that will not settle a topology,
+ * what dxgkrnl asked about each path and what it already had pinned. */
+TEST(cofunc_modality_visit, each_path_says_what_it_was_asked_and_what_was_pinned)
+{ Enumeration unpinned;
+  CHECK_EQ(unpinned.run(), 0u);
+  CHECK(std::strcmp(unpinned.fixture().platform().last_log(),
+                    "rvkgpu: cofunc path 0->0 pivot 5 scaling 254 rotation 254 source unpinned target unpinned") == 0);
+  Enumeration pinned;
+  pinned.vidpn().source_modes(0u).seed(source_mode(1024u, 768u), true);
+  D3dkmdtVidPnTargetModeRecord target = {};
+  DisplayMode(1024u, 768u).describe(target.VideoSignalInfo);
+  pinned.vidpn().target_modes(0u).seed(target, true);
+  CHECK_EQ(pinned.run(), 0u);
+  CHECK(std::strcmp(pinned.fixture().platform().last_log(),
+                    "rvkgpu: cofunc path 0->0 pivot 5 scaling 254 rotation 254 source 1024x768 target pinned") == 0); }
+
+/* dxgkrnl repeats the VidPn DDIs while it settles a topology, so the line comes
+ * out of the budget like every other repeated one. */
+TEST(cofunc_modality_visit, the_path_line_stops_when_the_window_is_spent)
+{ Enumeration enumeration;
+  while (enumeration.budget().allows()) {}
+  const std::uint32_t spent = enumeration.fixture().platform().logged();
+  CHECK_EQ(enumeration.run(), 0u);
+  CHECK_EQ(enumeration.fixture().platform().logged(), spent); }
+
 TEST(cofunc_modality_visit, a_path_to_another_source_or_target_is_invalid)
 { const std::uint32_t ends[][2] = {{1u, 0u}, {0u, 1u}};
   for (const auto &end : ends) {
       VidPnFixture fixture;
+      av::LogBudget budget(fixture.platform());
       DisplayModeList modes;
       fixture.vidpn().add_path(end[0], end[1]);
       DxgkargEnumVidPnCofuncModalityRecord request = {fixture.handle(), no_pivot, 0u, 0u, 0u};
       CHECK_EQ(static_cast<std::uint32_t>(
-                   CofuncModality(fixture.platform(), fixture.dxgkrnl(), modes, request).enumerate().value()),
+                   CofuncModality(fixture.platform(), fixture.dxgkrnl(), budget, modes, request).enumerate().value()),
                invalid_parameter);
   } }
 
@@ -209,7 +240,8 @@ TEST(cofunc_modality_enumerate, every_refusal_fails_without_a_leak)
 TEST(cofunc_modality, is_passive_only)
 { Enumeration enumeration;
   DisplayModeList modes;
-  CofuncModality cofunc(enumeration.fixture().platform(), enumeration.fixture().dxgkrnl(), modes, enumeration.request());
+  CofuncModality cofunc(enumeration.fixture().platform(), enumeration.fixture().dxgkrnl(), enumeration.budget(),
+                        modes, enumeration.request());
   enumeration.fixture().platform().set_irql(Irql::dispatch);
   static_cast<void>(cofunc.visit(enumeration.vidpn().path(0u)));
   enumeration.fixture().platform().set_irql(Irql::passive);

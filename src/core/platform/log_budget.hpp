@@ -17,7 +17,11 @@ struct LogBudgetProbe;
 
 class LogBudget {
 public:
-    static constexpr uint32_t lines_per_window = 32u;
+    /* Well above the legitimate burst: one adapter start answers around thirty
+     * DDIs, and dxgkrnl repeats the VidPn DDIs while it settles a topology, so
+     * a window that a bring-up can exhaust stops the log being evidence for the
+     * step that failed. A storm is unbounded; this still bounds it. */
+    static constexpr uint32_t lines_per_window = 256u;
     /* One second, in the 100ns units Platform::interrupt_time counts. */
     static constexpr uint64_t window_ticks = 10000000u;
 

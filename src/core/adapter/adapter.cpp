@@ -545,7 +545,7 @@ int32_t Adapter::enum_vidpn_cofunc_modality(const DxgkargEnumVidPnCofuncModality
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::enum_vidpn_cofunc_modality");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    const int32_t enumerated = CofuncModality(platform_, dxgkrnl_, modes_, *request).enumerate().value();
+    const int32_t enumerated = CofuncModality(platform_, dxgkrnl_, budget_, modes_, *request).enumerate().value();
     log_status("rvkgpu: EnumVidPnCofuncModality", enumerated);
     return enumerated;
 }
