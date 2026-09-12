@@ -71,6 +71,51 @@ TEST(gpu_request_writer_transfer_to_host_2d, covers_the_whole_resource)
   CHECK_EQ(u32(buffer.bytes, 48u), 1u);
   CHECK_EQ(u32(buffer.bytes, 52u), 0u); }
 
+/* struct virtio_gpu_set_scanout: the rectangle the host shows, then which
+ * scanout shows it and from which resource. */
+TEST(gpu_request_writer_set_scanout, names_the_scanout_the_resource_and_the_rectangle)
+{ Buffer buffer;
+  GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  CHECK_STATUS(writer.set_scanout(1u, 7u, 1280u, 800u), Status::ok);
+  CHECK_EQ(writer.length(), 48u);
+  CHECK(plain_header(buffer.bytes, 0x0103u));
+  CHECK_EQ(u32(buffer.bytes, 24u), 0u);
+  CHECK_EQ(u32(buffer.bytes, 28u), 0u);
+  CHECK_EQ(u32(buffer.bytes, 32u), 1280u);
+  CHECK_EQ(u32(buffer.bytes, 36u), 800u);
+  CHECK_EQ(u32(buffer.bytes, 40u), 1u);
+  CHECK_EQ(u32(buffer.bytes, 44u), 7u);
+  CHECK_EQ(buffer.bytes[48], 0xEEu); }
+
+/* A scanout of resource 0 is how virtio-gpu is told to show nothing. */
+TEST(gpu_request_writer_set_scanout, disables_a_scanout_with_resource_zero)
+{ Buffer buffer;
+  GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  CHECK_STATUS(writer.set_scanout(0u, 0u, 0u, 0u), Status::ok);
+  CHECK_EQ(u32(buffer.bytes, 32u), 0u);
+  CHECK_EQ(u32(buffer.bytes, 44u), 0u); }
+
+TEST(gpu_request_writer_resource_flush, covers_the_rectangle_of_one_resource)
+{ Buffer buffer;
+  GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  CHECK_STATUS(writer.resource_flush(7u, 1280u, 800u), Status::ok);
+  CHECK_EQ(writer.length(), 48u);
+  CHECK(plain_header(buffer.bytes, 0x0104u));
+  CHECK_EQ(u32(buffer.bytes, 24u), 0u);
+  CHECK_EQ(u32(buffer.bytes, 28u), 0u);
+  CHECK_EQ(u32(buffer.bytes, 32u), 1280u);
+  CHECK_EQ(u32(buffer.bytes, 36u), 800u);
+  CHECK_EQ(u32(buffer.bytes, 40u), 7u);
+  CHECK_EQ(u32(buffer.bytes, 44u), 0u); }
+
+TEST(gpu_request_writer_get_display_info, is_a_header_and_nothing_else)
+{ Buffer buffer;
+  GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  CHECK_STATUS(writer.get_display_info(), Status::ok);
+  CHECK_EQ(writer.length(), GpuRequestWriter::header_size);
+  CHECK(plain_header(buffer.bytes, 0x0100u));
+  CHECK_EQ(buffer.bytes[GpuRequestWriter::header_size], 0xEEu); }
+
 TEST(gpu_request_writer_update_cursor, names_the_position_resource_and_hot_spot)
 { Buffer buffer;
   GpuRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
@@ -108,6 +153,11 @@ TEST(gpu_request_writer, a_request_that_does_not_fit_writes_nothing)
   CHECK_STATUS(tiny.create_2d(1u, 1u, 1u, 1u), Status::too_large);
   CHECK_STATUS(tiny.transfer_to_host_2d(1u, 1u, 1u), Status::too_large);
   CHECK_STATUS(tiny.update_cursor(0u, 0, 0, 1u, 0u, 0u), Status::too_large);
+  CHECK_STATUS(tiny.set_scanout(0u, 1u, 1u, 1u), Status::too_large);
+  CHECK_STATUS(tiny.resource_flush(1u, 1u, 1u), Status::too_large);
   CHECK_EQ(tiny.length(), 0u);
+  GpuRequestWriter header_only(buffer.bytes, GpuRequestWriter::header_size - 1u);
+  CHECK_STATUS(header_only.get_display_info(), Status::too_large);
+  CHECK_EQ(header_only.length(), 0u);
   GpuRequestWriter none(nullptr, 64u);
   CHECK_STATUS(none.attach_backing(1u, 0u, 0u), Status::too_large); }

@@ -15,7 +15,7 @@ import unittest
 from tool_run import ROOT
 
 sys.path.insert(0, str(ROOT / "tools" / "guest"))
-from run_guest_suite import describe_panic  # noqa: E402
+from run_guest_suite import Screendump, StepFailed, describe_panic  # noqa: E402
 
 RUNNER = ROOT / "tools" / "guest" / "run_guest_suite.py"
 FAKES = ROOT / "tests" / "tools" / "fake_guest"
@@ -314,3 +314,58 @@ class GuestSuiteRun(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScreendumpTest(unittest.TestCase):
+    """The PPM QEMU writes, read back: its size, and whether two differ."""
+
+    def setUp(self):
+        self.scratch = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.scratch, ignore_errors=True)
+
+    def ppm(self, name, width, height, pixel=b"\x10\x20\x30"):
+        path = self.scratch / name
+        path.write_bytes(f"P6\n{width} {height}\n255\n".encode() + pixel * (width * height))
+        return path
+
+    def test_size_reads_the_ppm_header(self):
+        self.assertEqual(Screendump(self.ppm("a.ppm", 1280, 800)).size(), (1280, 800))
+
+    def test_a_dump_that_is_not_a_ppm_has_no_size(self):
+        path = self.scratch / "bad.ppm"
+        path.write_bytes(b"not a ppm at all")
+        self.assertEqual(Screendump(path).size(), (0, 0))
+        path.write_bytes(b"P6\nwide high\n255\n")
+        self.assertEqual(Screendump(path).size(), (0, 0))
+        path.write_bytes(b"P6\n12")
+        self.assertEqual(Screendump(path).size(), (0, 0))
+
+    def test_dumps_differ_when_a_pixel_does(self):
+        first = Screendump(self.ppm("first.ppm", 4, 4))
+        same = Screendump(self.ppm("same.ppm", 4, 4))
+        other = Screendump(self.ppm("other.ppm", 4, 4, b"\x99\x20\x30"))
+        bigger = Screendump(self.ppm("bigger.ppm", 8, 4))
+        self.assertFalse(first.differs_from(same))
+        self.assertTrue(first.differs_from(other))
+        self.assertTrue(first.differs_from(bigger))
+
+    def test_capture_asks_qemu_and_refuses_an_empty_dump(self):
+        asked = []
+
+        class Writing:
+            def __init__(self, contents):
+                self.contents = contents
+
+            def execute(self, command, arguments=None):
+                asked.append((command, arguments))
+                if self.contents is not None:
+                    pathlib.Path(arguments["filename"]).write_bytes(self.contents)
+
+        path = self.scratch / "taken.ppm"
+        dump = Screendump(path).capture(Writing(b"P6\n2 2\n255\n" + b"\x00\x00\x00" * 4))
+        self.assertEqual(dump.size(), (2, 2))
+        self.assertEqual(asked, [("screendump", {"filename": str(path)})])
+        with self.assertRaises(StepFailed):
+            Screendump(self.scratch / "missing.ppm").capture(Writing(None))
+        with self.assertRaises(StepFailed):
+            Screendump(self.scratch / "empty.ppm").capture(Writing(b""))

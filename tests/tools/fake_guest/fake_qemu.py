@@ -195,6 +195,19 @@ class Guest:
                 except OSError:
                     return
 
+    def qmp_command(self, request):
+        """screendump writes a PPM of the scripted size, as QEMU would."""
+        if request.get("execute") != "screendump":
+            return
+        width, height = self.script.get("screendump", [64, 48])[:2]
+        frame = self.script.get("screendump_frame", 0)
+        path = request.get("arguments", {})["filename"]
+        pixel = bytes([frame & 0xFF, 0x20, 0x40])
+        with open(path, "wb") as dump:
+            dump.write(f"P6\n{width} {height}\n255\n".encode())
+            dump.write(pixel * (width * height))
+        self.note(f"screendump {width}x{height}")
+
     def serve_qmp(self, path):
         server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         server.bind(path)
@@ -213,8 +226,9 @@ class Guest:
             buffer += data
             while b"\n" in buffer:
                 line, buffer = buffer.split(b"\n", 1)
-                json.loads(line)
+                request = json.loads(line)
                 self.qmp = connection
+                self.qmp_command(request)
                 with self.send_lock:
                     connection.sendall(b'{"return": {}}\n')
 

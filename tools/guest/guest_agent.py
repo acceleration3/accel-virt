@@ -212,8 +212,11 @@ class Qmp:
     def close(self):
         self.channel.close()
 
-    def execute(self, command):
-        self.channel.send({"execute": command})
+    def execute(self, command, arguments=None):
+        message = {"execute": command}
+        if arguments is not None:
+            message["arguments"] = arguments
+        self.channel.send(message)
         deadline = time.monotonic() + self.timeout
         while True:
             message = self.channel.message(deadline)

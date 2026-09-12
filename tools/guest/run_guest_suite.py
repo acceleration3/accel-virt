@@ -163,6 +163,47 @@ def describe_panic(data):
     return f"bugcheck {code:#x} {BUGCHECKS.get(code, 'unnamed')} ({parameters})"
 
 
+class Screendump:
+    """One QMP screendump: the device's scanout as QEMU writes it, in PPM.
+
+    QEMU answers screendump for whatever the device is scanning out, with
+    -display none and no VGA, which is how a run verifies that a frame reached
+    the host at all.
+    """
+
+    def __init__(self, path):
+        self.path = pathlib.Path(path)
+
+    def capture(self, qmp):
+        """Writes the dump; raises StepFailed when QEMU refuses or writes nothing."""
+        try:
+            qmp.execute("screendump", {"filename": str(self.path)})
+        except AgentError as error:
+            raise StepFailed("screendump", str(error))
+        if not self.path.exists() or self.path.stat().st_size == 0:
+            raise StepFailed("screendump", f"QEMU wrote no dump to {self.path}")
+        return self
+
+    def size(self):
+        """The PPM's width and height, or (0, 0) when it is not a P6 PPM."""
+        with open(self.path, "rb") as dump:
+            head = dump.read(64)
+        fields = head.split(maxsplit=4)
+        if len(fields) < 3 or fields[0] != b"P6":
+            return (0, 0)
+        try:
+            return (int(fields[1]), int(fields[2]))
+        except ValueError:
+            return (0, 0)
+
+    def pixels(self):
+        with open(self.path, "rb") as dump:
+            return dump.read()
+
+    def differs_from(self, other):
+        return self.pixels() != other.pixels()
+
+
 class GuestRun:
     """One run: its work directory, its QEMU, and the sockets into the guest."""
 

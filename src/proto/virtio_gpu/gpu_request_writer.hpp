@@ -29,6 +29,13 @@ public:
     [[nodiscard]] Status attach_backing(uint32_t resource_id, uint64_t address, uint32_t length);
     /* The whole resource, from offset 0. */
     [[nodiscard]] Status transfer_to_host_2d(uint32_t resource_id, uint32_t width, uint32_t height);
+    /* What `scanout` shows, from the top left of `resource_id`; resource 0
+     * shows nothing. */
+    [[nodiscard]] Status set_scanout(uint32_t scanout, uint32_t resource_id, uint32_t width, uint32_t height);
+    /* The host reads the resource's pixels again, over that rectangle. */
+    [[nodiscard]] Status resource_flush(uint32_t resource_id, uint32_t width, uint32_t height);
+    /* Asks for every scanout's rectangle; the answer is a DisplayInfoResponse. */
+    [[nodiscard]] Status get_display_info();
     /* Resource 0 hides the cursor. */
     [[nodiscard]] Status update_cursor(uint32_t scanout, int32_t x, int32_t y, uint32_t resource_id, uint32_t hot_x,
                                        uint32_t hot_y);
@@ -39,6 +46,9 @@ public:
 private:
     enum : uint32_t {
         resource_create_2d = 0x0101u,
+        get_display_info_type = 0x0100u,
+        set_scanout_type = 0x0103u,
+        resource_flush_type = 0x0104u,
         transfer_to_host_2d_type = 0x0105u,
         resource_attach_backing = 0x0106u,
         update_cursor_type = 0x0300u,

@@ -11,10 +11,10 @@ from, before it is fixed (FR-007).
 
 ## Phase 1: The wire requests the 2D path needs
 
-- [ ] T001 [P] Tests then `set_scanout` in src/proto/virtio_gpu/gpu_request_writer.{hpp,cpp}: type `0x0103`, the scanout id, resource id and rectangle it writes, and a buffer one byte too small refused with nothing written
-- [ ] T002 [P] Tests then `resource_flush` in src/proto/virtio_gpu/gpu_request_writer.{hpp,cpp}: type `0x0104`, the resource id and rectangle, and a short buffer refused
-- [ ] T003 [P] Tests then `get_display_info` in src/proto/virtio_gpu/gpu_request_writer.{hpp,cpp}: type `0x0100` with a header and no payload, and a short buffer refused
-- [ ] T004 Runner: a QMP `screendump` into the work directory and a comparison answering whether two dumps differ, in tools/guest/run_guest_suite.py; tests over the fake QEMU in tests/tools/fake_guest/
+- [X] T001 [P] Tests then `set_scanout` in src/proto/virtio_gpu/gpu_request_writer.{hpp,cpp}: type `0x0103`, the scanout id, resource id and rectangle it writes, and a buffer one byte too small refused with nothing written
+- [X] T002 [P] Tests then `resource_flush` in src/proto/virtio_gpu/gpu_request_writer.{hpp,cpp}: type `0x0104`, the resource id and rectangle, and a short buffer refused
+- [X] T003 [P] Tests then `get_display_info` in src/proto/virtio_gpu/gpu_request_writer.{hpp,cpp}: type `0x0100` with a header and no payload, and a short buffer refused
+- [X] T004 Runner: a QMP `screendump` into the work directory and a comparison answering whether two dumps differ, in tools/guest/run_guest_suite.py; tests over the fake QEMU in tests/tools/fake_guest/
 
 **Checkpoint**: commit.
 
