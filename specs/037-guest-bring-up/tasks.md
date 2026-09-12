@@ -284,13 +284,23 @@ rvkgpu: SetVidPnSourceVisibility status 0x00000000
   in its destructor; `FakeHandleTable` fails the test on a loan never handed
   back.
 
-- [ ] T009 [US2] `D3DKMTEnumAdapters2` lists the adapter at WDDM 3.2 with its PCI identity; no Verifier violation, no TDR, no live kernel report caused by `rvkgpu`
+- [X] T009 [US2] `D3DKMTEnumAdapters2` lists the adapter at WDDM 3.2 with its PCI identity; no Verifier violation, no TDR, no live kernel report caused by `rvkgpu`
+
+  `adapter.find` matches `1af4:1050` subsystem `1af4:5256` through
+  `D3DKMTEnumAdapters2`, and `adapter.driver_version` reads
+  `KMT_DRIVERVERSION_WDDM_3_2`. The run's `diag/` is clean: `dumps/` empty, so
+  no TDR and no live kernel report; `verifier.txt` shows `rvkgpu.sys` verified
+  with no failed allocation and no violation; `system.txt` holds no bugcheck and
+  no start error; the one 411 in `kernel-pnp.txt` is not this device.
 
 **Checkpoint**: commit.
 
 ## Phase 4: It stays passing
 
-- [ ] T010 [US2] Three consecutive runs end with verdict 0, their `diag/` free of start errors, bugchecks and Verifier violations
+- [X] T010 [US2] Three consecutive runs end with verdict 0, their `diag/` free of start errors, bugchecks and Verifier violations
+
+  Three back-to-back runs of `run_guest_suite.py`, each on its own overlay, all
+  exited 0 with `rvktest: 23 passed, 0 failed` and no live kernel report.
 - [ ] T011 `tools/gate.sh` with `AV_GUEST_IMAGE` set becomes the merge gate from this feature on (FR-006); docs/testing.md and docs/roadmap.md; 035's T016 closes; merge; push
 
 **Checkpoint**: commit.
