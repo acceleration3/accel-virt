@@ -87,21 +87,28 @@ Status CofuncModality::offer_targets(uint32_t target, const D3dkmdtVidPnSourceMo
     return status != Status::ok ? status : set.assign();
 }
 
-/* Every path is updated exactly once per enumeration, whatever it supports:
- * UpdatePathSupportInfo (dxgkrnl.sys @1403ab840) counts the paths down and only
- * ends the enumeration when the count reaches zero, and PinContentScaling
- * (@140013e5c) fails 0xC01E0306 forever on a path whose support mask is still 0. */
+/* What the adapter can do with a path is identity scaling and identity rotation
+ * at offset zero, and that is what every path is told, in one call.
+ *
+ * Offset0 is not optional: IsDriverSupportPathIndependentRotation (dxgkrnl.sys
+ * @1403d9d78) answers yes for any driver whose declared interface version is
+ * above 0x4002, which is every WDDM 2 driver and so always us, and
+ * SetRotationSupport (@14004b80c) then bugchecks 0x113 subcode 0x1C on a
+ * test-signed machine when the mask for a primary clone path - the only path we
+ * have - lacks it.
+ *
+ * A pivoting transformation is left alone by not calling at all, as
+ * basicdisplay.sys does: pfnUpdatePathSupportInfo writes both supports, so
+ * there is no way to update one and leave the other. */
 Status CofuncModality::update_support(const D3dkmdtVidPnPresentPathRecord &path)
 {
+    const bool pivots_here = request_.EnumPivotVidPnSourceId == path.VidPnSourceId &&
+                             request_.EnumPivotVidPnTargetId == path.VidPnTargetId;
+    if (pivots_here && (request_.EnumPivotType == pivot_scaling || request_.EnumPivotType == pivot_rotation))
+        return Status::ok;
     D3dkmdtVidPnPresentPathRecord update = path;
-    const bool scaling_unchosen = (path.ContentTransformationScaling == transformation_uninitialized ||
-                                   path.ContentTransformationScaling == transformation_unpinned) &&
-                                  request_.EnumPivotType != pivot_scaling;
-    const bool rotation_unchosen = (path.ContentTransformationRotation == transformation_uninitialized ||
-                                    path.ContentTransformationRotation == transformation_unpinned) &&
-                                   request_.EnumPivotType != pivot_rotation;
-    if (scaling_unchosen) update.ContentTransformationScalingSupport = identity_supported;
-    if (rotation_unchosen) update.ContentTransformationRotationSupport = identity_supported;
+    update.ContentTransformationScalingSupport = identity_supported;
+    update.ContentTransformationRotationSupport = identity_supported | rotation_offset_zero;
     return vidpn_.update_path_support(update);
 }
 

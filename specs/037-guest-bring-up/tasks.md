@@ -134,6 +134,32 @@ and `vidpn_create_mode_set.answers_fresh_sets_to_fill_and_assign`, which used to
 assign the empty sets it had just created. `an_uninitialized_transformation_is_offered_identity`
 covers the other unpinned value.
 
+**The sixth defect, found by the guest run the fourth and fifth fixes made
+possible.** With `pfnUpdatePathSupportInfo` finally reaching dxgkrnl, the guest
+bugchecked `0x113` (VIDEO_DXGKRNL_FATAL_ERROR) subcode `0x1C` one second into
+the device restart, with no bugcheck parameters on the wire and no kernel dump.
+Read off the paused guest over QEMU's gdbstub: `nt!KiBugCheckData` held
+`0x113, 0x1C, 0x1, 0x1, 0x0`, and the stack of the bugchecking processor carried
+`VidPn::update_path_support` -> `CofuncModality::update_support` ->
+`CofuncModality::visit` -> `VidPn::for_each_path` -> `AvDdiEnumVidPnCofuncModality`.
+
+`DMMVIDPNPRESENTPATH::SetRotationSupport` (dxgkrnl.sys @`14004b80c`) validates
+the rotation support mask whenever `IsDriverSupportPathIndependentRotation`
+(@`1403d9d78`) is true - which it is for any driver whose declared interface
+version is above `0x4002`, so always for us - and the machine is test-signed. A
+primary clone path, which `IsPrimaryClonePath` (@`14027ce7c`) makes the only
+path of a single-path topology, must carry `Offset0` (`0x10`) and none of
+`Offset90/180/270`. Parameter 2 of the bugcheck is the mask we sent: `0x1`,
+Identity alone. `basicdisplay.sys`'s own `EnumVidPnCofuncModality` ends its
+rotation mask with `| 0x10` for the same reason.
+
+`update_support` now states what the adapter actually does - identity scaling,
+identity rotation at offset zero - on every path in one call, and leaves a path
+whose scaling or rotation is the enumeration's pivot alone entirely, because one
+call writes both supports and there is no way to update one and not the other.
+`FakeVidPn::update_path` fails the test on a mask dxgkrnl would bugcheck on, so
+this cannot come back as a guest bugcheck.
+
 `a_storm_of_refusals_is_silent_once_the_window_is_spent` closes T003's last
 uncovered branches: with the window spent, the four DPC refusal lines and every
 `log_status` line say nothing. The one line the DPC still writes is

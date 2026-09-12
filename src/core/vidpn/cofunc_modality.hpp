@@ -29,17 +29,12 @@ public:
 
 private:
     enum : int32_t { pivot_source = 1, pivot_target = 2, pivot_scaling = 3, pivot_rotation = 4 };   /* D3DKMDT_EPT_* */
-    /* The two D3DKMDT_VPPS_* / D3DKMDT_VPPR_* values that leave the transformation
-     * ours to offer. A live path carries UNPINNED: dxgkrnl's AcquirePathInfo
-     * (dxgkrnl.sys @1403a6b10) stamps 0xFE in both fields, and PinPathContentScaling
-     * (@1403052c0) reads 0xFE back as "was unpinned". UNINITIALIZED only ever
-     * reaches us from a caller that built the record itself. */
-    enum : int32_t { transformation_uninitialized = 0, transformation_unpinned = 254 };
     enum : uint32_t {
         preferred = 1u,                /* D3DKMDT_MP_PREFERRED */
         not_preferred = 2u,
         rgb_8_bits_per_channel = 0x02u << 2u,   /* the Rgb field above the 2-bit preference */
         identity_supported = 1u,       /* the Identity bit of both support fields */
+        rotation_offset_zero = 0x10u,  /* the Offset0 bit of the rotation support field */
     };
 
     [[nodiscard]] Status copy_pinned_source(uint32_t source, D3dkmdtVidPnSourceModeRecord &mode);

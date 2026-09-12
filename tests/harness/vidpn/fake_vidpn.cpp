@@ -11,6 +11,8 @@ constexpr std::int32_t invalid_parameter = static_cast<std::int32_t>(0xC000000Du
 /* D3DKMDT_VPPS_UNPINNED / D3DKMDT_VPPR_UNPINNED, the value dxgkrnl's own
  * AcquirePathInfo writes into an unpinned path's transform fields. */
 constexpr std::int32_t unpinned_transformation = 254;
+constexpr std::uint32_t offset_zero = 0x10u;    /* D3DKMDT_VIDPN_PRESENT_PATH_ROTATION_SUPPORT.Offset0 */
+constexpr std::uint32_t other_offsets = 0xE0u;  /* Offset90, Offset180 and Offset270 */
 constexpr std::int32_t empty_source_mode_set = static_cast<std::int32_t>(0xC01E0308u);
 constexpr std::int32_t empty_target_mode_set = static_cast<std::int32_t>(0xC01E0309u);
 constexpr std::int32_t no_more_elements = 0x401E034C;
@@ -421,8 +423,19 @@ std::int32_t FakeVidPn::acquire_path(std::uint32_t index, const D3dkmdtVidPnPres
     return 0;
 }
 
+/* DMMVIDPNPRESENTPATH::SetRotationSupport (dxgkrnl.sys @14004b80c) bugchecks
+ * 0x113 subcode 0x1C, rather than answering a status, when a driver that
+ * declares an interface version above 0x4002 - every WDDM 2 driver - answers a
+ * primary clone path with a rotation support mask that lacks Offset0 or carries
+ * any of Offset90/180/270. Every path this fake has is the primary clone path
+ * of its source, so a violation is a failed test here instead of a bugchecked
+ * guest. */
 std::int32_t FakeVidPn::update_path(const D3dkmdtVidPnPresentPathRecord &path)
 {
+    const std::uint32_t rotation = path.ContentTransformationRotationSupport;
+    if ((rotation & offset_zero) == 0u || (rotation & other_offsets) != 0u)
+        TestRegistry::instance().record_failure(__FILE__, __LINE__,
+                                                "a rotation support mask dxgkrnl would bugcheck on");
     for (std::uint32_t index = 0u; index < path_count_; index++) {
         if (paths_[index].VidPnSourceId != path.VidPnSourceId || paths_[index].VidPnTargetId != path.VidPnTargetId)
             continue;

@@ -22,6 +22,7 @@ constexpr std::uint32_t no_more_elements = 0x401E034Cu;
 constexpr std::uint32_t dataset_is_empty = 0x401E034Bu;
 constexpr std::uint32_t mode_already_in_mode_set = 0xC01E0314u;
 constexpr std::uint32_t mode_not_in_mode_set = 0xC01E034Au;
+constexpr std::uint32_t rotation_supported = 0x11u;   /* Identity | Offset0 */
 constexpr std::uint32_t empty_source_mode_set = 0xC01E0308u;
 constexpr std::uint32_t empty_target_mode_set = 0xC01E0309u;
 
@@ -93,10 +94,10 @@ TEST(fake_vidpn_topology, acquires_and_updates_a_path_by_its_ends)
   CHECK_EQ(topology_interface->pfnAcquirePathInfo(topology, 0u, 0u, &path), 0);
   D3dkmdtVidPnPresentPathRecord update = *path;
   update.ContentTransformationScalingSupport = 1u;
-  update.ContentTransformationRotationSupport = 1u;
+  update.ContentTransformationRotationSupport = rotation_supported;
   CHECK_EQ(topology_interface->pfnUpdatePathSupportInfo(topology, &update), 0);
   CHECK_EQ(vidpn.path(0u).ContentTransformationScalingSupport, 1u);
-  CHECK_EQ(vidpn.path(0u).ContentTransformationRotationSupport, 1u);
+  CHECK_EQ(vidpn.path(0u).ContentTransformationRotationSupport, rotation_supported);
   CHECK_EQ(vidpn.path_support_updates(), 1u);
   update.VidPnTargetId = 1u;
   CHECK_EQ(nt(topology_interface->pfnUpdatePathSupportInfo(topology, &update)), invalid_parameter);

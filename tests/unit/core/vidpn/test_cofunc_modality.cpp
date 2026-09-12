@@ -31,8 +31,10 @@ constexpr std::int32_t no_pivot = 5;
 constexpr std::uint32_t preferred = 1u;         /* D3DKMDT_MP_PREFERRED */
 constexpr std::uint32_t not_preferred = 2u;
 constexpr std::uint32_t rgb_8_bits = 0x02u << 2u;
-constexpr std::int32_t identity = 1;        /* D3DKMDT_VPPS_IDENTITY / D3DKMDT_VPPR_IDENTITY */
-constexpr std::int32_t uninitialized = 0;   /* D3DKMDT_VPPS_UNINITIALIZED */
+constexpr std::int32_t identity = 1;            /* D3DKMDT_VPPS_IDENTITY / D3DKMDT_VPPR_IDENTITY */
+constexpr std::uint32_t identity_supported = 1u;
+/* Identity | Offset0: without Offset0 dxgkrnl bugchecks 0x113 subcode 0x1C. */
+constexpr std::uint32_t rotation_supported = 0x11u;
 
 D3dkmdtVidPnSourceModeRecord source_mode(std::uint32_t width, std::uint32_t height)
 {
@@ -82,8 +84,8 @@ TEST(cofunc_modality_enumerate, nothing_pinned_offers_every_mode_on_both_ends)
       CHECK_EQ(mode.WireFormatAndPreference, (is_preferred ? preferred : not_preferred) | rgb_8_bits);
       CHECK_EQ(mode.VideoSignalInfo.VSyncFreqNumerator, 60u);
   }
-  CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationScalingSupport, 1u);
-  CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationRotationSupport, 1u);
+  CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationScalingSupport, identity_supported);
+  CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationRotationSupport, rotation_supported);
   CHECK_EQ(enumeration.vidpn().path_support_updates(), 1u); }
 
 TEST(cofunc_modality_visit, a_pinned_source_mode_leaves_its_set_and_constrains_the_target)
@@ -140,40 +142,41 @@ TEST(cofunc_modality_visit, the_pivot_mode_set_is_left_alone)
   CHECK_EQ(other_ids.run(), 0u);
   CHECK_EQ(other_ids.vidpn().target_modes(0u).modes(), DisplayModeList::mode_count); }
 
-TEST(cofunc_modality_visit, a_pivoting_transformation_keeps_its_support)
-{ Enumeration scaling;
-  scaling.request().EnumPivotType = pivot_scaling;
-  CHECK_EQ(scaling.run(), 0u);
-  CHECK_EQ(scaling.vidpn().path(0u).ContentTransformationScalingSupport, 0u);
-  CHECK_EQ(scaling.vidpn().path(0u).ContentTransformationRotationSupport, 1u);
-  Enumeration rotation;
-  rotation.request().EnumPivotType = pivot_rotation;
-  CHECK_EQ(rotation.run(), 0u);
-  CHECK_EQ(rotation.vidpn().path(0u).ContentTransformationScalingSupport, 1u);
-  CHECK_EQ(rotation.vidpn().path(0u).ContentTransformationRotationSupport, 0u); }
+/* One call carries both supports, so the only way to leave a pivoting
+ * transformation alone is to leave the whole path alone - and a pivot on
+ * another path's ends is not this path's pivot. */
+TEST(cofunc_modality_visit, a_path_pivoting_on_a_transformation_is_left_alone)
+{ const std::int32_t pivots[] = {pivot_scaling, pivot_rotation};
+  for (std::int32_t pivot : pivots) {
+      Enumeration enumeration;
+      enumeration.request().EnumPivotType = pivot;
+      CHECK_EQ(enumeration.run(), 0u);
+      CHECK_EQ(enumeration.vidpn().path_support_updates(), 0u);
+      CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationScalingSupport, 0u);
+      CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationRotationSupport, 0u);
+      Enumeration elsewhere;
+      elsewhere.request().EnumPivotType = pivot;
+      elsewhere.request().EnumPivotVidPnTargetId = 1u;
+      CHECK_EQ(elsewhere.run(), 0u);
+      CHECK_EQ(elsewhere.vidpn().path_support_updates(), 1u);
+      CHECK_EQ(elsewhere.vidpn().path(0u).ContentTransformationRotationSupport, rotation_supported);
+  } }
 
-/* dxgkrnl counts one pfnUpdatePathSupportInfo per path per enumeration, so a
- * path whose transformations are already pinned is still updated - it just
- * offers nothing. */
-TEST(cofunc_modality_visit, a_path_with_both_transformations_chosen_is_updated_offering_nothing)
-{ Enumeration enumeration;
-  enumeration.path().ContentTransformationScaling = identity;
-  enumeration.path().ContentTransformationRotation = identity;
-  CHECK_EQ(enumeration.run(), 0u);
-  CHECK_EQ(enumeration.vidpn().path_support_updates(), 1u);
-  CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationScalingSupport, 0u);
-  CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationRotationSupport, 0u); }
-
-/* A record built by a caller rather than acquired from dxgkrnl carries
- * UNINITIALIZED, which is unpinned too. */
-TEST(cofunc_modality_visit, an_uninitialized_transformation_is_offered_identity)
-{ Enumeration enumeration;
-  enumeration.path().ContentTransformationScaling = uninitialized;
-  enumeration.path().ContentTransformationRotation = uninitialized;
-  CHECK_EQ(enumeration.run(), 0u);
-  CHECK_EQ(enumeration.vidpn().path_support_updates(), 1u);
-  CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationScalingSupport, 1u);
-  CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationRotationSupport, 1u); }
+/* What the path already carries does not change the answer: identity is all the
+ * adapter does, whether the transformation is unpinned (254, what dxgkrnl
+ * presents), uninitialized (0, what a caller-built record carries) or already
+ * pinned to identity. */
+TEST(cofunc_modality_visit, every_path_is_offered_identity_whatever_it_carries)
+{ const std::int32_t carried[] = {0, 254, identity};
+  for (std::int32_t transformation : carried) {
+      Enumeration enumeration;
+      enumeration.path().ContentTransformationScaling = transformation;
+      enumeration.path().ContentTransformationRotation = transformation;
+      CHECK_EQ(enumeration.run(), 0u);
+      CHECK_EQ(enumeration.vidpn().path_support_updates(), 1u);
+      CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationScalingSupport, identity_supported);
+      CHECK_EQ(enumeration.vidpn().path(0u).ContentTransformationRotationSupport, rotation_supported);
+  } }
 
 TEST(cofunc_modality_visit, a_path_to_another_source_or_target_is_invalid)
 { const std::uint32_t ends[][2] = {{1u, 0u}, {0u, 1u}};

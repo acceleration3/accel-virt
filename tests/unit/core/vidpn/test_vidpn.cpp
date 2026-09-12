@@ -173,8 +173,10 @@ TEST(vidpn_update_path_support, forwards_the_path)
   CHECK_STATUS(vidpn.initialize(), Status::ok);
   D3dkmdtVidPnPresentPathRecord path = fixture.vidpn().path(0u);
   path.ContentTransformationScalingSupport = 1u;
+  path.ContentTransformationRotationSupport = 0x11u;   /* Identity | Offset0 */
   CHECK_STATUS(vidpn.update_path_support(path), Status::ok);
   CHECK_EQ(fixture.vidpn().path_support_updates(), 1u);
+  CHECK_EQ(fixture.vidpn().path(0u).ContentTransformationRotationSupport, 0x11u);
   fixture.vidpn().refuse(VidPnCall::update_path_support, no_memory);
   CHECK_STATUS(vidpn.update_path_support(path), Status::no_memory); }
 
