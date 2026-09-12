@@ -61,6 +61,7 @@
 #include "core/scheduling/render_request.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/support/nt_status.hpp"
+#include "core/support/text_buffer.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/vidpn/cofunc_modality.hpp"
 #include "core/vidpn/vidpn_commit.hpp"
@@ -90,7 +91,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
-      cursor_(platform, device_), started_(false), present_(true) {}
+      cursor_(platform, device_), budget_(platform), started_(false), present_(true) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
 
@@ -152,11 +153,19 @@ int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_inte
     if (status == Status::ok) status = vsync_.initialize();
     if (status == Status::ok) status = cursor_.initialize();
     if (status == Status::ok) status = power_up();
-    if (status != Status::ok) return NtStatus(status).value();
+    if (status != Status::ok) {
+        char       bytes[72];
+        TextBuffer message(bytes, sizeof bytes);
+        message.append("rvkgpu: StartDevice failed, status 0x");
+        message.append_hex(static_cast<uint32_t>(NtStatus(status).value()), 8u);
+        platform_.log(message.text());
+        return NtStatus(status).value();
+    }
     undo.dismiss();
     *sources = DisplaySources::source_count;
     *children = DisplaySources::target_count;
     started_ = true;
+    platform_.log("rvkgpu: StartDevice");
     return NtStatus(Status::ok).value();
 }
 
@@ -194,12 +203,15 @@ void Adapter::dpc_routine()
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::dpc_routine");
     uint32_t completed = 0u;
     const bool harvest = device_.constructed() && present_;
-    if (harvest && device_.object().harvest_control(completed) != Status::ok)
+    /* A device that fails every harvest would otherwise log on every DPC, so
+     * each of these lines is spent from the budget (feature 037, FR-003). */
+    if (harvest && device_.object().harvest_control(completed) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: control queue harvest failed in the DPC");
-    if (harvest && device_.object().harvest_cursor(completed) != Status::ok)
+    if (harvest && device_.object().harvest_cursor(completed) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: cursor queue harvest failed in the DPC");
-    if (node_.complete(notification_) != Status::ok) platform_.log("rvkgpu: a completion was refused in the DPC");
-    if (hw_submissions_.complete(notification_) != Status::ok)
+    if (node_.complete(notification_) != Status::ok && budget_.allows())
+        platform_.log("rvkgpu: a completion was refused in the DPC");
+    if (hw_submissions_.complete(notification_) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: a progress fence signal was refused in the DPC");
     dxgkrnl_.notify_dpc();
 }

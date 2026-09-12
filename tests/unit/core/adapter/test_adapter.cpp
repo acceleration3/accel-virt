@@ -398,10 +398,11 @@ TEST(adapter_dpc_routine, before_start_or_after_power_down_does_nothing)
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(fixture.start(), success);
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  const std::uint32_t quiet = fixture.platform().logged();
   fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
   fixture.platform().set_irql(Irql::passive);
-  CHECK_EQ(fixture.platform().logged(), 0u);
+  CHECK_EQ(fixture.platform().logged(), quiet);   /* a clean DPC says nothing */
   CHECK_EQ(fixture.dxgkrnl().dpc_notifications(), 1u); }
 
 TEST(adapter_dpc_routine, a_device_lying_about_a_completion_is_failed_and_logged)
@@ -993,10 +994,11 @@ TEST(adapter_set_pointer_shape, reaches_the_device_once_started)
   const av::FakeCommonConfig::Queue &control = fixture.function().common().queue(0u);
   av::FakeVirtqueueDevice device(fixture.platform(), control.desc, control.driver, control.device, control.size);
   CHECK_EQ(device.respond_all(0x1100u), 3u);
+  const std::uint32_t quiet = fixture.platform().logged();
   fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
   fixture.platform().set_irql(Irql::passive);
-  CHECK_EQ(fixture.platform().logged(), 0u); }
+  CHECK_EQ(fixture.platform().logged(), quiet); }   /* a clean DPC says nothing */
 
 TEST(adapter_set_pointer_shape, a_power_cycle_creates_the_cursor_resource_again)
 { Fixture fixture;

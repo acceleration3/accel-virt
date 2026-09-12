@@ -17,6 +17,7 @@
 #include "core/miniport/interrupt_notification.hpp"
 #include "core/pci/bar_mappings.hpp"
 #include "core/pci/resource_list.hpp"
+#include "core/platform/log_budget.hpp"
 #include "core/platform/platform.hpp"
 #include "core/scheduling/context_table.hpp"
 #include "core/scheduling/device_table.hpp"
@@ -267,6 +268,7 @@ private:
     InterruptNotification          notification_;
     SyntheticVsync                 vsync_;
     HardwareCursor                 cursor_;
+    LogBudget                      budget_;
     bool                           started_;
     bool                           present_;
 

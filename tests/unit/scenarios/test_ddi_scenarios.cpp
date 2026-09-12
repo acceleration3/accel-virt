@@ -230,7 +230,9 @@ TEST(ddi_scenario, add_device_past_the_adapter_ceiling_is_no_memory)
   for (std::uint32_t i = 0u; i < 8u; i++) CHECK_EQ(fdos[i].add_device(), 0);
   CHECK_EQ(nt(fdos[8].add_device()), no_memory);
   CHECK(fdos[8].context() == nullptr);
-  CHECK_EQ(driver.platform().logged(), 2u);   /* DriverEntry, and the refusal */ }
+  /* DriverEntry, a line for each adapter added, and the refusal naming why. */
+  CHECK_EQ(driver.platform().logged(), 10u);
+  CHECK(std::strstr(driver.platform().last_log(), "no free adapter slot") != nullptr); }
 
 /* ---- Capability reporting (feature 007) ------------------------------------ */
 
