@@ -19,3 +19,4 @@ D3DKMTQueryAdapterInfo
 D3DKMTSignalSynchronizationObjectFromGpu2
 D3DKMTSubmitCommand
 D3DKMTWaitForSynchronizationObjectFromCpu
+D3DKMTWaitForVerticalBlankEvent

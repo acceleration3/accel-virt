@@ -10,6 +10,7 @@
 #include "harness/platform/violation.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 using av::DisplaySources;
 using av::DxgkrnlInterface;
@@ -106,9 +107,26 @@ TEST(synthetic_vsync_tick, a_refused_report_asks_for_no_dpc)
 
 TEST(synthetic_vsync_tick, the_timer_entry_point_reaches_it)
 { Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
   fixture.platform().set_irql(Irql::dispatch);
   AvVsyncTick(nullptr, &fixture.vsync());
   fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u); }
+
+/* The timer keeps its phase while dxgkrnl has the blanks off, and a tick then
+ * reports nothing. */
+TEST(synthetic_vsync_disable, leaves_the_timer_running)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  fixture.vsync().disable();
+  fixture.platform().run_timers(frame * 4u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  CHECK_EQ(fixture.platform().logged(), 0u);
+  /* Enabling again does not re-arm it: the next blank is the timer's own. */
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  fixture.platform().run_timers(frame);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u); }
 
 TEST(synthetic_vsync, ceilings)
@@ -125,3 +143,30 @@ TEST(synthetic_vsync, ceilings)
   CHECK(fixture.platform().claim(Violation::irql_ceiling));
   while (fixture.platform().claim(Violation::irql_ceiling)) {}
   while (fixture.platform().claim(Violation::allocation_at_dispatch)) {} }
+
+/* dxgkrnl turns vertical blanks off when nothing waits and on again when
+ * something does, and each turn on costs a period: what the driver can see is
+ * how many times it was asked. */
+TEST(synthetic_vsync_enabled_count, counts_what_dxgkrnl_asked_for)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  CHECK_EQ(fixture.vsync().enabled_count(), 0u);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  fixture.vsync().disable();
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  CHECK_EQ(fixture.vsync().enabled_count(), 2u); }
+
+/* Only the driver can see the period its own timer keeps, so it says so every
+ * two seconds of blanks. */
+TEST(synthetic_vsync_reported, says_the_rate_it_kept_every_window)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  CHECK_EQ(fixture.vsync().reported(), 0u);
+  fixture.platform().run_timers(frame * 119u);
+  CHECK_EQ(fixture.vsync().reported(), 119u);
+  CHECK_EQ(fixture.platform().logged(), 0u);
+  fixture.platform().run_timers(frame);
+  CHECK_EQ(fixture.vsync().reported(), 0u);
+  CHECK(std::strstr(fixture.platform().last_log(), "vsync 120 blanks in") != nullptr);
+  CHECK(std::strstr(fixture.platform().last_log(), "enabled 1 times") != nullptr); }

@@ -103,6 +103,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual((self.work / "diag" / "dumps" / "WD-1.dmp").read_text(), "live dump")
         self.assertEqual(sorted(p.name for p in (self.work / "symbols").iterdir()), ["rvkgpu.pdb", "rvkgpu.sys"])
         self.assertIn("guest: report ok: 23 passed", result.stdout)
+        self.assertIn("guest: vsync ok: 60.00 blanks a second", result.stdout)
         self.assertIn("guest: collect: 2 files in", result.stdout)
         self.assertFalse((self.work / "panic.txt").exists())
         self.assert_clean()
@@ -329,6 +330,35 @@ class GuestSuiteRun(unittest.TestCase):
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("the guest is not offered ['1024x768']", (self.work / "verdict.txt").read_text())
+
+    def test_the_drivers_own_vertical_blank_rate_is_checked(self):
+        """US3: a waiter in the guest cannot see the driver's rate - the blank
+        is a pulse it can miss - so the line the driver logs is read here."""
+        self.script(screendump=[1280, 800],
+                    driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
+                                "rvkgpu: vsync 600 blanks in 200000000 ticks, enabled 0 times"])
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the driver reports 30.00 vertical blanks a second, not 60 within 5%",
+                      (self.work / "verdict.txt").read_text())
+
+    def test_a_driver_that_logged_no_vertical_blank_window_fails_the_run(self):
+        self.script(screendump=[1280, 800],
+                    driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0"])
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the driver logged no vertical blank window", (self.work / "verdict.txt").read_text())
+
+    def test_the_fastest_window_is_the_drivers_rate(self):
+        """A window dxgkrnl turned the blanks off in is slower than the driver's
+        period; the fastest window says what the period is."""
+        self.script(screendump=[1280, 800],
+                    driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
+                                "rvkgpu: vsync 120 blanks in 700000000 ticks, enabled 120 times",
+                                "rvkgpu: vsync 120 blanks in 20000000 ticks, enabled 0 times"])
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: vsync ok: 60.00 blanks a second", result.stdout)
 
     def test_a_switch_the_guest_refuses_must_leave_the_scanout_alone(self):
         """The console session's display is not the session 0 service's to

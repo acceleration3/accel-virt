@@ -230,3 +230,15 @@ TEST(guest_session_invariants, an_orphaned_object_a_stray_fence_object_or_an_unh
   CHECK(!GuestSessionProbe::sound_with_device(session, 9u));
   GuestSessionProbe::clear(session);
   CHECK(session.invariants_hold()); }
+
+/* The vertical blank is the adapter's, waited on through the session's device:
+ * without one there is nothing to wait on. */
+TEST(guest_session_await_vertical_blank, needs_the_device_and_names_it)
+{ Fixture fixture;
+  GuestSession session(fixture.kmt(), fixture.adapter());
+  CHECK_STATUS(session.await_vertical_blank(0u), Status::invalid_state);
+  CHECK_STATUS(session.open_device(), Status::ok);
+  CHECK_STATUS(session.await_vertical_blank(0u), Status::ok);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_vertical_blank), 1u);
+  CHECK_EQ(fixture.kmt().misuses(), 0u);
+  CHECK_STATUS(session.tear_down(), Status::ok); }

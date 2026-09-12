@@ -83,6 +83,12 @@ Status GuestSession::wait()
     return kmt_.wait_for_context(device_, context_);
 }
 
+Status GuestSession::await_vertical_blank(uint32_t source)
+{
+    if (device_ == 0u) return Status::invalid_state;
+    return kmt_.wait_for_vertical_blank(adapter_, device_, source);
+}
+
 void GuestSession::note(Status &first, Status status)
 {
     if (first != Status::ok || status == Status::ok) return;

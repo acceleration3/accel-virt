@@ -4,5 +4,7 @@ CloseHandle
 CreateEventW
 ExitProcess
 GetStdHandle
+QueryPerformanceCounter
+QueryPerformanceFrequency
 WaitForSingleObject
 WriteFile

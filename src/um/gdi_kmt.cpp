@@ -19,6 +19,9 @@ static_assert(__builtin_offsetof(D3DKMT_CREATEALLOCATION, pAllocationInfo2) == 0
 static_assert(__builtin_offsetof(D3DDDI_ALLOCATIONINFO2, hAllocation) == 0x00u);
 static_assert(__builtin_offsetof(D3DDDI_ALLOCATIONINFO2, pPrivateDriverData) == 0x10u);
 static_assert(__builtin_offsetof(D3DDDI_ALLOCATIONINFO2, PrivateDriverDataSize) == 0x18u);
+static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, hAdapter) == 0x00u);
+static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, hDevice) == 0x04u);
+static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, VidPnSourceId) == 0x08u);
 
 namespace av {
 
@@ -274,6 +277,27 @@ Status GdiKmt::wait_for_context(uint32_t device, uint32_t context)
     if (status == Status::ok) return destroyed;
     last_code_ = code;
     return status;
+}
+
+/* dxgkrnl blocks until the driver reports the next CRTC vsync for the source,
+ * or answers at once when it is not reporting them. */
+Status GdiKmt::wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32_t source)
+{
+    D3DKMT_WAITFORVERTICALBLANKEVENT wait = {};
+    wait.hAdapter = adapter;
+    wait.hDevice = device;
+    wait.VidPnSourceId = source;
+    return answer(D3DKMTWaitForVerticalBlankEvent(&wait));
+}
+
+uint64_t GdiKmt::performance_counter(uint64_t &frequency) const
+{
+    LARGE_INTEGER ticks = {};
+    LARGE_INTEGER rate = {};
+    QueryPerformanceFrequency(&rate);
+    QueryPerformanceCounter(&ticks);
+    frequency = static_cast<uint64_t>(rate.QuadPart);
+    return static_cast<uint64_t>(ticks.QuadPart);
 }
 
 uint32_t GdiKmt::last_code() const { return last_code_; }

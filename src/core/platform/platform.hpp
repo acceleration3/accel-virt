@@ -76,7 +76,12 @@ public:
     virtual void     stall(uint32_t microseconds) = 0;
 
     /* A periodic high-resolution timer, not yet running; null when out of
-     * memory. Never at DISPATCH. */
+     * memory. Never at DISPATCH.
+     *
+     * While one exists the system clock is asked to tick finely: a virtual
+     * machine's default 15.6 ms tick rounds a 60 Hz period up to twice it, and
+     * the display's vertical blank is what DWM paces frames against (feature
+     * 038, US3 - measured at 31.2 Hz on a real guest before this). */
     virtual void *create_timer(TimerCallback callback, void *context) = 0;
     /* Fires every `period` (100 ns, non-zero) from one period after the call,
      * replacing any earlier schedule. At most DISPATCH. */

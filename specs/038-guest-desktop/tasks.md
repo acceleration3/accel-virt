@@ -153,9 +153,44 @@ from, before it is fixed (FR-007).
 
 ## Phase 4 (US3): frame pacing
 
-- [ ] T015 [US3] Tests then `VsyncScenario` in src/guest/suite/vsync_scenario.{hpp,cpp} over the `Kmt` contract: the vertical blanks counted in a window judged against the committed mode's rate, with `MockKmt` scripting a refusal, a timeout and a rate outside the tolerance
-- [ ] T016 [US3] `wait_for_vertical_blank` added to src/guest/kmt/kmt.hpp and implemented in src/um/gdi_kmt.cpp over `D3DKMTWaitForVerticalBlankEvent`, with the struct offsets it reads pinned by `static_assert`; the scenario joins `GuestSuite`
-- [ ] T017 [US3] A guest run: the rate is within 5% of the committed mode over 60 s and stops when `dxgkrnl` disables vsync interrupts; record what it found here
+- [X] T015 [US3] Tests then `VsyncScenario` in src/guest/suite/vsync_scenario.{hpp,cpp} over the `Kmt` contract: the vertical blanks counted in a window judged against the committed mode's rate, with `MockKmt` scripting a refusal, a timeout and a rate outside the tolerance
+- [X] T016 [US3] `wait_for_vertical_blank` added to src/guest/kmt/kmt.hpp and implemented in src/um/gdi_kmt.cpp over `D3DKMTWaitForVerticalBlankEvent`, with the struct offsets it reads pinned by `static_assert`; the scenario joins `GuestSuite`
+- [X] T017 [US3] A guest run: the rate is within 5% of the committed mode over 60 s and stops when `dxgkrnl` disables vsync interrupts; record what it found here
+
+  **What the run found, and what it cost to see.** The driver reports 58.68
+  vertical blanks a second - inside SC-003's 5% of the committed 60 - and the
+  in-guest scenario passes. Getting there took three findings, each measured
+  rather than reasoned:
+
+  **13th defect: a 60 Hz timer that fired at 32 Hz.** `ExAllocateTimer` with
+  `EX_TIMER_HIGH_RESOLUTION` still expires on the system clock's tick, and a
+  guest's default tick is 15.625 ms: the 16.666 ms period fired every 31.25 ms.
+  `KernelPlatform::create_timer` now asks for a one-millisecond clock while a
+  timer exists (`ExSetTimerResolution`), and the driver's own log line - which
+  this task added, because only the driver can see its own period - went from
+  600 blanks in 5.5 s to 600 in 10.25 s, 58.5 Hz.
+
+  **14th defect: every blank a whole period after the wait that asked for it.**
+  dxgkrnl turns vertical blanks on for each `WaitForVerticalBlankEvent` and off
+  when the waiter wakes - the log counted one enable per blank - and
+  `SyntheticVsync::enable` re-armed the timer each time, so the blank always
+  came a full period *after* the wait. A real display's blank has a phase of its
+  own. The timer now runs from the first enable until the device stops and only
+  the reporting is gated; the price is a DPC at the refresh rate while the
+  adapter is up.
+
+  **What a waiter can and cannot measure.** dxgkrnl signals the blank with
+  `KePulseEvent` (`ADAPTER_DISPLAY::SignalVerticalBlankEvent`, dxgkrnl.sys
+  @14002e378), which wakes only threads already waiting, and its
+  `WaitForVerticalBlankEvent` waits with a 500 ms timeout
+  (`ADAPTER_DISPLAY::WaitForVerticalBlankEvent` @1401b053c). A loop that returns
+  to user mode and waits again misses whatever pulsed while it was away: with
+  the driver reporting every 17.08 ms, the shortest interval a waiter saw was
+  30.7 ms. So the scenario judges the *shortest* interval against one to two
+  frames - a blank that was not missed - and reports the rate it caught without
+  judging it; the 5% property is checked by the runner from the driver's own
+  line, where the whole log is. That is why SC-003's minute is measured in the
+  driver's two-second windows rather than by counting 3600 waits.
 
 **Checkpoint**: commit.
 

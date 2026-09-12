@@ -35,12 +35,15 @@ public:
         destroy_context,
         submit,
         wait_for_context,
+        wait_for_vertical_blank,
         count
     };
     static constexpr std::uint32_t max_objects = 32u;
     static constexpr std::uint32_t invalid_parameter = 0xC000000Du;
     static constexpr std::uint32_t pending = 0x00000103u;
     static constexpr std::uint64_t page_bytes = 4096u;
+    /* The performance counter this answers, in the 100ns units Windows uses. */
+    static constexpr std::uint64_t ticks_per_second = 10000000u;
 
     MockKmt();
 
@@ -64,6 +67,8 @@ public:
     Status        destroy_context(std::uint32_t context) override;
     Status        submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length) override;
     Status        wait_for_context(std::uint32_t device, std::uint32_t context) override;
+    Status        wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
+    std::uint64_t performance_counter(std::uint64_t &frequency) const override;
     std::uint32_t last_code() const override;
 
     /* An adapter enumeration opens; up to eight. */
@@ -75,6 +80,11 @@ public:
     /* The next `call` succeeds with a zero handle or address; a paging queue
      * comes without its fence object. */
     void          zero_next(Call call);
+    /* How far the clock moves at each vertical blank; the default is the
+     * committed mode's 60 Hz. */
+    void          set_blank_period(std::uint64_t ticks);
+    /* Every `nth` blank takes `ticks` longer, as one the waiter missed does. */
+    void          slip_every(std::uint32_t nth, std::uint64_t ticks);
 
     std::uint32_t calls(Call call) const;
     /* Adapters, devices, allocations, queues, contexts and mappings still open. */
@@ -120,6 +130,10 @@ private:
     std::uint32_t success_code_;
     std::uint32_t last_code_;
     std::uint32_t misuses_;
+    std::uint64_t ticks_;
+    std::uint64_t blank_period_;
+    std::uint32_t slip_nth_;
+    std::uint64_t slip_ticks_;
 };
 
 }  // namespace av

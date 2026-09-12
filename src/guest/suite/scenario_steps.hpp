@@ -5,6 +5,8 @@
 
 #include "core/support/status.hpp"
 
+#include <stdint.h>
+
 namespace av {
 
 class GuestReport;
@@ -17,6 +19,9 @@ public:
 
     /* Records a step that must succeed: its status, to chain on. */
     Status check(const char *step, Status status);
+    /* Records a step whose failure is explained by a measurement rather than
+     * by an NTSTATUS: the value is reported where the code would be. */
+    Status check_measured(const char *step, Status status, uint32_t measurement);
     /* Records a step the driver must refuse. */
     void   check_refused(const char *step, Status status);
     /* Tears the session down and records it with its first failure's NTSTATUS. */

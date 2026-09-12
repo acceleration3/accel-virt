@@ -18,6 +18,9 @@ static_assert(sizeof(KSPIN_LOCK) == sizeof(uintptr_t), "SpinLock word is not a K
 static_assert(static_cast<unsigned>(Pool::non_paged) == 0u && static_cast<unsigned>(Pool::paged) == 1u,
               "pool_flags_ is indexed by Pool");
 
+/* One millisecond, in the 100 ns units ExSetTimerResolution counts. */
+constexpr ULONG fine_clock_ticks = 10000u;
+
 KernelPlatform::KernelPlatform(ULONG pool_tag) : pool_tag_(pool_tag), log_lock_()
 {
     KeInitializeSpinLock(&log_lock_);
@@ -91,12 +94,21 @@ void KernelPlatform::release_spin_lock(uintptr_t &word, LockRank, Irql previous)
 }
 
 /* TimerCallback is EXT_CALLBACK with void pointers, so it is passed as is. */
+/* A high-resolution EX timer still expires on the system clock's tick, and a
+ * guest's default tick is 15.625 ms: a 16.666 ms period then fires every
+ * 31.25 ms, which is the 31.2 Hz vertical blank the in-guest suite measured.
+ * Asking for a one-millisecond clock is what makes the period reachable; the
+ * request is given back when the timer goes. */
 void *KernelPlatform::create_timer(TimerCallback callback, void *context)
 {
-    return ExAllocateTimer(reinterpret_cast<PEXT_CALLBACK>(callback), context, EX_TIMER_HIGH_RESOLUTION);
+    PEX_TIMER timer = ExAllocateTimer(reinterpret_cast<PEXT_CALLBACK>(callback), context,
+                                      EX_TIMER_HIGH_RESOLUTION);
+    if (timer != nullptr) static_cast<void>(ExSetTimerResolution(fine_clock_ticks, TRUE));
+    return timer;
 }
 
-/* A negative due time is relative. */
+/* A negative due time is relative; both it and the period are 100 ns units, as
+ * a 17 that fired at the clock's millisecond proved (feature 038, US3). */
 void KernelPlatform::start_timer(void *timer, uint64_t period)
 {
     static_cast<void>(ExSetTimer(static_cast<PEX_TIMER>(timer), -static_cast<LONGLONG>(period),
@@ -108,6 +120,7 @@ void KernelPlatform::stop_timer(void *timer) { static_cast<void>(ExCancelTimer(s
 void KernelPlatform::destroy_timer(void *timer)
 {
     static_cast<void>(ExDeleteTimer(static_cast<PEX_TIMER>(timer), TRUE, TRUE, nullptr));
+    static_cast<void>(ExSetTimerResolution(0u, FALSE));
 }
 
 void KernelPlatform::initialize_mutex(void *storage)

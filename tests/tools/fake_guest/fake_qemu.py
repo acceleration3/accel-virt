@@ -286,7 +286,8 @@ def main():
         sys.exit(f"fake qemu: no disk at {disk}")
     with open(debug, "w") as log:
         lines = script.get("driver_log", ["rvkgpu: DriverEntry",
-                                          "rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0"])
+                                          "rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
+                                          "rvkgpu: vsync 600 blanks in 100000000 ticks, enabled 0 times"])
         log.write("".join(line + "\n" for line in lines) if device else "")
     threading.Thread(target=guest.serve_agent, args=(agent,), daemon=True).start()
     guest.serve_qmp(qmp)

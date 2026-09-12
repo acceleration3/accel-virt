@@ -8,6 +8,7 @@
 #include "guest/suite/allocation_scenario.hpp"
 #include "guest/suite/gpu_mapping_scenario.hpp"
 #include "guest/suite/submission_scenario.hpp"
+#include "guest/suite/vsync_scenario.hpp"
 
 #include <stdint.h>
 
@@ -33,6 +34,7 @@ private:
     AllocationScenario allocation_;
     GpuMappingScenario mapping_;
     SubmissionScenario submission_;
+    VsyncScenario      vsync_;
 };
 
 }  // namespace av

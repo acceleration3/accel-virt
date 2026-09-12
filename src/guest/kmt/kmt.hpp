@@ -41,6 +41,13 @@ public:
     virtual Status   submit(uint32_t context, uint64_t commands, uint64_t length) = 0;
     /* Until everything submitted on the context so far has completed. */
     virtual Status   wait_for_context(uint32_t device, uint32_t context) = 0;
+    /* Until the next vertical blank of `source` on that device: what DWM's
+     * frame pacing waits on, and the only way in to see the rate the driver
+     * reports. */
+    virtual Status   wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32_t source) = 0;
+    /* The system's performance counter and its frequency: a vertical blank
+     * carries no timestamp, so a rate is measured against this. */
+    virtual uint64_t performance_counter(uint64_t &frequency) const = 0;
     virtual uint32_t last_code() const = 0;
 
 protected:

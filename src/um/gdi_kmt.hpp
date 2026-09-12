@@ -44,6 +44,8 @@ public:
     Status   destroy_context(uint32_t context) override;
     Status   submit(uint32_t context, uint64_t commands, uint64_t length) override;
     Status   wait_for_context(uint32_t device, uint32_t context) override;
+    Status   wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32_t source) override;
+    uint64_t performance_counter(uint64_t &frequency) const override;
     uint32_t last_code() const override;
 
 private:

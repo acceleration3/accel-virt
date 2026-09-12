@@ -32,6 +32,8 @@ public:
     [[nodiscard]] Status open_context();
     [[nodiscard]] Status submit(uint64_t commands, uint64_t length);
     [[nodiscard]] Status wait();
+    /* Until the next vertical blank of `source` on this device. */
+    [[nodiscard]] Status await_vertical_blank(uint32_t source);
     /* The first failure among the destructions; every one is attempted. */
     [[nodiscard]] Status tear_down();
     /* The NTSTATUS of that first failure. */

@@ -168,6 +168,13 @@ DISPLAY_SIZE = (1280, 800)
 """The mode the guest commits with QEMU's default -display size."""
 PLACEHOLDER_GREY = b"\xaa\xaa\xaa"
 """The grey QEMU draws its "display output is not active" text in."""
+REFRESH_HZ = 60
+"""DisplayMode::refresh_hz: the rate every mode is committed at."""
+VSYNC_TOLERANCE_PERCENT = 5
+"""SC-003."""
+TICKS_PER_SECOND = 10000000
+"""The 100 ns units the driver's interrupt time counts in."""
+VSYNC_LINE = re.compile(r"rvkgpu: vsync (\d+) blanks in (\d+) ticks, enabled (\d+) times")
 SETTLE_SECONDS = 1.0
 """Long enough for the DPC that follows a commit to have run."""
 OFFERED_MODES = ["1024x768", "1280x800"]
@@ -467,6 +474,26 @@ class GuestRun:
         self.say(f"setmode ok: {SWITCH_MODE} {'taken' if taken else 'refused, and the console session kept'}, "
                  f"{UNOFFERED_MODE} refused, {committed} scanned out")
 
+    def vsync_rate(self):
+        """US3: the driver's own vertical blank rate, in hertz, from the fastest
+        window it logged. A waiter in the guest cannot see this - the blank is a
+        pulse it can miss - so it is read here, where the whole log is. The
+        fastest window is the one dxgkrnl left the blanks on through; a window it
+        turned them off in measures its power policy, not the driver's period."""
+        windows = [(int(blanks), int(ticks)) for blanks, ticks, _enables in VSYNC_LINE.findall(self.driver_log())
+                   if int(ticks) != 0]
+        if not windows:
+            raise StepFailed("vsync", "the driver logged no vertical blank window")
+        return max(blanks * TICKS_PER_SECOND / ticks for blanks, ticks in windows)
+
+    def vsync(self):
+        rate = self.vsync_rate()
+        tolerance = REFRESH_HZ * VSYNC_TOLERANCE_PERCENT / 100.0
+        if abs(rate - REFRESH_HZ) > tolerance:
+            raise StepFailed("vsync", f"the driver reports {rate:.2f} vertical blanks a second, not "
+                                      f"{REFRESH_HZ} within {VSYNC_TOLERANCE_PERCENT}%")
+        self.say(f"vsync ok: {rate:.2f} blanks a second")
+
     def driver_log(self):
         path = self.work / "rvkgpu.log"
         return path.read_text(errors="replace") if path.exists() else ""
@@ -480,6 +507,7 @@ class GuestRun:
         self.display()
         self.mode_switch()
         self.suite()
+        self.vsync()
 
     def prepare_guest(self):
         if self.stage("prepare"):
