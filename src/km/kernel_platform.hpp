@@ -58,7 +58,12 @@ private:
      * port write, legal at any IRQL, readable on the host from DriverEntry on. */
     static constexpr uintptr_t debug_port = 0x402u;
 
-    ULONG pool_tag_;
+    ULONG      pool_tag_;
+    /* One line at a time on the debug port. Four processors writing it byte by
+     * byte interleave the characters of concurrent lines and truncate them,
+     * which feature 037's guest log showed. Not the core SpinLock: this object
+     * implements that contract, so its own logging cannot route through it. */
+    KSPIN_LOCK log_lock_;
 };
 
 }  // namespace av

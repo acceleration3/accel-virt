@@ -18,7 +18,10 @@ static_assert(sizeof(KSPIN_LOCK) == sizeof(uintptr_t), "SpinLock word is not a K
 static_assert(static_cast<unsigned>(Pool::non_paged) == 0u && static_cast<unsigned>(Pool::paged) == 1u,
               "pool_flags_ is indexed by Pool");
 
-KernelPlatform::KernelPlatform(ULONG pool_tag) : pool_tag_(pool_tag) {}
+KernelPlatform::KernelPlatform(ULONG pool_tag) : pool_tag_(pool_tag), log_lock_()
+{
+    KeInitializeSpinLock(&log_lock_);
+}
 
 void *KernelPlatform::allocate(size_t bytes, Pool pool)
 {
@@ -167,12 +170,15 @@ void KernelPlatform::write_register_u64(void *address, uint64_t value)
 
 void KernelPlatform::log(const char *message)
 {
+    KIRQL previous = 0;
+    KeAcquireSpinLock(&log_lock_, &previous);
     DbgPrintEx(DPFLTR_IHVVIDEO_ID, DPFLTR_ERROR_LEVEL, "rvkgpu: %s\n", message);
     /* WRITE_PORT_BUFFER_UCHAR expands to __outbytestring, which clang-cl does
      * not provide; one byte at a time is the same port protocol. */
     for (const char *cursor = message; *cursor != '\0'; ++cursor)
         WRITE_PORT_UCHAR(reinterpret_cast<PUCHAR>(debug_port), static_cast<UCHAR>(*cursor));
     WRITE_PORT_UCHAR(reinterpret_cast<PUCHAR>(debug_port), '\n');
+    KeReleaseSpinLock(&log_lock_, previous);
 }
 
 /* The table's layout is proven identical to DRIVER_INITIALIZATION_DATA by

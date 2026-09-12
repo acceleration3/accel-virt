@@ -74,6 +74,23 @@ claim.
 
 **Checkpoint**: commit.
 
+**The third defect, found by reading the marker run's own log.** The VidPn fix
+holds live - `EnumVidPnCofuncModality` and `IsSupportedVidPn` both answer
+`0x00000000`, repeatedly, where the driver used to bugcheck - but the log
+itself came back interleaved between vCPUs:
+
+```
+rvkgpu: QruvekrgypAud:a pEtneurmIVnifdoP ntCyopfeu n2c4M osdtaaltiutsy  0sxtaCt0u0s0 000x002000000
+rvkgpu:rv kQgupeur:y AIdsaSputpeproIrntfeod VtiydpPen  2s5t atsutsa t0uxs0 000x0C00000000
+```
+
+Two processors writing the debug port at once, character by character. It also
+truncates lines. US1 acceptance 2 asks the log to show the steps *in order* and
+FR-003 asks each refusal to be one line, so the instrument this feature depends
+on has to be serialized: the platform owns the log device, so the write belongs
+under a lock there. `LogBudget` cannot cover it - it releases its lock before
+the write, and the lines outside the budget never take it.
+
 ## Phase 3: The suite passes
 
 - [ ] T008 [US2] Each `rvktest.exe` scenario that fails - adapter, allocation, GPU mapping, submission - reproduced at L2, fixed in core, re-run, one commit per defect
