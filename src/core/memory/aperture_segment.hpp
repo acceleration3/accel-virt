@@ -17,6 +17,11 @@ struct ApertureSegmentProbe;
 class ApertureSegment {
 public:
     static constexpr uint32_t segment_id = 1u;
+    /* The same segment as a DXGK_CONTEXTINFO.DmaBufferSegmentSet bit, which is
+     * one per segment counting from identifier one. basicrender.sys answers 1,
+     * its only segment; an empty set leaves VidMmInitDmaPool (dxgmms2.sys
+     * @1400c7990) with no segment to take a DMA buffer from. */
+    static constexpr uint32_t segment_set = 1u << (segment_id - 1u);
     /* The system memory segment VidMm appends after this one for a GPU MMU
      * adapter (CreatePhysicalAdapterSegments). */
     static constexpr uint32_t system_memory_segment_id = segment_id + 1u;

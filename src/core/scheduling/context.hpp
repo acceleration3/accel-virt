@@ -18,6 +18,9 @@ struct DxgkargSetRootPageTableRecord;
 
 class Context {
 public:
+    /* The DMA buffers of every context, including the privileged one dxgkrnl
+     * makes for paging, come from the adapter's one segment: an empty
+     * DmaBufferSegmentSet leaves VidMm with nowhere to take them from. */
     static constexpr uint32_t dma_buffer_bytes = 0x10000u;
     static constexpr uint32_t allocation_list_entries = 256u;
     static constexpr uint32_t patch_location_entries = 1024u;

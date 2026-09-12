@@ -1,6 +1,7 @@
 #include "core/scheduling/context.hpp"
 
 #include "core/ddi/dxgkarg_create_context_record.hpp"
+#include "core/memory/aperture_segment.hpp"
 
 namespace av {
 
@@ -30,7 +31,7 @@ void Context::report_to(DxgkargCreateContextRecord &request)
     platform_.require_irql_at_most(Irql::dispatch, "Context::report_to");
     request.hContext = this;
     request.ContextInfoDmaBufferSize = dma_buffer_bytes;
-    request.ContextInfoDmaBufferSegmentSet = 0u;
+    request.ContextInfoDmaBufferSegmentSet = ApertureSegment::segment_set;
     request.ContextInfoDmaBufferPrivateDataSize = 0u;
     request.ContextInfoAllocationListSize = allocation_list_entries;
     request.ContextInfoPatchLocationListSize = patch_location_entries;

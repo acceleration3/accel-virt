@@ -2,6 +2,7 @@
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/ddi/dxgkarg_set_root_page_table_record.hpp"
 #include "core/memory/gpu_mmu_geometry.hpp"
+#include "core/memory/aperture_segment.hpp"
 #include "core/scheduling/context.hpp"
 #include "core/scheduling/device.hpp"
 #include "core/support/status.hpp"
@@ -43,7 +44,7 @@ TEST(context_report_to, answers_the_context_info_and_the_handle)
   context.report_to(request);
   CHECK(request.hContext == &context);
   CHECK_EQ(request.ContextInfoDmaBufferSize, 0x10000u);
-  CHECK_EQ(request.ContextInfoDmaBufferSegmentSet, 0u);
+  CHECK_EQ(request.ContextInfoDmaBufferSegmentSet, av::ApertureSegment::segment_set);
   CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, 0u);
   CHECK_EQ(request.ContextInfoAllocationListSize, 256u);
   CHECK_EQ(request.ContextInfoPatchLocationListSize, 1024u);
