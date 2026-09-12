@@ -221,6 +221,7 @@ int32_t Adapter::query_child_relations(DxgkChildDescriptorRecord *relations, uin
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_child_relations");
     if (relations == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (size < sizeof *relations) return NtStatus(NtStatus::buffer_too_small).value();
+    platform_.log("rvkgpu: QueryChildRelations");
     relations->ChildDeviceType = type_video_output;
     relations->InterfaceTechnology = output_technology_other;
     relations->MonitorOrientationAwareness = orientation_awareness_none;
@@ -296,24 +297,44 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_adapter_info");
     if (query == nullptr) return NtStatus(Status::invalid_parameter).value();
     const AdapterInfoQuery request(platform_, *query);
+    int32_t                answered = NtStatus(NtStatus::not_implemented).value();
     switch (request.type()) {
     case query_driver_caps:
-        return NtStatus(capabilities_.report_driver_caps(request)).value();
+        answered = NtStatus(capabilities_.report_driver_caps(request)).value();
+        break;
     case query_wddm_device_caps:
-        return NtStatus(capabilities_.report_wddm_device_caps(request)).value();
+        answered = NtStatus(capabilities_.report_wddm_device_caps(request)).value();
+        break;
     case query_segment4:
-        return NtStatus(segment_.report(request)).value();
+        answered = NtStatus(segment_.report(request)).value();
+        break;
     case query_gpu_mmu_caps:
-        return NtStatus(geometry_.report_caps(request)).value();
+        answered = NtStatus(geometry_.report_caps(request)).value();
+        break;
     case query_page_table_level_desc:
-        return NtStatus(geometry_.report_level(request)).value();
+        answered = NtStatus(geometry_.report_level(request)).value();
+        break;
     case query_physical_adapter_caps:
-        return NtStatus(capabilities_.report_physical_adapter_caps(request, dxgkrnl_.device_handle())).value();
+        answered = NtStatus(capabilities_.report_physical_adapter_caps(request, dxgkrnl_.device_handle())).value();
+        break;
     case query_display_driver_caps_extension:
-        return NtStatus(capabilities_.report_display_caps_extension(request)).value();
+        answered = NtStatus(capabilities_.report_display_caps_extension(request)).value();
+        break;
     default:
-        return NtStatus(NtStatus::not_implemented).value();
+        break;
     }
+    /* The order and outcome of these is what US1 asks the guest log to show;
+     * dxgkrnl asks for types the driver declines, so the status is the point. */
+    if (budget_.allows()) {
+        char       bytes[80];
+        TextBuffer message(bytes, sizeof bytes);
+        message.append("rvkgpu: QueryAdapterInfo type ");
+        message.append_decimal(static_cast<uint32_t>(request.type()));
+        message.append(" status 0x");
+        message.append_hex(static_cast<uint32_t>(answered), 8u);
+        platform_.log(message.text());
+    }
+    return answered;
 }
 
 /* No escape is defined until a user-mode component needs one; basicrender
