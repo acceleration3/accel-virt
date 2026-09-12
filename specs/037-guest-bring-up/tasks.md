@@ -49,7 +49,7 @@ claim.
   kernel loaded the image and ran `DriverEntry`. What refused was dxgkrnl, after
   `AddDevice`, for a missing software-key value. `src/km/rvkgpu.inf` now adds
   `UserModeDriverName` (`REG_MULTI_SZ`, `rvkumd.dll`) under `[Rvkgpu_Install]`.
-- [ ] T007 [US1] A guest run: the device reports status OK, problem 0, service `rvkgpu`, and `diag/kernel-pnp.txt` holds no 411 for it
+- [X] T007 [US1] A guest run: the device reports status OK, problem 0, service `rvkgpu`, and `diag/kernel-pnp.txt` holds no 411 for it
 
   **The second defect, found by the marker run.** With `UserModeDriverName` in
   place the adapter starts: the log reaches `StartDevice`, `QueryChildRelations`
@@ -224,9 +224,51 @@ uncovered branches: with the window spent, the four DPC refusal lines and every
 `VirtioGpuDevice::harvest` failing the device, which happens once and then stops
 the queues - not a storm to budget.
 
+**T007 is met.** With the eighth and ninth fixes the adapter starts, keeps
+running and displays:
+
+```
+FriendlyName : accel-virt paravirtual GPU
+Status       : OK
+Problem      : CM_PROB_NONE
+DEVPKEY_Device_Service   rvkgpu        SERVICE_NAME: rvkgpu  STATE: 4 RUNNING
+```
+
+`diag/kernel-pnp.txt` holds one 411 and it is `ACPI\PNP0400\1`, the parallel
+port, not this device. Driver Verifier ran with the standard checks and DDI
+compliance on `rvkgpu.sys` and reported no violation - 13 pool allocations, 13
+succeeded, none failed. The guest no longer bugchecks: `install ok`,
+`install.reset ok`, `install.reboot ok`, `check ok`, `rvktest ok`, and the log
+carries what the whole feature was waiting for:
+
+```
+rvkgpu: CreateAllocation status 0x00000000
+rvkgpu: CommitVidPn status 0x00000000
+rvkgpu: SetVidPnSourceVisibility status 0x00000000
+```
+
 ## Phase 3: The suite passes
 
 - [ ] T008 [US2] Each `rvktest.exe` scenario that fails - adapter, allocation, GPU mapping, submission - reproduced at L2, fixed in core, re-run, one commit per defect
+
+  **Where the suite stands: 9 passed, 3 failed.** `adapter.find`,
+  `adapter.driver_version`, every `*.adapter` and every `*.teardown` pass, and
+  `suite.close_adapter` passes. The three failures are the same step in each
+  scenario:
+
+  ```
+  FAIL allocation.device status=9 code=0x00000000
+  FAIL mapping.device    status=9 code=0x00000000
+  FAIL submission.device status=9 code=0x00000000
+  ```
+
+  Status 9 is `Status::malformed`, which `GuestSession::accept` answers when a
+  call succeeds and hands back a zero handle, and code 0 is the NTSTATUS: so
+  `D3DKMTCreateDevice` returns `STATUS_SUCCESS` with `hDevice` still zero. The
+  driver was called and agreed - the log carries three `CreateDevice status
+  0x00000000` lines, one per scenario, at the point rvktest runs - so whatever
+  refuses the handle is between dxgkrnl and the runtime, not in
+  `Adapter::create_device`.
 - [ ] T009 [US2] `D3DKMTEnumAdapters2` lists the adapter at WDDM 3.2 with its PCI identity; no Verifier violation, no TDR, no live kernel report caused by `rvkgpu`
 
 **Checkpoint**: commit.
