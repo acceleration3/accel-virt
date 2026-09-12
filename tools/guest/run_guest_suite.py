@@ -25,6 +25,7 @@ the QEMU guest agent installed and running. Exits 0 only when every step
 passed and the report counts no failure.
 """
 import argparse
+import collections
 import os
 import pathlib
 import re
@@ -345,12 +346,37 @@ class GuestRun:
             raise StepFailed("report", f"{failed} step(s) failed, exit {code}; see report.txt")
         self.say(f"report ok: {int(summary.group(1))} passed")
 
+    def display(self):
+        """The composited desktop, as the host sees it (feature 038, US1).
+
+        The agent is a session 0 service and cannot open a window on the
+        interactive desktop, so what is asserted is what a frame arriving
+        actually proves: the host is scanning out a picture of the committed
+        size which is not one flat colour. A blank or absent scanout is all one
+        byte; a composited Windows desktop is not.
+        """
+        dump = Screendump(self.work / "screen.ppm").capture(self.qmp)
+        width, height = dump.size()
+        if width == 0 or height == 0:
+            raise StepFailed("display", f"the screendump is not a PPM: {dump.path}")
+        pixels = dump.pixels()
+        body = pixels[pixels.index(b"255\n") + 4:]
+        if len(body) < width * height * 3:
+            raise StepFailed("display", f"the screendump holds {len(body)} bytes for {width}x{height}")
+        pixels_seen = width * height
+        common = max(collections.Counter(body[at:at + 3] for at in range(0, pixels_seen * 3, 3)).values())
+        if common * 100 >= pixels_seen * 95:
+            raise StepFailed("display", f"{common * 100 // pixels_seen}% of the {width}x{height} scanout is one "
+                                        "colour: the desktop is not reaching the host")
+        self.say(f"display ok: {width}x{height} composited")
+
     def install_and_test(self):
         if self.stage("sign"):
             self.reboot("sign")
         if self.stage("install"):
             self.reboot("install")
         self.stage("check", saved="device.txt")
+        self.display()
         self.suite()
 
     def prepare_guest(self):

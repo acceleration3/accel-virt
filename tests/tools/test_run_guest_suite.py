@@ -304,6 +304,29 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("absent.exe does not exist", missing.stdout)
         self.assert_clean()
 
+    def test_the_display_step_asserts_the_host_is_scanning_out_a_picture(self):
+        """A frame arriving is what the screendump proves; a flat one is not one.
+
+        The agent is a session 0 service and cannot open a window on the
+        interactive desktop, so the run asserts what the dump can show: the
+        committed size, and pixels that are not all one byte.
+        """
+        self.script(screendump=[1280, 800])
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("display ok: 1280x800 composited", result.stdout)
+        self.assertEqual(Screendump(self.work / "screen.ppm").size(), (1280, 800))
+        self.assertIn("screendump 1280x800", self.journal_lines())
+
+    def test_a_blank_scanout_fails_the_run(self):
+        """A frame of one colour is what an unattached or wrong backing looks
+        like: mostly zeros, which must not read as a desktop."""
+        self.script(screendump=[640, 480], screendump_flat=True)
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("is one colour: the desktop is not reaching the host",
+                      (self.work / "verdict.txt").read_text())
+
     def test_without_an_image_it_says_how_to_name_one(self):
         environment = {key: value for key, value in self.environment.items() if key != "AV_GUEST_IMAGE"}
         result = subprocess.run([sys.executable, "-B", str(RUNNER), "--work", str(self.work)], capture_output=True,

@@ -202,10 +202,13 @@ class Guest:
         width, height = self.script.get("screendump", [64, 48])[:2]
         frame = self.script.get("screendump_frame", 0)
         path = request.get("arguments", {})["filename"]
-        pixel = bytes([frame & 0xFF, 0x20, 0x40])
         with open(path, "wb") as dump:
             dump.write(f"P6\n{width} {height}\n255\n".encode())
-            dump.write(pixel * (width * height))
+            if self.script.get("screendump_flat"):
+                dump.write(bytes([frame & 0xFF]) * (width * height * 3))
+            else:
+                # A composited desktop is not one flat colour; vary per pixel.
+                dump.write(bytes((frame + i) & 0xFF for i in range(width * height * 3)))
         self.note(f"screendump {width}x{height}")
 
     def serve_qmp(self, path):

@@ -26,6 +26,29 @@ from, before it is fixed (FR-007).
 - [X] T008 [US1] An L2 scenario in tests/unit/scenarios/test_ddi_scenarios.cpp: commit a VidPn, set the source address, run the DPC, and assert the device saw `CREATE_2D`, `ATTACH_BACKING`, `SET_SCANOUT`, `TRANSFER_TO_HOST_2D` and `RESOURCE_FLUSH` for that source
 - [ ] T009 [US1] A guest run: screendumps before and after the guest opens a window differ, `dwm.exe` runs, the adapter is `rvkgpu` with status OK, Basic Display is not bound, and no display TDR is logged; record what it found here
 
+  **What the first run found.** Three of the four hold on the real guest:
+  `dwm=1`, `services=rvkgpu` - nothing else is bound to a display - status OK,
+  problem 0, and no display TDR. A frame does reach the host: QMP `screendump`
+  answers a 1280x800 PPM where before this feature it answered nothing.
+
+  The frame is the wrong memory. The dump holds two colours - 1,023,316 black
+  pixels and 684 grey - so what the host reads is not the composited desktop.
+  The cause is in the driver, not the path: `PagingRequest::build` answers
+  `DXGK_OPERATION_MAP_APERTURE_SEGMENT` with `Status::ok` and records nothing,
+  so the only address the scanout has is the one `SetVidPnSourceAddress` gives -
+  an aperture segment address, `ApertureSegment::base_address + offset` - and
+  `ATTACH_BACKING` needs guest physical pages. The host is reading whatever sits
+  at 0xC0000000 + offset, which is mostly zeros.
+
+  The window-and-cursor half of the acceptance cannot be tested the way it is
+  written: the guest agent is a session 0 service and cannot open a window on
+  the interactive desktop. The step asserts what an arriving frame proves
+  instead - the committed size, and that no single colour covers 95% of it,
+  which is exactly what the near-blank frame above fails - and US2's mode switch
+  covers "the dump follows what the guest did".
+
+- [ ] T009a [US1] The aperture the primary really lives in: `map_aperture_segment` and `unmap_aperture_segment` record the pages dxgkrnl gives for each segment offset, in src/core/memory/; `ScanoutResource` attaches those pages, with `ATTACH_BACKING` carrying one memory entry per run of contiguous pages; hostile-input tests for the operation's MDL and a fuzz target
+
 **Checkpoint**: commit.
 
 ## Phase 3 (US2): modes from the device

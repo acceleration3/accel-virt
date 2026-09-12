@@ -132,6 +132,12 @@ switch ($Stage) {
         $problem = & $property DEVPKEY_Device_ProblemCode
         $status = '0x{0:X8}' -f [uint32](& $property DEVPKEY_Device_ProblemStatus)
         $service = & $property DEVPKEY_Device_Service
+        # The desktop's compositor, and every driver bound to a display: feature
+        # 038 asks for rvkgpu alone with dwm.exe composited on it.
+        $dwm = @(Get-Process -Name dwm -ErrorAction SilentlyContinue).Count
+        $displays = (Get-PnpDevice -Class Display -Status OK -ErrorAction SilentlyContinue |
+            ForEach-Object { (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_Service).Data }) -join ','
+        Write-Output "display: dwm=$dwm services=$displays"
         # Last, so a failure's tail - all the runner reports - names the problem.
         Write-Output "device: $($device.InstanceId) status=$($device.Status) problem=$problem problem-status=$status service=$service"
         if ($device.Status -ne 'OK' -or $service -ne 'rvkgpu') { exit 1 }
