@@ -16,6 +16,8 @@
 
 namespace av {
 
+class LogRecord;
+
 class MockPlatform final : public Platform {
 public:
     static constexpr std::uint32_t lock_stack_depth = 16u;
@@ -25,6 +27,8 @@ public:
     MockPlatform();
     /* The NTSTATUS register_miniport answers, as dxgkrnl would. */
     explicit MockPlatform(std::uint32_t registration_status);
+    /* The same, with every line also written where it outlives this platform. */
+    MockPlatform(std::uint32_t registration_status, LogRecord &record);
     ~MockPlatform();
     MockPlatform(const MockPlatform &) = delete;
     MockPlatform &operator=(const MockPlatform &) = delete;
@@ -160,6 +164,7 @@ private:
     bool          verbose_;
     std::uint32_t logged_;
     char          last_log_[192] = {};
+    LogRecord    *record_ = nullptr;
     std::uint32_t registration_status_;
     void         *registered_driver_object_;
     void         *registered_registry_path_;

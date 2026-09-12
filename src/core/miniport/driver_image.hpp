@@ -13,6 +13,7 @@
 #include "core/support/nt_status.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
+#include "core/support/text_buffer.hpp"
 
 #include <stdint.h>
 
@@ -43,7 +44,14 @@ public:
         miniport_binding.bind(miniport_.object());
         const int32_t registered =
             platform.register_miniport(driver_object, registry_path, miniport_.object().ddi_table());
-        if (registered < 0) leave();
+        if (registered < 0) {
+            char       bytes[80];
+            TextBuffer message(bytes, sizeof bytes);
+            message.append("rvkgpu: DxgkInitialize refused the driver, status 0x");
+            message.append_hex(static_cast<uint32_t>(registered), 8u);
+            platform.log(message.text());
+            leave();
+        }
         return registered;
     }
 

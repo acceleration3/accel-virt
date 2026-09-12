@@ -1,5 +1,7 @@
 #include "harness/platform/mock_platform.hpp"
 
+#include "harness/platform/log_record.hpp"
+
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdarg>
@@ -28,6 +30,12 @@ MockPlatform::MockPlatform()
       verbose_(std::getenv("AV_TEST_VERBOSE") != nullptr), logged_(0u), registration_status_(0u),
       registered_driver_object_(nullptr), registered_registry_path_(nullptr), registered_table_(nullptr),
       timers_{}, register_windows_{}, register_window_count_(0u) {}
+
+MockPlatform::MockPlatform(std::uint32_t registration_status, LogRecord &record)
+    : MockPlatform(registration_status)
+{
+    record_ = &record;
+}
 
 MockPlatform::MockPlatform(std::uint32_t registration_status) : MockPlatform()
 {
@@ -336,6 +344,7 @@ void MockPlatform::log(const char *message)
 {
     logged_++;
     std::snprintf(last_log_, sizeof last_log_, "%s", message);
+    if (record_ != nullptr) record_->write(message);
     if (verbose_) std::fprintf(stderr, "%s\n", message);
 }
 

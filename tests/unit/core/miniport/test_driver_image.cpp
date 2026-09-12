@@ -4,9 +4,11 @@
 #include "core/support/status.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/platform/log_record.hpp"
 #include "harness/platform/mock_platform.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 using av::DriverImage;
 using av::FakeDxgkrnl;
@@ -56,11 +58,20 @@ TEST(driver_image_enter, registers_the_miniport_table_and_binds_the_root)
   CHECK_STATUS(dxgkrnl.initialize(platform.registered_table()), Status::ok);
   CHECK_EQ(platform.logged(), 1u); }
 
-TEST(driver_image_enter, a_registration_dxgkrnl_refuses_unbinds_and_returns_its_status)
-{ Entered entered;
-  CHECK_EQ(static_cast<std::uint32_t>(entered.image().enter(&driver_object, &registry_path, 0xC0000059u)),
+/* The refusal releases the platform that logged it, so the line is asserted
+ * through a record that outlives it. Without this line a driver that dxgkrnl
+ * refuses says only "DriverEntry" and stops, which is what the first live run
+ * of feature 036 left us reading. */
+TEST(driver_image_enter, a_registration_dxgkrnl_refuses_unbinds_and_logs_its_status)
+{ av::LogRecord record;
+  Entered entered;
+  CHECK_EQ(static_cast<std::uint32_t>(
+               entered.image().enter(&driver_object, &registry_path, 0xC0000059u, record)),
            0xC0000059u);
-  CHECK(av::miniport_binding.miniport() == nullptr); }
+  CHECK(av::miniport_binding.miniport() == nullptr);
+  CHECK_EQ(record.count(), 2u);   /* DriverEntry, then the refusal */
+  CHECK(std::strstr(record.last(), "DxgkInitialize refused") != nullptr);
+  CHECK(std::strstr(record.last(), "C0000059") != nullptr); }
 
 TEST(driver_image_enter, a_second_entry_is_refused)
 { Entered entered;
