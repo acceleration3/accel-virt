@@ -47,6 +47,7 @@
 #include "core/ddi/dxgkarg_recommend_functional_vidpn_record.hpp"
 #include "core/ddi/dxgkarg_recommend_monitor_modes_record.hpp"
 #include "core/ddi/dxgkarg_recommend_vidpn_topology_record.hpp"
+#include "core/platform/log_budget.hpp"
 #include "core/ddi/dxgkarg_render_record.hpp"
 #include "core/ddi/dxgkarg_reset_engine_record.hpp"
 #include "core/ddi/dxgkarg_reset_hw_engine_record.hpp"
@@ -1793,6 +1794,45 @@ TEST(adapter_submit_command, queues_and_asks_for_the_dpc_that_completes_it)
   fence.NodeOrdinal = 1u;
   CHECK_EQ(nt(fixture.adapter().query_current_fence(&fence)), invalid_parameter);
   CHECK_EQ(nt(fixture.adapter().query_current_fence(nullptr)), invalid_parameter); }
+
+/* A fault storm at DISPATCH would otherwise turn one broken device into an
+ * unbounded stream of log lines, so every refusal line in the DPC and every DDI
+ * status line is spent from the budget (feature 037, FR-003). Once the window is
+ * spent, the same four refusals and the same DDI say nothing at all. */
+TEST(adapter_dpc_routine, a_storm_of_refusals_is_silent_once_the_window_is_spent)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  std::uint64_t progress = 0u;
+  av::DxgkargSubmitCommandToHwQueueRecord hw_submit = {};
+  hw_submit.hHwQueue = &fixture;
+  hw_submit.HwQueueProgressFenceId = 1u;
+  hw_submit.HwQueueProgressFenceCpuVa = &progress;
+  CHECK_EQ(nt(fixture.adapter().submit_command_to_hw_queue(&hw_submit)), success);
+  av::DxgkargSubmitCommandRecord submit = {};
+  submit.SubmissionFenceId = 1u;
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_EQ(nt(fixture.adapter().submit_command(&submit)), success);
+  fixture.platform().set_irql(Irql::passive);
+  const av::DxgkargRecommendVidPnTopologyRecord topology = {};
+  for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++)
+      CHECK_EQ(nt(fixture.adapter().recommend_vidpn_topology(&topology)), no_recommended_vidpn_topology);
+  const std::uint32_t spent = fixture.platform().logged();
+  CHECK_EQ(nt(fixture.adapter().recommend_vidpn_topology(&topology)), no_recommended_vidpn_topology);
+  CHECK_EQ(fixture.platform().logged(), spent);
+  for (std::uint16_t index = 0u; index < 2u; index++) {
+      const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(index);
+      const auto used = static_cast<std::uint8_t *>(fixture.platform().translate_physical(queue.device, 4u));
+      used[2] = 1u;   /* used.idx: a completion nothing was submitted for */
+  }
+  fixture.dxgkrnl().refuse_synchronize(no_memory);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  /* The one line the DPC still writes is the device failing itself, which it
+   * does once and then stops running - not a storm to budget. */
+  CHECK(std::strcmp(fixture.platform().last_log(),
+                    "virtio-gpu: a queue returned a request it was never given") == 0);
+  CHECK_EQ(fixture.platform().logged(), spent + 1u); }
 
 TEST(adapter_dpc_routine, a_refused_completion_is_logged)
 { Fixture fixture;

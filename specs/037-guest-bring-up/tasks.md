@@ -10,9 +10,9 @@ before it is fixed, citing the `dxgkrnl.sys` function the belief was read from.
 
 ## Phase 1: The driver says where it stops
 
-- [ ] T001 [US4] Tests then `LogBudget` in src/core/platform/log_budget.{hpp,cpp}: lines per window, the window rolling over, a burst refused, no allocation and no block at `Irql::dispatch`
-- [ ] T002 [US1] [US4] The registration status logged when `register_miniport` refuses, in src/core/miniport/driver_image.hpp; L1 test over `MockPlatform` asserting the line and its status value
-- [ ] T003 [US1] [US4] One line each for `AddDevice`, `StartDevice` and every `QueryAdapterInfo` type answered or refused, in src/core/miniport/miniport.cpp and src/core/adapter/adapter.cpp; the DPC's existing refusal lines go through `LogBudget`; L1 tests assert each line once
+- [X] T001 [US4] Tests then `LogBudget` in src/core/platform/log_budget.{hpp,cpp}: lines per window, the window rolling over, a burst refused, no allocation and no block at `Irql::dispatch`
+- [X] T002 [US1] [US4] The registration status logged when `register_miniport` refuses, in src/core/miniport/driver_image.hpp; L1 test over `MockPlatform` asserting the line and its status value
+- [X] T003 [US1] [US4] One line each for `AddDevice`, `StartDevice` and every `QueryAdapterInfo` type answered or refused, in src/core/miniport/miniport.cpp and src/core/adapter/adapter.cpp; the DPC's existing refusal lines go through `LogBudget`; L1 tests assert each line once
 - [X] T004 [US1] A guest run: read where `rvkgpu.log` stops, and record it in this file as the defect Phase 2 fixes
 
 **The defect Phase 2 fixes**, read from `dxgkrnl.sys` in `re/ghidra-proj` rather
@@ -133,6 +133,12 @@ just offers nothing), `a_pinned_source_mode_the_adapter_lacks_leaves_the_target_
 and `vidpn_create_mode_set.answers_fresh_sets_to_fill_and_assign`, which used to
 assign the empty sets it had just created. `an_uninitialized_transformation_is_offered_identity`
 covers the other unpinned value.
+
+`a_storm_of_refusals_is_silent_once_the_window_is_spent` closes T003's last
+uncovered branches: with the window spent, the four DPC refusal lines and every
+`log_status` line say nothing. The one line the DPC still writes is
+`VirtioGpuDevice::harvest` failing the device, which happens once and then stops
+the queues - not a storm to budget.
 
 ## Phase 3: The suite passes
 
