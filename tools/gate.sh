@@ -45,5 +45,6 @@ if [ -n "${AV_GUEST_IMAGE:-}" ]; then
     fi
 else
     echo "gate: guest skipped: AV_GUEST_IMAGE names no prepared image (docs/testing.md, L5)"
+    echo "gate: a feature does not merge on a skipped guest (feature 037, FR-006)"
 fi
 echo "gate: every configuration passed"

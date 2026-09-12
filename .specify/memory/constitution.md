@@ -1,6 +1,6 @@
 # accel-virt Constitution
 
-**Version**: 2.4.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-12
+**Version**: 2.5.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-12
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
 display miniport (`rvkgpu.sys`), a custom in-process QEMU device
@@ -235,6 +235,11 @@ A task is done when all of the following hold:
    two documented ABI boundaries.
 8. The feature level's capability reporting matches what is implemented.
 9. Documentation that the change makes wrong is fixed in the same change.
+10. From feature 037 on, `tools/gate.sh` with `AV_GUEST_IMAGE` set passes: the
+    driver installs in a real Windows guest under Driver Verifier, the adapter
+    starts, and the in-guest suite reports no failure. The four Linux
+    configurations cannot see a wrong belief about `dxgkrnl`, and that is the
+    failure mode this project has.
 
 ## Governance
 

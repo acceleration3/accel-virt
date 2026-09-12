@@ -392,7 +392,11 @@ can leave the guest with no display.
   it times out. Its tests run it against a fake QEMU with a scripted guest
   (`tests/tools/fake_guest/`), bugchecks and boot loops included.
 - **The gate**: `tools/gate.sh` runs it when `AV_GUEST_IMAGE` names a prepared
-  image, and says it skipped the guest otherwise.
+  image, and says it skipped the guest otherwise. From feature 037 on a skipped
+  guest is not a pass: no feature merges until the suite has run live, because
+  every defect in that feature - a VidPn dxgkrnl would not commit, a segment set
+  VidMm could not place, a handle callback WDDM 2.0 had replaced - was invisible
+  to all four Linux configurations and visible in the guest immediately.
 
 ### Preparing an image
 
