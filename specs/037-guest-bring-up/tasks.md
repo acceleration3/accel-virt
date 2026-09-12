@@ -51,6 +51,27 @@ claim.
   `UserModeDriverName` (`REG_MULTI_SZ`, `rvkumd.dll`) under `[Rvkgpu_Install]`.
 - [ ] T007 [US1] A guest run: the device reports status OK, problem 0, service `rvkgpu`, and `diag/kernel-pnp.txt` holds no 411 for it
 
+  **The second defect, found by the marker run.** With `UserModeDriverName` in
+  place the adapter starts: the log reaches `StartDevice`, `QueryChildRelations`
+  and twenty-two `QueryAdapterInfo` answers, then the guest bugchecks
+  `0x113` (VIDEO_DXGKRNL_FATAL_ERROR) subcode 7, parameter 3 `0xC0000005`.
+
+  Read from the binaries, not guessed: dxgkrnl never calls `KeBugCheckEx` with
+  `0x113` - it goes through `watchdog.sys`'s `WdLogSingleEntry5` @`1400011c0`,
+  whose first argument 0 means bugcheck. The one site matching these parameters
+  is `DXGK_VIDPNTARGETMODESET_INTERFACE_V1_IMPL::AddModeImpl` @`1403b38ec`, the
+  call at @`1403b40a1`, where `0xC0000005` is a hardcoded immediate and
+  parameter 2 is dxgkrnl's own VidPn target object - so parameter 3 is *not* a
+  captured exception code. The guard: on the V1 interface a target mode whose
+  `MinimumVSyncFreq.Numerator`/`.Denominator` (offsets `+0x44`/`+0x48`) are not
+  the all-ones `CreateNewModeInfo` stamped is a bugcheck, not a returned status.
+
+  `VidPnModeSet::add` copies the caller's description over the whole record
+  (`*info = description`), and nothing in `src/` ever wrote `MinimumVSyncFreq`,
+  so both fields reached dxgkrnl as zero. Reproduced in the harness -
+  `FakeModeSet::create_new` now stamps what dxgkrnl stamps and `add` fails the
+  test when it comes back changed - and fixed in `CofuncModality::offer_targets`.
+
 **Checkpoint**: commit.
 
 ## Phase 3: The suite passes

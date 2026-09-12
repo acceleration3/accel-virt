@@ -15,6 +15,25 @@
 
 namespace av {
 
+/* A mode info from pfnCreateNewModeInfo is not a blank record to overwrite:
+ * dxgkrnl stamps fields it owns and checks them on the way back in. Its V1
+ * target mode set bugchecks - VIDEO_DXGKRNL_FATAL_ERROR 0x113 subcode 7, from
+ * DXGK_VIDPNTARGETMODESET_INTERFACE_V1_IMPL::AddModeImpl - when a target mode
+ * returns with MinimumVSyncFreq other than the all-ones it wrote, rather than
+ * answering a status. So a description is copied over the record and what
+ * dxgkrnl owns is put back, per record type. */
+inline void restore_created(D3dkmdtVidPnSourceModeRecord &info, const D3dkmdtVidPnSourceModeRecord &created)
+{
+    info.Id = created.Id;
+}
+
+inline void restore_created(D3dkmdtVidPnTargetModeRecord &info, const D3dkmdtVidPnTargetModeRecord &created)
+{
+    info.Id = created.Id;
+    info.MinimumVSyncFreqNumerator = created.MinimumVSyncFreqNumerator;
+    info.MinimumVSyncFreqDenominator = created.MinimumVSyncFreqDenominator;
+}
+
 template <typename Mode, typename ModeSetInterface>
 class VidPnModeSet {
 public:
@@ -30,8 +49,8 @@ public:
     [[nodiscard]] Status assign();
     /* not_found when no mode is pinned. */
     [[nodiscard]] Status copy_pinned(Mode &mode);
-    /* A new mode info described by `description`, keeping the Id dxgkrnl gave
-     * it; a mode the set already has is not a failure. */
+    /* A new mode info described by `description`, keeping every field dxgkrnl
+     * stamped into it; a mode the set already has is not a failure. */
     [[nodiscard]] Status add(const Mode &description);
 
 private:
@@ -106,9 +125,9 @@ Status VidPnModeSet<Mode, ModeSetInterface>::add(const Mode &description)
     const Status status = NtStatus(interface_->pfnCreateNewModeInfo(mode_set_, &info)).status();
     if (status != Status::ok) return status;
     if (info == nullptr) return Status::malformed;
-    const uint32_t id = info->Id;
+    const Mode created = *info;
     *info = description;
-    info->Id = id;
+    restore_created(*info, created);
     const NtStatus added(interface_->pfnAddMode(mode_set_, info));
     if (added.succeeded()) return Status::ok;
     const Status released = NtStatus(interface_->pfnReleaseModeInfo(mode_set_, info)).status();

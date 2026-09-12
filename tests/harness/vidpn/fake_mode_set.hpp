@@ -41,6 +41,30 @@ inline bool same_mode(const D3dkmdtMonitorSourceModeRecord &a, const D3dkmdtMoni
     return same_signal(a.VideoSignalInfo, b.VideoSignalInfo);
 }
 
+/* What dxgkrnl stamps into a mode info it hands out, and checks on the way back
+ * in. DXGK_VIDPNTARGETMODESET_INTERFACE_V1_IMPL::AddModeImpl (dxgkrnl.sys
+ * @1403b38ec, the call at @1403b40a1) bugchecks with VIDEO_DXGKRNL_FATAL_ERROR
+ * (0x113, subcode 7) - not a returned status - when a target mode comes back
+ * with MinimumVSyncFreq other than the all-ones CreateNewModeInfo wrote. Source
+ * and monitor modes carry no such field. */
+constexpr std::uint32_t unspecified_vsync = 0xFFFFFFFFu;
+
+inline void stamp_created(D3dkmdtVidPnSourceModeRecord &) {}
+inline void stamp_created(D3dkmdtMonitorSourceModeRecord &) {}
+inline void stamp_created(D3dkmdtVidPnTargetModeRecord &mode)
+{
+    mode.MinimumVSyncFreqNumerator = unspecified_vsync;
+    mode.MinimumVSyncFreqDenominator = unspecified_vsync;
+}
+
+inline bool stamp_intact(const D3dkmdtVidPnSourceModeRecord &) { return true; }
+inline bool stamp_intact(const D3dkmdtMonitorSourceModeRecord &) { return true; }
+inline bool stamp_intact(const D3dkmdtVidPnTargetModeRecord &mode)
+{
+    return mode.MinimumVSyncFreqNumerator == unspecified_vsync &&
+           mode.MinimumVSyncFreqDenominator == unspecified_vsync;
+}
+
 template <typename Mode>
 class FakeModeSet {
 public:
@@ -122,6 +146,7 @@ public:
     {
         std::memset(static_cast<void *>(&scratch_), 0, sizeof scratch_);
         scratch_.Id = next_id_++;
+        stamp_created(scratch_);
         *mode = &scratch_;
         outstanding_++;
         return 0;
@@ -130,6 +155,12 @@ public:
     /* On success the new mode info is released, as dxgkrnl documents. */
     std::int32_t add(const Mode *mode)
     {
+        /* dxgkrnl bugchecks here rather than refusing, so the harness fails the
+         * test rather than answering a status the driver could handle. */
+        if (!stamp_intact(*mode))
+            TestRegistry::instance().record_failure(
+                __FILE__, __LINE__,
+                "AddMode: the mode info's MinimumVSyncFreq was overwritten; dxgkrnl bugchecks 0x113 subcode 7");
         for (std::uint32_t index = 0u; index < count_; index++)
             if (same_mode(modes_[index], *mode)) return mode_already_in_mode_set;
         if (count_ == capacity) return invalid_parameter;
