@@ -1,8 +1,8 @@
 #pragma once
 
 
+#include <cstddef>
 #include <cstdint>
-#include <span>
 
 #include <vulkan/vulkan_core.h>
 
@@ -408,8 +408,24 @@ struct Entry {
     PFN_vkVoidFunction fn;
 };
 
-// Span of generated wrapper entries. The ICD layer prepends its own
+// The generated entries and how many there are. Not a std::span:
+// this repository compiles freestanding, with no standard library,
+// so the table carries its own length.
+class EntryTable {
+public:
+    EntryTable(const Entry* first, std::size_t count) noexcept;
+
+    const Entry* begin() const noexcept;
+    const Entry* end() const noexcept;
+    std::size_t size() const noexcept;
+
+private:
+    const Entry* first_;
+    std::size_t count_;
+};
+
+// The generated wrapper entries. The ICD layer prepends its own
 // non-wire entries (loader negotiation, GetInstanceProcAddr, etc.).
-std::span<const Entry> wrapper_entries() noexcept;
+EntryTable wrapper_entries() noexcept;
 
 }  // namespace rvk::icd::generated

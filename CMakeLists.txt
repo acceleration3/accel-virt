@@ -66,7 +66,16 @@ set(AV_KHRONOS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/khronos/include)
 # gate compares the whole tree; each joins a build when its feature arrives.
 set(AV_GENERATED_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_command_names.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_host_image_default.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_server.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_command_names.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_server.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_command_names.cpp)
+
+# The OpenGL tree writes its own gl_types.h from the registry and includes it by
+# name, so it needs its own directory on the include path and no external header.
+set(AV_GENERATED_OPENGL_INCLUDE ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl)
 if(EXISTS ${AV_KHRONOS_INCLUDE}/vulkan/vulkan_core.h)
   set(AV_GENERATED ON)
   message(STATUS "generated sources: compiled against ${AV_KHRONOS_INCLUDE}")
@@ -84,7 +93,7 @@ endif()
 add_library(av_core STATIC ${AV_PORTABLE_SOURCES})
 target_include_directories(av_core PUBLIC src)
 if(AV_GENERATED)
-  target_include_directories(av_core PUBLIC ${AV_KHRONOS_INCLUDE})
+  target_include_directories(av_core PUBLIC ${AV_KHRONOS_INCLUDE} ${AV_GENERATED_OPENGL_INCLUDE})
 endif()
 target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 
@@ -102,7 +111,7 @@ endif()
 add_library(rvk_device STATIC ${AV_DEVICE_SOURCES})
 target_include_directories(rvk_device PRIVATE src)
 if(AV_GENERATED)
-  target_include_directories(rvk_device PRIVATE ${AV_KHRONOS_INCLUDE})
+  target_include_directories(rvk_device PRIVATE ${AV_KHRONOS_INCLUDE} ${AV_GENERATED_OPENGL_INCLUDE})
 endif()
 target_compile_options(rvk_device PRIVATE -O2 -ffreestanding)
 set_target_properties(rvk_device PROPERTIES

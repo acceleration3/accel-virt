@@ -1,14 +1,19 @@
 
 #include "vk_icd_entries.h"
 
-#include <array>
-#include <vector>
-
 #include "rvk/icd/connection.hpp"
 #include "rvk/icd/handle_registry.hpp"
 #include "vk_dispatch_client.h"
 
 namespace rvk::icd::generated {
+namespace {
+
+// How many raw server handles a wrapper stages on its stack while
+// wrapping an array the application asked for. A request for more is
+// refused with VK_ERROR_OUT_OF_HOST_MEMORY rather than allocated.
+constexpr std::size_t kMaxStagedHandles = 1024;
+
+}  // namespace
 
 VKAPI_ATTR void VKAPI_CALL Wrap_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) {
     if (instance == VK_NULL_HANDLE) {
@@ -37,8 +42,11 @@ VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkEnumeratePhysicalDevices(VkInstance instan
     if (pPhysicalDevices == nullptr) {
         return ::av::vkproto::rvk_vkEnumeratePhysicalDevices(conn->transport(), instance, pPhysicalDeviceCount, nullptr);
     }
-    std::vector<std::uint64_t> server_pPhysicalDevices(*pPhysicalDeviceCount, 0);
-    const VkResult __rc = ::av::vkproto::rvk_vkEnumeratePhysicalDevices(conn->transport(), instance, pPhysicalDeviceCount, server_pPhysicalDevices.data());
+    if (static_cast<std::size_t>(*pPhysicalDeviceCount) > kMaxStagedHandles) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    std::uint64_t server_pPhysicalDevices[kMaxStagedHandles] = {};
+    const VkResult __rc = ::av::vkproto::rvk_vkEnumeratePhysicalDevices(conn->transport(), instance, pPhysicalDeviceCount, server_pPhysicalDevices);
     if (__rc != VK_SUCCESS && __rc != VK_INCOMPLETE) {
         return __rc;
     }
@@ -453,8 +461,11 @@ VKAPI_ATTR void VKAPI_CALL Wrap_vkUpdateDescriptorSets(VkDevice device, uint32_t
 
 VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkAllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* pAllocateInfo, VkCommandBuffer* pCommandBuffers) {
     auto* conn = ::rvk::icd::connection_of(device);
-    std::vector<std::uint64_t> server_pCommandBuffers(pAllocateInfo->commandBufferCount, 0);
-    const VkResult __rc = ::av::vkproto::rvk_vkAllocateCommandBuffers(conn->transport(), device, pAllocateInfo, server_pCommandBuffers.data());
+    if (static_cast<std::size_t>(pAllocateInfo->commandBufferCount) > kMaxStagedHandles) {
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    std::uint64_t server_pCommandBuffers[kMaxStagedHandles] = {};
+    const VkResult __rc = ::av::vkproto::rvk_vkAllocateCommandBuffers(conn->transport(), device, pAllocateInfo, server_pCommandBuffers);
     if (__rc != VK_SUCCESS && __rc != VK_INCOMPLETE) {
         return __rc;
     }
@@ -1809,7 +1820,7 @@ VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkUnmapMemory2KHR(VkDevice device, const VkM
 }
 
 namespace {
-const std::array<Entry, 386> kWrapperTable = {{
+const Entry kWrapperTable[386] = {
     Entry{ "vkDestroyInstance", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyInstance) },
     Entry{ "vkDestroyDevice", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkDestroyDevice) },
     Entry{ "vkGetDeviceQueue", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkGetDeviceQueue) },
@@ -2196,9 +2207,16 @@ const std::array<Entry, 386> kWrapperTable = {{
     Entry{ "vkImportFenceFdKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkImportFenceFdKHR) },
     Entry{ "vkImportSemaphoreFdKHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkImportSemaphoreFdKHR) },
     Entry{ "vkUnmapMemory2KHR", reinterpret_cast<PFN_vkVoidFunction>(&Wrap_vkUnmapMemory2KHR) },
-}};
+};
 }  // namespace
 
-std::span<const Entry> wrapper_entries() noexcept { return {kWrapperTable.data(), kWrapperTable.size()}; }
+EntryTable::EntryTable(const Entry* first, std::size_t count) noexcept
+    : first_(first), count_(count) {}
+
+const Entry* EntryTable::begin() const noexcept { return first_; }
+const Entry* EntryTable::end() const noexcept { return first_ + count_; }
+std::size_t EntryTable::size() const noexcept { return count_; }
+
+EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 386u}; }
 
 }  // namespace rvk::icd::generated

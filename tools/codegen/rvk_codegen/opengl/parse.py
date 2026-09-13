@@ -72,6 +72,10 @@ class RawRegistry:
     groups: dict[str, set[str]] = field(default_factory=dict)
     # Enum name -> value, for the tables the emitters need.
     enums: dict[str, str] = field(default_factory=dict)
+    # Type name -> the C the registry declares it with, in document
+    # order, which is dependency order: GLDEBUGPROC is written in terms
+    # of GLenum and the registry declares GLenum first.
+    types: dict[str, str] = field(default_factory=dict)
 
 
 def _ctype_from(node: ET.Element) -> CType:
@@ -98,6 +102,17 @@ def _ctype_from(node: ET.Element) -> CType:
 
 def _read(path: Path, api: str, reg: RawRegistry) -> None:
     root = ET.parse(path).getroot()
+
+    # Only gl.xml's. The window-system binding declares its parameters
+    # in the platform's own types - HDC, HGLRC - which come from
+    # windows.h and cannot be written out here.
+    if api == "gl":
+        for t in root.findall("types/type"):
+            name = t.get("name") or t.findtext("name") or ""
+            text = "".join(t.itertext())
+            if not name or "#include" in text:
+                continue
+            reg.types.setdefault(name, text)
 
     for enums in root.findall("enums"):
         group_attr = enums.get("group")

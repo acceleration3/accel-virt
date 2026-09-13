@@ -185,7 +185,8 @@ def _lower_command(raw: RawCommand, prof: Profile, tier: str) -> Command:
 
 
 def lower(raw: RawRegistry, prof: Profile) -> Registry:
-    reg = Registry(pname_counts=dict(prof.pname_counts),
+    reg = Registry(types=dict(raw.types),
+                   pname_counts=dict(prof.pname_counts),
                    handwritten=set(prof.handwritten),
                    answered_by_guest=set(prof.answered_by_guest),
                    synchronous=set(prof.synchronous))

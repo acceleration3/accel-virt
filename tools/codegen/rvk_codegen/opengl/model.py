@@ -161,6 +161,10 @@ class Command:
 @dataclass
 class Registry:
     commands: dict[str, Command] = field(default_factory=dict)
+    # The registry's own type declarations, in document order. The
+    # generated tree defines them itself rather than including a GL
+    # header: there is no OpenGL SDK on the host side of this project.
+    types: dict[str, str] = field(default_factory=dict)
     # Enum name -> how many values a query with it answers with.
     pname_counts: dict[str, int] = field(default_factory=dict)
     # Commands the profile marks as written by hand: generated code

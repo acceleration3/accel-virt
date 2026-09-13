@@ -184,6 +184,27 @@ def _emit_destroy_instance(cmd: Command) -> list[str]:
     ]
 
 
+def _staging_array(cmd: Command, name: str, count_expr: str) -> list[str]:
+    """Where an array of raw server handles is staged on the way back up.
+
+    A fixed block on the stack, not a container: there is no standard
+    library in this repository's freestanding subset, the count is one the
+    application chose, and a request for more handles than the block holds
+    is a Vulkan error rather than an allocation sized by the caller.
+    """
+    if cmd.return_type.base == "void":
+        raise ValueError(
+            f"command {cmd.name} returns void but has a dispatchable handle "
+            "array output; it has no way to refuse an oversized request"
+        )
+    return [
+        f"    if (static_cast<std::size_t>({count_expr}) > kMaxStagedHandles) {{",
+        "        return VK_ERROR_OUT_OF_HOST_MEMORY;",
+        "    }",
+        f"    std::uint64_t {name}[kMaxStagedHandles] = {{}};",
+    ]
+
+
 def _emit_default_body(cmd: Command) -> list[str]:
     """Generic wrapper: unwrap input handles, call, wrap output handles."""
     is_void = cmd.return_type.base == "void"
@@ -248,11 +269,9 @@ def _emit_default_body(cmd: Command) -> list[str]:
                     + transport + ", " + ", ".join(forward_args) + ");"
                 )
                 pre_call.append("    }")
-                pre_call.append(
-                    f"    std::vector<std::uint64_t> {vec_name}(*{count.name}, 0);"
-                )
+                pre_call.extend(_staging_array(cmd, vec_name, f"*{count.name}"))
                 call_args.append(count.name)
-                call_args.append(f"{vec_name}.data()")
+                call_args.append(vec_name)
                 post_call.append(
                     f"    for (std::uint32_t k = 0; k < *{count.name}; ++k) {{"
                 )
@@ -297,17 +316,15 @@ def _emit_default_body(cmd: Command) -> list[str]:
             # a sibling struct member (e.g. vkAllocateCommandBuffers's
             # pCommandBuffers, len="pAllocateInfo->commandBufferCount";
             # vkAllocateDescriptorSets's pDescriptorSets too). The wire
-            # layer fills a temporary vector with raw server handles,
-            # then we wrap each into the caller's array so subsequent
-            # unwrap calls find an RvkWrappedHandle and not a raw value.
+            # layer fills a staging array with raw server handles, then we
+            # wrap each into the caller's array so subsequent unwrap calls
+            # find an RvkWrappedHandle and not a raw value.
             vec = f"server_{p.name}"
-            # Rewrite ``X->Y`` as ``X->Y`` for the count expression — it
-            # references the caller's actual struct pointer in scope.
+            # The count expression references the caller's actual struct
+            # pointer, which is in scope here.
             count_expr = p.len_expr
-            pre_call.append(
-                f"    std::vector<std::uint64_t> {vec}({count_expr}, 0);"
-            )
-            call_args.append(f"{vec}.data()")
+            pre_call.extend(_staging_array(cmd, vec, count_expr))
+            call_args.append(vec)
             post_call.append(
                 f"    for (std::uint32_t k = 0; k < static_cast<std::uint32_t>({count_expr}); ++k) {{"
             )
@@ -359,8 +376,8 @@ def emit(reg: Registry, out_dir: Path) -> None:
     h = [
         GENERATED_BANNER,
         "",
+        "#include <cstddef>",
         "#include <cstdint>",
-        "#include <span>",
         "",
         "#include <vulkan/vulkan_core.h>",
         "",
@@ -383,9 +400,25 @@ def emit(reg: Registry, out_dir: Path) -> None:
     h.append("    PFN_vkVoidFunction fn;")
     h.append("};")
     h.append("")
-    h.append("// Span of generated wrapper entries. The ICD layer prepends its own")
+    h.append("// The generated entries and how many there are. Not a std::span:")
+    h.append("// this repository compiles freestanding, with no standard library,")
+    h.append("// so the table carries its own length.")
+    h.append("class EntryTable {")
+    h.append("public:")
+    h.append("    EntryTable(const Entry* first, std::size_t count) noexcept;")
+    h.append("")
+    h.append("    const Entry* begin() const noexcept;")
+    h.append("    const Entry* end() const noexcept;")
+    h.append("    std::size_t size() const noexcept;")
+    h.append("")
+    h.append("private:")
+    h.append("    const Entry* first_;")
+    h.append("    std::size_t count_;")
+    h.append("};")
+    h.append("")
+    h.append("// The generated wrapper entries. The ICD layer prepends its own")
     h.append("// non-wire entries (loader negotiation, GetInstanceProcAddr, etc.).")
-    h.append("std::span<const Entry> wrapper_entries() noexcept;")
+    h.append("EntryTable wrapper_entries() noexcept;")
     h.append("")
     h.append("}  // namespace rvk::icd::generated")
     h.append("")
@@ -397,14 +430,19 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         '#include "vk_icd_entries.h"',
         "",
-        "#include <array>",
-        "#include <vector>",
-        "",
         '#include "rvk/icd/connection.hpp"',
         '#include "rvk/icd/handle_registry.hpp"',
         '#include "vk_dispatch_client.h"',
         "",
         "namespace rvk::icd::generated {",
+        "namespace {",
+        "",
+        "// How many raw server handles a wrapper stages on its stack while",
+        "// wrapping an array the application asked for. A request for more is",
+        "// refused with VK_ERROR_OUT_OF_HOST_MEMORY rather than allocated.",
+        "constexpr std::size_t kMaxStagedHandles = 1024;",
+        "",
+        "}  // namespace",
         "",
     ]
     for cmd in cmds:
@@ -416,18 +454,29 @@ def emit(reg: Registry, out_dir: Path) -> None:
     # Note: not ``constexpr`` -- reinterpret_cast to function pointer isn't a
     # constant expression. Plain runtime-initialised globals are fine here.
     s.append("namespace {")
-    s.append(f"const std::array<Entry, {len(cmds)}> kWrapperTable = {{{{")
+    s.append(f"const Entry kWrapperTable[{len(cmds)}] = {{")
     for cmd in cmds:
         s.append(
             f'    Entry{{ "{cmd.name}", '
             f"reinterpret_cast<PFN_vkVoidFunction>(&Wrap_{cmd.name}) }},"
         )
-    s.append("}};")
+    s.append("};")
     s.append("}  // namespace")
     s.append("")
     s.append(
-        "std::span<const Entry> wrapper_entries() noexcept { "
-        "return {kWrapperTable.data(), kWrapperTable.size()}; }"
+        "EntryTable::EntryTable(const Entry* first, std::size_t count) noexcept"
+    )
+    s.append("    : first_(first), count_(count) {}")
+    s.append("")
+    s.append("const Entry* EntryTable::begin() const noexcept { return first_; }")
+    s.append(
+        "const Entry* EntryTable::end() const noexcept { return first_ + count_; }"
+    )
+    s.append("std::size_t EntryTable::size() const noexcept { return count_; }")
+    s.append("")
+    s.append(
+        f"EntryTable wrapper_entries() noexcept {{ "
+        f"return EntryTable{{kWrapperTable, {len(cmds)}u}}; }}"
     )
     s.append("")
     s.append("}  // namespace rvk::icd::generated")

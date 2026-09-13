@@ -1,10 +1,12 @@
 #pragma once
 
 
+#include <cstddef>
 #include <cstdint>
 
 #include <vulkan/vulkan_core.h>
 
+#include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_writer.hpp"
 #include "proto/wire/wire_reader.hpp"
 
@@ -404,6 +406,9 @@ public:
 };
 
 // Decode and dispatch a single command. Returns false on protocol error.
-bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader& r, ::av::WireWriter& reply);
+// `arena` is where everything a decoded command points at lives, for the
+// length of the call; it is the caller's block, because it has to outlive
+// the decode that filled it.
+[[nodiscard]] bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena);
 
 }  // namespace av::vkproto

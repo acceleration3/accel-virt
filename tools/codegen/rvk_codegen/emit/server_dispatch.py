@@ -21,11 +21,45 @@ def _interface_signature(cmd: Command) -> str:
     return f"virtual {cmd.return_type.cpp()} on_{cmd.name}({args}) = 0;"
 
 
+def _storage_decls(name: str, elem: str) -> list[str]:
+    return [
+        f"    {elem}* {name} = nullptr;",
+        f"    std::size_t {name}_count = 0;",
+    ]
+
+
+def _storage_alloc(
+    pad: str, name: str, elem: str, count_expr: str, *, zero_fill: bool = True
+) -> list[str]:
+    """Room for an array whose length the frame gives.
+
+    The length is the sender's to choose, so the storage is the caller's
+    arena block rather than a container sized by whoever sent the frame: a
+    length the block cannot hold answers null and the command is refused.
+    Zeroed unless every byte is about to be overwritten, because the driver
+    may fill fewer elements than were asked for and the reply serializes
+    what is there.
+    """
+    lines = [
+        f"{pad}{name}_count = static_cast<std::size_t>({count_expr});",
+        f"{pad}if ({name}_count != 0) {{",
+        f"{pad}    {name} = arena.allocate<{elem}>({name}_count);",
+        f"{pad}    if ({name} == nullptr) return false;",
+    ]
+    if zero_fill:
+        lines.append(
+            f"{pad}    for (std::size_t __z = 0; __z < {name}_count; ++__z) "
+            f"{{ {name}[__z] = {{}}; }}"
+        )
+    lines.append(f"{pad}}}")
+    return lines
+
+
 def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     is_void = cmd.return_type.base == "void"
     lines: list[str] = [f"case ::av::vkproto::kCmd_{cmd.name}: {{"]
 
-    decl_lines: list[str] = ["    ::av::WireArena arena;", "    (void)arena;"]
+    decl_lines: list[str] = []
     decode_lines: list[str] = []
     call_args: list[str] = []
     out_after_call: list[str] = []
@@ -38,20 +72,26 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             arr = cmd.params[i + 1]
             decl_lines.append("    std::uint8_t array_present = 0;")
             decl_lines.append(f"    std::uint32_t {count.name}_local = 0;")
-            decl_lines.append(f"    std::vector<{arr.type.base}> {arr.name}_storage;")
+            decl_lines.extend(_storage_decls(f"{arr.name}_storage", arr.type.base))
             decode_lines.append("    if (!r.read_pod(array_present)) return false;")
             decode_lines.append("    if (array_present) {")
             decode_lines.append(f"        if (!r.read_pod({count.name}_local)) return false;")
-            decode_lines.append(f"        {arr.name}_storage.resize({count.name}_local);")
+            decode_lines.extend(
+                _storage_alloc(
+                    "        ", f"{arr.name}_storage", arr.type.base, f"{count.name}_local"
+                )
+            )
             stype_value = classify.stype_value_for_struct(reg, arr.type.base)
             if stype_value is not None:
                 decode_lines.append(
-                    f"        for (auto& __e : {arr.name}_storage) {{ "
-                    f"__e.sType = {stype_value}; __e.pNext = nullptr; }}"
+                    f"        for (std::size_t __e = 0; "
+                    f"__e < {arr.name}_storage_count; ++__e) {{ "
+                    f"{arr.name}_storage[__e].sType = {stype_value}; "
+                    f"{arr.name}_storage[__e].pNext = nullptr; }}"
                 )
             decode_lines.append("    }")
             call_args.append(f"&{count.name}_local")
-            call_args.append(f"array_present ? {arr.name}_storage.data() : nullptr")
+            call_args.append(f"array_present ? {arr.name}_storage : nullptr")
             out_after_call.append(f"    reply.write_pod({count.name}_local);")
             out_after_call.append("    if (array_present) {")
             out_after_call.append(f"        for (std::uint32_t k = 0; k < {count.name}_local; ++k) {{")
@@ -116,9 +156,9 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             srv_len = classify.server_len_expr(cmd.params, p.len_expr)
             # Mirror the client's presence byte for a nullable array: read
             # it, decode only when present, and pass the driver null when
-            # not — an empty vector's data() is not guaranteed null.
+            # not.
             nullable = bool(p.optional_levels) and p.optional_levels[0]
-            decl_lines.append(f"    std::vector<{elem}> {p.name}_storage;")
+            decl_lines.extend(_storage_decls(f"{p.name}_storage", elem))
             pad = ""
             if nullable:
                 decl_lines.append(f"    std::uint8_t {p.name}_present = 0;")
@@ -127,12 +167,12 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 )
                 decode_lines.append(f"    if ({p.name}_present) {{")
                 pad = "    "
-            decode_lines.append(
-                f"{pad}    {p.name}_storage.resize(static_cast<std::size_t>({srv_len}));"
+            decode_lines.extend(
+                _storage_alloc(f"{pad}    ", f"{p.name}_storage", elem, srv_len)
             )
             decode_lines.append(
-                f"{pad}    for (std::uint32_t __i = 0; "
-                f"__i < static_cast<std::uint32_t>({srv_len}); ++__i) {{"
+                f"{pad}    for (std::size_t __i = 0; "
+                f"__i < {p.name}_storage_count; ++__i) {{"
             )
             if kind == "in_handle_array":
                 decode_lines.append(
@@ -150,10 +190,10 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             if nullable:
                 decode_lines.append("    }")
                 call_args.append(
-                    f"{p.name}_present ? {p.name}_storage.data() : nullptr"
+                    f"{p.name}_present ? {p.name}_storage : nullptr"
                 )
             else:
-                call_args.append(f"{p.name}_storage.data()")
+                call_args.append(f"{p.name}_storage")
         elif kind in ("in_struct_array2", "in_pod_array2"):
             # Rebuild the pointer-to-pointer shape in the arena: an outer
             # array of pointers, each to its own inner array.
@@ -184,17 +224,19 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             call_args.append(f"{p.name}_outer")
         elif kind == "in_byte_array":
             srv_len = classify.server_len_expr(cmd.params, p.len_expr)
-            decl_lines.append(f"    std::vector<std::uint8_t> {p.name}_storage;")
-            decode_lines.append(f"    if ({srv_len} > 0) {{")
-            decode_lines.append(
-                f"        {p.name}_storage.resize(static_cast<std::size_t>({srv_len}));"
+            decl_lines.extend(_storage_decls(f"{p.name}_storage", "std::uint8_t"))
+            # The read fills every byte, so it goes inside the allocation's
+            # own guard and the block is not zeroed first.
+            alloc = _storage_alloc(
+                "    ", f"{p.name}_storage", "std::uint8_t", srv_len, zero_fill=False
             )
-            decode_lines.append(
-                f"        if (!r.read({p.name}_storage.data(), "
-                f"static_cast<std::size_t>({srv_len}))) return false;"
+            alloc.insert(
+                len(alloc) - 1,
+                f"        if (!r.read({p.name}_storage, {p.name}_storage_count)) "
+                f"return false;",
             )
-            decode_lines.append("    }")
-            call_args.append(f"{p.name}_storage.data()")
+            decode_lines.extend(alloc)
+            call_args.append(f"{p.name}_storage")
         elif kind == "in_fixed_array":
             decl_lines.append(
                 f"    {p.type.base} {p.name}_local[{p.type.fixed_dim}]{{}};"
@@ -232,26 +274,26 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             out_after_call.append(f"    reply.write_pod({p.name}_out);")
         elif kind == "out_byte_array":
             srv_len = classify.server_len_expr(cmd.params, p.len_expr)
-            decl_lines.append(f"    std::vector<std::uint8_t> {p.name}_storage;")
-            decode_lines.append(
-                f"    {p.name}_storage.resize(static_cast<std::size_t>({srv_len}));"
+            decl_lines.extend(_storage_decls(f"{p.name}_storage", "std::uint8_t"))
+            decode_lines.extend(
+                _storage_alloc("    ", f"{p.name}_storage", "std::uint8_t", srv_len)
             )
-            call_args.append(f"{p.name}_storage.data()")
-            out_after_call.append(f"    if (!{p.name}_storage.empty()) {{")
+            call_args.append(f"{p.name}_storage")
+            out_after_call.append(f"    if ({p.name}_storage_count != 0) {{")
             out_after_call.append(
-                f"        reply.write({p.name}_storage.data(), {p.name}_storage.size());"
+                f"        reply.write({p.name}_storage, {p.name}_storage_count);"
             )
             out_after_call.append("    }")
         elif kind in ("out_handle_array", "out_struct_array", "out_pod_array"):
             elem = p.type.base
             srv_len = classify.server_len_expr(cmd.params, p.len_expr)
-            decl_lines.append(f"    std::vector<{elem}> {p.name}_storage;")
-            decode_lines.append(
-                f"    {p.name}_storage.resize(static_cast<std::size_t>({srv_len}));"
+            decl_lines.extend(_storage_decls(f"{p.name}_storage", elem))
+            decode_lines.extend(
+                _storage_alloc("    ", f"{p.name}_storage", elem, srv_len)
             )
-            call_args.append(f"{p.name}_storage.data()")
+            call_args.append(f"{p.name}_storage")
             out_after_call.append(
-                f"    for (std::uint32_t __k = 0; __k < {p.name}_storage.size(); ++__k) {{"
+                f"    for (std::size_t __k = 0; __k < {p.name}_storage_count; ++__k) {{"
             )
             if kind in ("out_handle_array", "out_struct_array"):
                 out_after_call.append(
@@ -267,18 +309,11 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     lines.extend(decl_lines)
     lines.extend(decode_lines)
 
-    fmt, fmt_args = classify.trace_format_and_args(cmd, reg)
-    fmt_args_str = ("," + ", ".join(fmt_args)) if fmt_args else ""
-    lines.append(
-        f'    RVK_TRACE("server {cmd.name}{fmt}"{fmt_args_str});'
-    )
-
     if is_void:
         lines.append(f"    s.on_{cmd.name}({', '.join(call_args)});")
         if cmd.sync_mode == "sync":
             lines.append("    reply.write_pod<std::int32_t>(0);")
             lines.extend(out_after_call)
-        lines.append(f'    RVK_TRACE("server {cmd.name} -> (void)");')
     else:
         lines.append(
             f"    {cmd.return_type.cpp()} result = s.on_{cmd.name}({', '.join(call_args)});"
@@ -298,9 +333,6 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 "    reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));"
             )
         lines.extend(out_after_call)
-        lines.append(
-            f'    RVK_TRACE("server {cmd.name} -> {{}}", static_cast<long long>(result));'
-        )
 
     lines.append("    return true;")
     lines.append("}")
@@ -314,13 +346,15 @@ def emit(reg: Registry, out_dir: Path) -> None:
     header = [
         GENERATED_BANNER,
         "",
+        "#include <cstddef>",
         "#include <cstdint>",
         "",
         "#include <vulkan/vulkan_core.h>",
         "",
-        # dispatch_command's signature names both, so both must be
-        # complete here — a forward declaration of BufferReader is not
+        # dispatch_command's signature names all three, so all three must
+        # be complete here — a forward declaration of BufferReader is not
         # enough for the declaration to compile.
+        '#include "proto/wire/wire_arena.hpp"',
         '#include "proto/wire/wire_writer.hpp"',
         '#include "proto/wire/wire_reader.hpp"',
         "",
@@ -340,8 +374,15 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "// Decode and dispatch a single command. Returns false on protocol error."
     )
     header.append(
-        "bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, "
-        "::av::WireReader& r, ::av::WireWriter& reply);"
+        "// `arena` is where everything a decoded command points at lives, for the"
+    )
+    header.append(
+        "// length of the call; it is the caller's block, because it has to outlive"
+    )
+    header.append("// the decode that filled it.")
+    header.append(
+        "[[nodiscard]] bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, "
+        "::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena);"
     )
     header.append("")
     header.append("}  // namespace av::vkproto")
@@ -354,17 +395,13 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         '#include "vk_dispatch_server.h"',
         "",
-        "#include <vector>",
-        "",
-        # rvk/instr/log.hpp, not rvk/log.hpp — see client_dispatch.py.
-        '#include "rvk/instr/log.hpp"',
         '#include "vk_protocol_ids.h"',
         '#include "vk_serialize.h"',
         "",
         "namespace av::vkproto {",
         "",
         "bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, "
-        "::av::WireReader& r, ::av::WireWriter& reply) {",
+        "::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {",
         "    switch (cmd_id) {",
     ]
     for cmd in cmds:
