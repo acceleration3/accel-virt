@@ -170,3 +170,44 @@ TEST(synthetic_vsync_reported, says_the_rate_it_kept_every_window)
   CHECK_EQ(fixture.vsync().reported(), 0u);
   CHECK(std::strstr(fixture.platform().last_log(), "vsync 120 blanks in") != nullptr);
   CHECK(std::strstr(fixture.platform().last_log(), "enabled 1 times") != nullptr); }
+
+/* A powered-down adapter must interrupt nobody. dxgkrnl keeps asking for
+ * vertical blanks across a suspend - it has no reason to stop - and the timer
+ * that reports them outlives D3 unless power stops it. A blank reported to an
+ * adapter in D3, or on the way back out of S3 before dxgkrnl has powered it up,
+ * is what bugchecks a real guest (feature 040, US1). */
+TEST(synthetic_vsync_suspend, a_powered_down_adapter_reports_no_blanks)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.vsync().tick();
+  CHECK_EQ(fixture.vsync().reported(), 1u);
+  fixture.platform().set_irql(Irql::passive);
+
+  fixture.vsync().suspend();
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.vsync().tick();
+  fixture.vsync().tick();
+  CHECK_EQ(fixture.vsync().reported(), 1u);          /* nothing while power is down */
+  fixture.platform().set_irql(Irql::passive);
+
+  /* What dxgkrnl asked for survives the transition: the resume puts back the
+   * reporting it had, not a default. */
+  CHECK_STATUS(fixture.vsync().resume(), Status::ok);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.vsync().tick();
+  CHECK_EQ(fixture.vsync().reported(), 2u);
+  fixture.platform().set_irql(Irql::passive);
+  fixture.vsync().destroy(); }
+
+TEST(synthetic_vsync_resume, an_adapter_nobody_was_waiting_on_stays_quiet)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  fixture.vsync().suspend();
+  CHECK_STATUS(fixture.vsync().resume(), Status::ok);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.vsync().tick();
+  CHECK_EQ(fixture.vsync().reported(), 0u);
+  fixture.platform().set_irql(Irql::passive);
+  fixture.vsync().destroy(); }

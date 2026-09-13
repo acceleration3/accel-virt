@@ -39,6 +39,14 @@ public:
     void                 disable();
     /* Waits out a running tick: StopDevice. */
     void                 destroy();
+    /* Power went away: the timer stops and nothing is reported. dxgkrnl keeps
+     * asking for vertical blanks across a suspend, and a blank reported to an
+     * adapter that is not powered - or to one on its way out of S3, before
+     * dxgkrnl has powered it up - bugchecks the guest. */
+    void                 suspend();
+    /* Power is back: the reporting dxgkrnl asked for is put back, and nothing
+     * more. */
+    [[nodiscard]] Status resume();
     /* The timer's callback, at DISPATCH. */
     void                 tick();
     /* Vertical blanks reported since the last line it said; only the driver
@@ -65,6 +73,8 @@ private:
     PeriodicTimer          timer_;
     bool                   reporting_;
     bool                   running_;
+    /* What reporting_ was when power went away, to put back on the way up. */
+    bool                   suspended_reporting_;
     uint32_t               reported_;
     uint32_t               enables_;
     uint64_t               window_start_;

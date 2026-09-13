@@ -31,11 +31,14 @@ public:
         return Status::ok;
     }
 
+    /* Not constructed before the destructor runs, not after: an interrupt that
+     * asks while this is tearing down must be told no, and a half-destroyed
+     * device is exactly what it must not be handed. */
     void destroy()
     {
         if (!constructed_) return;
-        object().~T();
         constructed_ = false;
+        object().~T();
     }
 
     bool     constructed() const { return constructed_; }

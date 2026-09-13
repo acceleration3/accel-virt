@@ -9,8 +9,8 @@ namespace av {
 
 SyntheticVsync::SyntheticVsync(Platform &platform, DxgkrnlInterface &dxgkrnl, DisplaySources &sources)
     : platform_(platform), dxgkrnl_(dxgkrnl), sources_(sources), notification_(platform, dxgkrnl),
-      timer_(platform, &AvVsyncTick, this), reporting_(false), running_(false), reported_(0u), enables_(0u),
-      window_start_(0u) {}
+      timer_(platform, &AvVsyncTick, this), reporting_(false), running_(false), suspended_reporting_(false),
+      reported_(0u), enables_(0u), window_start_(0u) {}
 
 Status SyntheticVsync::initialize()
 {
@@ -45,6 +45,23 @@ void SyntheticVsync::destroy()
     reporting_ = false;
     running_ = false;
     timer_.destroy();
+}
+
+void SyntheticVsync::suspend()
+{
+    platform_.require_irql_at_most(Irql::passive, "SyntheticVsync::suspend");
+    suspended_reporting_ = reporting_;
+    reporting_ = false;
+    running_ = false;
+    timer_.stop();
+}
+
+Status SyntheticVsync::resume()
+{
+    platform_.require_irql_at_most(Irql::passive, "SyntheticVsync::resume");
+    if (!suspended_reporting_) return Status::ok;
+    suspended_reporting_ = false;
+    return enable();
 }
 
 void SyntheticVsync::tick()

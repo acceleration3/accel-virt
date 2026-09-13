@@ -300,17 +300,29 @@ int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)
     if (device != adapter_device_uid) return NtStatus(Status::ok).value();
     if (!started_) return NtStatus(Status::invalid_state).value();
     if (power_state == power_d0) {
+        platform_.log("rvkgpu: SetPowerState D0");
         const Status powered = power_up();
+        log_status("rvkgpu: SetPowerState D0 device", NtStatus(powered).value());
         /* What power took away, put back: dxgkrnl kept every allocation and
          * VidPn across this, so what it expects to find is what was scanning
          * out before. */
         if (powered == Status::ok && transition_.held()) restore_scanouts();
+        if (powered == Status::ok)
+            log_status("rvkgpu: SetPowerState D0 vsync", NtStatus(vsync_.resume()).value());
         transition_.release();
+        platform_.log("rvkgpu: SetPowerState D0 done");
         return NtStatus(powered).value();
     }
     if (power_state > power_d0 && power_state <= power_d3) {
+        platform_.log("rvkgpu: SetPowerState D3");
         static_cast<void>(transition_.hold(device_.constructed(), scanning_out()));
-        return NtStatus(power_down()).value();
+        /* Before the device goes: a vertical blank reported to an adapter that
+         * is not powered - or to one on its way out of S3, before dxgkrnl has
+         * powered it up - is what bugchecks the guest. */
+        vsync_.suspend();
+        const int32_t down = NtStatus(power_down()).value();
+        log_status("rvkgpu: SetPowerState D3 done", down);
+        return down;
     }
     return NtStatus(Status::invalid_parameter).value();
 }

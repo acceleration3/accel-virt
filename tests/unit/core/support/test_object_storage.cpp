@@ -53,3 +53,18 @@ TEST(object_storage, a_second_construct_is_refused_and_destroy_when_empty_does_n
 TEST(object_storage, is_aligned_for_its_object)
 { ObjectStorage<long double> storage;
   CHECK((reinterpret_cast<unsigned long>(storage.address()) % alignof(long double)) == 0u); }
+
+/* An interrupt can ask while a device is being torn down: what it must never
+ * be handed is an object whose destructor has already run. */
+TEST(object_storage_destroy, is_not_constructed_while_the_destructor_runs)
+{ struct Asker {
+      ObjectStorage<Asker> *storage;
+      bool                 *seen;
+      ~Asker() { *seen = storage->constructed(); }
+  };
+  ObjectStorage<Asker> storage;
+  bool constructed_during_destruction = true;
+  CHECK_STATUS(storage.construct(Asker{&storage, &constructed_during_destruction}), Status::ok);
+  storage.destroy();
+  CHECK(!constructed_during_destruction);
+  CHECK(!storage.constructed()); }
