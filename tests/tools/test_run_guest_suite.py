@@ -224,9 +224,23 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         journal = self.journal_lines()
         self.assertIn("guest-suspend-disk", journal)
-        self.assertIn("guest: hibernate ok: the adapter came back from S4", result.stdout)
+        self.assertIn("guest: hibernate ok: the adapter came back from S4, 1 of 1", result.stdout)
         self.assertIn("hibernate", " ".join(self.stage_calls()))
         self.assertEqual(self.stage_calls().count("sleepstates"), 2)
+        self.assert_clean()
+
+    def test_every_resume_runs_the_suite_again(self):
+        """SC-001 asks for five S4 resumes with a passing rvktest, not five
+        machines that come back: the suite runs after each one."""
+        self.script(stages={"sign": [3010], "install": [3010], "check": [0], "hibernate": [0],
+                            "sleepstates": [0]})
+        result = self.run_suite("--hibernate", "3")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.journal_lines().count("guest-suspend-disk"), 3)
+        for cycle in (1, 2, 3):
+            self.assertIn(f"guest: hibernate ok: the adapter came back from S4, {cycle} of 3", result.stdout)
+        # Once after each resume, and once for the run itself.
+        self.assertEqual(result.stdout.count("guest: report ok: 23 passed"), 4)
         self.assert_clean()
 
     def test_the_stress_window_is_passed_to_the_guest_and_its_numbers_read_back(self):

@@ -130,8 +130,9 @@ def arguments():
                         help="make the test executor lose the device on its Nth command")
     parser.add_argument("--s3", action="store_true",
                         help="let the machine advertise S3; this firmware cannot resume from it")
-    parser.add_argument("--hibernate", action="store_true",
-                        help="also suspend to disk and boot the overlay again (feature 040, US1)")
+    parser.add_argument("--hibernate", nargs="?", type=int, const=1, default=0, metavar="N",
+                        help="suspend to disk and boot the overlay again this many times, once if the "
+                             "option is given no number (feature 040, US1)")
     parser.add_argument("--stress-minutes", type=float, default=0.0,
                         help="minutes of fences awaited while the blank's interrupt is masked and unmasked "
                              "(feature 039, US3); 0 leaves the long run out")
@@ -773,13 +774,17 @@ class GuestRun:
         if not self.offers_sleep("hibernate"):
             self.say("hibernate skipped: this machine offers no S4")
             return
-        self.agent.notify("guest-suspend-disk", {})
-        self.step("hibernate.off", lambda: self.qemu.wait(timeout=self.args.boot_timeout))
-        self.stop_qemu()
-        self.boot()
-        self.connect_agent("hibernate.resume")
-        self.check_monitors(self.stage_output("check", saved="device-after-hibernate.txt"))
-        self.say("hibernate ok: the adapter came back from S4")
+        for cycle in range(self.args.hibernate):
+            self.agent.notify("guest-suspend-disk", {})
+            self.step("hibernate.off", lambda: self.qemu.wait(timeout=self.args.boot_timeout))
+            self.stop_qemu()
+            self.boot()
+            self.connect_agent("hibernate.resume")
+            self.check_monitors(self.stage_output("check", saved=f"device-after-hibernate{cycle + 1}.txt"))
+            # What SC-001 asks is not that the machine comes back but that the
+            # driver still works when it does.
+            self.suite()
+            self.say(f"hibernate ok: the adapter came back from S4, {cycle + 1} of {self.args.hibernate}")
 
     def install_and_test(self):
         if self.stage("sign"):
