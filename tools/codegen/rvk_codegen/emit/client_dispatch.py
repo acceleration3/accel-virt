@@ -55,9 +55,17 @@ def _signature(reg: Registry, cmd: Command) -> str:
 def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     is_void = cmd.return_type.base == "void"
     is_async = cmd.sync_mode == "async"
-    on_fail = "    return;" if is_void else "    return VK_ERROR_DEVICE_LOST;"
+    # A failed call returns the return type's own error: VK_ERROR_DEVICE_LOST
+    # for a VkResult, a zero value for a handle getter or a count - returning a
+    # negative VkResult into an unsigned handle getter was the bug this fixes.
+    if is_void:
+        on_fail = "    return;"
+    elif cmd.return_type.base == "VkResult":
+        on_fail = "    return VK_ERROR_DEVICE_LOST;"
+    else:
+        on_fail = f"    return static_cast<{cmd.return_type.cpp()}>(0);"
 
-    lines: list[str] = ["::av::WireWriter payload;"]
+    lines: list[str] = ["::av::WireWriter payload = t.request_writer();"]
 
     # ---- Encode inputs ----
     i = 0
@@ -182,9 +190,14 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
 
     # ---- Send / receive ----
     if is_async:
+        # send_async refuses a writer that overflowed its ring slot rather than
+        # send a short command; a dropped frame is a failed call.
         lines.append(
-            f"(void)t.send_async(::av::vkproto::kCmd_{cmd.name}, payload.bytes());"
+            f"if (t.send_async(::av::vkproto::kCmd_{cmd.name}, payload) "
+            "!= ::av::TransportResult::ok) {"
         )
+        lines.append(on_fail)
+        lines.append("}")
         # Async-with-result (e.g. vkQueueSubmit when sync_override = "async")
         # is optimistic: errors come back out-of-band on the control stream.
         # Return VK_SUCCESS so the caller's success path runs.
@@ -192,14 +205,15 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append("return VK_SUCCESS;")
         return lines
 
-    lines.append("::av::WireWriter reply;")
+    # send_sync points `r` at the answer in the reply slot on ok; it is valid
+    # only until the next call on this transport.
+    lines.append("::av::WireReader r{nullptr, 0u};")
     lines.append(
-        f"if (t.send_sync(::av::vkproto::kCmd_{cmd.name}, payload.bytes(), &reply) "
-        "!= ::av::TransportResult::Ok) {"
+        f"if (t.send_sync(::av::vkproto::kCmd_{cmd.name}, payload, r) "
+        "!= ::av::TransportResult::ok) {"
     )
     lines.append(on_fail)
     lines.append("}")
-    lines.append("::av::WireReader r{reply.bytes()};")
     # Must match the width the server wrote — see classify.returns_wide.
     if classify.returns_wide(cmd):
         lines.append("std::uint64_t result_code = 0;")
@@ -221,13 +235,11 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append("}")
             element_is_struct = arr.type.base in reg.structs
             element_is_handle = arr.type.base in reg.handles
-            if element_is_struct:
-                lines.append("::av::WireArena arena_arr;")
             lines.append("if (array_present) {")
             lines.append(f"    for (std::uint32_t k = 0; k < *{count.name}; ++k) {{")
             if element_is_struct:
                 lines.append(
-                    f"        if (!deserialize_{arr.type.base}(r, &{arr.name}[k], arena_arr)) {{"
+                    f"        if (!deserialize_{arr.type.base}(r, &{arr.name}[k], t.decode_arena())) {{"
                 )
             elif arr.type.base in classify.DISPATCHABLE_HANDLES:
                 # Raw 64 bits: the caller's array is std::uint64_t[] so
@@ -254,8 +266,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append(on_fail)
             lines.append("}")
         elif kind == "out_struct":
-            lines.append("::av::WireArena arena_out;")
-            lines.append(f"if (!deserialize_{p.type.base}(r, {p.name}, arena_out)) {{")
+            lines.append(f"if (!deserialize_{p.type.base}(r, {p.name}, t.decode_arena())) {{")
             lines.append(on_fail)
             lines.append("}")
         elif kind == "out_pod":
@@ -274,8 +285,6 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append("}")
         elif kind in ("out_handle_array", "out_struct_array", "out_pod_array"):
             elem = p.type.base
-            if kind == "out_struct_array":
-                lines.append("::av::WireArena arena_out_arr;")
             lines.append(
                 f"for (std::uint32_t rvk_k = 0; rvk_k < static_cast<std::uint32_t>({p.len_expr}); ++rvk_k) {{"
             )
@@ -285,7 +294,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 lines.append("    }")
             elif kind == "out_struct_array":
                 lines.append(
-                    f"    if (!deserialize_{elem}(r, &{p.name}[rvk_k], arena_out_arr)) {{"
+                    f"    if (!deserialize_{elem}(r, &{p.name}[rvk_k], t.decode_arena())) {{"
                 )
                 lines.append("    " + on_fail.lstrip())
                 lines.append("    }")

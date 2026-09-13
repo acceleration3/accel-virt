@@ -280,6 +280,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
          "namespace av::clproto {", ""]
     c = [HEADER, '#include "cl_dispatch_client.h"', "",
          "#include <cstring>", "",
+         '#include "proto/wire/wire_arena.hpp"',
          '#include "proto/wire/wire_reader.hpp"',
          '#include "proto/wire/wire_writer.hpp"',
          '#include "cl_protocol_ids.h"', "",
@@ -289,27 +290,33 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         sig = _client_signature(reg, cmd)
         h.append(f"{sig};")
         c.append(f"{sig} {{")
-        c.append("    ::av::WireWriter b;")
+        c.append("    ::av::WireWriter b = t.request_writer();")
         for p in cmd.params:
             _encode_param(reg, cmd, p, c)
+        if cmd.returns_handle:
+            fail = "        return 0;"
+        elif cmd.returns_void:
+            fail = "        return;"
+        else:
+            fail = "        return CL_OUT_OF_RESOURCES;"
         if cmd.is_async:
-            c.append(f"    (void)t.send_async(kCmd_{cmd.name}, b.bytes());")
+            # A writer that overflowed its slot is a failed call, not a short
+            # command on the wire.
+            c.append(f"    if (t.send_async(kCmd_{cmd.name}, b) != ::av::TransportResult::ok) {{")
+            c.append(fail)
+            c.append("    }")
             if cmd.returns_handle:
                 c.append("    return 0;")
             elif not cmd.returns_void:
                 c.append("    return CL_SUCCESS;")
         else:
-            c.append("    ::av::WireWriter reply;")
-            c.append(f"    if (t.send_sync(kCmd_{cmd.name}, b.bytes(), &reply) !=")
-            c.append("        ::av::TransportResult::Ok) {")
-            if cmd.returns_handle:
-                c.append("        return 0;")
-            elif cmd.returns_void:
-                c.append("        return;")
-            else:
-                c.append("        return CL_OUT_OF_RESOURCES;")
+            # send_sync points r at the answer, valid only until the next call.
+            c.append("    ::av::WireReader r{nullptr, 0u};")
+            c.append(f"    if (t.send_sync(kCmd_{cmd.name}, b, r) !=")
+            c.append("        ::av::TransportResult::ok) {")
+            c.append(fail)
             c.append("    }")
-            c.append("    ::av::WireReader r{reply.bytes()};")
+            c.append("    [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();")
             _decode_reply(reg, cmd, c)
             if cmd.returns_handle or not cmd.returns_void:
                 c.append("    return ret;")
