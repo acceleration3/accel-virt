@@ -79,6 +79,31 @@ TEST(host_memory_probe_run, memory_that_does_not_read_back_is_malformed)
   CHECK_EQ(host.live_gpu_memory(), 0u);
   CHECK_EQ(host.live_placements(), 0u); }
 
+/* Constitution V: the host is outside, and what it answers is not trusted. A
+ * handle with no mapping behind it, and a region that cannot be read at all,
+ * are both refusals rather than a probe that carries on with a null. */
+TEST(host_memory_probe_run, a_host_that_answers_a_handle_with_no_mapping_is_refused)
+{ MockHost host;
+  host.set_hostmem_size(HostMemoryProbe::probe_bytes);
+  host.empty_export_at(1u);
+  HostMemoryProbe probe(host);
+  probe.run();
+  CHECK(!probe.result().passed());
+  CHECK_STATUS(probe.result().reason(), Status::not_supported);
+  CHECK_EQ(host.live_gpu_memory(), 0u);
+  CHECK_EQ(host.live_placements(), 0u); }
+
+TEST(host_memory_probe_run, a_region_the_host_cannot_read_back_is_refused)
+{ MockHost host;
+  host.set_hostmem_size(HostMemoryProbe::probe_bytes);
+  host.refuse_hostmem_read_at(1u);
+  HostMemoryProbe probe(host);
+  probe.run();
+  CHECK(!probe.result().passed());
+  CHECK_STATUS(probe.result().reason(), Status::not_found);
+  CHECK_EQ(host.live_gpu_memory(), 0u);
+  CHECK_EQ(host.live_placements(), 0u); }
+
 TEST(host_memory_probe_run, answers_once)
 { MockHost host;
   host.set_hostmem_size(HostMemoryProbe::probe_bytes);

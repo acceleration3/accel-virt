@@ -434,6 +434,13 @@ can leave the guest with no display.
   `VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP` (0x1A8) - which is expected until
   something renders into the primary, since dxgkrnl takes that dump when a
   source shows nothing. Two of feature 038's five consecutive runs left one.
+- **The long run** is `--stress-minutes N`: the suite's `stress` scenario
+  submits one fence at a time and waits for each for N minutes, waiting out a
+  vertical blank between batches so the blank's interrupt is enabled and
+  disabled hundreds of times over the run (dxgkrnl turns that source off when
+  the last waiter leaves). The runner reads back the fences completed and the
+  worst wait. It is not part of an ordinary run: a gate run asks for no stress
+  and gets none.
 - **The gate**: `tools/gate.sh` runs it when `AV_GUEST_IMAGE` names a prepared
   image, and says it skipped the guest otherwise. From feature 037 on a skipped
   guest is not a pass: no feature merges until the suite has run live, because

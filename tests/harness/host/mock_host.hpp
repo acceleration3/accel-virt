@@ -91,6 +91,13 @@ public:
     /* The Nth read of the hostmem region from now answers bytes nothing wrote:
      * a region that maps something other than the block placed in it. */
     void corrupt_hostmem_read_at(std::uint32_t nth);
+    /* The Nth export from now answers a handle with no mapping behind it, and
+     * the Nth read of the region refuses outright: a host that says yes and
+     * means no. */
+    void empty_export_at(std::uint32_t nth);
+    void refuse_hostmem_read_at(std::uint32_t nth);
+    /* The Nth read through an import from now is refused outright. */
+    void refuse_import_read_at(std::uint32_t nth);
     /* The scripted clock moves this many nanoseconds per reading, so a test
      * decides how long the work it measures took. */
     void advance_clock_per_read(std::uint64_t nanoseconds);
@@ -256,6 +263,9 @@ private:
     bool            fence_connected_;
     std::uint32_t   fail_fence_connect_;
     std::uint32_t   raised_[max_doorbells];
+    std::uint32_t   refuse_import_read_;
+    std::uint32_t   empty_export_;
+    std::uint32_t   refuse_hostmem_read_;
     std::uint64_t   clock_;
     std::uint64_t   clock_step_;
     std::uint32_t   corrupt_hostmem_read_;

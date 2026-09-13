@@ -148,6 +148,31 @@ TEST(guest_import_probe_run, a_gpu_that_reads_back_something_else_is_malformed)
   CHECK_EQ(host.live_imports(), 0u);
   CHECK_EQ(host.live_guest_mappings(), 0u); }
 
+/* Constitution V: a host that says yes and means no. A mapping shorter than the
+ * window is not the window, and a read the host refuses outright is not a
+ * comparison. */
+TEST(guest_import_probe_run, a_window_the_host_maps_only_part_of_is_not_found)
+{ MockHost host;
+  host.add_guest_ram(window, GuestImportProbe::probe_bytes);
+  host.split_guest_memory_at(window + 0x1000u);
+  GuestImportProbe probe(host);
+  probe.run(window);
+  CHECK(!probe.result().passed());
+  CHECK_STATUS(probe.result().reason(), Status::not_found);
+  CHECK_EQ(host.live_guest_mappings(), 0u);
+  CHECK_EQ(host.live_imports(), 0u); }
+
+TEST(guest_import_probe_run, a_read_the_host_refuses_is_not_a_pass)
+{ MockHost host;
+  with_ram(host);
+  host.refuse_import_read_at(1u);
+  GuestImportProbe probe(host);
+  probe.run(window);
+  CHECK(!probe.result().passed());
+  CHECK_STATUS(probe.result().reason(), Status::not_supported);
+  CHECK_EQ(host.live_imports(), 0u);
+  CHECK_EQ(host.live_guest_mappings(), 0u); }
+
 TEST(guest_import_probe_run, answers_once)
 { MockHost host;
   with_ram(host);

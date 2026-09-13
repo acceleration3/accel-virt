@@ -352,13 +352,22 @@ subclassing `VirtIOGPU`; M1 works unchanged on it. Add capset, `CTX_CREATE`,
 doorbell BAR with ioeventfd, one worker thread, fence page, irqfd MSI-X.
 **Done when** a ping command posted from a test program round-trips through
 ring, doorbell, worker, fence and ISR, with latency measured.
-Spikes to run here, because each can reshape M3:
-  - Host-visible mapping: can this host's NVIDIA driver export Vulkan memory
-    that `mmap`s into a KVM memslot through `hostmem`? If not, segment 2 falls
-    back to guest-backed memory plus copies.
-  - Guest-backed import: does the memfd remap window import with
-    `VK_EXT_external_memory_host` on this driver?
-  - irqfd from a worker thread with vector masking under a stress test.
+Spikes to run here, because each can reshape M3. **Feature 039 ran them**; the
+per-GPU answers are in [`04-memory.md`](04-memory.md), and the short version is:
+  - Host-visible mapping: **yes on both GPUs here** - but on NVIDIA only through
+    the dma-buf export. Its opaque-fd export gives a descriptor `mmap` refuses
+    with `EINVAL`, so a device that tries one handle type only would conclude
+    the path does not exist. Segment 2 does not have to fall back on this host.
+  - Guest-backed import: **yes on both**, over guest RAM that is
+    `memory-backend-memfd,share=on`; the device refuses a window it can only
+    reach through a bounce buffer.
+  - irqfd under masking: the device counts what it injected
+    (`InterruptStressProbe`) and the guest suite's `--stress-minutes` run awaits
+    fences while the vertical blank's interrupt is enabled and disabled around
+    them.
+
+Each answer is a capset bit the guest only sees where the probe passed, and the
+device decides it at realize on the GPU that instance is bound to.
 
 **M3 — memory and execution in the KMD.** Two segments, blob creation and
 mapping, GPU-VA-as-handle, `BuildPagingBuffer` for `TRANSFER`,

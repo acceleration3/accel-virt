@@ -33,11 +33,17 @@ void HostMemoryProbe::run()
     void   *pointer = nullptr;
     int32_t host_error = 0;
     void *const exported = host_.export_gpu_memory(probe_bytes, pointer, host_error);
-    if (exported == nullptr || pointer == nullptr) {
+    if (exported == nullptr) {
         static_cast<void>(result_.record_failure(Status::not_supported, host_error));
         return;
     }
+    /* Armed before anything else can fail: a handle is the host's to take back
+     * even when what came with it is useless. */
     ScopeExit release([&] { host_.release_gpu_memory(exported); });
+    if (pointer == nullptr) {
+        static_cast<void>(result_.record_failure(Status::not_supported, host_error));
+        return;
+    }
     const Status placed = host_.place_in_hostmem(exported, 0u);
     if (placed != Status::ok) {
         static_cast<void>(result_.record_failure(placed, 0));

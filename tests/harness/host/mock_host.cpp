@@ -35,7 +35,7 @@ MockHost::MockHost()
       fail_allocation_(0u), fail_host_memory_(0u), fail_placement_(0u), empty_mapping_(0u), allocations_{}, regions_{}, region_count_(0u),
       splits_{}, split_count_(0u),
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
-      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, clock_(0u), clock_step_(0u), corrupt_hostmem_read_(0u), fail_bind_gpu_(0u), bound_gpu_(no_gpu), refuse_export_(0u), export_error_(0),
+      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, refuse_import_read_(0u), empty_export_(0u), refuse_hostmem_read_(0u), clock_(0u), clock_step_(0u), corrupt_hostmem_read_(0u), fail_bind_gpu_(0u), bound_gpu_(no_gpu), refuse_export_(0u), export_error_(0),
       refuse_import_(0u), import_error_(0), corrupt_import_read_(0u), imports_{}
 {
     pthread_mutex_init(&state_, nullptr);
@@ -254,6 +254,7 @@ Status MockHost::read_hostmem(std::uint64_t offset, std::uint8_t *buffer, std::u
 {
     require_main_loop("MockHost::read_hostmem");
     StateLock lock(state_);
+    if (fail_now(refuse_hostmem_read_)) return Status::not_found;
     for (const HostBlock &block : host_blocks_) {
         if (!block.live || !block.placed || offset < block.offset || offset + size > block.offset + block.size)
             continue;
@@ -285,10 +286,11 @@ void *MockHost::export_gpu_memory(std::uint64_t size, void *&pointer, std::int32
         host_error = export_error_;
         return nullptr;
     }
+    const bool empty = fail_now(empty_export_);
     for (HostBlock &block : host_blocks_) {
         if (block.live) continue;
         block = HostBlock{std::calloc(1u, size), size, true, false, 0u, true};
-        pointer = block.pointer;
+        pointer = empty ? nullptr : block.pointer;
         return &block;
     }
     return nullptr;
@@ -346,6 +348,7 @@ Status MockHost::read_imported_memory(void *memory, std::uint64_t offset, std::u
     Status status = Status::not_found;
     {
         StateLock lock(state_);
+        if (fail_now(refuse_import_read_)) return Status::not_supported;
         for (const Import &import : imports_) {
             if (!import.live || &import != memory) continue;
             if (offset + size > import.size) return Status::invalid_parameter;
@@ -763,6 +766,9 @@ void MockHost::fail_placement_at(std::uint32_t nth) { StateLock lock(state_); fa
 void MockHost::empty_mapping_at(std::uint32_t nth) { StateLock lock(state_); empty_mapping_ = nth; }
 void MockHost::fail_bind_gpu_at(std::uint32_t nth) { StateLock lock(state_); fail_bind_gpu_ = nth; }
 void MockHost::corrupt_hostmem_read_at(std::uint32_t nth) { StateLock lock(state_); corrupt_hostmem_read_ = nth; }
+void MockHost::empty_export_at(std::uint32_t nth) { StateLock lock(state_); empty_export_ = nth; }
+void MockHost::refuse_import_read_at(std::uint32_t nth) { StateLock lock(state_); refuse_import_read_ = nth; }
+void MockHost::refuse_hostmem_read_at(std::uint32_t nth) { StateLock lock(state_); refuse_hostmem_read_ = nth; }
 void MockHost::advance_clock_per_read(std::uint64_t nanoseconds) { StateLock lock(state_); clock_step_ = nanoseconds; }
 void MockHost::refuse_export_at(std::uint32_t nth, std::int32_t host_error)
 { StateLock lock(state_); refuse_export_ = nth; export_error_ = host_error; }
