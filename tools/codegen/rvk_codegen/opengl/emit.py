@@ -352,7 +352,7 @@ def _lease_for_write(name: str, out: list[str], guard: str) -> None:
     out.append(f"    bool {name}_via_blob = false;")
     out.append(f"    if ({guard} &&")
     out.append(f"        {name}_want >= ::av::glproto::kPixelBlobFloor) {{")
-    out.append("        auto& rvk_blobs = ::av::ClientBlobArena::for_transport(rvk_t);")
+    out.append("        auto& rvk_blobs = rvk_t.blobs();")
     out.append("        if (rvk_blobs.ready()) {")
     out.append(f"            {name}_lease = rvk_blobs.take({name}_want);")
     out.append(f"            if ({name}_lease.ok()) {{")
@@ -368,11 +368,17 @@ def _write_leases(cmd: Command) -> list[str]:
             if p.role is Role.PIXELS_IN or p.role is Role.ARRAY_IN]
 
 
+def _read_leases(cmd: Command) -> list[str]:
+    """Read-back (PIXELS_OUT) leases: given back in the reply decode on success,
+    but a send that never happened must give them back too, or they leak."""
+    return [p.name for p in cmd.params if p.role is Role.PIXELS_OUT]
+
+
 def _hand_back_leases(cmd: Command, out: list[str], sent: bool,
                       indent: str = "    ") -> None:
     for name in _write_leases(cmd):
         out.append(f"{indent}if ({name}_via_blob) {{")
-        out.append(f"{indent}    ::av::ClientBlobArena::for_transport(rvk_t)")
+        out.append(f"{indent}    rvk_t.blobs()")
         if sent:
             out.append(f"{indent}        .retire_after_last({name}_lease);")
         else:
@@ -441,7 +447,7 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
         if not cmd.is_async:
             out.append(f"    if (!{name}_is_offset && {name} != nullptr &&")
             out.append(f"        {name}_want >= ::av::glproto::kPixelBlobFloor) {{")
-            out.append("        auto& rvk_blobs = ::av::ClientBlobArena::for_transport(rvk_t);")
+            out.append("        auto& rvk_blobs = rvk_t.blobs();")
             out.append("        if (rvk_blobs.ready()) {")
             out.append(f"            {name}_lease = rvk_blobs.take({name}_want);")
             out.append(f"            {name}_via_blob = {name}_lease.ok();")
@@ -591,7 +597,7 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
             # back.
             out.append(f"    if ({p.name}_via_blob) {{")
             out.append(f"        std::memcpy({p.name}, {p.name}_lease.data, {p.name}_want);")
-            out.append("        ::av::ClientBlobArena::for_transport(rvk_t)")
+            out.append("        rvk_t.blobs()")
             out.append(f"            .give_back({p.name}_lease);")
             out.append("    }")
             # A read into a pixel buffer lands on the host and stays
@@ -642,7 +648,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
             # `answered_by_guest` in gl_profile.toml.
             continue
         c.append(f"{_client_signature(cmd)} {{")
-        c.append("    ::av::WireWriter rvk_b;")
+        c.append("    ::av::WireWriter rvk_b = rvk_t.request_writer();")
         if cmd.mints_handle:
             # The handle the guest is about to answer with, written
             # first so the server binds it before it decodes anything
@@ -670,7 +676,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         c.append(f"        {'return;' if _ret_kind(cmd) == 'void' else fail_for(cmd)}")
         c.append("    }")
         if cmd.is_async:
-            c.append(f"    (void)rvk_t.send_async(kCmd_{cmd.name}, rvk_b.bytes());")
+            c.append(f"    (void)rvk_t.send_async(kCmd_{cmd.name}, rvk_b);")
             _hand_back_leases(cmd, c, sent=True)
             if cmd.mints_handle:
                 c.append("    return rvk_token;")
@@ -678,14 +684,15 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         else:
             kind = _ret_kind(cmd)
             fail = fail_for(cmd)
-            c.append("    ::av::WireWriter rvk_reply;")
-            c.append(f"    const bool rvk_sent = rvk_t.send_sync(kCmd_{cmd.name}, rvk_b.bytes(), &rvk_reply) ==")
-            c.append("        ::av::TransportResult::Ok;")
+            c.append("    ::av::WireReader rvk_r{nullptr, 0u};")
+            c.append(f"    const bool rvk_sent = rvk_t.send_sync(kCmd_{cmd.name}, rvk_b, rvk_r) ==")
+            c.append("        ::av::TransportResult::ok;")
             _hand_back_leases(cmd, c, sent=False)
             c.append("    if (!rvk_sent) {")
+            for rname in _read_leases(cmd):
+                c.append(f"        if ({rname}_via_blob) rvk_t.blobs().give_back({rname}_lease);")
             c.append(f"        {fail}")
             c.append("    }")
-            c.append("    ::av::WireReader rvk_r{rvk_reply.bytes()};")
             _decode_reply(cmd, c)
             c.append("}")
         c.append("")
