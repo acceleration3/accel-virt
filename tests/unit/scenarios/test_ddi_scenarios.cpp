@@ -1706,7 +1706,7 @@ TEST(ddi_scenario, a_device_with_host_memory_offers_a_second_segment_and_maps_it
   CHECK_EQ(ask(adapter, &query), 0);
   av::DxgkSegmentDescriptor4Record host_visible = {};
   std::memcpy(&host_visible, descriptors + stride, sizeof host_visible);
-  CHECK_EQ(host_visible.Flags, 0x14u);   /* CpuVisible | CacheCoherent, no Aperture */
+  CHECK_EQ(host_visible.Flags, 0x4u);   /* CpuVisible alone: a BAR is not coherent RAM */
   CHECK_EQ(host_visible.Size, host_region_bytes);
   CHECK(host_visible.CpuTranslatedAddress == static_cast<std::int64_t>(host_region_address));
 

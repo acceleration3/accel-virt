@@ -57,10 +57,13 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* DXGK_SEGMENTFLAGS: CpuVisible | CacheCoherent. Never Aperture - the
+    /* DXGK_SEGMENTFLAGS: CpuVisible, and nothing else. Never Aperture - the
      * segment has storage of its own, and VidMm asks for guest pages to be
-     * mapped into an aperture. */
-    static constexpr uint32_t flags = 0x14u;
+     * mapped into an aperture. Never CacheCoherent either: this is a BAR, which
+     * is MMIO and not coherent RAM, and VidMm holds a cached allocation to
+     * supporting only cache-coherent segments
+     * (VerifySupportedSegmentSetAndAdjustFlags, dxgmms2.sys @1400fb430). */
+    static constexpr uint32_t flags = 0x4u;
     static constexpr uint8_t  host_visible_region = 1u;
 
     friend struct HostVisibleSegmentProbe;

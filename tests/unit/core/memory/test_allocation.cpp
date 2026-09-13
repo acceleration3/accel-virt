@@ -251,37 +251,6 @@ TEST(allocation_invariants, aperture_pages_that_lost_theirs_are_detected)
   AllocationProbe(allocation).break_aperture();
   CHECK(!allocation.invariants_hold()); }
 
-/* Feature 041, US1: memory a process asked to map is the host's, where this
- * adapter has any. That segment is the only one it supports and there is no
- * eviction segment, so VidMm has one place to put it and nowhere to move it
- * to - which is what makes the process's view the host's memory rather than a
- * copy of it. */
-TEST(allocation_report_to, a_cpu_visible_allocation_is_asked_for_in_host_memory)
-{ MockPlatform platform;
-  Segments segments(platform);
-  segments.offer_host_visible(platform, 64u << 20u);
-  const AllocationDescriptor client(AllocationKind::client, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
-  Allocation allocation(platform, segments.segments(), client, 0x1000u);
-  DxgkAllocationInfoRecord info = {};
-  allocation.report_to(info);
-  CHECK_EQ(info.PreferredSegment, av::HostVisibleSegment::segment_id);
-  CHECK_EQ(info.SupportedReadSegmentSet, 1u << (av::HostVisibleSegment::segment_id - 1u));
-  CHECK_EQ(info.SupportedWriteSegmentSet, 1u << (av::HostVisibleSegment::segment_id - 1u));
-  CHECK_EQ(info.EvictionSegmentSet, 0u);
-  CHECK_EQ(info.Flags, 1u); }
-
-/* Without a region the same allocation is guest-backed, and says so: the
- * fallback is what a caller can see, not something the driver hides (FR-007). */
-TEST(allocation_report_to, without_a_region_the_same_allocation_is_guest_backed)
-{ MockPlatform platform;
-  Segments segments(platform);
-  const AllocationDescriptor client(AllocationKind::client, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
-  Allocation allocation(platform, segments.segments(), client, 0x1000u);
-  DxgkAllocationInfoRecord info = {};
-  allocation.report_to(info);
-  CHECK_EQ(info.PreferredSegment, 2u);   /* VidMm's own system memory */
-  CHECK_EQ(info.Flags, 1u); }
-
 /* A primary is read by the display, which has no BAR to read it through: it
  * stays in the aperture whatever the device offers. */
 TEST(allocation_report_to, a_primary_stays_in_the_aperture_where_a_region_exists)
@@ -295,20 +264,6 @@ TEST(allocation_report_to, a_primary_stays_in_the_aperture_where_a_region_exists
   scanned_out.report_to(info);
   CHECK_EQ(info.PreferredSegment, av::ApertureSegment::segment_id);
   CHECK_EQ(info.Flags, 0x8001u);   /* CpuVisible | AccessedPhysically */ }
-
-/* An allocation nobody asked to map is not put in host memory: the region is
- * finite and a process that never maps it has no use for it. */
-TEST(allocation_report_to, a_gpu_only_allocation_stays_out_of_host_memory)
-{ MockPlatform platform;
-  Segments segments(platform);
-  segments.offer_host_visible(platform, 64u << 20u);
-  const AllocationDescriptor texture(AllocationKind::gdi, false, SurfaceLayout(1u, 1u, 21u, 4u), 4u,
-                                     ScanoutTarget());
-  Allocation allocation(platform, segments.segments(), texture, 0x1000u);
-  DxgkAllocationInfoRecord info = {};
-  allocation.report_to(info);
-  CHECK_EQ(info.PreferredSegment, 3u);   /* VidMm's own, after the two this adapter reports */
-  CHECK_EQ(info.Flags, 0u); }
 
 /* Feature 041, US2: the pages an rvk context runs on belong to the device that
  * made them. A second device asking for the same ring is asking for another
@@ -367,37 +322,30 @@ TEST(allocation_invariants, an_open_with_no_holder_is_detected)
   AllocationProbe(allocation).set_opens(1u);
   CHECK_STATUS(allocation.close(), Status::ok); }
 
-/* Windows marks its own standard allocations CPU-visible - a GDI texture, a
- * staging surface - and the desktop is composed from those. They must stay
- * where they were: sent to a segment with nowhere to be evicted to and no way
- * to move bytes out of, composition stops and the primary never gets an
- * address. A live guest showed exactly that (feature 041). */
-TEST(allocation_report_to, windows_own_cpu_visible_surfaces_stay_out_of_host_memory)
+/* Feature 041: the CPU-visible segment is reported, and nothing is asked for in
+ * it yet. Three live runs said VidMm refuses every allocation whose
+ * PreferredSegment is that segment, with STATUS_INVALID_PARAMETER at
+ * CreateAllocation - with and without a system-memory fallback in the supported
+ * sets, with and without an eviction segment, and with and without CacheCoherent
+ * on the segment - while reporting the segment itself is fine and the desktop
+ * runs from the aperture. What VidMm wants of an allocation in a CPU-visible
+ * segment that has storage is feature 043's to find out, with a client that
+ * asks for the memory. */
+TEST(allocation_report_to, nothing_is_asked_for_in_host_memory_yet)
 { MockPlatform platform;
   Segments segments(platform);
   segments.offer_host_visible(platform, 64u << 20u);
-  const AllocationKind windows_own[] = {AllocationKind::shadow, AllocationKind::staging, AllocationKind::gdi};
-  for (const AllocationKind kind : windows_own) {
-      const AllocationDescriptor surface(kind, true, SurfaceLayout(8u, 8u, 21u, 32u), 256u, ScanoutTarget());
-      Allocation allocation(platform, segments.segments(), surface, 0x1000u);
-      DxgkAllocationInfoRecord info = {};
-      allocation.report_to(info);
-      CHECK_EQ(info.PreferredSegment, 3u);   /* VidMm's own, after the two this adapter reports */
-      CHECK_EQ(info.Flags, 1u);              /* still CPU-visible, still guest-backed */
-  } }
-
-/* The transport's own pages go where a process can map them. */
-TEST(allocation_report_to, a_ring_and_a_fence_page_are_asked_for_in_host_memory)
-{ MockPlatform platform;
-  Segments segments(platform);
-  segments.offer_host_visible(platform, 64u << 20u);
-  const AllocationDescriptor transport[] = {
-      AllocationDescriptor(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget()),
-      AllocationDescriptor(AllocationKind::fence_page, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
-  };
-  for (const AllocationDescriptor &descriptor : transport) {
+  const AllocationDescriptor client(AllocationKind::client, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
+  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
+  const AllocationDescriptor asked[] = {client, ring};
+  for (const AllocationDescriptor &descriptor : asked) {
       Allocation allocation(platform, segments.segments(), descriptor, descriptor.size());
       DxgkAllocationInfoRecord info = {};
       allocation.report_to(info);
-      CHECK_EQ(info.PreferredSegment, av::HostVisibleSegment::segment_id);
+      /* VidMm's own system memory, which is the third segment once this adapter
+       * reports two. */
+      CHECK_EQ(info.PreferredSegment, 3u);
+      CHECK_EQ(info.SupportedReadSegmentSet, 0x4u);
+      CHECK_EQ(info.EvictionSegmentSet, 0u);
+      CHECK_EQ(info.Flags, 1u);   /* still CPU-visible, and still guest-backed */
   } }

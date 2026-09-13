@@ -34,25 +34,17 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * address with pages behind it. */
     const bool scanned_out = descriptor_.kind() == AllocationKind::shared_primary;
 
-    /* Memory a process asked *us* for is the host's, where this adapter has
-     * any: that segment is the only one it supports, so VidMm has one place to
-     * put it and - with no eviction segment - nowhere to move it to. That is
-     * what makes the mapping a process gets the host's memory and not a copy of
-     * it (feature 041, FR-001).
-     *
-     * Only our own kinds go there. Windows marks its own standard allocations
-     * CPU-visible too - a GDI texture, a staging surface - and those are what
-     * the desktop is composed from: sent to a segment with nowhere to be
-     * evicted to and no way to move bytes out of, composition stops and the
-     * primary never gets an address. A live guest showed exactly that, with the
-     * source hidden and no SetVidPnSourceAddress at all. */
-    const AllocationKind kind = descriptor_.kind();
-    const bool ours = kind == AllocationKind::client || kind == AllocationKind::context_ring ||
-                      kind == AllocationKind::fence_page;
-    const bool host_visible = ours && descriptor_.cpu_visible() && segments_.offers_host_visible();
-    uint32_t segment = segments_.system_memory_segment_id();
-    if (scanned_out) segment = ApertureSegment::segment_id;
-    if (host_visible) segment = HostVisibleSegment::segment_id;
+    /* Nothing is asked for in host memory yet, and the segment is reported all
+     * the same. Three live experiments say VidMm refuses every allocation whose
+     * PreferredSegment is the CPU-visible segment, with STATUS_INVALID_PARAMETER
+     * at CreateAllocation: with and without a system-memory fallback in the
+     * supported sets, with and without an eviction segment, and with and
+     * without CacheCoherent on the segment. The same adapter reports the
+     * segment happily and runs its desktop out of the aperture. What VidMm
+     * wants of an allocation in a CPU-visible segment that has storage is not
+     * yet known, and the feature that can find out is the one with a user-mode
+     * client asking for such memory (043). */
+    const uint32_t segment = scanned_out ? ApertureSegment::segment_id : segments_.system_memory_segment_id();
     info.PreferredSegment = segment;
     info.SupportedReadSegmentSet = 1u << (segment - 1u);
     info.SupportedWriteSegmentSet = 1u << (segment - 1u);

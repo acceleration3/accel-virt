@@ -151,7 +151,7 @@ TEST(host_visible_segment, describes_a_cpu_visible_segment_at_the_bar)
   segment.offer(capset(CapsetInfo::feature_host_visible_memory));
   DxgkSegmentDescriptor4Record descriptor = {};
   segment.describe(descriptor);
-  CHECK_EQ(descriptor.Flags, 0x14u);            /* CpuVisible | CacheCoherent, no Aperture */
+  CHECK_EQ(descriptor.Flags, 0x4u);             /* CpuVisible alone: a BAR is not coherent RAM */
   CHECK(descriptor.BaseAddress == 0);
   CHECK_EQ(descriptor.Size, region_bytes);
   CHECK_EQ(descriptor.CommitLimit, region_bytes);

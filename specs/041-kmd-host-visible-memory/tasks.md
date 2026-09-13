@@ -115,7 +115,50 @@ description: "Tasks: KMD host-visible memory a process can map"
 
 - [X] T024 The in-guest suite gains a host-visible scenario in `src/guest/suite/`: create a CPU-visible allocation, write a pattern through the view `D3DKMTLock2` returns, read it back, and report what it wrote; `GdiKmt` gains the lock and unlock calls it needs, with `MockKmt` scripting every failure
 - [X] T025 The runner gains `--hostmem N` (default 256 MiB, `0` for a device with no region) in `tools/guest/run_guest_suite.py`, a `segments` step that reads the driver's own log line for what it reported, and the read-back: after the guest writes, the host reads that BAR range through QMP and compares; with its fake-guest tests
-- [ ] T026 A live run with the region and one without it (SC-003); record what each showed here
+- [~] T026 A live run with the region and one without it (SC-003); record what each showed here
+
+  **Without a region** (`--hostmem 0`): clean. 36 steps passed, the display,
+  modes, power and vertical blank all as before, and the host-visible scenario
+  ran against a guest-backed allocation - which is the FR-007 fallback working.
+
+  **With a 256 MiB region**: the device side and the driver side both work, and
+  VidMm will not let an allocation near the segment.
+
+  - `segments ok: 2 reported, the second 256 MiB of host memory at
+    0x7000000000` - the capset bit, the PCI capability walk, the segment
+    descriptor and the region's blob (created and mapped on the real device at
+    StartDevice) are all right.
+  - Every allocation whose `PreferredSegment` was that segment was refused with
+    **`STATUS_INVALID_PARAMETER` at `CreateAllocation`**, by dxgkrnl and not by
+    this driver, which had answered success: `allocation.create`,
+    `mapping.allocation`, `submission.allocation` and `host_visible.allocation`,
+    all `code=0xC000000D`.
+
+  Three experiments, each a live run, each refused the same way:
+
+  1. the segment as its only supported one, with no eviction segment;
+  2. host memory preferred with VidMm's system memory in the supported sets and
+     as the eviction segment;
+  3. the same again with `CacheCoherent` cleared from the segment's flags, on
+     the theory that a BAR is MMIO and `VerifySupportedSegmentSetAndAdjustFlags`
+     (dxgmms2.sys @1400fb430) holds a cached allocation to cache-coherent
+     segments.
+
+  A fourth thing was learned by breaking it: routing **Windows' own**
+  CPU-visible standard allocations there (a GDI texture, a staging surface -
+  `standard_allocation.cpp:76` sets `cpu_visible` on them) stops desktop
+  composition dead, with the source hidden and no `SetVidPnSourceAddress` at
+  all. Host memory can only ever be for kinds this driver's own descriptor
+  names.
+
+  **So the preference is parked and everything else lands.** The segment is
+  reported, the region is mapped, the allocation kinds exist, the guest suite
+  locks and writes a pattern, and the runner reads the BAR back - all of it
+  ready for the one question left: what VidMm wants of an allocation in a
+  CPU-visible segment that has storage. Feature 043 is where that is answered,
+  because it is the first feature with a user-mode client that asks for such
+  memory and can iterate against a real caller. **SC-003 is not met by this
+  feature**, and says so here rather than being quietly dropped.
 - [X] T027 `docs/protocol.md` documents capset feature bits 1 and 2 beside bit 0, and `docs/kb/04-memory.md` gains the segment shape this feature reports and why the aperture variant was refused
 - [ ] T028 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
 
