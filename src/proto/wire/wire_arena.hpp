@@ -40,16 +40,25 @@ public:
     void   reset();
     size_t used() const;
     size_t capacity() const;
+    /* How many allocations this block was too small for, since it was made.
+     * A decode that fails because the host would not give it room and one that
+     * fails because the frame was malformed both answer false, and the guest is
+     * told the same thing either way - telling it where the edge is tells an
+     * attacker where the edge is - but the host can tell them apart (042). */
+    size_t refusals() const;
 
     bool invariants_hold() const;
 
 private:
     /* `count * size` bytes at the next multiple of `alignment`, or null. */
     void *claim(size_t count, size_t size, size_t alignment);
+    /* Null, counted. */
+    void *refuse();
 
     uint8_t *block_;
     size_t   capacity_;
     size_t   used_;
+    size_t   refusals_;
 };
 
 }  // namespace av

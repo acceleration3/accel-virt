@@ -125,3 +125,23 @@ TEST(wire_arena, padding_that_runs_past_the_block_allocates_nothing)
   CHECK(arena.allocate<std::uint32_t>() == nullptr);
   CHECK_EQ(arena.used(), 5u);
   CHECK(arena.invariants_hold()); }
+
+/* A host has to tell "the frame was malformed" from "this block was too small
+ * for it": the guest is told the same thing either way, but an operator who
+ * cannot tell them apart cannot size the block. */
+TEST(wire_arena, counts_what_it_would_not_give_room_for)
+{ std::uint8_t block[16];
+  WireArena arena(block, sizeof block);
+  CHECK_EQ(arena.refusals(), 0u);
+  CHECK(arena.allocate<std::uint8_t>(64u) == nullptr);
+  CHECK_EQ(arena.refusals(), 1u);
+  CHECK(arena.allocate<std::uint8_t>(0u) == nullptr);
+  CHECK(arena.allocate<std::uint64_t>(~std::size_t{0}) == nullptr);
+  CHECK_EQ(arena.refusals(), 3u);
+  /* What it did give room for is not a refusal. */
+  CHECK(arena.allocate<std::uint8_t>(16u) != nullptr);
+  CHECK_EQ(arena.refusals(), 3u);
+  /* And a reset starts the next decode, not the count. */
+  arena.reset();
+  CHECK_EQ(arena.refusals(), 3u);
+  CHECK(arena.invariants_hold()); }

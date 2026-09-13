@@ -29,8 +29,11 @@ each: the `DxgkDdi*` entry points in `src/core/ddi/`, which forward to the
 adapter behind the context pointer (or, for AddDevice and Unload, the root
 registered in `MiniportBinding`), and the `extern "C"` entry points that
 libFuzzer and QEMU call. No logic lives in either. `MiniportBinding`'s pointer,
-the kernel shim's static storage for the root and the device module's
-`DeviceModule` are the only process-lifetime state (constitution III).
+the kernel shim's static storage for the root, the device module's
+`DeviceModule` and the executor library's root behind `rvk_executor_ops()` are
+the only process-lifetime state (constitution III). Each is a C entry point with
+nowhere to put a `this`, and each is one `ObjectStorage` in the single
+translation unit defining those entry points.
 
 Genuinely stateless operators and ADL hooks stay free functions. Nothing else
 does.

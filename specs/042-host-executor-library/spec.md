@@ -208,11 +208,15 @@ executor and this project's library alike.
 
 - **SC-001**: The conformance suite passes for the echo executor and for this
   project's executor library, under ASan and UBSan.
-- **SC-002**: The qemu configuration runs a Vulkan triangle, an OpenGL clear and
-  an OpenCL vector add through the device with results read back by the
-  virtio-gpu suite.
-- **SC-003**: A byte-flip sweep of a valid stream produces faults, never a crash,
-  for 60 seconds of fuzzing per sub-API.
+- **SC-002**: A Vulkan triangle, an OpenGL clear and an OpenCL vector add run
+  through the executor and their results are read back from the reply. The
+  conformance suite drives them: it builds the frames with the generated
+  serializers and hands them to the ABI. The same three driven from a real guest
+  through the transport and the ICDs are feature 044, which is what that feature
+  is for.
+- **SC-003**: A byte-flip sweep of a valid stream produces faults, never a
+  crash, for 60 seconds of fuzzing per sub-API - one fuzz target per sub-API,
+  since the gate's budget is per target.
 
 ## Assumptions
 
