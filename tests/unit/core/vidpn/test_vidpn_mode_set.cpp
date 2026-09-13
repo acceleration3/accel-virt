@@ -119,6 +119,24 @@ TEST(vidpn_mode_set, a_refused_acquire_create_or_assign_fails_without_a_leak)
   session.fake().refuse(VidPnCall::assign_target_mode_set, no_memory);
   CHECK_STATUS(assigned.assign(), Status::no_memory); }
 
+/* dxgkrnl writes the interface table before it decides the owner is one the
+ * VidPn does not have, so a failed acquire can leave a table behind. Keeping it
+ * makes the destructor release a mode set that was never acquired - a handle
+ * dxgkrnl never gave us. The fuzz target found this with a source beyond the
+ * ones the VidPn holds. */
+TEST(vidpn_mode_set_acquire, an_owner_the_vidpn_lacks_leaves_nothing_to_release)
+{ Session session;
+  { SourceModeSet source(session.platform(), session.vidpn(), 7u);
+    CHECK_STATUS(source.acquire(), Status::invalid_parameter);
+    CHECK_STATUS(source.create(), Status::invalid_parameter);
+    TargetModeSet target(session.platform(), session.vidpn(), 7u);
+    CHECK_STATUS(target.acquire(), Status::invalid_parameter);
+    CHECK_STATUS(target.create(), Status::invalid_parameter);
+    D3dkmdtVidPnSourceModeRecord mode = {};
+    CHECK_STATUS(source.copy_pinned(mode), Status::invalid_state);
+    CHECK_STATUS(source.add(source_mode(640u, 480u)), Status::invalid_state); }
+  CHECK(!av::TestRegistry::instance().take_current_failure()); }
+
 TEST(vidpn_mode_set, a_target_mode_set_works_the_same_way)
 { Session session;
   { av::VidPnModeSet<D3dkmdtVidPnTargetModeRecord, av::DxgkVidPnTargetModeSetInterfaceRecord> set(

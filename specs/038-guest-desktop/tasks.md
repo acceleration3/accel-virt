@@ -324,3 +324,25 @@ from, before it is fixed (FR-007).
   names. The fake guest serves file content one byte per character (latin-1) so
   a dump header can be scripted, and the runner's tests cover the TDR code and
   the unreadable dump.
+
+  **What the fuzz configuration found.** `tools/gate.sh` builds four
+  configurations, and only two had been run during this phase: the fuzz build
+  had not compiled since T021 gave `VidPnSupportCheck`, `CofuncModality` and
+  `MonitorModes` their `DisplaySources`, so `tests/fuzz/fuzz_vidpn.cpp` was
+  stale. Repaired, and given the values this phase made interesting - every
+  scaling and rotation from Uninitialized through Unpinned and NotSpecified, a
+  gamma ramp type, and an output count of its own - it failed on its own seed
+  corpus: *released a mode set that was not held*.
+
+  The defect is real and predates the feature. `VidPn::obtain` passed the
+  caller's mode set and interface pointers straight to
+  `pfnAcquireSourceModeSet` and friends, and dxgkrnl - like the fake that
+  mirrors it - writes the interface table *before* it decides the owner is not
+  one this VidPn has. A failed acquire therefore left
+  `VidPnModeSet::interface_` set and the object believed it held a set: its
+  destructor released a handle nothing had given it, and `copy_pinned` on it
+  dereferenced a null mode set. `obtain` now clears both out parameters, keeps
+  what it was given only when the call succeeded and left a set *and* a table,
+  and answers `malformed` otherwise;
+  `vidpn_mode_set_acquire an_owner_the_vidpn_lacks_leaves_nothing_to_release`
+  holds it, and fails both ways with the fix backed out.

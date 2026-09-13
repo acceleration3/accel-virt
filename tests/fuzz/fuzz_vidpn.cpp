@@ -34,6 +34,9 @@ constexpr std::uint32_t guard = 32u;
 constexpr std::uint8_t  poison = 0x5Au;
 constexpr std::int32_t  no_memory = static_cast<std::int32_t>(0xC0000017u);
 const std::int32_t      formats[] = {22, 21, 0};
+/* Uninitialized, Identity, a real transformation, Unpinned and NotSpecified. */
+const std::int32_t      transformations[] = {0, 1, 2, 5, 254, 255};
+const std::int32_t      gamma_ramps[] = {0, 1, 2, 4};
 
 void shape(av::WireReader &reader, av::FakeVidPn &vidpn)
 {
@@ -42,8 +45,9 @@ void shape(av::WireReader &reader, av::FakeVidPn &vidpn)
         const std::uint32_t source = reader.read_u8() % 3u;
         const std::uint32_t target = reader.read_u8() % 3u;
         av::D3dkmdtVidPnPresentPathRecord &path = vidpn.add_path(source, target);
-        path.ContentTransformationScaling = reader.read_u8() % 3;
-        path.ContentTransformationRotation = reader.read_u8() % 3;
+        path.ContentTransformationScaling = transformations[reader.read_u8() % 6u];
+        path.ContentTransformationRotation = transformations[reader.read_u8() % 6u];
+        path.GammaRampType = gamma_ramps[reader.read_u8() % 4u];
     }
     const std::uint32_t seeds = reader.read_u8() % (max_seeds + 1u);
     for (std::uint32_t index = 0u; index < seeds; index++) {
@@ -68,16 +72,17 @@ void drive(av::WireReader &reader)
     av::LogBudget         budget(fixture.platform());
     const av::DisplayModeList modes;
     av::DisplaySources    sources(fixture.platform());
+    static_cast<void>(sources.set_count(reader.read_u8() % 6u));
     shape(reader, fixture.vidpn());
 
     av::DxgkargIsSupportedVidPnRecord supported = {fixture.handle(), 0u, {}};
-    static_cast<void>(av::VidPnSupportCheck(fixture.platform(), fixture.dxgkrnl(), supported).decide());
+    static_cast<void>(av::VidPnSupportCheck(fixture.platform(), fixture.dxgkrnl(), sources, supported).decide());
 
     const std::int32_t  pivot = reader.read_u8() % 7;
     const std::uint32_t pivot_source = reader.read_u8() % 3u;
     const std::uint32_t pivot_target = reader.read_u8() % 3u;
     const av::DxgkargEnumVidPnCofuncModalityRecord cofunc = {fixture.handle(), pivot, pivot_source, pivot_target, 0u};
-    static_cast<void>(av::CofuncModality(fixture.platform(), fixture.dxgkrnl(), budget, modes, cofunc).enumerate());
+    static_cast<void>(av::CofuncModality(fixture.platform(), fixture.dxgkrnl(), budget, modes, sources, cofunc).enumerate());
 
     const std::uint32_t commit_source = reader.read_u8() % 2u;
     const std::uint32_t commit_flags = reader.read_u8() & 3u;
@@ -86,7 +91,7 @@ void drive(av::WireReader &reader)
 
     const av::DxgkargRecommendMonitorModesRecord monitor = {reader.read_u8() % 2u, 0u, fixture.vidpn().monitor_mode_set(),
                                                             &fixture.vidpn().monitor_interface()};
-    static_cast<void>(av::MonitorModes(fixture.platform(), modes, monitor).recommend());
+    static_cast<void>(av::MonitorModes(fixture.platform(), modes, sources, monitor).recommend());
 
     std::uint8_t edid[av::Edid::block_bytes + guard];
     std::memset(edid, poison, sizeof edid);

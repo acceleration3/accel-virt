@@ -126,9 +126,15 @@ template <typename ModeSetInterface>
 Status VidPn::obtain(int32_t (*call)(void *, uint32_t, void **, const ModeSetInterface **), uint32_t owner,
                      void *&mode_set, const ModeSetInterface *&mode_set_interface)
 {
+    mode_set = nullptr;
+    mode_set_interface = nullptr;
     const Status status = NtStatus(call(handle_, owner, &mode_set, &mode_set_interface)).status();
-    if (status == Status::ok && mode_set_interface == nullptr) return Status::malformed;
-    return status;
+    if (status == Status::ok && mode_set_interface != nullptr && mode_set != nullptr) return Status::ok;
+    /* A call that failed holds nothing, whatever it left in the out parameters:
+     * keeping its interface makes the caller release a set it never acquired. */
+    mode_set = nullptr;
+    mode_set_interface = nullptr;
+    return status == Status::ok ? Status::malformed : status;
 }
 
 Status VidPn::release_path(const D3dkmdtVidPnPresentPathRecord *path)
