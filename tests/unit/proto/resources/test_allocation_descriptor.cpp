@@ -77,6 +77,8 @@ TEST(allocation_descriptor_decode, round_trips_every_kind)
       AllocationDescriptor(AllocationKind::staging, true, SurfaceLayout(8u, 8u, 21u, 32u), 256u, ScanoutTarget()),
       AllocationDescriptor(AllocationKind::gdi, false, SurfaceLayout(8u, 8u, 21u, 32u), 256u, ScanoutTarget()),
       AllocationDescriptor(AllocationKind::client, false, SurfaceLayout(), 1u, ScanoutTarget()),
+      AllocationDescriptor(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget()),
+      AllocationDescriptor(AllocationKind::fence_page, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
   };
   for (const AllocationDescriptor &descriptor : descriptors) {
       std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
@@ -138,3 +140,39 @@ TEST(allocation_descriptor_decode, hostile_sweep_never_accepts_what_does_not_rou
   const HostileSweep sweep(rejects, encoded(primary, bytes), sizeof bytes);
   sweep.run();
   CHECK(sweep.cases_run() > 8u * AllocationDescriptor::encoded_size); }
+
+/* Feature 041, US2: the pages an rvk context runs on. A ring the device reads
+ * with a power-of-two mask, and the single page its fences are written to - the
+ * device's own decoder refuses anything else, so a descriptor asking for it is
+ * refused here first. */
+TEST(allocation_descriptor_decode, a_ring_is_a_power_of_two_of_pages_and_a_fence_page_is_one)
+{ struct Case { AllocationKind kind; std::uint64_t size; bool surface; Status expected; };
+  const Case cases[] = {
+      {AllocationKind::context_ring, 0x1000u, false, Status::ok},
+      {AllocationKind::context_ring, 0x4000u, false, Status::ok},
+      {AllocationKind::context_ring, 0x3000u, false, Status::malformed},   /* not a power of two */
+      {AllocationKind::context_ring, 0x800u, false, Status::malformed},    /* under a page */
+      {AllocationKind::context_ring, 0x4000u, true, Status::malformed},    /* not a surface */
+      {AllocationKind::fence_page, 0x1000u, false, Status::ok},
+      {AllocationKind::fence_page, 0x2000u, false, Status::malformed},     /* one page, exactly */
+      {AllocationKind::fence_page, 0x1000u, true, Status::malformed},
+  };
+  for (const Case &one : cases) {
+      const SurfaceLayout layout = one.surface ? SurfaceLayout(8u, 8u, 21u, 32u) : SurfaceLayout();
+      const AllocationDescriptor descriptor(one.kind, true, layout, one.size, ScanoutTarget());
+      std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
+      AllocationDescriptor decoded;
+      CHECK_STATUS(decoded.decode(encoded(descriptor, bytes), sizeof bytes), one.expected);
+  } }
+
+/* A kind outside the enumeration is refused, whatever else the descriptor
+ * says: a guest that invents one is asking for memory this driver has no rules
+ * for. */
+TEST(allocation_descriptor_decode, a_kind_past_the_last_one_is_refused)
+{ const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
+  std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
+  static_cast<void>(encoded(ring, bytes));
+  const std::uint16_t past = 19u;
+  std::memcpy(bytes + 4u, &past, sizeof past);
+  AllocationDescriptor decoded;
+  CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::malformed); }

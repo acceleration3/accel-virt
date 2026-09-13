@@ -13,6 +13,11 @@ enum class AllocationKind : uint16_t {
     staging = 3u,
     gdi = 4u,
     client = 16u,
+    /* What an rvk context runs on, and what feature 043's transport gives a
+     * process: a submission ring of a power-of-two page size, and the one page
+     * a context's fences are written to. */
+    context_ring = 17u,
+    fence_page = 18u,
 };
 
 }  // namespace av
