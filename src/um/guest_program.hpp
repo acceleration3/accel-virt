@@ -13,7 +13,9 @@ namespace av {
 
 class GuestProgram {
 public:
-    GuestProgram();
+    /* The whole suite, with the long fence run only when the command line asks
+     * for it: `rvktest.exe <seconds>` (feature 039, US3). */
+    explicit GuestProgram(uint32_t stress_seconds);
     GuestProgram(const GuestProgram &) = delete;
     GuestProgram &operator=(const GuestProgram &) = delete;
 

@@ -83,6 +83,9 @@ public:
     /* How far the clock moves at each vertical blank; the default is the
      * committed mode's 60 Hz. */
     void          set_blank_period(std::uint64_t ticks);
+    /* A wait for a context costs this many ticks, as waiting for real work
+     * does; 0 (the default) leaves the clock where it was. */
+    void          spend_on_wait(std::uint64_t ticks);
     /* Every `nth` blank takes `ticks` longer, as one the waiter missed does. */
     void          slip_every(std::uint32_t nth, std::uint64_t ticks);
 
@@ -134,6 +137,7 @@ private:
     std::uint64_t blank_period_;
     std::uint32_t slip_nth_;
     std::uint64_t slip_ticks_;
+    std::uint64_t wait_cost_;
 };
 
 }  // namespace av

@@ -4,7 +4,7 @@
 
 namespace av {
 
-GuestProgram::GuestProgram() : kmt_(), report_(), suite_(kmt_, report_) {}
+GuestProgram::GuestProgram(uint32_t stress_seconds) : kmt_(), report_(), suite_(kmt_, report_, stress_seconds) {}
 
 uint32_t GuestProgram::run()
 {

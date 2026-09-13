@@ -129,6 +129,25 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertFalse((self.work / "panic.txt").exists())
         self.assert_clean()
 
+    def test_the_stress_window_is_passed_to_the_guest_and_its_numbers_read_back(self):
+        """Feature 039 US3: a long run is asked for in minutes, spent in the
+        guest, and what it saw comes back on the report's own lines."""
+        stressed = ("ok adapter.find\nok stress.fences 74210\nok stress.worst_wait_us 812\n"
+                    "rvktest: 30 passed, 0 failed\n")
+        self.script(outputs={"check": ONE_MONITOR, "rvktest": stressed, "collect": COLLECTED})
+        result = self.run_suite("--stress-minutes", "0.5")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("C:\\rvk\\rvktest.exe 30", "\n".join(self.journal_lines()))
+        self.assertIn("guest: stress ok: 74210 fences awaited, worst wait 812 us", result.stdout)
+        self.assert_clean()
+
+    def test_a_run_that_asked_for_stress_and_got_none_fails(self):
+        self.script(outputs={"check": ONE_MONITOR, "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite("--stress-minutes", "0.5")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("stress failed: the suite ran no fence stress", result.stdout)
+        self.assert_clean()
+
     def test_a_stage_that_needs_no_reboot_is_not_rebooted_and_garbage_from_the_agent_is_skipped(self):
         self.script(stages={"sign": [0], "install": [0], "check": [0]}, garbage=True)
         result = self.run_suite()

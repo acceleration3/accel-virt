@@ -20,6 +20,24 @@ void GuestReport::check_refused(const char *scenario, const char *step, Status s
     line(scenario, step, status != Status::ok, status, code);
 }
 
+void GuestReport::measure(const char *scenario, const char *step, Status status, uint32_t measurement)
+{
+    const bool passed = status == Status::ok;
+    buffer_.append(passed ? "ok " : "FAIL ");
+    buffer_.append(scenario);
+    buffer_.append(".");
+    buffer_.append(step);
+    if (!passed) {
+        buffer_.append(" status=");
+        buffer_.append_decimal(static_cast<uint64_t>(status));
+    }
+    buffer_.append(" ");
+    buffer_.append_decimal(measurement);
+    buffer_.append("\n");
+    if (passed) passed_++;
+    else failed_++;
+}
+
 void GuestReport::line(const char *scenario, const char *step, bool passed, Status status, uint32_t code)
 {
     buffer_.append(passed ? "ok " : "FAIL ");

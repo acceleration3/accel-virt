@@ -126,7 +126,7 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 - [X] T025 [P] [US3] Write `tests/unit/device/probe/test_interrupt_stress_probe.cpp` first: an interrupt raised between `disabled()` and `enabled()` is a failure; a final fence never acknowledged is a failure; acknowledgements carry the worst delay into `measured()`; counts survive raises from several workers (IRQL/threading rules enforced by `MockHost`)
 - [X] T026 [US3] Implement `InterruptStressProbe` (object class) in `src/device/probe/interrupt_stress_probe.{hpp,cpp}`, with `raised()` on the worker side and the rest on the main loop
 - [X] T027 [US3] Report into it from the fence path in `src/device/fence/fence_interrupts.{hpp,cpp}`, tested where the existing fence tests are
-- [ ] T028 [US3] Add the guest side: a stress scenario in `src/guest/suite/` that raises fences as fast as the host sustains while the miniport disables and re-enables its interrupt, with `--stress-minutes` in `tools/guest/run_guest_suite.py` and its fake-guest test
+- [X] T028 [US3] Add the guest side: a stress scenario in `src/guest/suite/` that raises fences as fast as the host sustains while the miniport disables and re-enables its interrupt, with `--stress-minutes` in `tools/guest/run_guest_suite.py` and its fake-guest test
 - [ ] T029 [US3] Run it for ten minutes against the real guest and record the rate, the worst delay and the verdict in `docs/kb/05-scheduling.md`
 
 **Checkpoint**: US3 measured on the real guest and recorded. Commit.

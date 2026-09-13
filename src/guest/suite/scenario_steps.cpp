@@ -17,7 +17,7 @@ Status ScenarioSteps::check(const char *step, Status status)
 
 Status ScenarioSteps::check_measured(const char *step, Status status, uint32_t measurement)
 {
-    report_.check(scenario_, step, status, measurement);
+    report_.measure(scenario_, step, status, measurement);
     return status;
 }
 

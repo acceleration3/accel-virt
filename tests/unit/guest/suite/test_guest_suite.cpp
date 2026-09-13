@@ -11,6 +11,7 @@
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/guest_suite.hpp"
 #include "guest/suite/submission_scenario.hpp"
+#include "guest/suite/fence_stress_scenario.hpp"
 #include "guest/suite/vsync_scenario.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -20,6 +21,7 @@
 using av::AdapterScenario;
 using av::AdapterSearch;
 using av::AllocationScenario;
+using av::FenceStressScenario;
 using av::GpuMappingScenario;
 using av::GuestReport;
 using av::GuestSuite;
@@ -46,7 +48,7 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
   kmt.add_adapter(PciIdentity(0x1414u, 0x008Cu, 0u, 0u), 3100u);
   kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
   GuestReport report;
-  GuestSuite suite(kmt, report);
+  GuestSuite suite(kmt, report, 0u);
   CHECK_EQ(suite.run(), 0u);
   CHECK(std::strcmp(report.text(),
                     "ok adapter.find\n"
@@ -74,8 +76,8 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
                     "ok vsync.adapter\n"
                     "ok vsync.device\n"
                     "ok vsync.blanks\n"
-                    "ok vsync.rate\n"
-                    "ok vsync.caught\n"
+                    "ok vsync.rate 6000\n"
+                    "ok vsync.caught 6000\n"
                     "ok vsync.teardown\n"
                     "ok suite.close_adapter\n"
                     "rvktest: 29 passed, 0 failed\n") == 0);
@@ -87,7 +89,7 @@ TEST(guest_suite, without_the_adapter_every_scenario_fails_without_calling_d3dkm
 { MockKmt kmt;
   kmt.add_adapter(PciIdentity(0x1AF4u, 0x1050u, 0x1AF4u, 0x1100u), 1300u);
   GuestReport report;
-  GuestSuite suite(kmt, report);
+  GuestSuite suite(kmt, report, 0u);
   CHECK_EQ(suite.run(), 5u);
   CHECK(has_line(report, "FAIL adapter.find status=3"));
   CHECK(has_line(report, "FAIL allocation.adapter status=3"));
@@ -125,7 +127,7 @@ TEST(guest_suite, a_refusal_at_any_call_is_reported_and_leaves_nothing_open)
       kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
       kmt.fail_at(call, 1u, 0xC0000001u);
       GuestReport report;
-      { GuestSuite suite(kmt, report);
+      { GuestSuite suite(kmt, report, 0u);
         CHECK(suite.run() != 0u);
         CHECK(has_line(report, "code=0xC0000001")); }
       CHECK(report.invariants_hold());
@@ -323,3 +325,58 @@ TEST(vsync_scenario, a_later_interval_shorter_than_the_first_is_the_one_judged)
   CHECK_EQ(vsync.rate_centihertz(), VsyncScenario::expected_hz * 100u);
   CHECK(vsync.paced());
   CHECK_STATUS(search.close(), Status::ok); }
+
+/* ---- Fences under a long run (feature 039, US3) ---------------------------- */
+
+TEST(fence_stress_scenario, runs_until_its_seconds_are_spent_and_reports_what_it_saw)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.spend_on_wait(MockKmt::ticks_per_second / 100u);   /* a hundredth of a second a fence */
+  kmt.set_blank_period(0u);                              /* only the fences spend the run's time */
+  AdapterSearch search(kmt);
+  CHECK_STATUS(search.find(rvk), Status::ok);
+  GuestReport report;
+  FenceStressScenario stress(kmt, report, search, 2u);
+  stress.run();
+  CHECK(has_line(report, "ok stress.context"));
+  CHECK(has_line(report, "ok stress.fences"));
+  CHECK(has_line(report, "ok stress.worst_wait_us"));
+  CHECK(has_line(report, "ok stress.teardown"));
+  /* Two seconds of hundredth-second fences, with a blank between batches. */
+  CHECK_EQ(stress.completed(), 200u);
+  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_vertical_blank),
+           200u / av::FenceStressScenario::fences_per_blank);
+  CHECK_EQ(stress.worst_wait_microseconds(), 10000u);
+  CHECK_STATUS(search.close(), Status::ok);
+  CHECK_EQ(kmt.open_objects(), 0u);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
+/* A stress nobody asked for costs a run nothing. */
+TEST(fence_stress_scenario, no_seconds_is_no_run)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  AdapterSearch search(kmt);
+  CHECK_STATUS(search.find(rvk), Status::ok);
+  GuestReport report;
+  FenceStressScenario stress(kmt, report, search, 0u);
+  stress.run();
+  CHECK_EQ(report.length(), 0u);
+  CHECK_EQ(stress.completed(), 0u);
+  CHECK_EQ(kmt.calls(MockKmt::Call::submit), 0u);
+  CHECK_STATUS(search.close(), Status::ok); }
+
+/* A fence that never completes ends the run where it failed, and says so. */
+TEST(fence_stress_scenario, a_wait_that_fails_stops_the_run_and_is_reported)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.spend_on_wait(MockKmt::ticks_per_second / 100u);
+  kmt.fail_at(MockKmt::Call::wait_for_context, 4u, 0xC0000001u);
+  AdapterSearch search(kmt);
+  CHECK_STATUS(search.find(rvk), Status::ok);
+  GuestReport report;
+  FenceStressScenario stress(kmt, report, search, 2u);
+  stress.run();
+  CHECK(has_line(report, "FAIL stress.fences"));
+  CHECK_EQ(stress.completed(), 3u);
+  CHECK_STATUS(search.close(), Status::ok);
+  CHECK_EQ(kmt.open_objects(), 0u); }

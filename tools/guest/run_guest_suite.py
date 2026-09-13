@@ -45,6 +45,8 @@ PACKAGE_DIRECTORY = GUEST_DIRECTORY + "\\package"
 POWERSHELL = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
 REBOOT_REQUIRED = 3010
 SUMMARY = re.compile(rb"^rvktest: (\d+) passed, (\d+) failed$", re.M)
+STRESS_FENCES = re.compile(rb"^ok stress\.fences (\d+)$", re.M)
+STRESS_WORST = re.compile(rb"^ok stress\.worst_wait_us (\d+)$", re.M)
 MANIFEST = re.compile(r"^(file|dump) (.+?)\r?$", re.M)
 # The enlightenments Windows expects of KVM, and hv-crash: Windows writes its
 # bugcheck code and parameters to the crash MSRs, which QEMU reports as
@@ -112,6 +114,9 @@ def arguments():
     parser.add_argument("--cpus", type=int, default=4)
     parser.add_argument("--outputs", type=int, default=1, help="the device's max_outputs")
     parser.add_argument("--power-poll", type=float, default=5.0, help="seconds between display-power screendumps")
+    parser.add_argument("--stress-minutes", type=float, default=0.0,
+                        help="minutes of fences awaited while the blank's interrupt is masked and unmasked "
+                             "(feature 039, US3); 0 leaves the long run out")
     parser.add_argument("--accel", default="kvm")
     parser.add_argument("--boot-timeout", type=float, default=900.0)
     parser.add_argument("--step-timeout", type=float, default=600.0)
@@ -194,6 +199,8 @@ TICKS_PER_SECOND = 10000000
 """The 100 ns units the driver's interrupt time counts in."""
 VSYNC_LINE = re.compile(r"rvkgpu: vsync (\d+) blanks in (\d+) ticks, enabled (\d+) times")
 ACCESS_DENIED = 5
+STRESS_PATIENCE = 2.0
+"""How much longer than the stress window the guest is given to finish it."""
 """What SetDisplayConfig answers a caller outside the console session."""
 POWER_ATTEMPTS = 24
 """Screendumps to wait for the display to go dark or come back: with the default
@@ -415,8 +422,12 @@ class GuestRun:
         return code == REBOOT_REQUIRED
 
     def suite(self):
-        code, out, error = self.step("rvktest", lambda: self.agent.run(GUEST_DIRECTORY + "\\rvktest.exe", [],
-                                                                         self.args.step_timeout))
+        seconds = int(self.args.stress_minutes * 60)
+        # The guest is given the whole stress window plus the rest of the suite.
+        patience = self.args.step_timeout + seconds * STRESS_PATIENCE
+        code, out, error = self.step("rvktest", lambda: self.agent.run(GUEST_DIRECTORY + "\\rvktest.exe",
+                                                                       [str(seconds)] if seconds else [],
+                                                                       patience))
         (self.work / "report.txt").write_bytes(out)
         summary = SUMMARY.search(out)
         if summary is None:
@@ -425,6 +436,19 @@ class GuestRun:
         if failed != 0 or code != 0:
             raise StepFailed("report", f"{failed} step(s) failed, exit {code}; see report.txt")
         self.say(f"report ok: {int(summary.group(1))} passed")
+        self.report_stress(out)
+
+    def report_stress(self, report):
+        """What the long fence run saw, when one was asked for (feature 039, US3).
+        The suite fails its own steps; this says what the numbers were."""
+        fences = STRESS_FENCES.search(report)
+        worst = STRESS_WORST.search(report)
+        if fences is None or worst is None:
+            if self.args.stress_minutes:
+                raise StepFailed("stress", "the suite ran no fence stress")
+            return
+        self.say(f"stress ok: {int(fences.group(1))} fences awaited, worst wait "
+                 f"{int(worst.group(1))} us")
 
     def display(self):
         """The frame the host scans out of the guest's primary (feature 038, US1).

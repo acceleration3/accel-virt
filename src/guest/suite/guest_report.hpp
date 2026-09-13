@@ -1,5 +1,6 @@
 /* The in-guest suite's verdict as tools/guest/run_guest_suite.py reads it: one
- * line per step, `ok scenario.step` or
+ * line per step, `ok scenario.step`, `ok scenario.step N` for a step that
+ * measured something, or
  * `FAIL scenario.step status=N code=0xXXXXXXXX`, then
  * `rvktest: P passed, F failed`. Text past the capacity is cut; the counts
  * are not, and a report without its summary line reads as a failure. */
@@ -26,6 +27,9 @@ public:
     void check(const char *scenario, const char *step, Status status, uint32_t code);
     /* Passes when `status` is not ok: something the driver must refuse. */
     void check_refused(const char *scenario, const char *step, Status status, uint32_t code);
+    /* A step that measured something: the number is on the line, passed or
+     * not, because it is what the run was for. */
+    void measure(const char *scenario, const char *step, Status status, uint32_t measurement);
     void finish();
 
     const char *text() const;

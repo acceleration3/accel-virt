@@ -3,6 +3,7 @@ EXPORTS
 CloseHandle
 CreateEventW
 ExitProcess
+GetCommandLineW
 GetStdHandle
 QueryPerformanceCounter
 QueryPerformanceFrequency

@@ -6,6 +6,7 @@
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/suite/adapter_search.hpp"
 #include "guest/suite/allocation_scenario.hpp"
+#include "guest/suite/fence_stress_scenario.hpp"
 #include "guest/suite/gpu_mapping_scenario.hpp"
 #include "guest/suite/submission_scenario.hpp"
 #include "guest/suite/vsync_scenario.hpp"
@@ -19,7 +20,9 @@ class Kmt;
 
 class GuestSuite {
 public:
-    GuestSuite(Kmt &kmt, GuestReport &report);
+    /* `stress_seconds` of 0 leaves the long fence run out, which is every run
+     * but the one that asks for it (feature 039, US3). */
+    GuestSuite(Kmt &kmt, GuestReport &report, uint32_t stress_seconds);
     GuestSuite(const GuestSuite &) = delete;
     GuestSuite &operator=(const GuestSuite &) = delete;
 
@@ -34,7 +37,8 @@ private:
     AllocationScenario allocation_;
     GpuMappingScenario mapping_;
     SubmissionScenario submission_;
-    VsyncScenario      vsync_;
+    VsyncScenario       vsync_;
+    FenceStressScenario stress_;
 };
 
 }  // namespace av

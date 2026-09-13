@@ -47,12 +47,13 @@ TEST(scenario_steps, a_teardown_is_recorded_with_its_first_failure_s_ntstatus)
                     "ok probe.teardown\n") == 0);
   CHECK_STATUS(kmt.close_adapter(adapter), Status::ok); }
 
-/* A rate is not an NTSTATUS: the measurement is what explains the failure. */
-TEST(scenario_steps_check_measured, reports_the_measurement_where_the_code_goes)
+/* A rate is not an NTSTATUS: the measurement is on the line either way, because
+ * the number is what the step was for and the runner reads it back. */
+TEST(scenario_steps_check_measured, puts_the_measurement_on_the_line_passed_or_not)
 { MockKmt kmt;
   GuestReport report;
   ScenarioSteps steps(kmt, report, "vsync");
   CHECK_STATUS(steps.check_measured("rate", Status::conflict, 3098u), Status::conflict);
-  CHECK(std::strstr(report.text(), "FAIL vsync.rate status=4 code=0x00000C1A") != nullptr);
+  CHECK(std::strstr(report.text(), "FAIL vsync.rate status=4 3098") != nullptr);
   CHECK_STATUS(steps.check_measured("rate", Status::ok, 6000u), Status::ok);
-  CHECK(std::strstr(report.text(), "ok vsync.rate") != nullptr); }
+  CHECK(std::strstr(report.text(), "ok vsync.rate 6000") != nullptr); }

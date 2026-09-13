@@ -18,7 +18,7 @@ MockKmt::MockKmt()
     : identities_{}, versions_{}, adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{},
       zeroing_{}, calls_{}, objects_{}, next_handle_(first_handle), next_address_(first_address), next_fence_(0u),
       success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u), blank_period_(ticks_per_second / 60u),
-      slip_nth_(0u), slip_ticks_(0u) {}
+      slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u) {}
 
 bool MockKmt::begin(Call call)
 {
@@ -275,6 +275,7 @@ Status MockKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
     if (!begin(Call::wait_for_context)) return refuse(last_code_);
     const Object *const object = find(Kind::context, context);
     if (find(Kind::device, device) == nullptr || object == nullptr || object->owner != device) return misuse();
+    ticks_ += wait_cost_;
     return succeed();
 }
 
@@ -299,6 +300,7 @@ std::uint64_t MockKmt::performance_counter(std::uint64_t &frequency) const
 }
 
 void MockKmt::set_blank_period(std::uint64_t ticks) { blank_period_ = ticks; }
+void MockKmt::spend_on_wait(std::uint64_t ticks) { wait_cost_ = ticks; }
 
 void MockKmt::slip_every(std::uint32_t nth, std::uint64_t ticks)
 {
