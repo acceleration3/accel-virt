@@ -86,8 +86,42 @@ description: "Tasks: real-guest power, restart and recovery"
 - [X] T013 [US3] `Adapter::reset_engine` records the contexts whose work it aborted as lost, and reports them, in `src/core/adapter/adapter.cpp`; `tests/unit/core/adapter/test_adapter.cpp` asserts the other device's context is untouched
 - [X] T014 [US3] The L2 timeout and reset scenario in `tests/unit/scenarios/test_ddi_scenarios.cpp`: `QueryEngineStatus` deferring once, then refusing, then `ResetEngine` aborting only that node - and the driver returning at the IRQL it was called at, which `DdiResetEngine` (dxgkrnl.sys @14006e0a4) checks
 - [X] T015 [US3] The echo executor gains stall and fault controls read from its environment at load, in `tests/qemu/echo_executor.cpp`, with the L4 loopback run that uses them
-- [ ] T016 [US3] The runner's `tdr` scenario: one context stalled past the timeout, the other still completing, event 4101 in the System log, the live kernel report collected; with its fake-guest test
-- [ ] T017 [US3] An injected 5 s stall recovers within 10 s with the other context unaffected (SC-003); record what the run showed here
+- [X] T016 [US3] The runner's `tdr` scenario: one context stalled past the timeout, the other still completing, event 4101 in the System log, the live kernel report collected; with its fake-guest test
+
+  Built, and it runs: `--stall-ms` (and `--fault-after`) aim the host's stall or
+  fault at one context (`RVK_ECHO_ONLY_NTH`, `--stall-context`), the guest is
+  asked for `rvktest.exe tdr` - `TimeoutScenario`, two devices with a context
+  each, both submitting - the `timeouts` provisioning stage reads event 4101 out
+  of the System log, and a TDR live dump is expected of such a run and of no
+  other.
+
+- [~] T017 [US3] An injected 5 s stall recovers within 10 s with the other context unaffected (SC-003); record what the run showed here
+
+  **What the first live run showed: the injection cannot reach a guest
+  submission yet, and the reason is the roadmap, not this feature.** The run did
+  everything it was asked to; the guest's verdict was
+
+  ```
+  ok timeout.held_submit
+  ok timeout.other_submit
+  FAIL timeout.held_lost status=0 code=0x00000000
+  ok timeout.other_completed
+  ```
+
+  and the driver's log names why: `CreateDevice`, `CreateAllocation`, and no
+  context or batch reaching the device at all. A guest submission today is
+  fences kept by `ExecutionNode` and completed from the driver's own DPC; the
+  path that carries a context's batches to the host executor is feature 043
+  (guest transport) on top of 042 (the host executor), and 044 is where the two
+  meet in a real guest. Until then a host that holds a context holds nothing the
+  guest is waiting for, so dxgkrnl has nothing to time out.
+
+  What is proven meanwhile is the whole path either side of that gap: L2 drives
+  dxgkrnl's real timeout sequence through the driver's table (T014), L4 drives a
+  stalling and a faulting executor through the device and asserts the faulted
+  context is lost alone while the other completes (T015, T022), and L3 proves
+  the injection reaches one executor and not the others. The L5 half of SC-003
+  belongs to feature 044 and is recorded there.
 
 **Checkpoint**: one context's stall is one context's problem. Commit.
 
@@ -115,7 +149,15 @@ description: "Tasks: real-guest power, restart and recovery"
 **Goal**: a fault loses the faulted context and nothing else.
 
 - [X] T022 [US4] The L4 scenario with a faulting executor in `tests/loopback/`: the faulted context is reported lost to its owner, the other completes, and the device holds no leftover context or blob (FR-004)
-- [ ] T023 [US4] The runner's fault injection, alongside the stall, and the L5 run showing only the faulted context lost (SC-004); record what the run showed here
+- [~] T023 [US4] The runner's fault injection, alongside the stall, and the L5 run showing only the faulted context lost (SC-004); record what the run showed here
+
+  The injection is built and reaches the device (`--fault-after`, aimed with
+  `--stall-context`), and the `tdr` run carries it. Its L5 verdict waits on the
+  same gap as T017: a fault on the host's side of a context is invisible to a
+  guest whose submissions never leave the driver. SC-004 is proven at L4 today
+  (`tests/loopback/test_loopback_context.cpp`: the faulted context reports its
+  code while another completes and sets up again) and is recorded for L5 with
+  feature 044.
 
 **Checkpoint**: a fault is not an outage. Commit.
 
