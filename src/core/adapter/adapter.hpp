@@ -23,6 +23,7 @@
 #include "core/platform/platform.hpp"
 #include "core/scheduling/context_table.hpp"
 #include "core/scheduling/device_table.hpp"
+#include "core/adapter/power_transition.hpp"
 #include "core/scheduling/engine_progress.hpp"
 #include "core/scheduling/execution_node.hpp"
 #include "core/scheduling/hw_queue_submissions.hpp"
@@ -250,6 +251,11 @@ private:
 
     [[nodiscard]] Status discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface);
     [[nodiscard]] Status power_up();
+    /* Which sources have a committed mode: what a power transition puts back. */
+    uint32_t             scanning_out() const;
+    /* Configures each source the transition held, logging any it cannot: a
+     * source that does not come back is one dark display, not a failed resume. */
+    void                 restore_scanouts();
     [[nodiscard]] Status power_down();
     /* One line naming a DDI and the status it answered, spent from the budget. */
     /* The host's scanout follows what was committed: the mode's resource, or
@@ -302,6 +308,7 @@ private:
     HwQueueSubmissions             hw_submissions_;
     ExecutionNode                  node_;
     EngineProgress                 progress_;
+    PowerTransition                transition_;
     InterruptNotification          notification_;
     SyntheticVsync                 vsync_;
     HardwareCursor                 cursor_;

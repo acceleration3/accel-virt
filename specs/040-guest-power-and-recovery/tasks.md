@@ -37,10 +37,10 @@ description: "Tasks: real-guest power, restart and recovery"
 
 **Independent Test**: the L2 power sequence in `contracts/ddi_sequences.md`, then the guest's own S3 and S4 scenarios.
 
-- [ ] T004 [P] [US1] Write `tests/unit/core/adapter/test_power_transition.cpp` first: a transition holds what was running (device started, which sources were scanning out); `release()` answers it once and forgets it; a second `hold` without a release is `invalid_state`; a transition that held nothing restores nothing
-- [ ] T005 [US1] Implement `PowerTransition` (object class) in `src/core/adapter/power_transition.{hpp,cpp}`
-- [ ] T006 [US1] `Adapter::set_power_state` holds on the way down and restores on the way up in `src/core/adapter/adapter.cpp`: the device is started again, each source that was scanning out is configured again, and a failure to restore leaves the adapter running without that source rather than failing the transition
-- [ ] T007 [US1] Every DDI that touches the device refuses while power is down, tested in `tests/unit/core/adapter/test_adapter.cpp`: a flip, a cursor update, a scan-line query and a present answer `invalid_state` between D3 and D0 instead of touching a destroyed device
+- [X] T004 [P] [US1] Write `tests/unit/core/adapter/test_power_transition.cpp` first: a transition holds what was running (device started, which sources were scanning out); `release()` answers it once and forgets it; a second `hold` without a release is `invalid_state`; a transition that held nothing restores nothing
+- [X] T005 [US1] Implement `PowerTransition` (object class) in `src/core/adapter/power_transition.{hpp,cpp}`
+- [X] T006 [US1] `Adapter::set_power_state` holds on the way down and restores on the way up in `src/core/adapter/adapter.cpp`: the device is started again, each source that was scanning out is configured again, and a failure to restore leaves the adapter running without that source rather than failing the transition
+- [X] T007 [US1] Every DDI that touches the device refuses while power is down, tested in `tests/unit/core/adapter/test_adapter.cpp`: a flip, a cursor update, a scan-line query and a present answer `invalid_state` between D3 and D0 instead of touching a destroyed device
 - [ ] T008 [US1] The L2 suspend/resume scenario in `tests/unit/scenarios/test_ddi_scenarios.cpp`, driving the real table through the sequence the contract names
 - [ ] T009 [US1] The runner's `suspend` and `hibernate` scenarios in `tools/guest/run_guest_suite.py` (agent `guest-suspend-ram`, QMP `system_wakeup`; hibernation enabled inside the overlay for `guest-suspend-disk`, then the overlay booted again), each reported skipped with its reason where the machine does not offer the transition, with fake-guest tests in `tests/tools/test_run_guest_suite.py`
 - [ ] T010 [US1] Five S4 resumes with a passing `rvktest.exe` (SC-001), and S3 likewise where offered; record what the runs showed here

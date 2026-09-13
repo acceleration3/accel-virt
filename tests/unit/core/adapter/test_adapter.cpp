@@ -204,6 +204,10 @@ public:
     /* The host answering a later ask, for a test that changes the display. */
     static void answer_display_info_from(void *context) { answer_display_info(context); }
 
+    /* A power cycle destroys the device and builds it again, so the queue this
+     * views is programmed afresh: a test that cycles power takes a new view. */
+    void forget_control() { control_.reset(); }
+
     /* The device side of the control queue, shared with the answer StartDevice
      * waits for, so a test sees the requests made after it and no others. */
     av::FakeVirtqueueDevice &control()
@@ -716,6 +720,71 @@ TEST(adapter_commit_vidpn, records_the_mode_scan_lines_follow)
 /* A commit makes the resource the mode needs; the DPC attaches the primary,
  * scans it out and carries its first frame; a present carries another
  * (feature 038, US1). */
+/* Between D3 and D0 the device object is gone. Every path a guest can still
+ * reach must answer without touching it: dxgkrnl keeps flipping, moving the
+ * cursor and asking for scan lines right up to the transition. */
+TEST(adapter_set_power_state, the_guest_keeps_asking_while_power_is_down_and_nothing_touches_the_device)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(commit(fixture, 1280u, 800u), success);
+  const Primary primary(fixture, 1280u, 800u);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+
+  av::DxgkargSetVidPnSourceAddressRecord address = {};
+  address.PrimaryAddress = primary.address();
+  address.PrimarySegment = av::ApertureSegment::segment_id;
+  address.hAllocation = primary.handle();
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  av::DxgkargGetScanLineRecord scan = {0u, 0u, {}, 0u};
+  CHECK_EQ(nt(fixture.adapter().get_scan_line(&scan)), success);
+  /* The cursor was told to forget the device, so it refuses rather than
+   * pointing a request at memory that is gone. */
+  const av::DxgkargSetPointerPositionRecord position = {0u, 10, 10, 0u};
+  CHECK_EQ(nt(fixture.adapter().set_pointer_position(&position)), invalid_device_state);
+  CHECK(fixture.adapter().invariants_hold());
+  CHECK_EQ(fixture.platform().unclaimed_violations(), 0u);
+
+  fixture.forget_control();
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  CHECK(fixture.adapter().invariants_hold()); }
+
+/* D3 is not StopDevice: dxgkrnl keeps the VidPn and every allocation across it,
+ * so what was scanning out before power went away is what it expects to find
+ * after (feature 040, US1). */
+TEST(adapter_set_power_state, what_was_scanning_out_before_d3_is_scanning_out_after_d0)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::FakeVirtqueueDevice &control = fixture.control();
+  CHECK_EQ(commit(fixture, 1280u, 800u), success);
+  CHECK_EQ(control.respond_all(0x1100u), 1u);   /* the committed mode's resource */
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.forget_control();
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  /* The resume asks the host for the same scanout the guest still believes in. */
+  av::FakeVirtqueueDevice &resumed = fixture.control();
+  /* The host lost every resource with the device, so the source that was
+   * scanning out has its resource created again; the pages follow with the
+   * guest's next address, which is what dxgkrnl sends after a resume. */
+  CHECK_EQ(resumed.respond_all(0x1100u), 1u);
+  CHECK_EQ(resumed.request_type(resumed.requests() - 1u), 0x0101u);
+  CHECK(fixture.adapter().invariants_hold()); }
+
+/* A resume that never had a scanout asks the host for none. */
+TEST(adapter_set_power_state, a_source_that_was_dark_stays_dark_across_power)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::FakeVirtqueueDevice &control = fixture.control();
+  CHECK_EQ(control.respond_all(0x1100u), 0u);   /* StartDevice's display info was answered */
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.forget_control();
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  CHECK_EQ(fixture.control().respond_all(0x1100u), 0u);   /* nothing was scanning out */
+  CHECK(fixture.adapter().invariants_hold()); }
+
 TEST(adapter_commit_vidpn, the_committed_source_reaches_the_host_scanout)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);

@@ -93,7 +93,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       segment_(platform),
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
-      hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
+      hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u),
       display_changed_(0u), started_(false), present_(true) {}
 
@@ -299,8 +299,19 @@ int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)
     InvariantScope<Adapter> guard(platform_, *this, "set_power_state");
     if (device != adapter_device_uid) return NtStatus(Status::ok).value();
     if (!started_) return NtStatus(Status::invalid_state).value();
-    if (power_state == power_d0) return NtStatus(power_up()).value();
-    if (power_state > power_d0 && power_state <= power_d3) return NtStatus(power_down()).value();
+    if (power_state == power_d0) {
+        const Status powered = power_up();
+        /* What power took away, put back: dxgkrnl kept every allocation and
+         * VidPn across this, so what it expects to find is what was scanning
+         * out before. */
+        if (powered == Status::ok && transition_.held()) restore_scanouts();
+        transition_.release();
+        return NtStatus(powered).value();
+    }
+    if (power_state > power_d0 && power_state <= power_d3) {
+        static_cast<void>(transition_.hold(device_.constructed(), scanning_out()));
+        return NtStatus(power_down()).value();
+    }
     return NtStatus(Status::invalid_parameter).value();
 }
 
@@ -701,6 +712,23 @@ int32_t Adapter::commit_vidpn(const DxgkargCommitVidPnRecord *request)
     }
     log_status("rvkgpu: CommitVidPn", applied);
     return applied;
+}
+
+uint32_t Adapter::scanning_out() const
+{
+    uint32_t sources = 0u;
+    for (uint32_t source = 0u; source < sources_.count(); source++)
+        if (sources_.committed_mode(source) != nullptr) sources |= 1u << source;
+    return sources;
+}
+
+void Adapter::restore_scanouts()
+{
+    for (uint32_t source = 0u; source < sources_.count(); source++) {
+        if (!transition_.scanning_out(source)) continue;
+        const Status followed = follow_commit(source);
+        if (followed != Status::ok) log_status("rvkgpu: resume scanout", NtStatus(followed).value());
+    }
 }
 
 Status Adapter::follow_commit(uint32_t source)
