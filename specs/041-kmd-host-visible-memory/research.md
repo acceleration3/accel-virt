@@ -80,12 +80,35 @@ segment is a paging operation naming it (`DXGK_OPERATION_TRANSFER` in, and out
 again on eviction; `src/core/memory/paging_request.cpp:31-49` is where the
 existing ones are decoded).
 
-**Decision.** One blob per host-visible allocation, created when the allocation
-is created, mapped into the region at the offset the first paging operation
-names, and unmapped when VidMm evicts it or the allocation is destroyed. The
-blob outlives the mapping - the device keeps its contents across an unmap
-(`docs/protocol.md:416-420`) - so an eviction and a later re-map do not lose
-what the process wrote, and no transfer of the bytes themselves is needed.
+**What dxgkrnl does, read rather than assumed.**
+`VIDMM_GLOBAL::MapInCpuVisibleSegment` (dxgmms2.sys @14009ea98) builds an MDL
+over the segment's CPU range itself - `VidMmiBuildMdlForContiguousMmIo` for a
+segment whose storage is MMIO, which is what a BAR is - and locks it for the
+process. **VidMm maps; the driver is never called to map anything for the CPU.**
+The driver's whole job is to have storage at the offset VidMm chose, and the
+`CpuTranslatedAddress` it reported is what makes that offset an address.
+
+**Decision.** One blob per host-visible allocation, created and mapped into the
+region when the first paging operation names its offset in this segment, and
+released when the allocation is destroyed. The blob outlives an unmap - the
+device keeps its contents (`docs/protocol.md:416-420`) - so a later re-map at
+another offset does not lose what the process wrote.
+
+**Decision: nothing is evicted out of this segment.** A host-visible allocation
+is reported with the host-visible segment as its only supported segment and an
+empty `EvictionSegmentSet`, so VidMm has one place to put it and nowhere to move
+it to. That is what makes "no copy" true, and it is also what keeps the driver
+out of the business of moving bytes between segments, which for a paravirtual
+device would mean copying the whole allocation through the BAR. The region
+filling up is then a creation failure, which VidMm turns into a budget failure
+(FR-006), not a bugcheck.
+
+**Open, and the live guest is what answers it.** Which paging operation carries
+that first offset - `DXGK_OPERATION_TRANSFER` into the segment, or
+`DXGK_OPERATION_FILL` - is not settled by reading: both name a destination
+segment and address, and which one Windows issues for a never-yet-resident
+CPU-visible allocation depends on the allocation's backing store. The driver
+therefore handles **both**, and the L5 run says which one arrived.
 
 **Decision.** A process's writes go straight through the BAR: no command is
 sent per access, which is what SC-002 measures.
