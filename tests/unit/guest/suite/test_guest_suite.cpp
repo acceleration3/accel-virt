@@ -11,6 +11,7 @@
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/guest_suite.hpp"
 #include "guest/suite/submission_scenario.hpp"
+#include "guest/suite/timeout_scenario.hpp"
 #include "guest/suite/fence_stress_scenario.hpp"
 #include "guest/suite/vsync_scenario.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -29,9 +30,13 @@ using av::MockKmt;
 using av::PciIdentity;
 using av::Status;
 using av::SubmissionScenario;
+using av::TimeoutScenario;
 using av::VsyncScenario;
 
 namespace {
+
+/* What D3DKMT answers a wait on a context dxgkrnl reset under it. */
+constexpr std::uint32_t device_removed = 0xC00E0102u;
 
 const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
                       AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
@@ -465,4 +470,71 @@ TEST(fence_stress_scenario, a_wait_that_fails_stops_the_run_and_is_reported)
   CHECK(has_line(report, "FAIL stress.fences"));
   CHECK_EQ(stress.completed(), 3u);
   CHECK_STATUS(search.close(), Status::ok);
+  CHECK_EQ(kmt.open_objects(), 0u); }
+
+/* Feature 040, US3: the host holds the first context past dxgkrnl's timeout,
+ * which resets that node and loses that context alone. What the guest can see
+ * is that its held context came back refused and the other's work completed;
+ * a wait that fails is the whole point, so the step passes when it does. */
+TEST(timeout_scenario, the_held_context_is_lost_and_the_other_completes)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.fail_at(MockKmt::Call::wait_for_context, 1u, device_removed);
+  AdapterSearch search(kmt);
+  CHECK_STATUS(search.find(rvk), Status::ok);
+  GuestReport report;
+  TimeoutScenario timeout(kmt, report, search);
+  timeout.run();
+  CHECK(has_line(report, "ok timeout.held_lost"));
+  CHECK(has_line(report, "ok timeout.other_completed"));
+  CHECK(has_line(report, "ok timeout.held_set_up"));
+  CHECK(has_line(report, "ok timeout.other_set_up"));
+  CHECK_EQ(kmt.calls(MockKmt::Call::submit), 2u);
+  CHECK_STATUS(search.close(), Status::ok);
+  CHECK_EQ(kmt.open_objects(), 0u);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
+/* A host that answers the held context after all is a timeout that never
+ * happened: the run says so rather than passing for the wrong reason. */
+TEST(timeout_scenario, a_held_context_that_completes_fails_the_run)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  AdapterSearch search(kmt);
+  CHECK_STATUS(search.find(rvk), Status::ok);
+  GuestReport report;
+  TimeoutScenario timeout(kmt, report, search);
+  timeout.run();
+  CHECK(has_line(report, "FAIL timeout.held_lost"));
+  CHECK(has_line(report, "ok timeout.other_completed"));
+  CHECK_STATUS(search.close(), Status::ok);
+  CHECK_EQ(kmt.open_objects(), 0u); }
+
+/* A reset that reaches past the context the host held is not one context's
+ * problem, and the step that says the other one completed fails. */
+TEST(timeout_scenario, the_other_context_being_lost_fails_the_run)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.fail_at(MockKmt::Call::wait_for_context, 2u, device_removed);
+  AdapterSearch search(kmt);
+  CHECK_STATUS(search.find(rvk), Status::ok);
+  GuestReport report;
+  TimeoutScenario timeout(kmt, report, search);
+  timeout.run();
+  CHECK(has_line(report, "FAIL timeout.other_completed"));
+  CHECK_STATUS(search.close(), Status::ok);
+  CHECK_EQ(kmt.open_objects(), 0u); }
+
+/* A stalling host makes every other scenario measure the stall, so the run
+ * that asks for the timeout runs nothing else. */
+TEST(guest_suite, the_timeout_run_is_the_timeout_scenario_and_the_adapter)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.fail_at(MockKmt::Call::wait_for_context, 1u, device_removed);
+  GuestReport report;
+  GuestSuite suite(kmt, report, 0u);
+  CHECK_EQ(suite.run_timeout(), 0u);
+  CHECK(has_line(report, "ok adapter.find"));
+  CHECK(has_line(report, "ok timeout.held_lost"));
+  CHECK(std::strstr(report.text(), "allocation.") == nullptr);
+  CHECK(std::strstr(report.text(), "submission.") == nullptr);
   CHECK_EQ(kmt.open_objects(), 0u); }

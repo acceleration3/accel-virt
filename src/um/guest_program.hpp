@@ -14,8 +14,11 @@ namespace av {
 class GuestProgram {
 public:
     /* The whole suite, with the long fence run only when the command line asks
-     * for it: `rvktest.exe <seconds>` (feature 039, US3). */
-    explicit GuestProgram(uint32_t stress_seconds);
+     * for it: `rvktest.exe <seconds>` (feature 039, US3). With `timeout_only`
+     * the command line asked for `tdr` instead, and only the timeout scenario
+     * runs: the host has been told to hold a context, and every other scenario
+     * would be measuring that (feature 040, US3). */
+    GuestProgram(uint32_t stress_seconds, bool timeout_only);
     GuestProgram(const GuestProgram &) = delete;
     GuestProgram &operator=(const GuestProgram &) = delete;
 
@@ -28,6 +31,7 @@ private:
     GdiKmt      kmt_;
     GuestReport report_;
     GuestSuite  suite_;
+    bool        timeout_only_;
 };
 
 }  // namespace av

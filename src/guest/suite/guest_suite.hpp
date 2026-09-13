@@ -9,6 +9,7 @@
 #include "guest/suite/fence_stress_scenario.hpp"
 #include "guest/suite/gpu_mapping_scenario.hpp"
 #include "guest/suite/submission_scenario.hpp"
+#include "guest/suite/timeout_scenario.hpp"
 #include "guest/suite/vsync_scenario.hpp"
 
 #include <stdint.h>
@@ -28,6 +29,10 @@ public:
 
     /* The failures reported. */
     uint32_t run();
+    /* Only the timeout scenario, for a run whose host has been told to hold
+     * one context: every other scenario would be measuring the stall
+     * (feature 040, US3). */
+    uint32_t run_timeout();
 
 private:
     Kmt               &kmt_;
@@ -39,6 +44,7 @@ private:
     SubmissionScenario submission_;
     VsyncScenario       vsync_;
     FenceStressScenario stress_;
+    TimeoutScenario     timeout_;
 };
 
 }  // namespace av
