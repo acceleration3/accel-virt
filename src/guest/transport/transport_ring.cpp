@@ -1,0 +1,80 @@
+#include "guest/transport/transport_ring.hpp"
+
+#include "proto/submission/batch_header.hpp"
+#include "proto/submission/ring_header.hpp"
+#include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
+
+namespace av {
+
+TransportRing::TransportRing() : ring_(nullptr), order_(0u), tail_(0u) {}
+
+Status TransportRing::initialize(uint8_t *ring, uint8_t order)
+{
+    if (ring_ != nullptr) return Status::invalid_state;
+    if (ring == nullptr || order < RingHeader::lowest_order || order > RingHeader::highest_order)
+        return Status::invalid_parameter;
+    /* The header is 32 bytes of a ring that by contract holds header and data,
+     * so this cannot refuse. */
+    static_cast<void>(RingHeader(order, 0u, 0u).encode(ring, header_size));
+    ring_ = ring;
+    order_ = order;
+    tail_ = 0u;
+    return Status::ok;
+}
+
+Status TransportRing::write_batch(const uint8_t *payload, uint32_t length, uint64_t fence_id, uint64_t &begin,
+                                  uint64_t &end)
+{
+    if (ring_ == nullptr) return Status::invalid_state;
+    if (fence_id == 0u || payload == nullptr) return Status::invalid_parameter;
+    const BatchHeader header(length, fence_id);
+    if (!header.fits(capacity())) return Status::invalid_parameter;
+    const uint64_t span = header.span();
+    if (span > free_space()) return Status::no_space;
+    uint8_t framing[BatchHeader::encoded_size] = {};
+    static_cast<void>(header.encode(framing, sizeof framing));   /* exactly its size, never refuses */
+    begin = tail_;
+    write_wrapped(tail_, framing, BatchHeader::encoded_size);
+    write_wrapped(tail_ + BatchHeader::encoded_size, payload, length);
+    tail_ += span;
+    end = tail_;
+    /* Only the tail field: head is the device's, and re-encoding the header
+     * would race its write of it. */
+    WireWriter published(ring_ + tail_offset, sizeof(uint64_t));
+    published.write_u64(tail_);
+    return Status::ok;
+}
+
+void TransportRing::write_wrapped(uint64_t counter, const uint8_t *source, uint32_t count)
+{
+    const uint64_t mask = capacity() - 1u;
+    uint8_t *const data = ring_ + header_size;
+    for (uint32_t i = 0u; i < count; i++) data[(counter + i) & mask] = source[i];
+}
+
+uint64_t TransportRing::read_head() const
+{
+    if (ring_ == nullptr) return 0u;
+    WireReader reader(ring_ + head_offset, sizeof(uint64_t));
+    return reader.read_u64();
+}
+
+uint64_t TransportRing::tail() const { return tail_; }
+uint64_t TransportRing::head() const { return read_head(); }
+uint64_t TransportRing::capacity() const { return ring_ == nullptr ? 0u : uint64_t{1} << order_; }
+
+uint64_t TransportRing::free_space() const
+{
+    const uint64_t used = tail_ - read_head();
+    return capacity() - used;
+}
+
+bool TransportRing::invariants_hold() const
+{
+    if (ring_ == nullptr) return tail_ == 0u && order_ == 0u;
+    const uint64_t head = read_head();
+    return tail_ >= head && tail_ - head <= capacity();
+}
+
+}  // namespace av
