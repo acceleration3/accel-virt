@@ -34,8 +34,8 @@ description: "Tasks: the guest transport"
 
 **Purpose**: the interface the generated client is handed and the loopback rig substitutes, before either implementation.
 
-- [ ] T003 `ClientTransport` (object interface) in `src/proto/client_transport.hpp`: `request_writer()`, `send_async(id, writer)`, `send_sync(id, writer, reply)`, `decode_arena()`, and `blobs()` - the members the generated client calls (contracts/client_transport.md, section A). `TransportResult` with `Ok`. Protected non-virtual destructor. This is the header `src/proto/generated/*/dispatch_client.h` includes, so the include name it carries changes to this in the emitter (T017)
-- [ ] T004 [P] Write `tests/harness/transport/mock_transport.{hpp,cpp}` - the loopback-side `ClientTransport` a test drives, recording what was sent and answering scripted replies, so US1's client tests need no guest
+- [X] T003 `ClientTransport` (object interface) in `src/proto/client_transport.hpp`: `request_writer()`, `send_async(id, writer)`, `send_sync(id, writer, reply)`, `decode_arena()`, and `blobs()` - the members the generated client calls (contracts/client_transport.md, section A). `TransportResult` with `Ok`. Protected non-virtual destructor. This is the header `src/proto/generated/*/dispatch_client.h` includes, so the include name it carries changes to this in the emitter (T017)
+- [X] T004 [P] Write `tests/harness/transport/mock_transport.{hpp,cpp}` - the loopback-side `ClientTransport` a test drives, recording what was sent and answering scripted replies, so US1's client tests need no guest
 
 **Checkpoint**: the interface compiles and a mock implements it. Commit.
 
