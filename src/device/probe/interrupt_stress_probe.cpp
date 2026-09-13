@@ -1,0 +1,93 @@
+#include "device/probe/interrupt_stress_probe.hpp"
+
+#include "device/host/host.hpp"
+
+namespace av {
+
+InterruptStressProbe::InterruptStressProbe(Host &host)
+    : host_(host), lock_(nullptr), raised_(0u), seen_(0u), worst_(0u), injected_while_disabled_(0u),
+      listening_(true), result_() {}
+
+InterruptStressProbe::~InterruptStressProbe()
+{
+    if (lock_ != nullptr) host_.destroy_mutex(lock_);
+}
+
+Status InterruptStressProbe::initialize()
+{
+    host_.require_main_loop("InterruptStressProbe::initialize");
+    if (lock_ != nullptr) return Status::invalid_state;
+    return host_.create_mutex(lock_);
+}
+
+void InterruptStressProbe::raised(uint32_t)
+{
+    if (lock_ == nullptr) return;
+    host_.lock_mutex(lock_);
+    raised_++;
+    if (!listening_) injected_while_disabled_++;
+    host_.unlock_mutex(lock_);
+}
+
+void InterruptStressProbe::disabled()
+{
+    host_.require_main_loop("InterruptStressProbe::disabled");
+    if (lock_ == nullptr) return;
+    host_.lock_mutex(lock_);
+    listening_ = false;
+    host_.unlock_mutex(lock_);
+}
+
+void InterruptStressProbe::enabled()
+{
+    host_.require_main_loop("InterruptStressProbe::enabled");
+    if (lock_ == nullptr) return;
+    host_.lock_mutex(lock_);
+    listening_ = true;
+    host_.unlock_mutex(lock_);
+}
+
+void InterruptStressProbe::acknowledged(uint64_t seen, uint64_t nanoseconds)
+{
+    host_.require_main_loop("InterruptStressProbe::acknowledged");
+    if (lock_ == nullptr) return;
+    host_.lock_mutex(lock_);
+    seen_ = seen;
+    if (nanoseconds > worst_) worst_ = nanoseconds;
+    host_.unlock_mutex(lock_);
+}
+
+/* Three questions, in the order that tells the most about what went wrong: was
+ * the guest interrupted while it was not listening, did it see the end of the
+ * run, and did it see more than the device ever sent. */
+void InterruptStressProbe::finish()
+{
+    host_.require_main_loop("InterruptStressProbe::finish");
+    if (lock_ == nullptr || result_.ran()) return;
+    host_.lock_mutex(lock_);
+    const uint64_t raised = raised_;
+    const uint64_t seen = seen_;
+    const uint64_t injected = injected_while_disabled_;
+    const uint64_t worst = worst_;
+    host_.unlock_mutex(lock_);
+    if (injected != 0u) {
+        static_cast<void>(result_.record_failure(Status::invalid_state, static_cast<int32_t>(injected)));
+        return;
+    }
+    if (seen < raised) {
+        static_cast<void>(result_.record_failure(Status::not_found, static_cast<int32_t>(raised - seen)));
+        return;
+    }
+    if (seen > raised) {
+        static_cast<void>(result_.record_failure(Status::malformed, static_cast<int32_t>(seen - raised)));
+        return;
+    }
+    static_cast<void>(result_.record_pass(worst));
+}
+
+const ProbeResult &InterruptStressProbe::verdict() const
+{
+    return result_;
+}
+
+}  // namespace av

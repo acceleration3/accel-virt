@@ -2,6 +2,7 @@
  * connecting and releasing the notifiers that carry them. */
 #include "core/support/status.hpp"
 #include "device/fence/fence_interrupts.hpp"
+#include "device/probe/interrupt_stress_probe.hpp"
 #include "device/threading/doorbell.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/host_violation.hpp"
@@ -14,6 +15,7 @@
 using av::Doorbell;
 using av::FenceInterrupts;
 using av::HostViolation;
+using av::InterruptStressProbe;
 using av::MockHost;
 using av::Status;
 
@@ -144,6 +146,28 @@ TEST(fence_interrupts, connects_on_the_main_loop)
   host.join_thread(thread);
   /* initialize, connect and disconnect, and the host's own connect and disconnect */
   for (int count = 0; count < 5; count++) CHECK(host.claim(HostViolation::main_loop_required)); }
+
+/* Feature 039 US3: what the device injected, counted where the guest's own
+ * report can be set against it. An interrupt nothing carried is not an
+ * injection. */
+TEST(fence_interrupts_report_to, counts_only_what_reached_the_guest)
+{ MockHost host;
+  FenceInterrupts interrupts(host);
+  InterruptStressProbe stress(host);
+  CHECK_STATUS(stress.initialize(), Status::ok);
+  CHECK_STATUS(interrupts.initialize(), Status::ok);
+  interrupts.report_to(stress);
+  interrupts.raise(0u);                       /* nothing is connected yet */
+  CHECK_STATUS(interrupts.connect(), Status::ok);
+  interrupts.raise(0u);
+  interrupts.raise(1u);
+  interrupts.raise(Doorbell::pages);          /* no such line */
+  interrupts.disconnect();
+  interrupts.raise(0u);
+  stress.acknowledged(2u, 700u);
+  stress.finish();
+  CHECK(stress.verdict().passed());
+  CHECK_EQ(stress.verdict().measured(), 700u); }
 
 TEST(fence_interrupts_invariants, a_connection_without_a_lock_is_detected)
 { MockHost host;

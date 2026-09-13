@@ -6,7 +6,8 @@
 
 namespace av {
 
-HostFeasibility::HostFeasibility(Host &host) : host_(host), memory_(host), import_(host), decided_(false) {}
+HostFeasibility::HostFeasibility(Host &host)
+    : host_(host), memory_(host), import_(host), interrupts_(host), decided_(false) {}
 
 void HostFeasibility::decide(uint64_t guest_probe_address)
 {
@@ -17,6 +18,11 @@ void HostFeasibility::decide(uint64_t guest_probe_address)
     log("exported memory", memory_.result());
     import_.run(guest_probe_address);
     log("guest import", import_.result());
+}
+
+InterruptStressProbe &HostFeasibility::interrupts()
+{
+    return interrupts_;
 }
 
 uint64_t HostFeasibility::features() const

@@ -13,6 +13,7 @@
 namespace av {
 
 class Host;
+class InterruptStressProbe;
 struct FenceInterruptsProbe;
 
 class FenceInterrupts {
@@ -31,14 +32,18 @@ public:
     void                 disconnect();
     /* Any thread. Nothing while disconnected, or for a line past the fence queues. */
     void                 raise(uint32_t line);
+    /* Main loop. Every interrupt injected from here on is also counted by
+     * `stress`, which must outlive this; feature 039's US3. */
+    void                 report_to(InterruptStressProbe &stress);
     bool                 connected() const;
 
     bool invariants_hold() const;
 
 private:
-    Host       &host_;
-    void       *lock_;
-    bool        connected_;
+    Host                 &host_;
+    void                 *lock_;
+    bool                  connected_;
+    InterruptStressProbe *stress_;
 
     friend struct FenceInterruptsProbe;
 };

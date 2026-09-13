@@ -42,6 +42,7 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
     /* What this host can actually do, asked once, on the GPU just bound: a
      * probe that fails leaves its bit clear and the device starts anyway. */
     feasibility_.decide(guest_probe_address);
+    if (feasibility_.interrupts().initialize() == Status::ok) interrupts_.report_to(feasibility_.interrupts());
     capset_.describe(binding_.index(), library_.sub_apis(), feasibility_.features());
     return status;
 }

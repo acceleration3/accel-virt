@@ -91,7 +91,11 @@ def guest_check(kernel):
         return {"outcome": "skipped", "reason": f"no kernel image at {kernel}"}
     if not os.access("/dev/kvm", os.R_OK | os.W_OK):
         return {"outcome": "skipped", "reason": "/dev/kvm is not readable and writable"}
-    return {"outcome": "skipped", "reason": "the in-guest check is not built yet (039 T012)"}
+    # A guest can only read the mapping while a block is placed in the region,
+    # and the probe takes its own away inside realize. The guest half is 041's
+    # first mapped blob; holding a block just for a guest to find would be a
+    # device mode that exists for a test.
+    return {"outcome": "skipped", "reason": "the guest reads a mapping only through a blob it asked for (feature 041)"}
 
 
 def answers(arguments, gpus):

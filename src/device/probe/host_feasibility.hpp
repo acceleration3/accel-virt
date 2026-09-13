@@ -7,6 +7,7 @@
 
 #include "device/probe/guest_import_probe.hpp"
 #include "device/probe/host_memory_probe.hpp"
+#include "device/probe/interrupt_stress_probe.hpp"
 
 #include <stdint.h>
 
@@ -25,14 +26,18 @@ public:
     void     decide(uint64_t guest_probe_address);
     /* The capset's feature mask: one bit per path this host actually has. */
     uint64_t features() const;
+    /* The one the fence path reports its injections into; interrupts are a path
+     * with no alternative, so they set no bit - a failure here is a defect. */
+    InterruptStressProbe &interrupts();
 
 private:
     void log(const char *probe, const ProbeResult &result);
 
-    Host            &host_;
-    HostMemoryProbe  memory_;
-    GuestImportProbe import_;
-    bool             decided_;
+    Host                &host_;
+    HostMemoryProbe      memory_;
+    GuestImportProbe     import_;
+    InterruptStressProbe interrupts_;
+    bool                 decided_;
 };
 
 }  // namespace av

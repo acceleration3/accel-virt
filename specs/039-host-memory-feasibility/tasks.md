@@ -61,7 +61,7 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 > depends on and it is done.
 
 - [X] T011 [US1] Write the failing test for the runner first in `tests/tools/test_probe_host_memory.py` (captured device output in, JSON out, a refused probe still exit 0), then `tools/host/probe_host_memory.py`: one device per host GPU from `list_gpus.py`'s enumeration, realize only, JSON per GPU with driver, version, outcome, host error and measurement
-- [ ] T012 [US1] Add the minimal Linux guest check: a freestanding static init in `tests/qemu/probe_guest/` that maps the device's hostmem BAR through sysfs, writes and reads back a pattern, and prints one line; packed into a cpio initramfs by the runner and booted with `-enable-kvm -kernel`. Skipped with a recorded reason when `/dev/kvm` or the kernel image is absent
+- [~] T012 [US1] The in-guest KVM check, **deferred to 041 with its reason recorded here**. A guest can only read the mapping while something is placed in the region, and the probe places its block inside realize and takes it away again - so a guest reading the BAR afterwards would find the hole, not the mapping. Keeping a block placed for a guest to find would be a test-only device mode (constitution VIII), and the only honest way to hold one is the path 041 builds: the guest asks for a blob and maps it. What the probe does prove today is the half that is this feature's question - the host driver's export `mmap`s, `MAP_FIXED` over the hostmem reservation carries the bytes, and the region reads back what the GPU wrote. The runner's `--guest-check` reports `skipped` with this reason rather than pretending. 041's first mapped blob under KVM is the check, and its spec carries the pointer
 - [X] T013 [US1] Record this host's answers (Intel Mesa ANV, NVIDIA proprietary; llvmpipe and AMD as not measured) in `docs/kb/04-memory.md` with driver, version, outcome, errno and measurement (FR-002)
 
 **Checkpoint**: US1 answered on this host, both halves, and recorded. Commit.
@@ -123,9 +123,9 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 
 **Independent Test**: a long guest run with the stress scenario; no interrupt while disabled, no lost final fence, and a recorded latency distribution.
 
-- [ ] T025 [P] [US3] Write `tests/unit/device/probe/test_interrupt_stress_probe.cpp` first: an interrupt raised between `disabled()` and `enabled()` is a failure; a final fence never acknowledged is a failure; acknowledgements carry the worst delay into `measured()`; counts survive raises from several workers (IRQL/threading rules enforced by `MockHost`)
-- [ ] T026 [US3] Implement `InterruptStressProbe` (object class) in `src/device/probe/interrupt_stress_probe.{hpp,cpp}`, with `raised()` on the worker side and the rest on the main loop
-- [ ] T027 [US3] Report into it from the fence path in `src/device/fence/fence_interrupts.{hpp,cpp}`, tested where the existing fence tests are
+- [X] T025 [P] [US3] Write `tests/unit/device/probe/test_interrupt_stress_probe.cpp` first: an interrupt raised between `disabled()` and `enabled()` is a failure; a final fence never acknowledged is a failure; acknowledgements carry the worst delay into `measured()`; counts survive raises from several workers (IRQL/threading rules enforced by `MockHost`)
+- [X] T026 [US3] Implement `InterruptStressProbe` (object class) in `src/device/probe/interrupt_stress_probe.{hpp,cpp}`, with `raised()` on the worker side and the rest on the main loop
+- [X] T027 [US3] Report into it from the fence path in `src/device/fence/fence_interrupts.{hpp,cpp}`, tested where the existing fence tests are
 - [ ] T028 [US3] Add the guest side: a stress scenario in `src/guest/suite/` that raises fences as fast as the host sustains while the miniport disables and re-enables its interrupt, with `--stress-minutes` in `tools/guest/run_guest_suite.py` and its fake-guest test
 - [ ] T029 [US3] Run it for ten minutes against the real guest and record the rate, the worst delay and the verdict in `docs/kb/05-scheduling.md`
 

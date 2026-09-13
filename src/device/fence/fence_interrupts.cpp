@@ -1,11 +1,13 @@
 #include "device/fence/fence_interrupts.hpp"
 
+#include "device/probe/interrupt_stress_probe.hpp"
+
 #include "device/host/host.hpp"
 #include "device/threading/doorbell.hpp"
 
 namespace av {
 
-FenceInterrupts::FenceInterrupts(Host &host) : host_(host), lock_(nullptr), connected_(false) {}
+FenceInterrupts::FenceInterrupts(Host &host) : host_(host), lock_(nullptr), connected_(false), stress_(nullptr) {}
 
 FenceInterrupts::~FenceInterrupts()
 {
@@ -46,8 +48,18 @@ void FenceInterrupts::raise(uint32_t line)
 {
     if (lock_ == nullptr || line >= Doorbell::pages) return;
     host_.lock_mutex(lock_);
-    if (connected_) host_.raise_fence_interrupt(line);
+    const bool injected = connected_;
+    if (injected) host_.raise_fence_interrupt(line);
     host_.unlock_mutex(lock_);
+    /* Counted outside this lock: the stress probe holds its own, and nesting
+     * them would put the interrupt path behind two. */
+    if (injected && stress_ != nullptr) stress_->raised(line);
+}
+
+void FenceInterrupts::report_to(InterruptStressProbe &stress)
+{
+    host_.require_main_loop("FenceInterrupts::report_to");
+    stress_ = &stress;
 }
 
 /* Read on the main loop, which alone changes it. */
