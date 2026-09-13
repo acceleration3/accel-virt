@@ -225,7 +225,7 @@ TICKS_PER_SECOND = 10000000
 VSYNC_POLL_SECONDS = 1.0
 """Between reads of the driver's log while waiting for a window at its period."""
 
-VSYNC_LINE = re.compile(r"rvkgpu: vsync (\d+) blanks in (\d+) ticks, enabled (\d+) times")
+VSYNC_LINE = re.compile(r"rvkgpu: vsync (\d+) periods in (\d+) ticks, (\d+) reported, enabled (\d+) times")
 ACCESS_DENIED = 5
 STRESS_PATIENCE = 2.0
 """How much longer than the stress window the guest is given to finish it."""
@@ -576,14 +576,16 @@ class GuestRun:
         """US3: the driver's own vertical blank rate, in hertz, from the fastest
         window it logged, or None while it has logged none. A waiter in the
         guest cannot see this - the blank is a pulse it can miss - so it is read
-        here, where the whole log is. The fastest window is the one dxgkrnl left
-        the blanks on through; a window it turned them off in measures its power
-        policy, not the driver's period."""
-        windows = [(int(blanks), int(ticks)) for blanks, ticks, _enables in VSYNC_LINE.findall(self.driver_log())
+        here, where the whole log is. The window counts the driver's own timer
+        periods, which run whether or not dxgkrnl is asking for blanks; the
+        fastest of them is taken all the same, because a window that straddles a
+        power transition or a stopped device measures that."""
+        windows = [(int(periods), int(ticks))
+                   for periods, ticks, _reported, _enables in VSYNC_LINE.findall(self.driver_log())
                    if int(ticks) != 0]
         if not windows:
             return None
-        return max(blanks * TICKS_PER_SECOND / ticks for blanks, ticks in windows)
+        return max(periods * TICKS_PER_SECOND / ticks for periods, ticks in windows)
 
     def vsync(self):
         """The driver says its rate once every 120 blanks, so the window that

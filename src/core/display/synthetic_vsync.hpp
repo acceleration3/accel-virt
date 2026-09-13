@@ -50,8 +50,7 @@ public:
     [[nodiscard]] Status resume();
     /* The timer's callback, at DISPATCH. */
     void                 tick();
-    /* Vertical blanks reported since the last line it said; only the driver
-     * can see the period its own timer keeps. */
+    /* Vertical blanks reported since the last line it said. */
     uint32_t             reported() const;
     /* Times dxgkrnl asked for them since then: it turns them off when nothing
      * is waiting, and each turn back on costs a period. */
@@ -60,9 +59,13 @@ public:
 private:
     static constexpr uint64_t frame_period = 10000000u / DisplayMode::refresh_hz;   /* 100 ns */
     static constexpr uint32_t target = 0u;   /* shows source 0 */
-    /* Two seconds of blanks at the committed rate: enough to see a rate that is
-     * not 60 Hz, short enough that a window fits inside the in-guest suite's
-     * vertical blank scenario, and its own budget at one line per two seconds. */
+    /* Two seconds of timer periods at the committed rate: enough to see a rate
+     * that is not 60 Hz, and its own budget at one line per two seconds. The
+     * window counts periods and not reported blanks, because only the periods
+     * are the driver's: dxgkrnl turns the reporting off whenever nothing is
+     * waiting, and a window of 120 reported blanks measures how often something
+     * waited (a live guest logged 2.3 "blanks" a second for a timer that never
+     * left 60 Hz). */
     static constexpr uint32_t ticks_per_report = 120u;
 
     void                 report_rate();
@@ -76,6 +79,8 @@ private:
     bool                   running_;
     /* What reporting_ was when power went away, to put back on the way up. */
     bool                   suspended_reporting_;
+    /* Timer periods since the window opened. */
+    uint32_t               ticks_;
     uint32_t               reported_;
     uint32_t               enables_;
     uint64_t               window_start_;

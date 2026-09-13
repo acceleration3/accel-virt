@@ -159,7 +159,9 @@ TEST(synthetic_vsync_enabled_count, counts_what_dxgkrnl_asked_for)
   CHECK_EQ(fixture.vsync().enabled_count(), 2u); }
 
 /* Only the driver can see the period its own timer keeps, so it says so every
- * two seconds of blanks. */
+ * two seconds of it. The window counts periods, not reported blanks: dxgkrnl
+ * turns the reporting off whenever nothing is waiting, and a window of reported
+ * blanks would measure how often something waited. */
 TEST(synthetic_vsync_reported, says_the_rate_it_kept_every_window)
 { Fixture fixture;
   CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
@@ -170,7 +172,7 @@ TEST(synthetic_vsync_reported, says_the_rate_it_kept_every_window)
   CHECK_EQ(fixture.platform().logged(), 0u);
   fixture.platform().run_timers(frame);
   CHECK_EQ(fixture.vsync().reported(), 0u);
-  CHECK(std::strstr(fixture.platform().last_log(), "vsync 120 blanks in") != nullptr);
+  CHECK(std::strstr(fixture.platform().last_log(), "vsync 120 periods in") != nullptr);
   CHECK(std::strstr(fixture.platform().last_log(), "enabled 1 times") != nullptr); }
 
 /* A powered-down adapter must interrupt nobody. dxgkrnl keeps asking for
@@ -220,7 +222,7 @@ TEST(synthetic_vsync_suspend, a_rate_window_does_not_span_a_power_transition)
   fixture.platform().advance_time(asleep);
   CHECK_STATUS(fixture.vsync().resume(), Status::ok);
   fixture.platform().run_timers(frame * 120u);
-  CHECK(std::strstr(fixture.platform().last_log(), "vsync 120 blanks in 19999920 ticks") != nullptr);
+  CHECK(std::strstr(fixture.platform().last_log(), "vsync 120 periods in 19999920 ticks, 120 reported") != nullptr);
   CHECK(std::strstr(fixture.platform().last_log(), "enabled 1 times") != nullptr);
   fixture.vsync().destroy(); }
 
@@ -233,4 +235,19 @@ TEST(synthetic_vsync_resume, an_adapter_nobody_was_waiting_on_stays_quiet)
   fixture.vsync().tick();
   CHECK_EQ(fixture.vsync().reported(), 0u);
   fixture.platform().set_irql(Irql::passive);
+  fixture.vsync().destroy(); }
+
+/* The rate the driver says is its timer's, not dxgkrnl's appetite: with the
+ * reporting off for most of a window the periods still say 60 Hz, and the line
+ * says how few of them were reported. A live guest logged 2.3 blanks a second
+ * this way for a timer that never left its period (feature 040, US1). */
+TEST(synthetic_vsync_reported, the_window_measures_the_timer_and_not_the_waiters)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  fixture.platform().run_timers(frame * 10u);
+  fixture.vsync().disable();
+  fixture.platform().run_timers(frame * 110u);
+  CHECK(std::strstr(fixture.platform().last_log(), "vsync 120 periods in 19999920 ticks, 10 reported") != nullptr);
+  CHECK_EQ(fixture.vsync().reported(), 0u);
   fixture.vsync().destroy(); }

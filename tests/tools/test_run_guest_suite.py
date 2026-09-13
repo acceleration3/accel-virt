@@ -514,7 +514,7 @@ class GuestSuiteRun(unittest.TestCase):
         is a pulse it can miss - so the line the driver logs is read here."""
         self.script(screendump=[1280, 800],
                     driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
-                                "rvkgpu: vsync 600 blanks in 200000000 ticks, enabled 0 times"])
+                                "rvkgpu: vsync 600 periods in 200000000 ticks, 600 reported, enabled 0 times"])
         result = self.run_suite("--vsync-wait", "0")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("the driver reports 30.00 vertical blanks a second, not 60 within 5%",
@@ -532,8 +532,8 @@ class GuestSuiteRun(unittest.TestCase):
         period; the fastest window says what the period is."""
         self.script(screendump=[1280, 800],
                     driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
-                                "rvkgpu: vsync 120 blanks in 700000000 ticks, enabled 120 times",
-                                "rvkgpu: vsync 120 blanks in 20000000 ticks, enabled 0 times"])
+                                "rvkgpu: vsync 120 periods in 700000000 ticks, 120 reported, enabled 120 times",
+                                "rvkgpu: vsync 120 periods in 20000000 ticks, 120 reported, enabled 0 times"])
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("guest: vsync ok: 60.00 blanks a second", result.stdout)
@@ -545,8 +545,8 @@ class GuestSuiteRun(unittest.TestCase):
         log the instant the suite ends (feature 040, US1)."""
         self.script(screendump=[1280, 800],
                     driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
-                                "rvkgpu: vsync 120 blanks in 700000000 ticks, enabled 120 times"],
-                    driver_log_late=["rvkgpu: vsync 120 blanks in 20000000 ticks, enabled 120 times"],
+                                "rvkgpu: vsync 120 periods in 700000000 ticks, 120 reported, enabled 120 times"],
+                    driver_log_late=["rvkgpu: vsync 120 periods in 20000000 ticks, 120 reported, enabled 120 times"],
                     driver_log_late_seconds=1.5)
         result = self.run_suite("--vsync-wait", "20")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

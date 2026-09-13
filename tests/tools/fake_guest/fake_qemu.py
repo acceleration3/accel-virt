@@ -342,7 +342,7 @@ def main():
     with open(debug, "w") as log:
         lines = script.get("driver_log", ["rvkgpu: DriverEntry",
                                           "rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
-                                          "rvkgpu: vsync 600 blanks in 100000000 ticks, enabled 0 times"])
+                                          "rvkgpu: vsync 600 periods in 100000000 ticks, 600 reported, enabled 0 times"])
         log.write("".join(line + "\n" for line in lines) if device else "")
     # A driver goes on logging while the run reads: what it says every 120
     # blanks arrives long after the line before it.

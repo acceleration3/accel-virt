@@ -10,7 +10,7 @@ namespace av {
 SyntheticVsync::SyntheticVsync(Platform &platform, DxgkrnlInterface &dxgkrnl, DisplaySources &sources)
     : platform_(platform), dxgkrnl_(dxgkrnl), sources_(sources), notification_(platform, dxgkrnl),
       timer_(platform, &AvVsyncTick, this), reporting_(false), running_(false), suspended_reporting_(false),
-      reported_(0u), enables_(0u), window_start_(0u) {}
+      ticks_(0u), reported_(0u), enables_(0u), window_start_(0u) {}
 
 Status SyntheticVsync::initialize()
 {
@@ -23,9 +23,8 @@ Status SyntheticVsync::enable()
     platform_.require_irql_at_most(Irql::passive, "SyntheticVsync::enable");
     enables_++;
     reporting_ = true;
-    /* The window opens at the first blank of a report, whichever enable
-     * brought it. */
-    if (reported_ == 0u) window_start_ = platform_.interrupt_time();
+    /* The window opens with the timer, whichever enable started it. */
+    if (ticks_ == 0u) window_start_ = platform_.interrupt_time();
     if (running_) return Status::ok;
     const Status started = timer_.start(frame_period);
     running_ = started == Status::ok;
@@ -56,6 +55,7 @@ void SyntheticVsync::suspend()
     timer_.stop();
     /* Interrupt time counts the sleep, so a window that straddles the
      * transition measures the sleep and not the period the timer kept. */
+    ticks_ = 0u;
     reported_ = 0u;
     enables_ = 0u;
 }
@@ -71,14 +71,16 @@ Status SyntheticVsync::resume()
 void SyntheticVsync::tick()
 {
     platform_.require_irql_at_most(Irql::dispatch, "SyntheticVsync::tick");
-    if (!reporting_) return;
-    if (notification_.report_vsync(target, sources_.scanout_address(target)) != Status::ok) {
-        platform_.log("rvkgpu: a vsync was refused");
-        return;
+    ticks_++;
+    if (reporting_) {
+        if (notification_.report_vsync(target, sources_.scanout_address(target)) == Status::ok) {
+            reported_++;
+            dxgkrnl_.notify_dpc();
+        } else {
+            platform_.log("rvkgpu: a vsync was refused");
+        }
     }
-    reported_++;
-    if (reported_ == ticks_per_report) report_rate();
-    dxgkrnl_.notify_dpc();
+    if (ticks_ == ticks_per_report) report_rate();
 }
 
 uint32_t SyntheticVsync::reported() const
@@ -99,14 +101,17 @@ void SyntheticVsync::report_rate()
     char           bytes[96];
     TextBuffer     line(bytes, sizeof bytes);
     line.append("rvkgpu: vsync ");
-    line.append_decimal(reported_);
-    line.append(" blanks in ");
+    line.append_decimal(ticks_);
+    line.append(" periods in ");
     line.append_decimal(now - window_start_);
-    line.append(" ticks, enabled ");
+    line.append(" ticks, ");
+    line.append_decimal(reported_);
+    line.append(" reported, enabled ");
     line.append_decimal(enables_);
     line.append(" times");
     platform_.log(line.text());
     window_start_ = now;
+    ticks_ = 0u;
     reported_ = 0u;
     enables_ = 0u;
 }
