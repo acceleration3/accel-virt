@@ -74,8 +74,8 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 
 **Independent Test**: the same runner reports the import verdict per GPU; with the extension refused, the fallback throughput is what it records.
 
-- [ ] T014 [P] [US2] Write `tests/unit/device/probe/test_guest_import_probe.cpp` first: nothing mapped at the address is `not_found`; a bounce buffer (`direct` false) is refused without asking the host to import; an import refusal with `host_error` 0 is a clean `failed` (no extension); a readback through the import that differs is `malformed`; success is `passed()` carrying the bytes; every path releases the import and the guest mapping; a second `run()` is `invalid_state`
-- [ ] T015 [US2] Implement `GuestImportProbe` (object class) in `src/device/probe/guest_import_probe.{hpp,cpp}`: `map_guest` of `probe_bytes` at the address it is given, `direct` required, import, pattern, `read_imported_memory` compare, `ScopeExit` cleanup, `require_main_loop`
+- [X] T014 [P] [US2] Write `tests/unit/device/probe/test_guest_import_probe.cpp` first: nothing mapped at the address is `not_found`; a bounce buffer (`direct` false) is refused without asking the host to import; an import refusal with `host_error` 0 is a clean `failed` (no extension); a readback through the import that differs is `malformed`; success is `passed()` carrying the bytes; every path releases the import and the guest mapping; a second `run()` is `invalid_state`
+- [X] T015 [US2] Implement `GuestImportProbe` (object class) in `src/device/probe/guest_import_probe.{hpp,cpp}`: `map_guest` of `probe_bytes` at the address it is given, `direct` required, import, pattern, `read_imported_memory` compare, `ScopeExit` cleanup, `require_main_loop`
 - [ ] T016 [US2] Measure the copy fallback: the device records the bytes per second of the existing blob copy path into the probe's `measured()` when the import failed, tested at L1 with a scripted clock
 - [ ] T017 [US2] Extend `tools/host/probe_host_memory.py` and its test to report the import verdict and the fallback throughput per GPU, and record the answers in `docs/kb/04-memory.md`
 

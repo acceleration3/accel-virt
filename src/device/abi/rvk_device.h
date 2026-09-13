@@ -85,7 +85,7 @@ typedef struct RvkHostOps {
     void *(*import_guest_memory)(void *opaque, void *pointer, uint64_t size, int32_t *host_error);
     void (*release_guest_memory)(void *opaque, void *memory);
     /* What the host GPU sees through the import; nonzero when it cannot say. */
-    int (*read_imported_memory)(void *opaque, void *memory, uint8_t *buffer, uint64_t size);
+    int (*read_imported_memory)(void *opaque, void *memory, uint64_t offset, uint8_t *buffer, uint64_t size);
     /* A 4-byte store at offset 0 of doorbell page `index` signals the event
      * (memory_region_add_eventfd); disconnect removes it. */
     void (*connect_doorbell)(void *opaque, void *event, uint32_t index);

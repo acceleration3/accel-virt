@@ -43,7 +43,7 @@ public:
     void     release_gpu_memory(void *memory) override;
     void    *import_guest_memory(void *pointer, uint64_t size, int32_t &host_error) override;
     void     release_guest_memory(void *memory) override;
-    Status   read_imported_memory(void *memory, uint8_t *buffer, uint64_t size) override;
+    Status   read_imported_memory(void *memory, uint64_t offset, uint8_t *buffer, uint64_t size) override;
     void     connect_doorbell(void *event, uint32_t index) override;
     void     disconnect_doorbell(void *event, uint32_t index) override;
     Status   connect_fence_interrupts() override;

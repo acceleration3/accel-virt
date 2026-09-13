@@ -87,8 +87,9 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
         return host_of(opaque).import_guest_memory(pointer, size, *host_error);
     };
     table_.release_guest_memory = [](void *opaque, void *memory) { host_of(opaque).release_guest_memory(memory); };
-    table_.read_imported_memory = [](void *opaque, void *memory, std::uint8_t *buffer, std::uint64_t size) {
-        return host_of(opaque).read_imported_memory(memory, buffer, size) == Status::ok ? 0 : 1;
+    table_.read_imported_memory = [](void *opaque, void *memory, std::uint64_t offset, std::uint8_t *buffer,
+                                     std::uint64_t size) {
+        return host_of(opaque).read_imported_memory(memory, offset, buffer, size) == Status::ok ? 0 : 1;
     };
     table_.connect_doorbell = [](void *opaque, void *event, std::uint32_t index) {
         host_of(opaque).connect_doorbell(event, index);

@@ -91,9 +91,10 @@ public:
      * until the import is released. */
     [[nodiscard]] virtual void *import_guest_memory(void *pointer, uint64_t size, int32_t &host_error) = 0;
     virtual void                release_guest_memory(void *memory) = 0;
-    /* Main loop. `size` bytes of what the host GPU sees through the import,
-     * which is what a probe compares against what the device wrote. */
-    [[nodiscard]] virtual Status read_imported_memory(void *memory, uint8_t *buffer, uint64_t size) = 0;
+    /* Main loop. `size` bytes of what the host GPU sees at `offset` of the
+     * import, which is what a probe compares against what the device wrote. */
+    [[nodiscard]] virtual Status read_imported_memory(void *memory, uint64_t offset, uint8_t *buffer,
+                                                      uint64_t size) = 0;
 
     /* Main loop. A 4-byte store at offset 0 of doorbell page `index` signals
      * `event` without the main loop (a KVM ioeventfd) until disconnected; the

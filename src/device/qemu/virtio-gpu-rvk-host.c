@@ -480,14 +480,14 @@ static void rvk_release_guest_memory(void *opaque, void *memory)
 
 /* What the GPU's own mapping of the imported memory holds, which is the claim a
  * probe checks against the bytes the device wrote into the guest window. */
-static int rvk_read_imported_memory(void *opaque, void *memory, uint8_t *buffer, uint64_t size)
+static int rvk_read_imported_memory(void *opaque, void *memory, uint64_t offset, uint8_t *buffer, uint64_t size)
 {
     VirtIOGPURvkBlock *block = memory;
 
-    if (size > block->size) {
+    if (offset + size > block->size) {
         return 1;
     }
-    memcpy(buffer, block->pointer, size);
+    memcpy(buffer, (char *)block->pointer + offset, size);
     return 0;
 }
 

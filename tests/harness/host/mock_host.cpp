@@ -332,7 +332,7 @@ void MockHost::release_guest_memory(void *memory)
     if (!released) record(HostViolation::unknown_handle, "MockHost::release_guest_memory");
 }
 
-Status MockHost::read_imported_memory(void *memory, std::uint8_t *buffer, std::uint64_t size)
+Status MockHost::read_imported_memory(void *memory, std::uint64_t offset, std::uint8_t *buffer, std::uint64_t size)
 {
     require_main_loop("MockHost::read_imported_memory");
     Status status = Status::not_found;
@@ -340,8 +340,8 @@ Status MockHost::read_imported_memory(void *memory, std::uint8_t *buffer, std::u
         StateLock lock(state_);
         for (const Import &import : imports_) {
             if (!import.live || &import != memory) continue;
-            if (size > import.size) return Status::invalid_parameter;
-            for (std::uint64_t index = 0u; index < size; index++) buffer[index] = import.pointer[index];
+            if (offset + size > import.size) return Status::invalid_parameter;
+            for (std::uint64_t index = 0u; index < size; index++) buffer[index] = import.pointer[offset + index];
             /* A host GPU that imported something else sees something else. */
             if (fail_now(corrupt_import_read_) && size != 0u)
                 buffer[size - 1u] = static_cast<std::uint8_t>(~buffer[size - 1u]);

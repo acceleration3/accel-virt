@@ -182,9 +182,10 @@ void TableHost::release_guest_memory(void *memory)
     ops_.release_guest_memory(ops_.opaque, memory);
 }
 
-Status TableHost::read_imported_memory(void *memory, uint8_t *buffer, uint64_t size)
+Status TableHost::read_imported_memory(void *memory, uint64_t offset, uint8_t *buffer, uint64_t size)
 {
-    return ops_.read_imported_memory(ops_.opaque, memory, buffer, size) == 0 ? Status::ok : Status::not_supported;
+    return ops_.read_imported_memory(ops_.opaque, memory, offset, buffer, size) == 0 ? Status::ok
+                                                                                     : Status::not_supported;
 }
 
 void TableHost::connect_doorbell(void *event, uint32_t index)

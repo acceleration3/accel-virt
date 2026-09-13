@@ -173,9 +173,12 @@ TEST(table_host, forwards_exported_gpu_memory_and_guest_imports)
   CHECK_EQ(host_error, 0);
   CHECK_EQ(mock.live_imports(), 1u);
   std::uint8_t seen[0x1000] = {};
-  CHECK_STATUS(host.read_imported_memory(imported, seen, sizeof seen), Status::ok);
+  CHECK_STATUS(host.read_imported_memory(imported, 0u, seen, sizeof seen), Status::ok);
   CHECK_EQ(seen[0], 0xA5u);
   CHECK_EQ(seen[0xFFFu], 0x5Au);
+  std::uint8_t tail[1] = {};
+  CHECK_STATUS(host.read_imported_memory(imported, 0xFFFu, tail, sizeof tail), Status::ok);
+  CHECK_EQ(tail[0], 0x5Au);
   host.release_guest_memory(imported);
   CHECK_EQ(mock.live_imports(), 0u);
   /* A host with no VK_EXT_external_memory_host refuses with no number of its own. */
