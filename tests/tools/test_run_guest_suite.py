@@ -133,6 +133,18 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertFalse((self.work / "panic.txt").exists())
         self.assert_clean()
 
+    def test_the_executor_controls_reach_qemus_environment(self):
+        """Feature 040 US3: a real TDR needs the host to stall, and the test
+        executor is told to from outside - no rebuild, no test-only command in
+        the protocol (FR-006)."""
+        self.script()
+        result = self.run_suite("--stall-ms", "5000", "--fault-after", "3")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        environment = json.loads((self.work / "environment.json").read_text())
+        self.assertEqual(environment.get("RVK_ECHO_STALL_MS"), "5000")
+        self.assertEqual(environment.get("RVK_ECHO_FAULT_AFTER"), "3")
+        self.assert_clean()
+
     def test_s3_suspends_through_the_agent_and_wakes_through_qmp(self):
         """Feature 040 US1: the adapter is still there after the guest slept."""
         self.script()

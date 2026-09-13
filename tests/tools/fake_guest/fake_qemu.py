@@ -320,6 +320,11 @@ def main():
     device = any(word.startswith("virtio-gpu-rvk-pci") for word in argv)
     guest = Guest(script, os.environ["FAKE_GUEST_JOURNAL"], device)
     guest.note("argv " + " ".join(argv))
+    # What the device's executor was told to do, as the runner set it: the
+    # environment is how a test executor is steered without a rebuild.
+    work = os.path.dirname(os.environ["FAKE_GUEST_JOURNAL"])
+    with open(os.path.join(work, "work", "environment.json"), "w") as out:
+        json.dump({name: value for name, value in os.environ.items() if name.startswith("RVK_ECHO_")}, out)
     if script.get("exit_at_boot") or (not device and os.environ.get("FAKE_QEMU_RESCUE_FAILS")):
         sys.exit(1)
     agent = field(option(argv, "-chardev", "socket,id=agent"), "path")

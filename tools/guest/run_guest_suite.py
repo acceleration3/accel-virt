@@ -114,6 +114,10 @@ def arguments():
     parser.add_argument("--cpus", type=int, default=4)
     parser.add_argument("--outputs", type=int, default=1, help="the device's max_outputs")
     parser.add_argument("--power-poll", type=float, default=5.0, help="seconds between display-power screendumps")
+    parser.add_argument("--stall-ms", type=int, default=0,
+                        help="make the test executor take this long per command (feature 040, US3)")
+    parser.add_argument("--fault-after", type=int, default=0,
+                        help="make the test executor lose the device on its Nth command")
     parser.add_argument("--s3", action="store_true",
                         help="let the machine advertise S3; this firmware cannot resume from it")
     parser.add_argument("--hibernate", action="store_true",
@@ -349,6 +353,12 @@ class GuestRun:
         self.qmp_lost = False
         output = open(self.qemu_log, "wb")
         environment = dict(os.environ, QEMU_MODULE_DIR=os.path.dirname(os.path.abspath(self.args.qemu)))
+        # What the test executor is told to do to the host's work: a stall
+        # longer than TdrDelay is what dxgkrnl times out on (feature 040, US3).
+        if self.args.stall_ms:
+            environment["RVK_ECHO_STALL_MS"] = str(self.args.stall_ms)
+        if self.args.fault_after:
+            environment["RVK_ECHO_FAULT_AFTER"] = str(self.args.fault_after)
         self.qemu = subprocess.Popen(qemu_command(self.args, self.work, self.disk, rescue), stdout=output,
                                      stderr=subprocess.STDOUT, env=environment)
         output.close()
@@ -673,7 +683,7 @@ class GuestRun:
         """What the guest says it can do, asked before it is asked to do it: a
         suspend the machine does not offer would just stop answering."""
         if self.sleep_states is None:
-            self.sleep_states = self.stage_output("sleepstates")
+            self.sleep_states = self.stage_output("sleepstates", saved="sleepstates.txt")
         return f"{state}=yes" in self.sleep_states
 
     def suspend(self):
