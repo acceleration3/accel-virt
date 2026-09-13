@@ -55,9 +55,19 @@ public:
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
 
+    /* Destroys whatever the guest still owned - the instance it made, and the
+     * device with it - and forgets every handle. A context's host objects are
+     * the context's, and a guest that never destroys them must not be able to
+     * leak them by dying (feature 042). */
+    void     shut_down();
+
     /* Commands run since this backend was made, which is what a conformance
      * run counts. */
     uint64_t ran() const;
+    /* Records a handle this backend is about to hand the guest. A registry
+     * with no room left loses the device rather than hand out one it would
+     * refuse when the guest sent it back. */
+    void     made(uint64_t raw);
     /* Whether this backend made the handle a guest just named. What the
      * generated decoder asks through wire_to_handle. */
     bool     knows_handle(uint64_t raw) const;
@@ -81,6 +91,7 @@ private:
     /* The device the imports belong to. A VkDeviceMemory is a device's, and
      * the guest makes exactly one per context through vkCreateDevice, so this
      * is taken from the command that made it rather than guessed. */
+    VkInstance     instance_;
     VkDevice       device_;
     HandleRegistry handles_;
     uint64_t ran_;

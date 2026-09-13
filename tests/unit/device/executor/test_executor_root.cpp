@@ -5,7 +5,6 @@
 #include "device/executor/context_session.hpp"
 #include "device/executor/executor_root.hpp"
 #include "harness/executor/mock_host_apis.hpp"
-#include "harness/executor/mock_session_backend.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
@@ -13,7 +12,6 @@
 using av::ContextSession;
 using av::ExecutorRoot;
 using av::MockHostApis;
-using av::MockSessionBackend;
 using av::Status;
 
 namespace {
@@ -106,11 +104,9 @@ public:
     }
     Status              status() const { return status_; }
     ExecutorRoot       &root() { return root_; }
-    MockSessionBackend &backend() { return backend_; }
 
 private:
     MockHostApis       apis_;
-    MockSessionBackend backend_;
     ExecutorRoot       root_;
     Status             status_ = Status::ok;
 };
@@ -123,7 +119,7 @@ TEST(executor_root_open, a_context_on_a_gpu_that_runs_it_gets_a_session)
   CHECK_EQ(opened.root().live(), 0u);
 
   ContextSession *const session =
-      opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel, opened.backend());
+      opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel);
   CHECK(session != nullptr);
   CHECK(session->live());
   CHECK_EQ(opened.root().live(), 1u);
@@ -138,14 +134,14 @@ TEST(executor_root_open, a_context_on_a_gpu_that_runs_it_gets_a_session)
  * does not run. It is refused rather than served by the wrong device. */
 TEST(executor_root_open, an_api_this_gpu_does_not_run_gets_no_session)
 { Opened opened;
-  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_OPENCL, nvidia, opened.backend()) == nullptr);
-  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_OPENCL, intel, opened.backend()) != nullptr);
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_OPENCL, nvidia) == nullptr);
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_OPENCL, intel) != nullptr);
   CHECK_EQ(opened.root().live(), 1u); }
 
 TEST(executor_root_open, a_gpu_nobody_has_gets_no_session)
 { Opened opened;
-  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, absent, opened.backend()) == nullptr);
-  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, nullptr, opened.backend()) == nullptr);
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, absent) == nullptr);
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, nullptr) == nullptr);
   CHECK_EQ(opened.root().live(), 0u); }
 
 /* Every slot taken is a refusal, not a failure: the device turns it into a
@@ -153,10 +149,10 @@ TEST(executor_root_open, a_gpu_nobody_has_gets_no_session)
 TEST(executor_root_open, every_slot_taken_refuses_the_next)
 { Opened opened;
   for (std::uint32_t i = 0u; i < ExecutorRoot::sessions; i++) {
-      CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel, opened.backend()) != nullptr);
+      CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel) != nullptr);
   }
   CHECK_EQ(opened.root().live(), ExecutorRoot::sessions);
-  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel, opened.backend()) == nullptr); }
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel) == nullptr); }
 
 /* A slot given back is a slot the next context gets. */
 TEST(executor_root_open, a_closed_session_s_slot_comes_back)
@@ -164,12 +160,12 @@ TEST(executor_root_open, a_closed_session_s_slot_comes_back)
   ContextSession *first = nullptr;
   for (std::uint32_t i = 0u; i < ExecutorRoot::sessions; i++) {
       ContextSession *const session =
-          opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel, opened.backend());
+          opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel);
       if (i == 0u) first = session;
   }
   opened.root().close(first);
   CHECK_EQ(opened.root().live(), ExecutorRoot::sessions - 1u);
-  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel, opened.backend()) == first); }
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel) == first); }
 
 /* A pointer this root never handed out is not one it will act on, which is
  * what a device that destroys twice would present. */
@@ -182,6 +178,5 @@ TEST(executor_root_open, a_session_it_never_handed_out_is_not_closed)
 
 /* Nothing is handed out before the host has been asked. */
 TEST(executor_root_open, opens_nothing_until_it_has_asked)
-{ MockSessionBackend backend;
-  ExecutorRoot root;
-  CHECK(root.open(RVK_EXECUTOR_SUB_API_VULKAN, intel, backend) == nullptr); }
+{ ExecutorRoot root;
+  CHECK(root.open(RVK_EXECUTOR_SUB_API_VULKAN, intel) == nullptr); }

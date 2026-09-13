@@ -14,7 +14,7 @@ alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][DecodeArena::arena_byt
 
 }  // namespace
 
-ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, asked_(false) {}
+ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, vulkan_{}, asked_(false) {}
 
 Status ExecutorRoot::initialize(HostApis &apis)
 {
@@ -35,8 +35,7 @@ uint32_t ExecutorRoot::import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) c
     return gpu != nullptr ? gpu->import_kinds(sub_api) : 0u;
 }
 
-ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid,
-                                   SessionBackend &backend)
+ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid)
 {
     const HostGpu *const gpu = asked_ ? gpus_.find(gpu_uuid) : nullptr;
     if (gpu == nullptr) return nullptr;
@@ -47,8 +46,8 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid,
 
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         if (sessions_[slot].live()) continue;
-        if (sessions_[slot].initialize(backend, decode_blocks[slot], DecodeArena::arena_bytes) !=
-            Status::ok)
+        if (sessions_[slot].initialize(vulkan_[slot], decode_blocks[slot],
+                                       DecodeArena::arena_bytes) != Status::ok)
             return nullptr;
         return &sessions_[slot];
     }
@@ -59,6 +58,12 @@ void ExecutorRoot::close(ContextSession *session)
 {
     if (!owns(session)) return;
     session->release();
+    /* And the host objects the guest never destroyed. A context that dies
+     * owning a VkInstance would otherwise leak it for the life of the process,
+     * which is a guest's to trigger as often as it likes. */
+    for (uint32_t slot = 0u; slot < max_sessions; slot++) {
+        if (&sessions_[slot] == session) vulkan_[slot].shut_down();
+    }
 }
 
 uint32_t ExecutorRoot::live() const

@@ -26,9 +26,29 @@ std::uint64_t number_of(const void *handle)
     return raw;
 }
 
+
+/* Every other handle. The driver dereferences these too - a VkBuffer this
+ * executor never made is the same hole one layer down - but null is a value the
+ * API itself defines for most of them, and refusing it would refuse every
+ * optional parameter. So: null passes, anything else must be ours. */
+template <typename H>
+bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
+{
+    if (raw != 0u && (backend == nullptr || !backend->knows_handle(raw))) return false;
+    memcpy(&out, &raw, sizeof out);
+    return true;
+}
+
 }  // namespace
 
-VulkanBackend::VulkanBackend() : device_(VK_NULL_HANDLE), handles_(), ran_(0u), lost_(false) {}
+VulkanBackend::VulkanBackend()
+    : instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), handles_(), ran_(0u), lost_(false)
+{}
+
+void VulkanBackend::made(uint64_t raw)
+{
+    if (!handles_.remember(raw)) lost_ = true;
+}
 
 bool VulkanBackend::knows_handle(uint64_t raw) const { return handles_.knows(raw); }
 
@@ -38,14 +58,17 @@ VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateI
                                             const VkAllocationCallbacks *, VkInstance *pInstance)
 {
     const VkResult result = RealVulkanDispatch::on_vkCreateInstance(pCreateInfo, nullptr, pInstance);
-    if (result == VK_SUCCESS && pInstance != nullptr && !handles_.remember(number_of(*pInstance)))
-        lost_ = true;
+    if (result == VK_SUCCESS && pInstance != nullptr) {
+        instance_ = *pInstance;
+        if (!handles_.remember(number_of(*pInstance))) lost_ = true;
+    }
     return result;
 }
 
 void VulkanBackend::on_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *)
 {
     handles_.forget(number_of(instance));
+    if (instance == instance_) instance_ = VK_NULL_HANDLE;
     RealVulkanDispatch::on_vkDestroyInstance(instance, nullptr);
 }
 
@@ -188,6 +211,23 @@ void VulkanBackend::abandon(ImportedBlob &blob)
 
 bool VulkanBackend::lost() const { return lost_; }
 
+void VulkanBackend::shut_down()
+{
+    /* Device before instance, which is the order the API requires and the
+     * order a guest would have used had it bothered. */
+    if (device_ != VK_NULL_HANDLE) {
+        ::vkDestroyDevice(device_, nullptr);
+        device_ = VK_NULL_HANDLE;
+    }
+    if (instance_ != VK_NULL_HANDLE) {
+        ::vkDestroyInstance(instance_, nullptr);
+        instance_ = VK_NULL_HANDLE;
+    }
+    handles_.forget_all();
+    ran_ = 0u;
+    lost_ = false;
+}
+
 uint64_t VulkanBackend::ran() const { return ran_; }
 
 
@@ -199,6 +239,22 @@ namespace vkproto {
 
 namespace {
 
+/* Outbound: whatever the host is about to tell the guest about is a handle the
+ * host made, so this is where it becomes one the host will accept back. A
+ * registry that is full makes the executor lose its device rather than hand out
+ * a handle it will refuse later. */
+template <typename H>
+uint64_t remember(VulkanBackend *backend, H value)
+{
+    uint64_t raw = 0u;
+    static_assert(sizeof(H) <= sizeof raw);
+    memcpy(&raw, &value, sizeof value);
+    if (backend != nullptr) backend->made(raw);
+    return raw;
+}
+
+/* A handle the loader dispatches on. Null is never one of these: the loader
+ * dereferences it to find the table to call through. */
 template <typename H>
 bool answer(const VulkanBackend *backend, uint64_t raw, H &out)
 {
@@ -239,6 +295,240 @@ bool wire_to_handle(uint64_t raw, VkCommandBuffer &out) noexcept
 {
     return answer(VulkanBackend::deciding(), raw, out);
 }
+
+bool wire_to_handle(uint64_t raw, VkAccelerationStructureKHR &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkAccelerationStructureNV &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkBuffer &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkBufferView &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkCommandPool &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkDeferredOperationKHR &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkDescriptorPool &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkDescriptorSet &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkDescriptorSetLayout &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkDescriptorUpdateTemplate &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkDeviceMemory &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkEvent &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkFence &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkFramebuffer &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkImage &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkImageView &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkMicromapEXT &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkPipeline &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkPipelineBinaryKHR &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkPipelineCache &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkPipelineLayout &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkPrivateDataSlot &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkQueryPool &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkRenderPass &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkSampler &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkSamplerYcbcrConversion &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkSemaphore &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkShaderEXT &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkShaderModule &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkSurfaceKHR &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkSwapchainKHR &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+bool wire_to_handle(uint64_t raw, VkValidationCacheEXT &out) noexcept
+{
+    return answer_optional(VulkanBackend::deciding(), raw, out);
+}
+
+std::uint64_t handle_to_wire(VkAccelerationStructureKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkAccelerationStructureNV v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkBuffer v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkBufferView v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkCommandBuffer v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkCommandPool v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkDeferredOperationKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkDescriptorPool v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkDescriptorSet v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkDescriptorSetLayout v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkDescriptorUpdateTemplate v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkDevice v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkDeviceMemory v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkEvent v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkFence v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkFramebuffer v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkImage v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkImageView v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkInstance v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkMicromapEXT v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkPhysicalDevice v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkPipeline v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkPipelineBinaryKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkPipelineCache v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkPipelineLayout v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkPrivateDataSlot v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkQueryPool v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkQueue v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkRenderPass v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkSampler v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkSamplerYcbcrConversion v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkSemaphore v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkShaderEXT v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkShaderModule v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkSurfaceKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkSwapchainKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+
+std::uint64_t handle_to_wire(VkValidationCacheEXT v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
 }  // namespace vkproto
 

@@ -10,7 +10,6 @@
 #include "device/abi/rvk_executor.h"
 #include "device/executor/context_session.hpp"
 #include "device/executor/executor_root.hpp"
-#include "device/executor/vulkan_backend.hpp"
 #include "device/shim/loader_host_apis.hpp"
 
 namespace {
@@ -28,7 +27,7 @@ public:
     av::ContextSession *create(uint32_t sub_api, const uint8_t *gpu_uuid)
     {
         if (sub_api != RVK_EXECUTOR_SUB_API_VULKAN) return nullptr;
-        return root().open(sub_api, gpu_uuid, vulkan());
+        return root().open(sub_api, gpu_uuid);
     }
 
     void destroy(av::ContextSession *session) { root().close(session); }
@@ -49,17 +48,9 @@ public:
     }
 
 private:
-    /* One backend per host API, shared by every context on it: a backend
-     * outlives a session as the GPU outlives the context. */
-    av::VulkanBackend &vulkan()
-    {
-        if (!vulkan_.constructed()) (void)vulkan_.construct();
-        return vulkan_.object();
-    }
 
     av::ObjectStorage<av::LoaderHostApis> apis_;
     av::ObjectStorage<av::ExecutorRoot>   root_;
-    av::ObjectStorage<av::VulkanBackend>  vulkan_;
     bool                                  asked_ = false;
 };
 

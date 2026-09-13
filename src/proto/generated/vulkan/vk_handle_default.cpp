@@ -29,11 +29,43 @@ template<typename H>
 }
 }  // namespace
 
-RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkInstance v) noexcept { return identity(v); }
-RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkPhysicalDevice v) noexcept { return identity(v); }
-RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkDevice v) noexcept { return identity(v); }
-RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkQueue v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkAccelerationStructureKHR v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkAccelerationStructureNV v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkBuffer v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkBufferView v) noexcept { return identity(v); }
 RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkCommandBuffer v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkCommandPool v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkDeferredOperationKHR v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkDescriptorPool v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkDescriptorSet v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkDescriptorSetLayout v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkDescriptorUpdateTemplate v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkDevice v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkDeviceMemory v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkEvent v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkFence v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkFramebuffer v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkImage v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkImageView v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkInstance v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkMicromapEXT v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkPhysicalDevice v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkPipeline v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkPipelineBinaryKHR v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkPipelineCache v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkPipelineLayout v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkPrivateDataSlot v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkQueryPool v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkQueue v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkRenderPass v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkSampler v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkSamplerYcbcrConversion v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkSemaphore v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkShaderEXT v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkShaderModule v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkSurfaceKHR v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkSwapchainKHR v) noexcept { return identity(v); }
+RVK_HOOK_DEFAULT std::uint64_t handle_to_wire(VkValidationCacheEXT v) noexcept { return identity(v); }
 
 // Identity inbound as well, which is right where the numbers are the
 // caller's own. A host overrides every one of these, because there they

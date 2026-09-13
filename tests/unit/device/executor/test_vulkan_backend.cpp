@@ -22,6 +22,22 @@ using av::WireArena;
 using av::WireReader;
 using av::WireWriter;
 
+/* This test makes real VkInstances, and the drivers behind them allocate
+ * things they never give back - dbus connections inside the loader's ICD
+ * enumeration, most of them. Those are named here rather than leak detection
+ * being turned off, so a leak of this repository's own still fails. */
+extern "C" const char *__lsan_default_suppressions(void);
+extern "C" const char *__lsan_default_suppressions(void)
+{
+    return "leak:libdbus-1\n"
+           "leak:libvulkan\n"
+           "leak:libnvidia\n"
+           "leak:nvidia_icd\n"
+           "leak:libGLX\n"
+           "leak:iris_dri\n"
+           "leak:libz\n";
+}
+
 namespace {
 
 constexpr std::size_t block_bytes = 65536u;
@@ -68,7 +84,8 @@ TEST(vulkan_backend, a_well_formed_command_decodes_and_answers)
   CHECK_EQ(backend.ran(), 1u);
   /* A VkResult and a handle come back, whatever the driver made of it. */
   CHECK_EQ(answer.offset(), 12u);
-  CHECK(!backend.lost()); }
+  CHECK(!backend.lost());
+  backend.shut_down(); }
 
 /* A frame that stops short is refused rather than read past: every truncation
  * of a real command, not just a convenient one. */
@@ -183,7 +200,8 @@ TEST(vulkan_backend, the_device_the_guest_makes_is_the_one_imports_belong_to)
   WireWriter invented_answer(reply, sizeof reply);
   arena.reset();
   CHECK(!backend.run(av::vkproto::kCmd_vkDestroyDevice, invented_payload, invented_answer, arena));
-  CHECK(!backend.lost()); }
+  CHECK(!backend.lost());
+  backend.shut_down(); }
 
 /* The property a guest must not be able to break: a number this host did not
  * produce is not a handle. A fuzzer reached vkDestroyInstance with a
@@ -215,4 +233,35 @@ TEST(vulkan_backend, knows_only_the_handles_it_made)
   if (returned == VK_SUCCESS) {
       CHECK(backend.knows_handle(raw));
       CHECK(!backend.knows_handle(raw ^ 0x1000u));
-  } }
+  }
+  backend.shut_down(); }
+
+/* A context that dies still owning its instance must take it with it. A guest
+ * can create and abandon contexts as often as it likes, and a host object left
+ * behind each time is a leak it controls. The fuzz target found this one. */
+TEST(vulkan_backend, shutting_down_gives_back_what_the_guest_never_destroyed)
+{ VulkanBackend backend;
+  std::uint8_t block[block_bytes];
+  WireArena arena(block, sizeof block);
+  std::uint8_t frame[1024];
+  const std::size_t length = create_instance_frame(frame, sizeof frame);
+  std::uint8_t reply[256] = {};
+  WireReader payload(frame, length);
+  WireWriter answer(reply, sizeof reply);
+  CHECK(backend.run(av::vkproto::kCmd_vkCreateInstance, payload, answer, arena));
+
+  av::WireReader read_back(reply, answer.offset());
+  std::int32_t   returned = 0;
+  std::uint64_t  raw = 0u;
+  CHECK(read_back.read_pod(returned));
+  CHECK(read_back.read_pod(raw));
+
+  backend.shut_down();
+  /* Nothing it made is still its own, so a handle from before is refused the
+   * way any other guest-chosen number is. */
+  CHECK(!backend.knows_handle(raw));
+  CHECK_EQ(backend.ran(), 0u);
+  CHECK(!backend.lost());
+  /* And shutting down twice is not a second destroy. */
+  backend.shut_down();
+  CHECK(!backend.knows_handle(raw)); }

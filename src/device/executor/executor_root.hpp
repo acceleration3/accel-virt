@@ -13,6 +13,7 @@
 #include "core/support/status.hpp"
 #include "device/executor/context_session.hpp"
 #include "device/executor/host_gpu_set.hpp"
+#include "device/executor/vulkan_backend.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -48,9 +49,12 @@ public:
      * when every slot is taken. The device turns a null into a context fault
      * and keeps running, so this is a refusal rather than a failure.
      *
-     * `backend` is what will run the commands; the caller owns it, because a
-     * backend outlives the session as the GPU outlives the context. */
-    ContextSession *open(uint32_t sub_api, const uint8_t *gpu_uuid, SessionBackend &backend);
+     * The backend is the session's own, not shared: a context that dies still
+     * owning a VkInstance has to take it with it, and one shared by every
+     * session has nowhere to do that (feature 042, found by fuzzing). */
+    ContextSession *open(uint32_t sub_api, const uint8_t *gpu_uuid);
+    /* The backend a session is running on, for a test to look at. */
+    SessionBackend *backend_of(const ContextSession *session);
     /* Gives a session's slot and block back. Safe on a null, which is what the
      * device passes if it ever destroys twice. */
     void            close(ContextSession *session);
@@ -70,6 +74,7 @@ private:
 
     HostGpuSet     gpus_;
     ContextSession sessions_[max_sessions];
+    VulkanBackend  vulkan_[max_sessions];
     bool           asked_;
 };
 

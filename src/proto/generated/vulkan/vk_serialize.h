@@ -34,11 +34,56 @@ static_assert(sizeof(void*) == 8 || sizeof(void*) == 4,
 // state, not in the struct. Weakly defined to 0 (send nothing) so
 // the server and loopback tests link without an image registry.
 [[nodiscard]] std::uint64_t host_image_copy_bytes(VkImage image, const VkMemoryToImageCopy& region) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkInstance v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkPhysicalDevice v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkDevice v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkQueue v) noexcept;
+// Any field, as the number it holds. A value off the wire is a value
+// its own type may not have - an enum with an unlisted value, most of
+// all - and loading one as that type is undefined. Everything that
+// reads a decoded field for its value rather than to pass it on goes
+// through here (feature 042).
+template <typename T>
+[[nodiscard]] inline std::uint64_t as_number(const T& value) noexcept {
+    std::uint64_t raw = 0;
+    static_assert(sizeof(T) <= sizeof(raw));
+    std::memcpy(&raw, &value, sizeof(T));
+    return raw;
+}
+
+[[nodiscard]] std::uint64_t handle_to_wire(VkAccelerationStructureKHR v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkAccelerationStructureNV v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkBuffer v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkBufferView v) noexcept;
 [[nodiscard]] std::uint64_t handle_to_wire(VkCommandBuffer v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkCommandPool v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkDeferredOperationKHR v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkDescriptorPool v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkDescriptorSet v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkDescriptorSetLayout v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkDescriptorUpdateTemplate v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkDevice v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkDeviceMemory v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkEvent v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkFence v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkFramebuffer v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkImage v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkImageView v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkInstance v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkMicromapEXT v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkPhysicalDevice v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkPipeline v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkPipelineBinaryKHR v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkPipelineCache v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkPipelineLayout v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkPrivateDataSlot v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkQueryPool v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkQueue v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkRenderPass v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkSampler v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkSamplerYcbcrConversion v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkSemaphore v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkShaderEXT v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkShaderModule v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkSurfaceKHR v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkSwapchainKHR v) noexcept;
+[[nodiscard]] std::uint64_t handle_to_wire(VkValidationCacheEXT v) noexcept;
 
 // The other direction, and the one that decides whether a handle off
 // the wire is a pointer the host will dereference. The default is
@@ -86,10 +131,11 @@ static_assert(sizeof(void*) == 8 || sizeof(void*) == 4,
 [[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkValidationCacheEXT& out) noexcept;
 
 inline void serialize_VkAccelerationStructureKHR(::av::WireWriter& buf, VkAccelerationStructureKHR v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkAccelerationStructureKHR) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkAccelerationStructureKHR(::av::WireReader& r, VkAccelerationStructureKHR& out) noexcept {
@@ -101,10 +147,11 @@ inline void serialize_VkAccelerationStructureKHR(::av::WireWriter& buf, VkAccele
 }
 
 inline void serialize_VkAccelerationStructureNV(::av::WireWriter& buf, VkAccelerationStructureNV v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkAccelerationStructureNV) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkAccelerationStructureNV(::av::WireReader& r, VkAccelerationStructureNV& out) noexcept {
@@ -116,10 +163,11 @@ inline void serialize_VkAccelerationStructureNV(::av::WireWriter& buf, VkAcceler
 }
 
 inline void serialize_VkBuffer(::av::WireWriter& buf, VkBuffer v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkBuffer) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkBuffer(::av::WireReader& r, VkBuffer& out) noexcept {
@@ -131,10 +179,11 @@ inline void serialize_VkBuffer(::av::WireWriter& buf, VkBuffer v) noexcept {
 }
 
 inline void serialize_VkBufferView(::av::WireWriter& buf, VkBufferView v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkBufferView) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkBufferView(::av::WireReader& r, VkBufferView& out) noexcept {
@@ -158,10 +207,11 @@ inline void serialize_VkCommandBuffer(::av::WireWriter& buf, VkCommandBuffer v) 
 }
 
 inline void serialize_VkCommandPool(::av::WireWriter& buf, VkCommandPool v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkCommandPool) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkCommandPool(::av::WireReader& r, VkCommandPool& out) noexcept {
@@ -173,10 +223,11 @@ inline void serialize_VkCommandPool(::av::WireWriter& buf, VkCommandPool v) noex
 }
 
 inline void serialize_VkDeferredOperationKHR(::av::WireWriter& buf, VkDeferredOperationKHR v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkDeferredOperationKHR) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkDeferredOperationKHR(::av::WireReader& r, VkDeferredOperationKHR& out) noexcept {
@@ -188,10 +239,11 @@ inline void serialize_VkDeferredOperationKHR(::av::WireWriter& buf, VkDeferredOp
 }
 
 inline void serialize_VkDescriptorPool(::av::WireWriter& buf, VkDescriptorPool v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkDescriptorPool) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkDescriptorPool(::av::WireReader& r, VkDescriptorPool& out) noexcept {
@@ -203,10 +255,11 @@ inline void serialize_VkDescriptorPool(::av::WireWriter& buf, VkDescriptorPool v
 }
 
 inline void serialize_VkDescriptorSet(::av::WireWriter& buf, VkDescriptorSet v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkDescriptorSet) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkDescriptorSet(::av::WireReader& r, VkDescriptorSet& out) noexcept {
@@ -218,10 +271,11 @@ inline void serialize_VkDescriptorSet(::av::WireWriter& buf, VkDescriptorSet v) 
 }
 
 inline void serialize_VkDescriptorSetLayout(::av::WireWriter& buf, VkDescriptorSetLayout v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkDescriptorSetLayout) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkDescriptorSetLayout(::av::WireReader& r, VkDescriptorSetLayout& out) noexcept {
@@ -233,10 +287,11 @@ inline void serialize_VkDescriptorSetLayout(::av::WireWriter& buf, VkDescriptorS
 }
 
 inline void serialize_VkDescriptorUpdateTemplate(::av::WireWriter& buf, VkDescriptorUpdateTemplate v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkDescriptorUpdateTemplate) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkDescriptorUpdateTemplate(::av::WireReader& r, VkDescriptorUpdateTemplate& out) noexcept {
@@ -260,10 +315,11 @@ inline void serialize_VkDevice(::av::WireWriter& buf, VkDevice v) noexcept {
 }
 
 inline void serialize_VkDeviceMemory(::av::WireWriter& buf, VkDeviceMemory v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkDeviceMemory) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkDeviceMemory(::av::WireReader& r, VkDeviceMemory& out) noexcept {
@@ -275,10 +331,11 @@ inline void serialize_VkDeviceMemory(::av::WireWriter& buf, VkDeviceMemory v) no
 }
 
 inline void serialize_VkEvent(::av::WireWriter& buf, VkEvent v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkEvent) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkEvent(::av::WireReader& r, VkEvent& out) noexcept {
@@ -290,10 +347,11 @@ inline void serialize_VkEvent(::av::WireWriter& buf, VkEvent v) noexcept {
 }
 
 inline void serialize_VkFence(::av::WireWriter& buf, VkFence v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkFence) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkFence(::av::WireReader& r, VkFence& out) noexcept {
@@ -305,10 +363,11 @@ inline void serialize_VkFence(::av::WireWriter& buf, VkFence v) noexcept {
 }
 
 inline void serialize_VkFramebuffer(::av::WireWriter& buf, VkFramebuffer v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkFramebuffer) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkFramebuffer(::av::WireReader& r, VkFramebuffer& out) noexcept {
@@ -320,10 +379,11 @@ inline void serialize_VkFramebuffer(::av::WireWriter& buf, VkFramebuffer v) noex
 }
 
 inline void serialize_VkImage(::av::WireWriter& buf, VkImage v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkImage) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkImage(::av::WireReader& r, VkImage& out) noexcept {
@@ -335,10 +395,11 @@ inline void serialize_VkImage(::av::WireWriter& buf, VkImage v) noexcept {
 }
 
 inline void serialize_VkImageView(::av::WireWriter& buf, VkImageView v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkImageView) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkImageView(::av::WireReader& r, VkImageView& out) noexcept {
@@ -362,10 +423,11 @@ inline void serialize_VkInstance(::av::WireWriter& buf, VkInstance v) noexcept {
 }
 
 inline void serialize_VkMicromapEXT(::av::WireWriter& buf, VkMicromapEXT v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkMicromapEXT) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkMicromapEXT(::av::WireReader& r, VkMicromapEXT& out) noexcept {
@@ -389,10 +451,11 @@ inline void serialize_VkPhysicalDevice(::av::WireWriter& buf, VkPhysicalDevice v
 }
 
 inline void serialize_VkPipeline(::av::WireWriter& buf, VkPipeline v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkPipeline) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkPipeline(::av::WireReader& r, VkPipeline& out) noexcept {
@@ -404,10 +467,11 @@ inline void serialize_VkPipeline(::av::WireWriter& buf, VkPipeline v) noexcept {
 }
 
 inline void serialize_VkPipelineBinaryKHR(::av::WireWriter& buf, VkPipelineBinaryKHR v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkPipelineBinaryKHR) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkPipelineBinaryKHR(::av::WireReader& r, VkPipelineBinaryKHR& out) noexcept {
@@ -419,10 +483,11 @@ inline void serialize_VkPipelineBinaryKHR(::av::WireWriter& buf, VkPipelineBinar
 }
 
 inline void serialize_VkPipelineCache(::av::WireWriter& buf, VkPipelineCache v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkPipelineCache) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkPipelineCache(::av::WireReader& r, VkPipelineCache& out) noexcept {
@@ -434,10 +499,11 @@ inline void serialize_VkPipelineCache(::av::WireWriter& buf, VkPipelineCache v) 
 }
 
 inline void serialize_VkPipelineLayout(::av::WireWriter& buf, VkPipelineLayout v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkPipelineLayout) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkPipelineLayout(::av::WireReader& r, VkPipelineLayout& out) noexcept {
@@ -449,10 +515,11 @@ inline void serialize_VkPipelineLayout(::av::WireWriter& buf, VkPipelineLayout v
 }
 
 inline void serialize_VkPrivateDataSlot(::av::WireWriter& buf, VkPrivateDataSlot v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkPrivateDataSlot) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkPrivateDataSlot(::av::WireReader& r, VkPrivateDataSlot& out) noexcept {
@@ -464,10 +531,11 @@ inline void serialize_VkPrivateDataSlot(::av::WireWriter& buf, VkPrivateDataSlot
 }
 
 inline void serialize_VkQueryPool(::av::WireWriter& buf, VkQueryPool v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkQueryPool) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkQueryPool(::av::WireReader& r, VkQueryPool& out) noexcept {
@@ -491,10 +559,11 @@ inline void serialize_VkQueue(::av::WireWriter& buf, VkQueue v) noexcept {
 }
 
 inline void serialize_VkRenderPass(::av::WireWriter& buf, VkRenderPass v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkRenderPass) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkRenderPass(::av::WireReader& r, VkRenderPass& out) noexcept {
@@ -506,10 +575,11 @@ inline void serialize_VkRenderPass(::av::WireWriter& buf, VkRenderPass v) noexce
 }
 
 inline void serialize_VkSampler(::av::WireWriter& buf, VkSampler v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkSampler) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkSampler(::av::WireReader& r, VkSampler& out) noexcept {
@@ -521,10 +591,11 @@ inline void serialize_VkSampler(::av::WireWriter& buf, VkSampler v) noexcept {
 }
 
 inline void serialize_VkSamplerYcbcrConversion(::av::WireWriter& buf, VkSamplerYcbcrConversion v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkSamplerYcbcrConversion) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkSamplerYcbcrConversion(::av::WireReader& r, VkSamplerYcbcrConversion& out) noexcept {
@@ -536,10 +607,11 @@ inline void serialize_VkSamplerYcbcrConversion(::av::WireWriter& buf, VkSamplerY
 }
 
 inline void serialize_VkSemaphore(::av::WireWriter& buf, VkSemaphore v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkSemaphore) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkSemaphore(::av::WireReader& r, VkSemaphore& out) noexcept {
@@ -551,10 +623,11 @@ inline void serialize_VkSemaphore(::av::WireWriter& buf, VkSemaphore v) noexcept
 }
 
 inline void serialize_VkShaderEXT(::av::WireWriter& buf, VkShaderEXT v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkShaderEXT) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkShaderEXT(::av::WireReader& r, VkShaderEXT& out) noexcept {
@@ -566,10 +639,11 @@ inline void serialize_VkShaderEXT(::av::WireWriter& buf, VkShaderEXT v) noexcept
 }
 
 inline void serialize_VkShaderModule(::av::WireWriter& buf, VkShaderModule v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkShaderModule) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkShaderModule(::av::WireReader& r, VkShaderModule& out) noexcept {
@@ -581,10 +655,11 @@ inline void serialize_VkShaderModule(::av::WireWriter& buf, VkShaderModule v) no
 }
 
 inline void serialize_VkSurfaceKHR(::av::WireWriter& buf, VkSurfaceKHR v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkSurfaceKHR) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkSurfaceKHR(::av::WireReader& r, VkSurfaceKHR& out) noexcept {
@@ -596,10 +671,11 @@ inline void serialize_VkSurfaceKHR(::av::WireWriter& buf, VkSurfaceKHR v) noexce
 }
 
 inline void serialize_VkSwapchainKHR(::av::WireWriter& buf, VkSwapchainKHR v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkSwapchainKHR) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkSwapchainKHR(::av::WireReader& r, VkSwapchainKHR& out) noexcept {
@@ -611,10 +687,11 @@ inline void serialize_VkSwapchainKHR(::av::WireWriter& buf, VkSwapchainKHR v) no
 }
 
 inline void serialize_VkValidationCacheEXT(::av::WireWriter& buf, VkValidationCacheEXT v) noexcept {
-    std::uint64_t raw = 0;
-    static_assert(sizeof(VkValidationCacheEXT) == sizeof(raw));
-    std::memcpy(&raw, &v, sizeof(raw));
-    buf.write_pod(raw);
+    // Through the hook, like the dispatchable handles: a host that
+    // must refuse a handle it did not make needs to know which it did,
+    // and every handle it ever gave the guest went out through here
+    // (feature 042).
+    buf.write_pod(handle_to_wire(v));
 }
 
 [[nodiscard]] inline bool deserialize_VkValidationCacheEXT(::av::WireReader& r, VkValidationCacheEXT& out) noexcept {
@@ -2186,7 +2263,7 @@ inline void serialize_VkAccelerationStructureBuildGeometryInfoKHR(::av::WireWrit
         const std::uint8_t present = v.pGeometries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.geometryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.geometryCount)); ++i) {
                 serialize_VkAccelerationStructureGeometryKHR(buf, v.pGeometries[i]);
             }
         }
@@ -2209,12 +2286,12 @@ inline void serialize_VkAccelerationStructureBuildGeometryInfoKHR(::av::WireWrit
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->geometryCount == 0) {
+        if (!present || as_number(out->geometryCount) == 0) {
             out->pGeometries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAccelerationStructureGeometryKHR>(static_cast<std::size_t>(out->geometryCount));
+            auto* arr = arena.allocate<VkAccelerationStructureGeometryKHR>(static_cast<std::size_t>(as_number(out->geometryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->geometryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->geometryCount)); ++i) {
                 if (!deserialize_VkAccelerationStructureGeometryKHR(r, &arr[i], arena)) { return false; }
             }
             out->pGeometries = arr;
@@ -2498,7 +2575,7 @@ inline void serialize_VkAccelerationStructureTrianglesOpacityMicromapEXT(::av::W
         const std::uint8_t present = v.pUsageCounts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.usageCountsCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.usageCountsCount)); ++i) {
                 serialize_VkMicromapUsageEXT(buf, v.pUsageCounts[i]);
             }
         }
@@ -2520,12 +2597,12 @@ inline void serialize_VkAccelerationStructureTrianglesOpacityMicromapEXT(::av::W
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->usageCountsCount == 0) {
+        if (!present || as_number(out->usageCountsCount) == 0) {
             out->pUsageCounts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkMicromapUsageEXT>(static_cast<std::size_t>(out->usageCountsCount));
+            auto* arr = arena.allocate<VkMicromapUsageEXT>(static_cast<std::size_t>(as_number(out->usageCountsCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->usageCountsCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->usageCountsCount)); ++i) {
                 if (!deserialize_VkMicromapUsageEXT(r, &arr[i], arena)) { return false; }
             }
             out->pUsageCounts = arr;
@@ -2806,7 +2883,7 @@ inline void serialize_VkAttachmentSampleCountInfoAMD(::av::WireWriter& buf, cons
         const std::uint8_t present = v.pColorAttachmentSamples != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 buf.write_pod(v.pColorAttachmentSamples[i]);
             }
         }
@@ -2822,12 +2899,12 @@ inline void serialize_VkAttachmentSampleCountInfoAMD(::av::WireWriter& buf, cons
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->colorAttachmentCount == 0) {
+        if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachmentSamples = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSampleCountFlagBits>(static_cast<std::size_t>(out->colorAttachmentCount));
+            auto* arr = arena.allocate<VkSampleCountFlagBits>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorAttachmentSamples = arr;
@@ -2859,7 +2936,7 @@ inline void serialize_VkSampleLocationsInfoEXT(::av::WireWriter& buf, const VkSa
         const std::uint8_t present = v.pSampleLocations != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.sampleLocationsCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.sampleLocationsCount)); ++i) {
                 serialize_VkSampleLocationEXT(buf, v.pSampleLocations[i]);
             }
         }
@@ -2876,12 +2953,12 @@ inline void serialize_VkSampleLocationsInfoEXT(::av::WireWriter& buf, const VkSa
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->sampleLocationsCount == 0) {
+        if (!present || as_number(out->sampleLocationsCount) == 0) {
             out->pSampleLocations = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSampleLocationEXT>(static_cast<std::size_t>(out->sampleLocationsCount));
+            auto* arr = arena.allocate<VkSampleLocationEXT>(static_cast<std::size_t>(as_number(out->sampleLocationsCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->sampleLocationsCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->sampleLocationsCount)); ++i) {
                 if (!deserialize_VkSampleLocationEXT(r, &arr[i], arena)) { return false; }
             }
             out->pSampleLocations = arr;
@@ -2910,7 +2987,7 @@ inline void serialize_VkBindBufferMemoryDeviceGroupInfo(::av::WireWriter& buf, c
         const std::uint8_t present = v.pDeviceIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.deviceIndexCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.deviceIndexCount)); ++i) {
                 buf.write_pod(v.pDeviceIndices[i]);
             }
         }
@@ -2925,12 +3002,12 @@ inline void serialize_VkBindBufferMemoryDeviceGroupInfo(::av::WireWriter& buf, c
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->deviceIndexCount == 0) {
+        if (!present || as_number(out->deviceIndexCount) == 0) {
             out->pDeviceIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->deviceIndexCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->deviceIndexCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->deviceIndexCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->deviceIndexCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDeviceIndices = arr;
@@ -2965,7 +3042,7 @@ inline void serialize_VkBindImageMemoryDeviceGroupInfo(::av::WireWriter& buf, co
         const std::uint8_t present = v.pDeviceIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.deviceIndexCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.deviceIndexCount)); ++i) {
                 buf.write_pod(v.pDeviceIndices[i]);
             }
         }
@@ -2975,7 +3052,7 @@ inline void serialize_VkBindImageMemoryDeviceGroupInfo(::av::WireWriter& buf, co
         const std::uint8_t present = v.pSplitInstanceBindRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.splitInstanceBindRegionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.splitInstanceBindRegionCount)); ++i) {
                 serialize_VkRect2D(buf, v.pSplitInstanceBindRegions[i]);
             }
         }
@@ -2990,12 +3067,12 @@ inline void serialize_VkBindImageMemoryDeviceGroupInfo(::av::WireWriter& buf, co
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->deviceIndexCount == 0) {
+        if (!present || as_number(out->deviceIndexCount) == 0) {
             out->pDeviceIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->deviceIndexCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->deviceIndexCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->deviceIndexCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->deviceIndexCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDeviceIndices = arr;
@@ -3005,12 +3082,12 @@ inline void serialize_VkBindImageMemoryDeviceGroupInfo(::av::WireWriter& buf, co
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->splitInstanceBindRegionCount == 0) {
+        if (!present || as_number(out->splitInstanceBindRegionCount) == 0) {
             out->pSplitInstanceBindRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(out->splitInstanceBindRegionCount));
+            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(as_number(out->splitInstanceBindRegionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->splitInstanceBindRegionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->splitInstanceBindRegionCount)); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
             out->pSplitInstanceBindRegions = arr;
@@ -3091,7 +3168,7 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
         const std::uint8_t present = v.pWaitSemaphores != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.waitSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.waitSemaphoreCount)); ++i) {
                 serialize_VkSemaphore(buf, v.pWaitSemaphores[i]);
             }
         }
@@ -3101,7 +3178,7 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
         const std::uint8_t present = v.pBufferBinds != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.bufferBindCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bufferBindCount)); ++i) {
                 serialize_VkSparseBufferMemoryBindInfo(buf, v.pBufferBinds[i]);
             }
         }
@@ -3111,7 +3188,7 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
         const std::uint8_t present = v.pImageOpaqueBinds != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.imageOpaqueBindCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.imageOpaqueBindCount)); ++i) {
                 serialize_VkSparseImageOpaqueMemoryBindInfo(buf, v.pImageOpaqueBinds[i]);
             }
         }
@@ -3121,7 +3198,7 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
         const std::uint8_t present = v.pImageBinds != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.imageBindCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.imageBindCount)); ++i) {
                 serialize_VkSparseImageMemoryBindInfo(buf, v.pImageBinds[i]);
             }
         }
@@ -3131,7 +3208,7 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
         const std::uint8_t present = v.pSignalSemaphores != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.signalSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.signalSemaphoreCount)); ++i) {
                 serialize_VkSemaphore(buf, v.pSignalSemaphores[i]);
             }
         }
@@ -3146,12 +3223,12 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->waitSemaphoreCount == 0) {
+        if (!present || as_number(out->waitSemaphoreCount) == 0) {
             out->pWaitSemaphores = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(out->waitSemaphoreCount));
+            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(as_number(out->waitSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->waitSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->waitSemaphoreCount)); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
             out->pWaitSemaphores = arr;
@@ -3161,12 +3238,12 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->bufferBindCount == 0) {
+        if (!present || as_number(out->bufferBindCount) == 0) {
             out->pBufferBinds = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSparseBufferMemoryBindInfo>(static_cast<std::size_t>(out->bufferBindCount));
+            auto* arr = arena.allocate<VkSparseBufferMemoryBindInfo>(static_cast<std::size_t>(as_number(out->bufferBindCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bufferBindCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bufferBindCount)); ++i) {
                 if (!deserialize_VkSparseBufferMemoryBindInfo(r, &arr[i], arena)) { return false; }
             }
             out->pBufferBinds = arr;
@@ -3176,12 +3253,12 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->imageOpaqueBindCount == 0) {
+        if (!present || as_number(out->imageOpaqueBindCount) == 0) {
             out->pImageOpaqueBinds = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSparseImageOpaqueMemoryBindInfo>(static_cast<std::size_t>(out->imageOpaqueBindCount));
+            auto* arr = arena.allocate<VkSparseImageOpaqueMemoryBindInfo>(static_cast<std::size_t>(as_number(out->imageOpaqueBindCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->imageOpaqueBindCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->imageOpaqueBindCount)); ++i) {
                 if (!deserialize_VkSparseImageOpaqueMemoryBindInfo(r, &arr[i], arena)) { return false; }
             }
             out->pImageOpaqueBinds = arr;
@@ -3191,12 +3268,12 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->imageBindCount == 0) {
+        if (!present || as_number(out->imageBindCount) == 0) {
             out->pImageBinds = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSparseImageMemoryBindInfo>(static_cast<std::size_t>(out->imageBindCount));
+            auto* arr = arena.allocate<VkSparseImageMemoryBindInfo>(static_cast<std::size_t>(as_number(out->imageBindCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->imageBindCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->imageBindCount)); ++i) {
                 if (!deserialize_VkSparseImageMemoryBindInfo(r, &arr[i], arena)) { return false; }
             }
             out->pImageBinds = arr;
@@ -3206,12 +3283,12 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->signalSemaphoreCount == 0) {
+        if (!present || as_number(out->signalSemaphoreCount) == 0) {
             out->pSignalSemaphores = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(out->signalSemaphoreCount));
+            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(as_number(out->signalSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->signalSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->signalSemaphoreCount)); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
             out->pSignalSemaphores = arr;
@@ -3246,7 +3323,7 @@ inline void serialize_VkBlitImageInfo2(::av::WireWriter& buf, const VkBlitImageI
         const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkImageBlit2(buf, v.pRegions[i]);
             }
         }
@@ -3266,12 +3343,12 @@ inline void serialize_VkBlitImageInfo2(::av::WireWriter& buf, const VkBlitImageI
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->regionCount == 0) {
+        if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageBlit2>(static_cast<std::size_t>(out->regionCount));
+            auto* arr = arena.allocate<VkImageBlit2>(static_cast<std::size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkImageBlit2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -3325,7 +3402,7 @@ inline void serialize_VkBufferCreateInfo(::av::WireWriter& buf, const VkBufferCr
         const std::uint8_t present = v.pQueueFamilyIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.queueFamilyIndexCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.queueFamilyIndexCount)); ++i) {
                 buf.write_pod(v.pQueueFamilyIndices[i]);
             }
         }
@@ -3344,12 +3421,12 @@ inline void serialize_VkBufferCreateInfo(::av::WireWriter& buf, const VkBufferCr
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->queueFamilyIndexCount == 0) {
+        if (!present || as_number(out->queueFamilyIndexCount) == 0) {
             out->pQueueFamilyIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->queueFamilyIndexCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->queueFamilyIndexCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->queueFamilyIndexCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->queueFamilyIndexCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pQueueFamilyIndices = arr;
@@ -3712,7 +3789,7 @@ inline void serialize_VkCoarseSampleOrderCustomNV(::av::WireWriter& buf, const V
         const std::uint8_t present = v.pSampleLocations != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.sampleLocationCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.sampleLocationCount)); ++i) {
                 serialize_VkCoarseSampleLocationNV(buf, v.pSampleLocations[i]);
             }
         }
@@ -3727,12 +3804,12 @@ inline void serialize_VkCoarseSampleOrderCustomNV(::av::WireWriter& buf, const V
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->sampleLocationCount == 0) {
+        if (!present || as_number(out->sampleLocationCount) == 0) {
             out->pSampleLocations = nullptr;
         } else {
-            auto* arr = arena.allocate<VkCoarseSampleLocationNV>(static_cast<std::size_t>(out->sampleLocationCount));
+            auto* arr = arena.allocate<VkCoarseSampleLocationNV>(static_cast<std::size_t>(as_number(out->sampleLocationCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->sampleLocationCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->sampleLocationCount)); ++i) {
                 if (!deserialize_VkCoarseSampleLocationNV(r, &arr[i], arena)) { return false; }
             }
             out->pSampleLocations = arr;
@@ -3896,7 +3973,7 @@ inline void serialize_VkCommandBufferInheritanceRenderingInfo(::av::WireWriter& 
         const std::uint8_t present = v.pColorAttachmentFormats != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 buf.write_pod(v.pColorAttachmentFormats[i]);
             }
         }
@@ -3916,12 +3993,12 @@ inline void serialize_VkCommandBufferInheritanceRenderingInfo(::av::WireWriter& 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->colorAttachmentCount == 0) {
+        if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachmentFormats = nullptr;
         } else {
-            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(out->colorAttachmentCount));
+            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorAttachmentFormats = arr;
@@ -4204,7 +4281,7 @@ inline void serialize_VkCopyBufferInfo2(::av::WireWriter& buf, const VkCopyBuffe
         const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkBufferCopy2(buf, v.pRegions[i]);
             }
         }
@@ -4221,12 +4298,12 @@ inline void serialize_VkCopyBufferInfo2(::av::WireWriter& buf, const VkCopyBuffe
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->regionCount == 0) {
+        if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBufferCopy2>(static_cast<std::size_t>(out->regionCount));
+            auto* arr = arena.allocate<VkBufferCopy2>(static_cast<std::size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkBufferCopy2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -4246,7 +4323,7 @@ inline void serialize_VkCopyBufferToImageInfo2(::av::WireWriter& buf, const VkCo
         const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkBufferImageCopy2(buf, v.pRegions[i]);
             }
         }
@@ -4264,12 +4341,12 @@ inline void serialize_VkCopyBufferToImageInfo2(::av::WireWriter& buf, const VkCo
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->regionCount == 0) {
+        if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBufferImageCopy2>(static_cast<std::size_t>(out->regionCount));
+            auto* arr = arena.allocate<VkBufferImageCopy2>(static_cast<std::size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkBufferImageCopy2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -4330,7 +4407,7 @@ inline void serialize_VkCopyImageInfo2(::av::WireWriter& buf, const VkCopyImageI
         const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkImageCopy2(buf, v.pRegions[i]);
             }
         }
@@ -4349,12 +4426,12 @@ inline void serialize_VkCopyImageInfo2(::av::WireWriter& buf, const VkCopyImageI
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->regionCount == 0) {
+        if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageCopy2>(static_cast<std::size_t>(out->regionCount));
+            auto* arr = arena.allocate<VkImageCopy2>(static_cast<std::size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkImageCopy2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -4374,7 +4451,7 @@ inline void serialize_VkCopyImageToBufferInfo2(::av::WireWriter& buf, const VkCo
         const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkBufferImageCopy2(buf, v.pRegions[i]);
             }
         }
@@ -4392,12 +4469,12 @@ inline void serialize_VkCopyImageToBufferInfo2(::av::WireWriter& buf, const VkCo
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->regionCount == 0) {
+        if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBufferImageCopy2>(static_cast<std::size_t>(out->regionCount));
+            auto* arr = arena.allocate<VkBufferImageCopy2>(static_cast<std::size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkBufferImageCopy2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -4419,7 +4496,7 @@ inline void serialize_VkCopyImageToImageInfo(::av::WireWriter& buf, const VkCopy
         const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkImageCopy2(buf, v.pRegions[i]);
             }
         }
@@ -4439,12 +4516,12 @@ inline void serialize_VkCopyImageToImageInfo(::av::WireWriter& buf, const VkCopy
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->regionCount == 0) {
+        if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageCopy2>(static_cast<std::size_t>(out->regionCount));
+            auto* arr = arena.allocate<VkImageCopy2>(static_cast<std::size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkImageCopy2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -4464,7 +4541,7 @@ inline void serialize_VkCopyImageToMemoryInfo(::av::WireWriter& buf, const VkCop
         const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkImageToMemoryCopy(buf, v.pRegions[i]);
             }
         }
@@ -4482,12 +4559,12 @@ inline void serialize_VkCopyImageToMemoryInfo(::av::WireWriter& buf, const VkCop
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->regionCount == 0) {
+        if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageToMemoryCopy>(static_cast<std::size_t>(out->regionCount));
+            auto* arr = arena.allocate<VkImageToMemoryCopy>(static_cast<std::size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkImageToMemoryCopy(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -4694,7 +4771,7 @@ inline void serialize_VkDependencyInfo(::av::WireWriter& buf, const VkDependency
         const std::uint8_t present = v.pMemoryBarriers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.memoryBarrierCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.memoryBarrierCount)); ++i) {
                 serialize_VkMemoryBarrier2(buf, v.pMemoryBarriers[i]);
             }
         }
@@ -4704,7 +4781,7 @@ inline void serialize_VkDependencyInfo(::av::WireWriter& buf, const VkDependency
         const std::uint8_t present = v.pBufferMemoryBarriers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.bufferMemoryBarrierCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bufferMemoryBarrierCount)); ++i) {
                 serialize_VkBufferMemoryBarrier2(buf, v.pBufferMemoryBarriers[i]);
             }
         }
@@ -4714,7 +4791,7 @@ inline void serialize_VkDependencyInfo(::av::WireWriter& buf, const VkDependency
         const std::uint8_t present = v.pImageMemoryBarriers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.imageMemoryBarrierCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.imageMemoryBarrierCount)); ++i) {
                 serialize_VkImageMemoryBarrier2(buf, v.pImageMemoryBarriers[i]);
             }
         }
@@ -4730,12 +4807,12 @@ inline void serialize_VkDependencyInfo(::av::WireWriter& buf, const VkDependency
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->memoryBarrierCount == 0) {
+        if (!present || as_number(out->memoryBarrierCount) == 0) {
             out->pMemoryBarriers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkMemoryBarrier2>(static_cast<std::size_t>(out->memoryBarrierCount));
+            auto* arr = arena.allocate<VkMemoryBarrier2>(static_cast<std::size_t>(as_number(out->memoryBarrierCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->memoryBarrierCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->memoryBarrierCount)); ++i) {
                 if (!deserialize_VkMemoryBarrier2(r, &arr[i], arena)) { return false; }
             }
             out->pMemoryBarriers = arr;
@@ -4745,12 +4822,12 @@ inline void serialize_VkDependencyInfo(::av::WireWriter& buf, const VkDependency
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->bufferMemoryBarrierCount == 0) {
+        if (!present || as_number(out->bufferMemoryBarrierCount) == 0) {
             out->pBufferMemoryBarriers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBufferMemoryBarrier2>(static_cast<std::size_t>(out->bufferMemoryBarrierCount));
+            auto* arr = arena.allocate<VkBufferMemoryBarrier2>(static_cast<std::size_t>(as_number(out->bufferMemoryBarrierCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bufferMemoryBarrierCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bufferMemoryBarrierCount)); ++i) {
                 if (!deserialize_VkBufferMemoryBarrier2(r, &arr[i], arena)) { return false; }
             }
             out->pBufferMemoryBarriers = arr;
@@ -4760,12 +4837,12 @@ inline void serialize_VkDependencyInfo(::av::WireWriter& buf, const VkDependency
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->imageMemoryBarrierCount == 0) {
+        if (!present || as_number(out->imageMemoryBarrierCount) == 0) {
             out->pImageMemoryBarriers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageMemoryBarrier2>(static_cast<std::size_t>(out->imageMemoryBarrierCount));
+            auto* arr = arena.allocate<VkImageMemoryBarrier2>(static_cast<std::size_t>(as_number(out->imageMemoryBarrierCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->imageMemoryBarrierCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->imageMemoryBarrierCount)); ++i) {
                 if (!deserialize_VkImageMemoryBarrier2(r, &arr[i], arena)) { return false; }
             }
             out->pImageMemoryBarriers = arr;
@@ -4840,7 +4917,7 @@ inline void serialize_VkDescriptorPoolCreateInfo(::av::WireWriter& buf, const Vk
         const std::uint8_t present = v.pPoolSizes != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.poolSizeCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.poolSizeCount)); ++i) {
                 serialize_VkDescriptorPoolSize(buf, v.pPoolSizes[i]);
             }
         }
@@ -4857,12 +4934,12 @@ inline void serialize_VkDescriptorPoolCreateInfo(::av::WireWriter& buf, const Vk
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->poolSizeCount == 0) {
+        if (!present || as_number(out->poolSizeCount) == 0) {
             out->pPoolSizes = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorPoolSize>(static_cast<std::size_t>(out->poolSizeCount));
+            auto* arr = arena.allocate<VkDescriptorPoolSize>(static_cast<std::size_t>(as_number(out->poolSizeCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->poolSizeCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->poolSizeCount)); ++i) {
                 if (!deserialize_VkDescriptorPoolSize(r, &arr[i], arena)) { return false; }
             }
             out->pPoolSizes = arr;
@@ -4906,7 +4983,7 @@ inline void serialize_VkDescriptorSetAllocateInfo(::av::WireWriter& buf, const V
         const std::uint8_t present = v.pSetLayouts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.descriptorSetCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorSetCount)); ++i) {
                 serialize_VkDescriptorSetLayout(buf, v.pSetLayouts[i]);
             }
         }
@@ -4922,12 +4999,12 @@ inline void serialize_VkDescriptorSetAllocateInfo(::av::WireWriter& buf, const V
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->descriptorSetCount == 0) {
+        if (!present || as_number(out->descriptorSetCount) == 0) {
             out->pSetLayouts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<std::size_t>(out->descriptorSetCount));
+            auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<std::size_t>(as_number(out->descriptorSetCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorSetCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorSetCount)); ++i) {
                 if (!deserialize_VkDescriptorSetLayout(r, arr[i])) { return false; }
             }
             out->pSetLayouts = arr;
@@ -4945,7 +5022,7 @@ inline void serialize_VkDescriptorSetLayoutBinding(::av::WireWriter& buf, const 
         const std::uint8_t present = v.pImmutableSamplers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.descriptorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorCount)); ++i) {
                 serialize_VkSampler(buf, v.pImmutableSamplers[i]);
             }
         }
@@ -4961,12 +5038,12 @@ inline void serialize_VkDescriptorSetLayoutBinding(::av::WireWriter& buf, const 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->descriptorCount == 0) {
+        if (!present || as_number(out->descriptorCount) == 0) {
             out->pImmutableSamplers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSampler>(static_cast<std::size_t>(out->descriptorCount));
+            auto* arr = arena.allocate<VkSampler>(static_cast<std::size_t>(as_number(out->descriptorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorCount)); ++i) {
                 if (!deserialize_VkSampler(r, arr[i])) { return false; }
             }
             out->pImmutableSamplers = arr;
@@ -4983,7 +5060,7 @@ inline void serialize_VkDescriptorSetLayoutBindingFlagsCreateInfo(::av::WireWrit
         const std::uint8_t present = v.pBindingFlags != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.bindingCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bindingCount)); ++i) {
                 buf.write_pod(v.pBindingFlags[i]);
             }
         }
@@ -4998,12 +5075,12 @@ inline void serialize_VkDescriptorSetLayoutBindingFlagsCreateInfo(::av::WireWrit
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->bindingCount == 0) {
+        if (!present || as_number(out->bindingCount) == 0) {
             out->pBindingFlags = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorBindingFlags>(static_cast<std::size_t>(out->bindingCount));
+            auto* arr = arena.allocate<VkDescriptorBindingFlags>(static_cast<std::size_t>(as_number(out->bindingCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bindingCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bindingCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pBindingFlags = arr;
@@ -5021,7 +5098,7 @@ inline void serialize_VkDescriptorSetLayoutCreateInfo(::av::WireWriter& buf, con
         const std::uint8_t present = v.pBindings != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.bindingCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bindingCount)); ++i) {
                 serialize_VkDescriptorSetLayoutBinding(buf, v.pBindings[i]);
             }
         }
@@ -5037,12 +5114,12 @@ inline void serialize_VkDescriptorSetLayoutCreateInfo(::av::WireWriter& buf, con
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->bindingCount == 0) {
+        if (!present || as_number(out->bindingCount) == 0) {
             out->pBindings = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorSetLayoutBinding>(static_cast<std::size_t>(out->bindingCount));
+            auto* arr = arena.allocate<VkDescriptorSetLayoutBinding>(static_cast<std::size_t>(as_number(out->bindingCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bindingCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bindingCount)); ++i) {
                 if (!deserialize_VkDescriptorSetLayoutBinding(r, &arr[i], arena)) { return false; }
             }
             out->pBindings = arr;
@@ -5073,7 +5150,7 @@ inline void serialize_VkDescriptorSetVariableDescriptorCountAllocateInfo(::av::W
         const std::uint8_t present = v.pDescriptorCounts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.descriptorSetCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorSetCount)); ++i) {
                 buf.write_pod(v.pDescriptorCounts[i]);
             }
         }
@@ -5088,12 +5165,12 @@ inline void serialize_VkDescriptorSetVariableDescriptorCountAllocateInfo(::av::W
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->descriptorSetCount == 0) {
+        if (!present || as_number(out->descriptorSetCount) == 0) {
             out->pDescriptorCounts = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->descriptorSetCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->descriptorSetCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorSetCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorSetCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDescriptorCounts = arr;
@@ -5125,7 +5202,7 @@ inline void serialize_VkDescriptorUpdateTemplateCreateInfo(::av::WireWriter& buf
         const std::uint8_t present = v.pDescriptorUpdateEntries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.descriptorUpdateEntryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorUpdateEntryCount)); ++i) {
                 serialize_VkDescriptorUpdateTemplateEntry(buf, v.pDescriptorUpdateEntries[i]);
             }
         }
@@ -5146,12 +5223,12 @@ inline void serialize_VkDescriptorUpdateTemplateCreateInfo(::av::WireWriter& buf
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->descriptorUpdateEntryCount == 0) {
+        if (!present || as_number(out->descriptorUpdateEntryCount) == 0) {
             out->pDescriptorUpdateEntries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorUpdateTemplateEntry>(static_cast<std::size_t>(out->descriptorUpdateEntryCount));
+            auto* arr = arena.allocate<VkDescriptorUpdateTemplateEntry>(static_cast<std::size_t>(as_number(out->descriptorUpdateEntryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorUpdateEntryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorUpdateEntryCount)); ++i) {
                 if (!deserialize_VkDescriptorUpdateTemplateEntry(r, &arr[i], arena)) { return false; }
             }
             out->pDescriptorUpdateEntries = arr;
@@ -5235,7 +5312,7 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
         const std::uint8_t present = v.pQueueCreateInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.queueCreateInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.queueCreateInfoCount)); ++i) {
                 serialize_VkDeviceQueueCreateInfo(buf, v.pQueueCreateInfos[i]);
             }
         }
@@ -5245,7 +5322,7 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
         const std::uint8_t present = v.ppEnabledLayerNames != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.enabledLayerCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.enabledLayerCount)); ++i) {
                 const char* s = v.ppEnabledLayerNames[i];
                 if (s == nullptr) {
                     buf.write_varint(0);
@@ -5262,7 +5339,7 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
         const std::uint8_t present = v.ppEnabledExtensionNames != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.enabledExtensionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.enabledExtensionCount)); ++i) {
                 const char* s = v.ppEnabledExtensionNames[i];
                 if (s == nullptr) {
                     buf.write_varint(0);
@@ -5294,12 +5371,12 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->queueCreateInfoCount == 0) {
+        if (!present || as_number(out->queueCreateInfoCount) == 0) {
             out->pQueueCreateInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDeviceQueueCreateInfo>(static_cast<std::size_t>(out->queueCreateInfoCount));
+            auto* arr = arena.allocate<VkDeviceQueueCreateInfo>(static_cast<std::size_t>(as_number(out->queueCreateInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->queueCreateInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->queueCreateInfoCount)); ++i) {
                 if (!deserialize_VkDeviceQueueCreateInfo(r, &arr[i], arena)) { return false; }
             }
             out->pQueueCreateInfos = arr;
@@ -5309,12 +5386,12 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->enabledLayerCount == 0) {
+        if (!present || as_number(out->enabledLayerCount) == 0) {
             out->ppEnabledLayerNames = nullptr;
         } else {
-            auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(out->enabledLayerCount));
+            auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(as_number(out->enabledLayerCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->enabledLayerCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->enabledLayerCount)); ++i) {
                 std::uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
                 if (n == 0) {
@@ -5342,12 +5419,12 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->enabledExtensionCount == 0) {
+        if (!present || as_number(out->enabledExtensionCount) == 0) {
             out->ppEnabledExtensionNames = nullptr;
         } else {
-            auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(out->enabledExtensionCount));
+            auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(as_number(out->enabledExtensionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->enabledExtensionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->enabledExtensionCount)); ++i) {
                 std::uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
                 if (n == 0) {
@@ -5458,7 +5535,7 @@ inline void serialize_VkDeviceGroupDeviceCreateInfo(::av::WireWriter& buf, const
         const std::uint8_t present = v.pPhysicalDevices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.physicalDeviceCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.physicalDeviceCount)); ++i) {
                 serialize_VkPhysicalDevice(buf, v.pPhysicalDevices[i]);
             }
         }
@@ -5473,12 +5550,12 @@ inline void serialize_VkDeviceGroupDeviceCreateInfo(::av::WireWriter& buf, const
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->physicalDeviceCount == 0) {
+        if (!present || as_number(out->physicalDeviceCount) == 0) {
             out->pPhysicalDevices = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPhysicalDevice>(static_cast<std::size_t>(out->physicalDeviceCount));
+            auto* arr = arena.allocate<VkPhysicalDevice>(static_cast<std::size_t>(as_number(out->physicalDeviceCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->physicalDeviceCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->physicalDeviceCount)); ++i) {
                 if (!deserialize_VkPhysicalDevice(r, arr[i])) { return false; }
             }
             out->pPhysicalDevices = arr;
@@ -5512,7 +5589,7 @@ inline void serialize_VkDeviceGroupRenderPassBeginInfo(::av::WireWriter& buf, co
         const std::uint8_t present = v.pDeviceRenderAreas != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.deviceRenderAreaCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.deviceRenderAreaCount)); ++i) {
                 serialize_VkRect2D(buf, v.pDeviceRenderAreas[i]);
             }
         }
@@ -5528,12 +5605,12 @@ inline void serialize_VkDeviceGroupRenderPassBeginInfo(::av::WireWriter& buf, co
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->deviceRenderAreaCount == 0) {
+        if (!present || as_number(out->deviceRenderAreaCount) == 0) {
             out->pDeviceRenderAreas = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(out->deviceRenderAreaCount));
+            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(as_number(out->deviceRenderAreaCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->deviceRenderAreaCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->deviceRenderAreaCount)); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
             out->pDeviceRenderAreas = arr;
@@ -5550,7 +5627,7 @@ inline void serialize_VkDeviceGroupSubmitInfo(::av::WireWriter& buf, const VkDev
         const std::uint8_t present = v.pWaitSemaphoreDeviceIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.waitSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.waitSemaphoreCount)); ++i) {
                 buf.write_pod(v.pWaitSemaphoreDeviceIndices[i]);
             }
         }
@@ -5560,7 +5637,7 @@ inline void serialize_VkDeviceGroupSubmitInfo(::av::WireWriter& buf, const VkDev
         const std::uint8_t present = v.pCommandBufferDeviceMasks != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.commandBufferCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.commandBufferCount)); ++i) {
                 buf.write_pod(v.pCommandBufferDeviceMasks[i]);
             }
         }
@@ -5570,7 +5647,7 @@ inline void serialize_VkDeviceGroupSubmitInfo(::av::WireWriter& buf, const VkDev
         const std::uint8_t present = v.pSignalSemaphoreDeviceIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.signalSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.signalSemaphoreCount)); ++i) {
                 buf.write_pod(v.pSignalSemaphoreDeviceIndices[i]);
             }
         }
@@ -5585,12 +5662,12 @@ inline void serialize_VkDeviceGroupSubmitInfo(::av::WireWriter& buf, const VkDev
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->waitSemaphoreCount == 0) {
+        if (!present || as_number(out->waitSemaphoreCount) == 0) {
             out->pWaitSemaphoreDeviceIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->waitSemaphoreCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->waitSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->waitSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->waitSemaphoreCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pWaitSemaphoreDeviceIndices = arr;
@@ -5600,12 +5677,12 @@ inline void serialize_VkDeviceGroupSubmitInfo(::av::WireWriter& buf, const VkDev
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->commandBufferCount == 0) {
+        if (!present || as_number(out->commandBufferCount) == 0) {
             out->pCommandBufferDeviceMasks = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->commandBufferCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->commandBufferCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->commandBufferCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->commandBufferCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCommandBufferDeviceMasks = arr;
@@ -5615,12 +5692,12 @@ inline void serialize_VkDeviceGroupSubmitInfo(::av::WireWriter& buf, const VkDev
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->signalSemaphoreCount == 0) {
+        if (!present || as_number(out->signalSemaphoreCount) == 0) {
             out->pSignalSemaphoreDeviceIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->signalSemaphoreCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->signalSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->signalSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->signalSemaphoreCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pSignalSemaphoreDeviceIndices = arr;
@@ -5784,7 +5861,7 @@ inline void serialize_VkDeviceQueueCreateInfo(::av::WireWriter& buf, const VkDev
         const std::uint8_t present = v.pQueuePriorities != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.queueCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.queueCount)); ++i) {
                 buf.write_pod(v.pQueuePriorities[i]);
             }
         }
@@ -5801,12 +5878,12 @@ inline void serialize_VkDeviceQueueCreateInfo(::av::WireWriter& buf, const VkDev
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->queueCount == 0) {
+        if (!present || as_number(out->queueCount) == 0) {
             out->pQueuePriorities = nullptr;
         } else {
-            auto* arr = arena.allocate<float>(static_cast<std::size_t>(out->queueCount));
+            auto* arr = arena.allocate<float>(static_cast<std::size_t>(as_number(out->queueCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->queueCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->queueCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pQueuePriorities = arr;
@@ -5886,7 +5963,7 @@ inline void serialize_VkDirectDriverLoadingListLUNARG(::av::WireWriter& buf, con
         const std::uint8_t present = v.pDrivers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.driverCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.driverCount)); ++i) {
                 serialize_VkDirectDriverLoadingInfoLUNARG(buf, v.pDrivers[i]);
             }
         }
@@ -5902,12 +5979,12 @@ inline void serialize_VkDirectDriverLoadingListLUNARG(::av::WireWriter& buf, con
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->driverCount == 0) {
+        if (!present || as_number(out->driverCount) == 0) {
             out->pDrivers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDirectDriverLoadingInfoLUNARG>(static_cast<std::size_t>(out->driverCount));
+            auto* arr = arena.allocate<VkDirectDriverLoadingInfoLUNARG>(static_cast<std::size_t>(as_number(out->driverCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->driverCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->driverCount)); ++i) {
                 if (!deserialize_VkDirectDriverLoadingInfoLUNARG(r, &arr[i], arena)) { return false; }
             }
             out->pDrivers = arr;
@@ -5952,7 +6029,7 @@ inline void serialize_VkDrmFormatModifierPropertiesList2EXT(::av::WireWriter& bu
         const std::uint8_t present = v.pDrmFormatModifierProperties != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.drmFormatModifierCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.drmFormatModifierCount)); ++i) {
                 serialize_VkDrmFormatModifierProperties2EXT(buf, v.pDrmFormatModifierProperties[i]);
             }
         }
@@ -5967,12 +6044,12 @@ inline void serialize_VkDrmFormatModifierPropertiesList2EXT(::av::WireWriter& bu
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->drmFormatModifierCount == 0) {
+        if (!present || as_number(out->drmFormatModifierCount) == 0) {
             out->pDrmFormatModifierProperties = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDrmFormatModifierProperties2EXT>(static_cast<std::size_t>(out->drmFormatModifierCount));
+            auto* arr = arena.allocate<VkDrmFormatModifierProperties2EXT>(static_cast<std::size_t>(as_number(out->drmFormatModifierCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->drmFormatModifierCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->drmFormatModifierCount)); ++i) {
                 if (!deserialize_VkDrmFormatModifierProperties2EXT(r, &arr[i], arena)) { return false; }
             }
             out->pDrmFormatModifierProperties = arr;
@@ -5989,7 +6066,7 @@ inline void serialize_VkDrmFormatModifierPropertiesListEXT(::av::WireWriter& buf
         const std::uint8_t present = v.pDrmFormatModifierProperties != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.drmFormatModifierCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.drmFormatModifierCount)); ++i) {
                 serialize_VkDrmFormatModifierPropertiesEXT(buf, v.pDrmFormatModifierProperties[i]);
             }
         }
@@ -6004,12 +6081,12 @@ inline void serialize_VkDrmFormatModifierPropertiesListEXT(::av::WireWriter& buf
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->drmFormatModifierCount == 0) {
+        if (!present || as_number(out->drmFormatModifierCount) == 0) {
             out->pDrmFormatModifierProperties = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDrmFormatModifierPropertiesEXT>(static_cast<std::size_t>(out->drmFormatModifierCount));
+            auto* arr = arena.allocate<VkDrmFormatModifierPropertiesEXT>(static_cast<std::size_t>(as_number(out->drmFormatModifierCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->drmFormatModifierCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->drmFormatModifierCount)); ++i) {
                 if (!deserialize_VkDrmFormatModifierPropertiesEXT(r, &arr[i], arena)) { return false; }
             }
             out->pDrmFormatModifierProperties = arr;
@@ -6371,7 +6448,7 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
         const std::uint8_t present = v.pImages != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.imageCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.imageCount)); ++i) {
                 serialize_VkImage(buf, v.pImages[i]);
             }
         }
@@ -6381,7 +6458,7 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
         const std::uint8_t present = v.pBuffers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.bufferCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bufferCount)); ++i) {
                 serialize_VkBuffer(buf, v.pBuffers[i]);
             }
         }
@@ -6391,8 +6468,8 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
     {
         const std::uint8_t present = v.pTag != nullptr ? 1 : 0;
         buf.write_pod(present);
-        if (present && v.tagSize != 0) {
-            buf.write(v.pTag, static_cast<std::size_t>(v.tagSize));
+        if (present && as_number(v.tagSize) != 0) {
+            buf.write(v.pTag, static_cast<std::size_t>(as_number(v.tagSize)));
         }
     }
 }
@@ -6407,12 +6484,12 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->imageCount == 0) {
+        if (!present || as_number(out->imageCount) == 0) {
             out->pImages = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImage>(static_cast<std::size_t>(out->imageCount));
+            auto* arr = arena.allocate<VkImage>(static_cast<std::size_t>(as_number(out->imageCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->imageCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->imageCount)); ++i) {
                 if (!deserialize_VkImage(r, arr[i])) { return false; }
             }
             out->pImages = arr;
@@ -6422,12 +6499,12 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->bufferCount == 0) {
+        if (!present || as_number(out->bufferCount) == 0) {
             out->pBuffers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBuffer>(static_cast<std::size_t>(out->bufferCount));
+            auto* arr = arena.allocate<VkBuffer>(static_cast<std::size_t>(as_number(out->bufferCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bufferCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bufferCount)); ++i) {
                 if (!deserialize_VkBuffer(r, arr[i])) { return false; }
             }
             out->pBuffers = arr;
@@ -6442,12 +6519,12 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->tagSize == 0) {
+        if (!present || as_number(out->tagSize) == 0) {
             out->pTag = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(out->tagSize));
+            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->tagSize)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(out->tagSize))) { return false; }
+            if (!r.read(blob, static_cast<std::size_t>(as_number(out->tagSize)))) { return false; }
             out->pTag = blob;
         }
     }
@@ -6467,7 +6544,7 @@ inline void serialize_VkFramebufferAttachmentImageInfo(::av::WireWriter& buf, co
         const std::uint8_t present = v.pViewFormats != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.viewFormatCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.viewFormatCount)); ++i) {
                 buf.write_pod(v.pViewFormats[i]);
             }
         }
@@ -6487,12 +6564,12 @@ inline void serialize_VkFramebufferAttachmentImageInfo(::av::WireWriter& buf, co
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->viewFormatCount == 0) {
+        if (!present || as_number(out->viewFormatCount) == 0) {
             out->pViewFormats = nullptr;
         } else {
-            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(out->viewFormatCount));
+            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(as_number(out->viewFormatCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->viewFormatCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->viewFormatCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pViewFormats = arr;
@@ -6509,7 +6586,7 @@ inline void serialize_VkFramebufferAttachmentsCreateInfo(::av::WireWriter& buf, 
         const std::uint8_t present = v.pAttachmentImageInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.attachmentImageInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentImageInfoCount)); ++i) {
                 serialize_VkFramebufferAttachmentImageInfo(buf, v.pAttachmentImageInfos[i]);
             }
         }
@@ -6524,12 +6601,12 @@ inline void serialize_VkFramebufferAttachmentsCreateInfo(::av::WireWriter& buf, 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->attachmentImageInfoCount == 0) {
+        if (!present || as_number(out->attachmentImageInfoCount) == 0) {
             out->pAttachmentImageInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkFramebufferAttachmentImageInfo>(static_cast<std::size_t>(out->attachmentImageInfoCount));
+            auto* arr = arena.allocate<VkFramebufferAttachmentImageInfo>(static_cast<std::size_t>(as_number(out->attachmentImageInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentImageInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentImageInfoCount)); ++i) {
                 if (!deserialize_VkFramebufferAttachmentImageInfo(r, &arr[i], arena)) { return false; }
             }
             out->pAttachmentImageInfos = arr;
@@ -6548,7 +6625,7 @@ inline void serialize_VkFramebufferCreateInfo(::av::WireWriter& buf, const VkFra
         const std::uint8_t present = v.pAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.attachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentCount)); ++i) {
                 serialize_VkImageView(buf, v.pAttachments[i]);
             }
         }
@@ -6568,12 +6645,12 @@ inline void serialize_VkFramebufferCreateInfo(::av::WireWriter& buf, const VkFra
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->attachmentCount == 0) {
+        if (!present || as_number(out->attachmentCount) == 0) {
             out->pAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageView>(static_cast<std::size_t>(out->attachmentCount));
+            auto* arr = arena.allocate<VkImageView>(static_cast<std::size_t>(as_number(out->attachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentCount)); ++i) {
                 if (!deserialize_VkImageView(r, arr[i])) { return false; }
             }
             out->pAttachments = arr;
@@ -6594,7 +6671,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
         const std::uint8_t present = v.pStages != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.stageCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.stageCount)); ++i) {
                 serialize_VkPipelineShaderStageCreateInfo(buf, v.pStages[i]);
             }
         }
@@ -6696,12 +6773,12 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->stageCount == 0) {
+        if (!present || as_number(out->stageCount) == 0) {
             out->pStages = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<std::size_t>(out->stageCount));
+            auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<std::size_t>(as_number(out->stageCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->stageCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->stageCount)); ++i) {
                 if (!deserialize_VkPipelineShaderStageCreateInfo(r, &arr[i], arena)) { return false; }
             }
             out->pStages = arr;
@@ -6845,7 +6922,7 @@ inline void serialize_VkGraphicsPipelineShaderGroupsCreateInfoNV(::av::WireWrite
         const std::uint8_t present = v.pGroups != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.groupCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.groupCount)); ++i) {
                 serialize_VkGraphicsShaderGroupCreateInfoNV(buf, v.pGroups[i]);
             }
         }
@@ -6855,7 +6932,7 @@ inline void serialize_VkGraphicsPipelineShaderGroupsCreateInfoNV(::av::WireWrite
         const std::uint8_t present = v.pPipelines != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.pipelineCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.pipelineCount)); ++i) {
                 serialize_VkPipeline(buf, v.pPipelines[i]);
             }
         }
@@ -6870,12 +6947,12 @@ inline void serialize_VkGraphicsPipelineShaderGroupsCreateInfoNV(::av::WireWrite
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->groupCount == 0) {
+        if (!present || as_number(out->groupCount) == 0) {
             out->pGroups = nullptr;
         } else {
-            auto* arr = arena.allocate<VkGraphicsShaderGroupCreateInfoNV>(static_cast<std::size_t>(out->groupCount));
+            auto* arr = arena.allocate<VkGraphicsShaderGroupCreateInfoNV>(static_cast<std::size_t>(as_number(out->groupCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->groupCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->groupCount)); ++i) {
                 if (!deserialize_VkGraphicsShaderGroupCreateInfoNV(r, &arr[i], arena)) { return false; }
             }
             out->pGroups = arr;
@@ -6885,12 +6962,12 @@ inline void serialize_VkGraphicsPipelineShaderGroupsCreateInfoNV(::av::WireWrite
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->pipelineCount == 0) {
+        if (!present || as_number(out->pipelineCount) == 0) {
             out->pPipelines = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipeline>(static_cast<std::size_t>(out->pipelineCount));
+            auto* arr = arena.allocate<VkPipeline>(static_cast<std::size_t>(as_number(out->pipelineCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->pipelineCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->pipelineCount)); ++i) {
                 if (!deserialize_VkPipeline(r, arr[i])) { return false; }
             }
             out->pPipelines = arr;
@@ -6907,7 +6984,7 @@ inline void serialize_VkGraphicsShaderGroupCreateInfoNV(::av::WireWriter& buf, c
         const std::uint8_t present = v.pStages != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.stageCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.stageCount)); ++i) {
                 serialize_VkPipelineShaderStageCreateInfo(buf, v.pStages[i]);
             }
         }
@@ -6940,12 +7017,12 @@ inline void serialize_VkGraphicsShaderGroupCreateInfoNV(::av::WireWriter& buf, c
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->stageCount == 0) {
+        if (!present || as_number(out->stageCount) == 0) {
             out->pStages = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<std::size_t>(out->stageCount));
+            auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<std::size_t>(as_number(out->stageCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->stageCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->stageCount)); ++i) {
                 if (!deserialize_VkPipelineShaderStageCreateInfo(r, &arr[i], arena)) { return false; }
             }
             out->pStages = arr;
@@ -7091,7 +7168,7 @@ inline void serialize_VkImageCompressionControlEXT(::av::WireWriter& buf, const 
         const std::uint8_t present = v.pFixedRateFlags != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.compressionControlPlaneCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.compressionControlPlaneCount)); ++i) {
                 buf.write_pod(v.pFixedRateFlags[i]);
             }
         }
@@ -7107,12 +7184,12 @@ inline void serialize_VkImageCompressionControlEXT(::av::WireWriter& buf, const 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->compressionControlPlaneCount == 0) {
+        if (!present || as_number(out->compressionControlPlaneCount) == 0) {
             out->pFixedRateFlags = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageCompressionFixedRateFlagsEXT>(static_cast<std::size_t>(out->compressionControlPlaneCount));
+            auto* arr = arena.allocate<VkImageCompressionFixedRateFlagsEXT>(static_cast<std::size_t>(as_number(out->compressionControlPlaneCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->compressionControlPlaneCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->compressionControlPlaneCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pFixedRateFlags = arr;
@@ -7195,7 +7272,7 @@ inline void serialize_VkImageCreateInfo(::av::WireWriter& buf, const VkImageCrea
         const std::uint8_t present = v.pQueueFamilyIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.queueFamilyIndexCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.queueFamilyIndexCount)); ++i) {
                 buf.write_pod(v.pQueueFamilyIndices[i]);
             }
         }
@@ -7221,12 +7298,12 @@ inline void serialize_VkImageCreateInfo(::av::WireWriter& buf, const VkImageCrea
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->queueFamilyIndexCount == 0) {
+        if (!present || as_number(out->queueFamilyIndexCount) == 0) {
             out->pQueueFamilyIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->queueFamilyIndexCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->queueFamilyIndexCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->queueFamilyIndexCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->queueFamilyIndexCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pQueueFamilyIndices = arr;
@@ -7245,7 +7322,7 @@ inline void serialize_VkImageDrmFormatModifierExplicitCreateInfoEXT(::av::WireWr
         const std::uint8_t present = v.pPlaneLayouts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.drmFormatModifierPlaneCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.drmFormatModifierPlaneCount)); ++i) {
                 serialize_VkSubresourceLayout(buf, v.pPlaneLayouts[i]);
             }
         }
@@ -7261,12 +7338,12 @@ inline void serialize_VkImageDrmFormatModifierExplicitCreateInfoEXT(::av::WireWr
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->drmFormatModifierPlaneCount == 0) {
+        if (!present || as_number(out->drmFormatModifierPlaneCount) == 0) {
             out->pPlaneLayouts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSubresourceLayout>(static_cast<std::size_t>(out->drmFormatModifierPlaneCount));
+            auto* arr = arena.allocate<VkSubresourceLayout>(static_cast<std::size_t>(as_number(out->drmFormatModifierPlaneCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->drmFormatModifierPlaneCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->drmFormatModifierPlaneCount)); ++i) {
                 if (!deserialize_VkSubresourceLayout(r, &arr[i], arena)) { return false; }
             }
             out->pPlaneLayouts = arr;
@@ -7283,7 +7360,7 @@ inline void serialize_VkImageDrmFormatModifierListCreateInfoEXT(::av::WireWriter
         const std::uint8_t present = v.pDrmFormatModifiers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.drmFormatModifierCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.drmFormatModifierCount)); ++i) {
                 buf.write_pod(v.pDrmFormatModifiers[i]);
             }
         }
@@ -7298,12 +7375,12 @@ inline void serialize_VkImageDrmFormatModifierListCreateInfoEXT(::av::WireWriter
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->drmFormatModifierCount == 0) {
+        if (!present || as_number(out->drmFormatModifierCount) == 0) {
             out->pDrmFormatModifiers = nullptr;
         } else {
-            auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(out->drmFormatModifierCount));
+            auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(as_number(out->drmFormatModifierCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->drmFormatModifierCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->drmFormatModifierCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDrmFormatModifiers = arr;
@@ -7320,7 +7397,7 @@ inline void serialize_VkImageFormatListCreateInfo(::av::WireWriter& buf, const V
         const std::uint8_t present = v.pViewFormats != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.viewFormatCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.viewFormatCount)); ++i) {
                 buf.write_pod(v.pViewFormats[i]);
             }
         }
@@ -7335,12 +7412,12 @@ inline void serialize_VkImageFormatListCreateInfo(::av::WireWriter& buf, const V
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->viewFormatCount == 0) {
+        if (!present || as_number(out->viewFormatCount) == 0) {
             out->pViewFormats = nullptr;
         } else {
-            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(out->viewFormatCount));
+            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(as_number(out->viewFormatCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->viewFormatCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->viewFormatCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pViewFormats = arr;
@@ -7811,7 +7888,7 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
         const std::uint8_t present = v.ppEnabledLayerNames != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.enabledLayerCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.enabledLayerCount)); ++i) {
                 const char* s = v.ppEnabledLayerNames[i];
                 if (s == nullptr) {
                     buf.write_varint(0);
@@ -7828,7 +7905,7 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
         const std::uint8_t present = v.ppEnabledExtensionNames != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.enabledExtensionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.enabledExtensionCount)); ++i) {
                 const char* s = v.ppEnabledExtensionNames[i];
                 if (s == nullptr) {
                     buf.write_varint(0);
@@ -7863,12 +7940,12 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->enabledLayerCount == 0) {
+        if (!present || as_number(out->enabledLayerCount) == 0) {
             out->ppEnabledLayerNames = nullptr;
         } else {
-            auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(out->enabledLayerCount));
+            auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(as_number(out->enabledLayerCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->enabledLayerCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->enabledLayerCount)); ++i) {
                 std::uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
                 if (n == 0) {
@@ -7896,12 +7973,12 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->enabledExtensionCount == 0) {
+        if (!present || as_number(out->enabledExtensionCount) == 0) {
             out->ppEnabledExtensionNames = nullptr;
         } else {
-            auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(out->enabledExtensionCount));
+            auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(as_number(out->enabledExtensionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->enabledExtensionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->enabledExtensionCount)); ++i) {
                 std::uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
                 if (n == 0) {
@@ -7984,8 +8061,8 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
     {
         const std::uint8_t present = v.pValues != nullptr ? 1 : 0;
         buf.write_pod(present);
-        if (present && v.valueCount != 0) {
-            buf.write(v.pValues, static_cast<std::size_t>(v.valueCount));
+        if (present && as_number(v.valueCount) != 0) {
+            buf.write(v.pValues, static_cast<std::size_t>(as_number(v.valueCount)));
         }
     }
 }
@@ -8031,12 +8108,12 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->valueCount == 0) {
+        if (!present || as_number(out->valueCount) == 0) {
             out->pValues = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(out->valueCount));
+            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->valueCount)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(out->valueCount))) { return false; }
+            if (!r.read(blob, static_cast<std::size_t>(as_number(out->valueCount)))) { return false; }
             out->pValues = blob;
         }
     }
@@ -8051,7 +8128,7 @@ inline void serialize_VkLayerSettingsCreateInfoEXT(::av::WireWriter& buf, const 
         const std::uint8_t present = v.pSettings != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.settingCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.settingCount)); ++i) {
                 serialize_VkLayerSettingEXT(buf, v.pSettings[i]);
             }
         }
@@ -8066,12 +8143,12 @@ inline void serialize_VkLayerSettingsCreateInfoEXT(::av::WireWriter& buf, const 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->settingCount == 0) {
+        if (!present || as_number(out->settingCount) == 0) {
             out->pSettings = nullptr;
         } else {
-            auto* arr = arena.allocate<VkLayerSettingEXT>(static_cast<std::size_t>(out->settingCount));
+            auto* arr = arena.allocate<VkLayerSettingEXT>(static_cast<std::size_t>(as_number(out->settingCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->settingCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->settingCount)); ++i) {
                 if (!deserialize_VkLayerSettingEXT(r, &arr[i], arena)) { return false; }
             }
             out->pSettings = arr;
@@ -8470,7 +8547,7 @@ inline void serialize_VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM(::av:
         const std::uint8_t present = v.pPerViewRenderAreas != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.perViewRenderAreaCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.perViewRenderAreaCount)); ++i) {
                 serialize_VkRect2D(buf, v.pPerViewRenderAreas[i]);
             }
         }
@@ -8485,12 +8562,12 @@ inline void serialize_VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM(::av:
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->perViewRenderAreaCount == 0) {
+        if (!present || as_number(out->perViewRenderAreaCount) == 0) {
             out->pPerViewRenderAreas = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(out->perViewRenderAreaCount));
+            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(as_number(out->perViewRenderAreaCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->perViewRenderAreaCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->perViewRenderAreaCount)); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
             out->pPerViewRenderAreas = arr;
@@ -8507,7 +8584,7 @@ inline void serialize_VkMutableDescriptorTypeCreateInfoEXT(::av::WireWriter& buf
         const std::uint8_t present = v.pMutableDescriptorTypeLists != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.mutableDescriptorTypeListCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.mutableDescriptorTypeListCount)); ++i) {
                 serialize_VkMutableDescriptorTypeListEXT(buf, v.pMutableDescriptorTypeLists[i]);
             }
         }
@@ -8522,12 +8599,12 @@ inline void serialize_VkMutableDescriptorTypeCreateInfoEXT(::av::WireWriter& buf
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->mutableDescriptorTypeListCount == 0) {
+        if (!present || as_number(out->mutableDescriptorTypeListCount) == 0) {
             out->pMutableDescriptorTypeLists = nullptr;
         } else {
-            auto* arr = arena.allocate<VkMutableDescriptorTypeListEXT>(static_cast<std::size_t>(out->mutableDescriptorTypeListCount));
+            auto* arr = arena.allocate<VkMutableDescriptorTypeListEXT>(static_cast<std::size_t>(as_number(out->mutableDescriptorTypeListCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->mutableDescriptorTypeListCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->mutableDescriptorTypeListCount)); ++i) {
                 if (!deserialize_VkMutableDescriptorTypeListEXT(r, &arr[i], arena)) { return false; }
             }
             out->pMutableDescriptorTypeLists = arr;
@@ -8542,7 +8619,7 @@ inline void serialize_VkMutableDescriptorTypeListEXT(::av::WireWriter& buf, cons
         const std::uint8_t present = v.pDescriptorTypes != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.descriptorTypeCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorTypeCount)); ++i) {
                 buf.write_pod(v.pDescriptorTypes[i]);
             }
         }
@@ -8555,12 +8632,12 @@ inline void serialize_VkMutableDescriptorTypeListEXT(::av::WireWriter& buf, cons
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->descriptorTypeCount == 0) {
+        if (!present || as_number(out->descriptorTypeCount) == 0) {
             out->pDescriptorTypes = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorType>(static_cast<std::size_t>(out->descriptorTypeCount));
+            auto* arr = arena.allocate<VkDescriptorType>(static_cast<std::size_t>(as_number(out->descriptorTypeCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorTypeCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorTypeCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDescriptorTypes = arr;
@@ -10883,7 +10960,7 @@ inline void serialize_VkPhysicalDeviceHostImageCopyProperties(::av::WireWriter& 
         const std::uint8_t present = v.pCopySrcLayouts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.copySrcLayoutCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.copySrcLayoutCount)); ++i) {
                 buf.write_pod(v.pCopySrcLayouts[i]);
             }
         }
@@ -10893,7 +10970,7 @@ inline void serialize_VkPhysicalDeviceHostImageCopyProperties(::av::WireWriter& 
         const std::uint8_t present = v.pCopyDstLayouts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.copyDstLayoutCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.copyDstLayoutCount)); ++i) {
                 buf.write_pod(v.pCopyDstLayouts[i]);
             }
         }
@@ -10910,12 +10987,12 @@ inline void serialize_VkPhysicalDeviceHostImageCopyProperties(::av::WireWriter& 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->copySrcLayoutCount == 0) {
+        if (!present || as_number(out->copySrcLayoutCount) == 0) {
             out->pCopySrcLayouts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageLayout>(static_cast<std::size_t>(out->copySrcLayoutCount));
+            auto* arr = arena.allocate<VkImageLayout>(static_cast<std::size_t>(as_number(out->copySrcLayoutCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->copySrcLayoutCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->copySrcLayoutCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCopySrcLayouts = arr;
@@ -10925,12 +11002,12 @@ inline void serialize_VkPhysicalDeviceHostImageCopyProperties(::av::WireWriter& 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->copyDstLayoutCount == 0) {
+        if (!present || as_number(out->copyDstLayoutCount) == 0) {
             out->pCopyDstLayouts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageLayout>(static_cast<std::size_t>(out->copyDstLayoutCount));
+            auto* arr = arena.allocate<VkImageLayout>(static_cast<std::size_t>(as_number(out->copyDstLayoutCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->copyDstLayoutCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->copyDstLayoutCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCopyDstLayouts = arr;
@@ -11059,7 +11136,7 @@ inline void serialize_VkPhysicalDeviceImageDrmFormatModifierInfoEXT(::av::WireWr
         const std::uint8_t present = v.pQueueFamilyIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.queueFamilyIndexCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.queueFamilyIndexCount)); ++i) {
                 buf.write_pod(v.pQueueFamilyIndices[i]);
             }
         }
@@ -11076,12 +11153,12 @@ inline void serialize_VkPhysicalDeviceImageDrmFormatModifierInfoEXT(::av::WireWr
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->queueFamilyIndexCount == 0) {
+        if (!present || as_number(out->queueFamilyIndexCount) == 0) {
             out->pQueueFamilyIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->queueFamilyIndexCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->queueFamilyIndexCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->queueFamilyIndexCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->queueFamilyIndexCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pQueueFamilyIndices = arr;
@@ -11356,7 +11433,7 @@ inline void serialize_VkPhysicalDeviceLayeredApiPropertiesListKHR(::av::WireWrit
         const std::uint8_t present = v.pLayeredApis != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.layeredApiCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.layeredApiCount)); ++i) {
                 serialize_VkPhysicalDeviceLayeredApiPropertiesKHR(buf, v.pLayeredApis[i]);
             }
         }
@@ -11371,12 +11448,12 @@ inline void serialize_VkPhysicalDeviceLayeredApiPropertiesListKHR(::av::WireWrit
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->layeredApiCount == 0) {
+        if (!present || as_number(out->layeredApiCount) == 0) {
             out->pLayeredApis = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPhysicalDeviceLayeredApiPropertiesKHR>(static_cast<std::size_t>(out->layeredApiCount));
+            auto* arr = arena.allocate<VkPhysicalDeviceLayeredApiPropertiesKHR>(static_cast<std::size_t>(as_number(out->layeredApiCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->layeredApiCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->layeredApiCount)); ++i) {
                 if (!deserialize_VkPhysicalDeviceLayeredApiPropertiesKHR(r, &arr[i], arena)) { return false; }
             }
             out->pLayeredApis = arr;
@@ -15188,8 +15265,8 @@ inline void serialize_VkPipelineBinaryDataKHR(::av::WireWriter& buf, const VkPip
     {
         const std::uint8_t present = v.pData != nullptr ? 1 : 0;
         buf.write_pod(present);
-        if (present && v.dataSize != 0) {
-            buf.write(v.pData, static_cast<std::size_t>(v.dataSize));
+        if (present && as_number(v.dataSize) != 0) {
+            buf.write(v.pData, static_cast<std::size_t>(as_number(v.dataSize)));
         }
     }
 }
@@ -15204,12 +15281,12 @@ inline void serialize_VkPipelineBinaryDataKHR(::av::WireWriter& buf, const VkPip
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->dataSize == 0) {
+        if (!present || as_number(out->dataSize) == 0) {
             out->pData = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(out->dataSize));
+            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->dataSize)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(out->dataSize))) { return false; }
+            if (!r.read(blob, static_cast<std::size_t>(as_number(out->dataSize)))) { return false; }
             out->pData = blob;
         }
     }
@@ -15224,7 +15301,7 @@ inline void serialize_VkPipelineBinaryHandlesInfoKHR(::av::WireWriter& buf, cons
         const std::uint8_t present = v.pPipelineBinaries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.pipelineBinaryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.pipelineBinaryCount)); ++i) {
                 serialize_VkPipelineBinaryKHR(buf, v.pPipelineBinaries[i]);
             }
         }
@@ -15239,12 +15316,12 @@ inline void serialize_VkPipelineBinaryHandlesInfoKHR(::av::WireWriter& buf, cons
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->pipelineBinaryCount == 0) {
+        if (!present || as_number(out->pipelineBinaryCount) == 0) {
             out->pPipelineBinaries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineBinaryKHR>(static_cast<std::size_t>(out->pipelineBinaryCount));
+            auto* arr = arena.allocate<VkPipelineBinaryKHR>(static_cast<std::size_t>(as_number(out->pipelineBinaryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->pipelineBinaryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->pipelineBinaryCount)); ++i) {
                 if (!deserialize_VkPipelineBinaryKHR(r, arr[i])) { return false; }
             }
             out->pPipelineBinaries = arr;
@@ -15261,7 +15338,7 @@ inline void serialize_VkPipelineBinaryInfoKHR(::av::WireWriter& buf, const VkPip
         const std::uint8_t present = v.pPipelineBinaries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.binaryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.binaryCount)); ++i) {
                 serialize_VkPipelineBinaryKHR(buf, v.pPipelineBinaries[i]);
             }
         }
@@ -15276,12 +15353,12 @@ inline void serialize_VkPipelineBinaryInfoKHR(::av::WireWriter& buf, const VkPip
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->binaryCount == 0) {
+        if (!present || as_number(out->binaryCount) == 0) {
             out->pPipelineBinaries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineBinaryKHR>(static_cast<std::size_t>(out->binaryCount));
+            auto* arr = arena.allocate<VkPipelineBinaryKHR>(static_cast<std::size_t>(as_number(out->binaryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->binaryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->binaryCount)); ++i) {
                 if (!deserialize_VkPipelineBinaryKHR(r, arr[i])) { return false; }
             }
             out->pPipelineBinaries = arr;
@@ -15312,7 +15389,7 @@ inline void serialize_VkPipelineBinaryKeysAndDataKHR(::av::WireWriter& buf, cons
         const std::uint8_t present = v.pPipelineBinaryKeys != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.binaryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.binaryCount)); ++i) {
                 serialize_VkPipelineBinaryKeyKHR(buf, v.pPipelineBinaryKeys[i]);
             }
         }
@@ -15321,7 +15398,7 @@ inline void serialize_VkPipelineBinaryKeysAndDataKHR(::av::WireWriter& buf, cons
         const std::uint8_t present = v.pPipelineBinaryData != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.binaryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.binaryCount)); ++i) {
                 serialize_VkPipelineBinaryDataKHR(buf, v.pPipelineBinaryData[i]);
             }
         }
@@ -15334,12 +15411,12 @@ inline void serialize_VkPipelineBinaryKeysAndDataKHR(::av::WireWriter& buf, cons
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->binaryCount == 0) {
+        if (!present || as_number(out->binaryCount) == 0) {
             out->pPipelineBinaryKeys = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineBinaryKeyKHR>(static_cast<std::size_t>(out->binaryCount));
+            auto* arr = arena.allocate<VkPipelineBinaryKeyKHR>(static_cast<std::size_t>(as_number(out->binaryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->binaryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->binaryCount)); ++i) {
                 if (!deserialize_VkPipelineBinaryKeyKHR(r, &arr[i], arena)) { return false; }
             }
             out->pPipelineBinaryKeys = arr;
@@ -15348,12 +15425,12 @@ inline void serialize_VkPipelineBinaryKeysAndDataKHR(::av::WireWriter& buf, cons
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->binaryCount == 0) {
+        if (!present || as_number(out->binaryCount) == 0) {
             out->pPipelineBinaryData = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineBinaryDataKHR>(static_cast<std::size_t>(out->binaryCount));
+            auto* arr = arena.allocate<VkPipelineBinaryDataKHR>(static_cast<std::size_t>(as_number(out->binaryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->binaryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->binaryCount)); ++i) {
                 if (!deserialize_VkPipelineBinaryDataKHR(r, &arr[i], arena)) { return false; }
             }
             out->pPipelineBinaryData = arr;
@@ -15370,8 +15447,8 @@ inline void serialize_VkPipelineCacheCreateInfo(::av::WireWriter& buf, const VkP
     {
         const std::uint8_t present = v.pInitialData != nullptr ? 1 : 0;
         buf.write_pod(present);
-        if (present && v.initialDataSize != 0) {
-            buf.write(v.pInitialData, static_cast<std::size_t>(v.initialDataSize));
+        if (present && as_number(v.initialDataSize) != 0) {
+            buf.write(v.pInitialData, static_cast<std::size_t>(as_number(v.initialDataSize)));
         }
     }
 }
@@ -15389,12 +15466,12 @@ inline void serialize_VkPipelineCacheCreateInfo(::av::WireWriter& buf, const VkP
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->initialDataSize == 0) {
+        if (!present || as_number(out->initialDataSize) == 0) {
             out->pInitialData = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(out->initialDataSize));
+            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->initialDataSize)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(out->initialDataSize))) { return false; }
+            if (!r.read(blob, static_cast<std::size_t>(as_number(out->initialDataSize)))) { return false; }
             out->pInitialData = blob;
         }
     }
@@ -15454,7 +15531,7 @@ inline void serialize_VkPipelineColorBlendStateCreateInfo(::av::WireWriter& buf,
         const std::uint8_t present = v.pAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.attachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentCount)); ++i) {
                 serialize_VkPipelineColorBlendAttachmentState(buf, v.pAttachments[i]);
             }
         }
@@ -15473,12 +15550,12 @@ inline void serialize_VkPipelineColorBlendStateCreateInfo(::av::WireWriter& buf,
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->attachmentCount == 0) {
+        if (!present || as_number(out->attachmentCount) == 0) {
             out->pAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineColorBlendAttachmentState>(static_cast<std::size_t>(out->attachmentCount));
+            auto* arr = arena.allocate<VkPipelineColorBlendAttachmentState>(static_cast<std::size_t>(as_number(out->attachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentCount)); ++i) {
                 if (!deserialize_VkPipelineColorBlendAttachmentState(r, &arr[i], arena)) { return false; }
             }
             out->pAttachments = arr;
@@ -15496,7 +15573,7 @@ inline void serialize_VkPipelineColorWriteCreateInfoEXT(::av::WireWriter& buf, c
         const std::uint8_t present = v.pColorWriteEnables != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.attachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentCount)); ++i) {
                 buf.write_pod(v.pColorWriteEnables[i]);
             }
         }
@@ -15511,12 +15588,12 @@ inline void serialize_VkPipelineColorWriteCreateInfoEXT(::av::WireWriter& buf, c
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->attachmentCount == 0) {
+        if (!present || as_number(out->attachmentCount) == 0) {
             out->pColorWriteEnables = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBool32>(static_cast<std::size_t>(out->attachmentCount));
+            auto* arr = arena.allocate<VkBool32>(static_cast<std::size_t>(as_number(out->attachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorWriteEnables = arr;
@@ -15550,7 +15627,7 @@ inline void serialize_VkPipelineCoverageModulationStateCreateInfoNV(::av::WireWr
         const std::uint8_t present = v.pCoverageModulationTable != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.coverageModulationTableCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.coverageModulationTableCount)); ++i) {
                 buf.write_pod(v.pCoverageModulationTable[i]);
             }
         }
@@ -15568,12 +15645,12 @@ inline void serialize_VkPipelineCoverageModulationStateCreateInfoNV(::av::WireWr
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->coverageModulationTableCount == 0) {
+        if (!present || as_number(out->coverageModulationTableCount) == 0) {
             out->pCoverageModulationTable = nullptr;
         } else {
-            auto* arr = arena.allocate<float>(static_cast<std::size_t>(out->coverageModulationTableCount));
+            auto* arr = arena.allocate<float>(static_cast<std::size_t>(as_number(out->coverageModulationTableCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->coverageModulationTableCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->coverageModulationTableCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCoverageModulationTable = arr;
@@ -15671,7 +15748,7 @@ inline void serialize_VkPipelineCreationFeedbackCreateInfo(::av::WireWriter& buf
         const std::uint8_t present = v.pPipelineStageCreationFeedbacks != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.pipelineStageCreationFeedbackCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.pipelineStageCreationFeedbackCount)); ++i) {
                 serialize_VkPipelineCreationFeedback(buf, v.pPipelineStageCreationFeedbacks[i]);
             }
         }
@@ -15698,12 +15775,12 @@ inline void serialize_VkPipelineCreationFeedbackCreateInfo(::av::WireWriter& buf
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->pipelineStageCreationFeedbackCount == 0) {
+        if (!present || as_number(out->pipelineStageCreationFeedbackCount) == 0) {
             out->pPipelineStageCreationFeedbacks = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineCreationFeedback>(static_cast<std::size_t>(out->pipelineStageCreationFeedbackCount));
+            auto* arr = arena.allocate<VkPipelineCreationFeedback>(static_cast<std::size_t>(as_number(out->pipelineStageCreationFeedbackCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->pipelineStageCreationFeedbackCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->pipelineStageCreationFeedbackCount)); ++i) {
                 if (!deserialize_VkPipelineCreationFeedback(r, &arr[i], arena)) { return false; }
             }
             out->pPipelineStageCreationFeedbacks = arr;
@@ -15776,7 +15853,7 @@ inline void serialize_VkPipelineDiscardRectangleStateCreateInfoEXT(::av::WireWri
         const std::uint8_t present = v.pDiscardRectangles != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.discardRectangleCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.discardRectangleCount)); ++i) {
                 serialize_VkRect2D(buf, v.pDiscardRectangles[i]);
             }
         }
@@ -15793,12 +15870,12 @@ inline void serialize_VkPipelineDiscardRectangleStateCreateInfoEXT(::av::WireWri
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->discardRectangleCount == 0) {
+        if (!present || as_number(out->discardRectangleCount) == 0) {
             out->pDiscardRectangles = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(out->discardRectangleCount));
+            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(as_number(out->discardRectangleCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->discardRectangleCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->discardRectangleCount)); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
             out->pDiscardRectangles = arr;
@@ -15816,7 +15893,7 @@ inline void serialize_VkPipelineDynamicStateCreateInfo(::av::WireWriter& buf, co
         const std::uint8_t present = v.pDynamicStates != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.dynamicStateCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.dynamicStateCount)); ++i) {
                 buf.write_pod(v.pDynamicStates[i]);
             }
         }
@@ -15832,12 +15909,12 @@ inline void serialize_VkPipelineDynamicStateCreateInfo(::av::WireWriter& buf, co
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->dynamicStateCount == 0) {
+        if (!present || as_number(out->dynamicStateCount) == 0) {
             out->pDynamicStates = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDynamicState>(static_cast<std::size_t>(out->dynamicStateCount));
+            auto* arr = arena.allocate<VkDynamicState>(static_cast<std::size_t>(as_number(out->dynamicStateCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->dynamicStateCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->dynamicStateCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDynamicStates = arr;
@@ -15907,7 +15984,7 @@ inline void serialize_VkPipelineLayoutCreateInfo(::av::WireWriter& buf, const Vk
         const std::uint8_t present = v.pSetLayouts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.setLayoutCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.setLayoutCount)); ++i) {
                 serialize_VkDescriptorSetLayout(buf, v.pSetLayouts[i]);
             }
         }
@@ -15917,7 +15994,7 @@ inline void serialize_VkPipelineLayoutCreateInfo(::av::WireWriter& buf, const Vk
         const std::uint8_t present = v.pPushConstantRanges != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.pushConstantRangeCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.pushConstantRangeCount)); ++i) {
                 serialize_VkPushConstantRange(buf, v.pPushConstantRanges[i]);
             }
         }
@@ -15933,12 +16010,12 @@ inline void serialize_VkPipelineLayoutCreateInfo(::av::WireWriter& buf, const Vk
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->setLayoutCount == 0) {
+        if (!present || as_number(out->setLayoutCount) == 0) {
             out->pSetLayouts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<std::size_t>(out->setLayoutCount));
+            auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<std::size_t>(as_number(out->setLayoutCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->setLayoutCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->setLayoutCount)); ++i) {
                 if (!deserialize_VkDescriptorSetLayout(r, arr[i])) { return false; }
             }
             out->pSetLayouts = arr;
@@ -15948,12 +16025,12 @@ inline void serialize_VkPipelineLayoutCreateInfo(::av::WireWriter& buf, const Vk
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->pushConstantRangeCount == 0) {
+        if (!present || as_number(out->pushConstantRangeCount) == 0) {
             out->pPushConstantRanges = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPushConstantRange>(static_cast<std::size_t>(out->pushConstantRangeCount));
+            auto* arr = arena.allocate<VkPushConstantRange>(static_cast<std::size_t>(as_number(out->pushConstantRangeCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->pushConstantRangeCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->pushConstantRangeCount)); ++i) {
                 if (!deserialize_VkPushConstantRange(r, &arr[i], arena)) { return false; }
             }
             out->pPushConstantRanges = arr;
@@ -15970,7 +16047,7 @@ inline void serialize_VkPipelineLibraryCreateInfoKHR(::av::WireWriter& buf, cons
         const std::uint8_t present = v.pLibraries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.libraryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.libraryCount)); ++i) {
                 serialize_VkPipeline(buf, v.pLibraries[i]);
             }
         }
@@ -15985,12 +16062,12 @@ inline void serialize_VkPipelineLibraryCreateInfoKHR(::av::WireWriter& buf, cons
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->libraryCount == 0) {
+        if (!present || as_number(out->libraryCount) == 0) {
             out->pLibraries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipeline>(static_cast<std::size_t>(out->libraryCount));
+            auto* arr = arena.allocate<VkPipeline>(static_cast<std::size_t>(as_number(out->libraryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->libraryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->libraryCount)); ++i) {
                 if (!deserialize_VkPipeline(r, arr[i])) { return false; }
             }
             out->pLibraries = arr;
@@ -16010,7 +16087,7 @@ inline void serialize_VkPipelineMultisampleStateCreateInfo(::av::WireWriter& buf
         const std::uint8_t present = v.pSampleMask != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>((v.rasterizationSamples + 31) / 32); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>((as_number(v.rasterizationSamples) + 31) / 32); ++i) {
                 buf.write_pod(v.pSampleMask[i]);
             }
         }
@@ -16030,12 +16107,12 @@ inline void serialize_VkPipelineMultisampleStateCreateInfo(::av::WireWriter& buf
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || (out->rasterizationSamples + 31) / 32 == 0) {
+        if (!present || (as_number(out->rasterizationSamples) + 31) / 32 == 0) {
             out->pSampleMask = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSampleMask>(static_cast<std::size_t>((out->rasterizationSamples + 31) / 32));
+            auto* arr = arena.allocate<VkSampleMask>(static_cast<std::size_t>((as_number(out->rasterizationSamples) + 31) / 32));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>((out->rasterizationSamples + 31) / 32); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>((as_number(out->rasterizationSamples) + 31) / 32); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pSampleMask = arr;
@@ -16187,7 +16264,7 @@ inline void serialize_VkPipelineRenderingCreateInfo(::av::WireWriter& buf, const
         const std::uint8_t present = v.pColorAttachmentFormats != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 buf.write_pod(v.pColorAttachmentFormats[i]);
             }
         }
@@ -16205,12 +16282,12 @@ inline void serialize_VkPipelineRenderingCreateInfo(::av::WireWriter& buf, const
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->colorAttachmentCount == 0) {
+        if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachmentFormats = nullptr;
         } else {
-            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(out->colorAttachmentCount));
+            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorAttachmentFormats = arr;
@@ -16279,7 +16356,7 @@ inline void serialize_VkPipelineShaderStageModuleIdentifierCreateInfoEXT(::av::W
         const std::uint8_t present = v.pIdentifier != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.identifierSize); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.identifierSize)); ++i) {
                 buf.write_pod(v.pIdentifier[i]);
             }
         }
@@ -16294,12 +16371,12 @@ inline void serialize_VkPipelineShaderStageModuleIdentifierCreateInfoEXT(::av::W
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->identifierSize == 0) {
+        if (!present || as_number(out->identifierSize) == 0) {
             out->pIdentifier = nullptr;
         } else {
-            auto* arr = arena.allocate<uint8_t>(static_cast<std::size_t>(out->identifierSize));
+            auto* arr = arena.allocate<uint8_t>(static_cast<std::size_t>(as_number(out->identifierSize)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->identifierSize); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->identifierSize)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pIdentifier = arr;
@@ -16360,7 +16437,7 @@ inline void serialize_VkPipelineVertexInputDivisorStateCreateInfo(::av::WireWrit
         const std::uint8_t present = v.pVertexBindingDivisors != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.vertexBindingDivisorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.vertexBindingDivisorCount)); ++i) {
                 serialize_VkVertexInputBindingDivisorDescription(buf, v.pVertexBindingDivisors[i]);
             }
         }
@@ -16375,12 +16452,12 @@ inline void serialize_VkPipelineVertexInputDivisorStateCreateInfo(::av::WireWrit
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->vertexBindingDivisorCount == 0) {
+        if (!present || as_number(out->vertexBindingDivisorCount) == 0) {
             out->pVertexBindingDivisors = nullptr;
         } else {
-            auto* arr = arena.allocate<VkVertexInputBindingDivisorDescription>(static_cast<std::size_t>(out->vertexBindingDivisorCount));
+            auto* arr = arena.allocate<VkVertexInputBindingDivisorDescription>(static_cast<std::size_t>(as_number(out->vertexBindingDivisorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->vertexBindingDivisorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->vertexBindingDivisorCount)); ++i) {
                 if (!deserialize_VkVertexInputBindingDivisorDescription(r, &arr[i], arena)) { return false; }
             }
             out->pVertexBindingDivisors = arr;
@@ -16398,7 +16475,7 @@ inline void serialize_VkPipelineVertexInputStateCreateInfo(::av::WireWriter& buf
         const std::uint8_t present = v.pVertexBindingDescriptions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.vertexBindingDescriptionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.vertexBindingDescriptionCount)); ++i) {
                 serialize_VkVertexInputBindingDescription(buf, v.pVertexBindingDescriptions[i]);
             }
         }
@@ -16408,7 +16485,7 @@ inline void serialize_VkPipelineVertexInputStateCreateInfo(::av::WireWriter& buf
         const std::uint8_t present = v.pVertexAttributeDescriptions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.vertexAttributeDescriptionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.vertexAttributeDescriptionCount)); ++i) {
                 serialize_VkVertexInputAttributeDescription(buf, v.pVertexAttributeDescriptions[i]);
             }
         }
@@ -16424,12 +16501,12 @@ inline void serialize_VkPipelineVertexInputStateCreateInfo(::av::WireWriter& buf
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->vertexBindingDescriptionCount == 0) {
+        if (!present || as_number(out->vertexBindingDescriptionCount) == 0) {
             out->pVertexBindingDescriptions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkVertexInputBindingDescription>(static_cast<std::size_t>(out->vertexBindingDescriptionCount));
+            auto* arr = arena.allocate<VkVertexInputBindingDescription>(static_cast<std::size_t>(as_number(out->vertexBindingDescriptionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->vertexBindingDescriptionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->vertexBindingDescriptionCount)); ++i) {
                 if (!deserialize_VkVertexInputBindingDescription(r, &arr[i], arena)) { return false; }
             }
             out->pVertexBindingDescriptions = arr;
@@ -16439,12 +16516,12 @@ inline void serialize_VkPipelineVertexInputStateCreateInfo(::av::WireWriter& buf
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->vertexAttributeDescriptionCount == 0) {
+        if (!present || as_number(out->vertexAttributeDescriptionCount) == 0) {
             out->pVertexAttributeDescriptions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkVertexInputAttributeDescription>(static_cast<std::size_t>(out->vertexAttributeDescriptionCount));
+            auto* arr = arena.allocate<VkVertexInputAttributeDescription>(static_cast<std::size_t>(as_number(out->vertexAttributeDescriptionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->vertexAttributeDescriptionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->vertexAttributeDescriptionCount)); ++i) {
                 if (!deserialize_VkVertexInputAttributeDescription(r, &arr[i], arena)) { return false; }
             }
             out->pVertexAttributeDescriptions = arr;
@@ -16462,7 +16539,7 @@ inline void serialize_VkPipelineViewportCoarseSampleOrderStateCreateInfoNV(::av:
         const std::uint8_t present = v.pCustomSampleOrders != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.customSampleOrderCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.customSampleOrderCount)); ++i) {
                 serialize_VkCoarseSampleOrderCustomNV(buf, v.pCustomSampleOrders[i]);
             }
         }
@@ -16478,12 +16555,12 @@ inline void serialize_VkPipelineViewportCoarseSampleOrderStateCreateInfoNV(::av:
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->customSampleOrderCount == 0) {
+        if (!present || as_number(out->customSampleOrderCount) == 0) {
             out->pCustomSampleOrders = nullptr;
         } else {
-            auto* arr = arena.allocate<VkCoarseSampleOrderCustomNV>(static_cast<std::size_t>(out->customSampleOrderCount));
+            auto* arr = arena.allocate<VkCoarseSampleOrderCustomNV>(static_cast<std::size_t>(as_number(out->customSampleOrderCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->customSampleOrderCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->customSampleOrderCount)); ++i) {
                 if (!deserialize_VkCoarseSampleOrderCustomNV(r, &arr[i], arena)) { return false; }
             }
             out->pCustomSampleOrders = arr;
@@ -16549,7 +16626,7 @@ inline void serialize_VkPipelineViewportExclusiveScissorStateCreateInfoNV(::av::
         const std::uint8_t present = v.pExclusiveScissors != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.exclusiveScissorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.exclusiveScissorCount)); ++i) {
                 serialize_VkRect2D(buf, v.pExclusiveScissors[i]);
             }
         }
@@ -16564,12 +16641,12 @@ inline void serialize_VkPipelineViewportExclusiveScissorStateCreateInfoNV(::av::
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->exclusiveScissorCount == 0) {
+        if (!present || as_number(out->exclusiveScissorCount) == 0) {
             out->pExclusiveScissors = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(out->exclusiveScissorCount));
+            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(as_number(out->exclusiveScissorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->exclusiveScissorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->exclusiveScissorCount)); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
             out->pExclusiveScissors = arr;
@@ -16587,7 +16664,7 @@ inline void serialize_VkPipelineViewportShadingRateImageStateCreateInfoNV(::av::
         const std::uint8_t present = v.pShadingRatePalettes != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.viewportCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.viewportCount)); ++i) {
                 serialize_VkShadingRatePaletteNV(buf, v.pShadingRatePalettes[i]);
             }
         }
@@ -16603,12 +16680,12 @@ inline void serialize_VkPipelineViewportShadingRateImageStateCreateInfoNV(::av::
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->viewportCount == 0) {
+        if (!present || as_number(out->viewportCount) == 0) {
             out->pShadingRatePalettes = nullptr;
         } else {
-            auto* arr = arena.allocate<VkShadingRatePaletteNV>(static_cast<std::size_t>(out->viewportCount));
+            auto* arr = arena.allocate<VkShadingRatePaletteNV>(static_cast<std::size_t>(as_number(out->viewportCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->viewportCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->viewportCount)); ++i) {
                 if (!deserialize_VkShadingRatePaletteNV(r, &arr[i], arena)) { return false; }
             }
             out->pShadingRatePalettes = arr;
@@ -16626,7 +16703,7 @@ inline void serialize_VkPipelineViewportStateCreateInfo(::av::WireWriter& buf, c
         const std::uint8_t present = v.pViewports != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.viewportCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.viewportCount)); ++i) {
                 serialize_VkViewport(buf, v.pViewports[i]);
             }
         }
@@ -16636,7 +16713,7 @@ inline void serialize_VkPipelineViewportStateCreateInfo(::av::WireWriter& buf, c
         const std::uint8_t present = v.pScissors != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.scissorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.scissorCount)); ++i) {
                 serialize_VkRect2D(buf, v.pScissors[i]);
             }
         }
@@ -16652,12 +16729,12 @@ inline void serialize_VkPipelineViewportStateCreateInfo(::av::WireWriter& buf, c
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->viewportCount == 0) {
+        if (!present || as_number(out->viewportCount) == 0) {
             out->pViewports = nullptr;
         } else {
-            auto* arr = arena.allocate<VkViewport>(static_cast<std::size_t>(out->viewportCount));
+            auto* arr = arena.allocate<VkViewport>(static_cast<std::size_t>(as_number(out->viewportCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->viewportCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->viewportCount)); ++i) {
                 if (!deserialize_VkViewport(r, &arr[i], arena)) { return false; }
             }
             out->pViewports = arr;
@@ -16667,12 +16744,12 @@ inline void serialize_VkPipelineViewportStateCreateInfo(::av::WireWriter& buf, c
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->scissorCount == 0) {
+        if (!present || as_number(out->scissorCount) == 0) {
             out->pScissors = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(out->scissorCount));
+            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(as_number(out->scissorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->scissorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->scissorCount)); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
             out->pScissors = arr;
@@ -16690,7 +16767,7 @@ inline void serialize_VkPipelineViewportSwizzleStateCreateInfoNV(::av::WireWrite
         const std::uint8_t present = v.pViewportSwizzles != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.viewportCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.viewportCount)); ++i) {
                 serialize_VkViewportSwizzleNV(buf, v.pViewportSwizzles[i]);
             }
         }
@@ -16706,12 +16783,12 @@ inline void serialize_VkPipelineViewportSwizzleStateCreateInfoNV(::av::WireWrite
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->viewportCount == 0) {
+        if (!present || as_number(out->viewportCount) == 0) {
             out->pViewportSwizzles = nullptr;
         } else {
-            auto* arr = arena.allocate<VkViewportSwizzleNV>(static_cast<std::size_t>(out->viewportCount));
+            auto* arr = arena.allocate<VkViewportSwizzleNV>(static_cast<std::size_t>(as_number(out->viewportCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->viewportCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->viewportCount)); ++i) {
                 if (!deserialize_VkViewportSwizzleNV(r, &arr[i], arena)) { return false; }
             }
             out->pViewportSwizzles = arr;
@@ -16729,7 +16806,7 @@ inline void serialize_VkPipelineViewportWScalingStateCreateInfoNV(::av::WireWrit
         const std::uint8_t present = v.pViewportWScalings != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.viewportCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.viewportCount)); ++i) {
                 serialize_VkViewportWScalingNV(buf, v.pViewportWScalings[i]);
             }
         }
@@ -16745,12 +16822,12 @@ inline void serialize_VkPipelineViewportWScalingStateCreateInfoNV(::av::WireWrit
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->viewportCount == 0) {
+        if (!present || as_number(out->viewportCount) == 0) {
             out->pViewportWScalings = nullptr;
         } else {
-            auto* arr = arena.allocate<VkViewportWScalingNV>(static_cast<std::size_t>(out->viewportCount));
+            auto* arr = arena.allocate<VkViewportWScalingNV>(static_cast<std::size_t>(as_number(out->viewportCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->viewportCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->viewportCount)); ++i) {
                 if (!deserialize_VkViewportWScalingNV(r, &arr[i], arena)) { return false; }
             }
             out->pViewportWScalings = arr;
@@ -16846,7 +16923,7 @@ inline void serialize_VkQueryPoolPerformanceCreateInfoKHR(::av::WireWriter& buf,
         const std::uint8_t present = v.pCounterIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.counterIndexCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.counterIndexCount)); ++i) {
                 buf.write_pod(v.pCounterIndices[i]);
             }
         }
@@ -16862,12 +16939,12 @@ inline void serialize_VkQueryPoolPerformanceCreateInfoKHR(::av::WireWriter& buf,
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->counterIndexCount == 0) {
+        if (!present || as_number(out->counterIndexCount) == 0) {
             out->pCounterIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->counterIndexCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->counterIndexCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->counterIndexCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->counterIndexCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCounterIndices = arr;
@@ -17029,7 +17106,7 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
         const std::uint8_t present = v.pStages != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.stageCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.stageCount)); ++i) {
                 serialize_VkPipelineShaderStageCreateInfo(buf, v.pStages[i]);
             }
         }
@@ -17039,7 +17116,7 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
         const std::uint8_t present = v.pGroups != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.groupCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.groupCount)); ++i) {
                 serialize_VkRayTracingShaderGroupCreateInfoKHR(buf, v.pGroups[i]);
             }
         }
@@ -17086,12 +17163,12 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->stageCount == 0) {
+        if (!present || as_number(out->stageCount) == 0) {
             out->pStages = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<std::size_t>(out->stageCount));
+            auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<std::size_t>(as_number(out->stageCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->stageCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->stageCount)); ++i) {
                 if (!deserialize_VkPipelineShaderStageCreateInfo(r, &arr[i], arena)) { return false; }
             }
             out->pStages = arr;
@@ -17101,12 +17178,12 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->groupCount == 0) {
+        if (!present || as_number(out->groupCount) == 0) {
             out->pGroups = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRayTracingShaderGroupCreateInfoKHR>(static_cast<std::size_t>(out->groupCount));
+            auto* arr = arena.allocate<VkRayTracingShaderGroupCreateInfoKHR>(static_cast<std::size_t>(as_number(out->groupCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->groupCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->groupCount)); ++i) {
                 if (!deserialize_VkRayTracingShaderGroupCreateInfoKHR(r, &arr[i], arena)) { return false; }
             }
             out->pGroups = arr;
@@ -17219,7 +17296,7 @@ inline void serialize_VkRenderPassAttachmentBeginInfo(::av::WireWriter& buf, con
         const std::uint8_t present = v.pAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.attachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentCount)); ++i) {
                 serialize_VkImageView(buf, v.pAttachments[i]);
             }
         }
@@ -17234,12 +17311,12 @@ inline void serialize_VkRenderPassAttachmentBeginInfo(::av::WireWriter& buf, con
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->attachmentCount == 0) {
+        if (!present || as_number(out->attachmentCount) == 0) {
             out->pAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageView>(static_cast<std::size_t>(out->attachmentCount));
+            auto* arr = arena.allocate<VkImageView>(static_cast<std::size_t>(as_number(out->attachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentCount)); ++i) {
                 if (!deserialize_VkImageView(r, arr[i])) { return false; }
             }
             out->pAttachments = arr;
@@ -17259,7 +17336,7 @@ inline void serialize_VkRenderPassBeginInfo(::av::WireWriter& buf, const VkRende
         const std::uint8_t present = v.pClearValues != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.clearValueCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.clearValueCount)); ++i) {
                 serialize_VkClearValue(buf, v.pClearValues[i]);
             }
         }
@@ -17277,12 +17354,12 @@ inline void serialize_VkRenderPassBeginInfo(::av::WireWriter& buf, const VkRende
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->clearValueCount == 0) {
+        if (!present || as_number(out->clearValueCount) == 0) {
             out->pClearValues = nullptr;
         } else {
-            auto* arr = arena.allocate<VkClearValue>(static_cast<std::size_t>(out->clearValueCount));
+            auto* arr = arena.allocate<VkClearValue>(static_cast<std::size_t>(as_number(out->clearValueCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->clearValueCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->clearValueCount)); ++i) {
                 if (!deserialize_VkClearValue(r, &arr[i], arena)) { return false; }
             }
             out->pClearValues = arr;
@@ -17300,7 +17377,7 @@ inline void serialize_VkRenderPassCreateInfo(::av::WireWriter& buf, const VkRend
         const std::uint8_t present = v.pAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.attachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentCount)); ++i) {
                 serialize_VkAttachmentDescription(buf, v.pAttachments[i]);
             }
         }
@@ -17310,7 +17387,7 @@ inline void serialize_VkRenderPassCreateInfo(::av::WireWriter& buf, const VkRend
         const std::uint8_t present = v.pSubpasses != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.subpassCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.subpassCount)); ++i) {
                 serialize_VkSubpassDescription(buf, v.pSubpasses[i]);
             }
         }
@@ -17320,7 +17397,7 @@ inline void serialize_VkRenderPassCreateInfo(::av::WireWriter& buf, const VkRend
         const std::uint8_t present = v.pDependencies != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.dependencyCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.dependencyCount)); ++i) {
                 serialize_VkSubpassDependency(buf, v.pDependencies[i]);
             }
         }
@@ -17336,12 +17413,12 @@ inline void serialize_VkRenderPassCreateInfo(::av::WireWriter& buf, const VkRend
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->attachmentCount == 0) {
+        if (!present || as_number(out->attachmentCount) == 0) {
             out->pAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentDescription>(static_cast<std::size_t>(out->attachmentCount));
+            auto* arr = arena.allocate<VkAttachmentDescription>(static_cast<std::size_t>(as_number(out->attachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentDescription(r, &arr[i], arena)) { return false; }
             }
             out->pAttachments = arr;
@@ -17351,12 +17428,12 @@ inline void serialize_VkRenderPassCreateInfo(::av::WireWriter& buf, const VkRend
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->subpassCount == 0) {
+        if (!present || as_number(out->subpassCount) == 0) {
             out->pSubpasses = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSubpassDescription>(static_cast<std::size_t>(out->subpassCount));
+            auto* arr = arena.allocate<VkSubpassDescription>(static_cast<std::size_t>(as_number(out->subpassCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->subpassCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->subpassCount)); ++i) {
                 if (!deserialize_VkSubpassDescription(r, &arr[i], arena)) { return false; }
             }
             out->pSubpasses = arr;
@@ -17366,12 +17443,12 @@ inline void serialize_VkRenderPassCreateInfo(::av::WireWriter& buf, const VkRend
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->dependencyCount == 0) {
+        if (!present || as_number(out->dependencyCount) == 0) {
             out->pDependencies = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSubpassDependency>(static_cast<std::size_t>(out->dependencyCount));
+            auto* arr = arena.allocate<VkSubpassDependency>(static_cast<std::size_t>(as_number(out->dependencyCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->dependencyCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->dependencyCount)); ++i) {
                 if (!deserialize_VkSubpassDependency(r, &arr[i], arena)) { return false; }
             }
             out->pDependencies = arr;
@@ -17389,7 +17466,7 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
         const std::uint8_t present = v.pAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.attachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentCount)); ++i) {
                 serialize_VkAttachmentDescription2(buf, v.pAttachments[i]);
             }
         }
@@ -17399,7 +17476,7 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
         const std::uint8_t present = v.pSubpasses != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.subpassCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.subpassCount)); ++i) {
                 serialize_VkSubpassDescription2(buf, v.pSubpasses[i]);
             }
         }
@@ -17409,7 +17486,7 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
         const std::uint8_t present = v.pDependencies != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.dependencyCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.dependencyCount)); ++i) {
                 serialize_VkSubpassDependency2(buf, v.pDependencies[i]);
             }
         }
@@ -17419,7 +17496,7 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
         const std::uint8_t present = v.pCorrelatedViewMasks != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.correlatedViewMaskCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.correlatedViewMaskCount)); ++i) {
                 buf.write_pod(v.pCorrelatedViewMasks[i]);
             }
         }
@@ -17435,12 +17512,12 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->attachmentCount == 0) {
+        if (!present || as_number(out->attachmentCount) == 0) {
             out->pAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentDescription2>(static_cast<std::size_t>(out->attachmentCount));
+            auto* arr = arena.allocate<VkAttachmentDescription2>(static_cast<std::size_t>(as_number(out->attachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentDescription2(r, &arr[i], arena)) { return false; }
             }
             out->pAttachments = arr;
@@ -17450,12 +17527,12 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->subpassCount == 0) {
+        if (!present || as_number(out->subpassCount) == 0) {
             out->pSubpasses = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSubpassDescription2>(static_cast<std::size_t>(out->subpassCount));
+            auto* arr = arena.allocate<VkSubpassDescription2>(static_cast<std::size_t>(as_number(out->subpassCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->subpassCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->subpassCount)); ++i) {
                 if (!deserialize_VkSubpassDescription2(r, &arr[i], arena)) { return false; }
             }
             out->pSubpasses = arr;
@@ -17465,12 +17542,12 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->dependencyCount == 0) {
+        if (!present || as_number(out->dependencyCount) == 0) {
             out->pDependencies = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSubpassDependency2>(static_cast<std::size_t>(out->dependencyCount));
+            auto* arr = arena.allocate<VkSubpassDependency2>(static_cast<std::size_t>(as_number(out->dependencyCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->dependencyCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->dependencyCount)); ++i) {
                 if (!deserialize_VkSubpassDependency2(r, &arr[i], arena)) { return false; }
             }
             out->pDependencies = arr;
@@ -17480,12 +17557,12 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->correlatedViewMaskCount == 0) {
+        if (!present || as_number(out->correlatedViewMaskCount) == 0) {
             out->pCorrelatedViewMasks = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->correlatedViewMaskCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->correlatedViewMaskCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->correlatedViewMaskCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->correlatedViewMaskCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCorrelatedViewMasks = arr;
@@ -17573,7 +17650,7 @@ inline void serialize_VkRenderPassInputAttachmentAspectCreateInfo(::av::WireWrit
         const std::uint8_t present = v.pAspectReferences != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.aspectReferenceCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.aspectReferenceCount)); ++i) {
                 serialize_VkInputAttachmentAspectReference(buf, v.pAspectReferences[i]);
             }
         }
@@ -17588,12 +17665,12 @@ inline void serialize_VkRenderPassInputAttachmentAspectCreateInfo(::av::WireWrit
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->aspectReferenceCount == 0) {
+        if (!present || as_number(out->aspectReferenceCount) == 0) {
             out->pAspectReferences = nullptr;
         } else {
-            auto* arr = arena.allocate<VkInputAttachmentAspectReference>(static_cast<std::size_t>(out->aspectReferenceCount));
+            auto* arr = arena.allocate<VkInputAttachmentAspectReference>(static_cast<std::size_t>(as_number(out->aspectReferenceCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->aspectReferenceCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->aspectReferenceCount)); ++i) {
                 if (!deserialize_VkInputAttachmentAspectReference(r, &arr[i], arena)) { return false; }
             }
             out->pAspectReferences = arr;
@@ -17610,7 +17687,7 @@ inline void serialize_VkRenderPassMultiviewCreateInfo(::av::WireWriter& buf, con
         const std::uint8_t present = v.pViewMasks != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.subpassCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.subpassCount)); ++i) {
                 buf.write_pod(v.pViewMasks[i]);
             }
         }
@@ -17620,7 +17697,7 @@ inline void serialize_VkRenderPassMultiviewCreateInfo(::av::WireWriter& buf, con
         const std::uint8_t present = v.pViewOffsets != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.dependencyCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.dependencyCount)); ++i) {
                 buf.write_pod(v.pViewOffsets[i]);
             }
         }
@@ -17630,7 +17707,7 @@ inline void serialize_VkRenderPassMultiviewCreateInfo(::av::WireWriter& buf, con
         const std::uint8_t present = v.pCorrelationMasks != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.correlationMaskCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.correlationMaskCount)); ++i) {
                 buf.write_pod(v.pCorrelationMasks[i]);
             }
         }
@@ -17645,12 +17722,12 @@ inline void serialize_VkRenderPassMultiviewCreateInfo(::av::WireWriter& buf, con
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->subpassCount == 0) {
+        if (!present || as_number(out->subpassCount) == 0) {
             out->pViewMasks = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->subpassCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->subpassCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->subpassCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->subpassCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pViewMasks = arr;
@@ -17660,12 +17737,12 @@ inline void serialize_VkRenderPassMultiviewCreateInfo(::av::WireWriter& buf, con
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->dependencyCount == 0) {
+        if (!present || as_number(out->dependencyCount) == 0) {
             out->pViewOffsets = nullptr;
         } else {
-            auto* arr = arena.allocate<int32_t>(static_cast<std::size_t>(out->dependencyCount));
+            auto* arr = arena.allocate<int32_t>(static_cast<std::size_t>(as_number(out->dependencyCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->dependencyCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->dependencyCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pViewOffsets = arr;
@@ -17675,12 +17752,12 @@ inline void serialize_VkRenderPassMultiviewCreateInfo(::av::WireWriter& buf, con
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->correlationMaskCount == 0) {
+        if (!present || as_number(out->correlationMaskCount) == 0) {
             out->pCorrelationMasks = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->correlationMaskCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->correlationMaskCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->correlationMaskCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->correlationMaskCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCorrelationMasks = arr;
@@ -17697,7 +17774,7 @@ inline void serialize_VkRenderPassSampleLocationsBeginInfoEXT(::av::WireWriter& 
         const std::uint8_t present = v.pAttachmentInitialSampleLocations != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.attachmentInitialSampleLocationsCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentInitialSampleLocationsCount)); ++i) {
                 serialize_VkAttachmentSampleLocationsEXT(buf, v.pAttachmentInitialSampleLocations[i]);
             }
         }
@@ -17707,7 +17784,7 @@ inline void serialize_VkRenderPassSampleLocationsBeginInfoEXT(::av::WireWriter& 
         const std::uint8_t present = v.pPostSubpassSampleLocations != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.postSubpassSampleLocationsCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.postSubpassSampleLocationsCount)); ++i) {
                 serialize_VkSubpassSampleLocationsEXT(buf, v.pPostSubpassSampleLocations[i]);
             }
         }
@@ -17722,12 +17799,12 @@ inline void serialize_VkRenderPassSampleLocationsBeginInfoEXT(::av::WireWriter& 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->attachmentInitialSampleLocationsCount == 0) {
+        if (!present || as_number(out->attachmentInitialSampleLocationsCount) == 0) {
             out->pAttachmentInitialSampleLocations = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentSampleLocationsEXT>(static_cast<std::size_t>(out->attachmentInitialSampleLocationsCount));
+            auto* arr = arena.allocate<VkAttachmentSampleLocationsEXT>(static_cast<std::size_t>(as_number(out->attachmentInitialSampleLocationsCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentInitialSampleLocationsCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentInitialSampleLocationsCount)); ++i) {
                 if (!deserialize_VkAttachmentSampleLocationsEXT(r, &arr[i], arena)) { return false; }
             }
             out->pAttachmentInitialSampleLocations = arr;
@@ -17737,12 +17814,12 @@ inline void serialize_VkRenderPassSampleLocationsBeginInfoEXT(::av::WireWriter& 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->postSubpassSampleLocationsCount == 0) {
+        if (!present || as_number(out->postSubpassSampleLocationsCount) == 0) {
             out->pPostSubpassSampleLocations = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSubpassSampleLocationsEXT>(static_cast<std::size_t>(out->postSubpassSampleLocationsCount));
+            auto* arr = arena.allocate<VkSubpassSampleLocationsEXT>(static_cast<std::size_t>(as_number(out->postSubpassSampleLocationsCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->postSubpassSampleLocationsCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->postSubpassSampleLocationsCount)); ++i) {
                 if (!deserialize_VkSubpassSampleLocationsEXT(r, &arr[i], arena)) { return false; }
             }
             out->pPostSubpassSampleLocations = arr;
@@ -17759,7 +17836,7 @@ inline void serialize_VkRenderPassStripeBeginInfoARM(::av::WireWriter& buf, cons
         const std::uint8_t present = v.pStripeInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.stripeInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.stripeInfoCount)); ++i) {
                 serialize_VkRenderPassStripeInfoARM(buf, v.pStripeInfos[i]);
             }
         }
@@ -17774,12 +17851,12 @@ inline void serialize_VkRenderPassStripeBeginInfoARM(::av::WireWriter& buf, cons
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->stripeInfoCount == 0) {
+        if (!present || as_number(out->stripeInfoCount) == 0) {
             out->pStripeInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRenderPassStripeInfoARM>(static_cast<std::size_t>(out->stripeInfoCount));
+            auto* arr = arena.allocate<VkRenderPassStripeInfoARM>(static_cast<std::size_t>(as_number(out->stripeInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->stripeInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->stripeInfoCount)); ++i) {
                 if (!deserialize_VkRenderPassStripeInfoARM(r, &arr[i], arena)) { return false; }
             }
             out->pStripeInfos = arr;
@@ -17810,7 +17887,7 @@ inline void serialize_VkRenderPassStripeSubmitInfoARM(::av::WireWriter& buf, con
         const std::uint8_t present = v.pStripeSemaphoreInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.stripeSemaphoreInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.stripeSemaphoreInfoCount)); ++i) {
                 serialize_VkSemaphoreSubmitInfo(buf, v.pStripeSemaphoreInfos[i]);
             }
         }
@@ -17825,12 +17902,12 @@ inline void serialize_VkRenderPassStripeSubmitInfoARM(::av::WireWriter& buf, con
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->stripeSemaphoreInfoCount == 0) {
+        if (!present || as_number(out->stripeSemaphoreInfoCount) == 0) {
             out->pStripeSemaphoreInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<std::size_t>(out->stripeSemaphoreInfoCount));
+            auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<std::size_t>(as_number(out->stripeSemaphoreInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->stripeSemaphoreInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->stripeSemaphoreInfoCount)); ++i) {
                 if (!deserialize_VkSemaphoreSubmitInfo(r, &arr[i], arena)) { return false; }
             }
             out->pStripeSemaphoreInfos = arr;
@@ -17909,7 +17986,7 @@ inline void serialize_VkRenderingAreaInfo(::av::WireWriter& buf, const VkRenderi
         const std::uint8_t present = v.pColorAttachmentFormats != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 buf.write_pod(v.pColorAttachmentFormats[i]);
             }
         }
@@ -17927,12 +18004,12 @@ inline void serialize_VkRenderingAreaInfo(::av::WireWriter& buf, const VkRenderi
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->colorAttachmentCount == 0) {
+        if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachmentFormats = nullptr;
         } else {
-            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(out->colorAttachmentCount));
+            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorAttachmentFormats = arr;
@@ -17979,7 +18056,7 @@ inline void serialize_VkRenderingAttachmentLocationInfo(::av::WireWriter& buf, c
         const std::uint8_t present = v.pColorAttachmentLocations != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 buf.write_pod(v.pColorAttachmentLocations[i]);
             }
         }
@@ -17994,12 +18071,12 @@ inline void serialize_VkRenderingAttachmentLocationInfo(::av::WireWriter& buf, c
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->colorAttachmentCount == 0) {
+        if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachmentLocations = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->colorAttachmentCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorAttachmentLocations = arr;
@@ -18054,7 +18131,7 @@ inline void serialize_VkRenderingInfo(::av::WireWriter& buf, const VkRenderingIn
         const std::uint8_t present = v.pColorAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 serialize_VkRenderingAttachmentInfo(buf, v.pColorAttachments[i]);
             }
         }
@@ -18091,12 +18168,12 @@ inline void serialize_VkRenderingInfo(::av::WireWriter& buf, const VkRenderingIn
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->colorAttachmentCount == 0) {
+        if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRenderingAttachmentInfo>(static_cast<std::size_t>(out->colorAttachmentCount));
+            auto* arr = arena.allocate<VkRenderingAttachmentInfo>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!deserialize_VkRenderingAttachmentInfo(r, &arr[i], arena)) { return false; }
             }
             out->pColorAttachments = arr;
@@ -18137,7 +18214,7 @@ inline void serialize_VkRenderingInputAttachmentIndexInfo(::av::WireWriter& buf,
         const std::uint8_t present = v.pColorAttachmentInputIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 buf.write_pod(v.pColorAttachmentInputIndices[i]);
             }
         }
@@ -18156,12 +18233,12 @@ inline void serialize_VkRenderingInputAttachmentIndexInfo(::av::WireWriter& buf,
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->colorAttachmentCount == 0) {
+        if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachmentInputIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->colorAttachmentCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorAttachmentInputIndices = arr;
@@ -18186,7 +18263,7 @@ inline void serialize_VkResolveImageInfo2(::av::WireWriter& buf, const VkResolve
         const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkImageResolve2(buf, v.pRegions[i]);
             }
         }
@@ -18205,12 +18282,12 @@ inline void serialize_VkResolveImageInfo2(::av::WireWriter& buf, const VkResolve
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->regionCount == 0) {
+        if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageResolve2>(static_cast<std::size_t>(out->regionCount));
+            auto* arr = arena.allocate<VkImageResolve2>(static_cast<std::size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkImageResolve2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -18514,7 +18591,7 @@ inline void serialize_VkSemaphoreWaitInfo(::av::WireWriter& buf, const VkSemapho
         const std::uint8_t present = v.pSemaphores != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.semaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.semaphoreCount)); ++i) {
                 serialize_VkSemaphore(buf, v.pSemaphores[i]);
             }
         }
@@ -18523,7 +18600,7 @@ inline void serialize_VkSemaphoreWaitInfo(::av::WireWriter& buf, const VkSemapho
         const std::uint8_t present = v.pValues != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.semaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.semaphoreCount)); ++i) {
                 buf.write_pod(v.pValues[i]);
             }
         }
@@ -18539,12 +18616,12 @@ inline void serialize_VkSemaphoreWaitInfo(::av::WireWriter& buf, const VkSemapho
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->semaphoreCount == 0) {
+        if (!present || as_number(out->semaphoreCount) == 0) {
             out->pSemaphores = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(out->semaphoreCount));
+            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(as_number(out->semaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->semaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->semaphoreCount)); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
             out->pSemaphores = arr;
@@ -18553,12 +18630,12 @@ inline void serialize_VkSemaphoreWaitInfo(::av::WireWriter& buf, const VkSemapho
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->semaphoreCount == 0) {
+        if (!present || as_number(out->semaphoreCount) == 0) {
             out->pValues = nullptr;
         } else {
-            auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(out->semaphoreCount));
+            auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(as_number(out->semaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->semaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->semaphoreCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pValues = arr;
@@ -18578,8 +18655,8 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
     {
         const std::uint8_t present = v.pCode != nullptr ? 1 : 0;
         buf.write_pod(present);
-        if (present && v.codeSize != 0) {
-            buf.write(v.pCode, static_cast<std::size_t>(v.codeSize));
+        if (present && as_number(v.codeSize) != 0) {
+            buf.write(v.pCode, static_cast<std::size_t>(as_number(v.codeSize)));
         }
     }
     {
@@ -18597,7 +18674,7 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
         const std::uint8_t present = v.pSetLayouts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.setLayoutCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.setLayoutCount)); ++i) {
                 serialize_VkDescriptorSetLayout(buf, v.pSetLayouts[i]);
             }
         }
@@ -18607,7 +18684,7 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
         const std::uint8_t present = v.pPushConstantRanges != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.pushConstantRangeCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.pushConstantRangeCount)); ++i) {
                 serialize_VkPushConstantRange(buf, v.pPushConstantRanges[i]);
             }
         }
@@ -18639,12 +18716,12 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->codeSize == 0) {
+        if (!present || as_number(out->codeSize) == 0) {
             out->pCode = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(out->codeSize));
+            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->codeSize)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(out->codeSize))) { return false; }
+            if (!r.read(blob, static_cast<std::size_t>(as_number(out->codeSize)))) { return false; }
             out->pCode = blob;
         }
     }
@@ -18669,12 +18746,12 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->setLayoutCount == 0) {
+        if (!present || as_number(out->setLayoutCount) == 0) {
             out->pSetLayouts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<std::size_t>(out->setLayoutCount));
+            auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<std::size_t>(as_number(out->setLayoutCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->setLayoutCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->setLayoutCount)); ++i) {
                 if (!deserialize_VkDescriptorSetLayout(r, arr[i])) { return false; }
             }
             out->pSetLayouts = arr;
@@ -18684,12 +18761,12 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->pushConstantRangeCount == 0) {
+        if (!present || as_number(out->pushConstantRangeCount) == 0) {
             out->pPushConstantRanges = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPushConstantRange>(static_cast<std::size_t>(out->pushConstantRangeCount));
+            auto* arr = arena.allocate<VkPushConstantRange>(static_cast<std::size_t>(as_number(out->pushConstantRangeCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->pushConstantRangeCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->pushConstantRangeCount)); ++i) {
                 if (!deserialize_VkPushConstantRange(r, &arr[i], arena)) { return false; }
             }
             out->pPushConstantRanges = arr;
@@ -18719,7 +18796,7 @@ inline void serialize_VkShaderModuleCreateInfo(::av::WireWriter& buf, const VkSh
         const std::uint8_t present = v.pCode != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.codeSize / 4); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.codeSize) / 4); ++i) {
                 buf.write_pod(v.pCode[i]);
             }
         }
@@ -18739,12 +18816,12 @@ inline void serialize_VkShaderModuleCreateInfo(::av::WireWriter& buf, const VkSh
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->codeSize / 4 == 0) {
+        if (!present || as_number(out->codeSize) / 4 == 0) {
             out->pCode = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->codeSize / 4));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->codeSize) / 4));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->codeSize / 4); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->codeSize) / 4); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCode = arr;
@@ -18773,7 +18850,7 @@ inline void serialize_VkShadingRatePaletteNV(::av::WireWriter& buf, const VkShad
         const std::uint8_t present = v.pShadingRatePaletteEntries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.shadingRatePaletteEntryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.shadingRatePaletteEntryCount)); ++i) {
                 buf.write_pod(v.pShadingRatePaletteEntries[i]);
             }
         }
@@ -18786,12 +18863,12 @@ inline void serialize_VkShadingRatePaletteNV(::av::WireWriter& buf, const VkShad
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->shadingRatePaletteEntryCount == 0) {
+        if (!present || as_number(out->shadingRatePaletteEntryCount) == 0) {
             out->pShadingRatePaletteEntries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkShadingRatePaletteEntryNV>(static_cast<std::size_t>(out->shadingRatePaletteEntryCount));
+            auto* arr = arena.allocate<VkShadingRatePaletteEntryNV>(static_cast<std::size_t>(as_number(out->shadingRatePaletteEntryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->shadingRatePaletteEntryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->shadingRatePaletteEntryCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pShadingRatePaletteEntries = arr;
@@ -18807,7 +18884,7 @@ inline void serialize_VkSparseBufferMemoryBindInfo(::av::WireWriter& buf, const 
         const std::uint8_t present = v.pBinds != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.bindCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bindCount)); ++i) {
                 serialize_VkSparseMemoryBind(buf, v.pBinds[i]);
             }
         }
@@ -18821,12 +18898,12 @@ inline void serialize_VkSparseBufferMemoryBindInfo(::av::WireWriter& buf, const 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->bindCount == 0) {
+        if (!present || as_number(out->bindCount) == 0) {
             out->pBinds = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSparseMemoryBind>(static_cast<std::size_t>(out->bindCount));
+            auto* arr = arena.allocate<VkSparseMemoryBind>(static_cast<std::size_t>(as_number(out->bindCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bindCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bindCount)); ++i) {
                 if (!deserialize_VkSparseMemoryBind(r, &arr[i], arena)) { return false; }
             }
             out->pBinds = arr;
@@ -18890,7 +18967,7 @@ inline void serialize_VkSparseImageMemoryBindInfo(::av::WireWriter& buf, const V
         const std::uint8_t present = v.pBinds != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.bindCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bindCount)); ++i) {
                 serialize_VkSparseImageMemoryBind(buf, v.pBinds[i]);
             }
         }
@@ -18904,12 +18981,12 @@ inline void serialize_VkSparseImageMemoryBindInfo(::av::WireWriter& buf, const V
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->bindCount == 0) {
+        if (!present || as_number(out->bindCount) == 0) {
             out->pBinds = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSparseImageMemoryBind>(static_cast<std::size_t>(out->bindCount));
+            auto* arr = arena.allocate<VkSparseImageMemoryBind>(static_cast<std::size_t>(as_number(out->bindCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bindCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bindCount)); ++i) {
                 if (!deserialize_VkSparseImageMemoryBind(r, &arr[i], arena)) { return false; }
             }
             out->pBinds = arr;
@@ -18957,7 +19034,7 @@ inline void serialize_VkSparseImageOpaqueMemoryBindInfo(::av::WireWriter& buf, c
         const std::uint8_t present = v.pBinds != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.bindCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bindCount)); ++i) {
                 serialize_VkSparseMemoryBind(buf, v.pBinds[i]);
             }
         }
@@ -18971,12 +19048,12 @@ inline void serialize_VkSparseImageOpaqueMemoryBindInfo(::av::WireWriter& buf, c
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->bindCount == 0) {
+        if (!present || as_number(out->bindCount) == 0) {
             out->pBinds = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSparseMemoryBind>(static_cast<std::size_t>(out->bindCount));
+            auto* arr = arena.allocate<VkSparseMemoryBind>(static_cast<std::size_t>(as_number(out->bindCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bindCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bindCount)); ++i) {
                 if (!deserialize_VkSparseMemoryBind(r, &arr[i], arena)) { return false; }
             }
             out->pBinds = arr;
@@ -19009,7 +19086,7 @@ inline void serialize_VkSpecializationInfo(::av::WireWriter& buf, const VkSpecia
         const std::uint8_t present = v.pMapEntries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.mapEntryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.mapEntryCount)); ++i) {
                 serialize_VkSpecializationMapEntry(buf, v.pMapEntries[i]);
             }
         }
@@ -19018,8 +19095,8 @@ inline void serialize_VkSpecializationInfo(::av::WireWriter& buf, const VkSpecia
     {
         const std::uint8_t present = v.pData != nullptr ? 1 : 0;
         buf.write_pod(present);
-        if (present && v.dataSize != 0) {
-            buf.write(v.pData, static_cast<std::size_t>(v.dataSize));
+        if (present && as_number(v.dataSize) != 0) {
+            buf.write(v.pData, static_cast<std::size_t>(as_number(v.dataSize)));
         }
     }
 }
@@ -19030,12 +19107,12 @@ inline void serialize_VkSpecializationInfo(::av::WireWriter& buf, const VkSpecia
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->mapEntryCount == 0) {
+        if (!present || as_number(out->mapEntryCount) == 0) {
             out->pMapEntries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSpecializationMapEntry>(static_cast<std::size_t>(out->mapEntryCount));
+            auto* arr = arena.allocate<VkSpecializationMapEntry>(static_cast<std::size_t>(as_number(out->mapEntryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->mapEntryCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->mapEntryCount)); ++i) {
                 if (!deserialize_VkSpecializationMapEntry(r, &arr[i], arena)) { return false; }
             }
             out->pMapEntries = arr;
@@ -19049,12 +19126,12 @@ inline void serialize_VkSpecializationInfo(::av::WireWriter& buf, const VkSpecia
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->dataSize == 0) {
+        if (!present || as_number(out->dataSize) == 0) {
             out->pData = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(out->dataSize));
+            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->dataSize)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(out->dataSize))) { return false; }
+            if (!r.read(blob, static_cast<std::size_t>(as_number(out->dataSize)))) { return false; }
             out->pData = blob;
         }
     }
@@ -19101,7 +19178,7 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
         const std::uint8_t present = v.pWaitSemaphores != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.waitSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.waitSemaphoreCount)); ++i) {
                 serialize_VkSemaphore(buf, v.pWaitSemaphores[i]);
             }
         }
@@ -19110,7 +19187,7 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
         const std::uint8_t present = v.pWaitDstStageMask != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.waitSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.waitSemaphoreCount)); ++i) {
                 buf.write_pod(v.pWaitDstStageMask[i]);
             }
         }
@@ -19120,7 +19197,7 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
         const std::uint8_t present = v.pCommandBuffers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.commandBufferCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.commandBufferCount)); ++i) {
                 serialize_VkCommandBuffer(buf, v.pCommandBuffers[i]);
             }
         }
@@ -19130,7 +19207,7 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
         const std::uint8_t present = v.pSignalSemaphores != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.signalSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.signalSemaphoreCount)); ++i) {
                 serialize_VkSemaphore(buf, v.pSignalSemaphores[i]);
             }
         }
@@ -19145,12 +19222,12 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->waitSemaphoreCount == 0) {
+        if (!present || as_number(out->waitSemaphoreCount) == 0) {
             out->pWaitSemaphores = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(out->waitSemaphoreCount));
+            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(as_number(out->waitSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->waitSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->waitSemaphoreCount)); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
             out->pWaitSemaphores = arr;
@@ -19159,12 +19236,12 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->waitSemaphoreCount == 0) {
+        if (!present || as_number(out->waitSemaphoreCount) == 0) {
             out->pWaitDstStageMask = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineStageFlags>(static_cast<std::size_t>(out->waitSemaphoreCount));
+            auto* arr = arena.allocate<VkPipelineStageFlags>(static_cast<std::size_t>(as_number(out->waitSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->waitSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->waitSemaphoreCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pWaitDstStageMask = arr;
@@ -19174,12 +19251,12 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->commandBufferCount == 0) {
+        if (!present || as_number(out->commandBufferCount) == 0) {
             out->pCommandBuffers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkCommandBuffer>(static_cast<std::size_t>(out->commandBufferCount));
+            auto* arr = arena.allocate<VkCommandBuffer>(static_cast<std::size_t>(as_number(out->commandBufferCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->commandBufferCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->commandBufferCount)); ++i) {
                 if (!deserialize_VkCommandBuffer(r, arr[i])) { return false; }
             }
             out->pCommandBuffers = arr;
@@ -19189,12 +19266,12 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->signalSemaphoreCount == 0) {
+        if (!present || as_number(out->signalSemaphoreCount) == 0) {
             out->pSignalSemaphores = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(out->signalSemaphoreCount));
+            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(as_number(out->signalSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->signalSemaphoreCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->signalSemaphoreCount)); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
             out->pSignalSemaphores = arr;
@@ -19212,7 +19289,7 @@ inline void serialize_VkSubmitInfo2(::av::WireWriter& buf, const VkSubmitInfo2& 
         const std::uint8_t present = v.pWaitSemaphoreInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.waitSemaphoreInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.waitSemaphoreInfoCount)); ++i) {
                 serialize_VkSemaphoreSubmitInfo(buf, v.pWaitSemaphoreInfos[i]);
             }
         }
@@ -19222,7 +19299,7 @@ inline void serialize_VkSubmitInfo2(::av::WireWriter& buf, const VkSubmitInfo2& 
         const std::uint8_t present = v.pCommandBufferInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.commandBufferInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.commandBufferInfoCount)); ++i) {
                 serialize_VkCommandBufferSubmitInfo(buf, v.pCommandBufferInfos[i]);
             }
         }
@@ -19232,7 +19309,7 @@ inline void serialize_VkSubmitInfo2(::av::WireWriter& buf, const VkSubmitInfo2& 
         const std::uint8_t present = v.pSignalSemaphoreInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.signalSemaphoreInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.signalSemaphoreInfoCount)); ++i) {
                 serialize_VkSemaphoreSubmitInfo(buf, v.pSignalSemaphoreInfos[i]);
             }
         }
@@ -19248,12 +19325,12 @@ inline void serialize_VkSubmitInfo2(::av::WireWriter& buf, const VkSubmitInfo2& 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->waitSemaphoreInfoCount == 0) {
+        if (!present || as_number(out->waitSemaphoreInfoCount) == 0) {
             out->pWaitSemaphoreInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<std::size_t>(out->waitSemaphoreInfoCount));
+            auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<std::size_t>(as_number(out->waitSemaphoreInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->waitSemaphoreInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->waitSemaphoreInfoCount)); ++i) {
                 if (!deserialize_VkSemaphoreSubmitInfo(r, &arr[i], arena)) { return false; }
             }
             out->pWaitSemaphoreInfos = arr;
@@ -19263,12 +19340,12 @@ inline void serialize_VkSubmitInfo2(::av::WireWriter& buf, const VkSubmitInfo2& 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->commandBufferInfoCount == 0) {
+        if (!present || as_number(out->commandBufferInfoCount) == 0) {
             out->pCommandBufferInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkCommandBufferSubmitInfo>(static_cast<std::size_t>(out->commandBufferInfoCount));
+            auto* arr = arena.allocate<VkCommandBufferSubmitInfo>(static_cast<std::size_t>(as_number(out->commandBufferInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->commandBufferInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->commandBufferInfoCount)); ++i) {
                 if (!deserialize_VkCommandBufferSubmitInfo(r, &arr[i], arena)) { return false; }
             }
             out->pCommandBufferInfos = arr;
@@ -19278,12 +19355,12 @@ inline void serialize_VkSubmitInfo2(::av::WireWriter& buf, const VkSubmitInfo2& 
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->signalSemaphoreInfoCount == 0) {
+        if (!present || as_number(out->signalSemaphoreInfoCount) == 0) {
             out->pSignalSemaphoreInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<std::size_t>(out->signalSemaphoreInfoCount));
+            auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<std::size_t>(as_number(out->signalSemaphoreInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->signalSemaphoreInfoCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->signalSemaphoreInfoCount)); ++i) {
                 if (!deserialize_VkSemaphoreSubmitInfo(r, &arr[i], arena)) { return false; }
             }
             out->pSignalSemaphoreInfos = arr;
@@ -19364,7 +19441,7 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
         const std::uint8_t present = v.pInputAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.inputAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.inputAttachmentCount)); ++i) {
                 serialize_VkAttachmentReference(buf, v.pInputAttachments[i]);
             }
         }
@@ -19374,7 +19451,7 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
         const std::uint8_t present = v.pColorAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 serialize_VkAttachmentReference(buf, v.pColorAttachments[i]);
             }
         }
@@ -19383,7 +19460,7 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
         const std::uint8_t present = v.pResolveAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 serialize_VkAttachmentReference(buf, v.pResolveAttachments[i]);
             }
         }
@@ -19402,7 +19479,7 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
         const std::uint8_t present = v.pPreserveAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.preserveAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.preserveAttachmentCount)); ++i) {
                 buf.write_pod(v.pPreserveAttachments[i]);
             }
         }
@@ -19417,12 +19494,12 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->inputAttachmentCount == 0) {
+        if (!present || as_number(out->inputAttachmentCount) == 0) {
             out->pInputAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentReference>(static_cast<std::size_t>(out->inputAttachmentCount));
+            auto* arr = arena.allocate<VkAttachmentReference>(static_cast<std::size_t>(as_number(out->inputAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->inputAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->inputAttachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentReference(r, &arr[i], arena)) { return false; }
             }
             out->pInputAttachments = arr;
@@ -19432,12 +19509,12 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->colorAttachmentCount == 0) {
+        if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentReference>(static_cast<std::size_t>(out->colorAttachmentCount));
+            auto* arr = arena.allocate<VkAttachmentReference>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentReference(r, &arr[i], arena)) { return false; }
             }
             out->pColorAttachments = arr;
@@ -19446,12 +19523,12 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->colorAttachmentCount == 0) {
+        if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pResolveAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentReference>(static_cast<std::size_t>(out->colorAttachmentCount));
+            auto* arr = arena.allocate<VkAttachmentReference>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentReference(r, &arr[i], arena)) { return false; }
             }
             out->pResolveAttachments = arr;
@@ -19473,12 +19550,12 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->preserveAttachmentCount == 0) {
+        if (!present || as_number(out->preserveAttachmentCount) == 0) {
             out->pPreserveAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->preserveAttachmentCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->preserveAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->preserveAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->preserveAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pPreserveAttachments = arr;
@@ -19498,7 +19575,7 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
         const std::uint8_t present = v.pInputAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.inputAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.inputAttachmentCount)); ++i) {
                 serialize_VkAttachmentReference2(buf, v.pInputAttachments[i]);
             }
         }
@@ -19508,7 +19585,7 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
         const std::uint8_t present = v.pColorAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 serialize_VkAttachmentReference2(buf, v.pColorAttachments[i]);
             }
         }
@@ -19517,7 +19594,7 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
         const std::uint8_t present = v.pResolveAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 serialize_VkAttachmentReference2(buf, v.pResolveAttachments[i]);
             }
         }
@@ -19536,7 +19613,7 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
         const std::uint8_t present = v.pPreserveAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.preserveAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.preserveAttachmentCount)); ++i) {
                 buf.write_pod(v.pPreserveAttachments[i]);
             }
         }
@@ -19554,12 +19631,12 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->inputAttachmentCount == 0) {
+        if (!present || as_number(out->inputAttachmentCount) == 0) {
             out->pInputAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<std::size_t>(out->inputAttachmentCount));
+            auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<std::size_t>(as_number(out->inputAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->inputAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->inputAttachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentReference2(r, &arr[i], arena)) { return false; }
             }
             out->pInputAttachments = arr;
@@ -19569,12 +19646,12 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->colorAttachmentCount == 0) {
+        if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<std::size_t>(out->colorAttachmentCount));
+            auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentReference2(r, &arr[i], arena)) { return false; }
             }
             out->pColorAttachments = arr;
@@ -19583,12 +19660,12 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->colorAttachmentCount == 0) {
+        if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pResolveAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<std::size_t>(out->colorAttachmentCount));
+            auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentReference2(r, &arr[i], arena)) { return false; }
             }
             out->pResolveAttachments = arr;
@@ -19610,12 +19687,12 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->preserveAttachmentCount == 0) {
+        if (!present || as_number(out->preserveAttachmentCount) == 0) {
             out->pPreserveAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->preserveAttachmentCount));
+            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->preserveAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->preserveAttachmentCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->preserveAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pPreserveAttachments = arr;
@@ -19681,7 +19758,7 @@ inline void serialize_VkSubpassFragmentDensityMapOffsetEndInfoQCOM(::av::WireWri
         const std::uint8_t present = v.pFragmentDensityOffsets != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.fragmentDensityOffsetCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.fragmentDensityOffsetCount)); ++i) {
                 serialize_VkOffset2D(buf, v.pFragmentDensityOffsets[i]);
             }
         }
@@ -19696,12 +19773,12 @@ inline void serialize_VkSubpassFragmentDensityMapOffsetEndInfoQCOM(::av::WireWri
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->fragmentDensityOffsetCount == 0) {
+        if (!present || as_number(out->fragmentDensityOffsetCount) == 0) {
             out->pFragmentDensityOffsets = nullptr;
         } else {
-            auto* arr = arena.allocate<VkOffset2D>(static_cast<std::size_t>(out->fragmentDensityOffsetCount));
+            auto* arr = arena.allocate<VkOffset2D>(static_cast<std::size_t>(as_number(out->fragmentDensityOffsetCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->fragmentDensityOffsetCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->fragmentDensityOffsetCount)); ++i) {
                 if (!deserialize_VkOffset2D(r, &arr[i], arena)) { return false; }
             }
             out->pFragmentDensityOffsets = arr;
@@ -19820,7 +19897,7 @@ inline void serialize_VkTimelineSemaphoreSubmitInfo(::av::WireWriter& buf, const
         const std::uint8_t present = v.pWaitSemaphoreValues != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.waitSemaphoreValueCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.waitSemaphoreValueCount)); ++i) {
                 buf.write_pod(v.pWaitSemaphoreValues[i]);
             }
         }
@@ -19830,7 +19907,7 @@ inline void serialize_VkTimelineSemaphoreSubmitInfo(::av::WireWriter& buf, const
         const std::uint8_t present = v.pSignalSemaphoreValues != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.signalSemaphoreValueCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.signalSemaphoreValueCount)); ++i) {
                 buf.write_pod(v.pSignalSemaphoreValues[i]);
             }
         }
@@ -19845,12 +19922,12 @@ inline void serialize_VkTimelineSemaphoreSubmitInfo(::av::WireWriter& buf, const
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->waitSemaphoreValueCount == 0) {
+        if (!present || as_number(out->waitSemaphoreValueCount) == 0) {
             out->pWaitSemaphoreValues = nullptr;
         } else {
-            auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(out->waitSemaphoreValueCount));
+            auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(as_number(out->waitSemaphoreValueCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->waitSemaphoreValueCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->waitSemaphoreValueCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pWaitSemaphoreValues = arr;
@@ -19860,12 +19937,12 @@ inline void serialize_VkTimelineSemaphoreSubmitInfo(::av::WireWriter& buf, const
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->signalSemaphoreValueCount == 0) {
+        if (!present || as_number(out->signalSemaphoreValueCount) == 0) {
             out->pSignalSemaphoreValues = nullptr;
         } else {
-            auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(out->signalSemaphoreValueCount));
+            auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(as_number(out->signalSemaphoreValueCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->signalSemaphoreValueCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->signalSemaphoreValueCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pSignalSemaphoreValues = arr;
@@ -19882,7 +19959,7 @@ inline void serialize_VkValidationFeaturesEXT(::av::WireWriter& buf, const VkVal
         const std::uint8_t present = v.pEnabledValidationFeatures != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.enabledValidationFeatureCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.enabledValidationFeatureCount)); ++i) {
                 buf.write_pod(v.pEnabledValidationFeatures[i]);
             }
         }
@@ -19892,7 +19969,7 @@ inline void serialize_VkValidationFeaturesEXT(::av::WireWriter& buf, const VkVal
         const std::uint8_t present = v.pDisabledValidationFeatures != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.disabledValidationFeatureCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.disabledValidationFeatureCount)); ++i) {
                 buf.write_pod(v.pDisabledValidationFeatures[i]);
             }
         }
@@ -19907,12 +19984,12 @@ inline void serialize_VkValidationFeaturesEXT(::av::WireWriter& buf, const VkVal
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->enabledValidationFeatureCount == 0) {
+        if (!present || as_number(out->enabledValidationFeatureCount) == 0) {
             out->pEnabledValidationFeatures = nullptr;
         } else {
-            auto* arr = arena.allocate<VkValidationFeatureEnableEXT>(static_cast<std::size_t>(out->enabledValidationFeatureCount));
+            auto* arr = arena.allocate<VkValidationFeatureEnableEXT>(static_cast<std::size_t>(as_number(out->enabledValidationFeatureCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->enabledValidationFeatureCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->enabledValidationFeatureCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pEnabledValidationFeatures = arr;
@@ -19922,12 +19999,12 @@ inline void serialize_VkValidationFeaturesEXT(::av::WireWriter& buf, const VkVal
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->disabledValidationFeatureCount == 0) {
+        if (!present || as_number(out->disabledValidationFeatureCount) == 0) {
             out->pDisabledValidationFeatures = nullptr;
         } else {
-            auto* arr = arena.allocate<VkValidationFeatureDisableEXT>(static_cast<std::size_t>(out->disabledValidationFeatureCount));
+            auto* arr = arena.allocate<VkValidationFeatureDisableEXT>(static_cast<std::size_t>(as_number(out->disabledValidationFeatureCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->disabledValidationFeatureCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->disabledValidationFeatureCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDisabledValidationFeatures = arr;
@@ -19944,7 +20021,7 @@ inline void serialize_VkValidationFlagsEXT(::av::WireWriter& buf, const VkValida
         const std::uint8_t present = v.pDisabledValidationChecks != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.disabledValidationCheckCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.disabledValidationCheckCount)); ++i) {
                 buf.write_pod(v.pDisabledValidationChecks[i]);
             }
         }
@@ -19959,12 +20036,12 @@ inline void serialize_VkValidationFlagsEXT(::av::WireWriter& buf, const VkValida
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->disabledValidationCheckCount == 0) {
+        if (!present || as_number(out->disabledValidationCheckCount) == 0) {
             out->pDisabledValidationChecks = nullptr;
         } else {
-            auto* arr = arena.allocate<VkValidationCheckEXT>(static_cast<std::size_t>(out->disabledValidationCheckCount));
+            auto* arr = arena.allocate<VkValidationCheckEXT>(static_cast<std::size_t>(as_number(out->disabledValidationCheckCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->disabledValidationCheckCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->disabledValidationCheckCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDisabledValidationChecks = arr;
@@ -20203,7 +20280,7 @@ inline void serialize_VkVideoProfileListInfoKHR(::av::WireWriter& buf, const VkV
         const std::uint8_t present = v.pProfiles != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.profileCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.profileCount)); ++i) {
                 serialize_VkVideoProfileInfoKHR(buf, v.pProfiles[i]);
             }
         }
@@ -20218,12 +20295,12 @@ inline void serialize_VkVideoProfileListInfoKHR(::av::WireWriter& buf, const VkV
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->profileCount == 0) {
+        if (!present || as_number(out->profileCount) == 0) {
             out->pProfiles = nullptr;
         } else {
-            auto* arr = arena.allocate<VkVideoProfileInfoKHR>(static_cast<std::size_t>(out->profileCount));
+            auto* arr = arena.allocate<VkVideoProfileInfoKHR>(static_cast<std::size_t>(as_number(out->profileCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->profileCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->profileCount)); ++i) {
                 if (!deserialize_VkVideoProfileInfoKHR(r, &arr[i], arena)) { return false; }
             }
             out->pProfiles = arr;
@@ -20292,7 +20369,7 @@ inline void serialize_VkWriteDescriptorSet(::av::WireWriter& buf, const VkWriteD
         const std::uint8_t present = v.pImageInfo != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.descriptorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorCount)); ++i) {
                 serialize_VkDescriptorImageInfo(buf, v.pImageInfo[i]);
             }
         }
@@ -20301,7 +20378,7 @@ inline void serialize_VkWriteDescriptorSet(::av::WireWriter& buf, const VkWriteD
         const std::uint8_t present = v.pBufferInfo != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.descriptorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorCount)); ++i) {
                 serialize_VkDescriptorBufferInfo(buf, v.pBufferInfo[i]);
             }
         }
@@ -20310,7 +20387,7 @@ inline void serialize_VkWriteDescriptorSet(::av::WireWriter& buf, const VkWriteD
         const std::uint8_t present = v.pTexelBufferView != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.descriptorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorCount)); ++i) {
                 serialize_VkBufferView(buf, v.pTexelBufferView[i]);
             }
         }
@@ -20329,12 +20406,12 @@ inline void serialize_VkWriteDescriptorSet(::av::WireWriter& buf, const VkWriteD
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->descriptorCount == 0) {
+        if (!present || as_number(out->descriptorCount) == 0) {
             out->pImageInfo = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorImageInfo>(static_cast<std::size_t>(out->descriptorCount));
+            auto* arr = arena.allocate<VkDescriptorImageInfo>(static_cast<std::size_t>(as_number(out->descriptorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorCount)); ++i) {
                 if (!deserialize_VkDescriptorImageInfo(r, &arr[i], arena)) { return false; }
             }
             out->pImageInfo = arr;
@@ -20343,12 +20420,12 @@ inline void serialize_VkWriteDescriptorSet(::av::WireWriter& buf, const VkWriteD
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->descriptorCount == 0) {
+        if (!present || as_number(out->descriptorCount) == 0) {
             out->pBufferInfo = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorBufferInfo>(static_cast<std::size_t>(out->descriptorCount));
+            auto* arr = arena.allocate<VkDescriptorBufferInfo>(static_cast<std::size_t>(as_number(out->descriptorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorCount)); ++i) {
                 if (!deserialize_VkDescriptorBufferInfo(r, &arr[i], arena)) { return false; }
             }
             out->pBufferInfo = arr;
@@ -20357,12 +20434,12 @@ inline void serialize_VkWriteDescriptorSet(::av::WireWriter& buf, const VkWriteD
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->descriptorCount == 0) {
+        if (!present || as_number(out->descriptorCount) == 0) {
             out->pTexelBufferView = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBufferView>(static_cast<std::size_t>(out->descriptorCount));
+            auto* arr = arena.allocate<VkBufferView>(static_cast<std::size_t>(as_number(out->descriptorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorCount)); ++i) {
                 if (!deserialize_VkBufferView(r, arr[i])) { return false; }
             }
             out->pTexelBufferView = arr;
@@ -20379,7 +20456,7 @@ inline void serialize_VkWriteDescriptorSetAccelerationStructureKHR(::av::WireWri
         const std::uint8_t present = v.pAccelerationStructures != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.accelerationStructureCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.accelerationStructureCount)); ++i) {
                 serialize_VkAccelerationStructureKHR(buf, v.pAccelerationStructures[i]);
             }
         }
@@ -20394,12 +20471,12 @@ inline void serialize_VkWriteDescriptorSetAccelerationStructureKHR(::av::WireWri
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->accelerationStructureCount == 0) {
+        if (!present || as_number(out->accelerationStructureCount) == 0) {
             out->pAccelerationStructures = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAccelerationStructureKHR>(static_cast<std::size_t>(out->accelerationStructureCount));
+            auto* arr = arena.allocate<VkAccelerationStructureKHR>(static_cast<std::size_t>(as_number(out->accelerationStructureCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->accelerationStructureCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->accelerationStructureCount)); ++i) {
                 if (!deserialize_VkAccelerationStructureKHR(r, arr[i])) { return false; }
             }
             out->pAccelerationStructures = arr;
@@ -20416,7 +20493,7 @@ inline void serialize_VkWriteDescriptorSetAccelerationStructureNV(::av::WireWrit
         const std::uint8_t present = v.pAccelerationStructures != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.accelerationStructureCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.accelerationStructureCount)); ++i) {
                 serialize_VkAccelerationStructureNV(buf, v.pAccelerationStructures[i]);
             }
         }
@@ -20431,12 +20508,12 @@ inline void serialize_VkWriteDescriptorSetAccelerationStructureNV(::av::WireWrit
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->accelerationStructureCount == 0) {
+        if (!present || as_number(out->accelerationStructureCount) == 0) {
             out->pAccelerationStructures = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAccelerationStructureNV>(static_cast<std::size_t>(out->accelerationStructureCount));
+            auto* arr = arena.allocate<VkAccelerationStructureNV>(static_cast<std::size_t>(as_number(out->accelerationStructureCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->accelerationStructureCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->accelerationStructureCount)); ++i) {
                 if (!deserialize_VkAccelerationStructureNV(r, arr[i])) { return false; }
             }
             out->pAccelerationStructures = arr;
@@ -20452,8 +20529,8 @@ inline void serialize_VkWriteDescriptorSetInlineUniformBlock(::av::WireWriter& b
     {
         const std::uint8_t present = v.pData != nullptr ? 1 : 0;
         buf.write_pod(present);
-        if (present && v.dataSize != 0) {
-            buf.write(v.pData, static_cast<std::size_t>(v.dataSize));
+        if (present && as_number(v.dataSize) != 0) {
+            buf.write(v.pData, static_cast<std::size_t>(as_number(v.dataSize)));
         }
     }
 }
@@ -20466,12 +20543,12 @@ inline void serialize_VkWriteDescriptorSetInlineUniformBlock(::av::WireWriter& b
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->dataSize == 0) {
+        if (!present || as_number(out->dataSize) == 0) {
             out->pData = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(out->dataSize));
+            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->dataSize)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(out->dataSize))) { return false; }
+            if (!r.read(blob, static_cast<std::size_t>(as_number(out->dataSize)))) { return false; }
             out->pData = blob;
         }
     }
@@ -20486,7 +20563,7 @@ inline void serialize_VkWriteDescriptorSetPartitionedAccelerationStructureNV(::a
         const std::uint8_t present = v.pAccelerationStructures != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(v.accelerationStructureCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.accelerationStructureCount)); ++i) {
                 buf.write_pod(v.pAccelerationStructures[i]);
             }
         }
@@ -20501,12 +20578,12 @@ inline void serialize_VkWriteDescriptorSetPartitionedAccelerationStructureNV(::a
     {
         std::uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || out->accelerationStructureCount == 0) {
+        if (!present || as_number(out->accelerationStructureCount) == 0) {
             out->pAccelerationStructures = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDeviceAddress>(static_cast<std::size_t>(out->accelerationStructureCount));
+            auto* arr = arena.allocate<VkDeviceAddress>(static_cast<std::size_t>(as_number(out->accelerationStructureCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->accelerationStructureCount); ++i) {
+            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->accelerationStructureCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pAccelerationStructures = arr;

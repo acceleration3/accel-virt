@@ -76,10 +76,11 @@ def _emit_handle_helpers(name: str) -> list[str]:
         ]
     return [
         f"inline void serialize_{name}(::av::WireWriter& buf, {name} v) noexcept {{",
-        "    std::uint64_t raw = 0;",
-        f"    static_assert(sizeof({name}) == sizeof(raw));",
-        "    std::memcpy(&raw, &v, sizeof(raw));",
-        "    buf.write_pod(raw);",
+        "    // Through the hook, like the dispatchable handles: a host that",
+        "    // must refuse a handle it did not make needs to know which it did,",
+        "    // and every handle it ever gave the guest went out through here",
+        "    // (feature 042).",
+        f"    buf.write_pod(handle_to_wire(v));",
         "}",
         "",
         "[[nodiscard]] inline bool "
@@ -123,7 +124,13 @@ def _expr_to_cpp(expr: str, prefix: str) -> str:
         # than at the generated line that caused it.
         if name.startswith("VK_"):
             return name
-        return prefix + name
+        # Read as the number it is. A member decoded from the wire holds
+        # whatever a guest sent, and some of them are enum-typed: loading one
+        # whose value the enum does not have is undefined, and a length
+        # expression is exactly where that load happens. as_number copies the
+        # bytes out instead, which is defined for every value there is. A fuzz
+        # target found it in VkPipelineMultisampleStateCreateInfo (feature 042).
+        return f"as_number({prefix}{name})"
 
     return re.sub(r"\b([a-zA-Z_][a-zA-Z_0-9]*)\b", sub, expr)
 
@@ -881,11 +888,23 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "// the server and loopback tests link without an image registry.",
         "[[nodiscard]] std::uint64_t host_image_copy_bytes("
         "VkImage image, const VkMemoryToImageCopy& region) noexcept;",
-        "[[nodiscard]] std::uint64_t handle_to_wire(VkInstance v) noexcept;",
-        "[[nodiscard]] std::uint64_t handle_to_wire(VkPhysicalDevice v) noexcept;",
-        "[[nodiscard]] std::uint64_t handle_to_wire(VkDevice v) noexcept;",
-        "[[nodiscard]] std::uint64_t handle_to_wire(VkQueue v) noexcept;",
-        "[[nodiscard]] std::uint64_t handle_to_wire(VkCommandBuffer v) noexcept;",
+        "// Any field, as the number it holds. A value off the wire is a value",
+        "// its own type may not have - an enum with an unlisted value, most of",
+        "// all - and loading one as that type is undefined. Everything that",
+        "// reads a decoded field for its value rather than to pass it on goes",
+        "// through here (feature 042).",
+        "template <typename T>",
+        "[[nodiscard]] inline std::uint64_t as_number(const T& value) noexcept {",
+        "    std::uint64_t raw = 0;",
+        "    static_assert(sizeof(T) <= sizeof(raw));",
+        "    std::memcpy(&raw, &value, sizeof(T));",
+        "    return raw;",
+        "}",
+        "",
+    ]
+    for h in _referenced_handle_names(reg):
+        header.append(f"[[nodiscard]] std::uint64_t handle_to_wire({h} v) noexcept;")
+    header += [
         "",
         "// The other direction, and the one that decides whether a handle off",
         "// the wire is a pointer the host will dereference. The default is",
@@ -1080,7 +1099,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "}  // namespace",
         "",
     ]
-    for h in DISPATCHABLE_HANDLE_TYPES:
+    for h in _referenced_handle_names(reg):
         handle_default.append(
             f"RVK_HOOK_DEFAULT std::uint64_t handle_to_wire({h} v) noexcept "
             f"{{ return identity(v); }}"

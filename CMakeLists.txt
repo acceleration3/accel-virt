@@ -352,16 +352,6 @@ if(AV_FUZZ)
     set(ENV{AV_FUZZ_SECONDS} 60)
   endif()
   file(GLOB AV_FUZZ_SOURCES CONFIGURE_DEPENDS tests/fuzz/fuzz_*.cpp)
-  # Built, seeded and runnable, but not yet a gate: it still finds a defect
-  # class the emitter has to fix - a length expression that reads an enum
-  # member decoded from the wire, which is an undefined load for every value
-  # the enum does not have. The corpus carries the reproducer. Feature 042,
-  # task T029; it joins the gate in the same commit that fixes it.
-  list(REMOVE_ITEM AV_FUZZ_SOURCES ${CMAKE_SOURCE_DIR}/tests/fuzz/fuzz_executor_vulkan.cpp)
-  add_executable(fuzz_executor_vulkan tests/fuzz/fuzz_executor_vulkan.cpp)
-  target_link_libraries(fuzz_executor_vulkan PRIVATE av_harness)
-  target_compile_options(fuzz_executor_vulkan PRIVATE -fsanitize=fuzzer)
-  target_link_options(fuzz_executor_vulkan PRIVATE -fsanitize=fuzzer)
   # The generated decoder's target includes the API's own header, which arrives
   # with the registry fetch; without it there is nothing to fuzz.
   if(NOT AV_GENERATED)

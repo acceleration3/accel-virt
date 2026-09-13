@@ -14,12 +14,14 @@
 #include <cstring>
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size);
-/* A guest that creates a VkInstance and never destroys it leaks a host object,
- * and the fuzzer finds that in seconds. It is a real problem and not this
- * target's: a backend is shared by every session today, so nothing destroys
- * what a dying context still owned. The corpus keeps the input that showed it
- * and the task list carries the fix - one backend per session, torn down with
- * it. Until then this target looks for memory safety, which is what it is for. */
+/* This target makes real VkInstances through the decoder, and the drivers
+ * behind them allocate from modules that carry no symbols, so a suppression by
+ * name cannot name them. Leak detection is therefore off here and on in
+ * tests/unit/device/executor/test_vulkan_backend.cpp, where the same objects
+ * are made and the drivers involved can be named. It did its work first: the
+ * leak it found - a backend shared by every session, so a context that died
+ * owning a VkInstance left it behind - is fixed, and the input that showed it
+ * is in this target's corpus. */
 extern "C" int __lsan_is_turned_off(void);
 extern "C" int __lsan_is_turned_off(void) { return 1; }
 
@@ -81,5 +83,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
         }
     }
     session.release();
+    /* What the guest never destroyed, which is what a dying context owes. */
+    backend.shut_down();
     return 0;
 }
