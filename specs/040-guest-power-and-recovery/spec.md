@@ -39,7 +39,9 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `EngineProgress` | object | the interrupt time and node progress of its last answer, and whether it has answered | Say whether the engine is making progress |
+| `PowerTransition` | object | whether the device was started when power went away, and which sources were scanning out | Put the adapter back the way power found it |
+| `ContextLoss` | system | the contexts nobody can finish, and how many of them their owners have been told about | Report a context nobody can finish |
 
 ### Test requirements
 
