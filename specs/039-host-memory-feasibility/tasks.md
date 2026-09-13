@@ -139,7 +139,7 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 
 - [X] T030 Every probe's hostile-input path is covered: a host that answers a handle with no mapping behind it (which the memory probe leaked until this test existed - the release is now armed the moment a handle exists), a region or an import read the host refuses outright, a guest window the host maps only part of, and a host error outside any range this code names
 - [X] T031 `docs/kb/11-implementation-plan.md`'s M2 spike list points at the recorded answers, and `docs/testing.md` gains the probe runner and the stress scenario
-- [ ] T032 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
+- [X] T032 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
 
 ---
 
