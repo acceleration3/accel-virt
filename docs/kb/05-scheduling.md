@@ -137,3 +137,35 @@ and WDDM 3.2's `DxgkDdiNotifyContextPriorityChange`. Also
 `DxgkDdiSetQueuedLimit`. In a remoting design these map onto host queue
 priorities (`VK_EXT_global_priority`) or simply onto which host thread services
 which guest ring.
+
+## What ten minutes of fences on the real guest showed (feature 039, US3)
+
+`AV_GUEST_IMAGE=... tools/guest/run_guest_suite.py --stress-minutes 10` on the
+Windows 11 guest, the driver's fences submitted one at a time and each awaited,
+with a vertical blank waited out every 64 fences so dxgkrnl turns that
+interrupt source off and on around them:
+
+| | |
+|---|---|
+| Fences submitted and awaited | ~991,600 (15,494 batches of 64) |
+| Vertical blank waits, each an enable/disable of that source | 15,494 |
+| Worst single fence wait | 13.06 ms |
+| Fences lost, waits that never woke | none |
+| Verifier violations, live kernel dumps | none |
+
+**The wait that never wakes did not happen**, which is what the run is for: a
+fence whose interrupt arrives while the guest has that source disabled is a
+wait nothing ever ends, and 15,000 mask/unmask cycles did not produce one.
+
+**13 ms is the tail, not the typical cost.** The fences here carry no work -
+the executor is an echo - so the wait is the round trip: doorbell, worker,
+fence page, MSI-X, and the guest's own scheduler getting back to the waiting
+thread. What the number bounds is the worst case of that path on an idle
+guest; a busy one will be worse, and 062's soak is where that gets measured.
+
+**A defect this run found in the reporting, not the path.** The scenario read
+its own count in the same argument list that ran the loop, so the report said
+`ok stress.fences 0` beside a worst wait of 13 ms - an argument list may be
+evaluated in either order, and this one was. The count is taken before it is
+reported now, and the test asserts the number on the line rather than the
+counter behind it.

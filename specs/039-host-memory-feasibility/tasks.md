@@ -127,7 +127,9 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 - [X] T026 [US3] Implement `InterruptStressProbe` (object class) in `src/device/probe/interrupt_stress_probe.{hpp,cpp}`, with `raised()` on the worker side and the rest on the main loop
 - [X] T027 [US3] Report into it from the fence path in `src/device/fence/fence_interrupts.{hpp,cpp}`, tested where the existing fence tests are
 - [X] T028 [US3] Add the guest side: a stress scenario in `src/guest/suite/` that raises fences as fast as the host sustains while the miniport disables and re-enables its interrupt, with `--stress-minutes` in `tools/guest/run_guest_suite.py` and its fake-guest test
-- [ ] T029 [US3] Run it for ten minutes against the real guest and record the rate, the worst delay and the verdict in `docs/kb/05-scheduling.md`
+- [X] T029 [US3] Ten minutes against the real guest: ~991,600 fences submitted and awaited one at a time, 15,494 vertical blank waits enabling and disabling that interrupt source around them, worst single wait 13.06 ms, nothing lost, no Verifier violation and no live dump. Recorded in `docs/kb/05-scheduling.md`.
+
+  The run also found a defect in the scenario's own reporting: it read its count in the same argument list that ran the loop, and an argument list may be evaluated in either order - the report said `ok stress.fences 0` beside a worst wait of 13 ms. Fixed, and the test now asserts the number on the line rather than the counter behind it
 
 **Checkpoint**: US3 measured on the real guest and recorded. Commit.
 

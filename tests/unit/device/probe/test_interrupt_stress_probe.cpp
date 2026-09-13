@@ -140,3 +140,20 @@ TEST(interrupt_stress_probe, the_guests_own_reports_are_main_loop_only)
   host.join_thread(thread);
   CHECK(host.claim(HostViolation::main_loop_required));
   while (host.claim(HostViolation::main_loop_required)) {} }
+
+/* A probe with no lock has nothing to count with: every call is a no-op rather
+ * than a crash, because a host with no mutex still has to run. */
+TEST(interrupt_stress_probe, without_a_lock_it_counts_nothing_and_judges_nothing)
+{ MockHost host;
+  InterruptStressProbe probe(host);
+  probe.raised(0u);
+  probe.disabled();
+  probe.enabled();
+  probe.acknowledged(5u, 5u);
+  probe.finish();
+  CHECK(!probe.verdict().ran());
+  host.fail_mutex_at(1u);
+  InterruptStressProbe refused(host);
+  CHECK_STATUS(refused.initialize(), Status::no_memory);
+  CHECK_STATUS(refused.initialize(), Status::ok);
+  CHECK_STATUS(refused.initialize(), Status::invalid_state); }

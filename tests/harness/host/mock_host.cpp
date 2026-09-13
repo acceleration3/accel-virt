@@ -682,10 +682,11 @@ void *MockHost::create_host_memory(std::uint64_t size, void *&pointer)
     StateLock lock(state_);
     pointer = nullptr;
     if (fail_now(fail_host_memory_)) return nullptr;
+    const bool empty = fail_now(empty_host_memory_);
     for (HostBlock &block : host_blocks_) {
         if (block.live) continue;
         block = HostBlock{std::calloc(1u, size), size, true, false, 0u, false};
-        pointer = block.pointer;
+        pointer = empty ? nullptr : block.pointer;
         return &block;
     }
     return nullptr;
@@ -767,6 +768,7 @@ void MockHost::empty_mapping_at(std::uint32_t nth) { StateLock lock(state_); emp
 void MockHost::fail_bind_gpu_at(std::uint32_t nth) { StateLock lock(state_); fail_bind_gpu_ = nth; }
 void MockHost::corrupt_hostmem_read_at(std::uint32_t nth) { StateLock lock(state_); corrupt_hostmem_read_ = nth; }
 void MockHost::empty_export_at(std::uint32_t nth) { StateLock lock(state_); empty_export_ = nth; }
+void MockHost::empty_host_memory_at(std::uint32_t nth) { StateLock lock(state_); empty_host_memory_ = nth; }
 void MockHost::refuse_import_read_at(std::uint32_t nth) { StateLock lock(state_); refuse_import_read_ = nth; }
 void MockHost::refuse_hostmem_read_at(std::uint32_t nth) { StateLock lock(state_); refuse_hostmem_read_ = nth; }
 void MockHost::advance_clock_per_read(std::uint64_t nanoseconds) { StateLock lock(state_); clock_step_ = nanoseconds; }

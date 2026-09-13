@@ -182,6 +182,8 @@ TEST(table_host, forwards_exported_gpu_memory_and_guest_imports)
   std::uint8_t tail[1] = {};
   CHECK_STATUS(host.read_imported_memory(imported, 0xFFFu, tail, sizeof tail), Status::ok);
   CHECK_EQ(tail[0], 0x5Au);
+  mock.refuse_import_read_at(1u);
+  CHECK_STATUS(host.read_imported_memory(imported, 0u, seen, sizeof seen), Status::not_supported);
   host.release_guest_memory(imported);
   CHECK_EQ(mock.live_imports(), 0u);
   /* A host with no VK_EXT_external_memory_host refuses with no number of its own. */

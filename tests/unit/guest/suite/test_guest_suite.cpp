@@ -339,8 +339,11 @@ TEST(fence_stress_scenario, runs_until_its_seconds_are_spent_and_reports_what_it
   FenceStressScenario stress(kmt, report, search, 2u);
   stress.run();
   CHECK(has_line(report, "ok stress.context"));
-  CHECK(has_line(report, "ok stress.fences"));
-  CHECK(has_line(report, "ok stress.worst_wait_us"));
+  /* The count on the line, not just in the object: the report is what the
+   * runner reads, and an argument list evaluated in the wrong order once put a
+   * zero there beside a worst wait that was not zero. */
+  CHECK(has_line(report, "ok stress.fences 200\n"));
+  CHECK(has_line(report, "ok stress.worst_wait_us 10000\n"));
   CHECK(has_line(report, "ok stress.teardown"));
   /* Two seconds of hundredth-second fences, with a blank between batches. */
   CHECK_EQ(stress.completed(), 200u);
@@ -364,6 +367,43 @@ TEST(fence_stress_scenario, no_seconds_is_no_run)
   CHECK_EQ(stress.completed(), 0u);
   CHECK_EQ(kmt.calls(MockKmt::Call::submit), 0u);
   CHECK_STATUS(search.close(), Status::ok); }
+
+/* A stress that cannot even set up says so at the step that refused, and never
+ * submits: the run is the fences, and there are none. */
+TEST(fence_stress_scenario, a_setup_that_fails_never_reaches_the_fences)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.fail_at(MockKmt::Call::create_context, 1u, 0xC0000017u);
+  AdapterSearch search(kmt);
+  CHECK_STATUS(search.find(rvk), Status::ok);
+  GuestReport report;
+  FenceStressScenario stress(kmt, report, search, 2u);
+  stress.run();
+  CHECK(has_line(report, "FAIL stress.context"));
+  CHECK(!has_line(report, "stress.fences"));
+  CHECK_EQ(stress.completed(), 0u);
+  CHECK_EQ(stress.worst_wait_microseconds(), 0u);
+  CHECK_EQ(kmt.calls(MockKmt::Call::submit), 0u);
+  CHECK_STATUS(search.close(), Status::ok);
+  CHECK_EQ(kmt.open_objects(), 0u); }
+
+/* A submission the driver refuses stops the run before the wait. */
+TEST(fence_stress_scenario, a_submission_that_fails_stops_the_run)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.spend_on_wait(MockKmt::ticks_per_second / 100u);
+  kmt.set_blank_period(0u);
+  kmt.fail_at(MockKmt::Call::submit, 3u, 0xC0000001u);
+  AdapterSearch search(kmt);
+  CHECK_STATUS(search.find(rvk), Status::ok);
+  GuestReport report;
+  FenceStressScenario stress(kmt, report, search, 2u);
+  stress.run();
+  CHECK(has_line(report, "FAIL stress.fences"));
+  CHECK_EQ(stress.completed(), 2u);
+  CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), 2u);
+  CHECK_STATUS(search.close(), Status::ok);
+  CHECK_EQ(kmt.open_objects(), 0u); }
 
 /* A fence that never completes ends the run where it failed, and says so. */
 TEST(fence_stress_scenario, a_wait_that_fails_stops_the_run_and_is_reported)

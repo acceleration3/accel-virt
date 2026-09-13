@@ -104,6 +104,19 @@ TEST(guest_import_probe_run, a_host_with_nowhere_to_keep_the_window_never_writes
   CHECK_EQ(host.live_host_memory(), 0u);
   CHECK_EQ(host.live_imports(), 0u); }
 
+/* A block with nothing behind it is nowhere to keep the window either. */
+TEST(guest_import_probe_run, a_block_the_host_gives_no_memory_for_is_nowhere_to_keep_it)
+{ MockHost host;
+  with_ram(host);
+  host.guest_ram(window)[0] = 0xD4u;
+  host.empty_host_memory_at(1u);
+  GuestImportProbe probe(host);
+  probe.run(window);
+  CHECK(!probe.result().passed());
+  CHECK_STATUS(probe.result().reason(), Status::no_memory);
+  CHECK_EQ(host.guest_ram(window)[0], 0xD4u);
+  CHECK_EQ(host.live_host_memory(), 0u); }
+
 TEST(guest_import_probe_run, leaves_the_guest_window_holding_what_it_held)
 { MockHost host;
   with_ram(host);

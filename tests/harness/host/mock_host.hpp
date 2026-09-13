@@ -95,6 +95,8 @@ public:
      * the Nth read of the region refuses outright: a host that says yes and
      * means no. */
     void empty_export_at(std::uint32_t nth);
+    /* The Nth host memory block from now is a handle with no memory behind it. */
+    void empty_host_memory_at(std::uint32_t nth);
     void refuse_hostmem_read_at(std::uint32_t nth);
     /* The Nth read through an import from now is refused outright. */
     void refuse_import_read_at(std::uint32_t nth);
@@ -265,6 +267,7 @@ private:
     std::uint32_t   raised_[max_doorbells];
     std::uint32_t   refuse_import_read_;
     std::uint32_t   empty_export_;
+    std::uint32_t   empty_host_memory_;
     std::uint32_t   refuse_hostmem_read_;
     std::uint64_t   clock_;
     std::uint64_t   clock_step_;

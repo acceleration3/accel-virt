@@ -309,6 +309,20 @@ TEST(virtio_gpu_rvk_realize, a_host_without_a_mutex_for_fence_interrupts_is_refu
   /* The refusal, and one line for each probe realize ran. */
   CHECK_EQ(host.logged(), 3u); }
 
+/* The stress probe is a measurement, not a capability: a host that has no
+ * mutex left for it realizes anyway, with nothing counting interrupts. */
+TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_the_stress_probe_still_realizes)
+{ MockHost host;
+  host.add_gpu(first);
+  VirtioGpuRvk device(host);
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  host.fail_mutex_at(2u);   /* the fence interrupts take the first */
+  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::ok);
+  CHECK(device.realized());
+  CHECK(device.invariants_hold());
+  device.reset(); }
+
 TEST(virtio_gpu_rvk, lifecycle_is_main_loop_only)
 { MockHost host;
   host.add_gpu(first);

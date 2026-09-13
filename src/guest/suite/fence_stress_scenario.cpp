@@ -34,7 +34,11 @@ void FenceStressScenario::run()
     if (status == Status::ok) status = steps_.check("map", session.map(index, descriptor.pages(), address));
     if (status == Status::ok) status = steps_.check("context", session.open_context());
     if (status == Status::ok) {
-        status = steps_.check_measured("fences", stress(session, address), completed_);
+        /* The run first, then what it counted: an argument list may read
+         * completed_ before it calls stress(), and a live run reported zero
+         * fences beside a worst wait of thirteen milliseconds because of it. */
+        const Status ran = stress(session, address);
+        status = steps_.check_measured("fences", ran, completed_);
         static_cast<void>(steps_.check_measured("worst_wait_us", Status::ok,
                                                 static_cast<uint32_t>(worst_wait_microseconds())));
         static_cast<void>(steps_.check_measured("blanks", Status::ok, blanks_));

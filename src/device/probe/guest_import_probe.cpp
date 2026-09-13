@@ -53,11 +53,17 @@ void GuestImportProbe::run(uint64_t guest_address)
      * refusal carries. */
     void       *kept = nullptr;
     void *const block = host_.create_host_memory(probe_bytes, kept);
-    if (block == nullptr || kept == nullptr) {
+    if (block == nullptr) {
         static_cast<void>(result_.record_failure(Status::no_memory, 0));
         return;
     }
+    /* Armed before the pointer is judged: a handle is the host's to take back
+     * even when nothing came with it. */
     ScopeExit destroy([&] { host_.destroy_host_memory(block); });
+    if (kept == nullptr) {
+        static_cast<void>(result_.record_failure(Status::no_memory, 0));
+        return;
+    }
     uint8_t *const bytes = static_cast<uint8_t *>(window);
     const uint64_t rate = copy(static_cast<uint8_t *>(kept), bytes);
     ScopeExit restore([&] {
