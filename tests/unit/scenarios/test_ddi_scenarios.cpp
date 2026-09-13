@@ -222,6 +222,32 @@ TEST(ddi_scenario, stop_device_twice)
   CHECK_EQ(device.fdo().stop_device(), 0);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
+/* US2 of feature 040: pnputil disables and enables a display adapter as often
+ * as an administrator likes, and each cycle is a StopDevice and a StartDevice
+ * on the same adapter object. Nothing may grow across them - the driver holds
+ * no state whose size depends on how many times it has been turned off. */
+TEST(ddi_scenario, fifty_stop_and_start_cycles_leave_nothing_behind)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  const std::uint32_t after_first = driver.platform().live_allocations();
+  for (std::uint32_t cycle = 0u; cycle < 50u; cycle++) {
+      CHECK_EQ(device.fdo().stop_device(), 0);
+      CHECK_EQ(device.function().common().status(), 0u);
+      device.forget_control();
+      CHECK_EQ(device.start_device(), 0);
+      CHECK_EQ(device.function().common().status(), driver_ok_status);
+  }
+  /* The same live allocations as after the first start, not fifty times as many. */
+  CHECK_EQ(driver.platform().live_allocations(), after_first);
+  CHECK_EQ(device.dxgkrnl().live_mappings(), 1u);
+  CHECK_EQ(device.fdo().stop_device(), 0);
+  CHECK_EQ(device.dxgkrnl().live_mappings(), 0u);
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
 TEST(ddi_scenario, remove_device_without_stop_device)
 { LoadedDriver driver;
   Device device(driver, 0u);

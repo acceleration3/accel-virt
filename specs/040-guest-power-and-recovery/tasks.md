@@ -73,7 +73,7 @@ description: "Tasks: real-guest power, restart and recovery"
 
 **Independent Test**: the L2 stop/start sequence fifty times, and the guest's `cycle` and `upgrade` scenarios.
 
-- [ ] T018 [US2] The L2 scenario in `tests/unit/scenarios/test_ddi_scenarios.cpp`: fifty StopDevice/StartDevice cycles on one adapter, with the mock platform's allocation balance and handle counts asserted after the last
+- [X] T018 [US2] The L2 scenario in `tests/unit/scenarios/test_ddi_scenarios.cpp`: fifty StopDevice/StartDevice cycles on one adapter, with the mock platform's allocation balance and handle counts asserted after the last
 - [ ] T019 [US2] The runner's `cycle` scenario in `tools/guest/run_guest_suite.py` (`pnputil /disable-device` and `/enable-device`, `--power-cycles N`), the adapter started after each, Driver Verifier's pool tracking read after the last; with its fake-guest test and the `provision.ps1` stage it needs
 - [ ] T020 [US2] The runner's `upgrade` scenario: a package with a higher version installed over the running one with no reboot, and the adapter started on the new version
 - [ ] T021 [US2] Fifty cycles and five upgrades on the real guest, no leak and no bugcheck (SC-002); record what the runs showed here
