@@ -198,7 +198,13 @@ description: "Tasks: real-guest power, restart and recovery"
   through the real table; L4 shows two device instances bound to different host
   GPUs answering for themselves, with the identity refusing the second.
 - [X] T025 `docs/kb/05-scheduling.md` gains what the timeout path actually asks for, and `docs/testing.md` the new L5 scenarios
-- [ ] T026 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
+- [X] T026 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
+
+  Every configuration passed - default, coverage (100% branches), fuzz, qemu -
+  and the live guest run with them: 29 steps passed, the display steps clean,
+  and `vsync ok: 58.73 blanks a second` from the window that now counts the
+  driver's own timer periods. The real device answers the capset the adapter
+  reads at StartDevice: `rvkgpu: device capset status 0x00000000`.
 
 ---
 
