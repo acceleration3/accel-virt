@@ -74,6 +74,7 @@ Everything this repository needs is in it, or fetched into it by pinned hash.
 
 ```bash
 tools/fetch_windows_kit.sh      # once: WDK/SDK header + import-library subset
+tools/fetch_khronos_registries.py  # once: vk.xml, gl.xml, cl.xml, pinned by hash
                                 # into third_party/windows-kit/ (not committed)
 
 cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++

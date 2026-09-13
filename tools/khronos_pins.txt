@@ -1,0 +1,11 @@
+# The Khronos registries the generators read, pinned by revision and hash.
+#
+# Every URL names a tag or a revision, never a branch: a registry that moved
+# under a regeneration is a wire change, and a pin is what makes the diff say
+# so. Bumping one is a deliberate commit that carries the regenerated sources
+# with it (feature 063, FR-002).
+#
+#   <name> <url> <sha256>
+vulkan https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/v1.4.309.tar.gz 437925ada160d86ed763d29dcb9318c1bb0d024d7deaf77bc7c170b8eb6b6f10
+opengl https://github.com/KhronosGroup/OpenGL-Registry/archive/1cdd228e34966dd6b95bd203e9f84faba0f371a1.tar.gz d8ac2e70b4a8173d4e30ceb726eb8b3137883d459e4666983eb1d2444483c62c
+opencl https://github.com/KhronosGroup/OpenCL-Docs/archive/refs/tags/v3.0.18.tar.gz 40d067b37816e28708af0dfad8b0f95212fc5340ade6ecf575b400853281ea38
