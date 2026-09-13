@@ -4,7 +4,7 @@ The ICD layer is mechanically driven by each command's parameter list:
 
   * dispatchable handle inputs (VkInstance, VkPhysicalDevice, VkDevice,
     VkQueue, VkCommandBuffer) get unwrapped from the loader-magic-marked
-    RvkWrappedHandle to expose the server-side handle on the wire;
+    wrapper to expose the server-side handle on the wire;
   * dispatchable handle outputs get wrapped on the way back up, inheriting
     the parent ``Connection`` from the first input dispatchable handle;
   * arrays of dispatchable handles (the count_array_pair shape) get
@@ -134,7 +134,7 @@ def _emit_create_instance(cmd: Command) -> list[str]:
             forwarded.append(p.name)
 
     return [
-        "    auto* conn = ::rvk::icd::acquire_default_connection();",
+        "    auto* conn = ::av::icd::acquire_default_connection();",
         "    if (conn == nullptr) {",
         "        return VK_ERROR_INITIALIZATION_FAILED;",
         "    }",
@@ -142,17 +142,17 @@ def _emit_create_instance(cmd: Command) -> list[str]:
         "    // server's handle in a VkInstance would narrow it on a 32-bit",
         "    // client and send back a handle no object is at.",
         "    std::uint64_t server_instance = 0;",
-        f"    const VkResult __rc = ::av::vkproto::rvk_{cmd.name}("
+        f"    const VkResult rvk_rc = ::av::vkproto::rvk_{cmd.name}("
         + "conn->transport(), "
         + ", ".join(forwarded)
         + ");",
-        "    if (__rc != VK_SUCCESS) {",
-        "        ::rvk::icd::release_connection(conn);",
-        "        return __rc;",
+        "    if (rvk_rc != VK_SUCCESS) {",
+        "        ::av::icd::release_connection(conn);",
+        "        return rvk_rc;",
         "    }",
-        f"    *{out_inst.name} = ::rvk::icd::wrap_server_handle<{out_inst.type.base}>("
+        f"    *{out_inst.name} = ::av::icd::wrap_server_handle<{out_inst.type.base}>("
         f"server_instance, conn);",
-        "    return __rc;",
+        "    return rvk_rc;",
     ]
 
 
@@ -176,11 +176,11 @@ def _emit_destroy_instance(cmd: Command) -> list[str]:
         f"    if ({inst_param.name} == VK_NULL_HANDLE) {{",
         "        return;",
         "    }",
-        f"    auto* conn = ::rvk::icd::connection_of({inst_param.name});",
+        f"    auto* conn = ::av::icd::connection_of({inst_param.name});",
         f"    ::av::vkproto::rvk_{cmd.name}(conn->transport(), "
         + ", ".join(forwarded) + ");",
-        f"    ::rvk::icd::destroy_wrapper({inst_param.name});",
-        "    ::rvk::icd::release_connection(conn);",
+        f"    ::av::icd::destroy_wrapper({inst_param.name});",
+        "    ::av::icd::release_connection(conn);",
     ]
 
 
@@ -230,7 +230,7 @@ def _emit_default_body(cmd: Command) -> list[str]:
     # every one of the hundred-odd vkCmd* wrappers.
     if not _is_recordable(cmd, parent):
         pre_call.append(
-            f"    auto* conn = ::rvk::icd::connection_of({parent.name});"
+            f"    auto* conn = ::av::icd::connection_of({parent.name});"
         )
 
     # Where this command's bytes go. For a recorded command that is the
@@ -239,7 +239,7 @@ def _emit_default_body(cmd: Command) -> list[str]:
     # real transport. The generated body is otherwise identical, which
     # is the point — nothing below here knows batching exists.
     if _is_recordable(cmd, parent):
-        transport = f"::rvk::icd::record_target({parent.name})"
+        transport = f"::av::icd::record_target({parent.name})"
     else:
         transport = "conn->transport()"
 
@@ -277,7 +277,7 @@ def _emit_default_body(cmd: Command) -> list[str]:
                 )
                 post_call.append(
                     f"        {arr.name}[k] = "
-                    f"::rvk::icd::wrap_server_handle<{arr.type.base}>({vec_name}[k], conn);"
+                    f"::av::icd::wrap_server_handle<{arr.type.base}>({vec_name}[k], conn);"
                 )
                 post_call.append("    }")
                 has_handle_array_out = True
@@ -304,7 +304,7 @@ def _emit_default_body(cmd: Command) -> list[str]:
             pre_call.append(f"    std::uint64_t {local} = 0;")
             call_args.append(f"&{local}")
             post_call.append(
-                f"    *{p.name} = ::rvk::icd::wrap_server_handle<{p.type.base}>({local}, conn);"
+                f"    *{p.name} = ::av::icd::wrap_server_handle<{p.type.base}>({local}, conn);"
             )
         elif (
             p.type.base in DISPATCHABLE_HANDLES
@@ -318,7 +318,7 @@ def _emit_default_body(cmd: Command) -> list[str]:
             # vkAllocateDescriptorSets's pDescriptorSets too). The wire
             # layer fills a staging array with raw server handles, then we
             # wrap each into the caller's array so subsequent unwrap calls
-            # find an RvkWrappedHandle and not a raw value.
+            # find a wrapper and not a raw value.
             vec = f"server_{p.name}"
             # The count expression references the caller's actual struct
             # pointer, which is in scope here.
@@ -329,7 +329,7 @@ def _emit_default_body(cmd: Command) -> list[str]:
                 f"    for (std::uint32_t k = 0; k < static_cast<std::uint32_t>({count_expr}); ++k) {{"
             )
             post_call.append(
-                f"        {p.name}[k] = ::rvk::icd::wrap_server_handle<{p.type.base}>({vec}[k], conn);"
+                f"        {p.name}[k] = ::av::icd::wrap_server_handle<{p.type.base}>({vec}[k], conn);"
             )
             post_call.append("    }")
             has_handle_array_out = True
@@ -347,12 +347,12 @@ def _emit_default_body(cmd: Command) -> list[str]:
         body.append(f"    {call_str};")
         body.extend(post_call)
     elif post_call or has_handle_array_out:
-        body.append(f"    const {cmd.return_type.cpp()} __rc = {call_str};")
-        body.append("    if (__rc != VK_SUCCESS && __rc != VK_INCOMPLETE) {")
-        body.append("        return __rc;")
+        body.append(f"    const {cmd.return_type.cpp()} rvk_rc = {call_str};")
+        body.append("    if (rvk_rc != VK_SUCCESS && rvk_rc != VK_INCOMPLETE) {")
+        body.append("        return rvk_rc;")
         body.append("    }")
         body.extend(post_call)
-        body.append("    return __rc;")
+        body.append("    return rvk_rc;")
     else:
         body.append(f"    return {call_str};")
     return body
@@ -381,14 +381,14 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         "#include <vulkan/vulkan_core.h>",
         "",
-        "namespace rvk::icd::generated {",
+        "namespace av::vkicd::generated {",
         "",
         "// Wrapper functions matching the application-facing Vulkan signatures.",
         "// Each one looks up the per-VkInstance Connection (or opens a fresh",
         "// one in vkCreateInstance), unwraps dispatchable handles, calls the",
         "// generated rvk_vk* dispatch over that Connection's transport, and",
-        "// wraps any returned dispatchable handles back into RvkWrappedHandle",
-        "// pointers carrying the same Connection.",
+        "// wraps any returned dispatchable handles back into the wrappers",
+        "// the handle registry hands out, carrying the same Connection.",
         "",
     ]
     for cmd in cmds:
@@ -420,7 +420,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
     h.append("// non-wire entries (loader negotiation, GetInstanceProcAddr, etc.).")
     h.append("EntryTable wrapper_entries() noexcept;")
     h.append("")
-    h.append("}  // namespace rvk::icd::generated")
+    h.append("}  // namespace av::vkicd::generated")
     h.append("")
     write(out_dir / "vk_icd_entries.h", header_guard("\n".join(h[1:])))
 
@@ -430,11 +430,11 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         '#include "vk_icd_entries.h"',
         "",
-        '#include "rvk/icd/connection.hpp"',
-        '#include "rvk/icd/handle_registry.hpp"',
+        '#include "proto/icd_connection.hpp"',
+        '#include "proto/icd_handle_registry.hpp"',
         '#include "vk_dispatch_client.h"',
         "",
-        "namespace rvk::icd::generated {",
+        "namespace av::vkicd::generated {",
         "namespace {",
         "",
         "// How many raw server handles a wrapper stages on its stack while",
@@ -479,6 +479,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
         f"return EntryTable{{kWrapperTable, {len(cmds)}u}}; }}"
     )
     s.append("")
-    s.append("}  // namespace rvk::icd::generated")
+    s.append("}  // namespace av::vkicd::generated")
     s.append("")
     write(out_dir / "vk_icd_entries.cpp", "\n".join(s[1:]))

@@ -6,14 +6,14 @@
 
 #include <vulkan/vulkan_core.h>
 
-namespace rvk::icd::generated {
+namespace av::vkicd::generated {
 
 // Wrapper functions matching the application-facing Vulkan signatures.
 // Each one looks up the per-VkInstance Connection (or opens a fresh
 // one in vkCreateInstance), unwraps dispatchable handles, calls the
 // generated rvk_vk* dispatch over that Connection's transport, and
-// wraps any returned dispatchable handles back into RvkWrappedHandle
-// pointers carrying the same Connection.
+// wraps any returned dispatchable handles back into the wrappers
+// the handle registry hands out, carrying the same Connection.
 
 VKAPI_ATTR void VKAPI_CALL Wrap_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator);
 VKAPI_ATTR void VKAPI_CALL Wrap_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator);
@@ -428,4 +428,4 @@ private:
 // non-wire entries (loader negotiation, GetInstanceProcAddr, etc.).
 EntryTable wrapper_entries() noexcept;
 
-}  // namespace rvk::icd::generated
+}  // namespace av::vkicd::generated

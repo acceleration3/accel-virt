@@ -8,7 +8,7 @@
 
 #include "gl_icd_entries.h"
 
-namespace rvk::glicd {
+namespace av::glicd {
 
 struct NamedEntry {
     const char* name;
@@ -1932,4 +1932,4 @@ inline constexpr std::size_t kEntryCount =
     return nullptr;
 }
 
-}  // namespace rvk::glicd
+}  // namespace av::glicd

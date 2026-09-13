@@ -11,6 +11,7 @@ regenerated tree against.
 | the API's own header (`vulkan_core.h`, `GL/gl.h`, `CL/cl.h`) | the types on the wire are the API's |
 | `proto/wire/wire_reader.hpp`, `proto/wire/wire_writer.hpp`, `proto/wire/wire_arena.hpp` | this repository's wire, which the emitted serialization is written against |
 | another generated header in the same directory | the generator's own structure |
+| one of the `proto/` interface headers section F names | the runtime the emitted client and ICD call, which this repository owes them |
 
 Nothing else. In particular: no `<vector>` or any other STL container, no
 exceptions, no RTTI, no logging header, and nothing from render-server.
@@ -103,3 +104,140 @@ a heap container, and nothing generated may include one.
 - emit a file that only compiles in one of the two builds that include it;
 - succeed while a selected command is absent from the registry - the generator
   fails naming it instead.
+
+## F. What the generated code asks of this repository (T022)
+
+The emitters were ported to this repository's wire, but the client and ICD
+emitters still wrote `#include "rvk/..."` and `::rvk::` names: headers from
+render-server, a project this one does not use and will never build. A
+generated tree that names them is coupled to a foreign tree by accident. T022
+ends that. Two of them were deleted; the rest were **renamed**, and what the
+generated code calls on each is written down here, so the feature that
+eventually writes the header inherits a stated contract instead of guessing
+from a diff.
+
+**063 writes none of these headers.** It stops naming someone else's. Until
+the owning feature lands, a generated file that includes one of them does not
+compile - which is the honest state, not a regression: those files were
+uncompilable before too, against headers that were not even in the tree.
+
+### Deleted outright, with nothing in their place
+
+| Was | Called | Now |
+|---|---|---|
+| `rvk/instr/log.hpp` | `RVK_TRACE`, `RVK_WARN` | gone |
+| `rvk/instr/profiler_macros.hpp` | `RVK_PROF_SCOPE` | gone |
+
+A decode failure is already a `return false` and a refusal is already a
+returned status, so nothing about the generated code's behaviour depended on
+either. This project logs at the decision point (principle IX), and for the
+generated dispatch that point is the hand-written call site feature 042 wires
+up - not a macro sprayed through a hundred thousand machine-written lines.
+
+### Renamed, one header per thing, `av::` throughout
+
+| Was | Is | Owed by |
+|---|---|---|
+| `rvk/protocol/transport.hpp` | `proto/client_transport.hpp` | 043 |
+| `rvk/client/blob_arena.hpp` | `proto/client_blob_arena.hpp` | 043 |
+| `rvk/client/stub_report.hpp` | `proto/icd_stub_report.hpp` | 045 |
+| `rvk/icd/connection.hpp` | `proto/icd_connection.hpp` | 045 |
+| `rvk/icd/handle_registry.hpp` | `proto/icd_handle_registry.hpp` | 045 |
+| `rvk/apis/opengl/icd/support.hpp` | `proto/gl_icd_support.hpp` | 050 |
+| `rvk/apis/opengl/sync_table.hpp` | `proto/gl_sync_table.hpp` | 042 |
+
+The generated ICD wrappers moved with them: they were emitted into
+`namespace rvk::icd::generated`, render-server's own ICD namespace, and are
+now `av::vkicd::generated` - the same `av::<api>` shape as `av::vkproto`,
+`av::clproto` and `av::glproto` beside them. OpenGL's `rvk::glicd` becomes
+`av::glicd` for the same reason.
+
+#### `proto/client_transport.hpp` - 043
+
+Every generated client wrapper takes one by reference as its first parameter
+(`rvk_vkXxx`, `rvk_clXxx`, `rvk_glXxx`), and calls exactly this much of it:
+
+| Member | Shape at the call site |
+|---|---|
+| `av::ClientTransport` | a class, passed as `::av::ClientTransport&`; never copied, never stored |
+| `.send_async(id, payload)` | `id` is a `kCmd_*` constant (`std::uint32_t`); the result is discarded with `(void)` |
+| `.send_sync(id, payload, &reply)` | `reply` is the writer the wrapper then reads the answer out of |
+| `av::TransportResult` | an enum with an `Ok` enumerator, compared with `!=` and `==` |
+
+`payload` is where a request's bytes live, and that is 043's decision, not
+this feature's. What the generated client does today is default-construct
+`::av::WireWriter payload;`, write every field into it, and pass
+`payload.bytes()`; it reads the reply back with `::av::WireReader r{reply.bytes()}`.
+**`av::WireWriter` has neither of those**: it is a fixed-capacity writer over
+a block the caller already owns (`WireWriter(uint8_t*, size_t)`), it does not
+grow, and it has no `bytes()`. So 043 owes three things that arrive together -
+where a request's bytes live (a ring slot the transport hands out is the
+obvious answer), how the writer is handed that block, and how the filled
+extent reaches `send_*` and comes back as something a `WireReader` can be
+built over. Until it decides, these call sites do not compile, and the
+emitters change with the decision rather than ahead of it.
+
+#### `proto/client_blob_arena.hpp` - 043
+
+OpenGL only: the path that sends a texture through lent memory instead of
+through the frame.
+
+| Member | Shape at the call site |
+|---|---|
+| `av::ClientBlobArena::Lease` | a value type, default-constructed `{}`, with `.ok()` and `.data` |
+| `ClientBlobArena::for_transport(t)` | reaches the arena belonging to a transport |
+| `.ready()` | whether lending is available at all |
+| `.take(std::size_t)` | answers a `Lease` |
+| `.give_back(lease)` | the frame was never sent |
+| `.retire_after_last(lease)` | the frame was sent; the host still has to read it |
+
+`for_transport` is a static reached for, which principle III does not allow in
+hand-written code. Generated code is exempt from `check_design.py`, but 043
+still owns the spelling: if the arena becomes a member the wrapper is given,
+the emitter changes with it.
+
+#### `proto/icd_connection.hpp` - 045
+
+| Member | Shape at the call site |
+|---|---|
+| `av::icd::Connection` | held as `Connection*`; `conn->transport()` yields the `ClientTransport&` a wrapper sends over |
+| `av::icd::acquire_default_connection()` | answers `Connection*`; null means `VK_ERROR_INITIALIZATION_FAILED`. One call site: `vkCreateInstance` |
+| `av::icd::release_connection(Connection*)` | two call sites: `vkCreateInstance`'s failure path and `vkDestroyInstance` |
+
+#### `proto/icd_handle_registry.hpp` - 045
+
+| Member | Shape at the call site |
+|---|---|
+| `av::icd::wrap_server_handle<H>(std::uint64_t, Connection*)` | answers an `H`. `H` is one of the five dispatchable handles: `VkInstance`, `VkPhysicalDevice`, `VkDevice`, `VkQueue`, `VkCommandBuffer` |
+| `av::icd::connection_of(H)` | answers `Connection*` for any wrapped dispatchable handle |
+| `av::icd::destroy_wrapper(H)` | one call site, `vkDestroyInstance` |
+| `av::icd::record_target(VkCommandBuffer)` | answers a `ClientTransport&` - the command buffer's own batch, which appends instead of sending. Every `vkCmd*` wrapper uses it and touches no `Connection` |
+
+`handle_to_wire` is the other half of this and already exists in the generated
+tree: `vk_handle_default.cpp` defines a weak identity for each of the five,
+and the ICD overrides it to unwrap. A wrapper therefore passes wrapped handles
+straight through to `rvk_vkXxx`; the unwrap happens once, in serialization.
+
+#### `proto/icd_stub_report.hpp` - 045
+
+| Member | Shape at the call site |
+|---|---|
+| `av::icd::stub_called(api, entry_point, why)` | three string literals; OpenCL's `cl_icd_stubs.h` calls it once per refused entry point |
+| `av::icd::payload_dropped(api, command, offset)` | OpenGL only: an encode that overran its buffer, reported once with how far it got |
+
+#### `proto/gl_sync_table.hpp` - 042 · `proto/gl_icd_support.hpp` - 050
+
+Both are OpenGL's. The sync table's members are already `av::`-namespaced -
+`av::glproto::mint_sync_token`, `sync_for`, `bind_sync`, `forget_sync` - so
+only the include path was foreign. The support header is the OpenGL ICD's own
+entry points (`av::glicd::wire`, `skip_bind_texture`, `pixel_bytes`,
+`level_bytes`, `compressed_bytes`, `offsets_of`, `framebuffer_name`,
+`flush_persistent_mappings`, `forget_bindings`, and the rest of that set); 050
+owns the list, and a generated call site is the only caller of each.
+
+### What a later emitter change must not do
+
+- name a header outside this repository, in an include or a comment;
+- put generated code in a namespace that is not `av::`;
+- re-introduce a logging or profiling macro into generated output - if a
+  generated path needs to say something, the hand-written caller says it.

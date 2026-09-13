@@ -137,9 +137,15 @@ def _client_signature(cmd: Command, defaults: bool = False) -> str:
     # The transport is rvk_t rather than t because GL has parameters
     # called t: glTexCoord2f(s, t) is one, and a transport named the
     # same thing shadows it in the very expression that needs both.
-    params = ["::rvk::protocol::Transport& rvk_t"] + _client_params(cmd, defaults)
+    params = ["::av::ClientTransport& rvk_t"] + _client_params(cmd, defaults)
     if _ret_kind(cmd) == "string":
-        params.append("std::string* out")
+        # GL answers with a pointer to storage the driver owns, and there
+        # is no growable string here to put it in. So the caller lends a
+        # buffer and is told how long the answer really was: a driver that
+        # was handed too little sees the truncation and asks again with
+        # room, rather than the wire deciding for it.
+        params += ["char* out", "std::size_t out_capacity",
+                   "std::size_t* out_length"]
     return f"{_client_return(cmd)} rvk_{cmd.name}({', '.join(params)})"
 
 
@@ -342,11 +348,11 @@ def _enum_value(name: str) -> int:
 # ---------------------------------------------------------------------
 
 def _lease_for_write(name: str, out: list[str], guard: str) -> None:
-    out.append(f"    ::rvk::client::BlobArena::Lease {name}_lease{{}};")
+    out.append(f"    ::av::ClientBlobArena::Lease {name}_lease{{}};")
     out.append(f"    bool {name}_via_blob = false;")
     out.append(f"    if ({guard} &&")
     out.append(f"        {name}_want >= ::av::glproto::kPixelBlobFloor) {{")
-    out.append("        auto& rvk_blobs = ::rvk::client::BlobArena::for_transport(rvk_t);")
+    out.append("        auto& rvk_blobs = ::av::ClientBlobArena::for_transport(rvk_t);")
     out.append("        if (rvk_blobs.ready()) {")
     out.append(f"            {name}_lease = rvk_blobs.take({name}_want);")
     out.append(f"            if ({name}_lease.ok()) {{")
@@ -366,7 +372,7 @@ def _hand_back_leases(cmd: Command, out: list[str], sent: bool,
                       indent: str = "    ") -> None:
     for name in _write_leases(cmd):
         out.append(f"{indent}if ({name}_via_blob) {{")
-        out.append(f"{indent}    ::rvk::client::BlobArena::for_transport(rvk_t)")
+        out.append(f"{indent}    ::av::ClientBlobArena::for_transport(rvk_t)")
         if sent:
             out.append(f"{indent}        .retire_after_last({name}_lease);")
         else:
@@ -430,12 +436,12 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
         # one, so a four-byte read would take 4096 and a round trip to
         # give it back, which is worse than the reply slot it replaced.
         out.append(f"    const std::size_t {name}_want = static_cast<std::size_t>({size});")
-        out.append(f"    ::rvk::client::BlobArena::Lease {name}_lease{{}};")
+        out.append(f"    ::av::ClientBlobArena::Lease {name}_lease{{}};")
         out.append(f"    bool {name}_via_blob = false;")
         if not cmd.is_async:
             out.append(f"    if (!{name}_is_offset && {name} != nullptr &&")
             out.append(f"        {name}_want >= ::av::glproto::kPixelBlobFloor) {{")
-            out.append("        auto& rvk_blobs = ::rvk::client::BlobArena::for_transport(rvk_t);")
+            out.append("        auto& rvk_blobs = ::av::ClientBlobArena::for_transport(rvk_t);")
             out.append("        if (rvk_blobs.ready()) {")
             out.append(f"            {name}_lease = rvk_blobs.take({name}_want);")
             out.append(f"            {name}_via_blob = {name}_lease.ok();")
@@ -546,15 +552,25 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
         # The length is the host's word for it, and the reply is the
         # only thing that bounds it.
         out.append(f"    if (length > rvk_r.remaining()) {fail}")
-        out.append("    if (out != nullptr) {")
-        out.append("        out->assign(static_cast<std::size_t>(length), '\\0');")
-        out.append("        if (length != 0 &&")
-        out.append(f"            !rvk_r.read(out->data(), static_cast<std::size_t>(length))) {fail}")
-        out.append("    } else {")
-        out.append("        for (std::uint64_t rvk_i = 0; rvk_i < length; ++rvk_i) {")
-        out.append("            std::uint8_t rvk_byte = 0;")
-        out.append(f"            if (!rvk_r.read_pod(rvk_byte)) {fail}")
-        out.append("        }")
+        # The length the host has, whatever the caller had room for, so a
+        # caller holding nothing can ask with a null buffer and then ask
+        # again with the right one.
+        out.append("    if (out_length != nullptr) "
+                   "*out_length = static_cast<std::size_t>(length);")
+        out.append("    std::size_t rvk_kept = 0;")
+        out.append("    if (out != nullptr && out_capacity != 0) {")
+        out.append("        rvk_kept = static_cast<std::size_t>(length) < out_capacity")
+        out.append("            ? static_cast<std::size_t>(length) : out_capacity - 1;")
+        out.append(f"        if (rvk_kept != 0 && !rvk_r.read(out, rvk_kept)) {fail}")
+        # Terminated, because what the caller hands its own caller back is
+        # a const GLubyte* and nothing carries the length with it.
+        out.append("        out[rvk_kept] = '\\0';")
+        out.append("    }")
+        # Whatever did not fit is still on the reply, and anything the
+        # command answers with follows it.
+        out.append("    for (std::uint64_t rvk_i = rvk_kept; rvk_i < length; ++rvk_i) {")
+        out.append("        std::uint8_t rvk_byte = 0;")
+        out.append(f"        if (!rvk_r.read_pod(rvk_byte)) {fail}")
         out.append("    }")
     for p in cmd.params:
         if p.role in (Role.ARRAY_OUT, Role.STRING_OUT):
@@ -575,7 +591,7 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
             # back.
             out.append(f"    if ({p.name}_via_blob) {{")
             out.append(f"        std::memcpy({p.name}, {p.name}_lease.data, {p.name}_want);")
-            out.append("        ::rvk::client::BlobArena::for_transport(rvk_t)")
+            out.append("        ::av::ClientBlobArena::for_transport(rvk_t)")
             out.append(f"            .give_back({p.name}_lease);")
             out.append("    }")
             # A read into a pixel buffer lands on the host and stays
@@ -598,9 +614,8 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
 
 def emit_client(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
-         "#include <cstddef>", "#include <cstdint>",
-         "#include <string>\n",
-         '#include "rvk/protocol/transport.hpp"',
+         "#include <cstddef>", "#include <cstdint>\n",
+         '#include "proto/client_transport.hpp"',
          '#include "gl_types.h"\n',
          "namespace av::glproto {\n"]
     c = [HEADER, '#include "gl_dispatch_client.h"\n',
@@ -608,13 +623,12 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
          '#include "core/support/status.hpp"',
          '#include "proto/wire/wire_writer.hpp"',
          '#include "proto/wire/wire_reader.hpp"',
-         '#include "rvk/client/stub_report.hpp"',
+         '#include "proto/icd_stub_report.hpp"',
          '#include "gl_helpers.h"',
          '#include "gl_protocol_ids.h"',
          '#include "gl_sizes.h"',
-         '#include "rvk/client/blob_arena.hpp"',
-         '#include "rvk/instr/profiler_macros.hpp"',
-         '#include "rvk/apis/opengl/sync_table.hpp"\n',
+         '#include "proto/client_blob_arena.hpp"',
+         '#include "proto/gl_sync_table.hpp"\n',
          "namespace av::glproto {\n",
          "// Below one page a blob lease costs more than the reply slot",
          "// it would replace: the allocator rounds to a page either way.",
@@ -628,25 +642,11 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
             # `answered_by_guest` in gl_profile.toml.
             continue
         c.append(f"{_client_signature(cmd)} {{")
-        # A span per call on the guest side.
-        #
-        # Without it a guest's profile is its presents and its waits and
-        # nothing in between — the whole reason a frame took what it
-        # took is the calls the application made, and they were the one
-        # thing the timeline could not show. The server has had spans
-        # around its replay since the beginning; this is the other half
-        # of the same picture, and the two line up because the trace
-        # headers carry a measured clock offset.
-        #
-        # "gl:" so a guest-side call sorts next to its server-side twin
-        # rather than being mistaken for it. Compiled out entirely
-        # without the profiler, and one predictable branch with it.
-        c.append(f'    RVK_PROF_SCOPE("gl:{cmd.name}");')
         c.append("    ::av::WireWriter rvk_b;")
         if cmd.mints_handle:
             # The handle the guest is about to answer with, written
             # first so the server binds it before it decodes anything
-            # that could fail. See rvk/apis/opengl/sync_table.hpp for
+            # that could fail. See proto/gl_sync_table.hpp for
             # why the guest gets to choose it at all.
             c.append("    const std::uint64_t rvk_token = "
                      "::av::glproto::mint_sync_token();")
@@ -664,7 +664,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         # arrived. Sending nothing is no better for the picture, but it
         # is honest, and it says so once.
         c.append("    if (rvk_b.status() != ::av::Status::ok) {")
-        c.append(f'        ::rvk::client::payload_dropped("gl", "{cmd.name}",')
+        c.append(f'        ::av::icd::payload_dropped("gl", "{cmd.name}",')
         c.append("                                       rvk_b.offset());")
         _hand_back_leases(cmd, c, sent=False, indent="        ")
         c.append(f"        {'return;' if _ret_kind(cmd) == 'void' else fail_for(cmd)}")
@@ -680,7 +680,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
             fail = fail_for(cmd)
             c.append("    ::av::WireWriter rvk_reply;")
             c.append(f"    const bool rvk_sent = rvk_t.send_sync(kCmd_{cmd.name}, rvk_b.bytes(), &rvk_reply) ==")
-            c.append("        ::rvk::protocol::TransportResult::Ok;")
+            c.append("        ::av::TransportResult::Ok;")
             _hand_back_leases(cmd, c, sent=False)
             c.append("    if (!rvk_sent) {")
             c.append(f"        {fail}")
@@ -717,7 +717,7 @@ def _decode_param(p: Param, out: list[str]) -> None:
         # The guest's token, not the host's pointer. The table says
         # which of the host's fences it stands for; an unknown token
         # resolves to null, which is what GL does with a handle that was
-        # never a handle. See rvk/apis/opengl/sync_table.hpp.
+        # never a handle. See proto/gl_sync_table.hpp.
         out.append(f"    std::uint64_t {name}_token = 0;")
         out.append(f"    if (!rvk_r.read_pod({name}_token)) return false;")
         out.append(f"    GLsync {name} = static_cast<GLsync>("
@@ -748,10 +748,15 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append(f"      {name} = reinterpret_cast<const void*>(static_cast<std::uintptr_t>(rvk_v)); }}")
         return
     if p.role is Role.PIXELS_IN:
-        # Off the heap rather than out of the arena, as a read is: a
-        # texture level is larger than a whole decode's block, and
-        # refusing an upload for its size is refusing the picture.
-        out.append(f"    std::vector<std::uint8_t> {name}_storage;")
+        # Out of the caller's block, like everything else a decoded
+        # command points at: there is no heap on this side. An upload
+        # larger than the block is refused here rather than truncated,
+        # because a texture that arrives short is a texture that is
+        # wrong for the rest of the run. A guest with a level that
+        # large sends it through the blob, which is what the 3 case
+        # above is.
+        out.append(f"    std::uint8_t* {name}_storage = nullptr;")
+        out.append(f"    std::size_t {name}_storage_count = 0;")
         out.append(f"    const void* {name} = nullptr;")
         out.append("    {")
         out.append("        std::uint8_t rvk_present = 0;")
@@ -773,19 +778,29 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("            std::uint64_t rvk_bytes = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
         out.append("            if (rvk_bytes > rvk_r.remaining()) return false;")
-        out.append(f"            {name}_storage.assign(static_cast<std::size_t>(rvk_bytes), 0);")
-        out.append(f"            if (!rvk_r.read({name}_storage.data(), "
-                   "static_cast<std::size_t>(rvk_bytes))) return false;")
-        out.append(f"            {name} = {name}_storage.data();")
+        out.append(f"            {name}_storage_count = static_cast<std::size_t>(rvk_bytes);")
+        out.append(f"            if ({name}_storage_count != 0) {{")
+        out.append(f"                {name}_storage = rvk_arena.allocate<std::uint8_t>("
+                   f"{name}_storage_count);")
+        out.append(f"                if ({name}_storage == nullptr) return false;")
+        # Every byte of it is about to be overwritten by the read, so it
+        # is the one block that is not cleared first.
+        out.append(f"                if (!rvk_r.read({name}_storage, "
+                   f"{name}_storage_count)) return false;")
+        out.append("            }")
+        out.append(f"            {name} = {name}_storage;")
         out.append("        }")
         out.append("    }")
         return
     if p.role is Role.PIXELS_OUT:
-        # Off the heap rather than out of the arena. A frame or a
-        # texture level is larger than a thread's arena slice, and an
-        # allocation that fails here is a command silently dropped —
-        # which is what an eight-megabyte read looked like before.
-        out.append(f"    std::vector<std::uint8_t> {name}_storage;")
+        # Out of the caller's block. A read too large for it is refused
+        # rather than answered short: the guest sizes its own buffer
+        # from the same arguments, so a truncated answer would be read
+        # back as pixels. A frame-sized read goes through the blob and
+        # never lands here at all — that is the 3 case below, and the
+        # guest takes it for anything above a page.
+        out.append(f"    std::uint8_t* {name}_storage = nullptr;")
+        out.append(f"    std::size_t {name}_storage_count = 0;")
         out.append(f"    void* {name} = nullptr;")
         out.append(f"    std::size_t {name}_bytes = 0;")
         out.append(f"    bool {name}_is_offset = false;")
@@ -819,8 +834,21 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("            std::uint64_t rvk_bytes = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
         out.append(f"            {name}_bytes = static_cast<std::size_t>(rvk_bytes);")
-        out.append(f"            {name}_storage.assign({name}_bytes + 1, 0);")
-        out.append(f"            {name} = {name}_storage.data();")
+        # One past what was asked for, which also makes the overflow
+        # harmless: a length of SIZE_MAX wraps the count to zero, the
+        # arena answers null for that, and the command is refused
+        # rather than handed a block smaller than it was told.
+        out.append(f"            {name}_storage_count = {name}_bytes + 1;")
+        out.append(f"            {name}_storage = rvk_arena.allocate<std::uint8_t>("
+                   f"{name}_storage_count);")
+        out.append(f"            if ({name}_storage == nullptr) return false;")
+        # Cleared, because the driver may write fewer bytes than were
+        # asked for and the reply sends back what is there: whatever
+        # the block last held is another guest's picture.
+        out.append(f"            for (std::size_t rvk_z = 0; "
+                   f"rvk_z < {name}_storage_count; ++rvk_z) {{ "
+                   f"{name}_storage[rvk_z] = 0; }}")
+        out.append(f"            {name} = {name}_storage;")
         out.append("        }")
         out.append("    }")
         return
@@ -903,10 +931,15 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("    }")
         return
     if p.role in (Role.ARRAY_OUT, Role.STRING_OUT):
-        # Off the heap, for the reason above: a buffer read of several
-        # megabytes is an ordinary thing to ask for.
+        # Out of the caller's block, counted in elements of what the
+        # call writes so that it is aligned for that type: a block of
+        # bytes is aligned for nothing. A query too large for the block
+        # is refused, which is the only honest answer — the reply is
+        # measured against what the guest asked for, so a short block
+        # would answer with uninitialised host memory.
         storage = _storage_type(p)
-        out.append(f"    std::vector<std::uint8_t> {name}_storage;")
+        out.append(f"    {storage}* {name}_storage = nullptr;")
+        out.append(f"    std::size_t {name}_storage_count = 0;")
         out.append(f"    {p.type.base}* {name} = nullptr;")
         out.append(f"    std::size_t {name}_bytes = 0;")
         out.append("    {")
@@ -916,21 +949,41 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("            std::uint64_t rvk_bytes = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
         out.append(f"            {name}_bytes = static_cast<std::size_t>(rvk_bytes);")
+        # One element past what was asked for, so a byte count of
+        # SIZE_MAX wraps the element count to zero, the arena answers
+        # null, and the command is refused rather than handed a block
+        # smaller than it was told.
         if p.length is not None and p.length.kind is LengthKind.PNAME:
             # A state query's length comes from a table of how many
             # values each enum answers with, and a table can be short:
             # GL_MODELVIEW_MATRIX is sixteen floats and was one, and
             # the host wrote all sixteen into a buffer sized for one.
-            # That is heap corruption in the server, from a missing
-            # line in a profile — so the buffer a query writes into is
-            # always big enough for the largest answer GL has, and only
-            # what was asked for is sent back. See kQuerySlack.
-            out.append(f"            {name}_storage.assign("
-                       f"std::max<std::size_t>({name}_bytes, "
-                       f"kQuerySlack * sizeof({storage})) + sizeof({storage}), 0);")
+            # That is memory the server owns, written past its end from
+            # a missing line in a profile — so the buffer a query writes
+            # into is always big enough for the largest answer GL has,
+            # and only what was asked for is sent back. See kQuerySlack.
+            out.append(f"            {name}_storage_count = "
+                       f"{name}_bytes / sizeof({storage});")
+            out.append(f"            if ({name}_storage_count < kQuerySlack) "
+                       f"{name}_storage_count = kQuerySlack;")
+            out.append(f"            {name}_storage_count += 1;")
         else:
-            out.append(f"            {name}_storage.assign({name}_bytes + sizeof({storage}), 0);")
-        out.append(f"            {name} = reinterpret_cast<{p.type.base}*>({name}_storage.data());")
+            out.append(f"            {name}_storage_count = "
+                       f"{name}_bytes / sizeof({storage}) + 1;")
+        out.append(f"            {name}_storage = rvk_arena.allocate<{storage}>("
+                   f"{name}_storage_count);")
+        out.append(f"            if ({name}_storage == nullptr) return false;")
+        # Cleared, because the driver answers a query with as many
+        # values as the enum really has and the reply sends back as many
+        # as were asked for: the difference would be whatever the block
+        # last held.
+        out.append(f"            for (std::size_t rvk_z = 0; "
+                   f"rvk_z < {name}_storage_count; ++rvk_z) {{ "
+                   f"{name}_storage[rvk_z] = {{}}; }}")
+        if storage == p.type.base:
+            out.append(f"            {name} = {name}_storage;")
+        else:
+            out.append(f"            {name} = reinterpret_cast<{p.type.base}*>({name}_storage);")
         out.append("        }")
         out.append("    }")
         return
@@ -939,24 +992,27 @@ def _decode_param(p: Param, out: list[str]) -> None:
 
 def emit_server(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
-         "#include <cstdint>\n",
+         "#include <cstddef>", "#include <cstdint>\n",
+         '#include "proto/wire/wire_arena.hpp"',
          '#include "proto/wire/wire_writer.hpp"',
          '#include "proto/wire/wire_reader.hpp"',
          '#include "gl_real_dispatch.h"\n',
          "namespace av::glproto {\n",
          "// Reads one command and calls the host's entry point for it.",
-         "bool dispatch_command(const RealGl& gl, std::uint32_t cmd_id,",
-         "                      ::av::WireReader& reader,",
-         "                      ::av::WireWriter& reply) noexcept;\n",
+         "//",
+         "// `arena` is where everything a decoded command points at lives,",
+         "// for the length of the call; it is the caller's block, because",
+         "// it has to outlive the decode that filled it.",
+         "[[nodiscard]] bool dispatch_command(const RealGl& gl, std::uint32_t cmd_id,",
+         "                                    ::av::WireReader& reader,",
+         "                                    ::av::WireWriter& reply,",
+         "                                    ::av::WireArena& arena) noexcept;\n",
          "}  // namespace av::glproto", ""]
     c = [HEADER, '#include "gl_dispatch_server.h"\n',
-         "#include <algorithm>", "#include <cstring>",
-         "#include <vector>\n",
-         '#include "proto/wire/wire_arena.hpp"',
+         "#include <cstddef>", "#include <cstring>\n",
          '#include "gl_protocol_ids.h"',
          '#include "gl_sizes.h"',
-         '#include "rvk/instr/profiler_macros.hpp"',
-         '#include "rvk/apis/opengl/sync_table.hpp"\n',
+         '#include "proto/gl_sync_table.hpp"\n',
          "namespace av::glproto {\n",
          "// How many values the largest state query GL has answers",
          "// with: a four-by-four matrix, and room to spare. A query's",
@@ -967,25 +1023,8 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
     for cmd in reg.commands.values():
         c.append(f"static bool decode_{cmd.name}(const RealGl& rvk_gl, "
                  "::av::WireReader& rvk_r, "
-                 "::av::WireWriter& rvk_reply) {")
-        # A span per call on the host side, matching the "drv:" the
-        # Vulkan real-dispatch has always used.
-        #
-        # The server had `gl.replay` around a whole batch and nothing
-        # inside it, so a profile could say the host spent four
-        # milliseconds replaying and not which call it was in. With the
-        # guest's "gl:" span and this one, the same command is visible
-        # on both sides of the wire and the difference between them is
-        # what the wire cost.
-        #
-        # It covers unpacking the arguments as well as making the call,
-        # which is the whole of what the server spends on one command
-        # and is the number worth having. Splitting the two would need a
-        # span around each of the four shapes the call site takes — void,
-        # a value, a string, a pointer — to separate a decode that is
-        # tens of nanoseconds from a driver call that is not.
-        c.append(f'    RVK_PROF_SCOPE("drv:{cmd.name}");')
-        c.append("    ::av::WireArena rvk_arena;")
+                 "::av::WireWriter& rvk_reply, "
+                 "::av::WireArena& rvk_arena) {")
         c.append("    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;")
         if cmd.mints_handle:
             c.append("    std::uint64_t rvk_token = 0;")
@@ -1044,10 +1083,12 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         c.append("")
     c.append("bool dispatch_command(const RealGl& rvk_gl, std::uint32_t cmd_id,")
     c.append("                      ::av::WireReader& rvk_r,")
-    c.append("                      ::av::WireWriter& rvk_reply) noexcept {")
+    c.append("                      ::av::WireWriter& rvk_reply,")
+    c.append("                      ::av::WireArena& rvk_arena) noexcept {")
     c.append("    switch (cmd_id) {")
     for cmd in reg.commands.values():
-        c.append(f"        case kCmd_{cmd.name}: return decode_{cmd.name}(rvk_gl, rvk_r, rvk_reply);")
+        c.append(f"        case kCmd_{cmd.name}: "
+                  f"return decode_{cmd.name}(rvk_gl, rvk_r, rvk_reply, rvk_arena);")
     c += ["        default: return false;", "    }", "}", "",
           "}  // namespace av::glproto", ""]
     write(out_dir / "gl_dispatch_server.h", "\n".join(h))
@@ -1234,9 +1275,9 @@ HANDWRITTEN = {
 # answers "this call cannot change anything", and a call that cannot
 # change anything is not worth a ring record. See support.hpp.
 BIND_SHADOW = {
-    "glActiveTexture": "::rvk::glicd::skip_active_texture(texture)",
-    "glBindTexture": "::rvk::glicd::skip_bind_texture(target, texture)",
-    "glBindSampler": "::rvk::glicd::skip_bind_sampler(unit, sampler)",
+    "glActiveTexture": "::av::glicd::skip_active_texture(texture)",
+    "glBindTexture": "::av::glicd::skip_bind_texture(target, texture)",
+    "glBindSampler": "::av::glicd::skip_bind_sampler(unit, sampler)",
 }
 
 # Everything else that can move one of those bindings.
@@ -1300,10 +1341,10 @@ def _icd_prologue(cmd: Command) -> list[str]:
             # query buffer, which is the same rule about a different
             # binding.
             if cmd.name.startswith("glGetQueryObject"):
-                bound = "::rvk::glicd::query_buffer_bound()"
+                bound = "::av::glicd::query_buffer_bound()"
             else:
                 packing = "true" if p.role is Role.PIXELS_OUT else "false"
-                bound = f"::rvk::glicd::pixel_buffer_bound({packing})"
+                bound = f"::av::glicd::pixel_buffer_bound({packing})"
             lines.append(f"    const bool rvk_{p.name}_offset = {bound};")
     return lines
 
@@ -1319,7 +1360,7 @@ def _icd_forward_args(cmd: Command) -> list[str]:
             args.append(f"static_cast<std::uint64_t>("
                         f"reinterpret_cast<std::uintptr_t>({p.name}))")
         elif p.role is Role.OFFSET_ARRAY:
-            args.append(f"::rvk::glicd::offsets_of({p.name}, "
+            args.append(f"::av::glicd::offsets_of({p.name}, "
                         f"static_cast<std::size_t>({p.length.text}))")
         elif p.role is Role.PIXELS_IN or p.role is Role.PIXELS_OUT:
             # An offset needs no length, and working one out would ask
@@ -1355,7 +1396,7 @@ def _icd_pixel_bytes(cmd: Command, p: Param) -> str:
         # not. What crosses starts at the caller's pointer and runs far
         # enough that the host, applying the same skips, lands inside
         # what it was given.
-        return (f"::rvk::glicd::compressed_bytes({width}, {height}, {depth}, "
+        return (f"::av::glicd::compressed_bytes({width}, {height}, {depth}, "
                 f"imageSize, {packing})")
     if "Compressed" in cmd.name:
         # glGetCompressedTexImage: neither the extent nor the format
@@ -1367,7 +1408,7 @@ def _icd_pixel_bytes(cmd: Command, p: Param) -> str:
         # call the level "lod", so the level is taken by whichever name
         # this command gave it.
         level = "level" if "level" in names else "lod"
-        return (f"::rvk::glicd::compressed_level_bytes(target, {level}, "
+        return (f"::av::glicd::compressed_level_bytes(target, {level}, "
                 f"{packing})")
     if "pname" in names and "format" not in names and "type" not in names:
         # A query answered by enum: how many values it is worth is the
@@ -1378,8 +1419,8 @@ def _icd_pixel_bytes(cmd: Command, p: Param) -> str:
     if "target" in reads and "level" in reads:
         # glGetTexImage: the extent is the level's, which only the
         # driver knows.
-        return (f"::rvk::glicd::level_bytes(target, level, {fmt}, {typ})")
-    return (f"::rvk::glicd::pixel_bytes({fmt}, {typ}, {width}, {height}, "
+        return (f"::av::glicd::level_bytes(target, level, {fmt}, {typ})")
+    return (f"::av::glicd::pixel_bytes({fmt}, {typ}, {width}, {height}, "
             f"{depth}, {packing})")
 
 
@@ -1417,7 +1458,7 @@ def _reads_buffers(cmd) -> bool:
 def emit_icd(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, '#include "gl_icd_entries.h"\n',
            "#include <cstdint>\n",
-           '#include "rvk/apis/opengl/icd/support.hpp"',
+           '#include "proto/gl_icd_support.hpp"',
            '#include "gl_dispatch_client.h"',
            '#include "gl_helpers.h"\n',
            "// Every entry point whose whole job is to forward.",
@@ -1433,21 +1474,21 @@ def emit_icd(reg: Registry, out_dir: Path) -> None:
         forwarded.append(cmd.name)
         out.append(f"{_icd_signature(cmd)} {{")
         args = ", ".join(["*rvk_t"] + _icd_forward_args(cmd))
-        out.append("    auto* rvk_t = ::rvk::glicd::wire();")
+        out.append("    auto* rvk_t = ::av::glicd::wire();")
         for rewritten in _framebuffer_names(cmd):
             # Zero names the window, and the window is a framebuffer
             # object here. See rvk::glicd::framebuffer_name.
             out.append(f"    {rewritten} = "
-                       f"::rvk::glicd::framebuffer_name({rewritten});")
+                       f"::av::glicd::framebuffer_name({rewritten});")
         if _reads_buffers(cmd):
             # A persistent mapping is memory the application writes into
             # and never unmaps, so nothing tells this driver the bytes
             # changed. What the specification promises is that the write
             # is visible to the next draw — so the next draw is where it
             # is sent. See rvk::glicd::flush_persistent_mappings.
-            out.append("    ::rvk::glicd::flush_persistent_mappings();")
+            out.append("    ::av::glicd::flush_persistent_mappings();")
         if cmd.name in BIND_SHADOW_FORGETS:
-            out.append("    ::rvk::glicd::forget_bindings();")
+            out.append("    ::av::glicd::forget_bindings();")
         kind = _ret_kind(cmd)
         prologue = _icd_prologue(cmd)
         if kind == "void":
@@ -1487,7 +1528,7 @@ def emit_icd(reg: Registry, out_dir: Path) -> None:
     table = [HEADER, "#pragma once\n",
              "#include <cstring>\n",
              '#include "gl_icd_entries.h"\n',
-             "namespace rvk::glicd {\n",
+             "namespace av::glicd {\n",
              "struct NamedEntry {",
              "    const char* name;",
              "    void* address;",
@@ -1518,7 +1559,7 @@ def emit_icd(reg: Registry, out_dir: Path) -> None:
               "    return nullptr;",
               "}",
               "",
-              "}  // namespace rvk::glicd", ""]
+              "}  // namespace av::glicd", ""]
     write(out_dir / "gl_icd_table.h", "\n".join(table))
 
     # What the library exports, written out rather than left to the

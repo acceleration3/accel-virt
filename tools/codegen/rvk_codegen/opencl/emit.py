@@ -114,7 +114,7 @@ def _server_param_decl(reg: Registry, p: Param) -> str:
 def _client_signature(reg: Registry, cmd: Command) -> str:
     ret = HANDLE_T if cmd.returns_handle else \
         ("void" if cmd.returns_void else cmd.return_type.cpp())
-    params = ["::rvk::protocol::Transport& t"]
+    params = ["::av::ClientTransport& t"]
     for p in cmd.params:
         if p.role == Role.IGNORED:
             # Not on the wire, but a string array's lengths are read by
@@ -276,7 +276,7 @@ def _decode_reply(reg: Registry, cmd: Command, out: list[str]) -> None:
 def emit_client(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
          "#include <cstddef>", "#include <cstdint>", ""] + CL_PREAMBLE + ["",
-         '#include "rvk/protocol/transport.hpp"', "",
+         '#include "proto/client_transport.hpp"', "",
          "namespace av::clproto {", ""]
     c = [HEADER, '#include "cl_dispatch_client.h"', "",
          "#include <cstring>", "",
@@ -301,7 +301,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         else:
             c.append("    ::av::WireWriter reply;")
             c.append(f"    if (t.send_sync(kCmd_{cmd.name}, b.bytes(), &reply) !=")
-            c.append("        ::rvk::protocol::TransportResult::Ok) {")
+            c.append("        ::av::TransportResult::Ok) {")
             if cmd.returns_handle:
                 c.append("        return 0;")
             elif cmd.returns_void:
@@ -857,13 +857,13 @@ def emit_icd_stubs(raw, reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n",
            "#include <type_traits>", ""] + CL_PREAMBLE + [
            "#include <CL/cl_icd.h>", "",
-           '#include "rvk/client/stub_report.hpp"', "",
+           '#include "proto/icd_stub_report.hpp"', "",
            "namespace av::clproto {", "",
            "// Every one of these answers CL_INVALID_OPERATION, and says so",
            "// once: an application that asks for something this driver does",
            "// not carry gets a clean refusal, and whoever is reading the log",
            "// gets the name of what it asked for. See",
-           "// rvk/client/stub_report.hpp.",
+           "// proto/icd_stub_report.hpp.",
            "namespace stubs {", ""]
 
     # A stub can only be written for a command whose types this
@@ -900,7 +900,7 @@ def emit_icd_stubs(raw, reg: Registry, out_dir: Path) -> None:
             continue
         ret, params, answer = _stub_signature(cmd, name)
         out.append(f"inline {ret} CL_API_CALL {name}({params}) {{")
-        out.append(f'    ::rvk::client::stub_called("cl", "{name}", '
+        out.append(f'    ::av::icd::stub_called("cl", "{name}", '
                    '"this driver does not carry it");')
         if answer:
             out.append(f"    {answer}")

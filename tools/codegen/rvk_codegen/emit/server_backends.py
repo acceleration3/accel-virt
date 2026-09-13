@@ -120,8 +120,6 @@ def _emit_real(reg: Registry) -> str:
         "",
         "#include <vulkan/vulkan_core.h>",
         "",
-        '#include "rvk/instr/log.hpp"',
-        '#include "rvk/instr/profiler_macros.hpp"',
         '#include "vk_dispatch_server.h"',
         "",
         "namespace av::vkproto {",
@@ -157,14 +155,10 @@ def _emit_real(reg: Registry) -> str:
             # by the loader; only the core symbol is. Calling cmd.name here
             # links fine for everything else and fails for exactly those.
             call = f"::{cmd.alias_of or cmd.name}({args})"
-            # The scope name is the driver symbol, so a flame graph reads
-            # "command -> vkFoo -> drv:vkFoo": proxy overhead outside,
-            # host driver time inside.
-            scope = f'        RVK_PROF_SCOPE("drv:{cmd.name}");'
             if cmd.return_type.base == "void":
-                lines.extend([f"    {sig} override {{", scope, f"        {call};", "    }"])
+                lines.extend([f"    {sig} override {{", f"        {call};", "    }"])
             else:
-                lines.extend([f"    {sig} override {{", scope, f"        return {call};", "    }"])
+                lines.extend([f"    {sig} override {{", f"        return {call};", "    }"])
             continue
 
         # Extension-only: the loader exports no symbol, so linking
@@ -184,23 +178,14 @@ def _emit_real(reg: Registry) -> str:
             f"        if ({pfn} == nullptr) {{",
         ]
         if cmd.return_type.base == "void":
-            body.append(
-                f'            RVK_WARN("{cmd.name}: not supported by the host driver");'
-            )
             body.append("            return;")
             body.append("        }")
             body.append(f"        {pfn}({args});")
         elif cmd.return_type.base == "VkResult":
-            body.append(
-                f'            RVK_WARN("{cmd.name}: not supported by the host driver");'
-            )
             body.append("            return VK_ERROR_EXTENSION_NOT_PRESENT;")
             body.append("        }")
             body.append(f"        return {pfn}({args});")
         else:
-            body.append(
-                f'            RVK_WARN("{cmd.name}: not supported by the host driver");'
-            )
             body.append(f"            return {cmd.return_type.cpp()}{{}};")
             body.append("        }")
             body.append(f"        return {pfn}({args});")

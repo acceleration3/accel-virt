@@ -48,8 +48,8 @@ def _storage_alloc(
     ]
     if zero_fill:
         lines.append(
-            f"{pad}    for (std::size_t __z = 0; __z < {name}_count; ++__z) "
-            f"{{ {name}[__z] = {{}}; }}"
+            f"{pad}    for (std::size_t rvk_z = 0; rvk_z < {name}_count; ++rvk_z) "
+            f"{{ {name}[rvk_z] = {{}}; }}"
         )
     lines.append(f"{pad}}}")
     return lines
@@ -84,10 +84,10 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             stype_value = classify.stype_value_for_struct(reg, arr.type.base)
             if stype_value is not None:
                 decode_lines.append(
-                    f"        for (std::size_t __e = 0; "
-                    f"__e < {arr.name}_storage_count; ++__e) {{ "
-                    f"{arr.name}_storage[__e].sType = {stype_value}; "
-                    f"{arr.name}_storage[__e].pNext = nullptr; }}"
+                    f"        for (std::size_t rvk_e = 0; "
+                    f"rvk_e < {arr.name}_storage_count; ++rvk_e) {{ "
+                    f"{arr.name}_storage[rvk_e].sType = {stype_value}; "
+                    f"{arr.name}_storage[rvk_e].pNext = nullptr; }}"
                 )
             decode_lines.append("    }")
             call_args.append(f"&{count.name}_local")
@@ -121,10 +121,10 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 # Read the wire's 64 bits, then narrow to this machine's
                 # size_t. See the same case on the client side.
                 decode_lines.append("    {")
-                decode_lines.append("        std::uint64_t __wide = 0;")
-                decode_lines.append("        if (!r.read_pod(__wide)) return false;")
+                decode_lines.append("        std::uint64_t rvk_wide = 0;")
+                decode_lines.append("        if (!r.read_pod(rvk_wide)) return false;")
                 decode_lines.append(
-                    f"        {p.name} = static_cast<{p.type.cpp()}>(__wide);")
+                    f"        {p.name} = static_cast<{p.type.cpp()}>(rvk_wide);")
                 decode_lines.append("    }")
             else:
                 decode_lines.append(f"    if (!r.read_pod({p.name})) return false;")
@@ -171,20 +171,20 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 _storage_alloc(f"{pad}    ", f"{p.name}_storage", elem, srv_len)
             )
             decode_lines.append(
-                f"{pad}    for (std::size_t __i = 0; "
-                f"__i < {p.name}_storage_count; ++__i) {{"
+                f"{pad}    for (std::size_t rvk_i = 0; "
+                f"rvk_i < {p.name}_storage_count; ++rvk_i) {{"
             )
             if kind == "in_handle_array":
                 decode_lines.append(
-                    f"{pad}        if (!deserialize_{elem}(r, {p.name}_storage[__i])) return false;"
+                    f"{pad}        if (!deserialize_{elem}(r, {p.name}_storage[rvk_i])) return false;"
                 )
             elif kind == "in_struct_array":
                 decode_lines.append(
-                    f"{pad}        if (!deserialize_{elem}(r, &{p.name}_storage[__i], arena)) return false;"
+                    f"{pad}        if (!deserialize_{elem}(r, &{p.name}_storage[rvk_i], arena)) return false;"
                 )
             else:  # in_pod_array
                 decode_lines.append(
-                    f"{pad}        if (!r.read_pod({p.name}_storage[__i])) return false;"
+                    f"{pad}        if (!r.read_pod({p.name}_storage[rvk_i])) return false;"
                 )
             decode_lines.append(f"{pad}    }}")
             if nullable:
@@ -203,23 +203,23 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             decl_lines.append(f"    const {elem}** {p.name}_outer = nullptr;")
             decode_lines.append(f"    {{")
             decode_lines.append(
-                f"        const std::uint32_t __n_outer = static_cast<std::uint32_t>({srv_outer});")
+                f"        const std::uint32_t rvk_n_outer = static_cast<std::uint32_t>({srv_outer});")
             decode_lines.append(
-                f"        auto** __ptrs = arena.allocate<const {elem}*>(__n_outer);")
-            decode_lines.append("        for (std::uint32_t __i = 0; __i < __n_outer; ++__i) {")
+                f"        auto** rvk_ptrs = arena.allocate<const {elem}*>(rvk_n_outer);")
+            decode_lines.append("        for (std::uint32_t rvk_i = 0; rvk_i < rvk_n_outer; ++rvk_i) {")
             decode_lines.append(
-                f"            const std::uint32_t __n = static_cast<std::uint32_t>({sib}_storage[__i].{member});")
-            decode_lines.append(f"            auto* __inner = arena.allocate<{elem}>(__n);")
-            decode_lines.append("            for (std::uint32_t __j = 0; __j < __n; ++__j) {")
+                f"            const std::uint32_t rvk_n = static_cast<std::uint32_t>({sib}_storage[rvk_i].{member});")
+            decode_lines.append(f"            auto* rvk_inner = arena.allocate<{elem}>(rvk_n);")
+            decode_lines.append("            for (std::uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {")
             if kind == "in_struct_array2":
                 decode_lines.append(
-                    f"                if (!deserialize_{elem}(r, &__inner[__j], arena)) return false;")
+                    f"                if (!deserialize_{elem}(r, &rvk_inner[rvk_j], arena)) return false;")
             else:
-                decode_lines.append("                if (!r.read_pod(__inner[__j])) return false;")
+                decode_lines.append("                if (!r.read_pod(rvk_inner[rvk_j])) return false;")
             decode_lines.append("            }")
-            decode_lines.append("            __ptrs[__i] = __inner;")
+            decode_lines.append("            rvk_ptrs[rvk_i] = rvk_inner;")
             decode_lines.append("        }")
-            decode_lines.append(f"        {p.name}_outer = __ptrs;")
+            decode_lines.append(f"        {p.name}_outer = rvk_ptrs;")
             decode_lines.append("    }")
             call_args.append(f"{p.name}_outer")
         elif kind == "in_byte_array":
@@ -242,10 +242,10 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 f"    {p.type.base} {p.name}_local[{p.type.fixed_dim}]{{}};"
             )
             decode_lines.append(
-                f"    for (std::uint32_t __i = 0; __i < {p.type.fixed_dim}u; ++__i) {{"
+                f"    for (std::uint32_t rvk_i = 0; rvk_i < {p.type.fixed_dim}u; ++rvk_i) {{"
             )
             decode_lines.append(
-                f"        if (!r.read_pod({p.name}_local[__i])) return false;"
+                f"        if (!r.read_pod({p.name}_local[rvk_i])) return false;"
             )
             decode_lines.append("    }")
             call_args.append(f"{p.name}_local")
@@ -293,15 +293,15 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             )
             call_args.append(f"{p.name}_storage")
             out_after_call.append(
-                f"    for (std::size_t __k = 0; __k < {p.name}_storage_count; ++__k) {{"
+                f"    for (std::size_t rvk_k = 0; rvk_k < {p.name}_storage_count; ++rvk_k) {{"
             )
             if kind in ("out_handle_array", "out_struct_array"):
                 out_after_call.append(
-                    f"        serialize_{elem}(reply, {p.name}_storage[__k]);"
+                    f"        serialize_{elem}(reply, {p.name}_storage[rvk_k]);"
                 )
             else:
                 out_after_call.append(
-                    f"        reply.write_pod({p.name}_storage[__k]);"
+                    f"        reply.write_pod({p.name}_storage[rvk_k]);"
                 )
             out_after_call.append("    }")
         i += 1

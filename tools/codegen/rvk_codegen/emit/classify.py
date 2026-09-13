@@ -282,42 +282,6 @@ def signature(cmd: Command, *, prefix: str) -> str:
     return f"{prefix}({args})"
 
 
-def trace_format_and_args(cmd: Command, reg: Registry,
-                           *, value_prefix: str = "") -> tuple[str, list[str]]:
-    """Build a (format_string, runtime_args) pair for tracing ``cmd``.
-
-    The format string looks like ``"(device={}, ...)"`` with one ``{}``
-    per scalar / handle param. Pointer and fixed-array params are
-    rendered as ``=ptr`` literally so they don't need a runtime arg.
-
-    ``value_prefix`` is prepended to each runtime arg name — useful on
-    the server side where deserialized locals live behind ``...`` (no
-    prefix) but in/out struct ptrs use ``..._local`` etc.; pass empty
-    on the client side where param names are the function's own args.
-    """
-    parts: list[str] = []
-    args: list[str] = []
-    for p in cmd.params:
-        if p.type.pointer_depth > 0 or p.type.fixed_dim is not None:
-            parts.append(f"{p.name}=ptr")
-        elif p.type.base in reg.handles:
-            # Not ``static_cast<const void*>``: a 32-bit build spells
-            # non-dispatchable handles ``uint64_t``, which is not a
-            # pointer. ``rvk::instr::trace_handle`` is the overload pair
-            # that takes either and yields an integer.
-            parts.append(f"{p.name}={{:#x}}")
-            args.append(f"::rvk::instr::trace_handle({value_prefix}{p.name})")
-        elif p.type.base in ("float", "double"):
-            parts.append(f"{p.name}={{}}")
-            args.append(f"{value_prefix}{p.name}")
-        else:
-            # Catches uint32_t, VkFormat, VkSampleCountFlagBits, etc.
-            # Cast to long long to avoid fmt's enum-formatter issues.
-            parts.append(f"{p.name}={{}}")
-            args.append(f"static_cast<long long>({value_prefix}{p.name})")
-    return "(" + ", ".join(parts) + ")", args
-
-
 # 64-bit scalar return types. Vulkan commands overwhelmingly return
 # VkResult, and the wire format encoded every return as int32 on that
 # assumption. The address queries break it: a VkDeviceAddress truncated

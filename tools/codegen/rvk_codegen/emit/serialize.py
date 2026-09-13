@@ -347,9 +347,9 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
         if _is_size_t(m):
             return [
                 "    {",
-                "        std::uint64_t __wide = 0;",
-                "        if (!r.read_pod(__wide)) { return false; }",
-                f"        out->{m.name} = static_cast<decltype(out->{m.name})>(__wide);",
+                "        std::uint64_t rvk_wide = 0;",
+                "        if (!r.read_pod(rvk_wide)) { return false; }",
+                f"        out->{m.name} = static_cast<decltype(out->{m.name})>(rvk_wide);",
                 "    }",
             ]
         return [f"    if (!r.read_pod(out->{m.name})) {{ return false; }}"]

@@ -16,7 +16,7 @@ from .common import GENERATED_BANNER, header_guard, write
 
 
 # RVK-internal control commands. Keep the numeric values in sync with
-# ``src/protocol/include/rvk/protocol/frame.hpp``. They live there as the
+# ``docs/protocol.md``. They live there as the
 # wire-format source of truth; this list lets cmd_id_to_string render
 # them, and bumps in frame.hpp need a corresponding bump here. There's
 # no chicken-and-egg: the header already uses these names too.

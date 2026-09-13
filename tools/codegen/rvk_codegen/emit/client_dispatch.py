@@ -43,7 +43,7 @@ def _out_handle_is_raw(reg: Registry, p, params) -> bool:
 
 
 def _signature(reg: Registry, cmd: Command) -> str:
-    args = ["::rvk::protocol::Transport& t"]
+    args = ["::av::ClientTransport& t"]
     for p in cmd.params:
         if _out_handle_is_raw(reg, p, cmd.params):
             args.append(f"std::uint64_t* {p.name}")
@@ -57,12 +57,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     is_async = cmd.sync_mode == "async"
     on_fail = "    return;" if is_void else "    return VK_ERROR_DEVICE_LOST;"
 
-    fmt, fmt_args = classify.trace_format_and_args(cmd, reg)
-    fmt_args_str = ("," + ", ".join(fmt_args)) if fmt_args else ""
-    lines: list[str] = [
-        f'RVK_TRACE("client {cmd.name}{fmt}"{fmt_args_str});',
-        "::av::WireWriter payload;",
-    ]
+    lines: list[str] = ["::av::WireWriter payload;"]
 
     # ---- Encode inputs ----
     i = 0
@@ -124,9 +119,9 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             # guard it with a presence byte so the loop never walks off a
             # null pointer, and the server can hand the driver null back.
             elem_line = (
-                f"    payload.write_pod({p.name}[__i]);"
+                f"    payload.write_pod({p.name}[rvk_i]);"
                 if kind == "in_pod_array"
-                else f"    serialize_{p.type.base}(payload, {p.name}[__i]);"
+                else f"    serialize_{p.type.base}(payload, {p.name}[rvk_i]);"
             )
             nullable = bool(p.optional_levels) and p.optional_levels[0]
             pad = ""
@@ -138,7 +133,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 lines.append(f"if ({p.name}_present) {{")
                 pad = "    "
             lines.append(
-                f"{pad}for (std::uint32_t __i = 0; __i < static_cast<std::uint32_t>({p.len_expr}); ++__i) {{"
+                f"{pad}for (std::uint32_t rvk_i = 0; rvk_i < static_cast<std::uint32_t>({p.len_expr}); ++rvk_i) {{"
             )
             lines.append(f"{pad}{elem_line}")
             lines.append(f"{pad}}}")
@@ -148,13 +143,13 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             # Outer array of pointers; each inner array's length comes
             # from a member of the matching element of a sibling array.
             sib, _, member = p.inner_len.partition(".")
-            lines.append(f"for (std::uint32_t __i = 0; __i < static_cast<std::uint32_t>({p.len_expr}); ++__i) {{")
-            lines.append(f"    const std::uint32_t __n = static_cast<std::uint32_t>({sib}[__i].{member});")
-            lines.append(f"    for (std::uint32_t __j = 0; __j < __n; ++__j) {{")
+            lines.append(f"for (std::uint32_t rvk_i = 0; rvk_i < static_cast<std::uint32_t>({p.len_expr}); ++rvk_i) {{")
+            lines.append(f"    const std::uint32_t rvk_n = static_cast<std::uint32_t>({sib}[rvk_i].{member});")
+            lines.append(f"    for (std::uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {{")
             if kind == "in_struct_array2":
-                lines.append(f"        serialize_{p.type.base}(payload, {p.name}[__i][__j]);")
+                lines.append(f"        serialize_{p.type.base}(payload, {p.name}[rvk_i][rvk_j]);")
             else:
-                lines.append(f"        payload.write_pod({p.name}[__i][__j]);")
+                lines.append(f"        payload.write_pod({p.name}[rvk_i][rvk_j]);")
             lines.append("    }")
             lines.append("}")
         elif kind == "in_byte_array":
@@ -165,9 +160,9 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append("}")
         elif kind == "in_fixed_array":
             lines.append(
-                f"for (std::uint32_t __i = 0; __i < {p.type.fixed_dim}u; ++__i) {{"
+                f"for (std::uint32_t rvk_i = 0; rvk_i < {p.type.fixed_dim}u; ++rvk_i) {{"
             )
-            lines.append(f"    payload.write_pod({p.name}[__i]);")
+            lines.append(f"    payload.write_pod({p.name}[rvk_i]);")
             lines.append("}")
         elif kind == "out_struct":
             # sType-bearing structs need their discriminator on the wire so
@@ -190,9 +185,6 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         lines.append(
             f"(void)t.send_async(::av::vkproto::kCmd_{cmd.name}, payload.bytes());"
         )
-        lines.append(
-            f'RVK_TRACE("client {cmd.name} -> (async, no reply expected)");'
-        )
         # Async-with-result (e.g. vkQueueSubmit when sync_override = "async")
         # is optimistic: errors come back out-of-band on the control stream.
         # Return VK_SUCCESS so the caller's success path runs.
@@ -203,7 +195,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     lines.append("::av::WireWriter reply;")
     lines.append(
         f"if (t.send_sync(::av::vkproto::kCmd_{cmd.name}, payload.bytes(), &reply) "
-        "!= ::rvk::protocol::TransportResult::Ok) {"
+        "!= ::av::TransportResult::Ok) {"
     )
     lines.append(on_fail)
     lines.append("}")
@@ -285,20 +277,20 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             if kind == "out_struct_array":
                 lines.append("::av::WireArena arena_out_arr;")
             lines.append(
-                f"for (std::uint32_t __k = 0; __k < static_cast<std::uint32_t>({p.len_expr}); ++__k) {{"
+                f"for (std::uint32_t rvk_k = 0; rvk_k < static_cast<std::uint32_t>({p.len_expr}); ++rvk_k) {{"
             )
             if kind == "out_handle_array":
-                lines.append(f"    if (!r.read_pod({p.name}[__k])) {{")
+                lines.append(f"    if (!r.read_pod({p.name}[rvk_k])) {{")
                 lines.append("    " + on_fail.lstrip())
                 lines.append("    }")
             elif kind == "out_struct_array":
                 lines.append(
-                    f"    if (!deserialize_{elem}(r, &{p.name}[__k], arena_out_arr)) {{"
+                    f"    if (!deserialize_{elem}(r, &{p.name}[rvk_k], arena_out_arr)) {{"
                 )
                 lines.append("    " + on_fail.lstrip())
                 lines.append("    }")
             else:  # out_pod_array
-                lines.append(f"    if (!r.read_pod({p.name}[__k])) {{")
+                lines.append(f"    if (!r.read_pod({p.name}[rvk_k])) {{")
                 lines.append("    " + on_fail.lstrip())
                 lines.append("    }")
             lines.append("}")
@@ -309,9 +301,6 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         # "unused variable" pylint warning that this block used to need.
         pass
 
-    lines.append(
-        f'RVK_TRACE("client {cmd.name} -> result_code={{}}", result_code);'
-    )
     if not is_void:
         lines.append(f"return static_cast<{cmd.return_type.cpp()}>(result_code);")
     return lines
@@ -328,7 +317,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         "#include <vulkan/vulkan_core.h>",
         "",
-        '#include "rvk/protocol/transport.hpp"',
+        '#include "proto/client_transport.hpp"',
         "",
         "namespace av::vkproto {",
         "",
@@ -346,11 +335,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         '#include "vk_dispatch_client.h"',
         "",
-        # rvk/instr/log.hpp, not rvk/log.hpp — the latter has never
-        # existed. The committed output had been corrected by hand, which
-        # is why check-codegen could not pass and why regenerating broke
-        # the build.
-        '#include "rvk/instr/log.hpp"',
         '#include "proto/wire/wire_writer.hpp"',
         '#include "vk_protocol_ids.h"',
         '#include "vk_serialize.h"',

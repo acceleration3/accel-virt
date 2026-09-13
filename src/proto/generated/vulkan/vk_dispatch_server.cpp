@@ -51,7 +51,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pPhysicalDevices_storage_count != 0) {
                 pPhysicalDevices_storage = arena.allocate<VkPhysicalDevice>(pPhysicalDevices_storage_count);
                 if (pPhysicalDevices_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pPhysicalDevices_storage_count; ++__z) { pPhysicalDevices_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pPhysicalDevices_storage_count; ++rvk_z) { pPhysicalDevices_storage[rvk_z] = {}; }
             }
         }
         VkResult result = s.on_vkEnumeratePhysicalDevices(instance, &pPhysicalDeviceCount_local, array_present ? pPhysicalDevices_storage : nullptr);
@@ -166,7 +166,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pQueueFamilyProperties_storage_count != 0) {
                 pQueueFamilyProperties_storage = arena.allocate<VkQueueFamilyProperties>(pQueueFamilyProperties_storage_count);
                 if (pQueueFamilyProperties_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pQueueFamilyProperties_storage_count; ++__z) { pQueueFamilyProperties_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pQueueFamilyProperties_storage_count; ++rvk_z) { pQueueFamilyProperties_storage[rvk_z] = {}; }
             }
         }
         s.on_vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &pQueueFamilyPropertyCount_local, array_present ? pQueueFamilyProperties_storage : nullptr);
@@ -203,7 +203,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pProperties_storage_count != 0) {
                 pProperties_storage = arena.allocate<VkSparseImageFormatProperties>(pProperties_storage_count);
                 if (pProperties_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pProperties_storage_count; ++__z) { pProperties_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
             }
         }
         s.on_vkGetPhysicalDeviceSparseImageFormatProperties(physicalDevice, format, type, samples, usage, tiling, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
@@ -241,7 +241,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pProperties_storage_count != 0) {
                 pProperties_storage = arena.allocate<VkExtensionProperties>(pProperties_storage_count);
                 if (pProperties_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pProperties_storage_count; ++__z) { pProperties_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
             }
         }
         VkResult result = s.on_vkEnumerateDeviceExtensionProperties(physicalDevice, pLayerName, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
@@ -268,7 +268,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pProperties_storage_count != 0) {
                 pProperties_storage = arena.allocate<VkLayerProperties>(pProperties_storage_count);
                 if (pProperties_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pProperties_storage_count; ++__z) { pProperties_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
             }
         }
         VkResult result = s.on_vkEnumerateDeviceLayerProperties(physicalDevice, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
@@ -343,9 +343,9 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pQueueFamilyProperties_storage_count != 0) {
                 pQueueFamilyProperties_storage = arena.allocate<VkQueueFamilyProperties2>(pQueueFamilyProperties_storage_count);
                 if (pQueueFamilyProperties_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pQueueFamilyProperties_storage_count; ++__z) { pQueueFamilyProperties_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pQueueFamilyProperties_storage_count; ++rvk_z) { pQueueFamilyProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t __e = 0; __e < pQueueFamilyProperties_storage_count; ++__e) { pQueueFamilyProperties_storage[__e].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2; pQueueFamilyProperties_storage[__e].pNext = nullptr; }
+            for (std::size_t rvk_e = 0; rvk_e < pQueueFamilyProperties_storage_count; ++rvk_e) { pQueueFamilyProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2; pQueueFamilyProperties_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetPhysicalDeviceQueueFamilyProperties2(physicalDevice, &pQueueFamilyPropertyCount_local, array_present ? pQueueFamilyProperties_storage : nullptr);
         reply.write_pod<std::int32_t>(0);
@@ -373,9 +373,9 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pProperties_storage_count != 0) {
                 pProperties_storage = arena.allocate<VkSparseImageFormatProperties2>(pProperties_storage_count);
                 if (pProperties_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pProperties_storage_count; ++__z) { pProperties_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t __e = 0; __e < pProperties_storage_count; ++__e) { pProperties_storage[__e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2; pProperties_storage[__e].pNext = nullptr; }
+            for (std::size_t rvk_e = 0; rvk_e < pProperties_storage_count; ++rvk_e) { pProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2; pProperties_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetPhysicalDeviceSparseImageFormatProperties2(physicalDevice, &pFormatInfo_local, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
         reply.write_pod<std::int32_t>(0);
@@ -593,10 +593,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pFences_storage_count != 0) {
             pFences_storage = arena.allocate<VkFence>(pFences_storage_count);
             if (pFences_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pFences_storage_count; ++__z) { pFences_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pFences_storage_count; ++rvk_z) { pFences_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pFences_storage_count; ++__i) {
-            if (!deserialize_VkFence(r, pFences_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pFences_storage_count; ++rvk_i) {
+            if (!deserialize_VkFence(r, pFences_storage[rvk_i])) return false;
         }
         VkResult result = s.on_vkResetFences(device, fenceCount, pFences_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -615,10 +615,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pFences_storage_count != 0) {
             pFences_storage = arena.allocate<VkFence>(pFences_storage_count);
             if (pFences_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pFences_storage_count; ++__z) { pFences_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pFences_storage_count; ++rvk_z) { pFences_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pFences_storage_count; ++__i) {
-            if (!deserialize_VkFence(r, pFences_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pFences_storage_count; ++rvk_i) {
+            if (!deserialize_VkFence(r, pFences_storage[rvk_i])) return false;
         }
         if (!r.read_pod(waitAll)) return false;
         if (!r.read_pod(timeout)) return false;
@@ -844,10 +844,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pCommandBuffers_storage_count != 0) {
             pCommandBuffers_storage = arena.allocate<VkCommandBuffer>(pCommandBuffers_storage_count);
             if (pCommandBuffers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pCommandBuffers_storage_count; ++__z) { pCommandBuffers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pCommandBuffers_storage_count; ++rvk_z) { pCommandBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pCommandBuffers_storage_count; ++__i) {
-            if (!deserialize_VkCommandBuffer(r, pCommandBuffers_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pCommandBuffers_storage_count; ++rvk_i) {
+            if (!deserialize_VkCommandBuffer(r, pCommandBuffers_storage[rvk_i])) return false;
         }
         s.on_vkFreeCommandBuffers(device, commandPool, commandBufferCount, pCommandBuffers_storage);
         return true;
@@ -864,10 +864,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pSubmits_storage_count != 0) {
             pSubmits_storage = arena.allocate<VkSubmitInfo>(pSubmits_storage_count);
             if (pSubmits_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pSubmits_storage_count; ++__z) { pSubmits_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pSubmits_storage_count; ++rvk_z) { pSubmits_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pSubmits_storage_count; ++__i) {
-            if (!deserialize_VkSubmitInfo(r, &pSubmits_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pSubmits_storage_count; ++rvk_i) {
+            if (!deserialize_VkSubmitInfo(r, &pSubmits_storage[rvk_i], arena)) return false;
         }
         if (!deserialize_VkFence(r, fence)) return false;
         VkResult result = s.on_vkQueueSubmit(queue, submitCount, pSubmits_storage, fence);
@@ -897,10 +897,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pViewports_storage_count != 0) {
             pViewports_storage = arena.allocate<VkViewport>(pViewports_storage_count);
             if (pViewports_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pViewports_storage_count; ++__z) { pViewports_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pViewports_storage_count; ++rvk_z) { pViewports_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pViewports_storage_count; ++__i) {
-            if (!deserialize_VkViewport(r, &pViewports_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pViewports_storage_count; ++rvk_i) {
+            if (!deserialize_VkViewport(r, &pViewports_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetViewport(commandBuffer, firstViewport, viewportCount, pViewports_storage);
         return true;
@@ -918,10 +918,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pScissors_storage_count != 0) {
             pScissors_storage = arena.allocate<VkRect2D>(pScissors_storage_count);
             if (pScissors_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pScissors_storage_count; ++__z) { pScissors_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pScissors_storage_count; ++rvk_z) { pScissors_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pScissors_storage_count; ++__i) {
-            if (!deserialize_VkRect2D(r, &pScissors_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pScissors_storage_count; ++rvk_i) {
+            if (!deserialize_VkRect2D(r, &pScissors_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetScissor(commandBuffer, firstScissor, scissorCount, pScissors_storage);
         return true;
@@ -941,19 +941,19 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pBuffers_storage_count != 0) {
             pBuffers_storage = arena.allocate<VkBuffer>(pBuffers_storage_count);
             if (pBuffers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pBuffers_storage_count; ++__z) { pBuffers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pBuffers_storage_count; ++rvk_z) { pBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pBuffers_storage_count; ++__i) {
-            if (!deserialize_VkBuffer(r, pBuffers_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pBuffers_storage_count; ++rvk_i) {
+            if (!deserialize_VkBuffer(r, pBuffers_storage[rvk_i])) return false;
         }
         pOffsets_storage_count = static_cast<std::size_t>(bindingCount);
         if (pOffsets_storage_count != 0) {
             pOffsets_storage = arena.allocate<VkDeviceSize>(pOffsets_storage_count);
             if (pOffsets_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pOffsets_storage_count; ++__z) { pOffsets_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pOffsets_storage_count; ++rvk_z) { pOffsets_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pOffsets_storage_count; ++__i) {
-            if (!r.read_pod(pOffsets_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pOffsets_storage_count; ++rvk_i) {
+            if (!r.read_pod(pOffsets_storage[rvk_i])) return false;
         }
         s.on_vkCmdBindVertexBuffers(commandBuffer, firstBinding, bindingCount, pBuffers_storage, pOffsets_storage);
         return true;
@@ -990,20 +990,20 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pDescriptorSets_storage_count != 0) {
             pDescriptorSets_storage = arena.allocate<VkDescriptorSet>(pDescriptorSets_storage_count);
             if (pDescriptorSets_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pDescriptorSets_storage_count; ++__z) { pDescriptorSets_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pDescriptorSets_storage_count; ++rvk_z) { pDescriptorSets_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pDescriptorSets_storage_count; ++__i) {
-            if (!deserialize_VkDescriptorSet(r, pDescriptorSets_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pDescriptorSets_storage_count; ++rvk_i) {
+            if (!deserialize_VkDescriptorSet(r, pDescriptorSets_storage[rvk_i])) return false;
         }
         if (!r.read_pod(dynamicOffsetCount)) return false;
         pDynamicOffsets_storage_count = static_cast<std::size_t>(dynamicOffsetCount);
         if (pDynamicOffsets_storage_count != 0) {
             pDynamicOffsets_storage = arena.allocate<uint32_t>(pDynamicOffsets_storage_count);
             if (pDynamicOffsets_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pDynamicOffsets_storage_count; ++__z) { pDynamicOffsets_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pDynamicOffsets_storage_count; ++rvk_z) { pDynamicOffsets_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pDynamicOffsets_storage_count; ++__i) {
-            if (!r.read_pod(pDynamicOffsets_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pDynamicOffsets_storage_count; ++rvk_i) {
+            if (!r.read_pod(pDynamicOffsets_storage[rvk_i])) return false;
         }
         s.on_vkCmdBindDescriptorSets(commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSetCount, pDescriptorSets_storage, dynamicOffsetCount, pDynamicOffsets_storage);
         return true;
@@ -1061,30 +1061,30 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pMemoryBarriers_storage_count != 0) {
             pMemoryBarriers_storage = arena.allocate<VkMemoryBarrier>(pMemoryBarriers_storage_count);
             if (pMemoryBarriers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pMemoryBarriers_storage_count; ++__z) { pMemoryBarriers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pMemoryBarriers_storage_count; ++rvk_z) { pMemoryBarriers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pMemoryBarriers_storage_count; ++__i) {
-            if (!deserialize_VkMemoryBarrier(r, &pMemoryBarriers_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pMemoryBarriers_storage_count; ++rvk_i) {
+            if (!deserialize_VkMemoryBarrier(r, &pMemoryBarriers_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(bufferMemoryBarrierCount)) return false;
         pBufferMemoryBarriers_storage_count = static_cast<std::size_t>(bufferMemoryBarrierCount);
         if (pBufferMemoryBarriers_storage_count != 0) {
             pBufferMemoryBarriers_storage = arena.allocate<VkBufferMemoryBarrier>(pBufferMemoryBarriers_storage_count);
             if (pBufferMemoryBarriers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pBufferMemoryBarriers_storage_count; ++__z) { pBufferMemoryBarriers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pBufferMemoryBarriers_storage_count; ++rvk_z) { pBufferMemoryBarriers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pBufferMemoryBarriers_storage_count; ++__i) {
-            if (!deserialize_VkBufferMemoryBarrier(r, &pBufferMemoryBarriers_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pBufferMemoryBarriers_storage_count; ++rvk_i) {
+            if (!deserialize_VkBufferMemoryBarrier(r, &pBufferMemoryBarriers_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(imageMemoryBarrierCount)) return false;
         pImageMemoryBarriers_storage_count = static_cast<std::size_t>(imageMemoryBarrierCount);
         if (pImageMemoryBarriers_storage_count != 0) {
             pImageMemoryBarriers_storage = arena.allocate<VkImageMemoryBarrier>(pImageMemoryBarriers_storage_count);
             if (pImageMemoryBarriers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pImageMemoryBarriers_storage_count; ++__z) { pImageMemoryBarriers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pImageMemoryBarriers_storage_count; ++rvk_z) { pImageMemoryBarriers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pImageMemoryBarriers_storage_count; ++__i) {
-            if (!deserialize_VkImageMemoryBarrier(r, &pImageMemoryBarriers_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pImageMemoryBarriers_storage_count; ++rvk_i) {
+            if (!deserialize_VkImageMemoryBarrier(r, &pImageMemoryBarriers_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount, pMemoryBarriers_storage, bufferMemoryBarrierCount, pBufferMemoryBarriers_storage, imageMemoryBarrierCount, pImageMemoryBarriers_storage);
         return true;
@@ -1104,10 +1104,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pRegions_storage_count != 0) {
             pRegions_storage = arena.allocate<VkBufferCopy>(pRegions_storage_count);
             if (pRegions_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pRegions_storage_count; ++__z) { pRegions_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pRegions_storage_count; ++__i) {
-            if (!deserialize_VkBufferCopy(r, &pRegions_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
+            if (!deserialize_VkBufferCopy(r, &pRegions_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, regionCount, pRegions_storage);
         return true;
@@ -1173,21 +1173,21 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pCreateInfos_storage_count != 0) {
             pCreateInfos_storage = arena.allocate<VkGraphicsPipelineCreateInfo>(pCreateInfos_storage_count);
             if (pCreateInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pCreateInfos_storage_count; ++__z) { pCreateInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pCreateInfos_storage_count; ++rvk_z) { pCreateInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pCreateInfos_storage_count; ++__i) {
-            if (!deserialize_VkGraphicsPipelineCreateInfo(r, &pCreateInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pCreateInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkGraphicsPipelineCreateInfo(r, &pCreateInfos_storage[rvk_i], arena)) return false;
         }
         pPipelines_storage_count = static_cast<std::size_t>(createInfoCount);
         if (pPipelines_storage_count != 0) {
             pPipelines_storage = arena.allocate<VkPipeline>(pPipelines_storage_count);
             if (pPipelines_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pPipelines_storage_count; ++__z) { pPipelines_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t __k = 0; __k < pPipelines_storage_count; ++__k) {
-            serialize_VkPipeline(reply, pPipelines_storage[__k]);
+        for (std::size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
+            serialize_VkPipeline(reply, pPipelines_storage[rvk_k]);
         }
         return true;
     }
@@ -1205,20 +1205,20 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pDescriptorWrites_storage_count != 0) {
             pDescriptorWrites_storage = arena.allocate<VkWriteDescriptorSet>(pDescriptorWrites_storage_count);
             if (pDescriptorWrites_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pDescriptorWrites_storage_count; ++__z) { pDescriptorWrites_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pDescriptorWrites_storage_count; ++rvk_z) { pDescriptorWrites_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pDescriptorWrites_storage_count; ++__i) {
-            if (!deserialize_VkWriteDescriptorSet(r, &pDescriptorWrites_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pDescriptorWrites_storage_count; ++rvk_i) {
+            if (!deserialize_VkWriteDescriptorSet(r, &pDescriptorWrites_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(descriptorCopyCount)) return false;
         pDescriptorCopies_storage_count = static_cast<std::size_t>(descriptorCopyCount);
         if (pDescriptorCopies_storage_count != 0) {
             pDescriptorCopies_storage = arena.allocate<VkCopyDescriptorSet>(pDescriptorCopies_storage_count);
             if (pDescriptorCopies_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pDescriptorCopies_storage_count; ++__z) { pDescriptorCopies_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pDescriptorCopies_storage_count; ++rvk_z) { pDescriptorCopies_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pDescriptorCopies_storage_count; ++__i) {
-            if (!deserialize_VkCopyDescriptorSet(r, &pDescriptorCopies_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pDescriptorCopies_storage_count; ++rvk_i) {
+            if (!deserialize_VkCopyDescriptorSet(r, &pDescriptorCopies_storage[rvk_i], arena)) return false;
         }
         s.on_vkUpdateDescriptorSets(device, descriptorWriteCount, pDescriptorWrites_storage, descriptorCopyCount, pDescriptorCopies_storage);
         return true;
@@ -1234,12 +1234,12 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pCommandBuffers_storage_count != 0) {
             pCommandBuffers_storage = arena.allocate<VkCommandBuffer>(pCommandBuffers_storage_count);
             if (pCommandBuffers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pCommandBuffers_storage_count; ++__z) { pCommandBuffers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pCommandBuffers_storage_count; ++rvk_z) { pCommandBuffers_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkAllocateCommandBuffers(device, &pAllocateInfo_local, pCommandBuffers_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t __k = 0; __k < pCommandBuffers_storage_count; ++__k) {
-            serialize_VkCommandBuffer(reply, pCommandBuffers_storage[__k]);
+        for (std::size_t rvk_k = 0; rvk_k < pCommandBuffers_storage_count; ++rvk_k) {
+            serialize_VkCommandBuffer(reply, pCommandBuffers_storage[rvk_k]);
         }
         return true;
     }
@@ -1254,12 +1254,12 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pDescriptorSets_storage_count != 0) {
             pDescriptorSets_storage = arena.allocate<VkDescriptorSet>(pDescriptorSets_storage_count);
             if (pDescriptorSets_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pDescriptorSets_storage_count; ++__z) { pDescriptorSets_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pDescriptorSets_storage_count; ++rvk_z) { pDescriptorSets_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkAllocateDescriptorSets(device, &pAllocateInfo_local, pDescriptorSets_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t __k = 0; __k < pDescriptorSets_storage_count; ++__k) {
-            serialize_VkDescriptorSet(reply, pDescriptorSets_storage[__k]);
+        for (std::size_t rvk_k = 0; rvk_k < pDescriptorSets_storage_count; ++rvk_k) {
+            serialize_VkDescriptorSet(reply, pDescriptorSets_storage[rvk_k]);
         }
         return true;
     }
@@ -1276,10 +1276,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pDescriptorSets_storage_count != 0) {
             pDescriptorSets_storage = arena.allocate<VkDescriptorSet>(pDescriptorSets_storage_count);
             if (pDescriptorSets_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pDescriptorSets_storage_count; ++__z) { pDescriptorSets_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pDescriptorSets_storage_count; ++rvk_z) { pDescriptorSets_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pDescriptorSets_storage_count; ++__i) {
-            if (!deserialize_VkDescriptorSet(r, pDescriptorSets_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pDescriptorSets_storage_count; ++rvk_i) {
+            if (!deserialize_VkDescriptorSet(r, pDescriptorSets_storage[rvk_i])) return false;
         }
         VkResult result = s.on_vkFreeDescriptorSets(device, descriptorPool, descriptorSetCount, pDescriptorSets_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -1300,21 +1300,21 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pCreateInfos_storage_count != 0) {
             pCreateInfos_storage = arena.allocate<VkComputePipelineCreateInfo>(pCreateInfos_storage_count);
             if (pCreateInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pCreateInfos_storage_count; ++__z) { pCreateInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pCreateInfos_storage_count; ++rvk_z) { pCreateInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pCreateInfos_storage_count; ++__i) {
-            if (!deserialize_VkComputePipelineCreateInfo(r, &pCreateInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pCreateInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkComputePipelineCreateInfo(r, &pCreateInfos_storage[rvk_i], arena)) return false;
         }
         pPipelines_storage_count = static_cast<std::size_t>(createInfoCount);
         if (pPipelines_storage_count != 0) {
             pPipelines_storage = arena.allocate<VkPipeline>(pPipelines_storage_count);
             if (pPipelines_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pPipelines_storage_count; ++__z) { pPipelines_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkCreateComputePipelines(device, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t __k = 0; __k < pPipelines_storage_count; ++__k) {
-            serialize_VkPipeline(reply, pPipelines_storage[__k]);
+        for (std::size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
+            serialize_VkPipeline(reply, pPipelines_storage[rvk_k]);
         }
         return true;
     }
@@ -1417,10 +1417,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pEvents_storage_count != 0) {
             pEvents_storage = arena.allocate<VkEvent>(pEvents_storage_count);
             if (pEvents_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pEvents_storage_count; ++__z) { pEvents_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pEvents_storage_count; ++rvk_z) { pEvents_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pEvents_storage_count; ++__i) {
-            if (!deserialize_VkEvent(r, pEvents_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pEvents_storage_count; ++rvk_i) {
+            if (!deserialize_VkEvent(r, pEvents_storage[rvk_i])) return false;
         }
         if (!r.read_pod(srcStageMask)) return false;
         if (!r.read_pod(dstStageMask)) return false;
@@ -1429,30 +1429,30 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pMemoryBarriers_storage_count != 0) {
             pMemoryBarriers_storage = arena.allocate<VkMemoryBarrier>(pMemoryBarriers_storage_count);
             if (pMemoryBarriers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pMemoryBarriers_storage_count; ++__z) { pMemoryBarriers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pMemoryBarriers_storage_count; ++rvk_z) { pMemoryBarriers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pMemoryBarriers_storage_count; ++__i) {
-            if (!deserialize_VkMemoryBarrier(r, &pMemoryBarriers_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pMemoryBarriers_storage_count; ++rvk_i) {
+            if (!deserialize_VkMemoryBarrier(r, &pMemoryBarriers_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(bufferMemoryBarrierCount)) return false;
         pBufferMemoryBarriers_storage_count = static_cast<std::size_t>(bufferMemoryBarrierCount);
         if (pBufferMemoryBarriers_storage_count != 0) {
             pBufferMemoryBarriers_storage = arena.allocate<VkBufferMemoryBarrier>(pBufferMemoryBarriers_storage_count);
             if (pBufferMemoryBarriers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pBufferMemoryBarriers_storage_count; ++__z) { pBufferMemoryBarriers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pBufferMemoryBarriers_storage_count; ++rvk_z) { pBufferMemoryBarriers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pBufferMemoryBarriers_storage_count; ++__i) {
-            if (!deserialize_VkBufferMemoryBarrier(r, &pBufferMemoryBarriers_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pBufferMemoryBarriers_storage_count; ++rvk_i) {
+            if (!deserialize_VkBufferMemoryBarrier(r, &pBufferMemoryBarriers_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(imageMemoryBarrierCount)) return false;
         pImageMemoryBarriers_storage_count = static_cast<std::size_t>(imageMemoryBarrierCount);
         if (pImageMemoryBarriers_storage_count != 0) {
             pImageMemoryBarriers_storage = arena.allocate<VkImageMemoryBarrier>(pImageMemoryBarriers_storage_count);
             if (pImageMemoryBarriers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pImageMemoryBarriers_storage_count; ++__z) { pImageMemoryBarriers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pImageMemoryBarriers_storage_count; ++rvk_z) { pImageMemoryBarriers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pImageMemoryBarriers_storage_count; ++__i) {
-            if (!deserialize_VkImageMemoryBarrier(r, &pImageMemoryBarriers_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pImageMemoryBarriers_storage_count; ++rvk_i) {
+            if (!deserialize_VkImageMemoryBarrier(r, &pImageMemoryBarriers_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdWaitEvents(commandBuffer, eventCount, pEvents_storage, srcStageMask, dstStageMask, memoryBarrierCount, pMemoryBarriers_storage, bufferMemoryBarrierCount, pBufferMemoryBarriers_storage, imageMemoryBarrierCount, pImageMemoryBarriers_storage);
         return true;
@@ -1476,10 +1476,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pRegions_storage_count != 0) {
             pRegions_storage = arena.allocate<VkImageCopy>(pRegions_storage_count);
             if (pRegions_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pRegions_storage_count; ++__z) { pRegions_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pRegions_storage_count; ++__i) {
-            if (!deserialize_VkImageCopy(r, &pRegions_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
+            if (!deserialize_VkImageCopy(r, &pRegions_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdCopyImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions_storage);
         return true;
@@ -1501,10 +1501,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pRegions_storage_count != 0) {
             pRegions_storage = arena.allocate<VkBufferImageCopy>(pRegions_storage_count);
             if (pRegions_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pRegions_storage_count; ++__z) { pRegions_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pRegions_storage_count; ++__i) {
-            if (!deserialize_VkBufferImageCopy(r, &pRegions_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
+            if (!deserialize_VkBufferImageCopy(r, &pRegions_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdCopyBufferToImage(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions_storage);
         return true;
@@ -1526,10 +1526,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pRegions_storage_count != 0) {
             pRegions_storage = arena.allocate<VkBufferImageCopy>(pRegions_storage_count);
             if (pRegions_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pRegions_storage_count; ++__z) { pRegions_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pRegions_storage_count; ++__i) {
-            if (!deserialize_VkBufferImageCopy(r, &pRegions_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
+            if (!deserialize_VkBufferImageCopy(r, &pRegions_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdCopyImageToBuffer(commandBuffer, srcImage, srcImageLayout, dstBuffer, regionCount, pRegions_storage);
         return true;
@@ -1554,10 +1554,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pRegions_storage_count != 0) {
             pRegions_storage = arena.allocate<VkImageBlit>(pRegions_storage_count);
             if (pRegions_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pRegions_storage_count; ++__z) { pRegions_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pRegions_storage_count; ++__i) {
-            if (!deserialize_VkImageBlit(r, &pRegions_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
+            if (!deserialize_VkImageBlit(r, &pRegions_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(filter)) return false;
         s.on_vkCmdBlitImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions_storage, filter);
@@ -1580,10 +1580,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pRanges_storage_count != 0) {
             pRanges_storage = arena.allocate<VkImageSubresourceRange>(pRanges_storage_count);
             if (pRanges_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pRanges_storage_count; ++__z) { pRanges_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pRanges_storage_count; ++rvk_z) { pRanges_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pRanges_storage_count; ++__i) {
-            if (!deserialize_VkImageSubresourceRange(r, &pRanges_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pRanges_storage_count; ++rvk_i) {
+            if (!deserialize_VkImageSubresourceRange(r, &pRanges_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdClearColorImage(commandBuffer, image, imageLayout, &pColor_local, rangeCount, pRanges_storage);
         return true;
@@ -1605,10 +1605,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pRanges_storage_count != 0) {
             pRanges_storage = arena.allocate<VkImageSubresourceRange>(pRanges_storage_count);
             if (pRanges_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pRanges_storage_count; ++__z) { pRanges_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pRanges_storage_count; ++rvk_z) { pRanges_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pRanges_storage_count; ++__i) {
-            if (!deserialize_VkImageSubresourceRange(r, &pRanges_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pRanges_storage_count; ++rvk_i) {
+            if (!deserialize_VkImageSubresourceRange(r, &pRanges_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdClearDepthStencilImage(commandBuffer, image, imageLayout, &pDepthStencil_local, rangeCount, pRanges_storage);
         return true;
@@ -1627,20 +1627,20 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pAttachments_storage_count != 0) {
             pAttachments_storage = arena.allocate<VkClearAttachment>(pAttachments_storage_count);
             if (pAttachments_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pAttachments_storage_count; ++__z) { pAttachments_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pAttachments_storage_count; ++rvk_z) { pAttachments_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pAttachments_storage_count; ++__i) {
-            if (!deserialize_VkClearAttachment(r, &pAttachments_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pAttachments_storage_count; ++rvk_i) {
+            if (!deserialize_VkClearAttachment(r, &pAttachments_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(rectCount)) return false;
         pRects_storage_count = static_cast<std::size_t>(rectCount);
         if (pRects_storage_count != 0) {
             pRects_storage = arena.allocate<VkClearRect>(pRects_storage_count);
             if (pRects_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pRects_storage_count; ++__z) { pRects_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pRects_storage_count; ++rvk_z) { pRects_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pRects_storage_count; ++__i) {
-            if (!deserialize_VkClearRect(r, &pRects_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pRects_storage_count; ++rvk_i) {
+            if (!deserialize_VkClearRect(r, &pRects_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdClearAttachments(commandBuffer, attachmentCount, pAttachments_storage, rectCount, pRects_storage);
         return true;
@@ -1703,8 +1703,8 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         float blendConstants_local[4]{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
-        for (std::uint32_t __i = 0; __i < 4u; ++__i) {
-            if (!r.read_pod(blendConstants_local[__i])) return false;
+        for (std::uint32_t rvk_i = 0; rvk_i < 4u; ++rvk_i) {
+            if (!r.read_pod(blendConstants_local[rvk_i])) return false;
         }
         s.on_vkCmdSetBlendConstants(commandBuffer, blendConstants_local);
         return true;
@@ -1810,10 +1810,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pCommandBuffers_storage_count != 0) {
             pCommandBuffers_storage = arena.allocate<VkCommandBuffer>(pCommandBuffers_storage_count);
             if (pCommandBuffers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pCommandBuffers_storage_count; ++__z) { pCommandBuffers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pCommandBuffers_storage_count; ++rvk_z) { pCommandBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pCommandBuffers_storage_count; ++__i) {
-            if (!deserialize_VkCommandBuffer(r, pCommandBuffers_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pCommandBuffers_storage_count; ++rvk_i) {
+            if (!deserialize_VkCommandBuffer(r, pCommandBuffers_storage[rvk_i])) return false;
         }
         s.on_vkCmdExecuteCommands(commandBuffer, commandBufferCount, pCommandBuffers_storage);
         return true;
@@ -1840,10 +1840,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pBindInfos_storage_count != 0) {
             pBindInfos_storage = arena.allocate<VkBindBufferMemoryInfo>(pBindInfos_storage_count);
             if (pBindInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pBindInfos_storage_count; ++__z) { pBindInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pBindInfos_storage_count; ++rvk_z) { pBindInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pBindInfos_storage_count; ++__i) {
-            if (!deserialize_VkBindBufferMemoryInfo(r, &pBindInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pBindInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkBindBufferMemoryInfo(r, &pBindInfos_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkBindBufferMemory2(device, bindInfoCount, pBindInfos_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -1860,10 +1860,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pBindInfos_storage_count != 0) {
             pBindInfos_storage = arena.allocate<VkBindImageMemoryInfo>(pBindInfos_storage_count);
             if (pBindInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pBindInfos_storage_count; ++__z) { pBindInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pBindInfos_storage_count; ++rvk_z) { pBindInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pBindInfos_storage_count; ++__i) {
-            if (!deserialize_VkBindImageMemoryInfo(r, &pBindInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pBindInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkBindImageMemoryInfo(r, &pBindInfos_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkBindImageMemory2(device, bindInfoCount, pBindInfos_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -1920,19 +1920,19 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pBuffers_storage_count != 0) {
             pBuffers_storage = arena.allocate<VkBuffer>(pBuffers_storage_count);
             if (pBuffers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pBuffers_storage_count; ++__z) { pBuffers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pBuffers_storage_count; ++rvk_z) { pBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pBuffers_storage_count; ++__i) {
-            if (!deserialize_VkBuffer(r, pBuffers_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pBuffers_storage_count; ++rvk_i) {
+            if (!deserialize_VkBuffer(r, pBuffers_storage[rvk_i])) return false;
         }
         pOffsets_storage_count = static_cast<std::size_t>(bindingCount);
         if (pOffsets_storage_count != 0) {
             pOffsets_storage = arena.allocate<VkDeviceSize>(pOffsets_storage_count);
             if (pOffsets_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pOffsets_storage_count; ++__z) { pOffsets_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pOffsets_storage_count; ++rvk_z) { pOffsets_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pOffsets_storage_count; ++__i) {
-            if (!r.read_pod(pOffsets_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pOffsets_storage_count; ++rvk_i) {
+            if (!r.read_pod(pOffsets_storage[rvk_i])) return false;
         }
         if (!r.read_pod(pSizes_present)) return false;
         if (pSizes_present) {
@@ -1940,10 +1940,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pSizes_storage_count != 0) {
                 pSizes_storage = arena.allocate<VkDeviceSize>(pSizes_storage_count);
                 if (pSizes_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pSizes_storage_count; ++__z) { pSizes_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pSizes_storage_count; ++rvk_z) { pSizes_storage[rvk_z] = {}; }
             }
-            for (std::size_t __i = 0; __i < pSizes_storage_count; ++__i) {
-                if (!r.read_pod(pSizes_storage[__i])) return false;
+            for (std::size_t rvk_i = 0; rvk_i < pSizes_storage_count; ++rvk_i) {
+                if (!r.read_pod(pSizes_storage[rvk_i])) return false;
             }
         }
         if (!r.read_pod(pStrides_present)) return false;
@@ -1952,10 +1952,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pStrides_storage_count != 0) {
                 pStrides_storage = arena.allocate<VkDeviceSize>(pStrides_storage_count);
                 if (pStrides_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pStrides_storage_count; ++__z) { pStrides_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pStrides_storage_count; ++rvk_z) { pStrides_storage[rvk_z] = {}; }
             }
-            for (std::size_t __i = 0; __i < pStrides_storage_count; ++__i) {
-                if (!r.read_pod(pStrides_storage[__i])) return false;
+            for (std::size_t rvk_i = 0; rvk_i < pStrides_storage_count; ++rvk_i) {
+                if (!r.read_pod(pStrides_storage[rvk_i])) return false;
             }
         }
         s.on_vkCmdBindVertexBuffers2(commandBuffer, firstBinding, bindingCount, pBuffers_storage, pOffsets_storage, pSizes_present ? pSizes_storage : nullptr, pStrides_present ? pStrides_storage : nullptr);
@@ -2158,10 +2158,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pRegions_storage_count != 0) {
             pRegions_storage = arena.allocate<VkImageResolve>(pRegions_storage_count);
             if (pRegions_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pRegions_storage_count; ++__z) { pRegions_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pRegions_storage_count; ++__i) {
-            if (!deserialize_VkImageResolve(r, &pRegions_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
+            if (!deserialize_VkImageResolve(r, &pRegions_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdResolveImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions_storage);
         return true;
@@ -2283,10 +2283,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pScissors_storage_count != 0) {
             pScissors_storage = arena.allocate<VkRect2D>(pScissors_storage_count);
             if (pScissors_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pScissors_storage_count; ++__z) { pScissors_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pScissors_storage_count; ++rvk_z) { pScissors_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pScissors_storage_count; ++__i) {
-            if (!deserialize_VkRect2D(r, &pScissors_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pScissors_storage_count; ++rvk_i) {
+            if (!deserialize_VkRect2D(r, &pScissors_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetScissorWithCount(commandBuffer, scissorCount, pScissors_storage);
         return true;
@@ -2326,10 +2326,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pViewports_storage_count != 0) {
             pViewports_storage = arena.allocate<VkViewport>(pViewports_storage_count);
             if (pViewports_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pViewports_storage_count; ++__z) { pViewports_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pViewports_storage_count; ++rvk_z) { pViewports_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pViewports_storage_count; ++__i) {
-            if (!deserialize_VkViewport(r, &pViewports_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pViewports_storage_count; ++rvk_i) {
+            if (!deserialize_VkViewport(r, &pViewports_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetViewportWithCount(commandBuffer, viewportCount, pViewports_storage);
         return true;
@@ -2347,19 +2347,19 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pEvents_storage_count != 0) {
             pEvents_storage = arena.allocate<VkEvent>(pEvents_storage_count);
             if (pEvents_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pEvents_storage_count; ++__z) { pEvents_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pEvents_storage_count; ++rvk_z) { pEvents_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pEvents_storage_count; ++__i) {
-            if (!deserialize_VkEvent(r, pEvents_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pEvents_storage_count; ++rvk_i) {
+            if (!deserialize_VkEvent(r, pEvents_storage[rvk_i])) return false;
         }
         pDependencyInfos_storage_count = static_cast<std::size_t>(eventCount);
         if (pDependencyInfos_storage_count != 0) {
             pDependencyInfos_storage = arena.allocate<VkDependencyInfo>(pDependencyInfos_storage_count);
             if (pDependencyInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pDependencyInfos_storage_count; ++__z) { pDependencyInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pDependencyInfos_storage_count; ++rvk_z) { pDependencyInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pDependencyInfos_storage_count; ++__i) {
-            if (!deserialize_VkDependencyInfo(r, &pDependencyInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pDependencyInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkDependencyInfo(r, &pDependencyInfos_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdWaitEvents2(commandBuffer, eventCount, pEvents_storage, pDependencyInfos_storage);
         return true;
@@ -2508,9 +2508,9 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pPhysicalDeviceGroupProperties_storage_count != 0) {
                 pPhysicalDeviceGroupProperties_storage = arena.allocate<VkPhysicalDeviceGroupProperties>(pPhysicalDeviceGroupProperties_storage_count);
                 if (pPhysicalDeviceGroupProperties_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pPhysicalDeviceGroupProperties_storage_count; ++__z) { pPhysicalDeviceGroupProperties_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pPhysicalDeviceGroupProperties_storage_count; ++rvk_z) { pPhysicalDeviceGroupProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t __e = 0; __e < pPhysicalDeviceGroupProperties_storage_count; ++__e) { pPhysicalDeviceGroupProperties_storage[__e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES; pPhysicalDeviceGroupProperties_storage[__e].pNext = nullptr; }
+            for (std::size_t rvk_e = 0; rvk_e < pPhysicalDeviceGroupProperties_storage_count; ++rvk_e) { pPhysicalDeviceGroupProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES; pPhysicalDeviceGroupProperties_storage[rvk_e].pNext = nullptr; }
         }
         VkResult result = s.on_vkEnumeratePhysicalDeviceGroups(instance, &pPhysicalDeviceGroupCount_local, array_present ? pPhysicalDeviceGroupProperties_storage : nullptr);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -2533,10 +2533,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pMemoryRanges_storage_count != 0) {
             pMemoryRanges_storage = arena.allocate<VkMappedMemoryRange>(pMemoryRanges_storage_count);
             if (pMemoryRanges_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pMemoryRanges_storage_count; ++__z) { pMemoryRanges_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pMemoryRanges_storage_count; ++rvk_z) { pMemoryRanges_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pMemoryRanges_storage_count; ++__i) {
-            if (!deserialize_VkMappedMemoryRange(r, &pMemoryRanges_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pMemoryRanges_storage_count; ++rvk_i) {
+            if (!deserialize_VkMappedMemoryRange(r, &pMemoryRanges_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkFlushMappedMemoryRanges(device, memoryRangeCount, pMemoryRanges_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -2665,9 +2665,9 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pSparseMemoryRequirements_storage_count != 0) {
                 pSparseMemoryRequirements_storage = arena.allocate<VkSparseImageMemoryRequirements2>(pSparseMemoryRequirements_storage_count);
                 if (pSparseMemoryRequirements_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pSparseMemoryRequirements_storage_count; ++__z) { pSparseMemoryRequirements_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
             }
-            for (std::size_t __e = 0; __e < pSparseMemoryRequirements_storage_count; ++__e) { pSparseMemoryRequirements_storage[__e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[__e].pNext = nullptr; }
+            for (std::size_t rvk_e = 0; rvk_e < pSparseMemoryRequirements_storage_count; ++rvk_e) { pSparseMemoryRequirements_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetDeviceImageSparseMemoryRequirements(device, &pInfo_local, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
         reply.write_pod<std::int32_t>(0);
@@ -2739,7 +2739,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pSparseMemoryRequirements_storage_count != 0) {
                 pSparseMemoryRequirements_storage = arena.allocate<VkSparseImageMemoryRequirements>(pSparseMemoryRequirements_storage_count);
                 if (pSparseMemoryRequirements_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pSparseMemoryRequirements_storage_count; ++__z) { pSparseMemoryRequirements_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
             }
         }
         s.on_vkGetImageSparseMemoryRequirements(device, image, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
@@ -2768,9 +2768,9 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pSparseMemoryRequirements_storage_count != 0) {
                 pSparseMemoryRequirements_storage = arena.allocate<VkSparseImageMemoryRequirements2>(pSparseMemoryRequirements_storage_count);
                 if (pSparseMemoryRequirements_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pSparseMemoryRequirements_storage_count; ++__z) { pSparseMemoryRequirements_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
             }
-            for (std::size_t __e = 0; __e < pSparseMemoryRequirements_storage_count; ++__e) { pSparseMemoryRequirements_storage[__e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[__e].pNext = nullptr; }
+            for (std::size_t rvk_e = 0; rvk_e < pSparseMemoryRequirements_storage_count; ++rvk_e) { pSparseMemoryRequirements_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetImageSparseMemoryRequirements2(device, &pInfo_local, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
         reply.write_pod<std::int32_t>(0);
@@ -2850,7 +2850,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pRects_storage_count != 0) {
                 pRects_storage = arena.allocate<VkRect2D>(pRects_storage_count);
                 if (pRects_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pRects_storage_count; ++__z) { pRects_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pRects_storage_count; ++rvk_z) { pRects_storage[rvk_z] = {}; }
             }
         }
         VkResult result = s.on_vkGetPhysicalDevicePresentRectanglesKHR(physicalDevice, surface, &pRectCount_local, array_present ? pRects_storage : nullptr);
@@ -2877,9 +2877,9 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pToolProperties_storage_count != 0) {
                 pToolProperties_storage = arena.allocate<VkPhysicalDeviceToolProperties>(pToolProperties_storage_count);
                 if (pToolProperties_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pToolProperties_storage_count; ++__z) { pToolProperties_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pToolProperties_storage_count; ++rvk_z) { pToolProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t __e = 0; __e < pToolProperties_storage_count; ++__e) { pToolProperties_storage[__e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES; pToolProperties_storage[__e].pNext = nullptr; }
+            for (std::size_t rvk_e = 0; rvk_e < pToolProperties_storage_count; ++rvk_e) { pToolProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES; pToolProperties_storage[rvk_e].pNext = nullptr; }
         }
         VkResult result = s.on_vkGetPhysicalDeviceToolProperties(physicalDevice, &pToolCount_local, array_present ? pToolProperties_storage : nullptr);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -2921,15 +2921,15 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(firstQuery)) return false;
         if (!r.read_pod(queryCount)) return false;
         {
-            std::uint64_t __wide = 0;
-            if (!r.read_pod(__wide)) return false;
-            dataSize = static_cast<size_t>(__wide);
+            std::uint64_t rvk_wide = 0;
+            if (!r.read_pod(rvk_wide)) return false;
+            dataSize = static_cast<size_t>(rvk_wide);
         }
         pData_storage_count = static_cast<std::size_t>(dataSize);
         if (pData_storage_count != 0) {
             pData_storage = arena.allocate<std::uint8_t>(pData_storage_count);
             if (pData_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pData_storage_count; ++__z) { pData_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
         }
         if (!r.read_pod(stride)) return false;
         if (!r.read_pod(flags)) return false;
@@ -2973,10 +2973,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pMemoryRanges_storage_count != 0) {
             pMemoryRanges_storage = arena.allocate<VkMappedMemoryRange>(pMemoryRanges_storage_count);
             if (pMemoryRanges_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pMemoryRanges_storage_count; ++__z) { pMemoryRanges_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pMemoryRanges_storage_count; ++rvk_z) { pMemoryRanges_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pMemoryRanges_storage_count; ++__i) {
-            if (!deserialize_VkMappedMemoryRange(r, &pMemoryRanges_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pMemoryRanges_storage_count; ++rvk_i) {
+            if (!deserialize_VkMappedMemoryRange(r, &pMemoryRanges_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkInvalidateMappedMemoryRanges(device, memoryRangeCount, pMemoryRanges_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -2995,10 +2995,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pSrcCaches_storage_count != 0) {
             pSrcCaches_storage = arena.allocate<VkPipelineCache>(pSrcCaches_storage_count);
             if (pSrcCaches_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pSrcCaches_storage_count; ++__z) { pSrcCaches_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pSrcCaches_storage_count; ++rvk_z) { pSrcCaches_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pSrcCaches_storage_count; ++__i) {
-            if (!deserialize_VkPipelineCache(r, pSrcCaches_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pSrcCaches_storage_count; ++rvk_i) {
+            if (!deserialize_VkPipelineCache(r, pSrcCaches_storage[rvk_i])) return false;
         }
         VkResult result = s.on_vkMergePipelineCaches(device, dstCache, srcCacheCount, pSrcCaches_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -3016,10 +3016,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pBindInfo_storage_count != 0) {
             pBindInfo_storage = arena.allocate<VkBindSparseInfo>(pBindInfo_storage_count);
             if (pBindInfo_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pBindInfo_storage_count; ++__z) { pBindInfo_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pBindInfo_storage_count; ++rvk_z) { pBindInfo_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pBindInfo_storage_count; ++__i) {
-            if (!deserialize_VkBindSparseInfo(r, &pBindInfo_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pBindInfo_storage_count; ++rvk_i) {
+            if (!deserialize_VkBindSparseInfo(r, &pBindInfo_storage[rvk_i], arena)) return false;
         }
         if (!deserialize_VkFence(r, fence)) return false;
         VkResult result = s.on_vkQueueBindSparse(queue, bindInfoCount, pBindInfo_storage, fence);
@@ -3038,10 +3038,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pSubmits_storage_count != 0) {
             pSubmits_storage = arena.allocate<VkSubmitInfo2>(pSubmits_storage_count);
             if (pSubmits_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pSubmits_storage_count; ++__z) { pSubmits_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pSubmits_storage_count; ++rvk_z) { pSubmits_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pSubmits_storage_count; ++__i) {
-            if (!deserialize_VkSubmitInfo2(r, &pSubmits_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pSubmits_storage_count; ++rvk_i) {
+            if (!deserialize_VkSubmitInfo2(r, &pSubmits_storage[rvk_i], arena)) return false;
         }
         if (!deserialize_VkFence(r, fence)) return false;
         VkResult result = s.on_vkQueueSubmit2(queue, submitCount, pSubmits_storage, fence);
@@ -3178,9 +3178,9 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pQueueFamilyProperties_storage_count != 0) {
                 pQueueFamilyProperties_storage = arena.allocate<VkQueueFamilyProperties2>(pQueueFamilyProperties_storage_count);
                 if (pQueueFamilyProperties_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pQueueFamilyProperties_storage_count; ++__z) { pQueueFamilyProperties_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pQueueFamilyProperties_storage_count; ++rvk_z) { pQueueFamilyProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t __e = 0; __e < pQueueFamilyProperties_storage_count; ++__e) { pQueueFamilyProperties_storage[__e].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2; pQueueFamilyProperties_storage[__e].pNext = nullptr; }
+            for (std::size_t rvk_e = 0; rvk_e < pQueueFamilyProperties_storage_count; ++rvk_e) { pQueueFamilyProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2; pQueueFamilyProperties_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetPhysicalDeviceQueueFamilyProperties2KHR(physicalDevice, &pQueueFamilyPropertyCount_local, array_present ? pQueueFamilyProperties_storage : nullptr);
         reply.write_pod<std::int32_t>(0);
@@ -3208,9 +3208,9 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pProperties_storage_count != 0) {
                 pProperties_storage = arena.allocate<VkSparseImageFormatProperties2>(pProperties_storage_count);
                 if (pProperties_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pProperties_storage_count; ++__z) { pProperties_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t __e = 0; __e < pProperties_storage_count; ++__e) { pProperties_storage[__e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2; pProperties_storage[__e].pNext = nullptr; }
+            for (std::size_t rvk_e = 0; rvk_e < pProperties_storage_count; ++rvk_e) { pProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2; pProperties_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetPhysicalDeviceSparseImageFormatProperties2KHR(physicalDevice, &pFormatInfo_local, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
         reply.write_pod<std::int32_t>(0);
@@ -3233,10 +3233,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pBindInfos_storage_count != 0) {
             pBindInfos_storage = arena.allocate<VkBindBufferMemoryInfo>(pBindInfos_storage_count);
             if (pBindInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pBindInfos_storage_count; ++__z) { pBindInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pBindInfos_storage_count; ++rvk_z) { pBindInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pBindInfos_storage_count; ++__i) {
-            if (!deserialize_VkBindBufferMemoryInfo(r, &pBindInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pBindInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkBindBufferMemoryInfo(r, &pBindInfos_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkBindBufferMemory2KHR(device, bindInfoCount, pBindInfos_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -3253,10 +3253,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pBindInfos_storage_count != 0) {
             pBindInfos_storage = arena.allocate<VkBindImageMemoryInfo>(pBindInfos_storage_count);
             if (pBindInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pBindInfos_storage_count; ++__z) { pBindInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pBindInfos_storage_count; ++rvk_z) { pBindInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pBindInfos_storage_count; ++__i) {
-            if (!deserialize_VkBindImageMemoryInfo(r, &pBindInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pBindInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkBindImageMemoryInfo(r, &pBindInfos_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkBindImageMemory2KHR(device, bindInfoCount, pBindInfos_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -3304,9 +3304,9 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pSparseMemoryRequirements_storage_count != 0) {
                 pSparseMemoryRequirements_storage = arena.allocate<VkSparseImageMemoryRequirements2>(pSparseMemoryRequirements_storage_count);
                 if (pSparseMemoryRequirements_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pSparseMemoryRequirements_storage_count; ++__z) { pSparseMemoryRequirements_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
             }
-            for (std::size_t __e = 0; __e < pSparseMemoryRequirements_storage_count; ++__e) { pSparseMemoryRequirements_storage[__e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[__e].pNext = nullptr; }
+            for (std::size_t rvk_e = 0; rvk_e < pSparseMemoryRequirements_storage_count; ++rvk_e) { pSparseMemoryRequirements_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetImageSparseMemoryRequirements2KHR(device, &pInfo_local, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
         reply.write_pod<std::int32_t>(0);
@@ -3511,19 +3511,19 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pEvents_storage_count != 0) {
             pEvents_storage = arena.allocate<VkEvent>(pEvents_storage_count);
             if (pEvents_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pEvents_storage_count; ++__z) { pEvents_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pEvents_storage_count; ++rvk_z) { pEvents_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pEvents_storage_count; ++__i) {
-            if (!deserialize_VkEvent(r, pEvents_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pEvents_storage_count; ++rvk_i) {
+            if (!deserialize_VkEvent(r, pEvents_storage[rvk_i])) return false;
         }
         pDependencyInfos_storage_count = static_cast<std::size_t>(eventCount);
         if (pDependencyInfos_storage_count != 0) {
             pDependencyInfos_storage = arena.allocate<VkDependencyInfo>(pDependencyInfos_storage_count);
             if (pDependencyInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pDependencyInfos_storage_count; ++__z) { pDependencyInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pDependencyInfos_storage_count; ++rvk_z) { pDependencyInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pDependencyInfos_storage_count; ++__i) {
-            if (!deserialize_VkDependencyInfo(r, &pDependencyInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pDependencyInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkDependencyInfo(r, &pDependencyInfos_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdWaitEvents2KHR(commandBuffer, eventCount, pEvents_storage, pDependencyInfos_storage);
         return true;
@@ -3603,9 +3603,9 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pPhysicalDeviceGroupProperties_storage_count != 0) {
                 pPhysicalDeviceGroupProperties_storage = arena.allocate<VkPhysicalDeviceGroupProperties>(pPhysicalDeviceGroupProperties_storage_count);
                 if (pPhysicalDeviceGroupProperties_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pPhysicalDeviceGroupProperties_storage_count; ++__z) { pPhysicalDeviceGroupProperties_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pPhysicalDeviceGroupProperties_storage_count; ++rvk_z) { pPhysicalDeviceGroupProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t __e = 0; __e < pPhysicalDeviceGroupProperties_storage_count; ++__e) { pPhysicalDeviceGroupProperties_storage[__e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES; pPhysicalDeviceGroupProperties_storage[__e].pNext = nullptr; }
+            for (std::size_t rvk_e = 0; rvk_e < pPhysicalDeviceGroupProperties_storage_count; ++rvk_e) { pPhysicalDeviceGroupProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES; pPhysicalDeviceGroupProperties_storage[rvk_e].pNext = nullptr; }
         }
         VkResult result = s.on_vkEnumeratePhysicalDeviceGroupsKHR(instance, &pPhysicalDeviceGroupCount_local, array_present ? pPhysicalDeviceGroupProperties_storage : nullptr);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -3705,9 +3705,9 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pSparseMemoryRequirements_storage_count != 0) {
                 pSparseMemoryRequirements_storage = arena.allocate<VkSparseImageMemoryRequirements2>(pSparseMemoryRequirements_storage_count);
                 if (pSparseMemoryRequirements_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pSparseMemoryRequirements_storage_count; ++__z) { pSparseMemoryRequirements_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
             }
-            for (std::size_t __e = 0; __e < pSparseMemoryRequirements_storage_count; ++__e) { pSparseMemoryRequirements_storage[__e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[__e].pNext = nullptr; }
+            for (std::size_t rvk_e = 0; rvk_e < pSparseMemoryRequirements_storage_count; ++rvk_e) { pSparseMemoryRequirements_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetDeviceImageSparseMemoryRequirementsKHR(device, &pInfo_local, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
         reply.write_pod<std::int32_t>(0);
@@ -3790,10 +3790,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pSubmits_storage_count != 0) {
             pSubmits_storage = arena.allocate<VkSubmitInfo2>(pSubmits_storage_count);
             if (pSubmits_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pSubmits_storage_count; ++__z) { pSubmits_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pSubmits_storage_count; ++rvk_z) { pSubmits_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pSubmits_storage_count; ++__i) {
-            if (!deserialize_VkSubmitInfo2(r, &pSubmits_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pSubmits_storage_count; ++rvk_i) {
+            if (!deserialize_VkSubmitInfo2(r, &pSubmits_storage[rvk_i], arena)) return false;
         }
         if (!deserialize_VkFence(r, fence)) return false;
         VkResult result = s.on_vkQueueSubmit2KHR(queue, submitCount, pSubmits_storage, fence);
@@ -3855,10 +3855,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pColorWriteEnables_storage_count != 0) {
             pColorWriteEnables_storage = arena.allocate<VkBool32>(pColorWriteEnables_storage_count);
             if (pColorWriteEnables_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pColorWriteEnables_storage_count; ++__z) { pColorWriteEnables_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pColorWriteEnables_storage_count; ++rvk_z) { pColorWriteEnables_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pColorWriteEnables_storage_count; ++__i) {
-            if (!r.read_pod(pColorWriteEnables_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pColorWriteEnables_storage_count; ++rvk_i) {
+            if (!r.read_pod(pColorWriteEnables_storage[rvk_i])) return false;
         }
         s.on_vkCmdSetColorWriteEnableEXT(commandBuffer, attachmentCount, pColorWriteEnables_storage);
         return true;
@@ -3917,20 +3917,20 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pVertexBindingDescriptions_storage_count != 0) {
             pVertexBindingDescriptions_storage = arena.allocate<VkVertexInputBindingDescription2EXT>(pVertexBindingDescriptions_storage_count);
             if (pVertexBindingDescriptions_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pVertexBindingDescriptions_storage_count; ++__z) { pVertexBindingDescriptions_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pVertexBindingDescriptions_storage_count; ++rvk_z) { pVertexBindingDescriptions_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pVertexBindingDescriptions_storage_count; ++__i) {
-            if (!deserialize_VkVertexInputBindingDescription2EXT(r, &pVertexBindingDescriptions_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pVertexBindingDescriptions_storage_count; ++rvk_i) {
+            if (!deserialize_VkVertexInputBindingDescription2EXT(r, &pVertexBindingDescriptions_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(vertexAttributeDescriptionCount)) return false;
         pVertexAttributeDescriptions_storage_count = static_cast<std::size_t>(vertexAttributeDescriptionCount);
         if (pVertexAttributeDescriptions_storage_count != 0) {
             pVertexAttributeDescriptions_storage = arena.allocate<VkVertexInputAttributeDescription2EXT>(pVertexAttributeDescriptions_storage_count);
             if (pVertexAttributeDescriptions_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pVertexAttributeDescriptions_storage_count; ++__z) { pVertexAttributeDescriptions_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pVertexAttributeDescriptions_storage_count; ++rvk_z) { pVertexAttributeDescriptions_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pVertexAttributeDescriptions_storage_count; ++__i) {
-            if (!deserialize_VkVertexInputAttributeDescription2EXT(r, &pVertexAttributeDescriptions_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pVertexAttributeDescriptions_storage_count; ++rvk_i) {
+            if (!deserialize_VkVertexInputAttributeDescription2EXT(r, &pVertexAttributeDescriptions_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetVertexInputEXT(commandBuffer, vertexBindingDescriptionCount, pVertexBindingDescriptions_storage, vertexAttributeDescriptionCount, pVertexAttributeDescriptions_storage);
         return true;
@@ -3949,25 +3949,25 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pInfos_storage_count != 0) {
             pInfos_storage = arena.allocate<VkAccelerationStructureBuildGeometryInfoKHR>(pInfos_storage_count);
             if (pInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pInfos_storage_count; ++__z) { pInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pInfos_storage_count; ++rvk_z) { pInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pInfos_storage_count; ++__i) {
-            if (!deserialize_VkAccelerationStructureBuildGeometryInfoKHR(r, &pInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkAccelerationStructureBuildGeometryInfoKHR(r, &pInfos_storage[rvk_i], arena)) return false;
         }
         {
-            const std::uint32_t __n_outer = static_cast<std::uint32_t>(infoCount);
-            auto** __ptrs = arena.allocate<const VkAccelerationStructureBuildRangeInfoKHR*>(__n_outer);
-            if (__ptrs == nullptr) { return false; }
-            for (std::uint32_t __i = 0; __i < __n_outer; ++__i) {
-                const std::uint32_t __n = static_cast<std::uint32_t>(pInfos_storage[__i].geometryCount);
-                auto* __inner = arena.allocate<VkAccelerationStructureBuildRangeInfoKHR>(__n);
-                if (__inner == nullptr) { return false; }
-                for (std::uint32_t __j = 0; __j < __n; ++__j) {
-                    if (!deserialize_VkAccelerationStructureBuildRangeInfoKHR(r, &__inner[__j], arena)) return false;
+            const std::uint32_t rvk_n_outer = static_cast<std::uint32_t>(infoCount);
+            auto** rvk_ptrs = arena.allocate<const VkAccelerationStructureBuildRangeInfoKHR*>(rvk_n_outer);
+            if (rvk_ptrs == nullptr) { return false; }
+            for (std::uint32_t rvk_i = 0; rvk_i < rvk_n_outer; ++rvk_i) {
+                const std::uint32_t rvk_n = static_cast<std::uint32_t>(pInfos_storage[rvk_i].geometryCount);
+                auto* rvk_inner = arena.allocate<VkAccelerationStructureBuildRangeInfoKHR>(rvk_n);
+                if (rvk_inner == nullptr) { return false; }
+                for (std::uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {
+                    if (!deserialize_VkAccelerationStructureBuildRangeInfoKHR(r, &rvk_inner[rvk_j], arena)) return false;
                 }
-                __ptrs[__i] = __inner;
+                rvk_ptrs[rvk_i] = rvk_inner;
             }
-            ppBuildRangeInfos_outer = __ptrs;
+            ppBuildRangeInfos_outer = rvk_ptrs;
         }
         VkResult result = s.on_vkBuildAccelerationStructuresKHR(device, deferredOperation, infoCount, pInfos_storage, ppBuildRangeInfos_outer);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -3987,10 +3987,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pStages_storage_count != 0) {
             pStages_storage = arena.allocate<VkShaderStageFlagBits>(pStages_storage_count);
             if (pStages_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pStages_storage_count; ++__z) { pStages_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pStages_storage_count; ++rvk_z) { pStages_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pStages_storage_count; ++__i) {
-            if (!r.read_pod(pStages_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pStages_storage_count; ++rvk_i) {
+            if (!r.read_pod(pStages_storage[rvk_i])) return false;
         }
         if (!r.read_pod(pShaders_present)) return false;
         if (pShaders_present) {
@@ -3998,10 +3998,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pShaders_storage_count != 0) {
                 pShaders_storage = arena.allocate<VkShaderEXT>(pShaders_storage_count);
                 if (pShaders_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pShaders_storage_count; ++__z) { pShaders_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pShaders_storage_count; ++rvk_z) { pShaders_storage[rvk_z] = {}; }
             }
-            for (std::size_t __i = 0; __i < pShaders_storage_count; ++__i) {
-                if (!deserialize_VkShaderEXT(r, pShaders_storage[__i])) return false;
+            for (std::size_t rvk_i = 0; rvk_i < pShaders_storage_count; ++rvk_i) {
+                if (!deserialize_VkShaderEXT(r, pShaders_storage[rvk_i])) return false;
             }
         }
         s.on_vkCmdBindShadersEXT(commandBuffer, stageCount, pStages_storage, pShaders_present ? pShaders_storage : nullptr);
@@ -4028,19 +4028,19 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pBuffers_storage_count != 0) {
             pBuffers_storage = arena.allocate<VkBuffer>(pBuffers_storage_count);
             if (pBuffers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pBuffers_storage_count; ++__z) { pBuffers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pBuffers_storage_count; ++rvk_z) { pBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pBuffers_storage_count; ++__i) {
-            if (!deserialize_VkBuffer(r, pBuffers_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pBuffers_storage_count; ++rvk_i) {
+            if (!deserialize_VkBuffer(r, pBuffers_storage[rvk_i])) return false;
         }
         pOffsets_storage_count = static_cast<std::size_t>(bindingCount);
         if (pOffsets_storage_count != 0) {
             pOffsets_storage = arena.allocate<VkDeviceSize>(pOffsets_storage_count);
             if (pOffsets_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pOffsets_storage_count; ++__z) { pOffsets_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pOffsets_storage_count; ++rvk_z) { pOffsets_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pOffsets_storage_count; ++__i) {
-            if (!r.read_pod(pOffsets_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pOffsets_storage_count; ++rvk_i) {
+            if (!r.read_pod(pOffsets_storage[rvk_i])) return false;
         }
         if (!r.read_pod(pSizes_present)) return false;
         if (pSizes_present) {
@@ -4048,10 +4048,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pSizes_storage_count != 0) {
                 pSizes_storage = arena.allocate<VkDeviceSize>(pSizes_storage_count);
                 if (pSizes_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pSizes_storage_count; ++__z) { pSizes_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pSizes_storage_count; ++rvk_z) { pSizes_storage[rvk_z] = {}; }
             }
-            for (std::size_t __i = 0; __i < pSizes_storage_count; ++__i) {
-                if (!r.read_pod(pSizes_storage[__i])) return false;
+            for (std::size_t rvk_i = 0; rvk_i < pSizes_storage_count; ++rvk_i) {
+                if (!r.read_pod(pSizes_storage[rvk_i])) return false;
             }
         }
         if (!r.read_pod(pStrides_present)) return false;
@@ -4060,10 +4060,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pStrides_storage_count != 0) {
                 pStrides_storage = arena.allocate<VkDeviceSize>(pStrides_storage_count);
                 if (pStrides_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pStrides_storage_count; ++__z) { pStrides_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pStrides_storage_count; ++rvk_z) { pStrides_storage[rvk_z] = {}; }
             }
-            for (std::size_t __i = 0; __i < pStrides_storage_count; ++__i) {
-                if (!r.read_pod(pStrides_storage[__i])) return false;
+            for (std::size_t rvk_i = 0; rvk_i < pStrides_storage_count; ++rvk_i) {
+                if (!r.read_pod(pStrides_storage[rvk_i])) return false;
             }
         }
         s.on_vkCmdBindVertexBuffers2EXT(commandBuffer, firstBinding, bindingCount, pBuffers_storage, pOffsets_storage, pSizes_present ? pSizes_storage : nullptr, pStrides_present ? pStrides_storage : nullptr);
@@ -4085,43 +4085,43 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pInfos_storage_count != 0) {
             pInfos_storage = arena.allocate<VkAccelerationStructureBuildGeometryInfoKHR>(pInfos_storage_count);
             if (pInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pInfos_storage_count; ++__z) { pInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pInfos_storage_count; ++rvk_z) { pInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pInfos_storage_count; ++__i) {
-            if (!deserialize_VkAccelerationStructureBuildGeometryInfoKHR(r, &pInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkAccelerationStructureBuildGeometryInfoKHR(r, &pInfos_storage[rvk_i], arena)) return false;
         }
         pIndirectDeviceAddresses_storage_count = static_cast<std::size_t>(infoCount);
         if (pIndirectDeviceAddresses_storage_count != 0) {
             pIndirectDeviceAddresses_storage = arena.allocate<VkDeviceAddress>(pIndirectDeviceAddresses_storage_count);
             if (pIndirectDeviceAddresses_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pIndirectDeviceAddresses_storage_count; ++__z) { pIndirectDeviceAddresses_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pIndirectDeviceAddresses_storage_count; ++rvk_z) { pIndirectDeviceAddresses_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pIndirectDeviceAddresses_storage_count; ++__i) {
-            if (!r.read_pod(pIndirectDeviceAddresses_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pIndirectDeviceAddresses_storage_count; ++rvk_i) {
+            if (!r.read_pod(pIndirectDeviceAddresses_storage[rvk_i])) return false;
         }
         pIndirectStrides_storage_count = static_cast<std::size_t>(infoCount);
         if (pIndirectStrides_storage_count != 0) {
             pIndirectStrides_storage = arena.allocate<uint32_t>(pIndirectStrides_storage_count);
             if (pIndirectStrides_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pIndirectStrides_storage_count; ++__z) { pIndirectStrides_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pIndirectStrides_storage_count; ++rvk_z) { pIndirectStrides_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pIndirectStrides_storage_count; ++__i) {
-            if (!r.read_pod(pIndirectStrides_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pIndirectStrides_storage_count; ++rvk_i) {
+            if (!r.read_pod(pIndirectStrides_storage[rvk_i])) return false;
         }
         {
-            const std::uint32_t __n_outer = static_cast<std::uint32_t>(infoCount);
-            auto** __ptrs = arena.allocate<const uint32_t*>(__n_outer);
-            if (__ptrs == nullptr) { return false; }
-            for (std::uint32_t __i = 0; __i < __n_outer; ++__i) {
-                const std::uint32_t __n = static_cast<std::uint32_t>(pInfos_storage[__i].geometryCount);
-                auto* __inner = arena.allocate<uint32_t>(__n);
-                if (__inner == nullptr) { return false; }
-                for (std::uint32_t __j = 0; __j < __n; ++__j) {
-                    if (!r.read_pod(__inner[__j])) return false;
+            const std::uint32_t rvk_n_outer = static_cast<std::uint32_t>(infoCount);
+            auto** rvk_ptrs = arena.allocate<const uint32_t*>(rvk_n_outer);
+            if (rvk_ptrs == nullptr) { return false; }
+            for (std::uint32_t rvk_i = 0; rvk_i < rvk_n_outer; ++rvk_i) {
+                const std::uint32_t rvk_n = static_cast<std::uint32_t>(pInfos_storage[rvk_i].geometryCount);
+                auto* rvk_inner = arena.allocate<uint32_t>(rvk_n);
+                if (rvk_inner == nullptr) { return false; }
+                for (std::uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {
+                    if (!r.read_pod(rvk_inner[rvk_j])) return false;
                 }
-                __ptrs[__i] = __inner;
+                rvk_ptrs[rvk_i] = rvk_inner;
             }
-            ppMaxPrimitiveCounts_outer = __ptrs;
+            ppMaxPrimitiveCounts_outer = rvk_ptrs;
         }
         s.on_vkCmdBuildAccelerationStructuresIndirectKHR(commandBuffer, infoCount, pInfos_storage, pIndirectDeviceAddresses_storage, pIndirectStrides_storage, ppMaxPrimitiveCounts_outer);
         return true;
@@ -4138,25 +4138,25 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pInfos_storage_count != 0) {
             pInfos_storage = arena.allocate<VkAccelerationStructureBuildGeometryInfoKHR>(pInfos_storage_count);
             if (pInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pInfos_storage_count; ++__z) { pInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pInfos_storage_count; ++rvk_z) { pInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pInfos_storage_count; ++__i) {
-            if (!deserialize_VkAccelerationStructureBuildGeometryInfoKHR(r, &pInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkAccelerationStructureBuildGeometryInfoKHR(r, &pInfos_storage[rvk_i], arena)) return false;
         }
         {
-            const std::uint32_t __n_outer = static_cast<std::uint32_t>(infoCount);
-            auto** __ptrs = arena.allocate<const VkAccelerationStructureBuildRangeInfoKHR*>(__n_outer);
-            if (__ptrs == nullptr) { return false; }
-            for (std::uint32_t __i = 0; __i < __n_outer; ++__i) {
-                const std::uint32_t __n = static_cast<std::uint32_t>(pInfos_storage[__i].geometryCount);
-                auto* __inner = arena.allocate<VkAccelerationStructureBuildRangeInfoKHR>(__n);
-                if (__inner == nullptr) { return false; }
-                for (std::uint32_t __j = 0; __j < __n; ++__j) {
-                    if (!deserialize_VkAccelerationStructureBuildRangeInfoKHR(r, &__inner[__j], arena)) return false;
+            const std::uint32_t rvk_n_outer = static_cast<std::uint32_t>(infoCount);
+            auto** rvk_ptrs = arena.allocate<const VkAccelerationStructureBuildRangeInfoKHR*>(rvk_n_outer);
+            if (rvk_ptrs == nullptr) { return false; }
+            for (std::uint32_t rvk_i = 0; rvk_i < rvk_n_outer; ++rvk_i) {
+                const std::uint32_t rvk_n = static_cast<std::uint32_t>(pInfos_storage[rvk_i].geometryCount);
+                auto* rvk_inner = arena.allocate<VkAccelerationStructureBuildRangeInfoKHR>(rvk_n);
+                if (rvk_inner == nullptr) { return false; }
+                for (std::uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {
+                    if (!deserialize_VkAccelerationStructureBuildRangeInfoKHR(r, &rvk_inner[rvk_j], arena)) return false;
                 }
-                __ptrs[__i] = __inner;
+                rvk_ptrs[rvk_i] = rvk_inner;
             }
-            ppBuildRangeInfos_outer = __ptrs;
+            ppBuildRangeInfos_outer = rvk_ptrs;
         }
         s.on_vkCmdBuildAccelerationStructuresKHR(commandBuffer, infoCount, pInfos_storage, ppBuildRangeInfos_outer);
         return true;
@@ -4246,10 +4246,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pDescriptorWrites_storage_count != 0) {
             pDescriptorWrites_storage = arena.allocate<VkWriteDescriptorSet>(pDescriptorWrites_storage_count);
             if (pDescriptorWrites_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pDescriptorWrites_storage_count; ++__z) { pDescriptorWrites_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pDescriptorWrites_storage_count; ++rvk_z) { pDescriptorWrites_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pDescriptorWrites_storage_count; ++__i) {
-            if (!deserialize_VkWriteDescriptorSet(r, &pDescriptorWrites_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pDescriptorWrites_storage_count; ++rvk_i) {
+            if (!deserialize_VkWriteDescriptorSet(r, &pDescriptorWrites_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdPushDescriptorSetKHR(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites_storage);
         return true;
@@ -4283,10 +4283,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pColorBlendAdvanced_storage_count != 0) {
             pColorBlendAdvanced_storage = arena.allocate<VkColorBlendAdvancedEXT>(pColorBlendAdvanced_storage_count);
             if (pColorBlendAdvanced_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pColorBlendAdvanced_storage_count; ++__z) { pColorBlendAdvanced_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pColorBlendAdvanced_storage_count; ++rvk_z) { pColorBlendAdvanced_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pColorBlendAdvanced_storage_count; ++__i) {
-            if (!deserialize_VkColorBlendAdvancedEXT(r, &pColorBlendAdvanced_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pColorBlendAdvanced_storage_count; ++rvk_i) {
+            if (!deserialize_VkColorBlendAdvancedEXT(r, &pColorBlendAdvanced_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetColorBlendAdvancedEXT(commandBuffer, firstAttachment, attachmentCount, pColorBlendAdvanced_storage);
         return true;
@@ -4304,10 +4304,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pColorBlendEnables_storage_count != 0) {
             pColorBlendEnables_storage = arena.allocate<VkBool32>(pColorBlendEnables_storage_count);
             if (pColorBlendEnables_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pColorBlendEnables_storage_count; ++__z) { pColorBlendEnables_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pColorBlendEnables_storage_count; ++rvk_z) { pColorBlendEnables_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pColorBlendEnables_storage_count; ++__i) {
-            if (!r.read_pod(pColorBlendEnables_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pColorBlendEnables_storage_count; ++rvk_i) {
+            if (!r.read_pod(pColorBlendEnables_storage[rvk_i])) return false;
         }
         s.on_vkCmdSetColorBlendEnableEXT(commandBuffer, firstAttachment, attachmentCount, pColorBlendEnables_storage);
         return true;
@@ -4325,10 +4325,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pColorBlendEquations_storage_count != 0) {
             pColorBlendEquations_storage = arena.allocate<VkColorBlendEquationEXT>(pColorBlendEquations_storage_count);
             if (pColorBlendEquations_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pColorBlendEquations_storage_count; ++__z) { pColorBlendEquations_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pColorBlendEquations_storage_count; ++rvk_z) { pColorBlendEquations_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pColorBlendEquations_storage_count; ++__i) {
-            if (!deserialize_VkColorBlendEquationEXT(r, &pColorBlendEquations_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pColorBlendEquations_storage_count; ++rvk_i) {
+            if (!deserialize_VkColorBlendEquationEXT(r, &pColorBlendEquations_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetColorBlendEquationEXT(commandBuffer, firstAttachment, attachmentCount, pColorBlendEquations_storage);
         return true;
@@ -4346,10 +4346,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pColorWriteMasks_storage_count != 0) {
             pColorWriteMasks_storage = arena.allocate<VkColorComponentFlags>(pColorWriteMasks_storage_count);
             if (pColorWriteMasks_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pColorWriteMasks_storage_count; ++__z) { pColorWriteMasks_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pColorWriteMasks_storage_count; ++rvk_z) { pColorWriteMasks_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pColorWriteMasks_storage_count; ++__i) {
-            if (!r.read_pod(pColorWriteMasks_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pColorWriteMasks_storage_count; ++rvk_i) {
+            if (!r.read_pod(pColorWriteMasks_storage[rvk_i])) return false;
         }
         s.on_vkCmdSetColorWriteMaskEXT(commandBuffer, firstAttachment, attachmentCount, pColorWriteMasks_storage);
         return true;
@@ -4389,10 +4389,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pCoverageModulationTable_storage_count != 0) {
             pCoverageModulationTable_storage = arena.allocate<float>(pCoverageModulationTable_storage_count);
             if (pCoverageModulationTable_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pCoverageModulationTable_storage_count; ++__z) { pCoverageModulationTable_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pCoverageModulationTable_storage_count; ++rvk_z) { pCoverageModulationTable_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pCoverageModulationTable_storage_count; ++__i) {
-            if (!r.read_pod(pCoverageModulationTable_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pCoverageModulationTable_storage_count; ++rvk_i) {
+            if (!r.read_pod(pCoverageModulationTable_storage[rvk_i])) return false;
         }
         s.on_vkCmdSetCoverageModulationTableNV(commandBuffer, coverageModulationTableCount, pCoverageModulationTable_storage);
         return true;
@@ -4509,8 +4509,8 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkFragmentShadingRateCombinerOpKHR combinerOps_local[2]{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkExtent2D(r, &pFragmentSize_local, arena)) return false;
-        for (std::uint32_t __i = 0; __i < 2u; ++__i) {
-            if (!r.read_pod(combinerOps_local[__i])) return false;
+        for (std::uint32_t rvk_i = 0; rvk_i < 2u; ++rvk_i) {
+            if (!r.read_pod(combinerOps_local[rvk_i])) return false;
         }
         s.on_vkCmdSetFragmentShadingRateKHR(commandBuffer, &pFragmentSize_local, combinerOps_local);
         return true;
@@ -4632,10 +4632,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pSampleMask_storage_count != 0) {
             pSampleMask_storage = arena.allocate<VkSampleMask>(pSampleMask_storage_count);
             if (pSampleMask_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pSampleMask_storage_count; ++__z) { pSampleMask_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pSampleMask_storage_count; ++rvk_z) { pSampleMask_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pSampleMask_storage_count; ++__i) {
-            if (!r.read_pod(pSampleMask_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pSampleMask_storage_count; ++rvk_i) {
+            if (!r.read_pod(pSampleMask_storage[rvk_i])) return false;
         }
         s.on_vkCmdSetSampleMaskEXT(commandBuffer, samples, pSampleMask_storage);
         return true;
@@ -4651,10 +4651,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pScissors_storage_count != 0) {
             pScissors_storage = arena.allocate<VkRect2D>(pScissors_storage_count);
             if (pScissors_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pScissors_storage_count; ++__z) { pScissors_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pScissors_storage_count; ++rvk_z) { pScissors_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pScissors_storage_count; ++__i) {
-            if (!deserialize_VkRect2D(r, &pScissors_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pScissors_storage_count; ++rvk_i) {
+            if (!deserialize_VkRect2D(r, &pScissors_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetScissorWithCountEXT(commandBuffer, scissorCount, pScissors_storage);
         return true;
@@ -4712,10 +4712,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pViewportSwizzles_storage_count != 0) {
             pViewportSwizzles_storage = arena.allocate<VkViewportSwizzleNV>(pViewportSwizzles_storage_count);
             if (pViewportSwizzles_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pViewportSwizzles_storage_count; ++__z) { pViewportSwizzles_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pViewportSwizzles_storage_count; ++rvk_z) { pViewportSwizzles_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pViewportSwizzles_storage_count; ++__i) {
-            if (!deserialize_VkViewportSwizzleNV(r, &pViewportSwizzles_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pViewportSwizzles_storage_count; ++rvk_i) {
+            if (!deserialize_VkViewportSwizzleNV(r, &pViewportSwizzles_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetViewportSwizzleNV(commandBuffer, firstViewport, viewportCount, pViewportSwizzles_storage);
         return true;
@@ -4739,10 +4739,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pViewports_storage_count != 0) {
             pViewports_storage = arena.allocate<VkViewport>(pViewports_storage_count);
             if (pViewports_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pViewports_storage_count; ++__z) { pViewports_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pViewports_storage_count; ++rvk_z) { pViewports_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pViewports_storage_count; ++__i) {
-            if (!deserialize_VkViewport(r, &pViewports_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pViewports_storage_count; ++rvk_i) {
+            if (!deserialize_VkViewport(r, &pViewports_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetViewportWithCountEXT(commandBuffer, viewportCount, pViewports_storage);
         return true;
@@ -4797,10 +4797,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pAccelerationStructures_storage_count != 0) {
             pAccelerationStructures_storage = arena.allocate<VkAccelerationStructureKHR>(pAccelerationStructures_storage_count);
             if (pAccelerationStructures_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pAccelerationStructures_storage_count; ++__z) { pAccelerationStructures_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pAccelerationStructures_storage_count; ++rvk_z) { pAccelerationStructures_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pAccelerationStructures_storage_count; ++__i) {
-            if (!deserialize_VkAccelerationStructureKHR(r, pAccelerationStructures_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pAccelerationStructures_storage_count; ++rvk_i) {
+            if (!deserialize_VkAccelerationStructureKHR(r, pAccelerationStructures_storage[rvk_i])) return false;
         }
         if (!r.read_pod(queryType)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
@@ -4905,21 +4905,21 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pCreateInfos_storage_count != 0) {
             pCreateInfos_storage = arena.allocate<VkRayTracingPipelineCreateInfoKHR>(pCreateInfos_storage_count);
             if (pCreateInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pCreateInfos_storage_count; ++__z) { pCreateInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pCreateInfos_storage_count; ++rvk_z) { pCreateInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pCreateInfos_storage_count; ++__i) {
-            if (!deserialize_VkRayTracingPipelineCreateInfoKHR(r, &pCreateInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pCreateInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkRayTracingPipelineCreateInfoKHR(r, &pCreateInfos_storage[rvk_i], arena)) return false;
         }
         pPipelines_storage_count = static_cast<std::size_t>(createInfoCount);
         if (pPipelines_storage_count != 0) {
             pPipelines_storage = arena.allocate<VkPipeline>(pPipelines_storage_count);
             if (pPipelines_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pPipelines_storage_count; ++__z) { pPipelines_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkCreateRayTracingPipelinesKHR(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t __k = 0; __k < pPipelines_storage_count; ++__k) {
-            serialize_VkPipeline(reply, pPipelines_storage[__k]);
+        for (std::size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
+            serialize_VkPipeline(reply, pPipelines_storage[rvk_k]);
         }
         return true;
     }
@@ -4936,21 +4936,21 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pCreateInfos_storage_count != 0) {
             pCreateInfos_storage = arena.allocate<VkShaderCreateInfoEXT>(pCreateInfos_storage_count);
             if (pCreateInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pCreateInfos_storage_count; ++__z) { pCreateInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pCreateInfos_storage_count; ++rvk_z) { pCreateInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pCreateInfos_storage_count; ++__i) {
-            if (!deserialize_VkShaderCreateInfoEXT(r, &pCreateInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pCreateInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkShaderCreateInfoEXT(r, &pCreateInfos_storage[rvk_i], arena)) return false;
         }
         pShaders_storage_count = static_cast<std::size_t>(createInfoCount);
         if (pShaders_storage_count != 0) {
             pShaders_storage = arena.allocate<VkShaderEXT>(pShaders_storage_count);
             if (pShaders_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pShaders_storage_count; ++__z) { pShaders_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pShaders_storage_count; ++rvk_z) { pShaders_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkCreateShadersEXT(device, createInfoCount, pCreateInfos_storage, nullptr, pShaders_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t __k = 0; __k < pShaders_storage_count; ++__k) {
-            serialize_VkShaderEXT(reply, pShaders_storage[__k]);
+        for (std::size_t rvk_k = 0; rvk_k < pShaders_storage_count; ++rvk_k) {
+            serialize_VkShaderEXT(reply, pShaders_storage[rvk_k]);
         }
         return true;
     }
@@ -5004,10 +5004,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pMaxPrimitiveCounts_storage_count != 0) {
                 pMaxPrimitiveCounts_storage = arena.allocate<uint32_t>(pMaxPrimitiveCounts_storage_count);
                 if (pMaxPrimitiveCounts_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pMaxPrimitiveCounts_storage_count; ++__z) { pMaxPrimitiveCounts_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pMaxPrimitiveCounts_storage_count; ++rvk_z) { pMaxPrimitiveCounts_storage[rvk_z] = {}; }
             }
-            for (std::size_t __i = 0; __i < pMaxPrimitiveCounts_storage_count; ++__i) {
-                if (!r.read_pod(pMaxPrimitiveCounts_storage[__i])) return false;
+            for (std::size_t rvk_i = 0; rvk_i < pMaxPrimitiveCounts_storage_count; ++rvk_i) {
+                if (!r.read_pod(pMaxPrimitiveCounts_storage[rvk_i])) return false;
             }
         }
         if (!r.read_pod(pSizeInfo_out.sType)) return false;
@@ -5084,9 +5084,9 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pFragmentShadingRates_storage_count != 0) {
                 pFragmentShadingRates_storage = arena.allocate<VkPhysicalDeviceFragmentShadingRateKHR>(pFragmentShadingRates_storage_count);
                 if (pFragmentShadingRates_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pFragmentShadingRates_storage_count; ++__z) { pFragmentShadingRates_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pFragmentShadingRates_storage_count; ++rvk_z) { pFragmentShadingRates_storage[rvk_z] = {}; }
             }
-            for (std::size_t __e = 0; __e < pFragmentShadingRates_storage_count; ++__e) { pFragmentShadingRates_storage[__e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR; pFragmentShadingRates_storage[__e].pNext = nullptr; }
+            for (std::size_t rvk_e = 0; rvk_e < pFragmentShadingRates_storage_count; ++rvk_e) { pFragmentShadingRates_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR; pFragmentShadingRates_storage[rvk_e].pNext = nullptr; }
         }
         VkResult result = s.on_vkGetPhysicalDeviceFragmentShadingRatesKHR(physicalDevice, &pFragmentShadingRateCount_local, array_present ? pFragmentShadingRates_storage : nullptr);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -5111,15 +5111,15 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(firstGroup)) return false;
         if (!r.read_pod(groupCount)) return false;
         {
-            std::uint64_t __wide = 0;
-            if (!r.read_pod(__wide)) return false;
-            dataSize = static_cast<size_t>(__wide);
+            std::uint64_t rvk_wide = 0;
+            if (!r.read_pod(rvk_wide)) return false;
+            dataSize = static_cast<size_t>(rvk_wide);
         }
         pData_storage_count = static_cast<std::size_t>(dataSize);
         if (pData_storage_count != 0) {
             pData_storage = arena.allocate<std::uint8_t>(pData_storage_count);
             if (pData_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pData_storage_count; ++__z) { pData_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR(device, pipeline, firstGroup, groupCount, dataSize, pData_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -5141,15 +5141,15 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(firstGroup)) return false;
         if (!r.read_pod(groupCount)) return false;
         {
-            std::uint64_t __wide = 0;
-            if (!r.read_pod(__wide)) return false;
-            dataSize = static_cast<size_t>(__wide);
+            std::uint64_t rvk_wide = 0;
+            if (!r.read_pod(rvk_wide)) return false;
+            dataSize = static_cast<size_t>(rvk_wide);
         }
         pData_storage_count = static_cast<std::size_t>(dataSize);
         if (pData_storage_count != 0) {
             pData_storage = arena.allocate<std::uint8_t>(pData_storage_count);
             if (pData_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pData_storage_count; ++__z) { pData_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkGetRayTracingShaderGroupHandlesKHR(device, pipeline, firstGroup, groupCount, dataSize, pData_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -5182,10 +5182,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pTransitions_storage_count != 0) {
             pTransitions_storage = arena.allocate<VkHostImageLayoutTransitionInfo>(pTransitions_storage_count);
             if (pTransitions_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pTransitions_storage_count; ++__z) { pTransitions_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pTransitions_storage_count; ++rvk_z) { pTransitions_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pTransitions_storage_count; ++__i) {
-            if (!deserialize_VkHostImageLayoutTransitionInfo(r, &pTransitions_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pTransitions_storage_count; ++rvk_i) {
+            if (!deserialize_VkHostImageLayoutTransitionInfo(r, &pTransitions_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkTransitionImageLayoutEXT(device, transitionCount, pTransitions_storage);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -5207,27 +5207,27 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pAccelerationStructures_storage_count != 0) {
             pAccelerationStructures_storage = arena.allocate<VkAccelerationStructureKHR>(pAccelerationStructures_storage_count);
             if (pAccelerationStructures_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pAccelerationStructures_storage_count; ++__z) { pAccelerationStructures_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pAccelerationStructures_storage_count; ++rvk_z) { pAccelerationStructures_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pAccelerationStructures_storage_count; ++__i) {
-            if (!deserialize_VkAccelerationStructureKHR(r, pAccelerationStructures_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pAccelerationStructures_storage_count; ++rvk_i) {
+            if (!deserialize_VkAccelerationStructureKHR(r, pAccelerationStructures_storage[rvk_i])) return false;
         }
         if (!r.read_pod(queryType)) return false;
         {
-            std::uint64_t __wide = 0;
-            if (!r.read_pod(__wide)) return false;
-            dataSize = static_cast<size_t>(__wide);
+            std::uint64_t rvk_wide = 0;
+            if (!r.read_pod(rvk_wide)) return false;
+            dataSize = static_cast<size_t>(rvk_wide);
         }
         pData_storage_count = static_cast<std::size_t>(dataSize);
         if (pData_storage_count != 0) {
             pData_storage = arena.allocate<std::uint8_t>(pData_storage_count);
             if (pData_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pData_storage_count; ++__z) { pData_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
         }
         {
-            std::uint64_t __wide = 0;
-            if (!r.read_pod(__wide)) return false;
-            stride = static_cast<size_t>(__wide);
+            std::uint64_t rvk_wide = 0;
+            if (!r.read_pod(rvk_wide)) return false;
+            stride = static_cast<size_t>(rvk_wide);
         }
         VkResult result = s.on_vkWriteAccelerationStructuresPropertiesKHR(device, accelerationStructureCount, pAccelerationStructures_storage, queryType, dataSize, pData_storage, stride);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
@@ -5250,21 +5250,21 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pTimestampInfos_storage_count != 0) {
             pTimestampInfos_storage = arena.allocate<VkCalibratedTimestampInfoKHR>(pTimestampInfos_storage_count);
             if (pTimestampInfos_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pTimestampInfos_storage_count; ++__z) { pTimestampInfos_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pTimestampInfos_storage_count; ++rvk_z) { pTimestampInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pTimestampInfos_storage_count; ++__i) {
-            if (!deserialize_VkCalibratedTimestampInfoKHR(r, &pTimestampInfos_storage[__i], arena)) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pTimestampInfos_storage_count; ++rvk_i) {
+            if (!deserialize_VkCalibratedTimestampInfoKHR(r, &pTimestampInfos_storage[rvk_i], arena)) return false;
         }
         pTimestamps_storage_count = static_cast<std::size_t>(timestampCount);
         if (pTimestamps_storage_count != 0) {
             pTimestamps_storage = arena.allocate<uint64_t>(pTimestamps_storage_count);
             if (pTimestamps_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pTimestamps_storage_count; ++__z) { pTimestamps_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pTimestamps_storage_count; ++rvk_z) { pTimestamps_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkGetCalibratedTimestampsEXT(device, timestampCount, pTimestampInfos_storage, pTimestamps_storage, &pMaxDeviation_out);
         reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t __k = 0; __k < pTimestamps_storage_count; ++__k) {
-            reply.write_pod(pTimestamps_storage[__k]);
+        for (std::size_t rvk_k = 0; rvk_k < pTimestamps_storage_count; ++rvk_k) {
+            reply.write_pod(pTimestamps_storage[rvk_k]);
         }
         reply.write_pod(pMaxDeviation_out);
         return true;
@@ -5283,7 +5283,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pTimeDomains_storage_count != 0) {
                 pTimeDomains_storage = arena.allocate<VkTimeDomainKHR>(pTimeDomains_storage_count);
                 if (pTimeDomains_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pTimeDomains_storage_count; ++__z) { pTimeDomains_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pTimeDomains_storage_count; ++rvk_z) { pTimeDomains_storage[rvk_z] = {}; }
             }
         }
         VkResult result = s.on_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(physicalDevice, &pTimeDomainCount_local, array_present ? pTimeDomains_storage : nullptr);
@@ -5438,10 +5438,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pCounterBuffers_storage_count != 0) {
             pCounterBuffers_storage = arena.allocate<VkBuffer>(pCounterBuffers_storage_count);
             if (pCounterBuffers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pCounterBuffers_storage_count; ++__z) { pCounterBuffers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pCounterBuffers_storage_count; ++rvk_z) { pCounterBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pCounterBuffers_storage_count; ++__i) {
-            if (!deserialize_VkBuffer(r, pCounterBuffers_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pCounterBuffers_storage_count; ++rvk_i) {
+            if (!deserialize_VkBuffer(r, pCounterBuffers_storage[rvk_i])) return false;
         }
         if (!r.read_pod(pCounterBufferOffsets_present)) return false;
         if (pCounterBufferOffsets_present) {
@@ -5449,10 +5449,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pCounterBufferOffsets_storage_count != 0) {
                 pCounterBufferOffsets_storage = arena.allocate<VkDeviceSize>(pCounterBufferOffsets_storage_count);
                 if (pCounterBufferOffsets_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pCounterBufferOffsets_storage_count; ++__z) { pCounterBufferOffsets_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pCounterBufferOffsets_storage_count; ++rvk_z) { pCounterBufferOffsets_storage[rvk_z] = {}; }
             }
-            for (std::size_t __i = 0; __i < pCounterBufferOffsets_storage_count; ++__i) {
-                if (!r.read_pod(pCounterBufferOffsets_storage[__i])) return false;
+            for (std::size_t rvk_i = 0; rvk_i < pCounterBufferOffsets_storage_count; ++rvk_i) {
+                if (!r.read_pod(pCounterBufferOffsets_storage[rvk_i])) return false;
             }
         }
         s.on_vkCmdBeginTransformFeedbackEXT(commandBuffer, firstCounterBuffer, counterBufferCount, pCounterBuffers_storage, pCounterBufferOffsets_present ? pCounterBufferOffsets_storage : nullptr);
@@ -5476,19 +5476,19 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pBuffers_storage_count != 0) {
             pBuffers_storage = arena.allocate<VkBuffer>(pBuffers_storage_count);
             if (pBuffers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pBuffers_storage_count; ++__z) { pBuffers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pBuffers_storage_count; ++rvk_z) { pBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pBuffers_storage_count; ++__i) {
-            if (!deserialize_VkBuffer(r, pBuffers_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pBuffers_storage_count; ++rvk_i) {
+            if (!deserialize_VkBuffer(r, pBuffers_storage[rvk_i])) return false;
         }
         pOffsets_storage_count = static_cast<std::size_t>(bindingCount);
         if (pOffsets_storage_count != 0) {
             pOffsets_storage = arena.allocate<VkDeviceSize>(pOffsets_storage_count);
             if (pOffsets_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pOffsets_storage_count; ++__z) { pOffsets_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pOffsets_storage_count; ++rvk_z) { pOffsets_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pOffsets_storage_count; ++__i) {
-            if (!r.read_pod(pOffsets_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pOffsets_storage_count; ++rvk_i) {
+            if (!r.read_pod(pOffsets_storage[rvk_i])) return false;
         }
         if (!r.read_pod(pSizes_present)) return false;
         if (pSizes_present) {
@@ -5496,10 +5496,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pSizes_storage_count != 0) {
                 pSizes_storage = arena.allocate<VkDeviceSize>(pSizes_storage_count);
                 if (pSizes_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pSizes_storage_count; ++__z) { pSizes_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pSizes_storage_count; ++rvk_z) { pSizes_storage[rvk_z] = {}; }
             }
-            for (std::size_t __i = 0; __i < pSizes_storage_count; ++__i) {
-                if (!r.read_pod(pSizes_storage[__i])) return false;
+            for (std::size_t rvk_i = 0; rvk_i < pSizes_storage_count; ++rvk_i) {
+                if (!r.read_pod(pSizes_storage[rvk_i])) return false;
             }
         }
         s.on_vkCmdBindTransformFeedbackBuffersEXT(commandBuffer, firstBinding, bindingCount, pBuffers_storage, pOffsets_storage, pSizes_present ? pSizes_storage : nullptr);
@@ -5551,10 +5551,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (pCounterBuffers_storage_count != 0) {
             pCounterBuffers_storage = arena.allocate<VkBuffer>(pCounterBuffers_storage_count);
             if (pCounterBuffers_storage == nullptr) return false;
-            for (std::size_t __z = 0; __z < pCounterBuffers_storage_count; ++__z) { pCounterBuffers_storage[__z] = {}; }
+            for (std::size_t rvk_z = 0; rvk_z < pCounterBuffers_storage_count; ++rvk_z) { pCounterBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t __i = 0; __i < pCounterBuffers_storage_count; ++__i) {
-            if (!deserialize_VkBuffer(r, pCounterBuffers_storage[__i])) return false;
+        for (std::size_t rvk_i = 0; rvk_i < pCounterBuffers_storage_count; ++rvk_i) {
+            if (!deserialize_VkBuffer(r, pCounterBuffers_storage[rvk_i])) return false;
         }
         if (!r.read_pod(pCounterBufferOffsets_present)) return false;
         if (pCounterBufferOffsets_present) {
@@ -5562,10 +5562,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (pCounterBufferOffsets_storage_count != 0) {
                 pCounterBufferOffsets_storage = arena.allocate<VkDeviceSize>(pCounterBufferOffsets_storage_count);
                 if (pCounterBufferOffsets_storage == nullptr) return false;
-                for (std::size_t __z = 0; __z < pCounterBufferOffsets_storage_count; ++__z) { pCounterBufferOffsets_storage[__z] = {}; }
+                for (std::size_t rvk_z = 0; rvk_z < pCounterBufferOffsets_storage_count; ++rvk_z) { pCounterBufferOffsets_storage[rvk_z] = {}; }
             }
-            for (std::size_t __i = 0; __i < pCounterBufferOffsets_storage_count; ++__i) {
-                if (!r.read_pod(pCounterBufferOffsets_storage[__i])) return false;
+            for (std::size_t rvk_i = 0; rvk_i < pCounterBufferOffsets_storage_count; ++rvk_i) {
+                if (!r.read_pod(pCounterBufferOffsets_storage[rvk_i])) return false;
             }
         }
         s.on_vkCmdEndTransformFeedbackEXT(commandBuffer, firstCounterBuffer, counterBufferCount, pCounterBuffers_storage, pCounterBufferOffsets_present ? pCounterBufferOffsets_storage : nullptr);
