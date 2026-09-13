@@ -114,6 +114,8 @@ def arguments():
     parser.add_argument("--cpus", type=int, default=4)
     parser.add_argument("--outputs", type=int, default=1, help="the device's max_outputs")
     parser.add_argument("--power-poll", type=float, default=5.0, help="seconds between display-power screendumps")
+    parser.add_argument("--hibernate", action="store_true",
+                        help="also suspend to disk and boot the overlay again (feature 040, US1)")
     parser.add_argument("--stress-minutes", type=float, default=0.0,
                         help="minutes of fences awaited while the blank's interrupt is masked and unmasked "
                              "(feature 039, US3); 0 leaves the long run out")
@@ -285,6 +287,7 @@ class GuestRun:
         self.colours = 0
         self.heads = 0
         self.unexpected_dump = None
+        self.sleep_states = None
 
     def say(self, line):
         self.log.append(line)
@@ -658,6 +661,50 @@ class GuestRun:
         path = self.work / "rvkgpu.log"
         return path.read_text(errors="replace") if path.exists() else ""
 
+    def offers_sleep(self, state):
+        """What the guest says it can do, asked before it is asked to do it: a
+        suspend the machine does not offer would just stop answering."""
+        if self.sleep_states is None:
+            self.sleep_states = self.stage_output("sleepstates")
+        return f"{state}=yes" in self.sleep_states
+
+    def suspend(self):
+        """US1 of feature 040: S3 through the guest agent, woken with QMP, and
+        the adapter still there afterwards. A machine that does not offer S3
+        answers the agent with an error, and that is a skip, not a failure."""
+        if not self.offers_sleep("standby"):
+            self.say("suspend skipped: this machine offers no S3")
+            return
+        self.qmp.forget_events("SUSPEND")
+        self.qmp.forget_events("WAKEUP")
+        self.agent.notify("guest-suspend-ram", {})
+        # QEMU says when the machine is actually in S3; waking one that has not
+        # got there yet wakes nothing.
+        self.step("suspend.asleep", lambda: self.qmp.wait_event("SUSPEND", self.args.boot_timeout))
+        self.qmp.execute("system_wakeup", {})
+        self.step("suspend.wake", lambda: self.qmp.wait_event("WAKEUP", self.args.boot_timeout))
+        self.connect_agent("suspend.agent")
+        self.check_monitors(self.stage_output("check", saved="device-after-suspend.txt"))
+        self.say("suspend ok: the adapter came back from S3")
+
+    def hibernate(self):
+        """US1: S4 leaves the machine off, and the overlay boots again on the
+        same QEMU configuration - a fresh device, and the guest's own image
+        expecting the one it had."""
+        if not self.args.hibernate:
+            return
+        self.provision_ok("hibernate")
+        if not self.offers_sleep("hibernate"):
+            self.say("hibernate skipped: this machine offers no S4")
+            return
+        self.agent.notify("guest-suspend-disk", {})
+        self.step("hibernate.off", lambda: self.qemu.wait(timeout=self.args.boot_timeout))
+        self.stop_qemu()
+        self.boot()
+        self.connect_agent("hibernate.resume")
+        self.check_monitors(self.stage_output("check", saved="device-after-hibernate.txt"))
+        self.say("hibernate ok: the adapter came back from S4")
+
     def install_and_test(self):
         if self.stage("sign"):
             self.reboot("sign")
@@ -667,6 +714,8 @@ class GuestRun:
         self.display()
         self.mode_switch()
         self.display_power()
+        self.suspend()
+        self.hibernate()
         self.suite()
         self.vsync()
 

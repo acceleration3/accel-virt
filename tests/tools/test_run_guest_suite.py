@@ -23,6 +23,8 @@ FAKES = ROOT / "tests" / "tools" / "fake_guest"
 ONE_MONITOR = "display: dwm=1 services=rvkgpu monitors=1\n"
 """What the check stage says about a guest with one output."""
 PASSING_REPORT = "ok adapter.find\nrvktest: 23 passed, 0 failed\n"
+SLEEP_STATES = "sleep: standby=yes hibernate=yes\n"
+"""What a machine that offers both says (feature 040, US1)."""
 COLLECTED = "file C:\\rvk\\diag\\system.txt\r\ndump C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp\r\n"
 
 
@@ -61,6 +63,7 @@ class GuestSuiteRun(unittest.TestCase):
         behaviour.setdefault("stages", {"sign": [3010], "install": [3010], "check": [0]})
         behaviour.setdefault("outputs", {"check": ONE_MONITOR +
                                                   "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                                         "sleepstates": SLEEP_STATES,
                                          "rvktest": PASSING_REPORT, "collect": COLLECTED})
         behaviour.setdefault("files", GUEST_FILES)
         (self.scratch / "script.json").write_text(json.dumps(behaviour))
@@ -106,7 +109,8 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(self.stage_calls(),
                          ["sign", "install", "check", "modes", "setmode -Width 1024 -Height 768",
                           "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800",
-                          "monitortimeout -Minutes 1", "monitortimeout -Minutes 0", "collect"])
+                          "monitortimeout -Minutes 1", "monitortimeout -Minutes 0",
+                          "sleepstates", "check", "collect"])
         self.assertEqual(events.count("file"), 4)
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.sys 1000", lines)
@@ -115,7 +119,7 @@ class GuestSuiteRun(unittest.TestCase):
                  if line in ("reboot", "powerdown") or (line.startswith("exec") and ("-Stage" in line or "rvktest" in line))]
         self.assertEqual([o if o in ("reboot", "powerdown") else o.split()[-1] for o in order],
                          ["sign", "reboot", "install", "reboot", "check", "modes", "768", "1600", "800",
-                          "1", "0", "C:\\rvk\\rvktest.exe", "collect", "powerdown"])
+                          "1", "0", "sleepstates", "check", "C:\\rvk\\rvktest.exe", "collect", "powerdown"])
         self.assertEqual((self.work / "report.txt").read_text(), PASSING_REPORT)
         self.assertIn("service=rvkgpu", (self.work / "device.txt").read_text())
         self.assertIn("rvkgpu: DriverEntry", (self.work / "rvkgpu.log").read_text())
@@ -127,6 +131,39 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: vsync ok: 60.00 blanks a second", result.stdout)
         self.assertIn("guest: collect: 2 files in", result.stdout)
         self.assertFalse((self.work / "panic.txt").exists())
+        self.assert_clean()
+
+    def test_s3_suspends_through_the_agent_and_wakes_through_qmp(self):
+        """Feature 040 US1: the adapter is still there after the guest slept."""
+        self.script()
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        journal = self.journal_lines()
+        self.assertIn("guest-suspend-ram", journal)
+        self.assertIn("system_wakeup", journal)
+        self.assertIn("guest: suspend ok: the adapter came back from S3", result.stdout)
+        self.assertTrue((self.work / "device-after-suspend.txt").exists())
+        self.assert_clean()
+
+    def test_a_machine_that_offers_no_s3_is_skipped_with_its_reason(self):
+        self.script(outputs={"check": ONE_MONITOR, "sleepstates": "sleep: standby=no hibernate=no\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite("--hibernate")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: suspend skipped: this machine offers no S3", result.stdout)
+        self.assertIn("guest: hibernate skipped: this machine offers no S4", result.stdout)
+        self.assertNotIn("guest-suspend-ram", self.journal_lines())
+        self.assert_clean()
+
+    def test_s4_leaves_the_machine_off_and_the_overlay_boots_again(self):
+        self.script(stages={"sign": [3010], "install": [3010], "check": [0], "hibernate": [0],
+                            "sleepstates": [0]})
+        result = self.run_suite("--hibernate")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        journal = self.journal_lines()
+        self.assertIn("guest-suspend-disk", journal)
+        self.assertIn("guest: hibernate ok: the adapter came back from S4", result.stdout)
+        self.assertIn("hibernate", " ".join(self.stage_calls()))
         self.assert_clean()
 
     def test_the_stress_window_is_passed_to_the_guest_and_its_numbers_read_back(self):

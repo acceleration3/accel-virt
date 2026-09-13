@@ -14,6 +14,7 @@ The script is JSON at $FAKE_GUEST_SCRIPT:
              the stage runs, then reboots; with loop, it bugchecks on every boot
              until QEMU is started again without virtio-gpu-rvk-pci
   die_during stage: QEMU aborts with an assertion when the stage runs
+  refuse     ["guest-suspend-ram", ...]: agent commands answered with an error
   exit_at_boot, agent_silent, garbage, no_reset, hang: misbehaviours
 Everything the guest was asked is appended to $FAKE_GUEST_JOURNAL.
 """
@@ -62,6 +63,7 @@ class Guest:
         self.processes = {}
         self.qmp = None
         self.up = True
+        self.suspended = False
 
     def note(self, line):
         with self.lock, open(self.journal, "a") as out:
@@ -191,6 +193,23 @@ class Guest:
             path, written, _ = self.files[arguments["handle"]]
             self.note(f"file {path} {len(written)}" if written else f"pull {path}")
             return json.dumps({"return": {}}).encode()
+        if command in ("guest-suspend-ram", "guest-suspend-disk"):
+            self.note(command)
+            if command in self.script.get("refuse", []):
+                return json.dumps({"error": {"class": "GenericError", "desc": f"{command} is not supported"}}).encode()
+            # Down before the socket closes: a wakeup that arrives while this
+            # is still deciding must not be undone by it.
+            self.up = False
+            connection.close()
+            if command == "guest-suspend-disk":
+                # S4 leaves the machine off; the runner boots the overlay again.
+                self.emit("SHUTDOWN")
+                os._exit(0)
+            self.suspended = True
+            # QEMU says when the machine has actually entered S3, which is what
+            # a wakeup has to wait for.
+            self.emit("SUSPEND")
+            return None
         if command == "guest-shutdown":
             self.note(arguments["mode"])
             connection.close()
@@ -240,6 +259,12 @@ class Guest:
     def qmp_command(self, request):
         """screendump writes a PPM of the scripted size, as QEMU would; input
         events wake a display the power policy turned off."""
+        if request.get("execute") == "system_wakeup":
+            self.note("system_wakeup")
+            self.suspended = False
+            self.up = True
+            self.emit("WAKEUP")
+            return
         if request.get("execute") == "input-send-event":
             self.note("input-send-event")
             self.script.pop("screendump_dark", None)

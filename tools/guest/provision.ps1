@@ -27,7 +27,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('prepare', 'sign', 'install', 'check', 'modes', 'setmode', 'extend', 'monitortimeout',
-                 'collect')][string]$Stage,
+                 'sleepstates', 'hibernate', 'collect')][string]$Stage,
     [string]$Package = 'C:\rvk\package',
     [int]$Width = 0,
     [int]$Height = 0,
@@ -257,6 +257,25 @@ switch ($Stage) {
         Write-Output "extend: $([Display]::Extend())"
         exit 0
     }
+    'sleepstates' {
+        # What this machine actually offers: QEMU's q35 has no S3 unless the
+        # firmware says so, and the prepared image keeps hibernation off.
+        $available = (powercfg /availablesleepstates | Out-String)
+        $standby = if ($available -match 'Standby \(S3\)') { 'yes' } else { 'no' }
+        $hibernate = if ($available -match 'Hibernate') { 'yes' } else { 'no' }
+        Write-Output "sleep: standby=$standby hibernate=$hibernate"
+        exit 0
+    }
+
+    'hibernate' {
+        # The prepared image keeps hibernation off so nothing interrupts a run;
+        # the S4 scenario turns it on inside the overlay, which is thrown away.
+        powercfg /hibernate on
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        Write-Output 'hibernate: on'
+        exit 0
+    }
+
     'monitortimeout' {
         powercfg /change monitor-timeout-ac $Minutes
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
