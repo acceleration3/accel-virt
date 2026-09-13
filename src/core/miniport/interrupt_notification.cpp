@@ -1,5 +1,7 @@
 #include "core/miniport/interrupt_notification.hpp"
 
+#include "core/support/nt_status.hpp"
+
 #include "core/ddi/entry_points.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
 
@@ -29,6 +31,18 @@ Status InterruptNotification::report_preempted(uint32_t preemption_fence, uint32
     data_.InterruptType = dma_preempted;
     data_.FenceId = preemption_fence;
     data_.Argument1 = last_completed_fence;
+    return report();
+}
+
+/* DmaFaulted is FaultedFenceId, Status, NodeOrdinal, EngineOrdinal: the one
+ * node and engine this adapter has, and the NTSTATUS the owner sees. */
+Status InterruptNotification::report_faulted(uint32_t fence, Status why)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "InterruptNotification::report_faulted");
+    data_ = DxgkargcbNotifyInterruptDataRecord{};
+    data_.InterruptType = dma_faulted;
+    data_.FenceId = fence;
+    data_.Argument1 = static_cast<uint32_t>(NtStatus(why).value());
     return report();
 }
 

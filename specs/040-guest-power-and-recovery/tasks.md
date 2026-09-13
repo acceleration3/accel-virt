@@ -55,8 +55,8 @@ description: "Tasks: real-guest power, restart and recovery"
 
 **Independent Test**: the L2 timeout sequence, an L4 run with a stalling executor, and the L5 `tdr` scenario.
 
-- [ ] T011 [P] [US3] Write `tests/unit/core/scheduling/test_context_loss.cpp` first: a loss is recorded and logged once with the value that caused it; the same context lost twice is recorded once and logged once; `pending()` counts what the owner has not been told; `report()` tells dxgkrnl and counts what it told; recording is safe at `Irql::dispatch`
-- [ ] T012 [US3] Implement `ContextLoss` (system class) in `src/core/scheduling/context_loss.{hpp,cpp}`
+- [X] T011 [P] [US3] Write `tests/unit/core/scheduling/test_context_loss.cpp` first: a loss is recorded and logged once with the value that caused it; the same context lost twice is recorded once and logged once; `pending()` counts what the owner has not been told; `report()` tells dxgkrnl and counts what it told; recording is safe at `Irql::dispatch`
+- [X] T012 [US3] Implement `ContextLoss` (system class) in `src/core/scheduling/context_loss.{hpp,cpp}`
 - [ ] T013 [US3] `Adapter::reset_engine` records the contexts whose work it aborted as lost, and reports them, in `src/core/adapter/adapter.cpp`; `tests/unit/core/adapter/test_adapter.cpp` asserts the other device's context is untouched
 - [ ] T014 [US3] The L2 timeout and reset scenario in `tests/unit/scenarios/test_ddi_scenarios.cpp`: `QueryEngineStatus` deferring once, then refusing, then `ResetEngine` aborting only that node - and the driver returning at the IRQL it was called at, which `DdiResetEngine` (dxgkrnl.sys @14006e0a4) checks
 - [ ] T015 [US3] The echo executor gains stall and fault controls read from its environment at load, in `tests/qemu/echo_executor.cpp`, with the L4 loopback run that uses them

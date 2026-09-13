@@ -81,6 +81,16 @@ TEST(interrupt_notification_report_preempted, notifies_the_preemption_and_last_c
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument2, 0u);
   CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument3, 0u); }
 
+/* DmaFaulted is what tells an owner its context cannot be finished: the fence
+ * it died on, and the NTSTATUS the owner sees (feature 040, US3). */
+TEST(interrupt_notification_report_faulted, names_the_fence_and_the_status_the_owner_sees)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.notification().report_faulted(12u, Status::not_found), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).InterruptType, 4);   /* DXGK_INTERRUPT_DMA_FAULTED */
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).FenceId, 12u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument1, 0xC0000225u);   /* STATUS_NOT_FOUND */
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).Argument2, 0u); }
+
 TEST(interrupt_notification_report_completed, a_refused_synchronization_is_returned)
 { Fixture fixture;
   fixture.dxgkrnl().refuse_synchronize(0xC0000017u);
