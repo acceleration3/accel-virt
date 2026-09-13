@@ -1,0 +1,100 @@
+#include "core/memory/host_visible_blob.hpp"
+
+#include "core/virtio/virtio_gpu_device.hpp"
+#include "proto/virtio_gpu/gpu_response_reader.hpp"
+#include "proto/virtio_gpu/rvk_request_writer.hpp"
+
+namespace av {
+
+HostVisibleBlob::HostVisibleBlob(Platform &platform)
+    : platform_(platform), resource_(0u), offset_(0u), mapped_(false), request_{}, answer_{} {}
+
+Status HostVisibleBlob::create(VirtioGpuDevice &device, uint32_t resource_id, uint64_t bytes)
+{
+    platform_.require_irql_at_most(Irql::passive, "HostVisibleBlob::create");
+    if (resource_ != 0u) return Status::invalid_state;
+    if (resource_id == 0u || bytes == 0u || (bytes & (page_bytes - 1u)) != 0u)
+        return Status::invalid_parameter;
+    RvkRequestWriter writer(request_, sizeof request_);
+    Status status = writer.host_blob(resource_id, bytes);
+    uint32_t map_info = 0u;
+    if (status == Status::ok) status = exchange(device, writer.length(), map_info);
+    if (status != Status::ok) return status;
+    resource_ = resource_id;
+    return Status::ok;
+}
+
+Status HostVisibleBlob::map(VirtioGpuDevice &device, uint64_t offset)
+{
+    platform_.require_irql_at_most(Irql::passive, "HostVisibleBlob::map");
+    if (resource_ == 0u || mapped_) return Status::invalid_state;
+    RvkRequestWriter writer(request_, sizeof request_);
+    Status status = writer.map_blob(resource_, offset);
+    uint32_t map_info = 0u;
+    if (status == Status::ok) status = exchange(device, writer.length(), map_info);
+    if (status != Status::ok) return status;
+    /* The device says how the guest may cache what it just mapped; anything
+     * else is an answer this driver does not know how to hand a process. */
+    if (map_info != map_cache_cached) return Status::malformed;
+    offset_ = offset;
+    mapped_ = true;
+    return Status::ok;
+}
+
+Status HostVisibleBlob::unmap(VirtioGpuDevice &device)
+{
+    platform_.require_irql_at_most(Irql::passive, "HostVisibleBlob::unmap");
+    if (resource_ == 0u || !mapped_) return Status::invalid_state;
+    RvkRequestWriter writer(request_, sizeof request_);
+    Status status = writer.unmap_blob(resource_);
+    uint32_t map_info = 0u;
+    if (status == Status::ok) status = exchange(device, writer.length(), map_info);
+    if (status != Status::ok) return status;
+    offset_ = 0u;
+    mapped_ = false;
+    return Status::ok;
+}
+
+Status HostVisibleBlob::destroy(VirtioGpuDevice &device)
+{
+    platform_.require_irql_at_most(Irql::passive, "HostVisibleBlob::destroy");
+    if (resource_ == 0u) return Status::invalid_state;
+    if (mapped_) {
+        const Status unmapped = unmap(device);
+        if (unmapped != Status::ok) return unmapped;
+    }
+    RvkRequestWriter writer(request_, sizeof request_);
+    Status status = writer.unref(resource_);
+    uint32_t map_info = 0u;
+    if (status == Status::ok) status = exchange(device, writer.length(), map_info);
+    if (status != Status::ok) return status;
+    resource_ = 0u;
+    return Status::ok;
+}
+
+/* One request, one answer: an error the device answers with is the device
+ * refusing, not a framing mistake of ours. */
+Status HostVisibleBlob::exchange(VirtioGpuDevice &device, size_t length, uint32_t &map_info)
+{
+    uint32_t     written = 0u;
+    const Status answered = device.ask_control(request_, length, answer_, sizeof answer_, written);
+    if (answered != Status::ok) return answered;
+    GpuResponseReader reader;
+    const Status      decoded = reader.decode(answer_, written);
+    if (decoded != Status::ok) return decoded;
+    if (!reader.ok()) return Status::not_supported;
+    map_info = reader.map_info();
+    return Status::ok;
+}
+
+bool     HostVisibleBlob::created() const  { return resource_ != 0u; }
+bool     HostVisibleBlob::mapped() const   { return mapped_; }
+uint32_t HostVisibleBlob::resource() const { return resource_; }
+uint64_t HostVisibleBlob::offset() const   { return mapped_ ? offset_ : 0u; }
+
+bool HostVisibleBlob::invariants_hold() const
+{
+    return !mapped_ || resource_ != 0u;
+}
+
+}  // namespace av
