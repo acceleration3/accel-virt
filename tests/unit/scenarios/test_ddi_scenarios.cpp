@@ -136,6 +136,10 @@ private:
 };
 
 /* One PCI function dxgkrnl found, with its FDO. */
+constexpr std::uint32_t create_blob = 0x010Cu;       /* VIRTIO_GPU_CMD_RESOURCE_CREATE_BLOB */
+constexpr std::uint32_t map_blob = 0x0208u;          /* VIRTIO_GPU_CMD_RESOURCE_MAP_BLOB */
+constexpr std::uint64_t host_region_address = 0x4000000000ull;
+constexpr std::uint64_t host_region_bytes = 16u << 20u;
 constexpr std::uint32_t get_capset_info = 0x0108u;   /* VIRTIO_GPU_CMD_GET_CAPSET_INFO */
 constexpr std::uint32_t get_capset = 0x0109u;        /* VIRTIO_GPU_CMD_GET_CAPSET */
 constexpr std::uint8_t  first_gpu[av::GpuIdentity::uuid_bytes] = {3};
@@ -145,7 +149,7 @@ av::CapsetInfo host_capset(const std::uint8_t *uuid)
 {
     return av::CapsetInfo(av::ProtocolVersion(av::ProtocolVersion::current_major,
                                               av::ProtocolVersion::current_minor),
-                          1u, 64u, 12u, 24u, 0u,
+                          1u, 64u, 12u, 24u, av::CapsetInfo::feature_host_visible_memory,
                           av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, 0u, 0u, "the host's"));
 }
 
@@ -186,6 +190,9 @@ public:
     /* What the device says it is from the next ask on: another host GPU behind
      * the same function is another device (feature 040, FR-005). */
     void answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid); }
+    /* Whether the driver made its region blob and mapped it. */
+    bool created_blob() const { return created_blob_; }
+    bool mapped_region() const { return mapped_region_; }
 
     /* The device side of the control queue, shared with that answer. */
     av::FakeVirtqueueDevice &control()
@@ -204,6 +211,21 @@ private:
         /* The adapter asks what the device is as well as what it shows, and the
          * answers are told apart by what was asked (feature 040, FR-005). */
         const std::uint32_t asked = device->control().pending_type();
+        /* The region as one blob, which StartDevice makes when the device
+         * offers a region (feature 041, US1). */
+        if (asked == create_blob || asked == map_blob) {
+            av::GpuResponse answer;
+            if (asked == map_blob) {
+                device->mapped_region_ = true;
+                answer.set_map_info(av::GpuResponse::map_cache_cached);
+            } else {
+                device->created_blob_ = true;
+                answer.set(av::GpuResponse::ok_nodata);
+            }
+            static_cast<void>(device->control().respond_all(answer.bytes(),
+                                                            static_cast<std::uint32_t>(answer.length())));
+            return;
+        }
         if (asked == get_capset_info || asked == get_capset) {
             av::GpuResponse answer;
             if (asked == get_capset_info)
@@ -224,6 +246,8 @@ private:
     FakeDxgkrnlFdo        fdo_;
     DisplayInfoAnswer     display_info_;
     av::CapsetInfo        capset_ = host_capset(first_gpu);
+    bool                  created_blob_ = false;
+    bool                  mapped_region_ = false;
     std::optional<av::FakeVirtqueueDevice> control_;
 };
 
@@ -1642,4 +1666,76 @@ TEST(ddi_scenario, two_displays_get_a_source_a_child_and_a_scanout_each)
   CHECK_EQ(u32(control.request(3u), 24u), av::ScanoutResource::first_resource_id);
   CHECK_EQ(control.request_type(4u), 0x0101u);
   CHECK_EQ(u32(control.request(4u), 24u), av::ScanoutResource::first_resource_id + 1u);
+  CHECK_EQ(device.fdo().remove_device(), 0); }
+
+/* Feature 041, US1, through the real table: an adapter whose device has a
+ * host-visible region reports two segments, the second addressable by the CPU
+ * at the BAR, and has host memory behind every offset VidMm can place an
+ * allocation at - because VidMm maps a process's view itself and tells the
+ * driver nothing (MapInCpuVisibleSegment, dxgmms2.sys @14009ea98). An
+ * allocation that asks to be mapped is asked for in that segment; a primary
+ * still lives in the aperture the display reads. */
+TEST(ddi_scenario, a_device_with_host_memory_offers_a_second_segment_and_maps_it)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  device.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  CHECK(device.created_blob());
+  CHECK(device.mapped_region());
+  void           *adapter = device.fdo().context();
+  const DdiTable &table = driver.table();
+
+  std::uint32_t physical_adapter = 0u;
+  av::DxgkQuerySegmentOut4Record out = {};
+  av::DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = 11;   /* DXGKQAITYPE_QUERYSEGMENT4 */
+  query.pInputData = &physical_adapter;
+  query.InputDataSize = sizeof physical_adapter;
+  query.pOutputData = &out;
+  query.OutputDataSize = sizeof out;
+  const auto ask = reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargQueryAdapterInfoRecord *)>(
+      table.routine(DdiSlot::DxgkDdiQueryAdapterInfo));
+  CHECK_EQ(ask(adapter, &query), 0);
+  CHECK_EQ(out.NbSegment, 2u);
+
+  constexpr std::uint32_t stride = 0x68u;
+  std::uint8_t descriptors[2u * stride] = {};
+  out.pSegmentDescriptor = descriptors;
+  out.SegmentDescriptorStride = stride;
+  CHECK_EQ(ask(adapter, &query), 0);
+  av::DxgkSegmentDescriptor4Record host_visible = {};
+  std::memcpy(&host_visible, descriptors + stride, sizeof host_visible);
+  CHECK_EQ(host_visible.Flags, 0x14u);   /* CpuVisible | CacheCoherent, no Aperture */
+  CHECK_EQ(host_visible.Size, host_region_bytes);
+  CHECK(host_visible.CpuTranslatedAddress == static_cast<std::int64_t>(host_region_address));
+
+  /* A primary still lives in the aperture the display reads, on an adapter
+   * that now has somewhere else to put memory. */
+  Runtime runtime(table, adapter);
+  CHECK_EQ(runtime.create_primary(), 0);
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* The same driver on a device with no region: one segment, no blob asked for,
+ * and every allocation where it was before (FR-007). */
+TEST(ddi_scenario, a_device_without_host_memory_is_the_adapter_as_it_was)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  CHECK(!device.created_blob());
+  CHECK(!device.mapped_region());
+  std::uint32_t physical_adapter = 0u;
+  av::DxgkQuerySegmentOut4Record out = {};
+  av::DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = 11;
+  query.pInputData = &physical_adapter;
+  query.InputDataSize = sizeof physical_adapter;
+  query.pOutputData = &out;
+  query.OutputDataSize = sizeof out;
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargQueryAdapterInfoRecord *)>(
+               driver.table().routine(DdiSlot::DxgkDdiQueryAdapterInfo))(device.fdo().context(), &query),
+           0);
+  CHECK_EQ(out.NbSegment, 1u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
