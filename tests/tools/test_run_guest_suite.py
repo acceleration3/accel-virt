@@ -42,7 +42,7 @@ BLACK_SCREEN = live_dump(0x1A8)
 GUEST_FILES = {"C:\\rvk\\diag\\system.txt": "System events\n",
                "C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp": BLACK_SCREEN,
                "C:\\Windows\\MEMORY.DMP": live_dump(0xD1)}
-HOST_VISIBLE_REPORT = "ok adapter.find\nok hostvisible.pattern 4096\r\nrvktest: 24 passed, 0 failed\n"
+HOST_VISIBLE_REPORT = "ok adapter.find\nok host_visible.pattern 4096\r\nrvktest: 24 passed, 0 failed\n"
 """What a suite that wrote a pattern through a mapped view reports (feature 041)."""
 TIMEOUT_EVENTS = "timeout: 2026-09-13T10:00:00 Display driver rvkgpu stopped responding and has successfully "\
                  "recovered.\r\ntimeouts: 1\r\n"

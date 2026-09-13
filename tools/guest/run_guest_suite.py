@@ -54,7 +54,7 @@ STRESS_WORST = re.compile(rb"^ok stress\.worst_wait_us (\d+)\r?$", re.M)
 # What Adapter::open_region logs at StartDevice, and the only place a run can
 # see the second segment: the list itself never leaves dxgkrnl.
 REGION_LINE = re.compile(r"^rvkgpu: host-visible region status 0x([0-9a-fA-F]{8})\r?$", re.M)
-HOST_VISIBLE_WRITTEN = re.compile(rb"^ok hostvisible\.pattern (\d+)\r?$", re.M)
+HOST_VISIBLE_WRITTEN = re.compile(rb"^ok host_visible\.pattern (\d+)\r?$", re.M)
 MANIFEST = re.compile(r"^(file|dump) (.+?)\r?$", re.M)
 # The enlightenments Windows expects of KVM, and hv-crash: Windows writes its
 # bugcheck code and parameters to the crash MSRs, which QEMU reports as
