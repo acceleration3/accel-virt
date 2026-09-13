@@ -10,11 +10,22 @@
 //                        thread that created it
 //
 // Anything else is RVK_UNKNOWN. With RVK_ECHO_FAIL_CREATE set, create fails.
+//
+// Two controls make a real timeout happen without rebuilding anything
+// (feature 040, FR-006), read from the environment at load:
+//
+//   RVK_ECHO_STALL_MS      every command sleeps this long before answering
+//   RVK_ECHO_FAULT_AFTER   the Nth command on each executor answers
+//                          RVK_DEVICE_LOST, whatever it asked for
+//
+// A stall longer than TdrDelay is what dxgkrnl times out on; the guest suite's
+// tdr scenario sets them for the run that needs them.
 #include "rvk_executor.h"
 
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <pthread.h>
 
 namespace {
@@ -29,6 +40,25 @@ struct Executor {
     std::uint64_t executed;
     bool          one_thread;
 };
+
+/* A number the environment names, or 0. */
+std::uint64_t from_environment(const char *name)
+{
+    const char *const value = std::getenv(name);
+    if (value == nullptr) return 0u;
+    std::uint64_t number = 0u;
+    for (const char *digit = value; *digit >= '0' && *digit <= '9'; digit++)
+        number = number * 10u + static_cast<std::uint64_t>(*digit - '0');
+    return number;
+}
+
+void stall(std::uint64_t milliseconds)
+{
+    if (milliseconds == 0u) return;
+    const timespec sleep = {static_cast<time_t>(milliseconds / 1000u),
+                            static_cast<long>((milliseconds % 1000u) * 1000000u)};
+    static_cast<void>(nanosleep(&sleep, nullptr));
+}
 
 std::uint32_t sub_apis(void *) { return RVK_EXECUTOR_SUB_API_VULKAN; }
 
@@ -49,6 +79,11 @@ std::uint32_t execute(void *, RvkExecutor *handle, std::uint32_t id, const std::
     auto *const executor = static_cast<Executor *>(static_cast<void *>(handle));
     executor->one_thread = executor->one_thread && pthread_equal(executor->thread, pthread_self()) != 0;
     *reply_size = 0u;
+    /* The host taking too long, and the host losing the device: what a guest
+     * cannot ask for and a test has to be able to produce. */
+    stall(from_environment("RVK_ECHO_STALL_MS"));
+    const std::uint64_t fault_after = from_environment("RVK_ECHO_FAULT_AFTER");
+    if (fault_after != 0u && executor->executed + 1u >= fault_after) return RVK_DEVICE_LOST;
     switch (id) {
     case echo:
         *reply_size = size;
