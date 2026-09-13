@@ -396,6 +396,18 @@ guest desktop.
 the M5 sample runs with the KMD out of the submission path and per-submit cost
 is measured lower.
 
+The guest transport (feature 043) is how a process reaches a host rvk context
+before those DDIs land. A process asks for a context with
+`D3DKMTCreateContextVirtual`, carrying the **context record** (RVKT,
+docs/protocol.md) as private data: it names, by the process's own allocation
+handles, the ring, fence page and reply slot. The miniport decodes it, publishes
+those allocations as GUEST blobs, and sends the context's setup. The process
+then writes a batch into the ring it mapped, leaves the submission descriptor
+(RVKS) in the DMA buffer of `D3DKMTSubmitCommandVirtual`, and the miniport rings
+the doorbell it owns; the process waits on the D3DKMT submission fence, which the
+miniport completes from the fence-page interrupt. `KmtTransport` (src/guest/
+transport) is the `ClientTransport` the generated client is handed for all this.
+
 **M7 — OpenGL and OpenCL.** Same kernel path, same device path, different
 capset sub-API and codec. **Done when** each API's existing test suite passes
 in the guest.

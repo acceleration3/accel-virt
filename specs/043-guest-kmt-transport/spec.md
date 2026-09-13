@@ -211,12 +211,20 @@ through its connected state and failing sends.
 
 ## Assumptions
 
-- Features 024 and 041 provide mappable rings, fence pages and host-visible
-  allocations.
+- ~~Features 024 and 041 provide mappable rings, fence pages and host-visible
+  allocations.~~ **Corrected during planning (research.md):** they did not. 024
+  left the doorbell and native-fence DDI slots null; 041 could not place an
+  allocation in the CPU-visible segment. So this feature builds the plumbing
+  itself: the ring, fence page and reply are **aperture-segment allocations
+  published as GUEST blobs** (guest memory the executor imports zero-copy, capset
+  bit 2 - not host-visible BAR memory, which waits on 041); the **miniport owns
+  the doorbell** and rings it; the wait is the D3DKMT submission fence completed
+  from the **fence-page interrupt**, needing no new fence DDI. A context is asked
+  for with **create-context private data** (the RVKT record), not an escape.
 - Feature 063's generator emits the client dispatch and the ICD entry points for
-  each API; this feature supplies the transport they are handed. How that
-  parameter is spelled in the emitted sources is settled with the generator,
-  which this project owns.
+  each API; this feature supplies the transport they are handed. The emitter was
+  changed (option A) so the client asks the transport for a writer over the ring
+  slot - `wire_*` stays fixed-capacity, and the overflow check lands in one place.
 
 ## Out of Scope
 

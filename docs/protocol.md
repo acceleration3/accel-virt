@@ -317,6 +317,42 @@ for its own; `DxgkDdiCreateAllocation` decodes it. It never reaches the device.
 
 Every kind but client is a surface: width, height and pitch are non-zero.
 
+## Context record (user mode -> guest driver)
+
+The private driver data of one `D3DKMTCreateContextVirtual`. A process that
+wants a host rvk context writes it; the miniport decodes it at `PASSIVE` inside
+`DxgkDdiCreateContext` and, like the allocation descriptor, treats every byte as
+hostile. It never reaches the device: it names, by the process's own D3DKMT
+allocation handles, the ring, fence page and reply slot the miniport must
+publish as guest blobs before it sends the context's setup. It carries no
+doorbell - the miniport owns the doorbell page and rings it itself. 32 bytes.
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | magic | `RVKT` = `0x544B5652` |
+| 4 | u32 | sub_api | exactly one of `SubApi` {1 Vulkan, 2 OpenGL, 4 OpenCL} |
+| 8 | u8 | ring_order | within the capset's [min, max] |
+| 9 | u8[3] | reserved | 0 |
+| 12 | u32 | ring | the ring allocation, non-zero |
+| 16 | u32 | fence | the fence-page allocation, non-zero, different from `ring` |
+| 20 | u32 | reply | 0 for no reply slot; otherwise different from `ring` and `fence` |
+| 24 | u64 | reserved | 0 |
+
+The bytes alone prove magic, one known sub-API, non-zero distinct ids and an
+order in 12..24; membership in the device's `sub_apis` and the capset's order
+range are a second validation against the decoded capset. The record is
+unchanged unless the decode returns ok.
+
+### The submission path
+
+With a context set up, a process submits by writing a batch into the ring it
+mapped (see Batches), leaving a submission descriptor (RVKS) in the DMA buffer
+of a `D3DKMTSubmitCommandVirtual`, and letting the miniport ring the doorbell;
+the miniport completes the D3DKMT submission fence the process waits on from the
+fence-page interrupt (see Fence page). A reply-generating command's answer is in
+the reply slot before the fence completes, so a process that waited reads a
+finished answer.
+
 ## Present command (guest driver -> device, in a DMA buffer)
 
 What `DxgkDdiPresent` writes at the start of the DMA buffer dxgkrnl gives it,
