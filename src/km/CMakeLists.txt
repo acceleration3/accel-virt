@@ -12,6 +12,12 @@ file(GLOB_RECURSE RVKGPU_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+# The kernel has no C++ standard headers, and the generated wire includes
+# <cstdint>. Nothing generated belongs in the miniport anyway: a graphics API's
+# commands are decoded on the host, never here (feature 063).
+file(GLOB_RECURSE RVKGPU_GENERATED CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/*.cpp)
+list(REMOVE_ITEM RVKGPU_SOURCES ${RVKGPU_GENERATED})
 
 add_executable(rvkgpu ${RVKGPU_SOURCES})
 set_target_properties(rvkgpu PROPERTIES SUFFIX .sys)

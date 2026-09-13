@@ -96,3 +96,28 @@ class CoverageGate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GeneratedDirectories(unittest.TestCase):
+    """A registry's thousands of commands are not branches any test could walk;
+    what holds generated code honest is the compiler and check_generated.py
+    (feature 063)."""
+
+    def setUp(self):
+        self.tree = SourceTree()
+        self.addCleanup(self.tree.remove)
+        self.profiles = self.tree.root / "build" / "coverage"
+        self.profiles.mkdir(parents=True)
+
+    def test_a_generated_source_is_not_asked_for_coverage(self):
+        self.tree.write("src/proto/generated/vulkan/vk_serialize.cpp", "int generated() { return 1; }\n")
+        verdict = check_coverage.CoverageVerdict(self.tree.root, {"data": [{"files": []}]}, (), self.profiles)
+        self.assertEqual(verdict.unlinked(), [])
+
+    def test_a_hand_written_source_still_is(self):
+        """The exclusion is the directory, and moving a file out of it puts the
+        rule back."""
+        self.tree.write("src/proto/hand_written/wire.cpp", "int written() { return 1; }\n")
+        verdict = check_coverage.CoverageVerdict(self.tree.root, {"data": [{"files": []}]}, (), self.profiles)
+        self.assertEqual(len(verdict.unlinked()), 1)
+        self.assertIn("wire.cpp", verdict.unlinked()[0])

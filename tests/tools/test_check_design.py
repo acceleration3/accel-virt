@@ -107,3 +107,41 @@ class DesignRules(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GeneratedDirectories(unittest.TestCase):
+    """What a generator wrote is not this project's design, and is not judged
+    as such - but nothing hand-written may hide there either, which is what
+    check_generated.py asserts and what this asserts it relies on (feature
+    063)."""
+
+    def setUp(self):
+        self.tree = SourceTree()
+        self.addCleanup(self.tree.remove)
+
+    def test_a_class_a_generator_wrote_is_not_judged_by_these_rules(self):
+        """A registry decides the shape of generated code: static methods and
+        stateless classes in it are the API's doing, not a design mistake."""
+        self.tree.write("src/proto/generated/vulkan/vk_serialize.hpp",
+                        "namespace av::vkproto {\n"
+                        "class Commands {\n"
+                        "public:\n"
+                        "    static void encode();\n"
+                        "};\n"
+                        "}\n")
+        result = run(CHECK, self.tree.root)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_the_same_class_outside_a_generated_directory_is_judged(self):
+        """The exclusion is the directory, not the name: move it and the rules
+        apply again."""
+        self.tree.write("src/proto/hand_written/vk_serialize.hpp",
+                        "namespace av::vkproto {\n"
+                        "class Commands {\n"
+                        "public:\n"
+                        "    static void encode();\n"
+                        "};\n"
+                        "}\n")
+        result = run(CHECK, self.tree.root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Commands", result.stdout + result.stderr)

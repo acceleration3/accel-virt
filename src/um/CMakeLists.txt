@@ -13,6 +13,11 @@ file(GLOB_RECURSE RVKTEST_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+# This program has no C runtime, and the generated wire includes <cstdint>: the
+# Vulkan wire belongs to the ICD feature 045 builds, not to the D3DKMT suite.
+file(GLOB_RECURSE RVKTEST_GENERATED CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/*.cpp)
+list(REMOVE_ITEM RVKTEST_SOURCES ${RVKTEST_GENERATED})
 
 # Import libraries naming exactly what the program calls; the SDK's own are
 # not in the kit.

@@ -53,8 +53,38 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DI
 # Includes name a path from src/ ("core/display/edid.hpp"), from any file.
 file(GLOB_RECURSE AV_PORTABLE_SOURCES CONFIGURE_DEPENDS
   src/core/*.cpp src/proto/*.cpp src/device/*.cpp src/guest/*.cpp)
+
+# What the generators wrote is committed, but it includes the API's own header,
+# and that arrives with tools/fetch_khronos_registries.py. A clean checkout
+# still builds: the generated sources join the build only once the headers are
+# there, and the configure says which state it is in (feature 063).
+set(AV_KHRONOS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/khronos/include)
+# Only the wire compiles today. The generator also writes the guest's dispatch
+# and ICD entries and the host's server dispatch, and those name types no
+# feature has built yet - a transport (043), an ICD connection (045), a backend
+# registry (042). They are generated and committed all the same, because the
+# gate compares the whole tree; each joins a build when its feature arrives.
+set(AV_GENERATED_SOURCES
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_command_names.cpp)
+if(EXISTS ${AV_KHRONOS_INCLUDE}/vulkan/vulkan_core.h)
+  set(AV_GENERATED ON)
+  message(STATUS "generated sources: compiled against ${AV_KHRONOS_INCLUDE}")
+else()
+  set(AV_GENERATED OFF)
+  message(STATUS "generated sources: skipped, no Khronos headers; "
+                 "run tools/fetch_khronos_registries.py to compile them")
+endif()
+# Whatever the glob picked up from generated/, the list above is what builds.
+file(GLOB_RECURSE AV_GENERATED_ALL CONFIGURE_DEPENDS src/proto/generated/*.cpp)
+list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_GENERATED_ALL})
+if(AV_GENERATED)
+  list(APPEND AV_PORTABLE_SOURCES ${AV_GENERATED_SOURCES})
+endif()
 add_library(av_core STATIC ${AV_PORTABLE_SOURCES})
 target_include_directories(av_core PUBLIC src)
+if(AV_GENERATED)
+  target_include_directories(av_core PUBLIC ${AV_KHRONOS_INCLUDE})
+endif()
 target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 
 # ---- the device core for QEMU: a PIC static library behind the C ABI -------
@@ -64,8 +94,15 @@ target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 # TextBuffer is the one core/support class with a body the device core uses.
 file(GLOB_RECURSE AV_DEVICE_SOURCES CONFIGURE_DEPENDS src/device/*.cpp src/proto/*.cpp)
 list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp)
+list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_GENERATED_ALL})
+if(AV_GENERATED)
+  list(APPEND AV_DEVICE_SOURCES ${AV_GENERATED_SOURCES})
+endif()
 add_library(rvk_device STATIC ${AV_DEVICE_SOURCES})
 target_include_directories(rvk_device PRIVATE src)
+if(AV_GENERATED)
+  target_include_directories(rvk_device PRIVATE ${AV_KHRONOS_INCLUDE})
+endif()
 target_compile_options(rvk_device PRIVATE -O2 -ffreestanding)
 set_target_properties(rvk_device PROPERTIES
   POSITION_INDEPENDENT_CODE ON CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
@@ -213,6 +250,10 @@ add_test(NAME guest_image
 add_test(NAME tools_tests
          COMMAND python3 -B -m unittest discover
                  -s ${CMAKE_SOURCE_DIR}/tests/tools -p "test_*.py")
+
+# ---- the committed generated sources are what the generators write --------
+add_test(NAME generated_sources
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_generated.py)
 
 # ---- constitution III and IV.5 --------------------------------------------
 add_test(NAME design_rules

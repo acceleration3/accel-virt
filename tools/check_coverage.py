@@ -15,6 +15,10 @@ import subprocess
 import sys
 
 SOURCE_DIRECTORIES = ("src/core/", "src/device/", "src/proto/", "src/guest/")
+# The same rule the design gate keeps, by the same name: what a generator wrote
+# is held to the compiler and to check_generated.py, not to a branch count no
+# test could reach across thousands of registry commands (feature 063).
+GENERATED_DIRECTORY = "generated"
 BASELINE = "tests/untestable_baseline.txt"
 MARK_RE = re.compile(r'AV_UNTESTABLE\(\s*"([^"]*)"')
 
@@ -46,7 +50,9 @@ class CoverageVerdict:
         for directory in SOURCE_DIRECTORIES:
             for base, _dirs, files in sorted(os.walk(os.path.join(self.root, directory))):
                 found += [os.path.join(base, name) for name in sorted(files)
-                          if name.endswith(suffixes)]
+                          if name.endswith(suffixes)
+                          and f"{os.sep}{GENERATED_DIRECTORY}{os.sep}"
+                          not in f"{os.sep}{os.path.relpath(os.path.join(base, name), self.root)}"]
         return found
 
     def unlinked(self):
@@ -59,6 +65,8 @@ class CoverageVerdict:
 
     def source_path(self, filename):
         relative = os.path.relpath(os.path.realpath(filename), self.root)
+        if f"{os.sep}{GENERATED_DIRECTORY}{os.sep}" in f"{os.sep}{relative}":
+            return None
         return relative if relative.startswith(SOURCE_DIRECTORIES) else None
 
     def uncovered(self):

@@ -10,6 +10,17 @@ import re
 from dataclasses import dataclass, field
 
 SOURCE_DIRECTORIES = ("src/core", "src/device", "src/proto", "src/guest")
+# What a generator wrote is not this project's design and is not judged as such:
+# the registries decide its shape, `tools/check_generated.py` decides that it is
+# what the generator would write, and the compiler judges it like any other
+# source (feature 063). Nothing hand-written may live here, which is what that
+# gate's own test asserts.
+GENERATED_DIRECTORY = "generated"
+
+
+def is_generated(relative):
+    """Whether a repository-relative path is under a generated directory."""
+    return f"{os.sep}{GENERATED_DIRECTORY}{os.sep}" in f"{os.sep}{relative}"
 
 CLASS_RE = re.compile(r"^\s*(?:class|struct)\s+([A-Z]\w*)\s*(?:final\s*)?(?:[:{]|$)")
 METHOD_RE = re.compile(
@@ -50,7 +61,13 @@ def headers(root):
             for name in sorted(files):
                 if name.endswith(".hpp"):
                     path = os.path.join(base, name)
-                    yield path, os.path.relpath(path, root)
+                    relative = os.path.relpath(path, root)
+                    # Filtered by path rather than by pruning `dirs`: this walk
+                    # is materialised by sorted(), so pruning would come too
+                    # late to skip anything.
+                    if is_generated(relative):
+                        continue
+                    yield path, relative
 
 
 def declared_classes(root):

@@ -10,7 +10,7 @@ import os
 import re
 import sys
 
-from header_scan import SOURCE_DIRECTORIES, declared_classes
+from header_scan import SOURCE_DIRECTORIES, declared_classes, is_generated
 
 IN_PLACE_CONSTRUCTORS = ("src/core/support/object_storage.hpp", "src/core/support/object_pool.hpp")
 COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
@@ -23,7 +23,13 @@ def sources(root):
             for name in sorted(files):
                 if name.endswith((".cpp", ".hpp")):
                     path = os.path.join(base, name)
-                    yield path, os.path.relpath(path, root)
+                    relative = os.path.relpath(path, root)
+                    # What a generator wrote answers to the compiler and to
+                    # check_generated.py, not to these rules: a registry decides
+                    # its shape (feature 063).
+                    if is_generated(relative):
+                        continue
+                    yield path, relative
 
 
 def allocation_expressions(root):

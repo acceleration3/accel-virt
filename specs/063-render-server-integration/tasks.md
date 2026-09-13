@@ -23,9 +23,9 @@ description: "Tasks: the generators, vendored"
 
 **Purpose**: nothing can be generated until there is something to generate from, and it has to arrive the way every other external input does.
 
-- [ ] T001 [US2] Write `tests/tools/test_fetch_khronos_registries.py` first, in the style of the other fetch-tool tests: a fetch into an empty tree writes the registries and a marker; a second fetch is a no-op that says so; a hash that does not match unpacks nothing, removes the partial download and names the registry; an unreachable source leaves a previously verified tree untouched
-- [ ] T002 [US2] `tools/fetch_khronos_registries.sh`, modelled on `tools/fetch_qemu.sh`: `vk.xml` and `vulkan_core.h` from Vulkan-Headers, `gl.xml` from OpenGL-Registry, `cl.xml` and the OpenCL headers, each at a **tag**, each verified by SHA-256, unpacked under `third_party/khronos/` with a `VERSION` marker; no path outside this repository appears in any tracked file (`self_contained`)
-- [ ] T003 [US2] `.gitignore` covers `third_party/khronos/`, and `README.md` gains the fetch beside the Windows kit's
+- [X] T001 [US2] Write `tests/tools/test_fetch_khronos_registries.py` first, in the style of the other fetch-tool tests: a fetch into an empty tree writes the registries and a marker; a second fetch is a no-op that says so; a hash that does not match unpacks nothing, removes the partial download and names the registry; an unreachable source leaves a previously verified tree untouched
+- [X] T002 [US2] `tools/fetch_khronos_registries.sh`, modelled on `tools/fetch_qemu.sh`: `vk.xml` and `vulkan_core.h` from Vulkan-Headers, `gl.xml` from OpenGL-Registry, `cl.xml` and the OpenCL headers, each at a **tag**, each verified by SHA-256, unpacked under `third_party/khronos/` with a `VERSION` marker; no path outside this repository appears in any tracked file (`self_contained`)
+- [X] T003 [US2] `.gitignore` covers `third_party/khronos/`, and `README.md` gains the fetch beside the Windows kit's
 
 **Checkpoint**: the inputs arrive, verified. Commit.
 
@@ -37,11 +37,11 @@ description: "Tasks: the generators, vendored"
 
 **Independent Test**: regenerate from a clean checkout and get no diff; edit a generated file and watch the gate name it.
 
-- [ ] T004 [US1] Vendor `rvk_codegen` into `tools/codegen/rvk_codegen/` - the Vulkan package and its `opengl` and `opencl` siblings - with its `pyproject.toml` reduced to this repository's linter settings. Record in `tools/codegen/README.md` where it came from (render-server at `89936e50b6145e75af3553e27d5c8a251787dd62`), that it is stdlib-only, and that it is now this repository's to edit
-- [ ] T005 [US1] The profiles become this repository's: `tools/codegen/profiles/{vulkan,opengl,opencl}.toml` and their id files, taken as they are with a header comment saying what they steer and that editing one is a wire change
-- [ ] T006 [P] [US1] Write `tests/tools/test_check_generated.py` first: a committed tree that matches passes; one that differs fails naming the file; missing registries skip with the reason; a generated directory that holds a file the generator would not write fails too
-- [ ] T007 [US1] `tools/check_generated.py`: runs each generator with `--check` against its committed directory, reports per API, and is wired into `ctest` as `generated_sources` beside `design_rules`
-- [ ] T008 [US1] Generate the Vulkan tree into `src/proto/generated/vulkan/` and commit it, with `--header` pointed at the fetched `vulkan_core.h` so the emitted `pNext` handling matches the header the output compiles against
+- [X] T004 [US1] Vendor `rvk_codegen` into `tools/codegen/rvk_codegen/` - the Vulkan package and its `opengl` and `opencl` siblings - with its `pyproject.toml` reduced to this repository's linter settings. Record in `tools/codegen/README.md` where it came from (render-server at `89936e50b6145e75af3553e27d5c8a251787dd62`), that it is stdlib-only, and that it is now this repository's to edit
+- [X] T005 [US1] The profiles become this repository's: `tools/codegen/profiles/{vulkan,opengl,opencl}.toml` and their id files, taken as they are with a header comment saying what they steer and that editing one is a wire change
+- [X] T006 [P] [US1] Write `tests/tools/test_check_generated.py` first: a committed tree that matches passes; one that differs fails naming the file; missing registries skip with the reason; a generated directory that holds a file the generator would not write fails too
+- [X] T007 [US1] `tools/check_generated.py`: runs each generator with `--check` against its committed directory, reports per API, and is wired into `ctest` as `generated_sources` beside `design_rules`
+- [X] T008 [US1] Generate the Vulkan tree into `src/proto/generated/vulkan/` and commit it, with `--header` pointed at the fetched `vulkan_core.h` so the emitted `pNext` handling matches the header the output compiles against
 
 **Checkpoint**: one API's wire is generated, committed and gated. Commit.
 
@@ -51,9 +51,13 @@ description: "Tasks: the generators, vendored"
 
 **Goal**: the emitted sources compile under this repository's flags, and the gates judge machine-written code by rules it can keep.
 
-- [ ] T009 [US3] Change the `serialize` emitter to emit this repository's includes and types: `proto/wire/wire_reader.hpp` and `proto/wire/wire_writer.hpp` instead of `rvk/protocol/buffer*.hpp`, no `rvk/instr/log.hpp`, and a decode that returns the reader's status rather than trusting a length (contracts/generated_code.md, section B)
-- [ ] T010 [US3] `tools/check_design.py` and `tools/check_coverage.py` exclude `generated/` directories by one named rule each, with their own tests asserting that a hand-written file moved into such a directory is **not** silently exempted
-- [ ] T011 [US3] The generated Vulkan sources compile into `rvk_device` and into the guest build: `CMakeLists.txt` picks them up, and the build passes `-Wall -Wextra -Werror -Wconversion` freestanding with no exceptions or RTTI
+- [X] T009 [US3] Change the `serialize` emitter to emit this repository's includes and types: `proto/wire/wire_reader.hpp` and `proto/wire/wire_writer.hpp` instead of `rvk/protocol/buffer*.hpp`, no `rvk/instr/log.hpp`, and a decode that returns the reader's status rather than trusting a length (contracts/generated_code.md, section B)
+- [X] T010 [US3] `tools/check_design.py` and `tools/check_coverage.py` exclude `generated/` directories by one named rule each (`header_scan.is_generated`), with their own tests asserting that the same class outside such a directory is judged as ever. One bug found doing it: both gates walk with `sorted(os.walk(...))`, which materialises the walk, so pruning `dirs[:]` would have come too late to skip anything - the exclusion filters by path instead
+- [X] T011 [US3] The generated Vulkan wire compiles into `av_core` and `rvk_device` under the full warning set, freestanding, with no exceptions or RTTI. Three things the build said that the plan had not:
+
+  - the generated code includes the API's own header, which arrives with the fetch, so a clean checkout would have stopped building. The generated sources join the build only when `third_party/khronos/include` is there, and the configure line says which state it is in;
+  - **only the wire compiles today.** The generator also writes the guest's dispatch and ICD entries and the host's server dispatch, and those name types no feature has built yet - a transport (043), an ICD connection (045), a backend registry (042). They are generated and committed all the same, because the gate compares the whole tree, and each joins a build when its feature arrives;
+  - neither the kernel miniport nor the no-CRT guest suite can compile `<cstdint>`, and nothing generated belongs in either: a graphics API's commands are decoded on the host
 - [ ] T012 [US3] Write `tests/fuzz/fuzz_generated_decode.cpp` and its corpus: a frame from outside into the generated decoder, with the corpus seeded from a real encode of each of a handful of commands, and the fuzz smoke gate passing
 - [ ] T013 [US3] A unit test that the generated encode and decode round-trip a command and that a truncated frame is refused rather than read past, in `tests/unit/proto/generated/test_generated_vulkan.cpp`
 
