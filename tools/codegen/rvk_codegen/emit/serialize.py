@@ -70,8 +70,7 @@ def _emit_handle_helpers(name: str) -> list[str]:
             "    if (!r.read_pod(raw)) {",
             "        return false;",
             "    }",
-            "    std::memcpy(&out, &raw, sizeof(out));",
-            "    return true;",
+            f"    return wire_to_handle(raw, out);",
             "}",
             "",
         ]
@@ -89,8 +88,7 @@ def _emit_handle_helpers(name: str) -> list[str]:
         "    if (!r.read_pod(raw)) {",
         "        return false;",
         "    }",
-        "    std::memcpy(&out, &raw, sizeof(out));",
-        "    return true;",
+        f"    return wire_to_handle(raw, out);",
         "}",
         "",
     ]
@@ -361,8 +359,13 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "        if (n == 0) {",
             f"            out->{m.name} = nullptr;",
             "        } else {",
-            "            char* s = arena.allocate_chars(static_cast<std::size_t>(n));",
+            "            // One byte more than the wire said, and a zero in it: the",
+            "            // length is the guest's and a host API will strcmp what it",
+            "            // is handed. A fuzzer found this in vkCreateInstance",
+            "            // (feature 042).",
+            "            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);",
             "            if (!r.read(s, static_cast<std::size_t>(n))) { return false; }",
+            "            s[n] = '\\0';",
             f"            out->{m.name} = s;",
             "        }",
             "    }",
@@ -464,10 +467,19 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "                std::uint64_t n = 0;",
             "                if (!r.read_varint(n)) { return false; }",
             "                if (n == 0) {",
-            "                    arr[i] = nullptr;",
+            "                    // An empty name, not a null one: an element of a",
+            "                    // string array is a string the API will read, and a",
+            "                    // null in it is a crash rather than an error. Found",
+            "                    // by the fuzz target in vkCreateInstance's extension",
+            "                    // list (feature 042).",
+            "                    char* empty = arena.allocate_chars(1u);",
+            "                    if (empty == nullptr) { return false; }",
+            "                    empty[0] = '\\0';",
+            "                    arr[i] = empty;",
             "                } else {",
-            "                    char* s = arena.allocate_chars(static_cast<std::size_t>(n));",
+            "                    char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);",
             "                    if (!r.read(s, static_cast<std::size_t>(n))) { return false; }",
+            "                    s[n] = '\\0';",
             "                    arr[i] = s;",
             "                }",
             "            }",
@@ -577,21 +589,23 @@ def _emit_pnext_codec(reg: Registry) -> list[str]:
         "    if (present == 0) { return true; }",
         "    std::uint32_t raw = 0;",
         "    if (!r.read_pod(raw)) { return false; }",
-        "    const auto st = static_cast<VkStructureType>(raw);",
+        "    // Switched on as the number it is. Loading an attacker's u32 as a",
+        "    // VkStructureType is undefined for every value the enum does not",
+        "    // have, and a fuzzer found one (feature 042).",
         "    VkBaseOutStructure* dst = nullptr;",
         "    for (VkBaseOutStructure* n = out->pNext; n != nullptr; n = n->pNext) {",
-        "        if (n->sType == st) { dst = n; break; }",
+        "        if (static_cast<std::uint32_t>(n->sType) == raw) { dst = n; break; }",
         "    }",
         "    // Only adopt a freshly allocated node when the caller had no",
         "    // chain at all (the server side). Splicing one into an",
         "    // application's chain would hand it a struct it never asked",
         "    // for and never frees.",
         "    const bool adopt = (dst == nullptr && out->pNext == nullptr);",
-        "    switch (st) {",
+        "    switch (raw) {",
     ])
     for s in nodes:
         lines.extend([
-            f"    case {_stype_of(s)}: {{",
+            f"    case static_cast<std::uint32_t>({_stype_of(s)}): {{",
             f"        auto* typed = (dst != nullptr) ? reinterpret_cast<{s.name}*>(dst)",
             f"                                       : arena.allocate<{s.name}>();",
             "        if (typed == nullptr) { return false; }",
@@ -873,7 +887,17 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "[[nodiscard]] std::uint64_t handle_to_wire(VkQueue v) noexcept;",
         "[[nodiscard]] std::uint64_t handle_to_wire(VkCommandBuffer v) noexcept;",
         "",
+        "// The other direction, and the one that decides whether a handle off",
+        "// the wire is a pointer the host will dereference. The default is",
+        "// identity, which is right on the guest side - the numbers are the",
+        "// application's own - and wrong on the host, where they are an",
+        "// attacker's: a host answers false for any handle it did not make",
+        "// itself. Weakly defined so the guest and the loopback tests link",
+        "// without a registry; see vk_handle_default.cpp (feature 042).",
     ]
+    for h in _referenced_handle_names(reg):
+        header.append(f"[[nodiscard]] bool wire_to_handle(std::uint64_t raw, {h}& out) noexcept;")
+    header.append("")
 
     for h in _referenced_handle_names(reg):
         header.extend(_emit_handle_helpers(h))
@@ -1060,6 +1084,15 @@ def emit(reg: Registry, out_dir: Path) -> None:
         handle_default.append(
             f"RVK_HOOK_DEFAULT std::uint64_t handle_to_wire({h} v) noexcept "
             f"{{ return identity(v); }}"
+        )
+    handle_default.append("")
+    handle_default.append("// Identity inbound as well, which is right where the numbers are the")
+    handle_default.append("// caller's own. A host overrides every one of these, because there they")
+    handle_default.append("// are an attacker's (feature 042).")
+    for h in _referenced_handle_names(reg):
+        handle_default.append(
+            f"RVK_HOOK_DEFAULT bool wire_to_handle(std::uint64_t raw, {h}& out) noexcept "
+            f"{{ std::memcpy(&out, &raw, sizeof(out)); return true; }}"
         )
     handle_default.append("")
     handle_default.append("}  // namespace av::vkproto")

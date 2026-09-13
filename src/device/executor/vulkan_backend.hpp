@@ -10,6 +10,7 @@
 #ifndef AV_VULKAN_BACKEND_HPP
 #define AV_VULKAN_BACKEND_HPP
 
+#include "device/executor/handle_registry.hpp"
 #include "device/executor/session_backend.hpp"
 #include "proto/generated/vulkan/vk_real_dispatch.h"
 
@@ -31,6 +32,21 @@ public:
     /* The two commands this backend interposes rather than forwards
      * untouched: an imported blob has to become memory of some device, and
      * nothing else says which. */
+    /* The five handles the loader dereferences, remembered as this backend
+     * makes them so that wire_to_handle can refuse every other number. */
+    VkResult on_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
+                                 const VkAllocationCallbacks *pAllocator,
+                                 VkInstance *pInstance) override;
+    VkResult on_vkEnumeratePhysicalDevices(VkInstance instance, uint32_t *pPhysicalDeviceCount,
+                                           VkPhysicalDevice *pPhysicalDevices) override;
+    void     on_vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex,
+                                 VkQueue *pQueue) override;
+    VkResult on_vkAllocateCommandBuffers(VkDevice device,
+                                         const VkCommandBufferAllocateInfo *pAllocateInfo,
+                                         VkCommandBuffer *pCommandBuffers) override;
+    void     on_vkDestroyInstance(VkInstance instance,
+                                  const VkAllocationCallbacks *pAllocator) override;
+
     VkResult on_vkCreateDevice(VkPhysicalDevice physicalDevice,
                                const VkDeviceCreateInfo *pCreateInfo,
                                const VkAllocationCallbacks *pAllocator, VkDevice *pDevice) override;
@@ -42,6 +58,13 @@ public:
     /* Commands run since this backend was made, which is what a conformance
      * run counts. */
     uint64_t ran() const;
+    /* Whether this backend made the handle a guest just named. What the
+     * generated decoder asks through wire_to_handle. */
+    bool     knows_handle(uint64_t raw) const;
+    /* The backend whose handles the decoder is inside. One context runs on one
+     * worker and one call at a time - the ABI says so - so the answer is the
+     * thread's, which is the only shape a hook with no user pointer can take. */
+    static VulkanBackend *deciding();
 
 private:
     /* Every Vulkan command id has this in its top 16 bits; the device filters
@@ -58,7 +81,8 @@ private:
     /* The device the imports belong to. A VkDeviceMemory is a device's, and
      * the guest makes exactly one per context through vkCreateDevice, so this
      * is taken from the command that made it rather than guessed. */
-    VkDevice device_;
+    VkDevice       device_;
+    HandleRegistry handles_;
     uint64_t ran_;
     bool     lost_;
 };

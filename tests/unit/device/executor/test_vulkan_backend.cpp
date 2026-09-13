@@ -15,6 +15,7 @@
 #include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 using av::VulkanBackend;
 using av::WireArena;
@@ -164,14 +165,54 @@ TEST(vulkan_backend, the_device_the_guest_makes_is_the_one_imports_belong_to)
   WireWriter answer(reply, sizeof reply);
   CHECK(backend.run(av::vkproto::kCmd_vkCreateInstance, payload, answer, arena));
 
-  /* Destroying a device this backend never saw leaves it as it was, which is
-   * the case a guest can drive with a handle it invented. */
+  /* A device this backend never made is refused before the driver sees it -
+   * including the null one, which the loader would dereference to find the
+   * table to call through. */
   std::uint8_t destroy_frame[64];
-  WireWriter destroy_writer(destroy_frame, sizeof destroy_frame);
-  VkDevice stranger = VK_NULL_HANDLE;
-  av::vkproto::serialize_VkDevice(destroy_writer, stranger);
+  WireWriter   destroy_writer(destroy_frame, sizeof destroy_frame);
+  destroy_writer.write_pod<std::uint64_t>(0u);
   WireReader destroy_payload(destroy_frame, destroy_writer.offset());
   WireWriter destroy_answer(reply, sizeof reply);
   arena.reset();
-  CHECK(backend.run(av::vkproto::kCmd_vkDestroyDevice, destroy_payload, destroy_answer, arena));
+  CHECK(!backend.run(av::vkproto::kCmd_vkDestroyDevice, destroy_payload, destroy_answer, arena));
+
+  std::uint8_t invented_frame[64];
+  WireWriter   invented(invented_frame, sizeof invented_frame);
+  invented.write_pod<std::uint64_t>(0xDEADBEEFu);
+  WireReader invented_payload(invented_frame, invented.offset());
+  WireWriter invented_answer(reply, sizeof reply);
+  arena.reset();
+  CHECK(!backend.run(av::vkproto::kCmd_vkDestroyDevice, invented_payload, invented_answer, arena));
   CHECK(!backend.lost()); }
+
+/* The property a guest must not be able to break: a number this host did not
+ * produce is not a handle. A fuzzer reached vkDestroyInstance with a
+ * guest-chosen address before this existed, so what is asserted here is that
+ * knows_handle answers for the executor's own handles and nothing else. */
+TEST(vulkan_backend, knows_only_the_handles_it_made)
+{ VulkanBackend backend;
+  CHECK(!backend.knows_handle(0x1234u));
+  /* The null handle is the API's own, and the hook refuses it separately -
+   * a dispatchable null is what the loader dereferences to find its table. */
+  CHECK(backend.knows_handle(0u));
+
+  std::uint8_t block[block_bytes];
+  WireArena arena(block, sizeof block);
+  std::uint8_t frame[1024];
+  const std::size_t length = create_instance_frame(frame, sizeof frame);
+  std::uint8_t reply[256] = {};
+  WireReader payload(frame, length);
+  WireWriter answer(reply, sizeof reply);
+  CHECK(backend.run(av::vkproto::kCmd_vkCreateInstance, payload, answer, arena));
+
+  /* Read as the number it is rather than through deserialize_VkInstance,
+   * which now refuses every handle outside a dispatch - which is the point. */
+  av::WireReader read_back(reply, answer.offset());
+  std::int32_t   returned = 0;
+  std::uint64_t  raw = 0u;
+  CHECK(read_back.read_pod(returned));
+  CHECK(read_back.read_pod(raw));
+  if (returned == VK_SUCCESS) {
+      CHECK(backend.knows_handle(raw));
+      CHECK(!backend.knows_handle(raw ^ 0x1000u));
+  } }

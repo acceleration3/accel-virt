@@ -147,12 +147,7 @@ if(AV_QEMU)
     USES_TERMINAL
     COMMENT "QEMU with virtio-gpu-rvk")
   # The executor the qtest suites name: the device's execution path without render-server.
-  add_library(rvk_echo_executor SHARED tests/qemu/echo_executor.cpp)
-  # A library that loads and answers no table, so the smoke test can prove
-  # realize fails rather than a capset-less device coming up (feature 042).
-  add_library(rvk_null_ops_executor SHARED tests/qemu/null_ops_executor.cpp)
-  target_include_directories(rvk_null_ops_executor PRIVATE src/device/abi)
-  target_include_directories(rvk_echo_executor PRIVATE src/device/abi)
+
   add_test(NAME qemu_smoke
            COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tests/qemu/qemu_smoke.py ${CMAKE_BINARY_DIR}/qemu
                    $<TARGET_FILE:rvk_echo_executor> $<TARGET_FILE:rvk_null_ops_executor>)
@@ -319,6 +314,34 @@ set_target_properties(rvk_executor PROPERTIES CXX_VISIBILITY_PRESET hidden
 # reaching the dynamic table is surface nobody asked for.
 target_link_options(rvk_executor PRIVATE -Wl,--exclude-libs,ALL)
 
+# ---- two libraries that exist to be held to the ABI ------------------------
+# Built in every configuration, not only under AV_QEMU: the conformance suite
+# runs against them, and a suite whose only library is this project's newest
+# one has tested nothing. Neither needs QEMU.
+add_library(rvk_echo_executor SHARED tests/qemu/echo_executor.cpp)
+target_include_directories(rvk_echo_executor PRIVATE src/device/abi)
+# A library that loads and answers no table, so the smoke test can prove realize
+# fails rather than a capset-less device coming up (feature 042).
+add_library(rvk_null_ops_executor SHARED tests/qemu/null_ops_executor.cpp)
+target_include_directories(rvk_null_ops_executor PRIVATE src/device/abi)
+
+# ---- any executor library, held to the ABI this repository owns (FR-001) ----
+# Not under AV_QEMU: the suite has to run sanitized, and that configuration
+# returns before the sanitizer flags are set. It needs no QEMU either - an
+# executor library is an ordinary shared object and this calls its ABI.
+add_executable(executor_conformance
+  tests/conformance/executor/executor_conformance.cpp
+  tests/conformance/executor/main.cpp)
+target_include_directories(executor_conformance PRIVATE tests src)
+target_link_libraries(executor_conformance PRIVATE ${CMAKE_DL_LIBS})
+# The same flags the tests carry: the library it loads is built with them, and
+# a sanitized object cannot be opened by a runner that is not.
+target_compile_options(executor_conformance PRIVATE ${AV_TEST_FLAGS})
+target_link_options(executor_conformance PRIVATE ${AV_TEST_FLAGS})
+add_test(NAME executor_conformance
+         COMMAND executor_conformance $<TARGET_FILE:rvk_executor>
+                 $<TARGET_FILE:rvk_echo_executor>)
+
 # ---- principle IX: a clean clone of this repository is all it takes ----------
 add_test(NAME self_contained
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_self_contained.py ${CMAKE_SOURCE_DIR})
@@ -329,6 +352,16 @@ if(AV_FUZZ)
     set(ENV{AV_FUZZ_SECONDS} 60)
   endif()
   file(GLOB AV_FUZZ_SOURCES CONFIGURE_DEPENDS tests/fuzz/fuzz_*.cpp)
+  # Built, seeded and runnable, but not yet a gate: it still finds a defect
+  # class the emitter has to fix - a length expression that reads an enum
+  # member decoded from the wire, which is an undefined load for every value
+  # the enum does not have. The corpus carries the reproducer. Feature 042,
+  # task T029; it joins the gate in the same commit that fixes it.
+  list(REMOVE_ITEM AV_FUZZ_SOURCES ${CMAKE_SOURCE_DIR}/tests/fuzz/fuzz_executor_vulkan.cpp)
+  add_executable(fuzz_executor_vulkan tests/fuzz/fuzz_executor_vulkan.cpp)
+  target_link_libraries(fuzz_executor_vulkan PRIVATE av_harness)
+  target_compile_options(fuzz_executor_vulkan PRIVATE -fsanitize=fuzzer)
+  target_link_options(fuzz_executor_vulkan PRIVATE -fsanitize=fuzzer)
   # The generated decoder's target includes the API's own header, which arrives
   # with the registry fetch; without it there is nothing to fuzz.
   if(NOT AV_GENERATED)

@@ -40,6 +40,51 @@ static_assert(sizeof(void*) == 8 || sizeof(void*) == 4,
 [[nodiscard]] std::uint64_t handle_to_wire(VkQueue v) noexcept;
 [[nodiscard]] std::uint64_t handle_to_wire(VkCommandBuffer v) noexcept;
 
+// The other direction, and the one that decides whether a handle off
+// the wire is a pointer the host will dereference. The default is
+// identity, which is right on the guest side - the numbers are the
+// application's own - and wrong on the host, where they are an
+// attacker's: a host answers false for any handle it did not make
+// itself. Weakly defined so the guest and the loopback tests link
+// without a registry; see vk_handle_default.cpp (feature 042).
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkAccelerationStructureKHR& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkAccelerationStructureNV& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkBuffer& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkBufferView& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkCommandBuffer& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkCommandPool& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDeferredOperationKHR& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDescriptorPool& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDescriptorSet& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDescriptorSetLayout& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDescriptorUpdateTemplate& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDevice& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDeviceMemory& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkEvent& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkFence& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkFramebuffer& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkImage& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkImageView& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkInstance& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkMicromapEXT& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkPhysicalDevice& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkPipeline& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkPipelineBinaryKHR& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkPipelineCache& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkPipelineLayout& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkPrivateDataSlot& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkQueryPool& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkQueue& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkRenderPass& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkSampler& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkSamplerYcbcrConversion& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkSemaphore& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkShaderEXT& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkShaderModule& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkSurfaceKHR& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkSwapchainKHR& out) noexcept;
+[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkValidationCacheEXT& out) noexcept;
+
 inline void serialize_VkAccelerationStructureKHR(::av::WireWriter& buf, VkAccelerationStructureKHR v) noexcept {
     std::uint64_t raw = 0;
     static_assert(sizeof(VkAccelerationStructureKHR) == sizeof(raw));
@@ -52,8 +97,7 @@ inline void serialize_VkAccelerationStructureKHR(::av::WireWriter& buf, VkAccele
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkAccelerationStructureNV(::av::WireWriter& buf, VkAccelerationStructureNV v) noexcept {
@@ -68,8 +112,7 @@ inline void serialize_VkAccelerationStructureNV(::av::WireWriter& buf, VkAcceler
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkBuffer(::av::WireWriter& buf, VkBuffer v) noexcept {
@@ -84,8 +127,7 @@ inline void serialize_VkBuffer(::av::WireWriter& buf, VkBuffer v) noexcept {
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkBufferView(::av::WireWriter& buf, VkBufferView v) noexcept {
@@ -100,8 +142,7 @@ inline void serialize_VkBufferView(::av::WireWriter& buf, VkBufferView v) noexce
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkCommandBuffer(::av::WireWriter& buf, VkCommandBuffer v) noexcept {
@@ -113,8 +154,7 @@ inline void serialize_VkCommandBuffer(::av::WireWriter& buf, VkCommandBuffer v) 
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkCommandPool(::av::WireWriter& buf, VkCommandPool v) noexcept {
@@ -129,8 +169,7 @@ inline void serialize_VkCommandPool(::av::WireWriter& buf, VkCommandPool v) noex
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkDeferredOperationKHR(::av::WireWriter& buf, VkDeferredOperationKHR v) noexcept {
@@ -145,8 +184,7 @@ inline void serialize_VkDeferredOperationKHR(::av::WireWriter& buf, VkDeferredOp
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkDescriptorPool(::av::WireWriter& buf, VkDescriptorPool v) noexcept {
@@ -161,8 +199,7 @@ inline void serialize_VkDescriptorPool(::av::WireWriter& buf, VkDescriptorPool v
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkDescriptorSet(::av::WireWriter& buf, VkDescriptorSet v) noexcept {
@@ -177,8 +214,7 @@ inline void serialize_VkDescriptorSet(::av::WireWriter& buf, VkDescriptorSet v) 
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkDescriptorSetLayout(::av::WireWriter& buf, VkDescriptorSetLayout v) noexcept {
@@ -193,8 +229,7 @@ inline void serialize_VkDescriptorSetLayout(::av::WireWriter& buf, VkDescriptorS
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkDescriptorUpdateTemplate(::av::WireWriter& buf, VkDescriptorUpdateTemplate v) noexcept {
@@ -209,8 +244,7 @@ inline void serialize_VkDescriptorUpdateTemplate(::av::WireWriter& buf, VkDescri
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkDevice(::av::WireWriter& buf, VkDevice v) noexcept {
@@ -222,8 +256,7 @@ inline void serialize_VkDevice(::av::WireWriter& buf, VkDevice v) noexcept {
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkDeviceMemory(::av::WireWriter& buf, VkDeviceMemory v) noexcept {
@@ -238,8 +271,7 @@ inline void serialize_VkDeviceMemory(::av::WireWriter& buf, VkDeviceMemory v) no
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkEvent(::av::WireWriter& buf, VkEvent v) noexcept {
@@ -254,8 +286,7 @@ inline void serialize_VkEvent(::av::WireWriter& buf, VkEvent v) noexcept {
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkFence(::av::WireWriter& buf, VkFence v) noexcept {
@@ -270,8 +301,7 @@ inline void serialize_VkFence(::av::WireWriter& buf, VkFence v) noexcept {
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkFramebuffer(::av::WireWriter& buf, VkFramebuffer v) noexcept {
@@ -286,8 +316,7 @@ inline void serialize_VkFramebuffer(::av::WireWriter& buf, VkFramebuffer v) noex
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkImage(::av::WireWriter& buf, VkImage v) noexcept {
@@ -302,8 +331,7 @@ inline void serialize_VkImage(::av::WireWriter& buf, VkImage v) noexcept {
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkImageView(::av::WireWriter& buf, VkImageView v) noexcept {
@@ -318,8 +346,7 @@ inline void serialize_VkImageView(::av::WireWriter& buf, VkImageView v) noexcept
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkInstance(::av::WireWriter& buf, VkInstance v) noexcept {
@@ -331,8 +358,7 @@ inline void serialize_VkInstance(::av::WireWriter& buf, VkInstance v) noexcept {
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkMicromapEXT(::av::WireWriter& buf, VkMicromapEXT v) noexcept {
@@ -347,8 +373,7 @@ inline void serialize_VkMicromapEXT(::av::WireWriter& buf, VkMicromapEXT v) noex
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkPhysicalDevice(::av::WireWriter& buf, VkPhysicalDevice v) noexcept {
@@ -360,8 +385,7 @@ inline void serialize_VkPhysicalDevice(::av::WireWriter& buf, VkPhysicalDevice v
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkPipeline(::av::WireWriter& buf, VkPipeline v) noexcept {
@@ -376,8 +400,7 @@ inline void serialize_VkPipeline(::av::WireWriter& buf, VkPipeline v) noexcept {
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkPipelineBinaryKHR(::av::WireWriter& buf, VkPipelineBinaryKHR v) noexcept {
@@ -392,8 +415,7 @@ inline void serialize_VkPipelineBinaryKHR(::av::WireWriter& buf, VkPipelineBinar
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkPipelineCache(::av::WireWriter& buf, VkPipelineCache v) noexcept {
@@ -408,8 +430,7 @@ inline void serialize_VkPipelineCache(::av::WireWriter& buf, VkPipelineCache v) 
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkPipelineLayout(::av::WireWriter& buf, VkPipelineLayout v) noexcept {
@@ -424,8 +445,7 @@ inline void serialize_VkPipelineLayout(::av::WireWriter& buf, VkPipelineLayout v
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkPrivateDataSlot(::av::WireWriter& buf, VkPrivateDataSlot v) noexcept {
@@ -440,8 +460,7 @@ inline void serialize_VkPrivateDataSlot(::av::WireWriter& buf, VkPrivateDataSlot
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkQueryPool(::av::WireWriter& buf, VkQueryPool v) noexcept {
@@ -456,8 +475,7 @@ inline void serialize_VkQueryPool(::av::WireWriter& buf, VkQueryPool v) noexcept
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkQueue(::av::WireWriter& buf, VkQueue v) noexcept {
@@ -469,8 +487,7 @@ inline void serialize_VkQueue(::av::WireWriter& buf, VkQueue v) noexcept {
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkRenderPass(::av::WireWriter& buf, VkRenderPass v) noexcept {
@@ -485,8 +502,7 @@ inline void serialize_VkRenderPass(::av::WireWriter& buf, VkRenderPass v) noexce
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkSampler(::av::WireWriter& buf, VkSampler v) noexcept {
@@ -501,8 +517,7 @@ inline void serialize_VkSampler(::av::WireWriter& buf, VkSampler v) noexcept {
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkSamplerYcbcrConversion(::av::WireWriter& buf, VkSamplerYcbcrConversion v) noexcept {
@@ -517,8 +532,7 @@ inline void serialize_VkSamplerYcbcrConversion(::av::WireWriter& buf, VkSamplerY
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkSemaphore(::av::WireWriter& buf, VkSemaphore v) noexcept {
@@ -533,8 +547,7 @@ inline void serialize_VkSemaphore(::av::WireWriter& buf, VkSemaphore v) noexcept
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkShaderEXT(::av::WireWriter& buf, VkShaderEXT v) noexcept {
@@ -549,8 +562,7 @@ inline void serialize_VkShaderEXT(::av::WireWriter& buf, VkShaderEXT v) noexcept
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkShaderModule(::av::WireWriter& buf, VkShaderModule v) noexcept {
@@ -565,8 +577,7 @@ inline void serialize_VkShaderModule(::av::WireWriter& buf, VkShaderModule v) no
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkSurfaceKHR(::av::WireWriter& buf, VkSurfaceKHR v) noexcept {
@@ -581,8 +592,7 @@ inline void serialize_VkSurfaceKHR(::av::WireWriter& buf, VkSurfaceKHR v) noexce
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkSwapchainKHR(::av::WireWriter& buf, VkSwapchainKHR v) noexcept {
@@ -597,8 +607,7 @@ inline void serialize_VkSwapchainKHR(::av::WireWriter& buf, VkSwapchainKHR v) no
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 inline void serialize_VkValidationCacheEXT(::av::WireWriter& buf, VkValidationCacheEXT v) noexcept {
@@ -613,8 +622,7 @@ inline void serialize_VkValidationCacheEXT(::av::WireWriter& buf, VkValidationCa
     if (!r.read_pod(raw)) {
         return false;
     }
-    std::memcpy(&out, &raw, sizeof(out));
-    return true;
+    return wire_to_handle(raw, out);
 }
 
 // Forward declarations.
@@ -2640,9 +2648,14 @@ inline void serialize_VkApplicationInfo(::av::WireWriter& buf, const VkApplicati
         if (n == 0) {
             out->pApplicationName = nullptr;
         } else {
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            // One byte more than the wire said, and a zero in it: the
+            // length is the guest's and a host API will strcmp what it
+            // is handed. A fuzzer found this in vkCreateInstance
+            // (feature 042).
+            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
             if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            s[n] = '\0';
             out->pApplicationName = s;
         }
     }
@@ -2653,9 +2666,14 @@ inline void serialize_VkApplicationInfo(::av::WireWriter& buf, const VkApplicati
         if (n == 0) {
             out->pEngineName = nullptr;
         } else {
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            // One byte more than the wire said, and a zero in it: the
+            // length is the guest's and a host API will strcmp what it
+            // is handed. A fuzzer found this in vkCreateInstance
+            // (feature 042).
+            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
             if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            s[n] = '\0';
             out->pEngineName = s;
         }
     }
@@ -4040,9 +4058,14 @@ inline void serialize_VkPipelineShaderStageCreateInfo(::av::WireWriter& buf, con
         if (n == 0) {
             out->pName = nullptr;
         } else {
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            // One byte more than the wire said, and a zero in it: the
+            // length is the guest's and a host API will strcmp what it
+            // is handed. A fuzzer found this in vkCreateInstance
+            // (feature 042).
+            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
             if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            s[n] = '\0';
             out->pName = s;
         }
     }
@@ -4604,9 +4627,14 @@ inline void serialize_VkDebugUtilsObjectNameInfoEXT(::av::WireWriter& buf, const
         if (n == 0) {
             out->pObjectName = nullptr;
         } else {
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            // One byte more than the wire said, and a zero in it: the
+            // length is the guest's and a host API will strcmp what it
+            // is handed. A fuzzer found this in vkCreateInstance
+            // (feature 042).
+            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
             if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            s[n] = '\0';
             out->pObjectName = s;
         }
     }
@@ -5290,11 +5318,20 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
                 std::uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
                 if (n == 0) {
-                    arr[i] = nullptr;
+                    // An empty name, not a null one: an element of a
+                    // string array is a string the API will read, and a
+                    // null in it is a crash rather than an error. Found
+                    // by the fuzz target in vkCreateInstance's extension
+                    // list (feature 042).
+                    char* empty = arena.allocate_chars(1u);
+                    if (empty == nullptr) { return false; }
+                    empty[0] = '\0';
+                    arr[i] = empty;
                 } else {
-                    char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+                    char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
                     if (s == nullptr) { return false; }
                     if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+                    s[n] = '\0';
                     arr[i] = s;
                 }
             }
@@ -5314,11 +5351,20 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
                 std::uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
                 if (n == 0) {
-                    arr[i] = nullptr;
+                    // An empty name, not a null one: an element of a
+                    // string array is a string the API will read, and a
+                    // null in it is a crash rather than an error. Found
+                    // by the fuzz target in vkCreateInstance's extension
+                    // list (feature 042).
+                    char* empty = arena.allocate_chars(1u);
+                    if (empty == nullptr) { return false; }
+                    empty[0] = '\0';
+                    arr[i] = empty;
                 } else {
-                    char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+                    char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
                     if (s == nullptr) { return false; }
                     if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+                    s[n] = '\0';
                     arr[i] = s;
                 }
             }
@@ -7826,11 +7872,20 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
                 std::uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
                 if (n == 0) {
-                    arr[i] = nullptr;
+                    // An empty name, not a null one: an element of a
+                    // string array is a string the API will read, and a
+                    // null in it is a crash rather than an error. Found
+                    // by the fuzz target in vkCreateInstance's extension
+                    // list (feature 042).
+                    char* empty = arena.allocate_chars(1u);
+                    if (empty == nullptr) { return false; }
+                    empty[0] = '\0';
+                    arr[i] = empty;
                 } else {
-                    char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+                    char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
                     if (s == nullptr) { return false; }
                     if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+                    s[n] = '\0';
                     arr[i] = s;
                 }
             }
@@ -7850,11 +7905,20 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
                 std::uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
                 if (n == 0) {
-                    arr[i] = nullptr;
+                    // An empty name, not a null one: an element of a
+                    // string array is a string the API will read, and a
+                    // null in it is a crash rather than an error. Found
+                    // by the fuzz target in vkCreateInstance's extension
+                    // list (feature 042).
+                    char* empty = arena.allocate_chars(1u);
+                    if (empty == nullptr) { return false; }
+                    empty[0] = '\0';
+                    arr[i] = empty;
                 } else {
-                    char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+                    char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
                     if (s == nullptr) { return false; }
                     if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+                    s[n] = '\0';
                     arr[i] = s;
                 }
             }
@@ -7934,9 +7998,14 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
         if (n == 0) {
             out->pLayerName = nullptr;
         } else {
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            // One byte more than the wire said, and a zero in it: the
+            // length is the guest's and a host API will strcmp what it
+            // is handed. A fuzzer found this in vkCreateInstance
+            // (feature 042).
+            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
             if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            s[n] = '\0';
             out->pLayerName = s;
         }
     }
@@ -7946,9 +8015,14 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
         if (n == 0) {
             out->pSettingName = nullptr;
         } else {
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            // One byte more than the wire said, and a zero in it: the
+            // length is the guest's and a host API will strcmp what it
+            // is handed. A fuzzer found this in vkCreateInstance
+            // (feature 042).
+            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
             if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            s[n] = '\0';
             out->pSettingName = s;
         }
     }
@@ -18580,9 +18654,14 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
         if (n == 0) {
             out->pName = nullptr;
         } else {
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            // One byte more than the wire said, and a zero in it: the
+            // length is the guest's and a host API will strcmp what it
+            // is handed. A fuzzer found this in vkCreateInstance
+            // (feature 042).
+            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
             if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            s[n] = '\0';
             out->pName = s;
         }
     }
@@ -22449,18 +22528,20 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
     if (present == 0) { return true; }
     std::uint32_t raw = 0;
     if (!r.read_pod(raw)) { return false; }
-    const auto st = static_cast<VkStructureType>(raw);
+    // Switched on as the number it is. Loading an attacker's u32 as a
+    // VkStructureType is undefined for every value the enum does not
+    // have, and a fuzzer found one (feature 042).
     VkBaseOutStructure* dst = nullptr;
     for (VkBaseOutStructure* n = out->pNext; n != nullptr; n = n->pNext) {
-        if (n->sType == st) { dst = n; break; }
+        if (static_cast<std::uint32_t>(n->sType) == raw) { dst = n; break; }
     }
     // Only adopt a freshly allocated node when the caller had no
     // chain at all (the server side). Splicing one into an
     // application's chain would hand it a struct it never asked
     // for and never frees.
     const bool adopt = (dst == nullptr && out->pNext == nullptr);
-    switch (st) {
-    case VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_LINEAR_SWEPT_SPHERES_DATA_NV: {
+    switch (raw) {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_LINEAR_SWEPT_SPHERES_DATA_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAccelerationStructureGeometryLinearSweptSpheresDataNV*>(dst)
                                        : arena.allocate<VkAccelerationStructureGeometryLinearSweptSpheresDataNV>();
         if (typed == nullptr) { return false; }
@@ -22468,7 +22549,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_MOTION_TRIANGLES_DATA_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_MOTION_TRIANGLES_DATA_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAccelerationStructureGeometryMotionTrianglesDataNV*>(dst)
                                        : arena.allocate<VkAccelerationStructureGeometryMotionTrianglesDataNV>();
         if (typed == nullptr) { return false; }
@@ -22476,7 +22557,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_SPHERES_DATA_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_SPHERES_DATA_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAccelerationStructureGeometrySpheresDataNV*>(dst)
                                        : arena.allocate<VkAccelerationStructureGeometrySpheresDataNV>();
         if (typed == nullptr) { return false; }
@@ -22484,7 +22565,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MOTION_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MOTION_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAccelerationStructureMotionInfoNV*>(dst)
                                        : arena.allocate<VkAccelerationStructureMotionInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22492,7 +22573,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_AMIGO_PROFILING_SUBMIT_INFO_SEC: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_AMIGO_PROFILING_SUBMIT_INFO_SEC): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAmigoProfilingSubmitInfoSEC*>(dst)
                                        : arena.allocate<VkAmigoProfilingSubmitInfoSEC>();
         if (typed == nullptr) { return false; }
@@ -22500,7 +22581,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAttachmentDescriptionStencilLayout*>(dst)
                                        : arena.allocate<VkAttachmentDescriptionStencilLayout>();
         if (typed == nullptr) { return false; }
@@ -22508,7 +22589,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_STENCIL_LAYOUT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_STENCIL_LAYOUT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAttachmentReferenceStencilLayout*>(dst)
                                        : arena.allocate<VkAttachmentReferenceStencilLayout>();
         if (typed == nullptr) { return false; }
@@ -22516,7 +22597,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_ATTACHMENT_SAMPLE_COUNT_INFO_AMD: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ATTACHMENT_SAMPLE_COUNT_INFO_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAttachmentSampleCountInfoAMD*>(dst)
                                        : arena.allocate<VkAttachmentSampleCountInfoAMD>();
         if (typed == nullptr) { return false; }
@@ -22524,7 +22605,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSampleLocationsInfoEXT*>(dst)
                                        : arena.allocate<VkSampleLocationsInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -22532,7 +22613,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBindBufferMemoryDeviceGroupInfo*>(dst)
                                        : arena.allocate<VkBindBufferMemoryDeviceGroupInfo>();
         if (typed == nullptr) { return false; }
@@ -22540,7 +22621,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBindImageMemoryDeviceGroupInfo*>(dst)
                                        : arena.allocate<VkBindImageMemoryDeviceGroupInfo>();
         if (typed == nullptr) { return false; }
@@ -22548,7 +22629,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBindImageMemorySwapchainInfoKHR*>(dst)
                                        : arena.allocate<VkBindImageMemorySwapchainInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -22556,7 +22637,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBindImagePlaneMemoryInfo*>(dst)
                                        : arena.allocate<VkBindImagePlaneMemoryInfo>();
         if (typed == nullptr) { return false; }
@@ -22564,7 +22645,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_BLIT_IMAGE_CUBIC_WEIGHTS_INFO_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BLIT_IMAGE_CUBIC_WEIGHTS_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBlitImageCubicWeightsInfoQCOM*>(dst)
                                        : arena.allocate<VkBlitImageCubicWeightsInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -22572,7 +22653,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBufferDeviceAddressCreateInfoEXT*>(dst)
                                        : arena.allocate<VkBufferDeviceAddressCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -22580,7 +22661,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_BUFFER_OPAQUE_CAPTURE_ADDRESS_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BUFFER_OPAQUE_CAPTURE_ADDRESS_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBufferOpaqueCaptureAddressCreateInfo*>(dst)
                                        : arena.allocate<VkBufferOpaqueCaptureAddressCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22588,7 +22669,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBufferUsageFlags2CreateInfo*>(dst)
                                        : arena.allocate<VkBufferUsageFlags2CreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22596,7 +22677,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkCommandBufferInheritanceConditionalRenderingInfoEXT*>(dst)
                                        : arena.allocate<VkCommandBufferInheritanceConditionalRenderingInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -22604,7 +22685,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDER_PASS_TRANSFORM_INFO_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDER_PASS_TRANSFORM_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkCommandBufferInheritanceRenderPassTransformInfoQCOM*>(dst)
                                        : arena.allocate<VkCommandBufferInheritanceRenderPassTransformInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -22612,7 +22693,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkCommandBufferInheritanceRenderingInfo*>(dst)
                                        : arena.allocate<VkCommandBufferInheritanceRenderingInfo>();
         if (typed == nullptr) { return false; }
@@ -22620,7 +22701,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_VIEWPORT_SCISSOR_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_VIEWPORT_SCISSOR_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkCommandBufferInheritanceViewportScissorInfoNV*>(dst)
                                        : arena.allocate<VkCommandBufferInheritanceViewportScissorInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22628,7 +22709,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkComputePipelineCreateInfo*>(dst)
                                        : arena.allocate<VkComputePipelineCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22636,7 +22717,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_INDIRECT_BUFFER_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_INDIRECT_BUFFER_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkComputePipelineIndirectBufferInfoNV*>(dst)
                                        : arena.allocate<VkComputePipelineIndirectBufferInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22644,7 +22725,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_COPY_COMMAND_TRANSFORM_INFO_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COPY_COMMAND_TRANSFORM_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkCopyCommandTransformInfoQCOM*>(dst)
                                        : arena.allocate<VkCopyCommandTransformInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -22652,7 +22733,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDebugUtilsObjectNameInfoEXT*>(dst)
                                        : arena.allocate<VkDebugUtilsObjectNameInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -22660,7 +22741,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_BUFFER_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_BUFFER_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDedicatedAllocationBufferCreateInfoNV*>(dst)
                                        : arena.allocate<VkDedicatedAllocationBufferCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22668,7 +22749,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_IMAGE_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_IMAGE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDedicatedAllocationImageCreateInfoNV*>(dst)
                                        : arena.allocate<VkDedicatedAllocationImageCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22676,7 +22757,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_MEMORY_ALLOCATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_MEMORY_ALLOCATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDedicatedAllocationMemoryAllocateInfoNV*>(dst)
                                        : arena.allocate<VkDedicatedAllocationMemoryAllocateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22684,7 +22765,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEPTH_BIAS_REPRESENTATION_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEPTH_BIAS_REPRESENTATION_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDepthBiasRepresentationInfoEXT*>(dst)
                                        : arena.allocate<VkDepthBiasRepresentationInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -22692,7 +22773,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDescriptorPoolInlineUniformBlockCreateInfo*>(dst)
                                        : arena.allocate<VkDescriptorPoolInlineUniformBlockCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22700,7 +22781,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDescriptorSetLayoutBindingFlagsCreateInfo*>(dst)
                                        : arena.allocate<VkDescriptorSetLayoutBindingFlagsCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22708,7 +22789,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDescriptorSetVariableDescriptorCountAllocateInfo*>(dst)
                                        : arena.allocate<VkDescriptorSetVariableDescriptorCountAllocateInfo>();
         if (typed == nullptr) { return false; }
@@ -22716,7 +22797,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDescriptorSetVariableDescriptorCountLayoutSupport*>(dst)
                                        : arena.allocate<VkDescriptorSetVariableDescriptorCountLayoutSupport>();
         if (typed == nullptr) { return false; }
@@ -22724,7 +22805,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceDiagnosticsConfigCreateInfoNV*>(dst)
                                        : arena.allocate<VkDeviceDiagnosticsConfigCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22732,7 +22813,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEVICE_GROUP_BIND_SPARSE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_BIND_SPARSE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceGroupBindSparseInfo*>(dst)
                                        : arena.allocate<VkDeviceGroupBindSparseInfo>();
         if (typed == nullptr) { return false; }
@@ -22740,7 +22821,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceGroupCommandBufferBeginInfo*>(dst)
                                        : arena.allocate<VkDeviceGroupCommandBufferBeginInfo>();
         if (typed == nullptr) { return false; }
@@ -22748,7 +22829,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceGroupDeviceCreateInfo*>(dst)
                                        : arena.allocate<VkDeviceGroupDeviceCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22756,7 +22837,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEVICE_GROUP_RENDER_PASS_BEGIN_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_RENDER_PASS_BEGIN_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceGroupRenderPassBeginInfo*>(dst)
                                        : arena.allocate<VkDeviceGroupRenderPassBeginInfo>();
         if (typed == nullptr) { return false; }
@@ -22764,7 +22845,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceGroupSubmitInfo*>(dst)
                                        : arena.allocate<VkDeviceGroupSubmitInfo>();
         if (typed == nullptr) { return false; }
@@ -22772,7 +22853,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceMemoryOverallocationCreateInfoAMD*>(dst)
                                        : arena.allocate<VkDeviceMemoryOverallocationCreateInfoAMD>();
         if (typed == nullptr) { return false; }
@@ -22780,7 +22861,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEVICE_PIPELINE_BINARY_INTERNAL_CACHE_CONTROL_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_PIPELINE_BINARY_INTERNAL_CACHE_CONTROL_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDevicePipelineBinaryInternalCacheControlKHR*>(dst)
                                        : arena.allocate<VkDevicePipelineBinaryInternalCacheControlKHR>();
         if (typed == nullptr) { return false; }
@@ -22788,7 +22869,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDevicePrivateDataCreateInfo*>(dst)
                                        : arena.allocate<VkDevicePrivateDataCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22796,7 +22877,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceQueueGlobalPriorityCreateInfo*>(dst)
                                        : arena.allocate<VkDeviceQueueGlobalPriorityCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22804,7 +22885,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DEVICE_QUEUE_SHADER_CORE_CONTROL_CREATE_INFO_ARM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_QUEUE_SHADER_CORE_CONTROL_CREATE_INFO_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceQueueShaderCoreControlCreateInfoARM*>(dst)
                                        : arena.allocate<VkDeviceQueueShaderCoreControlCreateInfoARM>();
         if (typed == nullptr) { return false; }
@@ -22812,7 +22893,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DIRECT_DRIVER_LOADING_LIST_LUNARG: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DIRECT_DRIVER_LOADING_LIST_LUNARG): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDirectDriverLoadingListLUNARG*>(dst)
                                        : arena.allocate<VkDirectDriverLoadingListLUNARG>();
         if (typed == nullptr) { return false; }
@@ -22820,7 +22901,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDrmFormatModifierPropertiesList2EXT*>(dst)
                                        : arena.allocate<VkDrmFormatModifierPropertiesList2EXT>();
         if (typed == nullptr) { return false; }
@@ -22828,7 +22909,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDrmFormatModifierPropertiesListEXT*>(dst)
                                        : arena.allocate<VkDrmFormatModifierPropertiesListEXT>();
         if (typed == nullptr) { return false; }
@@ -22836,7 +22917,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExportFenceCreateInfo*>(dst)
                                        : arena.allocate<VkExportFenceCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22844,7 +22925,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExportMemoryAllocateInfo*>(dst)
                                        : arena.allocate<VkExportMemoryAllocateInfo>();
         if (typed == nullptr) { return false; }
@@ -22852,7 +22933,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExportMemoryAllocateInfoNV*>(dst)
                                        : arena.allocate<VkExportMemoryAllocateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22860,7 +22941,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExportSemaphoreCreateInfo*>(dst)
                                        : arena.allocate<VkExportSemaphoreCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22868,7 +22949,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExternalImageFormatProperties*>(dst)
                                        : arena.allocate<VkExternalImageFormatProperties>();
         if (typed == nullptr) { return false; }
@@ -22876,7 +22957,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_ACQUIRE_UNMODIFIED_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_ACQUIRE_UNMODIFIED_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExternalMemoryAcquireUnmodifiedEXT*>(dst)
                                        : arena.allocate<VkExternalMemoryAcquireUnmodifiedEXT>();
         if (typed == nullptr) { return false; }
@@ -22884,7 +22965,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExternalMemoryBufferCreateInfo*>(dst)
                                        : arena.allocate<VkExternalMemoryBufferCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22892,7 +22973,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExternalMemoryImageCreateInfo*>(dst)
                                        : arena.allocate<VkExternalMemoryImageCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22900,7 +22981,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExternalMemoryImageCreateInfoNV*>(dst)
                                        : arena.allocate<VkExternalMemoryImageCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22908,7 +22989,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_FILTER_CUBIC_IMAGE_VIEW_IMAGE_FORMAT_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_FILTER_CUBIC_IMAGE_VIEW_IMAGE_FORMAT_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkFilterCubicImageViewImageFormatPropertiesEXT*>(dst)
                                        : arena.allocate<VkFilterCubicImageViewImageFormatPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -22916,7 +22997,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkFormatProperties3*>(dst)
                                        : arena.allocate<VkFormatProperties3>();
         if (typed == nullptr) { return false; }
@@ -22924,7 +23005,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkFragmentShadingRateAttachmentInfoKHR*>(dst)
                                        : arena.allocate<VkFragmentShadingRateAttachmentInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -22932,7 +23013,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_FRAME_BOUNDARY_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_FRAME_BOUNDARY_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkFrameBoundaryEXT*>(dst)
                                        : arena.allocate<VkFrameBoundaryEXT>();
         if (typed == nullptr) { return false; }
@@ -22940,7 +23021,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkFramebufferAttachmentsCreateInfo*>(dst)
                                        : arena.allocate<VkFramebufferAttachmentsCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22948,7 +23029,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkGraphicsPipelineCreateInfo*>(dst)
                                        : arena.allocate<VkGraphicsPipelineCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22956,7 +23037,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkGraphicsPipelineLibraryCreateInfoEXT*>(dst)
                                        : arena.allocate<VkGraphicsPipelineLibraryCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -22964,7 +23045,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_SHADER_GROUPS_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_SHADER_GROUPS_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkGraphicsPipelineShaderGroupsCreateInfoNV*>(dst)
                                        : arena.allocate<VkGraphicsPipelineShaderGroupsCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22972,7 +23053,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_HOST_IMAGE_COPY_DEVICE_PERFORMANCE_QUERY: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_HOST_IMAGE_COPY_DEVICE_PERFORMANCE_QUERY): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkHostImageCopyDevicePerformanceQuery*>(dst)
                                        : arena.allocate<VkHostImageCopyDevicePerformanceQuery>();
         if (typed == nullptr) { return false; }
@@ -22980,7 +23061,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_ALIGNMENT_CONTROL_CREATE_INFO_MESA: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_ALIGNMENT_CONTROL_CREATE_INFO_MESA): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageAlignmentControlCreateInfoMESA*>(dst)
                                        : arena.allocate<VkImageAlignmentControlCreateInfoMESA>();
         if (typed == nullptr) { return false; }
@@ -22988,7 +23069,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageCompressionControlEXT*>(dst)
                                        : arena.allocate<VkImageCompressionControlEXT>();
         if (typed == nullptr) { return false; }
@@ -22996,7 +23077,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageCompressionPropertiesEXT*>(dst)
                                        : arena.allocate<VkImageCompressionPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23004,7 +23085,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageDrmFormatModifierExplicitCreateInfoEXT*>(dst)
                                        : arena.allocate<VkImageDrmFormatModifierExplicitCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23012,7 +23093,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageDrmFormatModifierListCreateInfoEXT*>(dst)
                                        : arena.allocate<VkImageDrmFormatModifierListCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23020,7 +23101,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageFormatListCreateInfo*>(dst)
                                        : arena.allocate<VkImageFormatListCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -23028,7 +23109,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImagePlaneMemoryRequirementsInfo*>(dst)
                                        : arena.allocate<VkImagePlaneMemoryRequirementsInfo>();
         if (typed == nullptr) { return false; }
@@ -23036,7 +23117,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageStencilUsageCreateInfo*>(dst)
                                        : arena.allocate<VkImageStencilUsageCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -23044,7 +23125,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageSwapchainCreateInfoKHR*>(dst)
                                        : arena.allocate<VkImageSwapchainCreateInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -23052,7 +23133,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_VIEW_ASTC_DECODE_MODE_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_ASTC_DECODE_MODE_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageViewASTCDecodeModeEXT*>(dst)
                                        : arena.allocate<VkImageViewASTCDecodeModeEXT>();
         if (typed == nullptr) { return false; }
@@ -23060,7 +23141,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageViewMinLodCreateInfoEXT*>(dst)
                                        : arena.allocate<VkImageViewMinLodCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23068,7 +23149,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_VIEW_SAMPLE_WEIGHT_CREATE_INFO_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_SAMPLE_WEIGHT_CREATE_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageViewSampleWeightCreateInfoQCOM*>(dst)
                                        : arena.allocate<VkImageViewSampleWeightCreateInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -23076,7 +23157,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_VIEW_SLICED_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_SLICED_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageViewSlicedCreateInfoEXT*>(dst)
                                        : arena.allocate<VkImageViewSlicedCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23084,7 +23165,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageViewUsageCreateInfo*>(dst)
                                        : arena.allocate<VkImageViewUsageCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -23092,7 +23173,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImportMemoryFdInfoKHR*>(dst)
                                        : arena.allocate<VkImportMemoryFdInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -23100,7 +23181,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_LATENCY_SUBMISSION_PRESENT_ID_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_LATENCY_SUBMISSION_PRESENT_ID_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkLatencySubmissionPresentIdNV*>(dst)
                                        : arena.allocate<VkLatencySubmissionPresentIdNV>();
         if (typed == nullptr) { return false; }
@@ -23108,7 +23189,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkLayerSettingsCreateInfoEXT*>(dst)
                                        : arena.allocate<VkLayerSettingsCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23116,7 +23197,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryAllocateFlagsInfo*>(dst)
                                        : arena.allocate<VkMemoryAllocateFlagsInfo>();
         if (typed == nullptr) { return false; }
@@ -23124,7 +23205,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_MEMORY_BARRIER_2: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_BARRIER_2): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryBarrier2*>(dst)
                                        : arena.allocate<VkMemoryBarrier2>();
         if (typed == nullptr) { return false; }
@@ -23132,7 +23213,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_MEMORY_BARRIER_ACCESS_FLAGS_3_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_BARRIER_ACCESS_FLAGS_3_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryBarrierAccessFlags3KHR*>(dst)
                                        : arena.allocate<VkMemoryBarrierAccessFlags3KHR>();
         if (typed == nullptr) { return false; }
@@ -23140,7 +23221,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryDedicatedAllocateInfo*>(dst)
                                        : arena.allocate<VkMemoryDedicatedAllocateInfo>();
         if (typed == nullptr) { return false; }
@@ -23148,7 +23229,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryDedicatedRequirements*>(dst)
                                        : arena.allocate<VkMemoryDedicatedRequirements>();
         if (typed == nullptr) { return false; }
@@ -23156,7 +23237,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryOpaqueCaptureAddressAllocateInfo*>(dst)
                                        : arena.allocate<VkMemoryOpaqueCaptureAddressAllocateInfo>();
         if (typed == nullptr) { return false; }
@@ -23164,7 +23245,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_MEMORY_PRIORITY_ALLOCATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_PRIORITY_ALLOCATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryPriorityAllocateInfoEXT*>(dst)
                                        : arena.allocate<VkMemoryPriorityAllocateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23172,7 +23253,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMultisampledRenderToSingleSampledInfoEXT*>(dst)
                                        : arena.allocate<VkMultisampledRenderToSingleSampledInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23180,7 +23261,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_MULTIVIEW_PER_VIEW_ATTRIBUTES_INFO_NVX: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MULTIVIEW_PER_VIEW_ATTRIBUTES_INFO_NVX): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMultiviewPerViewAttributesInfoNVX*>(dst)
                                        : arena.allocate<VkMultiviewPerViewAttributesInfoNVX>();
         if (typed == nullptr) { return false; }
@@ -23188,7 +23269,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_MULTIVIEW_PER_VIEW_RENDER_AREAS_RENDER_PASS_BEGIN_INFO_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MULTIVIEW_PER_VIEW_RENDER_AREAS_RENDER_PASS_BEGIN_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM*>(dst)
                                        : arena.allocate<VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -23196,7 +23277,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMutableDescriptorTypeCreateInfoEXT*>(dst)
                                        : arena.allocate<VkMutableDescriptorTypeCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23204,7 +23285,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_OPTICAL_FLOW_IMAGE_FORMAT_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_OPTICAL_FLOW_IMAGE_FORMAT_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkOpticalFlowImageFormatInfoNV*>(dst)
                                        : arena.allocate<VkOpticalFlowImageFormatInfoNV>();
         if (typed == nullptr) { return false; }
@@ -23212,7 +23293,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PERFORMANCE_QUERY_SUBMIT_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PERFORMANCE_QUERY_SUBMIT_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPerformanceQuerySubmitInfoKHR*>(dst)
                                        : arena.allocate<VkPerformanceQuerySubmitInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -23220,7 +23301,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevice16BitStorageFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDevice16BitStorageFeatures>();
         if (typed == nullptr) { return false; }
@@ -23228,7 +23309,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevice4444FormatsFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevice4444FormatsFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23236,7 +23317,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevice8BitStorageFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDevice8BitStorageFeatures>();
         if (typed == nullptr) { return false; }
@@ -23244,7 +23325,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ASTC_DECODE_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ASTC_DECODE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceASTCDecodeFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceASTCDecodeFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23252,7 +23333,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAccelerationStructureFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAccelerationStructureFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -23260,7 +23341,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAccelerationStructurePropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAccelerationStructurePropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -23268,7 +23349,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAddressBindingReportFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAddressBindingReportFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23276,7 +23357,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_AMIGO_PROFILING_FEATURES_SEC: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_AMIGO_PROFILING_FEATURES_SEC): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAmigoProfilingFeaturesSEC*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAmigoProfilingFeaturesSEC>();
         if (typed == nullptr) { return false; }
@@ -23284,7 +23365,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ANTI_LAG_FEATURES_AMD: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ANTI_LAG_FEATURES_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAntiLagFeaturesAMD*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAntiLagFeaturesAMD>();
         if (typed == nullptr) { return false; }
@@ -23292,7 +23373,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_DYNAMIC_STATE_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_DYNAMIC_STATE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23300,7 +23381,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23308,7 +23389,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23316,7 +23397,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23324,7 +23405,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BORDER_COLOR_SWIZZLE_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BORDER_COLOR_SWIZZLE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceBorderColorSwizzleFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceBorderColorSwizzleFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23332,7 +23413,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceBufferDeviceAddressFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceBufferDeviceAddressFeatures>();
         if (typed == nullptr) { return false; }
@@ -23340,7 +23421,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceBufferDeviceAddressFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceBufferDeviceAddressFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23348,7 +23429,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_ACCELERATION_STRUCTURE_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_ACCELERATION_STRUCTURE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceClusterAccelerationStructureFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceClusterAccelerationStructureFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23356,7 +23437,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_ACCELERATION_STRUCTURE_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_ACCELERATION_STRUCTURE_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceClusterAccelerationStructurePropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceClusterAccelerationStructurePropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23364,7 +23445,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -23372,7 +23453,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_PROPERTIES_HUAWEI: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_PROPERTIES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -23380,7 +23461,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_VRS_FEATURES_HUAWEI: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_VRS_FEATURES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceClusterCullingShaderVrsFeaturesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceClusterCullingShaderVrsFeaturesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -23388,7 +23469,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCoherentMemoryFeaturesAMD*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCoherentMemoryFeaturesAMD>();
         if (typed == nullptr) { return false; }
@@ -23396,7 +23477,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceColorWriteEnableFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceColorWriteEnableFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23404,7 +23485,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMMAND_BUFFER_INHERITANCE_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMMAND_BUFFER_INHERITANCE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCommandBufferInheritanceFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCommandBufferInheritanceFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23412,7 +23493,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -23420,7 +23501,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_PROPERTIES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceComputeShaderDerivativesPropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceComputeShaderDerivativesPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -23428,7 +23509,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceConditionalRenderingFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceConditionalRenderingFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23436,7 +23517,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceConservativeRasterizationPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceConservativeRasterizationPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23444,7 +23525,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_2_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_2_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeMatrix2FeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeMatrix2FeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23452,7 +23533,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_2_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_2_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeMatrix2PropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeMatrix2PropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23460,7 +23541,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeMatrixFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeMatrixFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -23468,7 +23549,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeMatrixFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeMatrixFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23476,7 +23557,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeMatrixPropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeMatrixPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -23484,7 +23565,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeMatrixPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeMatrixPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23492,7 +23573,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_VECTOR_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_VECTOR_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeVectorFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeVectorFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23500,7 +23581,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_VECTOR_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_VECTOR_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeVectorPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeVectorPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23508,7 +23589,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCopyMemoryIndirectFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCopyMemoryIndirectFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23516,7 +23597,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCopyMemoryIndirectPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCopyMemoryIndirectPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23524,7 +23605,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CORNER_SAMPLED_IMAGE_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CORNER_SAMPLED_IMAGE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCornerSampledImageFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCornerSampledImageFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23532,7 +23613,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COVERAGE_REDUCTION_MODE_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COVERAGE_REDUCTION_MODE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCoverageReductionModeFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCoverageReductionModeFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23540,7 +23621,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUBIC_CLAMP_FEATURES_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUBIC_CLAMP_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCubicClampFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCubicClampFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -23548,7 +23629,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUBIC_WEIGHTS_FEATURES_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUBIC_WEIGHTS_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCubicWeightsFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCubicWeightsFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -23556,7 +23637,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCudaKernelLaunchFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCudaKernelLaunchFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23564,7 +23645,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCudaKernelLaunchPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCudaKernelLaunchPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23572,7 +23653,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCustomBorderColorFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCustomBorderColorFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23580,7 +23661,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCustomBorderColorPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCustomBorderColorPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23588,7 +23669,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEDICATED_ALLOCATION_IMAGE_ALIASING_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEDICATED_ALLOCATION_IMAGE_ALIASING_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23596,7 +23677,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_BIAS_CONTROL_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_BIAS_CONTROL_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDepthBiasControlFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDepthBiasControlFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23604,7 +23685,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_CONTROL_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_CONTROL_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDepthClampControlFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDepthClampControlFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23612,7 +23693,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_ZERO_ONE_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_ZERO_ONE_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDepthClampZeroOneFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDepthClampZeroOneFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -23620,7 +23701,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDepthClipControlFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDepthClipControlFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23628,7 +23709,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDepthClipEnableFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDepthClipEnableFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23636,7 +23717,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDepthStencilResolveProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDepthStencilResolveProperties>();
         if (typed == nullptr) { return false; }
@@ -23644,7 +23725,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_DENSITY_MAP_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_DENSITY_MAP_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23652,7 +23733,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorBufferFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorBufferFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23660,7 +23741,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorBufferPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorBufferPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23668,7 +23749,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorIndexingFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorIndexingFeatures>();
         if (typed == nullptr) { return false; }
@@ -23676,7 +23757,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorIndexingProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorIndexingProperties>();
         if (typed == nullptr) { return false; }
@@ -23684,7 +23765,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_POOL_OVERALLOCATION_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_POOL_OVERALLOCATION_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23692,7 +23773,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_SET_HOST_MAPPING_FEATURES_VALVE: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_SET_HOST_MAPPING_FEATURES_VALVE): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE>();
         if (typed == nullptr) { return false; }
@@ -23700,7 +23781,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_COMPUTE_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_COMPUTE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23708,7 +23789,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23716,7 +23797,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23724,7 +23805,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDeviceGeneratedCommandsPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDeviceGeneratedCommandsPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23732,7 +23813,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23740,7 +23821,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_MEMORY_REPORT_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_MEMORY_REPORT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDeviceMemoryReportFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDeviceMemoryReportFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23748,7 +23829,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DIAGNOSTICS_CONFIG_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DIAGNOSTICS_CONFIG_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDiagnosticsConfigFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDiagnosticsConfigFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23756,7 +23837,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DISCARD_RECTANGLE_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DISCARD_RECTANGLE_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDiscardRectanglePropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDiscardRectanglePropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23764,7 +23845,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDriverProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDriverProperties>();
         if (typed == nullptr) { return false; }
@@ -23772,7 +23853,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDrmPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDrmPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23780,7 +23861,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDynamicRenderingFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDynamicRenderingFeatures>();
         if (typed == nullptr) { return false; }
@@ -23788,7 +23869,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_LOCAL_READ_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_LOCAL_READ_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDynamicRenderingLocalReadFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDynamicRenderingLocalReadFeatures>();
         if (typed == nullptr) { return false; }
@@ -23796,7 +23877,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23804,7 +23885,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXCLUSIVE_SCISSOR_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXCLUSIVE_SCISSOR_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExclusiveScissorFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExclusiveScissorFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23812,7 +23893,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExtendedDynamicState2FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExtendedDynamicState2FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23820,7 +23901,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExtendedDynamicState3FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExtendedDynamicState3FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23828,7 +23909,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExtendedDynamicState3PropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExtendedDynamicState3PropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23836,7 +23917,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23844,7 +23925,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23852,7 +23933,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExtendedSparseAddressSpacePropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExtendedSparseAddressSpacePropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23860,7 +23941,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExternalImageFormatInfo*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExternalImageFormatInfo>();
         if (typed == nullptr) { return false; }
@@ -23868,7 +23949,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExternalMemoryHostPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExternalMemoryHostPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23876,7 +23957,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_RDMA_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_RDMA_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExternalMemoryRDMAFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExternalMemoryRDMAFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23884,7 +23965,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFaultFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFaultFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23892,7 +23973,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFeatures2*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFeatures2>();
         if (typed == nullptr) { return false; }
@@ -23900,7 +23981,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFloatControlsProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFloatControlsProperties>();
         if (typed == nullptr) { return false; }
@@ -23908,7 +23989,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentDensityMap2FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentDensityMap2FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23916,7 +23997,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentDensityMap2PropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentDensityMap2PropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23924,7 +24005,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentDensityMapFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentDensityMapFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23932,7 +24013,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_FEATURES_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -23940,7 +24021,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_PROPERTIES_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_PROPERTIES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM>();
         if (typed == nullptr) { return false; }
@@ -23948,7 +24029,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentDensityMapPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentDensityMapPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23956,7 +24037,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -23964,7 +24045,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_PROPERTIES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -23972,7 +24053,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23980,7 +24061,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_ENUMS_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_ENUMS_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShadingRateEnumsFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShadingRateEnumsFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23988,7 +24069,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_ENUMS_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_ENUMS_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShadingRateEnumsPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShadingRateEnumsPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23996,7 +24077,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShadingRateFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24004,7 +24085,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShadingRatePropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -24012,7 +24093,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAME_BOUNDARY_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAME_BOUNDARY_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFrameBoundaryFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFrameBoundaryFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24020,7 +24101,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GLOBAL_PRIORITY_QUERY_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GLOBAL_PRIORITY_QUERY_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceGlobalPriorityQueryFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceGlobalPriorityQueryFeatures>();
         if (typed == nullptr) { return false; }
@@ -24028,7 +24109,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24036,7 +24117,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24044,7 +24125,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HDR_VIVID_FEATURES_HUAWEI: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HDR_VIVID_FEATURES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceHdrVividFeaturesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceHdrVividFeaturesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -24052,7 +24133,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceHostImageCopyFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceHostImageCopyFeatures>();
         if (typed == nullptr) { return false; }
@@ -24060,7 +24141,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceHostImageCopyProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceHostImageCopyProperties>();
         if (typed == nullptr) { return false; }
@@ -24068,7 +24149,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceHostQueryResetFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceHostQueryResetFeatures>();
         if (typed == nullptr) { return false; }
@@ -24076,7 +24157,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceIDProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceIDProperties>();
         if (typed == nullptr) { return false; }
@@ -24084,7 +24165,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_2D_VIEW_OF_3D_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_2D_VIEW_OF_3D_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImage2DViewOf3DFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImage2DViewOf3DFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24092,7 +24173,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_FEATURES_MESA: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_FEATURES_MESA): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageAlignmentControlFeaturesMESA*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageAlignmentControlFeaturesMESA>();
         if (typed == nullptr) { return false; }
@@ -24100,7 +24181,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_PROPERTIES_MESA: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_PROPERTIES_MESA): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageAlignmentControlPropertiesMESA*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageAlignmentControlPropertiesMESA>();
         if (typed == nullptr) { return false; }
@@ -24108,7 +24189,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageCompressionControlFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageCompressionControlFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24116,7 +24197,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24124,7 +24205,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageDrmFormatModifierInfoEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageDrmFormatModifierInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -24132,7 +24213,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_FEATURES_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageProcessing2FeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageProcessing2FeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24140,7 +24221,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_PROPERTIES_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_PROPERTIES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageProcessing2PropertiesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageProcessing2PropertiesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24148,7 +24229,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_FEATURES_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageProcessingFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageProcessingFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24156,7 +24237,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_PROPERTIES_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_PROPERTIES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageProcessingPropertiesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageProcessingPropertiesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24164,7 +24245,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageRobustnessFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageRobustnessFeatures>();
         if (typed == nullptr) { return false; }
@@ -24172,7 +24253,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_SLICED_VIEW_OF_3D_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_SLICED_VIEW_OF_3D_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageSlicedViewOf3DFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageSlicedViewOf3DFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24180,7 +24261,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_IMAGE_FORMAT_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_IMAGE_FORMAT_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageViewImageFormatInfoEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageViewImageFormatInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -24188,7 +24269,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_MIN_LOD_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_MIN_LOD_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageViewMinLodFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageViewMinLodFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24196,7 +24277,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImagelessFramebufferFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImagelessFramebufferFeatures>();
         if (typed == nullptr) { return false; }
@@ -24204,7 +24285,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceIndexTypeUint8Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceIndexTypeUint8Features>();
         if (typed == nullptr) { return false; }
@@ -24212,7 +24293,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INHERITED_VIEWPORT_SCISSOR_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INHERITED_VIEWPORT_SCISSOR_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceInheritedViewportScissorFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceInheritedViewportScissorFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24220,7 +24301,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceInlineUniformBlockFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceInlineUniformBlockFeatures>();
         if (typed == nullptr) { return false; }
@@ -24228,7 +24309,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceInlineUniformBlockProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceInlineUniformBlockProperties>();
         if (typed == nullptr) { return false; }
@@ -24236,7 +24317,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INVOCATION_MASK_FEATURES_HUAWEI: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INVOCATION_MASK_FEATURES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceInvocationMaskFeaturesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceInvocationMaskFeaturesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -24244,7 +24325,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_PROPERTIES_LIST_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_PROPERTIES_LIST_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLayeredApiPropertiesListKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLayeredApiPropertiesListKHR>();
         if (typed == nullptr) { return false; }
@@ -24252,7 +24333,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_VULKAN_PROPERTIES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_VULKAN_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLayeredApiVulkanPropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLayeredApiVulkanPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -24260,7 +24341,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_DRIVER_PROPERTIES_MSFT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_DRIVER_PROPERTIES_MSFT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLayeredDriverPropertiesMSFT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLayeredDriverPropertiesMSFT>();
         if (typed == nullptr) { return false; }
@@ -24268,7 +24349,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_DITHERING_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_DITHERING_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLegacyDitheringFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLegacyDitheringFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24276,7 +24357,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_VERTEX_ATTRIBUTES_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_VERTEX_ATTRIBUTES_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLegacyVertexAttributesFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLegacyVertexAttributesFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24284,7 +24365,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_VERTEX_ATTRIBUTES_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_VERTEX_ATTRIBUTES_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLegacyVertexAttributesPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLegacyVertexAttributesPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24292,7 +24373,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLineRasterizationFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLineRasterizationFeatures>();
         if (typed == nullptr) { return false; }
@@ -24300,7 +24381,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLineRasterizationProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLineRasterizationProperties>();
         if (typed == nullptr) { return false; }
@@ -24308,7 +24389,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINEAR_COLOR_ATTACHMENT_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINEAR_COLOR_ATTACHMENT_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLinearColorAttachmentFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLinearColorAttachmentFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24316,7 +24397,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance3Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance3Properties>();
         if (typed == nullptr) { return false; }
@@ -24324,7 +24405,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance4Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance4Features>();
         if (typed == nullptr) { return false; }
@@ -24332,7 +24413,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance4Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance4Properties>();
         if (typed == nullptr) { return false; }
@@ -24340,7 +24421,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance5Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance5Features>();
         if (typed == nullptr) { return false; }
@@ -24348,7 +24429,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance5Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance5Properties>();
         if (typed == nullptr) { return false; }
@@ -24356,7 +24437,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance6Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance6Features>();
         if (typed == nullptr) { return false; }
@@ -24364,7 +24445,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance6Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance6Properties>();
         if (typed == nullptr) { return false; }
@@ -24372,7 +24453,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance7FeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance7FeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24380,7 +24461,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_PROPERTIES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance7PropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance7PropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -24388,7 +24469,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance8FeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance8FeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24396,7 +24477,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAP_MEMORY_PLACED_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAP_MEMORY_PLACED_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMapMemoryPlacedFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMapMemoryPlacedFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24404,7 +24485,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAP_MEMORY_PLACED_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAP_MEMORY_PLACED_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMapMemoryPlacedPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMapMemoryPlacedPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24412,7 +24493,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMemoryBudgetPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMemoryBudgetPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24420,7 +24501,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMemoryDecompressionFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMemoryDecompressionFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24428,7 +24509,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMemoryDecompressionPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMemoryDecompressionPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -24436,7 +24517,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMemoryPriorityFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMemoryPriorityFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24444,7 +24525,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMeshShaderFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMeshShaderFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24452,7 +24533,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMeshShaderFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMeshShaderFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24460,7 +24541,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMeshShaderPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMeshShaderPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24468,7 +24549,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMeshShaderPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMeshShaderPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -24476,7 +24557,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiDrawFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiDrawFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24484,7 +24565,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiDrawPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiDrawPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24492,7 +24573,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultisampledRenderToSingleSampledFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultisampledRenderToSingleSampledFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24500,7 +24581,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiviewFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiviewFeatures>();
         if (typed == nullptr) { return false; }
@@ -24508,7 +24589,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_ATTRIBUTES_PROPERTIES_NVX: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_ATTRIBUTES_PROPERTIES_NVX): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX>();
         if (typed == nullptr) { return false; }
@@ -24516,7 +24597,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_RENDER_AREAS_FEATURES_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_RENDER_AREAS_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiviewPerViewRenderAreasFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiviewPerViewRenderAreasFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24524,7 +24605,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_VIEWPORTS_FEATURES_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_VIEWPORTS_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24532,7 +24613,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiviewProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiviewProperties>();
         if (typed == nullptr) { return false; }
@@ -24540,7 +24621,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24548,7 +24629,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceNestedCommandBufferFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceNestedCommandBufferFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24556,7 +24637,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceNestedCommandBufferPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceNestedCommandBufferPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24564,7 +24645,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NON_SEAMLESS_CUBE_MAP_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NON_SEAMLESS_CUBE_MAP_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24572,7 +24653,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceOpacityMicromapFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceOpacityMicromapFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24580,7 +24661,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceOpacityMicromapPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceOpacityMicromapPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24588,7 +24669,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceOpticalFlowFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceOpticalFlowFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24596,7 +24677,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceOpticalFlowPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceOpticalFlowPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -24604,7 +24685,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePCIBusInfoPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePCIBusInfoPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24612,7 +24693,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24620,7 +24701,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PARTITIONED_ACCELERATION_STRUCTURE_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PARTITIONED_ACCELERATION_STRUCTURE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24628,7 +24709,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PARTITIONED_ACCELERATION_STRUCTURE_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PARTITIONED_ACCELERATION_STRUCTURE_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -24636,7 +24717,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PER_STAGE_DESCRIPTOR_SET_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PER_STAGE_DESCRIPTOR_SET_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePerStageDescriptorSetFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDevicePerStageDescriptorSetFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24644,7 +24725,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePerformanceQueryFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePerformanceQueryFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24652,7 +24733,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_PROPERTIES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePerformanceQueryPropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePerformanceQueryPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -24660,7 +24741,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineBinaryFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineBinaryFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24668,7 +24749,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_PROPERTIES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineBinaryPropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineBinaryPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -24676,7 +24757,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineCreationCacheControlFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineCreationCacheControlFeatures>();
         if (typed == nullptr) { return false; }
@@ -24684,7 +24765,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24692,7 +24773,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24700,7 +24781,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_OPACITY_MICROMAP_FEATURES_ARM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_OPACITY_MICROMAP_FEATURES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineOpacityMicromapFeaturesARM*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineOpacityMicromapFeaturesARM>();
         if (typed == nullptr) { return false; }
@@ -24708,7 +24789,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_PROPERTIES_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_PROPERTIES_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelinePropertiesFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelinePropertiesFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24716,7 +24797,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_PROTECTED_ACCESS_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_PROTECTED_ACCESS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineProtectedAccessFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineProtectedAccessFeatures>();
         if (typed == nullptr) { return false; }
@@ -24724,7 +24805,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineRobustnessFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineRobustnessFeatures>();
         if (typed == nullptr) { return false; }
@@ -24732,7 +24813,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineRobustnessProperties*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineRobustnessProperties>();
         if (typed == nullptr) { return false; }
@@ -24740,7 +24821,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePointClippingProperties*>(dst)
                                        : arena.allocate<VkPhysicalDevicePointClippingProperties>();
         if (typed == nullptr) { return false; }
@@ -24748,7 +24829,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_BARRIER_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_BARRIER_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePresentBarrierFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDevicePresentBarrierFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24756,7 +24837,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePresentIdFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePresentIdFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24764,7 +24845,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_MODE_FIFO_LATEST_READY_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_MODE_FIFO_LATEST_READY_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24772,7 +24853,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePresentWaitFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePresentWaitFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24780,7 +24861,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVE_TOPOLOGY_LIST_RESTART_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVE_TOPOLOGY_LIST_RESTART_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24788,7 +24869,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVES_GENERATED_QUERY_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVES_GENERATED_QUERY_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24796,7 +24877,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePrivateDataFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDevicePrivateDataFeatures>();
         if (typed == nullptr) { return false; }
@@ -24804,7 +24885,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceProtectedMemoryFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceProtectedMemoryFeatures>();
         if (typed == nullptr) { return false; }
@@ -24812,7 +24893,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceProtectedMemoryProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceProtectedMemoryProperties>();
         if (typed == nullptr) { return false; }
@@ -24820,7 +24901,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceProvokingVertexFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceProvokingVertexFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24828,7 +24909,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceProvokingVertexPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceProvokingVertexPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24836,7 +24917,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePushDescriptorProperties*>(dst)
                                        : arena.allocate<VkPhysicalDevicePushDescriptorProperties>();
         if (typed == nullptr) { return false; }
@@ -24844,7 +24925,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RGBA10X6_FORMATS_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RGBA10X6_FORMATS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24852,7 +24933,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24860,7 +24941,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAW_ACCESS_CHAINS_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAW_ACCESS_CHAINS_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRawAccessChainsFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRawAccessChainsFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24868,7 +24949,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayQueryFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayQueryFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24876,7 +24957,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24884,7 +24965,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -24892,7 +24973,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_LINEAR_SWEPT_SPHERES_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_LINEAR_SWEPT_SPHERES_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24900,7 +24981,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24908,7 +24989,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MOTION_BLUR_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MOTION_BLUR_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingMotionBlurFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingMotionBlurFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24916,7 +24997,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingPipelineFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24924,7 +25005,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingPipelinePropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingPipelinePropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -24932,7 +25013,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24940,7 +25021,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -24948,7 +25029,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingValidationFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingValidationFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24956,7 +25037,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RELAXED_LINE_RASTERIZATION_FEATURES_IMG: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RELAXED_LINE_RASTERIZATION_FEATURES_IMG): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRelaxedLineRasterizationFeaturesIMG*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRelaxedLineRasterizationFeaturesIMG>();
         if (typed == nullptr) { return false; }
@@ -24964,7 +25045,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_FEATURES_ARM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_FEATURES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRenderPassStripedFeaturesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRenderPassStripedFeaturesARM>();
         if (typed == nullptr) { return false; }
@@ -24972,7 +25053,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_PROPERTIES_ARM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_PROPERTIES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRenderPassStripedPropertiesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRenderPassStripedPropertiesARM>();
         if (typed == nullptr) { return false; }
@@ -24980,7 +25061,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_REPRESENTATIVE_FRAGMENT_TEST_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_REPRESENTATIVE_FRAGMENT_TEST_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24988,7 +25069,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRobustness2FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRobustness2FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24996,7 +25077,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRobustness2PropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRobustness2PropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25004,7 +25085,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSampleLocationsPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSampleLocationsPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25012,7 +25093,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSamplerFilterMinmaxProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSamplerFilterMinmaxProperties>();
         if (typed == nullptr) { return false; }
@@ -25020,7 +25101,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSamplerYcbcrConversionFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSamplerYcbcrConversionFeatures>();
         if (typed == nullptr) { return false; }
@@ -25028,7 +25109,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceScalarBlockLayoutFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceScalarBlockLayoutFeatures>();
         if (typed == nullptr) { return false; }
@@ -25036,7 +25117,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCHEDULING_CONTROLS_FEATURES_ARM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCHEDULING_CONTROLS_FEATURES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSchedulingControlsFeaturesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSchedulingControlsFeaturesARM>();
         if (typed == nullptr) { return false; }
@@ -25044,7 +25125,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCHEDULING_CONTROLS_PROPERTIES_ARM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCHEDULING_CONTROLS_PROPERTIES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSchedulingControlsPropertiesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSchedulingControlsPropertiesARM>();
         if (typed == nullptr) { return false; }
@@ -25052,7 +25133,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures>();
         if (typed == nullptr) { return false; }
@@ -25060,7 +25141,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT16_VECTOR_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT16_VECTOR_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25068,7 +25149,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25076,7 +25157,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25084,7 +25165,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderAtomicInt64Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderAtomicInt64Features>();
         if (typed == nullptr) { return false; }
@@ -25092,7 +25173,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderClockFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderClockFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25100,7 +25181,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_FEATURES_ARM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_FEATURES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM>();
         if (typed == nullptr) { return false; }
@@ -25108,7 +25189,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_PROPERTIES_ARM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_PROPERTIES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderCoreBuiltinsPropertiesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderCoreBuiltinsPropertiesARM>();
         if (typed == nullptr) { return false; }
@@ -25116,7 +25197,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderCoreProperties2AMD*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderCoreProperties2AMD>();
         if (typed == nullptr) { return false; }
@@ -25124,7 +25205,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderCorePropertiesAMD*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderCorePropertiesAMD>();
         if (typed == nullptr) { return false; }
@@ -25132,7 +25213,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_ARM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderCorePropertiesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderCorePropertiesARM>();
         if (typed == nullptr) { return false; }
@@ -25140,7 +25221,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures>();
         if (typed == nullptr) { return false; }
@@ -25148,7 +25229,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderDrawParametersFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderDrawParametersFeatures>();
         if (typed == nullptr) { return false; }
@@ -25156,7 +25237,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EARLY_AND_LATE_FRAGMENT_TESTS_FEATURES_AMD: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EARLY_AND_LATE_FRAGMENT_TESTS_FEATURES_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderEarlyAndLateFragmentTestsFeaturesAMD*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderEarlyAndLateFragmentTestsFeaturesAMD>();
         if (typed == nullptr) { return false; }
@@ -25164,7 +25245,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EXPECT_ASSUME_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EXPECT_ASSUME_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderExpectAssumeFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderExpectAssumeFeatures>();
         if (typed == nullptr) { return false; }
@@ -25172,7 +25253,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderFloat16Int8Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderFloat16Int8Features>();
         if (typed == nullptr) { return false; }
@@ -25180,7 +25261,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT_CONTROLS_2_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT_CONTROLS_2_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderFloatControls2Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderFloatControls2Features>();
         if (typed == nullptr) { return false; }
@@ -25188,7 +25269,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25196,7 +25277,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_FOOTPRINT_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_FOOTPRINT_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderImageFootprintFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderImageFootprintFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25204,7 +25285,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderIntegerDotProductFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderIntegerDotProductFeatures>();
         if (typed == nullptr) { return false; }
@@ -25212,7 +25293,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderIntegerDotProductProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderIntegerDotProductProperties>();
         if (typed == nullptr) { return false; }
@@ -25220,7 +25301,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_FUNCTIONS_2_FEATURES_INTEL: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_FUNCTIONS_2_FEATURES_INTEL): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL>();
         if (typed == nullptr) { return false; }
@@ -25228,7 +25309,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MAXIMAL_RECONVERGENCE_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MAXIMAL_RECONVERGENCE_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25236,7 +25317,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25244,7 +25325,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25252,7 +25333,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderObjectFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderObjectFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25260,7 +25341,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderObjectPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderObjectPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25268,7 +25349,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_QUAD_CONTROL_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_QUAD_CONTROL_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderQuadControlFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderQuadControlFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25276,7 +25357,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25284,7 +25365,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_REPLICATED_COMPOSITES_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_REPLICATED_COMPOSITES_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25292,7 +25373,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderSMBuiltinsFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderSMBuiltinsFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25300,7 +25381,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderSMBuiltinsPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderSMBuiltinsPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -25308,7 +25389,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures>();
         if (typed == nullptr) { return false; }
@@ -25316,7 +25397,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_ROTATE_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_ROTATE_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderSubgroupRotateFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderSubgroupRotateFeatures>();
         if (typed == nullptr) { return false; }
@@ -25324,7 +25405,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25332,7 +25413,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderTerminateInvocationFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderTerminateInvocationFeatures>();
         if (typed == nullptr) { return false; }
@@ -25340,7 +25421,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TILE_IMAGE_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TILE_IMAGE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderTileImageFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderTileImageFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25348,7 +25429,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TILE_IMAGE_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TILE_IMAGE_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderTileImagePropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderTileImagePropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25356,7 +25437,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_FEATURES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShadingRateImageFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShadingRateImageFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25364,7 +25445,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShadingRateImagePropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShadingRateImagePropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -25372,7 +25453,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSubgroupProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSubgroupProperties>();
         if (typed == nullptr) { return false; }
@@ -25380,7 +25461,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSubgroupSizeControlFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSubgroupSizeControlFeatures>();
         if (typed == nullptr) { return false; }
@@ -25388,7 +25469,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSubgroupSizeControlProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSubgroupSizeControlProperties>();
         if (typed == nullptr) { return false; }
@@ -25396,7 +25477,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_MERGE_FEEDBACK_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_MERGE_FEEDBACK_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25404,7 +25485,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_SHADING_FEATURES_HUAWEI: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_SHADING_FEATURES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSubpassShadingFeaturesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSubpassShadingFeaturesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -25412,7 +25493,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_SHADING_PROPERTIES_HUAWEI: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_SHADING_PROPERTIES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSubpassShadingPropertiesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSubpassShadingPropertiesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -25420,7 +25501,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25428,7 +25509,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSynchronization2Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSynchronization2Features>();
         if (typed == nullptr) { return false; }
@@ -25436,7 +25517,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25444,7 +25525,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTexelBufferAlignmentProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTexelBufferAlignmentProperties>();
         if (typed == nullptr) { return false; }
@@ -25452,7 +25533,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXTURE_COMPRESSION_ASTC_HDR_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXTURE_COMPRESSION_ASTC_HDR_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTextureCompressionASTCHDRFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTextureCompressionASTCHDRFeatures>();
         if (typed == nullptr) { return false; }
@@ -25460,7 +25541,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_PROPERTIES_FEATURES_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_PROPERTIES_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTilePropertiesFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTilePropertiesFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -25468,7 +25549,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTimelineSemaphoreFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTimelineSemaphoreFeatures>();
         if (typed == nullptr) { return false; }
@@ -25476,7 +25557,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTimelineSemaphoreProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTimelineSemaphoreProperties>();
         if (typed == nullptr) { return false; }
@@ -25484,7 +25565,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTransformFeedbackFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTransformFeedbackFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25492,7 +25573,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTransformFeedbackPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTransformFeedbackPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25500,7 +25581,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceUniformBufferStandardLayoutFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceUniformBufferStandardLayoutFeatures>();
         if (typed == nullptr) { return false; }
@@ -25508,7 +25589,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTERS_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTERS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVariablePointersFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVariablePointersFeatures>();
         if (typed == nullptr) { return false; }
@@ -25516,7 +25597,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVertexAttributeDivisorFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVertexAttributeDivisorFeatures>();
         if (typed == nullptr) { return false; }
@@ -25524,7 +25605,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVertexAttributeDivisorProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVertexAttributeDivisorProperties>();
         if (typed == nullptr) { return false; }
@@ -25532,7 +25613,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25540,7 +25621,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_ROBUSTNESS_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_ROBUSTNESS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25548,7 +25629,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25556,7 +25637,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_AV1_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_AV1_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVideoEncodeAV1FeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVideoEncodeAV1FeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25564,7 +25645,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_QUANTIZATION_MAP_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_QUANTIZATION_MAP_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVideoEncodeQuantizationMapFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVideoEncodeQuantizationMapFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25572,7 +25653,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_1_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_1_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVideoMaintenance1FeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVideoMaintenance1FeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25580,7 +25661,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_2_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_2_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVideoMaintenance2FeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVideoMaintenance2FeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25588,7 +25669,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkan11Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkan11Features>();
         if (typed == nullptr) { return false; }
@@ -25596,7 +25677,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkan11Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkan11Properties>();
         if (typed == nullptr) { return false; }
@@ -25604,7 +25685,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkan12Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkan12Features>();
         if (typed == nullptr) { return false; }
@@ -25612,7 +25693,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkan12Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkan12Properties>();
         if (typed == nullptr) { return false; }
@@ -25620,7 +25701,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkan13Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkan13Features>();
         if (typed == nullptr) { return false; }
@@ -25628,7 +25709,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkan13Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkan13Properties>();
         if (typed == nullptr) { return false; }
@@ -25636,7 +25717,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkanMemoryModelFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkanMemoryModelFeatures>();
         if (typed == nullptr) { return false; }
@@ -25644,7 +25725,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_FEATURES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25652,7 +25733,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_2_PLANE_444_FORMATS_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_2_PLANE_444_FORMATS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceYcbcr2Plane444FormatsFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceYcbcr2Plane444FormatsFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25660,7 +25741,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_DEGAMMA_FEATURES_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_DEGAMMA_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceYcbcrDegammaFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceYcbcrDegammaFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -25668,7 +25749,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_IMAGE_ARRAYS_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_IMAGE_ARRAYS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceYcbcrImageArraysFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceYcbcrImageArraysFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25676,7 +25757,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures>();
         if (typed == nullptr) { return false; }
@@ -25684,7 +25765,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_BINARY_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_BINARY_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineBinaryInfoKHR*>(dst)
                                        : arena.allocate<VkPipelineBinaryInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -25692,7 +25773,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineColorBlendAdvancedStateCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineColorBlendAdvancedStateCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25700,7 +25781,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_COLOR_WRITE_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COLOR_WRITE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineColorWriteCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineColorWriteCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25708,7 +25789,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_COMPILER_CONTROL_CREATE_INFO_AMD: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COMPILER_CONTROL_CREATE_INFO_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineCompilerControlCreateInfoAMD*>(dst)
                                        : arena.allocate<VkPipelineCompilerControlCreateInfoAMD>();
         if (typed == nullptr) { return false; }
@@ -25716,7 +25797,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_MODULATION_STATE_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_MODULATION_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineCoverageModulationStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineCoverageModulationStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25724,7 +25805,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_REDUCTION_STATE_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_REDUCTION_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineCoverageReductionStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineCoverageReductionStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25732,7 +25813,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_TO_COLOR_STATE_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_TO_COLOR_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineCoverageToColorStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineCoverageToColorStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25740,7 +25821,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineCreateFlags2CreateInfo*>(dst)
                                        : arena.allocate<VkPipelineCreateFlags2CreateInfo>();
         if (typed == nullptr) { return false; }
@@ -25748,7 +25829,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineCreationFeedbackCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineCreationFeedbackCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -25756,7 +25837,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_DISCARD_RECTANGLE_STATE_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_DISCARD_RECTANGLE_STATE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineDiscardRectangleStateCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineDiscardRectangleStateCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25764,7 +25845,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_ENUM_STATE_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_ENUM_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineFragmentShadingRateEnumStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineFragmentShadingRateEnumStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25772,7 +25853,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineFragmentShadingRateStateCreateInfoKHR*>(dst)
                                        : arena.allocate<VkPipelineFragmentShadingRateStateCreateInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -25780,7 +25861,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineLayoutCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineLayoutCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -25788,7 +25869,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineLibraryCreateInfoKHR*>(dst)
                                        : arena.allocate<VkPipelineLibraryCreateInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -25796,7 +25877,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRasterizationConservativeStateCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineRasterizationConservativeStateCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25804,7 +25885,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRasterizationDepthClipStateCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineRasterizationDepthClipStateCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25812,7 +25893,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRasterizationLineStateCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineRasterizationLineStateCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -25820,7 +25901,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRasterizationProvokingVertexStateCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineRasterizationProvokingVertexStateCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25828,7 +25909,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRasterizationStateRasterizationOrderAMD*>(dst)
                                        : arena.allocate<VkPipelineRasterizationStateRasterizationOrderAMD>();
         if (typed == nullptr) { return false; }
@@ -25836,7 +25917,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRasterizationStateStreamCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineRasterizationStateStreamCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25844,7 +25925,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRenderingCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineRenderingCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -25852,7 +25933,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_REPRESENTATIVE_FRAGMENT_TEST_STATE_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_REPRESENTATIVE_FRAGMENT_TEST_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRepresentativeFragmentTestStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineRepresentativeFragmentTestStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25860,7 +25941,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRobustnessCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineRobustnessCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -25868,7 +25949,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineSampleLocationsStateCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineSampleLocationsStateCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25876,7 +25957,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineShaderStageModuleIdentifierCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineShaderStageModuleIdentifierCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25884,7 +25965,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineShaderStageRequiredSubgroupSizeCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineShaderStageRequiredSubgroupSizeCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -25892,7 +25973,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineTessellationDomainOriginStateCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineTessellationDomainOriginStateCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -25900,7 +25981,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineVertexInputDivisorStateCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineVertexInputDivisorStateCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -25908,7 +25989,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_COARSE_SAMPLE_ORDER_STATE_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_COARSE_SAMPLE_ORDER_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportCoarseSampleOrderStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineViewportCoarseSampleOrderStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25916,7 +25997,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLAMP_CONTROL_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLAMP_CONTROL_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportDepthClampControlCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineViewportDepthClampControlCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25924,7 +26005,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportDepthClipControlCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineViewportDepthClipControlCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25932,7 +26013,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_EXCLUSIVE_SCISSOR_STATE_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_EXCLUSIVE_SCISSOR_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportExclusiveScissorStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineViewportExclusiveScissorStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25940,7 +26021,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_SHADING_RATE_IMAGE_STATE_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_SHADING_RATE_IMAGE_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportShadingRateImageStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineViewportShadingRateImageStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25948,7 +26029,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_SWIZZLE_STATE_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_SWIZZLE_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportSwizzleStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineViewportSwizzleStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25956,7 +26037,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_W_SCALING_STATE_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_W_SCALING_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportWScalingStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineViewportWScalingStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25964,7 +26045,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkProtectedSubmitInfo*>(dst)
                                        : arena.allocate<VkProtectedSubmitInfo>();
         if (typed == nullptr) { return false; }
@@ -25972,7 +26053,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_QUERY_POOL_PERFORMANCE_CREATE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUERY_POOL_PERFORMANCE_CREATE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueryPoolPerformanceCreateInfoKHR*>(dst)
                                        : arena.allocate<VkQueryPoolPerformanceCreateInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -25980,7 +26061,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_QUERY_POOL_PERFORMANCE_QUERY_CREATE_INFO_INTEL: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUERY_POOL_PERFORMANCE_QUERY_CREATE_INFO_INTEL): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueryPoolPerformanceQueryCreateInfoINTEL*>(dst)
                                        : arena.allocate<VkQueryPoolPerformanceQueryCreateInfoINTEL>();
         if (typed == nullptr) { return false; }
@@ -25988,7 +26069,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_QUERY_POOL_VIDEO_ENCODE_FEEDBACK_CREATE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUERY_POOL_VIDEO_ENCODE_FEEDBACK_CREATE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueryPoolVideoEncodeFeedbackCreateInfoKHR*>(dst)
                                        : arena.allocate<VkQueryPoolVideoEncodeFeedbackCreateInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -25996,7 +26077,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_2_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_2_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueueFamilyCheckpointProperties2NV*>(dst)
                                        : arena.allocate<VkQueueFamilyCheckpointProperties2NV>();
         if (typed == nullptr) { return false; }
@@ -26004,7 +26085,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueueFamilyCheckpointPropertiesNV*>(dst)
                                        : arena.allocate<VkQueueFamilyCheckpointPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -26012,7 +26093,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueueFamilyGlobalPriorityProperties*>(dst)
                                        : arena.allocate<VkQueueFamilyGlobalPriorityProperties>();
         if (typed == nullptr) { return false; }
@@ -26020,7 +26101,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_QUEUE_FAMILY_QUERY_RESULT_STATUS_PROPERTIES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_QUERY_RESULT_STATUS_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueueFamilyQueryResultStatusPropertiesKHR*>(dst)
                                        : arena.allocate<VkQueueFamilyQueryResultStatusPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -26028,7 +26109,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_QUEUE_FAMILY_VIDEO_PROPERTIES_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_VIDEO_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueueFamilyVideoPropertiesKHR*>(dst)
                                        : arena.allocate<VkQueueFamilyVideoPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -26036,7 +26117,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CLUSTER_ACCELERATION_STRUCTURE_CREATE_INFO_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CLUSTER_ACCELERATION_STRUCTURE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV*>(dst)
                                        : arena.allocate<VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -26044,7 +26125,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassAttachmentBeginInfo*>(dst)
                                        : arena.allocate<VkRenderPassAttachmentBeginInfo>();
         if (typed == nullptr) { return false; }
@@ -26052,7 +26133,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDER_PASS_CREATION_CONTROL_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_CREATION_CONTROL_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassCreationControlEXT*>(dst)
                                        : arena.allocate<VkRenderPassCreationControlEXT>();
         if (typed == nullptr) { return false; }
@@ -26060,7 +26141,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDER_PASS_CREATION_FEEDBACK_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_CREATION_FEEDBACK_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassCreationFeedbackCreateInfoEXT*>(dst)
                                        : arena.allocate<VkRenderPassCreationFeedbackCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26068,7 +26149,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDER_PASS_FRAGMENT_DENSITY_MAP_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_FRAGMENT_DENSITY_MAP_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassFragmentDensityMapCreateInfoEXT*>(dst)
                                        : arena.allocate<VkRenderPassFragmentDensityMapCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26076,7 +26157,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassInputAttachmentAspectCreateInfo*>(dst)
                                        : arena.allocate<VkRenderPassInputAttachmentAspectCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26084,7 +26165,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassMultiviewCreateInfo*>(dst)
                                        : arena.allocate<VkRenderPassMultiviewCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26092,7 +26173,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDER_PASS_SAMPLE_LOCATIONS_BEGIN_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_SAMPLE_LOCATIONS_BEGIN_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassSampleLocationsBeginInfoEXT*>(dst)
                                        : arena.allocate<VkRenderPassSampleLocationsBeginInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26100,7 +26181,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_BEGIN_INFO_ARM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_BEGIN_INFO_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassStripeBeginInfoARM*>(dst)
                                        : arena.allocate<VkRenderPassStripeBeginInfoARM>();
         if (typed == nullptr) { return false; }
@@ -26108,7 +26189,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_SUBMIT_INFO_ARM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_SUBMIT_INFO_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassStripeSubmitInfoARM*>(dst)
                                        : arena.allocate<VkRenderPassStripeSubmitInfoARM>();
         if (typed == nullptr) { return false; }
@@ -26116,7 +26197,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDER_PASS_SUBPASS_FEEDBACK_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_SUBPASS_FEEDBACK_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassSubpassFeedbackCreateInfoEXT*>(dst)
                                        : arena.allocate<VkRenderPassSubpassFeedbackCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26124,7 +26205,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDER_PASS_TRANSFORM_BEGIN_INFO_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_TRANSFORM_BEGIN_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassTransformBeginInfoQCOM*>(dst)
                                        : arena.allocate<VkRenderPassTransformBeginInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -26132,7 +26213,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_LOCATION_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_LOCATION_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderingAttachmentLocationInfo*>(dst)
                                        : arena.allocate<VkRenderingAttachmentLocationInfo>();
         if (typed == nullptr) { return false; }
@@ -26140,7 +26221,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_DENSITY_MAP_ATTACHMENT_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_DENSITY_MAP_ATTACHMENT_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderingFragmentDensityMapAttachmentInfoEXT*>(dst)
                                        : arena.allocate<VkRenderingFragmentDensityMapAttachmentInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26148,7 +26229,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderingFragmentShadingRateAttachmentInfoKHR*>(dst)
                                        : arena.allocate<VkRenderingFragmentShadingRateAttachmentInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26156,7 +26237,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SAMPLER_BLOCK_MATCH_WINDOW_CREATE_INFO_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_BLOCK_MATCH_WINDOW_CREATE_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerBlockMatchWindowCreateInfoQCOM*>(dst)
                                        : arena.allocate<VkSamplerBlockMatchWindowCreateInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -26164,7 +26245,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerBorderColorComponentMappingCreateInfoEXT*>(dst)
                                        : arena.allocate<VkSamplerBorderColorComponentMappingCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26172,7 +26253,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SAMPLER_CUBIC_WEIGHTS_CREATE_INFO_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_CUBIC_WEIGHTS_CREATE_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerCubicWeightsCreateInfoQCOM*>(dst)
                                        : arena.allocate<VkSamplerCubicWeightsCreateInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -26180,7 +26261,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerCustomBorderColorCreateInfoEXT*>(dst)
                                        : arena.allocate<VkSamplerCustomBorderColorCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26188,7 +26269,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerReductionModeCreateInfo*>(dst)
                                        : arena.allocate<VkSamplerReductionModeCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26196,7 +26277,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerYcbcrConversionImageFormatProperties*>(dst)
                                        : arena.allocate<VkSamplerYcbcrConversionImageFormatProperties>();
         if (typed == nullptr) { return false; }
@@ -26204,7 +26285,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerYcbcrConversionInfo*>(dst)
                                        : arena.allocate<VkSamplerYcbcrConversionInfo>();
         if (typed == nullptr) { return false; }
@@ -26212,7 +26293,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_YCBCR_DEGAMMA_CREATE_INFO_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_YCBCR_DEGAMMA_CREATE_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerYcbcrConversionYcbcrDegammaCreateInfoQCOM*>(dst)
                                        : arena.allocate<VkSamplerYcbcrConversionYcbcrDegammaCreateInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -26220,7 +26301,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSemaphoreTypeCreateInfo*>(dst)
                                        : arena.allocate<VkSemaphoreTypeCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26228,7 +26309,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkShaderModuleCreateInfo*>(dst)
                                        : arena.allocate<VkShaderModuleCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26236,7 +26317,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SHADER_MODULE_VALIDATION_CACHE_CREATE_INFO_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SHADER_MODULE_VALIDATION_CACHE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkShaderModuleValidationCacheCreateInfoEXT*>(dst)
                                        : arena.allocate<VkShaderModuleValidationCacheCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26244,7 +26325,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSubpassDescriptionDepthStencilResolve*>(dst)
                                        : arena.allocate<VkSubpassDescriptionDepthStencilResolve>();
         if (typed == nullptr) { return false; }
@@ -26252,7 +26333,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SUBPASS_FRAGMENT_DENSITY_MAP_OFFSET_END_INFO_QCOM: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SUBPASS_FRAGMENT_DENSITY_MAP_OFFSET_END_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSubpassFragmentDensityMapOffsetEndInfoQCOM*>(dst)
                                        : arena.allocate<VkSubpassFragmentDensityMapOffsetEndInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -26260,7 +26341,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SUBPASS_RESOLVE_PERFORMANCE_QUERY_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SUBPASS_RESOLVE_PERFORMANCE_QUERY_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSubpassResolvePerformanceQueryEXT*>(dst)
                                        : arena.allocate<VkSubpassResolvePerformanceQueryEXT>();
         if (typed == nullptr) { return false; }
@@ -26268,7 +26349,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SUBPASS_SHADING_PIPELINE_CREATE_INFO_HUAWEI: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SUBPASS_SHADING_PIPELINE_CREATE_INFO_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSubpassShadingPipelineCreateInfoHUAWEI*>(dst)
                                        : arena.allocate<VkSubpassShadingPipelineCreateInfoHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -26276,7 +26357,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_SUBRESOURCE_HOST_MEMCPY_SIZE: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SUBRESOURCE_HOST_MEMCPY_SIZE): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSubresourceHostMemcpySize*>(dst)
                                        : arena.allocate<VkSubresourceHostMemcpySize>();
         if (typed == nullptr) { return false; }
@@ -26284,7 +26365,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkTextureLODGatherFormatPropertiesAMD*>(dst)
                                        : arena.allocate<VkTextureLODGatherFormatPropertiesAMD>();
         if (typed == nullptr) { return false; }
@@ -26292,7 +26373,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkTimelineSemaphoreSubmitInfo*>(dst)
                                        : arena.allocate<VkTimelineSemaphoreSubmitInfo>();
         if (typed == nullptr) { return false; }
@@ -26300,7 +26381,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkValidationFeaturesEXT*>(dst)
                                        : arena.allocate<VkValidationFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -26308,7 +26389,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_VALIDATION_FLAGS_EXT: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VALIDATION_FLAGS_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkValidationFlagsEXT*>(dst)
                                        : arena.allocate<VkValidationFlagsEXT>();
         if (typed == nullptr) { return false; }
@@ -26316,7 +26397,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_VIDEO_DECODE_AV1_PROFILE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_DECODE_AV1_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoDecodeAV1ProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoDecodeAV1ProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26324,7 +26405,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_PROFILE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoDecodeH264ProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoDecodeH264ProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26332,7 +26413,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_PROFILE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoDecodeH265ProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoDecodeH265ProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26340,7 +26421,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_VIDEO_DECODE_USAGE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_DECODE_USAGE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoDecodeUsageInfoKHR*>(dst)
                                        : arena.allocate<VkVideoDecodeUsageInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26348,7 +26429,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_VIDEO_ENCODE_AV1_PROFILE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_ENCODE_AV1_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoEncodeAV1ProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoEncodeAV1ProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26356,7 +26437,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_PROFILE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoEncodeH264ProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoEncodeH264ProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26364,7 +26445,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PROFILE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoEncodeH265ProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoEncodeH265ProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26372,7 +26453,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_VIDEO_ENCODE_USAGE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_ENCODE_USAGE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoEncodeUsageInfoKHR*>(dst)
                                        : arena.allocate<VkVideoEncodeUsageInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26380,7 +26461,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26388,7 +26469,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_VIDEO_PROFILE_LIST_INFO_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_PROFILE_LIST_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoProfileListInfoKHR*>(dst)
                                        : arena.allocate<VkVideoProfileListInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26396,7 +26477,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkWriteDescriptorSetAccelerationStructureKHR*>(dst)
                                        : arena.allocate<VkWriteDescriptorSetAccelerationStructureKHR>();
         if (typed == nullptr) { return false; }
@@ -26404,7 +26485,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkWriteDescriptorSetAccelerationStructureNV*>(dst)
                                        : arena.allocate<VkWriteDescriptorSetAccelerationStructureNV>();
         if (typed == nullptr) { return false; }
@@ -26412,7 +26493,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkWriteDescriptorSetInlineUniformBlock*>(dst)
                                        : arena.allocate<VkWriteDescriptorSetInlineUniformBlock>();
         if (typed == nullptr) { return false; }
@@ -26420,7 +26501,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_PARTITIONED_ACCELERATION_STRUCTURE_NV: {
+    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_PARTITIONED_ACCELERATION_STRUCTURE_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkWriteDescriptorSetPartitionedAccelerationStructureNV*>(dst)
                                        : arena.allocate<VkWriteDescriptorSetPartitionedAccelerationStructureNV>();
         if (typed == nullptr) { return false; }

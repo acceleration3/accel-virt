@@ -69,10 +69,16 @@ void stall(std::uint64_t milliseconds)
 
 std::uint32_t sub_apis(void *) { return RVK_EXECUTOR_SUB_API_VULKAN; }
 
-RvkExecutor *create(void *, std::uint32_t, const std::uint8_t *)
+RvkExecutor *create(void *, std::uint32_t sub_api, const std::uint8_t *)
 {
+    /* Only what sub_apis offers. Accepting anything looks harmless in a test
+     * library and is not: the device would hand that context commands of an
+     * API nothing here decodes, and the guest would wait for answers that
+     * never come. The conformance suite found this one (feature 042). */
+    if (sub_api != RVK_EXECUTOR_SUB_API_VULKAN) return nullptr;
     if (std::getenv("RVK_ECHO_FAIL_CREATE") != nullptr) return nullptr;
     auto *const executor = static_cast<Executor *>(std::calloc(1u, sizeof(Executor)));
+    if (executor == nullptr) return nullptr;
     executor->thread = pthread_self();
     executor->ordinal = ++created;
     executor->one_thread = true;
