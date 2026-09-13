@@ -1,8 +1,6 @@
 #include "core/memory/aperture_segment.hpp"
 
-#include "core/ddi/dxgk_query_segment_out4_record.hpp"
 #include "core/ddi/dxgk_segment_descriptor4_record.hpp"
-#include "core/miniport/adapter_info_query.hpp"
 #include "core/support/invariant_scope.hpp"
 
 namespace av {
@@ -18,30 +16,16 @@ Status ApertureSegment::initialize(int64_t system_memory_bytes)
     return Status::ok;
 }
 
-Status ApertureSegment::report(const AdapterInfoQuery &query) const
+Status ApertureSegment::describe(DxgkSegmentDescriptor4Record &descriptor) const
 {
-    platform_.require_irql_at_most(Irql::passive, "ApertureSegment::report");
-    uint32_t physical_adapter = 0u;
-    DxgkQuerySegmentOut4Record out = {};
-    Status status = size_ == 0u ? Status::invalid_parameter : Status::ok;
-    if (status == Status::ok) status = query.read_input(&physical_adapter, physical_adapter_bytes);
-    if (status == Status::ok) status = query.read_output(&out, sizeof out);
-    if (status != Status::ok || physical_adapter != 0u) return Status::invalid_parameter;
-    if (out.pSegmentDescriptor != nullptr) {
-        if (out.NbSegment < 1u || out.SegmentDescriptorStride < sizeof(DxgkSegmentDescriptor4Record))
-            return Status::invalid_parameter;
-        DxgkSegmentDescriptor4Record descriptor = {};
-        descriptor.Flags = flags;
-        descriptor.BaseAddress = base_address;
-        descriptor.Size = size_;
-        descriptor.CommitLimit = size_;
-        platform_.copy(out.pSegmentDescriptor, &descriptor, sizeof descriptor);
-        out.PagingBufferSegmentId = segment_id;
-        out.PagingBufferSize = static_cast<uint32_t>(page_bytes);
-        out.PagingBufferPrivateDataSize = 0u;
-    }
-    out.NbSegment = 1u;
-    return query.write_output(&out, sizeof out);
+    platform_.require_irql_at_most(Irql::passive, "ApertureSegment::describe");
+    if (size_ == 0u) return Status::invalid_state;
+    descriptor = DxgkSegmentDescriptor4Record{};
+    descriptor.Flags = flags;
+    descriptor.BaseAddress = base_address;
+    descriptor.Size = size_;
+    descriptor.CommitLimit = size_;
+    return Status::ok;
 }
 
 uint64_t ApertureSegment::size() const { return size_; }

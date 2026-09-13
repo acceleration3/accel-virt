@@ -14,6 +14,8 @@
 #include "core/display/synthetic_vsync.hpp"
 #include "core/memory/allocation_table.hpp"
 #include "core/memory/aperture_segment.hpp"
+#include "core/memory/host_visible_segment.hpp"
+#include "core/memory/memory_segments.hpp"
 #include "core/memory/gpu_mmu_geometry.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
 #include "core/miniport/interrupt_notification.hpp"
@@ -307,6 +309,8 @@ private:
     DriverCapabilities             capabilities_;
     GpuMmuGeometry                 geometry_;
     ApertureSegment                segment_;
+    HostVisibleSegment             host_visible_;
+    MemorySegments                 memory_;
     DisplayInfoResponse            display_info_;
     DisplayModeList                modes_;
     Edid                           edid_;

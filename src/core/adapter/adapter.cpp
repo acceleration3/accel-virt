@@ -91,7 +91,7 @@ enum : int32_t {
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), budget_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
       resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), geometry_(platform),
-      segment_(platform),
+      segment_(platform), host_visible_(platform), memory_(platform, segment_, host_visible_),
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), losses_(platform), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
@@ -118,6 +118,9 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
     if (status == Status::ok) status = VirtioCapabilityWalk(config, config_space_bytes).walk(layout_);
     if (status == Status::ok)
         status = mappings_.map(PciBaseAddresses(config, config_space_bytes), resources_, layout_);
+    /* Where the device's host-visible region is, if it presents one; whether it
+     * is offered waits for the capset (feature 041, FR-001). */
+    if (status == Status::ok) host_visible_.discover(PciBaseAddresses(config, config_space_bytes), layout_);
     return status;
 }
 
@@ -126,7 +129,10 @@ void Adapter::remember_device()
     CapsetInfo     capset;
     CapsetExchange exchange(platform_, device_.object());
     const Status   read = exchange.read(capset);
-    if (read == Status::ok) identity_.remember(capset);
+    if (read == Status::ok) {
+        identity_.remember(capset);
+        host_visible_.offer(capset);
+    }
     log_status("rvkgpu: device capset", NtStatus(read).value());
 }
 
@@ -226,6 +232,7 @@ int32_t Adapter::stop_device()
     cursor_.release();
     mappings_.unmap_all();
     identity_.forget();
+    host_visible_.forget();
     started_ = false;
     const int32_t stopped = NtStatus(status).value();
     log_status("rvkgpu: StopDevice", stopped);
@@ -413,7 +420,7 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
         answered = NtStatus(capabilities_.report_wddm_device_caps(request)).value();
         break;
     case query_segment4:
-        answered = NtStatus(segment_.report(request)).value();
+        answered = NtStatus(memory_.report(request)).value();
         break;
     case query_gpu_mmu_caps:
         answered = NtStatus(geometry_.report_caps(request)).value();

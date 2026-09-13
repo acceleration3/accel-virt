@@ -11,7 +11,7 @@
 
 namespace av {
 
-class AdapterInfoQuery;
+struct DxgkSegmentDescriptor4Record;
 struct ApertureSegmentProbe;
 
 class ApertureSegment {
@@ -43,14 +43,16 @@ public:
      * @1400c7990) turns the identifier into a segment set and indexes the
      * adapter's segment pointers by bit position, so zero reaches a segment that
      * was never created. basicrender.sys answers 1 for the same reason. */
-    [[nodiscard]] Status report(const AdapterInfoQuery &query) const;
+    /* The descriptor VidMm is given for this segment; invalid_state before
+     * initialize, leaving it alone. `MemorySegments` is what answers
+     * DXGKQAITYPE_QUERYSEGMENT4 with it. */
+    [[nodiscard]] Status describe(DxgkSegmentDescriptor4Record &descriptor) const;
     uint64_t             size() const;
 
     bool invariants_hold() const;
 
 private:
-    static constexpr uint32_t flags = 0x15u;                 /* Aperture | CpuVisible | CacheCoherent */
-    static constexpr uint32_t physical_adapter_bytes = 4u;   /* DXGK_QUERYSEGMENTIN4 */
+    static constexpr uint32_t flags = 0x15u;   /* Aperture | CpuVisible | CacheCoherent */
 
     Platform &platform_;
     uint64_t  size_;
