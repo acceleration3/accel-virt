@@ -276,6 +276,12 @@ foreach(src ${AV_UNIT_TESTS})
       ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan
       ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl)
   endif()
+  if(name STREQUAL "test_loopback_transport")
+    target_sources(${name} PRIVATE
+      ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_client.cpp)
+    target_include_directories(${name} PRIVATE
+      ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan)
+  endif()
   if(AV_COVERAGE)
     set_tests_properties(${name} PROPERTIES
       FIXTURES_REQUIRED coverage_clean FIXTURES_SETUP coverage_profiles)
