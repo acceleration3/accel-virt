@@ -19,12 +19,14 @@ This feature is the driver side of that BAR:
 1. **A second segment, CPU-visible, whose `CpuTranslatedAddress` is the hostmem
    BAR.** Reported only when the capset says the device has the region and the
    PCI walk found it, so an adapter without it keeps exactly today's shape.
-2. **A placement allocator the driver owns**, because the protocol puts the
-   offset in the guest's hands: each host-visible allocation gets a page-aligned
-   range of the region, and the device refuses anything that does not fit.
-3. **A blob per host-visible allocation**, created with the allocation, mapped
-   into the region when VidMm makes it resident, unmapped when it is evicted or
-   destroyed - the contents surviving both, because the device keeps them.
+2. **The whole region as one blob**, created and mapped at offset 0 as soon as
+   the segment is offered. VidMm owns the segment's address space and maps a
+   process's view itself (`MapInCpuVisibleSegment`, dxgmms2.sys @14009ea98), so
+   the driver is never told where an allocation landed - and every offset VidMm
+   can choose has to have host memory behind it already.
+3. **A host-visible allocation with nowhere to be evicted to**: that segment is
+   its only supported one and its eviction set is empty, which is what makes a
+   process's view the host's memory rather than a copy of it.
 4. **The fallback said out loud.** With no region, the same allocation is
    guest-backed and reports that it is (FR-007); nothing silently aliases guest
    RAM.
@@ -57,11 +59,11 @@ through a mapped view reaches the device with no command sent per access.
 
 **Constraints**: `DxgkDdiCreateAllocation` and the paging path run at PASSIVE,
 but nothing on them may block on the device: a control exchange there would
-stall VidMm. The region is 256 MiB by default and every placement is a page
-multiple inside it. A descriptor from user mode is hostile input.
+stall VidMm, which is why the region's blob is made once at StartDevice and not
+per allocation. A descriptor from user mode is hostile input.
 
-**Scale/Scope**: one adapter, one region, `HostmemPlacement::max_blobs`
-host-visible allocations at once.
+**Scale/Scope**: one adapter, one region, one blob; as many host-visible
+allocations as VidMm can fit in the region it was told about.
 
 ## Constitution Check
 
@@ -69,13 +71,13 @@ host-visible allocations at once.
 |---|---|
 | I. Specification precedes implementation | This plan, research.md and tasks.md precede the code; each task names the story it serves. |
 | II. The core is portable; the shim is not | Every decision is in `src/core`; the BAR reaches the driver through `Platform` and the existing PCI walk, and nothing new is kernel-only. |
-| III. Object-oriented, with state | Four classes below, each owning state and one responsibility; the segment list owns the collection. |
+| III. Object-oriented, with state | Three classes below, each owning state and one responsibility; the segment list owns the collection. |
 | IV. Test-first and exhaustive | Each class's L1 tests precede it; the descriptor reader gains a hostile table test and its fuzz target already exists. |
 | V. Everything from outside is hostile | An allocation descriptor is validated before a blob is created, and the device's `OK_MAP_INFO` answer is judged rather than assumed. |
 | VI. Feature levels are phases | The segment is reported only where the capset proves the region; no capability is claimed that the device cannot back (FR-006). |
-| VII. IRQL and locking are typed | Placement is PASSIVE and says so; the paging path states its ceiling and takes the placement lock only there. |
+| VII. IRQL and locking are typed | Every new method states its ceiling; the blob's exchanges are PASSIVE, because they wait for the device to answer. |
 | VIII. No speculative structure | No user-mode mapping interface is invented for a client that does not exist yet (043); no aperture-window DDIs for a BAR that is addressable whole. |
-| IX. Reproducible and observable | A refused descriptor and a refused placement each log once with the offending value; the L5 run reads the host's own view of the BAR back. |
+| IX. Reproducible and observable | A region that cannot be made is logged once with the status that stopped it; the L5 run reads the host's own view of the BAR back. |
 
 No violations.
 
@@ -107,7 +109,6 @@ src/core/memory/host_visible_segment.{hpp,cpp}    # FR-001, FR-006
 src/core/memory/memory_segments.{hpp,cpp}         # FR-001
 src/core/memory/host_visible_blob.{hpp,cpp}       # FR-001, FR-005
 src/core/memory/allocation.{hpp,cpp}              # where a cpu-visible allocation goes
-src/core/memory/paging_request.{hpp,cpp}          # residency in the new segment
 src/core/adapter/adapter.{hpp,cpp}                # the capset gate and the segment answer
 src/proto/virtio_gpu/rvk_request_writer.hpp       # host blob, map blob, unmap blob
 src/proto/virtio_gpu/gpu_response_reader.{hpp,cpp}# OK_MAP_INFO
@@ -115,7 +116,7 @@ src/proto/virtio_gpu/gpu_response_reader.{hpp,cpp}# OK_MAP_INFO
 tests/unit/core/memory/test_host_visible_segment.cpp
 tests/unit/core/memory/test_memory_segments.cpp
 tests/unit/core/memory/test_host_visible_blob.cpp
-tests/unit/scenarios/test_ddi_scenarios.cpp       # the residency sequence
+tests/unit/scenarios/test_ddi_scenarios.cpp       # the segment and blob sequence
 tests/qemu/test_virtio_gpu_blobs.py               # the requests the driver emits
 tools/guest/run_guest_suite.py                    # hostmem= and the host's read-back
 ```
@@ -127,8 +128,8 @@ where an allocation goes in it; the adapter only asks.
 ## Phase 0: research
 
 `research.md` settles what the device already does with blobs and offsets, which
-of the WDK's two CPU-visible segment shapes to report and why, how a blob is
-made to follow VidMm's placement when the only signal is a paging operation,
+of the WDK's two CPU-visible segment shapes to report and why, why a blob cannot
+follow VidMm's placement and what is done instead,
 what the absence of the region has to mean, and how far the ring and fence pages
 can go before feature 043 exists.
 
