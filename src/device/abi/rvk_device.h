@@ -71,6 +71,9 @@ typedef struct RvkHostOps {
     /* Nonzero when the block cannot be placed at `offset` of the hostmem region. */
     int (*place_in_hostmem)(void *opaque, void *memory, uint64_t offset);
     void (*remove_from_hostmem)(void *opaque, uint64_t offset, uint64_t size);
+    /* What the guest reads at `offset` of the hostmem region; nonzero when the
+     * host cannot say. */
+    int (*read_hostmem)(void *opaque, uint64_t offset, uint8_t *buffer, uint64_t size);
     /* This device runs on host GPU `index`; nonzero when the host cannot. */
     int (*bind_gpu)(void *opaque, uint32_t index);
     /* `size` bytes on the bound host GPU, mapped into this process: its handle,

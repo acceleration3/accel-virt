@@ -35,7 +35,7 @@ MockHost::MockHost()
       fail_allocation_(0u), fail_host_memory_(0u), fail_placement_(0u), empty_mapping_(0u), allocations_{}, regions_{}, region_count_(0u),
       splits_{}, split_count_(0u),
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
-      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, fail_bind_gpu_(0u), bound_gpu_(no_gpu), refuse_export_(0u), export_error_(0),
+      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, corrupt_hostmem_read_(0u), fail_bind_gpu_(0u), bound_gpu_(no_gpu), refuse_export_(0u), export_error_(0),
       refuse_import_(0u), import_error_(0), corrupt_import_read_(0u), imports_{}
 {
     pthread_mutex_init(&state_, nullptr);
@@ -238,6 +238,24 @@ std::uint32_t MockHost::doorbell_of(void *event)
     for (std::uint32_t index = 0u; index < max_doorbells; index++)
         if (doorbells_[index] == event) return index;
     return max_doorbells;
+}
+
+/* The region shows what the block placed over it holds, as QEMU's does once
+ * the block's pages are mapped there. */
+Status MockHost::read_hostmem(std::uint64_t offset, std::uint8_t *buffer, std::uint64_t size)
+{
+    require_main_loop("MockHost::read_hostmem");
+    StateLock lock(state_);
+    for (const HostBlock &block : host_blocks_) {
+        if (!block.live || !block.placed || offset < block.offset || offset + size > block.offset + block.size)
+            continue;
+        const std::uint8_t *const bytes = static_cast<const std::uint8_t *>(block.pointer) + (offset - block.offset);
+        for (std::uint64_t index = 0u; index < size; index++) buffer[index] = bytes[index];
+        if (fail_now(corrupt_hostmem_read_) && size != 0u)
+            buffer[size - 1u] = static_cast<std::uint8_t>(~buffer[size - 1u]);
+        return Status::ok;
+    }
+    return Status::not_found;
 }
 
 Status MockHost::bind_gpu(std::uint32_t index)
@@ -736,6 +754,7 @@ void MockHost::fail_host_memory_at(std::uint32_t nth) { StateLock lock(state_); 
 void MockHost::fail_placement_at(std::uint32_t nth) { StateLock lock(state_); fail_placement_ = nth; }
 void MockHost::empty_mapping_at(std::uint32_t nth) { StateLock lock(state_); empty_mapping_ = nth; }
 void MockHost::fail_bind_gpu_at(std::uint32_t nth) { StateLock lock(state_); fail_bind_gpu_ = nth; }
+void MockHost::corrupt_hostmem_read_at(std::uint32_t nth) { StateLock lock(state_); corrupt_hostmem_read_ = nth; }
 void MockHost::refuse_export_at(std::uint32_t nth, std::int32_t host_error)
 { StateLock lock(state_); refuse_export_ = nth; export_error_ = host_error; }
 void MockHost::refuse_import_at(std::uint32_t nth, std::int32_t host_error)

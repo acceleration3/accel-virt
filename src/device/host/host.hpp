@@ -69,6 +69,10 @@ public:
     /* Main loop. The block becomes visible at `offset` of the hostmem region. */
     [[nodiscard]] virtual Status place_in_hostmem(void *memory, uint64_t offset) = 0;
     virtual void                 remove_from_hostmem(uint64_t offset, uint64_t size) = 0;
+    /* Main loop. `size` bytes of the hostmem region at `offset` - what the
+     * guest reads there, not what the placed block holds - so a probe can tell
+     * a mapping that carries the bytes from one that only claims to. */
+    [[nodiscard]] virtual Status read_hostmem(uint64_t offset, uint8_t *buffer, uint64_t size) = 0;
 
     /* Main loop, once, when the instance's host GPU is resolved: the glue may
      * now create what it needs on that physical device. not_supported when the

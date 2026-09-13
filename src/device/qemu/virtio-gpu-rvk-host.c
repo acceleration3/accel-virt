@@ -269,6 +269,19 @@ static int rvk_memory_type(VkPhysicalDevice physical, uint32_t allowed, uint32_t
  * when the core says which host GPU this instance runs on; a driver that cannot
  * give us external memory still gets a device, and each probe refuses on its
  * own. */
+/* What the guest reads at `offset`: the hostmem reservation itself, which the
+ * placement mapped the block's pages over. */
+static int rvk_read_hostmem(void *opaque, uint64_t offset, uint8_t *buffer, uint64_t size)
+{
+    VirtIOGPURvk *r = opaque;
+
+    if (!r->hostmem_mmap || offset + size > VIRTIO_GPU_BASE(r)->conf.hostmem) {
+        return 1;
+    }
+    memcpy(buffer, (char *)r->hostmem_mmap + offset, size);
+    return 0;
+}
+
 static int rvk_bind_gpu(void *opaque, uint32_t index)
 {
     VirtIOGPURvk *r = opaque;
@@ -649,6 +662,7 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .hostmem_size = rvk_hostmem_size,
         .place_in_hostmem = rvk_place_in_hostmem,
         .remove_from_hostmem = rvk_remove_from_hostmem,
+        .read_hostmem = rvk_read_hostmem,
         .bind_gpu = rvk_bind_gpu,
         .export_gpu_memory = rvk_export_gpu_memory,
         .release_gpu_memory = rvk_release_gpu_memory,

@@ -53,8 +53,13 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 
 **Independent Test**: `tools/host/probe_host_memory.py --qemu build-qemu` prints a verdict per host GPU; with `--guest-check --kernel <image>` a minimal Linux guest reads and writes the mapping under KVM.
 
-- [ ] T009 [P] [US1] Write `tests/unit/device/probe/test_host_memory_probe.cpp` first: no hostmem region leaves the result `failed` with `not_supported` and asks the host for nothing; an export refusal records the `VkResult` it was given; a `place_in_hostmem` refusal records its status and still releases the export; a readback that differs is `Status::malformed`; a run that works is `passed()` with `measured()` equal to `probe_bytes`; every path leaves no block, no placement and no guest mapping behind; `run()` twice is `invalid_state`
-- [ ] T010 [US1] Implement `HostMemoryProbe` (object class) in `src/device/probe/host_memory_probe.{hpp,cpp}`: `probe_bytes = 0x100000`, placement at hostmem offset 0, pattern write, readback compare, `ScopeExit` cleanup, `require_main_loop`
+- [X] T009 [P] [US1] Write `tests/unit/device/probe/test_host_memory_probe.cpp` first: no hostmem region leaves the result `failed` with `not_supported` and asks the host for nothing; an export refusal records the `VkResult` it was given; a `place_in_hostmem` refusal records its status and still releases the export; a readback that differs is `Status::malformed`; a run that works is `passed()` with `measured()` equal to `probe_bytes`; every path leaves no block, no placement and no guest mapping behind; `run()` twice is `invalid_state`
+- [X] T010 [US1] Implement `HostMemoryProbe` (object class) in `src/device/probe/host_memory_probe.{hpp,cpp}`: `probe_bytes = 0x100000`, placement at hostmem offset 0, pattern write, readback compare, `ScopeExit` cleanup, `require_main_loop`
+> **Order note**: T011-T013 read what the device *says* at realize, and the
+> realize wiring is T023. Doing them before it would mean writing that wiring
+> twice, so they run after Phase 5; the probe itself (T009, T010) is what US1
+> depends on and it is done.
+
 - [ ] T011 [US1] Write the failing test for the runner first in `tests/tools/test_probe_host_memory.py` (captured device output in, JSON out, a refused probe still exit 0), then `tools/host/probe_host_memory.py`: one device per host GPU from `list_gpus.py`'s enumeration, realize only, JSON per GPU with driver, version, outcome, host error and measurement
 - [ ] T012 [US1] Add the minimal Linux guest check: a freestanding static init in `tests/qemu/probe_guest/` that maps the device's hostmem BAR through sysfs, writes and reads back a pattern, and prints one line; packed into a cpio initramfs by the runner and booted with `-enable-kvm -kernel`. Skipped with a recorded reason when `/dev/kvm` or the kernel image is absent
 - [ ] T013 [US1] Record this host's answers (Intel Mesa ANV, NVIDIA proprietary; llvmpipe and AMD as not measured) in `docs/kb/04-memory.md` with driver, version, outcome, errno and measurement (FR-002)

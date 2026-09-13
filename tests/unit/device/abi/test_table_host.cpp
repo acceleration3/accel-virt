@@ -146,7 +146,12 @@ TEST(table_host, forwards_exported_gpu_memory_and_guest_imports)
   CHECK_EQ(host_error, 0);
   CHECK_EQ(mock.live_gpu_memory(), 1u);
   CHECK_STATUS(host.place_in_hostmem(exported, 0u), Status::ok);
+  static_cast<std::uint8_t *>(view)[0] = 0x39u;
+  std::uint8_t region[1] = {};
+  CHECK_STATUS(host.read_hostmem(0u, region, sizeof region), Status::ok);
+  CHECK_EQ(region[0], 0x39u);
   host.remove_from_hostmem(0u, 0x1000u);
+  CHECK_STATUS(host.read_hostmem(0u, region, sizeof region), Status::not_supported);
   host.release_gpu_memory(exported);
   CHECK_EQ(mock.live_gpu_memory(), 0u);
   mock.refuse_export_at(1u, -12);

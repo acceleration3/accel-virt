@@ -73,6 +73,9 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.remove_from_hostmem = [](void *opaque, std::uint64_t offset, std::uint64_t size) {
         host_of(opaque).remove_from_hostmem(offset, size);
     };
+    table_.read_hostmem = [](void *opaque, std::uint64_t offset, std::uint8_t *buffer, std::uint64_t size) {
+        return host_of(opaque).read_hostmem(offset, buffer, size) == Status::ok ? 0 : 1;
+    };
     table_.bind_gpu = [](void *opaque, std::uint32_t index) {
         return host_of(opaque).bind_gpu(index) == Status::ok ? 0 : 1;
     };

@@ -149,6 +149,11 @@ void TableHost::remove_from_hostmem(uint64_t offset, uint64_t size)
     ops_.remove_from_hostmem(ops_.opaque, offset, size);
 }
 
+Status TableHost::read_hostmem(uint64_t offset, uint8_t *buffer, uint64_t size)
+{
+    return ops_.read_hostmem(ops_.opaque, offset, buffer, size) == 0 ? Status::ok : Status::not_supported;
+}
+
 Status TableHost::bind_gpu(uint32_t index)
 {
     return ops_.bind_gpu(ops_.opaque, index) == 0 ? Status::ok : Status::not_supported;
