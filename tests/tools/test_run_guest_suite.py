@@ -216,6 +216,8 @@ class GuestSuiteRun(unittest.TestCase):
         self.assert_clean()
 
     def test_s4_leaves_the_machine_off_and_the_overlay_boots_again(self):
+        """The sleep states are asked again after the stage turns hibernation
+        on: what the guest said before it is no longer what it would say."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "hibernate": [0],
                             "sleepstates": [0]})
         result = self.run_suite("--hibernate")
@@ -224,6 +226,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest-suspend-disk", journal)
         self.assertIn("guest: hibernate ok: the adapter came back from S4", result.stdout)
         self.assertIn("hibernate", " ".join(self.stage_calls()))
+        self.assertEqual(self.stage_calls().count("sleepstates"), 2)
         self.assert_clean()
 
     def test_the_stress_window_is_passed_to_the_guest_and_its_numbers_read_back(self):

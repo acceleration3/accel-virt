@@ -748,6 +748,9 @@ class GuestRun:
         if not self.args.hibernate:
             return
         self.provision_ok("hibernate")
+        # What the guest said before the stage turned hibernation on is no
+        # longer what it would say: ask again.
+        self.sleep_states = None
         if not self.offers_sleep("hibernate"):
             self.say("hibernate skipped: this machine offers no S4")
             return
