@@ -46,6 +46,9 @@ public:
     [[nodiscard]] Status initialize();
     void                 teardown();
     bool                 established() const;
+    /* A device-side failure (a refused submission, a faulted wait, a bad reply)
+     * loses the context: every later send fails until it is torn down. */
+    bool                 faulted() const;
 
     WireWriter      request_writer() override;
     TransportResult send_async(uint32_t command_id, WireWriter &writer) override;
@@ -77,6 +80,7 @@ private:
     ReplyReader      reply_;
     TransportFence   fences_;
     uint8_t         *dma_view_;
+    bool             faulted_;
     WireArena        decode_arena_;
     ClientBlobArena  blobs_;
     uint8_t          staging_[max_command];

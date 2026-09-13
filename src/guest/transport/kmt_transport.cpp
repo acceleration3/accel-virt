@@ -19,7 +19,8 @@ constexpr uint64_t page_bytes = 4096u;
 
 KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t ring_order)
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), allocations_{}, dma_address_(0u),
-      context_(0u), ring_(), reply_(), fences_(), dma_view_(nullptr), decode_arena_(nullptr, 0u), blobs_(),
+      context_(0u), ring_(), reply_(), fences_(), dma_view_(nullptr), faulted_(false),
+      decode_arena_(nullptr, 0u), blobs_(),
       staging_{} {}
 
 KmtTransport::~KmtTransport() { teardown(); }
@@ -116,9 +117,11 @@ void KmtTransport::teardown()
         allocations_[index] = 0u;
     }
     dma_view_ = nullptr;
+    faulted_ = false;
 }
 
 bool KmtTransport::established() const { return context_ != 0u; }
+bool KmtTransport::faulted() const { return faulted_; }
 
 WireWriter KmtTransport::request_writer()
 {
@@ -145,25 +148,36 @@ TransportResult KmtTransport::publish(uint32_t command_id, WireWriter &writer, u
     for (size_t i = 0u; i < sizeof descriptor; i++) dma_view_[i] = descriptor[i];
     const Status submitted = connection_.kmt().submit(context_, dma_address_,
                                                       SubmissionDescriptor::encoded_size);
-    if (submitted != Status::ok) return TransportResult::failed;
+    if (submitted != Status::ok) {
+        faulted_ = true;
+        return TransportResult::failed;
+    }
     return TransportResult::ok;
 }
 
 TransportResult KmtTransport::send_async(uint32_t command_id, WireWriter &writer)
 {
+    if (faulted_) return TransportResult::failed;
     uint64_t fence = 0u;
     return publish(command_id, writer, 0u, fence);
 }
 
 TransportResult KmtTransport::send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply)
 {
+    if (faulted_) return TransportResult::failed;
     uint64_t              fence = 0u;
     const TransportResult sent = publish(command_id, writer, CommandHeader::generate_reply, fence);
     if (sent != TransportResult::ok) return sent;
     const Status waited = connection_.kmt().wait_for_context(connection_.device(), context_);
-    if (waited != Status::ok) return TransportResult::failed;
+    if (waited != Status::ok) {
+        faulted_ = true;
+        return TransportResult::failed;
+    }
     fences_.close(fence);
-    if (reply_.read(fence, reply) != Status::ok) return TransportResult::failed;
+    if (reply_.read(fence, reply) != Status::ok) {
+        faulted_ = true;
+        return TransportResult::failed;
+    }
     return TransportResult::ok;
 }
 

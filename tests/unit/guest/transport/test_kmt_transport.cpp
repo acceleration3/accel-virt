@@ -267,15 +267,25 @@ TEST(kmt_transport, send_sync_failure_paths)
   WireReader reply(nullptr, 0u);
   CHECK(transport.send_sync(0x10002u, early, reply) == TransportResult::failed);
   CHECK_STATUS(transport.initialize(), Status::ok);
-  /* The device will not answer the wait. */
-  kmt.fail_at(MockKmt::Call::wait_for_context, 1u, MockKmt::invalid_parameter);
-  WireWriter w1 = transport.request_writer();
-  w1.write_u32(1u);
-  CHECK(transport.send_sync(0x10002u, w1, reply) == TransportResult::failed);
   /* The wait succeeds but the reply slot holds no answer for the fence. */
   WireWriter w2 = transport.request_writer();
   w2.write_u32(2u);
-  CHECK(transport.send_sync(0x10002u, w2, reply) == TransportResult::failed); }
+  CHECK(transport.send_sync(0x10002u, w2, reply) == TransportResult::failed);
+  CHECK(transport.faulted()); }
+
+/* A device that will not answer the wait fails the call. */
+TEST(kmt_transport, a_wait_the_device_refuses_fails_the_sync)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(), Status::ok);
+  KmtTransport transport(connection, SubApi::vulkan, 12u);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  kmt.fail_at(MockKmt::Call::wait_for_context, 1u, MockKmt::invalid_parameter);
+  WireWriter w1 = transport.request_writer();
+  w1.write_u32(1u);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_sync(0x10002u, w1, reply) == TransportResult::failed); }
 
 TEST(kmt_transport, the_invariant_catches_an_established_context_with_no_buffer)
 { MockKmt kmt;
@@ -285,3 +295,42 @@ TEST(kmt_transport, the_invariant_catches_an_established_context_with_no_buffer)
   KmtTransport transport(connection, SubApi::vulkan, 12u);
   KmtTransportProbe::orphan(transport);
   CHECK(!transport.invariants_hold()); }
+
+/* A device-side failure loses the context: every later send fails, even a call
+ * the device would now accept. */
+TEST(kmt_transport, a_fault_loses_the_context_for_every_later_send)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK(!transport.faulted());
+  /* The device refuses the submission: the context is lost. */
+  fixture.kmt().fail_at(MockKmt::Call::submit, 1u, MockKmt::invalid_parameter);
+  WireWriter w1 = transport.request_writer();
+  w1.write_u32(1u);
+  CHECK(transport.send_async(0x10001u, w1) == TransportResult::failed);
+  CHECK(transport.faulted());
+  /* Later sends fail without even reaching the device. */
+  WireWriter w2 = transport.request_writer();
+  w2.write_u32(2u);
+  CHECK(transport.send_async(0x10001u, w2) == TransportResult::failed);
+  WireReader reply(nullptr, 0u);
+  WireWriter w3 = transport.request_writer();
+  w3.write_u32(3u);
+  CHECK(transport.send_sync(0x10002u, w3, reply) == TransportResult::failed); }
+
+/* A faulted wait loses the context the same way. */
+TEST(kmt_transport, a_faulted_wait_loses_the_context)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  fixture.kmt().fail_at(MockKmt::Call::wait_for_context, 1u, MockKmt::invalid_parameter);
+  WireWriter w1 = transport.request_writer();
+  w1.write_u32(1u);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_sync(0x10002u, w1, reply) == TransportResult::failed);
+  CHECK(transport.faulted());
+  WireWriter w2 = transport.request_writer();
+  w2.write_u32(2u);
+  CHECK(transport.send_async(0x10001u, w2) == TransportResult::failed); }
