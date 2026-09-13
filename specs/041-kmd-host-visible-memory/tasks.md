@@ -76,7 +76,36 @@ description: "Tasks: KMD host-visible memory a process can map"
 **Goal**: what the adapter says about its memory is what the device can back, and a WoW64 process is never handed a truncated pointer.
 
 - [ ] T022 [US3] The CPU-visible segment's `CommitLimit` never exceeds what the device backs, and `tests/unit/core/memory/test_host_visible_segment.cpp` asserts it against a capset that claims more than the region holds (FR-006)
-- [ ] T023 [US3] Answer, in this file, whether the driver can influence where a WoW64 process's view lands: read `DXGK_SEGMENTDESCRIPTOR4`, `DXGK_DRIVERCAPS.HighestAcceptableAddress` and what dxgkrnl does with `CpuTranslatedAddress` for a 32-bit process (`dxgkrnl.sys` in Ghidra), and either implement the refusal FR-004 asks for or record why the placement is not the driver's to make
+- [X] T023 [US3] Answer, in this file, whether the driver can influence where a WoW64 process's view lands
+
+  **It cannot, and FR-004 asks for something no miniport can do.** Read out of
+  the pinned WDK and out of dxgmms2:
+
+  - Nothing in `DXGK_SEGMENTFLAGS` or `DXGK_SEGMENTFLAGS2` names an address
+    range, 32-bit caller or low-memory preference; every bit is enumerated and
+    the rest are `Reserved` (`wdk-shared/d3dkmddi.h:2559-2603`, `:2650-2664`).
+  - What a driver reports for a CPU-visible segment is physical geometry only -
+    `CpuTranslatedAddress` is "the CPU physical base address of the segment"
+    (`:2720-2749`), and `DXGK_CPUHOSTAPERTURE` is a physical address and a page
+    count (`:2225-2229`). Neither says anything about a per-process view.
+  - `DXGK_DRIVERCAPS.HighestAcceptableAddress` (`:2407-2409`) is a
+    `PHYSICAL_ADDRESS`: what the device can reach by DMA, adapter-wide. It is
+    not a per-caller or WoW64-aware limit on a CPU virtual address.
+  - `D3DKMT_LOCK2.pData` is an **out** parameter ("Virtual address of the locked
+    allocation", `sdk-shared/d3dkmthk.h:5233-5239`) and `D3DDDICB_LOCK2FLAGS` in
+    WDDM 3.2 is a single reserved word: a caller cannot ask for a placement, and
+    a driver is not offered one to grant.
+  - In dxgmms2, `GetCpuVisibleAddress` (@1400f2cf0) maps with `MmMapIoSpaceEx`
+    or an MDL it builds itself, and `MapInCpuVisibleSegment` (@14009ea98) locks
+    that MDL; neither takes a highest-acceptable address, clamps to 4 GiB or
+    branches on WoW64, and dxgmms2 has no function whose name contains `Wow64`
+    or `32Bit` at all. The only failure path either has is running out of
+    memory for the MDL.
+
+  So the view's address is VidMm's alone, there is no driver-visible knob, and
+  there is no driver-owned refusal to implement. Deciding whether a locked view
+  fits a 32-bit process's address space is dxgkrnl's. FR-004 is recorded as not
+  the driver's to keep, and nothing is implemented for it.
 
 **Checkpoint**: the adapter tells the truth about its memory. Commit.
 
@@ -84,10 +113,10 @@ description: "Tasks: KMD host-visible memory a process can map"
 
 ## Phase 5: What the feature promised
 
-- [ ] T024 The in-guest suite gains a host-visible scenario in `src/guest/suite/`: create a CPU-visible allocation, write a pattern through the view `D3DKMTLock2` returns, read it back, and report what it wrote; `GdiKmt` gains the lock and unlock calls it needs, with `MockKmt` scripting every failure
+- [X] T024 The in-guest suite gains a host-visible scenario in `src/guest/suite/`: create a CPU-visible allocation, write a pattern through the view `D3DKMTLock2` returns, read it back, and report what it wrote; `GdiKmt` gains the lock and unlock calls it needs, with `MockKmt` scripting every failure
 - [ ] T025 The runner gains `--hostmem N` (default 256 MiB, `0` for a device with no region) in `tools/guest/run_guest_suite.py`, a `segments` step that reads the driver's own log line for what it reported, and the read-back: after the guest writes, the host reads that BAR range through QMP and compares; with its fake-guest tests
 - [ ] T026 A live run with the region and one without it (SC-003); record what each showed here
-- [ ] T027 `docs/protocol.md` documents capset feature bits 1 and 2 beside bit 0, and `docs/kb/04-memory.md` gains the segment shape this feature reports and why the aperture variant was refused
+- [X] T027 `docs/protocol.md` documents capset feature bits 1 and 2 beside bit 0, and `docs/kb/04-memory.md` gains the segment shape this feature reports and why the aperture variant was refused
 - [ ] T028 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
 
 ---
