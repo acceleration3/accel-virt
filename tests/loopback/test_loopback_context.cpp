@@ -2,6 +2,7 @@
  * Requests travel as bytes, doorbell stores ring the device's worker, and the
  * test serves each fence interrupt as the driver's DPC would. */
 #include "core/rvk/capset_query.hpp"
+#include "core/rvk/device_identity.hpp"
 #include "core/rvk/context_memory.hpp"
 #include "core/rvk/guest_context.hpp"
 #include "core/support/status.hpp"
@@ -281,3 +282,27 @@ TEST(loopback_status, a_fence_raised_after_driver_ok_is_cleared_reaches_no_notif
   CHECK_STATUS(rig.submit(0u, 3u, second_end, ring.tail()), Status::ok);
   CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 3u));
   CHECK(rig.context(0u).invariants_hold()); }
+
+/* FR-005 at L4: the device says which host GPU it is bound to, and a guest that
+ * remembers what it started on refuses another one - what a hibernated guest
+ * wakes up to when QEMU was started against a different GPU. The capset is read
+ * the way the driver reads it, through the device core. */
+TEST(loopback_identity, a_device_bound_to_another_gpu_is_another_device)
+{ constexpr std::uint8_t other_gpu[16] = {0x20, 0x0C};
+  LoopbackRig rig;
+  CHECK(rig.read_capset());
+  av::DeviceIdentity identity(rig.platform());
+  identity.remember(rig.capset());
+  CHECK(identity.accept(rig.capset()));
+  CHECK(!identity.changed());
+
+  LoopbackRig replaced(other_gpu);
+  CHECK(replaced.read_capset());
+  CHECK(!identity.accept(replaced.capset()));
+  CHECK(identity.changed());
+  /* The device that replaced it is a device of its own, and a guest starting on
+   * it is content. */
+  av::DeviceIdentity started_again(replaced.platform());
+  started_again.remember(replaced.capset());
+  CHECK(started_again.accept(replaced.capset()));
+  CHECK(!started_again.changed()); }

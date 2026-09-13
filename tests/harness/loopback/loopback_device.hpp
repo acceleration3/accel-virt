@@ -24,7 +24,12 @@ class LoopbackDevice {
 public:
     static constexpr std::uint32_t patience_ms = 5000u;
 
-    explicit LoopbackDevice(MockPlatform &guest);
+    /* The UUID of the host GPU the device is bound to: the default is the one
+     * every rig shares, and another one is another device to a guest that
+     * remembers what it started on (feature 040, FR-005). */
+    static constexpr std::uint8_t default_gpu[16] = {0x10, 0x0B};
+
+    explicit LoopbackDevice(MockPlatform &guest, const std::uint8_t *gpu = default_gpu);
     ~LoopbackDevice();
     LoopbackDevice(const LoopbackDevice &) = delete;
     LoopbackDevice &operator=(const LoopbackDevice &) = delete;

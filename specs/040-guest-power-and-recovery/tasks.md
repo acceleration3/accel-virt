@@ -186,7 +186,17 @@ description: "Tasks: real-guest power, restart and recovery"
 
 ## Phase 6: What the feature promised
 
-- [ ] T024 A device that changed across hibernation - a different host GPU UUID, an older protocol version - is refused with its contexts reported lost and the desktop still working (FR-005), tested at L2 and L4
+- [X] T024 A device that changed across hibernation - a different host GPU UUID, an older protocol version - is refused with its contexts reported lost and the desktop still working (FR-005), tested at L2 and L4
+
+  `DeviceIdentity` (object class) keeps the capset the adapter started on;
+  `CapsetExchange` (object class) reads one over the control queue, which the
+  adapter now does at StartDevice and again at D0. Another host GPU UUID, an
+  older protocol minor or another major is another device: its queued work is
+  reported faulted, a new context is refused, a submission on a context that
+  survived is answered with a fault, and the transition still succeeds with the
+  scanout restored - not bugchecking is what FR-005 asks for. L2 drives that
+  through the real table; L4 shows two device instances bound to different host
+  GPUs answering for themselves, with the identity refusing the second.
 - [X] T025 `docs/kb/05-scheduling.md` gains what the timeout path actually asks for, and `docs/testing.md` the new L5 scenarios
 - [ ] T026 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
 

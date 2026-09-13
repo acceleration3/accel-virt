@@ -13,8 +13,6 @@ namespace av {
 
 namespace {
 
-constexpr std::uint8_t uuid[16] = {0x10, 0x0B};
-
 std::uint64_t now_ms()
 {
     timespec time = {};
@@ -24,10 +22,10 @@ std::uint64_t now_ms()
 
 }  // namespace
 
-LoopbackDevice::LoopbackDevice(MockPlatform &guest)
+LoopbackDevice::LoopbackDevice(MockPlatform &guest, const std::uint8_t *gpu)
     : guest_(guest), host_(), executor_(RVK_EXECUTOR_SUB_API_VULKAN), device_(host_), doorbells_(host_)
 {
-    host_.add_gpu(uuid);
+    host_.add_gpu(gpu);
     host_.set_hostmem_size(64u << 20u);
     host_.translate_guest_with([](void *context, std::uint64_t address, std::uint64_t length) {
         return static_cast<MockPlatform *>(context)->translate_physical(address, static_cast<std::size_t>(length));
