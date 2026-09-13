@@ -47,3 +47,12 @@ TEST(power_transition, a_transition_that_held_nothing_restores_nothing)
   for (std::uint32_t source = 0u; source < 4u; source++) CHECK(!transition.scanning_out(source));
   transition.release();
   CHECK(!transition.held()); }
+
+/* A source no adapter has cannot have been scanning out: the question is
+ * answered rather than read past the bits that hold the answer. */
+TEST(power_transition_scanning_out, a_source_past_what_it_holds_scanned_out_nothing)
+{ av::PowerTransition transition;
+  CHECK_STATUS(transition.hold(true, 0xFFFFFFFFu), av::Status::ok);
+  CHECK(transition.scanning_out(31u));
+  CHECK(!transition.scanning_out(32u));
+  CHECK(!transition.scanning_out(0xFFFFFFFFu)); }

@@ -538,3 +538,38 @@ TEST(guest_suite, the_timeout_run_is_the_timeout_scenario_and_the_adapter)
   CHECK(std::strstr(report.text(), "allocation.") == nullptr);
   CHECK(std::strstr(report.text(), "submission.") == nullptr);
   CHECK_EQ(kmt.open_objects(), 0u); }
+
+/* Without the adapter there is nothing to time out, and the scenario says so
+ * without calling D3DKMT. */
+TEST(timeout_scenario, without_the_adapter_it_reports_and_stops)
+{ MockKmt kmt;
+  AdapterSearch search(kmt);
+  GuestReport report;
+  TimeoutScenario timeout(kmt, report, search);
+  timeout.run();
+  CHECK(has_line(report, "FAIL timeout.adapter"));
+  CHECK_EQ(kmt.calls(MockKmt::Call::create_device), 0u); }
+
+/* Each step of the two sessions is reported where it failed, and the run stops
+ * there rather than judging a timeout that never happened. */
+TEST(timeout_scenario, a_setup_that_fails_stops_the_run_where_it_failed)
+{ const struct { MockKmt::Call call; std::uint32_t nth; const char *line; } cases[] = {
+      {MockKmt::Call::create_device, 1u, "FAIL timeout.held_set_up"},
+      {MockKmt::Call::create_device, 2u, "FAIL timeout.other_set_up"},
+      {MockKmt::Call::submit, 1u, "FAIL timeout.held_submit"},
+      {MockKmt::Call::submit, 2u, "FAIL timeout.other_submit"},
+  };
+  for (const auto &one : cases) {
+      MockKmt kmt;
+      kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+      kmt.fail_at(one.call, one.nth, 0xC0000001u);
+      AdapterSearch search(kmt);
+      CHECK_STATUS(search.find(rvk), Status::ok);
+      GuestReport report;
+      TimeoutScenario timeout(kmt, report, search);
+      timeout.run();
+      CHECK(has_line(report, one.line));
+      CHECK(!has_line(report, "timeout.held_lost"));
+      CHECK_STATUS(search.close(), Status::ok);
+      CHECK_EQ(kmt.open_objects(), 0u);
+  } }

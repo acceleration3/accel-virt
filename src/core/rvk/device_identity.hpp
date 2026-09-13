@@ -15,6 +15,8 @@
 
 namespace av {
 
+struct DeviceIdentityProbe;
+
 class DeviceIdentity {
 public:
     explicit DeviceIdentity(Platform &platform);
@@ -44,6 +46,8 @@ private:
     CapsetInfo started_on_;
     bool       known_;
     bool       changed_;
+
+    friend struct DeviceIdentityProbe;
 };
 
 }  // namespace av

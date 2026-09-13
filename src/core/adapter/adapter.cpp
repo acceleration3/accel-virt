@@ -780,8 +780,10 @@ void Adapter::restore_scanouts()
 {
     for (uint32_t source = 0u; source < sources_.count(); source++) {
         if (!transition_.scanning_out(source)) continue;
-        const Status followed = follow_commit(source);
-        if (followed != Status::ok) log_status("rvkgpu: resume scanout", NtStatus(followed).value());
+        /* Said for every source power put back, because a resume that restored
+         * one and not the other is the difference between a desktop and a
+         * black screen. */
+        log_status("rvkgpu: resume scanout", NtStatus(follow_commit(source)).value());
     }
 }
 

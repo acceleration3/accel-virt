@@ -92,6 +92,10 @@ namespace av {
 struct AdapterProbe {
     explicit AdapterProbe(Adapter &target) : adapter(target) {}
     void set_started(bool started) { adapter.started_ = started; }
+    /* The window inside a power transition that no caller can stand in: the
+     * device object exists and is not running, which is when an interrupt
+     * dxgkrnl left connected must be left alone (feature 040, US1). */
+    void stop_device_object() { static_cast<void>(adapter.device_.object().stop()); }
     Adapter &adapter;
 };
 
@@ -2744,5 +2748,90 @@ TEST(adapter_set_power_state, a_device_that_changed_loses_its_contexts_and_keeps
   /* The desktop is untouched: the scanout the adapter restored is still the
    * one it had. */
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* Power builds the device and then starts it, and dxgkrnl leaves the interrupt
+ * connected across the whole transition: one arriving in between finds an
+ * object that exists and has nothing to read. Neither the ISR nor the DPC may
+ * touch it (feature 040, US1). */
+TEST(adapter_interrupt_routine, a_device_that_exists_but_is_not_running_is_left_alone)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  AdapterProbe(fixture.adapter()).stop_device_object();
+  const std::uint32_t queued = fixture.dxgkrnl().dpcs_queued();
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(fixture.adapter().interrupt_routine(0u), 0u);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), queued); }
+
+/* A resume that never read what the device was has nothing to compare it with,
+ * and runs on as it did: a device that will not answer is not a device that
+ * changed (FR-005). */
+TEST(adapter_set_power_state, a_device_that_never_said_what_it_was_is_not_judged)
+{ Fixture fixture;
+  fixture.answer_with(Fixture::Answer::none);
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.forget_control();
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before);   /* nothing was lost */
+  av::DxgkargCreateContextRecord another = {};
+  another.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &another)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(another.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* A device that changed with nothing queued on the one that is gone has no
+ * owner to tell: the refusal still stands for everything after it. */
+TEST(adapter_set_power_state, a_device_that_changed_with_no_work_queued_tells_nobody)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.forget_control();
+  fixture.answer_capset_of(other_gpu);
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  fixture.platform().on_stall(&Fixture::answer_display_info_from, &fixture);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before);
+  av::DxgkargCreateContextRecord refused = {};
+  refused.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &refused)), not_supported);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* dxgkrnl refusing the report leaves the loss pending and says so once: a
+ * context that cannot be reported is not a context quietly forgotten. */
+TEST(adapter_reset_engine, a_loss_dxgkrnl_refuses_is_logged)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::DxgkargSubmitCommandVirtualRecord submit = {};
+  submit.hContext = context.hContext;
+  submit.DmaBufferVirtualAddress = 0x8000000000ull;
+  submit.SubmissionFenceId = 1u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+  fixture.dxgkrnl().refuse_synchronize(0xC0000001u);
+  const std::uint32_t logged = fixture.platform().logged();
+  fixture.platform().set_irql(Irql::dispatch);
+  av::DxgkargResetEngineRecord reset = {0u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().reset_engine(&reset)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK(fixture.platform().logged() > logged);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }

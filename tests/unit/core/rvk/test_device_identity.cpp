@@ -22,6 +22,20 @@ using av::ProtocolVersion;
 using av::SubApi;
 using av::Violation;
 
+namespace av {
+
+struct DeviceIdentityProbe {
+    /* A device called changed without one to compare it with: what the class
+     * never builds, and what its invariant is there to catch. */
+    static void change_without_knowing(DeviceIdentity &identity)
+    {
+        identity.known_ = false;
+        identity.changed_ = true;
+    }
+};
+
+}  // namespace av
+
 namespace {
 
 constexpr std::uint8_t first_gpu[GpuIdentity::uuid_bytes] = {5};
@@ -114,6 +128,17 @@ TEST(device_identity, forgetting_leaves_nothing_to_compare)
   CHECK(!identity.changed());
   CHECK(identity.accept(capset(other_gpu)));
   CHECK(!identity.changed()); }
+
+/* Nothing was remembered, so nothing can have changed. */
+TEST(device_identity, a_change_without_a_device_to_compare_is_caught)
+{ MockPlatform platform;
+  DeviceIdentity identity(platform);
+  CHECK(identity.invariants_hold());
+  identity.remember(capset());
+  CHECK(!identity.accept(capset(other_gpu)));
+  CHECK(identity.invariants_hold());
+  av::DeviceIdentityProbe::change_without_knowing(identity);
+  CHECK(!identity.invariants_hold()); }
 
 TEST(device_identity, every_call_keeps_its_irql_ceiling)
 { MockPlatform platform;
