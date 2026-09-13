@@ -135,6 +135,9 @@ TEST(table_host, forwards_memory_hostmem_and_requests)
 TEST(table_host, forwards_exported_gpu_memory_and_guest_imports)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   mock.set_hostmem_size(0x4000u);
+  mock.advance_clock_per_read(7u);
+  CHECK_EQ(host.monotonic_nanoseconds(), 0u);
+  CHECK_EQ(host.monotonic_nanoseconds(), 7u);
   CHECK_STATUS(host.bind_gpu(1u), Status::ok);
   CHECK_EQ(mock.bound_gpu(), 1u);
   mock.fail_bind_gpu_at(1u);

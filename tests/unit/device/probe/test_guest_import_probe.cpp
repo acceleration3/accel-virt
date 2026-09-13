@@ -73,6 +73,43 @@ TEST(guest_import_probe_run, a_host_that_cannot_import_is_a_clean_refusal)
   CHECK_EQ(probe.result().errno_value(), 0);
   CHECK_EQ(host.live_guest_mappings(), 0u); }
 
+/* What a guest reading through a copy would get instead, so 041 knows what it
+ * is choosing between rather than guessing. */
+TEST(guest_import_probe_run, a_refused_import_measures_the_copy_the_fallback_would_do)
+{ MockHost host;
+  with_ram(host);
+  host.refuse_import_at(1u, 0);
+  host.advance_clock_per_read(1000u);   /* the copy takes a microsecond */
+  GuestImportProbe probe(host);
+  probe.run(window);
+  CHECK(!probe.result().passed());
+  /* A megabyte in a microsecond: a terabyte a second, in bytes per second. */
+  CHECK_EQ(probe.result().measured(), GuestImportProbe::probe_bytes * 1000000000u / 1000u);
+  CHECK_EQ(host.live_host_memory(), 0u);
+  CHECK_EQ(host.live_guest_mappings(), 0u); }
+
+TEST(guest_import_probe_run, a_copy_the_host_has_no_memory_for_measures_nothing)
+{ MockHost host;
+  with_ram(host);
+  host.refuse_import_at(1u, 0);
+  host.fail_host_memory_at(1u);
+  GuestImportProbe probe(host);
+  probe.run(window);
+  CHECK(!probe.result().passed());
+  CHECK_EQ(probe.result().measured(), 0u);
+  CHECK_EQ(host.live_host_memory(), 0u); }
+
+/* A clock that does not move cannot answer a rate, and dividing by it would be
+ * worse than saying nothing. */
+TEST(guest_import_probe_run, a_copy_too_fast_for_the_clock_measures_nothing)
+{ MockHost host;
+  with_ram(host);
+  host.refuse_import_at(1u, 0);
+  GuestImportProbe probe(host);
+  probe.run(window);
+  CHECK(!probe.result().passed());
+  CHECK_EQ(probe.result().measured(), 0u); }
+
 TEST(guest_import_probe_run, an_import_that_fails_with_a_number_keeps_it)
 { MockHost host;
   with_ram(host);

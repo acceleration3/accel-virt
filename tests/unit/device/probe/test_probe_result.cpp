@@ -65,6 +65,24 @@ TEST(probe_result_record_pass, a_second_answer_is_refused_and_the_first_stands)
   CHECK_STATUS(failed.reason(), Status::no_memory);
   CHECK_EQ(failed.errno_value(), 12); }
 
+/* A failed probe still has something to say about the path taken instead - the
+ * rate of the copy a fallback would do - but a passed one's measurement is its
+ * own and nothing overwrites it. */
+TEST(probe_result_measure, gives_a_failed_result_a_number_and_leaves_a_passed_one_alone)
+{ ProbeResult failed;
+  CHECK_STATUS(failed.record_failure(Status::not_supported, 0), Status::ok);
+  CHECK_EQ(failed.measured(), 0u);
+  failed.measure(4096u);
+  CHECK_EQ(failed.measured(), 4096u);
+  ProbeResult passed;
+  CHECK_STATUS(passed.record_pass(64u), Status::ok);
+  passed.measure(4096u);
+  CHECK_EQ(passed.measured(), 64u);
+  ProbeResult unanswered;
+  unanswered.measure(4096u);
+  CHECK_EQ(unanswered.measured(), 0u);
+  CHECK(!unanswered.ran()); }
+
 TEST(probe_result_describe, names_the_outcome_and_what_it_was_for)
 { char bytes[96];
   ProbeResult unanswered;

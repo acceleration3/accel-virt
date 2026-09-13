@@ -49,6 +49,10 @@ public:
     virtual uint32_t    gpu_count() = 0;
     virtual GpuIdentity gpu_identity(uint32_t index) = 0;
 
+    /* Any thread: a monotonic count of nanoseconds, for measuring what the
+     * device did rather than for telling the time. */
+    virtual uint64_t monotonic_nanoseconds() = 0;
+
     /* Any thread: zeroed memory, or null. */
     virtual void *allocate(size_t bytes) = 0;
     virtual void  release(void *block) = 0;

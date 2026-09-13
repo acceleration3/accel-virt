@@ -57,6 +57,7 @@ public:
     std::uint64_t hostmem_size() override;
     Status   place_in_hostmem(void *memory, std::uint64_t offset) override;
     void     remove_from_hostmem(std::uint64_t offset, std::uint64_t size) override;
+    std::uint64_t monotonic_nanoseconds() override;
     Status   read_hostmem(std::uint64_t offset, std::uint8_t *buffer, std::uint64_t size) override;
     Status   bind_gpu(std::uint32_t index) override;
     void    *export_gpu_memory(std::uint64_t size, void *&pointer, std::int32_t &host_error) override;
@@ -90,6 +91,9 @@ public:
     /* The Nth read of the hostmem region from now answers bytes nothing wrote:
      * a region that maps something other than the block placed in it. */
     void corrupt_hostmem_read_at(std::uint32_t nth);
+    /* The scripted clock moves this many nanoseconds per reading, so a test
+     * decides how long the work it measures took. */
+    void advance_clock_per_read(std::uint64_t nanoseconds);
     void refuse_export_at(std::uint32_t nth, std::int32_t host_error);
     void refuse_import_at(std::uint32_t nth, std::int32_t host_error);
     /* The Nth read through an import from now answers bytes the device never
@@ -252,6 +256,8 @@ private:
     bool            fence_connected_;
     std::uint32_t   fail_fence_connect_;
     std::uint32_t   raised_[max_doorbells];
+    std::uint64_t   clock_;
+    std::uint64_t   clock_step_;
     std::uint32_t   corrupt_hostmem_read_;
     std::uint32_t   fail_bind_gpu_;
     std::uint32_t   bound_gpu_;

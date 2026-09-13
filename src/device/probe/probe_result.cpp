@@ -23,6 +23,12 @@ Status ProbeResult::record_failure(Status reason, int32_t host_error)
     return Status::ok;
 }
 
+void ProbeResult::measure(uint64_t measured)
+{
+    if (outcome_ != Outcome::failed) return;
+    measured_ = measured;
+}
+
 bool ProbeResult::ran() const
 {
     return outcome_ != Outcome::not_run;

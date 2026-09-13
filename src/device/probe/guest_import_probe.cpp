@@ -22,6 +22,21 @@ Status GuestImportProbe::matches(void *imported, uint64_t offset)
     return Status::ok;
 }
 
+uint64_t GuestImportProbe::copy_rate(const void *window)
+{
+    void       *destination = nullptr;
+    void *const block = host_.create_host_memory(probe_bytes, destination);
+    if (block == nullptr || destination == nullptr) return 0u;
+    ScopeExit destroy([&] { host_.destroy_host_memory(block); });
+    const uint8_t *const from = static_cast<const uint8_t *>(window);
+    uint8_t *const       to = static_cast<uint8_t *>(destination);
+    const uint64_t       started = host_.monotonic_nanoseconds();
+    for (uint64_t offset = 0u; offset < probe_bytes; offset++) to[offset] = from[offset];
+    const uint64_t elapsed = host_.monotonic_nanoseconds() - started;
+    if (elapsed == 0u) return 0u;
+    return probe_bytes * nanoseconds_per_second / elapsed;
+}
+
 void GuestImportProbe::run(uint64_t guest_address)
 {
     host_.require_main_loop("GuestImportProbe::run");
@@ -46,6 +61,7 @@ void GuestImportProbe::run(uint64_t guest_address)
     void *const imported = host_.import_guest_memory(window, probe_bytes, host_error);
     if (imported == nullptr) {
         static_cast<void>(result_.record_failure(Status::not_supported, host_error));
+        result_.measure(copy_rate(window));
         return;
     }
     ScopeExit release([&] { host_.release_guest_memory(imported); });

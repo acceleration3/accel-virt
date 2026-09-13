@@ -35,7 +35,7 @@ MockHost::MockHost()
       fail_allocation_(0u), fail_host_memory_(0u), fail_placement_(0u), empty_mapping_(0u), allocations_{}, regions_{}, region_count_(0u),
       splits_{}, split_count_(0u),
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
-      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, corrupt_hostmem_read_(0u), fail_bind_gpu_(0u), bound_gpu_(no_gpu), refuse_export_(0u), export_error_(0),
+      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, clock_(0u), clock_step_(0u), corrupt_hostmem_read_(0u), fail_bind_gpu_(0u), bound_gpu_(no_gpu), refuse_export_(0u), export_error_(0),
       refuse_import_(0u), import_error_(0), corrupt_import_read_(0u), imports_{}
 {
     pthread_mutex_init(&state_, nullptr);
@@ -238,6 +238,14 @@ std::uint32_t MockHost::doorbell_of(void *event)
     for (std::uint32_t index = 0u; index < max_doorbells; index++)
         if (doorbells_[index] == event) return index;
     return max_doorbells;
+}
+
+std::uint64_t MockHost::monotonic_nanoseconds()
+{
+    StateLock lock(state_);
+    const std::uint64_t now = clock_;
+    clock_ += clock_step_;
+    return now;
 }
 
 /* The region shows what the block placed over it holds, as QEMU's does once
@@ -755,6 +763,7 @@ void MockHost::fail_placement_at(std::uint32_t nth) { StateLock lock(state_); fa
 void MockHost::empty_mapping_at(std::uint32_t nth) { StateLock lock(state_); empty_mapping_ = nth; }
 void MockHost::fail_bind_gpu_at(std::uint32_t nth) { StateLock lock(state_); fail_bind_gpu_ = nth; }
 void MockHost::corrupt_hostmem_read_at(std::uint32_t nth) { StateLock lock(state_); corrupt_hostmem_read_ = nth; }
+void MockHost::advance_clock_per_read(std::uint64_t nanoseconds) { StateLock lock(state_); clock_step_ = nanoseconds; }
 void MockHost::refuse_export_at(std::uint32_t nth, std::int32_t host_error)
 { StateLock lock(state_); refuse_export_ = nth; export_error_ = host_error; }
 void MockHost::refuse_import_at(std::uint32_t nth, std::int32_t host_error)

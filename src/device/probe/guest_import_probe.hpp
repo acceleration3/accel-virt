@@ -30,9 +30,14 @@ public:
 
 private:
     static constexpr uint64_t sample_bytes = 64u;
+    static constexpr uint64_t nanoseconds_per_second = 1000000000u;
 
     uint8_t              expected(uint64_t offset) const;
     [[nodiscard]] Status matches(void *imported, uint64_t offset);
+    /* Bytes a second for the copy a fallback would have to do over this window,
+     * or 0 when the host has no memory for it or no clock fine enough to time
+     * it. What 041 is choosing between when the import is refused. */
+    uint64_t             copy_rate(const void *window);
 
     Host       &host_;
     ProbeResult result_;

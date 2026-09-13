@@ -57,6 +57,8 @@ typedef struct RvkHostOps {
     void (*run_on_main_loop)(void *opaque, RvkHostRoutine routine, void *context);
     uint32_t (*gpu_count)(void *opaque);
     void (*gpu_properties)(void *opaque, uint32_t index, RvkGpuProperties *properties);
+    /* A monotonic nanosecond count; any thread. */
+    uint64_t (*monotonic_nanoseconds)(void *opaque);
     /* Zeroed memory, or NULL; any thread. */
     void *(*allocate)(void *opaque, size_t size);
     void (*release)(void *opaque, void *block);

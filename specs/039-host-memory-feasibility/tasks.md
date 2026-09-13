@@ -76,7 +76,7 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 
 - [X] T014 [P] [US2] Write `tests/unit/device/probe/test_guest_import_probe.cpp` first: nothing mapped at the address is `not_found`; a bounce buffer (`direct` false) is refused without asking the host to import; an import refusal with `host_error` 0 is a clean `failed` (no extension); a readback through the import that differs is `malformed`; success is `passed()` carrying the bytes; every path releases the import and the guest mapping; a second `run()` is `invalid_state`
 - [X] T015 [US2] Implement `GuestImportProbe` (object class) in `src/device/probe/guest_import_probe.{hpp,cpp}`: `map_guest` of `probe_bytes` at the address it is given, `direct` required, import, pattern, `read_imported_memory` compare, `ScopeExit` cleanup, `require_main_loop`
-- [ ] T016 [US2] Measure the copy fallback: the device records the bytes per second of the existing blob copy path into the probe's `measured()` when the import failed, tested at L1 with a scripted clock
+- [X] T016 [US2] Measure the copy fallback: there is no copy path in the device yet - guest-backed blobs are mapped, and the copy belongs to 041 - so the probe measures the copy a fallback would have to do: `probe_bytes` from the mapped guest window into a host memory block, timed with a new `Host::monotonic_nanoseconds()`, recorded as bytes per second in `measured()` when the import was refused. Scripted clock in `MockHost`, `g_get_monotonic_time()` in the glue
 - [ ] T017 [US2] Extend `tools/host/probe_host_memory.py` and its test to report the import verdict and the fallback throughput per GPU, and record the answers in `docs/kb/04-memory.md`
 
 **Checkpoint**: US2 answered on this host and recorded. Commit.

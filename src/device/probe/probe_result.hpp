@@ -26,6 +26,10 @@ public:
      * when the host had none to give. */
     [[nodiscard]] Status record_failure(Status reason, int32_t host_error);
 
+    /* What a failed probe measured about the path taken instead; ignored once
+     * the result passed, whose measurement is the probe's own. */
+    void     measure(uint64_t measured);
+
     bool     ran() const;
     bool     passed() const;
     Status   reason() const;

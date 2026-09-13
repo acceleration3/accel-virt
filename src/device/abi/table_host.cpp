@@ -149,6 +149,11 @@ void TableHost::remove_from_hostmem(uint64_t offset, uint64_t size)
     ops_.remove_from_hostmem(ops_.opaque, offset, size);
 }
 
+uint64_t TableHost::monotonic_nanoseconds()
+{
+    return ops_.monotonic_nanoseconds(ops_.opaque);
+}
+
 Status TableHost::read_hostmem(uint64_t offset, uint8_t *buffer, uint64_t size)
 {
     return ops_.read_hostmem(ops_.opaque, offset, buffer, size) == 0 ? Status::ok : Status::not_supported;

@@ -154,6 +154,11 @@ static void rvk_gpu_properties(void *opaque, uint32_t index, RvkGpuProperties *p
     *properties = r->gpus[index];
 }
 
+static uint64_t rvk_monotonic_nanoseconds(void *opaque)
+{
+    return (uint64_t)g_get_monotonic_time() * 1000u;
+}
+
 static void *rvk_allocate(void *opaque, size_t size)
 {
     return g_try_malloc0(size);
@@ -662,6 +667,7 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .hostmem_size = rvk_hostmem_size,
         .place_in_hostmem = rvk_place_in_hostmem,
         .remove_from_hostmem = rvk_remove_from_hostmem,
+        .monotonic_nanoseconds = rvk_monotonic_nanoseconds,
         .read_hostmem = rvk_read_hostmem,
         .bind_gpu = rvk_bind_gpu,
         .export_gpu_memory = rvk_export_gpu_memory,
