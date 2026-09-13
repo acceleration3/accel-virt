@@ -2,71 +2,47 @@
 
 #include "device/abi/rvk_executor.h"
 
-#include <dlfcn.h>
 #include <string.h>
 #include <vulkan/vulkan.h>
 
 namespace av {
 
-namespace {
-
-/* The loader's own soname. Not linked, because a library that will not load
- * without a GPU cannot tell the device it has no GPU. */
-constexpr const char *vulkan_loader = "libvulkan.so.1";
-
-/* How many extension names are asked for at a time. The loader will report
- * hundreds and only one of them matters. */
-constexpr uint32_t batch_size = 64u;
-
-template <typename T>
-T symbol_in(void *library, const char *name)
-{
-    return reinterpret_cast<T>(dlsym(library, name));
-}
-
-}  // namespace
-
 LoaderHostApis::LoaderHostApis()
-    : library_(nullptr), instance_(nullptr), uuids_{}, sub_apis_{}, vulkan_kinds_{}, count_(0u) {}
+    : instance_(nullptr), uuids_{}, sub_apis_{}, vulkan_kinds_{}, extensions_{}, count_(0u),
+      opened_(false) {}
 
 LoaderHostApis::~LoaderHostApis() { close(); }
 
 void LoaderHostApis::open()
 {
-    if (library_ != nullptr) return;
-    library_ = dlopen(vulkan_loader, RTLD_NOW | RTLD_LOCAL);
-    if (library_ == nullptr) return;
+    if (opened_) return;
+    opened_ = true;
     enumerate();
 }
 
 void LoaderHostApis::enumerate()
 {
-    auto *const create = symbol_in<PFN_vkCreateInstance>(library_, "vkCreateInstance");
-    auto *const enumerate_devices =
-        symbol_in<PFN_vkEnumeratePhysicalDevices>(library_, "vkEnumeratePhysicalDevices");
-    auto *const properties2 =
-        symbol_in<PFN_vkGetPhysicalDeviceProperties2>(library_, "vkGetPhysicalDeviceProperties2");
-    auto *const extensions = symbol_in<PFN_vkEnumerateDeviceExtensionProperties>(
-        library_, "vkEnumerateDeviceExtensionProperties");
-    if (create == nullptr || enumerate_devices == nullptr || properties2 == nullptr ||
-        extensions == nullptr)
-        return;
-
     VkApplicationInfo application = {};
     application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     application.pApplicationName = "rvk-executor";
-    application.apiVersion = VK_API_VERSION_1_1;
+    /* Spelled out rather than VK_API_VERSION_1_1, which is a macro full of
+     * C casts this build refuses. 1.1 is what VkPhysicalDeviceIDProperties
+     * needs, and nothing here needs more. */
+    application.apiVersion = (1u << 22) | (1u << 12);
     VkInstanceCreateInfo instance = {};
     instance.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instance.pApplicationInfo = &application;
 
     VkInstance handle = VK_NULL_HANDLE;
-    if (create(&instance, nullptr, &handle) != VK_SUCCESS) return;
+    /* A host with no GPU, no driver or no loader at all answers here, and that
+     * is an answer: the library then serves nothing and the device describes
+     * no capset rather than one it cannot honour. */
+    if (vkCreateInstance(&instance, nullptr, &handle) != VK_SUCCESS) return;
     instance_ = handle;
 
     VkPhysicalDevice devices[HostGpuSet::max_gpus];
     uint32_t found = HostGpuSet::max_gpus;
-    if (enumerate_devices(handle, &found, devices) < 0) return;
+    if (vkEnumeratePhysicalDevices(handle, &found, devices) < 0) return;
     if (found > HostGpuSet::max_gpus) found = HostGpuSet::max_gpus;
 
     for (uint32_t i = 0u; i < found; i++) {
@@ -75,7 +51,7 @@ void LoaderHostApis::enumerate()
         VkPhysicalDeviceProperties2 device = {};
         device.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
         device.pNext = &identity;
-        properties2(devices[i], &device);
+        vkGetPhysicalDeviceProperties2(devices[i], &device);
 
         memcpy(uuids_[i], identity.deviceUUID, uuid_bytes);
         sub_apis_[i] = RVK_EXECUTOR_SUB_API_VULKAN;
@@ -86,35 +62,30 @@ void LoaderHostApis::enumerate()
 
 uint32_t LoaderHostApis::kinds_of(void *device)
 {
-    auto *const extensions = symbol_in<PFN_vkEnumerateDeviceExtensionProperties>(
-        library_, "vkEnumerateDeviceExtensionProperties");
-    if (extensions == nullptr) return 0u;
     auto *const physical = static_cast<VkPhysicalDevice>(device);
 
-    uint32_t available = 0u;
-    if (extensions(physical, nullptr, &available, nullptr) != VK_SUCCESS) return 0u;
-    for (uint32_t offset = 0u; offset < available; offset += batch_size) {
-        VkExtensionProperties named[batch_size];
-        uint32_t             batch = available - offset < batch_size ? available - offset : batch_size;
-        if (extensions(physical, nullptr, &batch, named) < 0) return 0u;
-        for (uint32_t n = 0u; n < batch; n++) {
-            if (strcmp(named[n].extensionName, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME) == 0)
-                return RVK_BLOB_HOST_POINTER;
-        }
-        if (batch < batch_size) break;
+    /* Asked in one call, because vkEnumerateDeviceExtensionProperties has no
+     * offset: a second call with a smaller count re-reads the list from the
+     * start rather than continuing it, so anything beyond the first batch
+     * would never be seen. A driver with more extensions than this reports
+     * VK_INCOMPLETE and the ones past the end are not considered - the answer
+     * is then "cannot import", which costs a copy and never a wrong mapping. */
+    uint32_t available = max_extensions;
+    if (vkEnumerateDeviceExtensionProperties(physical, nullptr, &available, extensions_) < 0)
+        return 0u;
+    if (available > max_extensions) available = max_extensions;
+    for (uint32_t n = 0u; n < available; n++) {
+        if (strcmp(extensions_[n].extensionName, VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME) == 0)
+            return RVK_BLOB_HOST_POINTER;
     }
     return 0u;
 }
 
 void LoaderHostApis::close()
 {
-    if (instance_ != nullptr && library_ != nullptr) {
-        auto *const destroy = symbol_in<PFN_vkDestroyInstance>(library_, "vkDestroyInstance");
-        if (destroy != nullptr) destroy(static_cast<VkInstance>(instance_), nullptr);
-    }
+    if (instance_ != nullptr) vkDestroyInstance(static_cast<VkInstance>(instance_), nullptr);
     instance_ = nullptr;
-    if (library_ != nullptr) dlclose(library_);
-    library_ = nullptr;
+    opened_ = false;
     count_ = 0u;
 }
 

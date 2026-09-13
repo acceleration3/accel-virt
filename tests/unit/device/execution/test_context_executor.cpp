@@ -118,7 +118,10 @@ TEST(context_executor_execute, reads_every_answer_a_library_gives)
           {MockExecutorOps::unknown_id, Status::not_found},
           {MockExecutorOps::undecodable_id, Status::malformed},
           {MockExecutorOps::lost_id, Status::invalid_state},
-          {MockExecutorOps::garbage_id, Status::invalid_state},
+          /* A value the ABI does not define is a broken library, not a lost
+           * device: folding the two together would have an operator chasing a
+           * GPU fault that never happened (feature 042). */
+          {MockExecutorOps::garbage_id, Status::not_supported},
       };
       for (const Case &c : cases)
           CHECK_STATUS(executor.execute(c.id, nullptr, 0u, nullptr, 0u, reply_size), c.status);

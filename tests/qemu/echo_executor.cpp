@@ -118,7 +118,19 @@ std::uint32_t execute(void *, RvkExecutor *handle, std::uint32_t id, const std::
     return RVK_EXECUTED;
 }
 
-const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION, nullptr, sub_apis, create, destroy, execute};
+/* Deliberately version 1, and deliberately carrying none of version 2's memory
+ * operations: the device must keep accepting a library that imports nothing,
+ * and a test suite whose only library is the newest version never proves it
+ * (feature 042). */
+const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION_MINIMUM,
+                              nullptr,
+                              sub_apis,
+                              create,
+                              destroy,
+                              execute,
+                              nullptr,
+                              nullptr,
+                              nullptr};
 
 }  // namespace
 

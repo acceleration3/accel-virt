@@ -472,6 +472,13 @@ the guest reads it from its interrupt path. 32 bytes.
 | 24 | u32 | fault_code | 0 unless `faulted` |
 | 28 | u32 | reserved | 0 |
 
+The fault codes, which say where to look rather than only that something
+failed: 1 ring header, 2 ring tail, 3 batch header, 4 batch order, 5 command
+framing, 6 undecodable, 7 device lost, 8 no executor, 9 broken executor. The
+last is a library answering a value the executor ABI does not define, and it is
+separate from device lost on purpose - folded together, a bug in an executor
+reads as a GPU fault and is chased in the wrong place.
+
 Against what the guest has seen: `completed_fence` and `progress` never
 decrease, `completed_fence` never exceeds the highest fence id submitted, and
 once `faulted` is observed it stays set for the context's lifetime.

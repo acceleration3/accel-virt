@@ -47,7 +47,11 @@ Status ContextExecutor::execute(uint32_t command_id, const uint8_t *payload, siz
     case RVK_EXECUTED: return Status::ok;
     case RVK_UNKNOWN: return Status::not_found;
     case RVK_UNDECODABLE: return Status::malformed;
-    default: return Status::invalid_state;
+    case RVK_DEVICE_LOST: return Status::invalid_state;
+    /* Anything else is a library that does not keep the contract. Saying so is
+     * not pedantry: folded into device lost, a bug in an executor reads as a
+     * GPU fault and is chased in the wrong place (feature 042). */
+    default: return Status::not_supported;
     }
 }
 

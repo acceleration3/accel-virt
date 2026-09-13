@@ -21,6 +21,8 @@ concrete subclasses ride on top of it and are also generated:
 
 from __future__ import annotations
 
+import re
+
 from pathlib import Path
 
 from ..ir import Command, Param, Registry
@@ -38,9 +40,20 @@ def _param_cpp(t) -> str:
     return s
 
 
-def _signature(cmd: Command) -> str:
-    args = ", ".join(f"{_param_cpp(p.type)} {p.name}" for p in cmd.params)
-    return f"{cmd.return_type.cpp()} on_{cmd.name}({args})"
+def _signature(cmd: Command, body: str = "") -> str:
+    """The override's signature, naming only the parameters the body uses.
+
+    A parameter a body never touches is `-Wunused-parameter` under this
+    repository's warning set, and these bodies genuinely do not touch some of
+    them: the allocator is replaced with nullptr on every call, because the
+    protocol does not forward the client's allocator. Passing the body in and
+    dropping the unused names is the emitter's job rather than the reader's.
+    """
+    parts = []
+    for p in cmd.params:
+        used = body and re.search(r"\b" + re.escape(p.name) + r"\b", body) is not None
+        parts.append(f"{_param_cpp(p.type)} {p.name}" if used else f"{_param_cpp(p.type)}")
+    return f"{cmd.return_type.cpp()} on_{cmd.name}({', '.join(parts)})"
 
 
 def _is_count_param(cmd: Command, idx: int) -> bool:
@@ -91,7 +104,7 @@ def _emit_default(reg: Registry) -> str:
         if not body:
             lines.append(f"    {_signature(cmd)} override {{}}")
         else:
-            lines.append(f"    {_signature(cmd)} override {{")
+            lines.append(f"    {_signature(cmd, chr(10).join(body))} override {{")
             lines.extend(body)
             lines.append("    }")
     lines.append("};")
@@ -133,8 +146,8 @@ def _emit_real(reg: Registry) -> str:
     ]
     members: list[str] = []
     for cmd in sorted(reg.commands.values(), key=lambda c: c.cmd_id):
-        sig = _signature(cmd)
         args = ", ".join(_real_call_args(cmd))
+        sig = _signature(cmd, args)
 
         if cmd.name == "vkCreateInstance":
             # Capture the instance: every extension entry point below is

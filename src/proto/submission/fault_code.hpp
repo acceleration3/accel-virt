@@ -17,6 +17,7 @@ enum class FaultCode : uint32_t {
     undecodable = 6u,       /* a payload the executor cannot decode */
     device_lost = 7u,       /* the host API lost its device */
     no_executor = 8u,       /* the context's executor could not be created */
+    broken_executor = 9u,   /* the executor library answered a value the ABI does not define */
 };
 
 }  // namespace av

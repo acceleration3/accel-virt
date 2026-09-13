@@ -3,7 +3,7 @@
 qtest's port I/O reads the PCI function a guest driver would see, and the
 realize failures a bad host-gpu property produces.
 
-  qemu_smoke.py <qemu build directory> <echo executor library>
+  qemu_smoke.py <qemu build directory> <echo executor library> <table-less library>
 """
 import os
 import subprocess
@@ -77,7 +77,7 @@ def check(condition, message):
 
 
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 4:
         sys.exit(__doc__)
     qemu = Qemu(sys.argv[1])
 
@@ -93,8 +93,12 @@ def main():
         code, stderr = qemu.refused(host_gpu)
         check(code != 0, f"host-gpu={host_gpu} realized")
         check(reason in stderr, f"host-gpu={host_gpu}: {stderr.strip()}")
+    # The third is the one that used to pass silently: a library that loads and
+    # answers no table left the device up as a plain virtio-gpu with no capset,
+    # and nothing said why (feature 042).
     for executor, reason in (("/nonexistent/librvk_codec.so", "could not be loaded"),
-                             ("libc.so.6", "exports no rvk_executor_ops")):
+                             ("libc.so.6", "exports no rvk_executor_ops"),
+                             (sys.argv[3], "answered no table")):
         code, stderr = qemu.refused("auto", f",executor={executor}")
         check(code != 0, f"executor={executor} realized")
         check(reason in stderr, f"executor={executor}: {stderr.strip()}")

@@ -281,12 +281,15 @@ TEST(batch_executor_run, a_stream_no_producer_could_frame_or_an_executor_failure
       {"short tail", [](Commands &c) { c.tail(5u); }, Status::malformed},
       {"undecodable", [](Commands &c) { c.add(MockExecutorOps::undecodable_id, 0u); }, Status::malformed},
       {"device lost", [](Commands &c) { c.add(MockExecutorOps::lost_id, 0u); }, Status::invalid_state},
+      /* A library answering outside the ABI faults the context like a lost
+       * device does, but says something different, so an operator does not go
+       * looking for a GPU that never failed (feature 042). */
       {"an answer no library gives", [](Commands &c) { c.add(MockExecutorOps::garbage_id, 0u); },
-       Status::invalid_state},
+       Status::not_supported},
   };
   const FaultCode faults[] = {FaultCode::command_framing, FaultCode::command_framing, FaultCode::command_framing,
                              FaultCode::command_framing, FaultCode::undecodable, FaultCode::device_lost,
-                             FaultCode::device_lost};
+                             FaultCode::broken_executor};
   std::uint32_t index = 0u;
   for (const Case &c : cases) {
       Fixture fixture;

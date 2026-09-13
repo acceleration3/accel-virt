@@ -63,6 +63,15 @@ static void virtio_gpu_rvk_realize(DeviceState *qdev, Error **errp)
             return;
         }
         executor = ops();
+        /* The symbol answering NULL is a library that loaded and has nothing
+         * to say. Left unchecked it is worse than a failure: the device comes
+         * up as a plain virtio-gpu with no capset, and the guest's driver finds
+         * no rvk protocol with nothing anywhere saying why (feature 042). */
+        if (!executor) {
+            error_setg(errp, "virtio-gpu-rvk: executor '%s' answered no table from %s",
+                       r->executor, RVK_EXECUTOR_OPS_SYMBOL);
+            return;
+        }
     }
     virtio_gpu_rvk_host_init(r);
     r->core = rvk_device_create(&r->host, executor, r->host_gpu, virtio_gpu_blob_enabled(g->parent_obj.conf),

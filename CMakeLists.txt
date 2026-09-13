@@ -103,6 +103,13 @@ target_include_directories(av_core PUBLIC src)
 # must carry whatever sanitizers the configuration asked for - so av_core is
 # position-independent rather than the .so linking the unsanitized rvk_device.
 set_target_properties(av_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+# The executor's backends run commands on the host's own Vulkan, the way the
+# QEMU device already does (src/device/qemu/virtio-gpu-rvk-host.c). A host with
+# the loader but no GPU still links and enumerates nothing.
+find_library(AV_VULKAN_LIBRARY NAMES vulkan)
+if(AV_VULKAN_LIBRARY)
+  target_link_libraries(av_core PUBLIC ${AV_VULKAN_LIBRARY})
+endif()
 if(AV_GENERATED)
   target_include_directories(av_core PUBLIC ${AV_KHRONOS_INCLUDE} ${AV_GENERATED_OPENGL_INCLUDE})
 endif()
@@ -141,10 +148,14 @@ if(AV_QEMU)
     COMMENT "QEMU with virtio-gpu-rvk")
   # The executor the qtest suites name: the device's execution path without render-server.
   add_library(rvk_echo_executor SHARED tests/qemu/echo_executor.cpp)
+  # A library that loads and answers no table, so the smoke test can prove
+  # realize fails rather than a capset-less device coming up (feature 042).
+  add_library(rvk_null_ops_executor SHARED tests/qemu/null_ops_executor.cpp)
+  target_include_directories(rvk_null_ops_executor PRIVATE src/device/abi)
   target_include_directories(rvk_echo_executor PRIVATE src/device/abi)
   add_test(NAME qemu_smoke
            COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tests/qemu/qemu_smoke.py ${CMAKE_BINARY_DIR}/qemu
-                   $<TARGET_FILE:rvk_echo_executor>)
+                   $<TARGET_FILE:rvk_echo_executor> $<TARGET_FILE:rvk_null_ops_executor>)
   # The driver's own request bytes, sent to the real device by tests/qemu.
   add_executable(gpu_request_bytes tests/qemu/gpu_request_bytes.cpp)
   target_link_libraries(gpu_request_bytes PRIVATE av_core)
@@ -293,9 +304,20 @@ add_test(NAME symbol_tests
 # set. The qemu configuration additionally points a real device at this same
 # object through its executor= property (feature 042).
 add_library(rvk_executor SHARED ${AV_EXECUTOR_ENTRY})
+# The host's own Vulkan, the way the QEMU device already takes it
+# (src/device/qemu/virtio-gpu-rvk-host.c calls vkCreateInstance directly). A
+# host with the loader but no GPU still loads this and enumerates nothing.
+if(NOT AV_VULKAN_LIBRARY)
+  message(FATAL_ERROR "libvulkan not found; the executor library runs commands on it")
+endif()
 target_link_libraries(rvk_executor PRIVATE av_core)
 target_include_directories(rvk_executor PRIVATE src)
-set_target_properties(rvk_executor PROPERTIES CXX_VISIBILITY_PRESET hidden)
+set_target_properties(rvk_executor PROPERTIES CXX_VISIBILITY_PRESET hidden
+                                              VISIBILITY_INLINES_HIDDEN ON)
+# The archive it links carries the whole core with default visibility, and this
+# object has exactly one thing to say: the symbol QEMU looks up. Anything else
+# reaching the dynamic table is surface nobody asked for.
+target_link_options(rvk_executor PRIVATE -Wl,--exclude-libs,ALL)
 
 # ---- principle IX: a clean clone of this repository is all it takes ----------
 add_test(NAME self_contained

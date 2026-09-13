@@ -10,6 +10,7 @@
 #include "device/abi/rvk_executor.h"
 #include "device/executor/context_session.hpp"
 #include "device/executor/executor_root.hpp"
+#include "device/executor/vulkan_backend.hpp"
 #include "device/shim/loader_host_apis.hpp"
 
 namespace {
@@ -21,13 +22,14 @@ public:
     /* A session, or null: the device turns a null into a context fault and
      * keeps every other context running.
      *
-     * Null for everything today, because a session needs a backend to run its
-     * commands and the first of those - Vulkan over the generated server
-     * dispatch - arrives with the next phase. The root, the slots and the
-     * blocks they decode into are already here and already tested; what is
-     * missing is the host API underneath, and saying so is better than
-     * handing the device a session that answers nothing. */
-    av::ContextSession *create(uint32_t, const uint8_t *) { return nullptr; }
+     * Only Vulkan today. An OpenGL or OpenCL context is refused rather than
+     * given a session that would answer nothing, and the capset already says
+     * so, because the root offers only what a GPU here can actually run. */
+    av::ContextSession *create(uint32_t sub_api, const uint8_t *gpu_uuid)
+    {
+        if (sub_api != RVK_EXECUTOR_SUB_API_VULKAN) return nullptr;
+        return root().open(sub_api, gpu_uuid, vulkan());
+    }
 
     void destroy(av::ContextSession *session) { root().close(session); }
 
@@ -47,8 +49,17 @@ public:
     }
 
 private:
+    /* One backend per host API, shared by every context on it: a backend
+     * outlives a session as the GPU outlives the context. */
+    av::VulkanBackend &vulkan()
+    {
+        if (!vulkan_.constructed()) (void)vulkan_.construct();
+        return vulkan_.object();
+    }
+
     av::ObjectStorage<av::LoaderHostApis> apis_;
     av::ObjectStorage<av::ExecutorRoot>   root_;
+    av::ObjectStorage<av::VulkanBackend>  vulkan_;
     bool                                  asked_ = false;
 };
 

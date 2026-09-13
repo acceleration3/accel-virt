@@ -15,10 +15,10 @@ namespace av::vkproto {
 // — the RVK protocol does not forward the client's allocator.
 class RealVulkanDispatch : public ServerDispatch {
 public:
-    void on_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks*) override {
         ::vkDestroyInstance(instance, nullptr);
     }
-    void on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks*) override {
         ::vkDestroyDevice(device, nullptr);
     }
     void on_vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue) override {
@@ -30,12 +30,12 @@ public:
     void on_vkGetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2* pProperties) override {
         ::vkGetPhysicalDeviceProperties2(physicalDevice, pProperties);
     }
-    VkResult on_vkCreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkInstance* pInstance) override {
+    VkResult on_vkCreateInstance(const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkInstance* pInstance) override {
         const VkResult rc = ::vkCreateInstance(pCreateInfo, nullptr, pInstance);
         if (rc == VK_SUCCESS && pInstance != nullptr) { instance_ = *pInstance; }
         return rc;
     }
-    VkResult on_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice) override {
+    VkResult on_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkDevice* pDevice) override {
         return ::vkCreateDevice(physicalDevice, pCreateInfo, nullptr, pDevice);
     }
     void on_vkGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties) override {
@@ -89,10 +89,10 @@ public:
     VkResult on_vkQueueWaitIdle(VkQueue queue) override {
         return ::vkQueueWaitIdle(queue);
     }
-    VkResult on_vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo* pAllocateInfo, const VkAllocationCallbacks* pAllocator, VkDeviceMemory* pMemory) override {
+    VkResult on_vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo* pAllocateInfo, const VkAllocationCallbacks*, VkDeviceMemory* pMemory) override {
         return ::vkAllocateMemory(device, pAllocateInfo, nullptr, pMemory);
     }
-    void on_vkFreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkFreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks*) override {
         ::vkFreeMemory(device, memory, nullptr);
     }
     VkResult on_vkBindBufferMemory(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset) override {
@@ -107,40 +107,40 @@ public:
     void on_vkGetImageMemoryRequirements(VkDevice device, VkImage image, VkMemoryRequirements* pMemoryRequirements) override {
         ::vkGetImageMemoryRequirements(device, image, pMemoryRequirements);
     }
-    VkResult on_vkCreateBuffer(VkDevice device, const VkBufferCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkBuffer* pBuffer) override {
+    VkResult on_vkCreateBuffer(VkDevice device, const VkBufferCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkBuffer* pBuffer) override {
         return ::vkCreateBuffer(device, pCreateInfo, nullptr, pBuffer);
     }
-    void on_vkDestroyBuffer(VkDevice device, VkBuffer buffer, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyBuffer(VkDevice device, VkBuffer buffer, const VkAllocationCallbacks*) override {
         ::vkDestroyBuffer(device, buffer, nullptr);
     }
-    VkResult on_vkCreateImage(VkDevice device, const VkImageCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkImage* pImage) override {
+    VkResult on_vkCreateImage(VkDevice device, const VkImageCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkImage* pImage) override {
         return ::vkCreateImage(device, pCreateInfo, nullptr, pImage);
     }
-    void on_vkDestroyImage(VkDevice device, VkImage image, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyImage(VkDevice device, VkImage image, const VkAllocationCallbacks*) override {
         ::vkDestroyImage(device, image, nullptr);
     }
-    VkResult on_vkCreateImageView(VkDevice device, const VkImageViewCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkImageView* pView) override {
+    VkResult on_vkCreateImageView(VkDevice device, const VkImageViewCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkImageView* pView) override {
         return ::vkCreateImageView(device, pCreateInfo, nullptr, pView);
     }
-    void on_vkDestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyImageView(VkDevice device, VkImageView imageView, const VkAllocationCallbacks*) override {
         ::vkDestroyImageView(device, imageView, nullptr);
     }
-    VkResult on_vkCreateSampler(VkDevice device, const VkSamplerCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSampler* pSampler) override {
+    VkResult on_vkCreateSampler(VkDevice device, const VkSamplerCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkSampler* pSampler) override {
         return ::vkCreateSampler(device, pCreateInfo, nullptr, pSampler);
     }
-    void on_vkDestroySampler(VkDevice device, VkSampler sampler, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroySampler(VkDevice device, VkSampler sampler, const VkAllocationCallbacks*) override {
         ::vkDestroySampler(device, sampler, nullptr);
     }
-    VkResult on_vkCreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSemaphore* pSemaphore) override {
+    VkResult on_vkCreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkSemaphore* pSemaphore) override {
         return ::vkCreateSemaphore(device, pCreateInfo, nullptr, pSemaphore);
     }
-    void on_vkDestroySemaphore(VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroySemaphore(VkDevice device, VkSemaphore semaphore, const VkAllocationCallbacks*) override {
         ::vkDestroySemaphore(device, semaphore, nullptr);
     }
-    VkResult on_vkCreateFence(VkDevice device, const VkFenceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkFence* pFence) override {
+    VkResult on_vkCreateFence(VkDevice device, const VkFenceCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkFence* pFence) override {
         return ::vkCreateFence(device, pCreateInfo, nullptr, pFence);
     }
-    void on_vkDestroyFence(VkDevice device, VkFence fence, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyFence(VkDevice device, VkFence fence, const VkAllocationCallbacks*) override {
         ::vkDestroyFence(device, fence, nullptr);
     }
     VkResult on_vkResetFences(VkDevice device, uint32_t fenceCount, const VkFence* pFences) override {
@@ -152,10 +152,10 @@ public:
     VkResult on_vkGetFenceStatus(VkDevice device, VkFence fence) override {
         return ::vkGetFenceStatus(device, fence);
     }
-    VkResult on_vkCreateCommandPool(VkDevice device, const VkCommandPoolCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkCommandPool* pCommandPool) override {
+    VkResult on_vkCreateCommandPool(VkDevice device, const VkCommandPoolCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkCommandPool* pCommandPool) override {
         return ::vkCreateCommandPool(device, pCreateInfo, nullptr, pCommandPool);
     }
-    void on_vkDestroyCommandPool(VkDevice device, VkCommandPool commandPool, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyCommandPool(VkDevice device, VkCommandPool commandPool, const VkAllocationCallbacks*) override {
         ::vkDestroyCommandPool(device, commandPool, nullptr);
     }
     VkResult on_vkResetCommandPool(VkDevice device, VkCommandPool commandPool, VkCommandPoolResetFlags flags) override {
@@ -170,49 +170,49 @@ public:
     VkResult on_vkResetCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags) override {
         return ::vkResetCommandBuffer(commandBuffer, flags);
     }
-    void on_vkDestroyShaderModule(VkDevice device, VkShaderModule shaderModule, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyShaderModule(VkDevice device, VkShaderModule shaderModule, const VkAllocationCallbacks*) override {
         ::vkDestroyShaderModule(device, shaderModule, nullptr);
     }
-    VkResult on_vkCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkShaderModule* pShaderModule) override {
+    VkResult on_vkCreateShaderModule(VkDevice device, const VkShaderModuleCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkShaderModule* pShaderModule) override {
         return ::vkCreateShaderModule(device, pCreateInfo, nullptr, pShaderModule);
     }
-    VkResult on_vkCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkPipelineLayout* pPipelineLayout) override {
+    VkResult on_vkCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkPipelineLayout* pPipelineLayout) override {
         return ::vkCreatePipelineLayout(device, pCreateInfo, nullptr, pPipelineLayout);
     }
-    void on_vkDestroyPipelineLayout(VkDevice device, VkPipelineLayout pipelineLayout, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyPipelineLayout(VkDevice device, VkPipelineLayout pipelineLayout, const VkAllocationCallbacks*) override {
         ::vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
     }
-    void on_vkDestroyPipeline(VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyPipeline(VkDevice device, VkPipeline pipeline, const VkAllocationCallbacks*) override {
         ::vkDestroyPipeline(device, pipeline, nullptr);
     }
-    VkResult on_vkCreatePipelineCache(VkDevice device, const VkPipelineCacheCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkPipelineCache* pPipelineCache) override {
+    VkResult on_vkCreatePipelineCache(VkDevice device, const VkPipelineCacheCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkPipelineCache* pPipelineCache) override {
         return ::vkCreatePipelineCache(device, pCreateInfo, nullptr, pPipelineCache);
     }
-    void on_vkDestroyPipelineCache(VkDevice device, VkPipelineCache pipelineCache, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyPipelineCache(VkDevice device, VkPipelineCache pipelineCache, const VkAllocationCallbacks*) override {
         ::vkDestroyPipelineCache(device, pipelineCache, nullptr);
     }
-    VkResult on_vkCreateRenderPass(VkDevice device, const VkRenderPassCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkRenderPass* pRenderPass) override {
+    VkResult on_vkCreateRenderPass(VkDevice device, const VkRenderPassCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkRenderPass* pRenderPass) override {
         return ::vkCreateRenderPass(device, pCreateInfo, nullptr, pRenderPass);
     }
-    void on_vkDestroyRenderPass(VkDevice device, VkRenderPass renderPass, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyRenderPass(VkDevice device, VkRenderPass renderPass, const VkAllocationCallbacks*) override {
         ::vkDestroyRenderPass(device, renderPass, nullptr);
     }
-    VkResult on_vkCreateFramebuffer(VkDevice device, const VkFramebufferCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkFramebuffer* pFramebuffer) override {
+    VkResult on_vkCreateFramebuffer(VkDevice device, const VkFramebufferCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkFramebuffer* pFramebuffer) override {
         return ::vkCreateFramebuffer(device, pCreateInfo, nullptr, pFramebuffer);
     }
-    void on_vkDestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer, const VkAllocationCallbacks*) override {
         ::vkDestroyFramebuffer(device, framebuffer, nullptr);
     }
-    VkResult on_vkCreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorSetLayout* pSetLayout) override {
+    VkResult on_vkCreateDescriptorSetLayout(VkDevice device, const VkDescriptorSetLayoutCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkDescriptorSetLayout* pSetLayout) override {
         return ::vkCreateDescriptorSetLayout(device, pCreateInfo, nullptr, pSetLayout);
     }
-    void on_vkDestroyDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyDescriptorSetLayout(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, const VkAllocationCallbacks*) override {
         ::vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
     }
-    VkResult on_vkCreateDescriptorPool(VkDevice device, const VkDescriptorPoolCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorPool* pDescriptorPool) override {
+    VkResult on_vkCreateDescriptorPool(VkDevice device, const VkDescriptorPoolCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkDescriptorPool* pDescriptorPool) override {
         return ::vkCreateDescriptorPool(device, pCreateInfo, nullptr, pDescriptorPool);
     }
-    void on_vkDestroyDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, const VkAllocationCallbacks*) override {
         ::vkDestroyDescriptorPool(device, descriptorPool, nullptr);
     }
     void on_vkFreeCommandBuffers(VkDevice device, VkCommandPool commandPool, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers) override {
@@ -263,7 +263,7 @@ public:
     void on_vkCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout, VkShaderStageFlags stageFlags, uint32_t offset, uint32_t size, const void* pValues) override {
         ::vkCmdPushConstants(commandBuffer, layout, stageFlags, offset, size, pValues);
     }
-    VkResult on_vkCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkGraphicsPipelineCreateInfo* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines) override {
+    VkResult on_vkCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkGraphicsPipelineCreateInfo* pCreateInfos, const VkAllocationCallbacks*, VkPipeline* pPipelines) override {
         return ::vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos, nullptr, pPipelines);
     }
     void on_vkUpdateDescriptorSets(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet* pDescriptorCopies) override {
@@ -278,16 +278,16 @@ public:
     VkResult on_vkFreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets) override {
         return ::vkFreeDescriptorSets(device, descriptorPool, descriptorSetCount, pDescriptorSets);
     }
-    VkResult on_vkCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkComputePipelineCreateInfo* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines) override {
+    VkResult on_vkCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkComputePipelineCreateInfo* pCreateInfos, const VkAllocationCallbacks*, VkPipeline* pPipelines) override {
         return ::vkCreateComputePipelines(device, pipelineCache, createInfoCount, pCreateInfos, nullptr, pPipelines);
     }
     VkResult on_vkResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorPoolResetFlags flags) override {
         return ::vkResetDescriptorPool(device, descriptorPool, flags);
     }
-    VkResult on_vkCreateEvent(VkDevice device, const VkEventCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkEvent* pEvent) override {
+    VkResult on_vkCreateEvent(VkDevice device, const VkEventCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkEvent* pEvent) override {
         return ::vkCreateEvent(device, pCreateInfo, nullptr, pEvent);
     }
-    void on_vkDestroyEvent(VkDevice device, VkEvent event, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyEvent(VkDevice device, VkEvent event, const VkAllocationCallbacks*) override {
         ::vkDestroyEvent(device, event, nullptr);
     }
     VkResult on_vkGetEventStatus(VkDevice device, VkEvent event) override {
@@ -509,37 +509,37 @@ public:
     void on_vkCmdWriteTimestamp2(VkCommandBuffer commandBuffer, VkPipelineStageFlags2 stage, VkQueryPool queryPool, uint32_t query) override {
         ::vkCmdWriteTimestamp2(commandBuffer, stage, queryPool, query);
     }
-    VkResult on_vkCreateBufferView(VkDevice device, const VkBufferViewCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkBufferView* pView) override {
+    VkResult on_vkCreateBufferView(VkDevice device, const VkBufferViewCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkBufferView* pView) override {
         return ::vkCreateBufferView(device, pCreateInfo, nullptr, pView);
     }
-    VkResult on_vkCreateDescriptorUpdateTemplate(VkDevice device, const VkDescriptorUpdateTemplateCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplate* pDescriptorUpdateTemplate) override {
+    VkResult on_vkCreateDescriptorUpdateTemplate(VkDevice device, const VkDescriptorUpdateTemplateCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkDescriptorUpdateTemplate* pDescriptorUpdateTemplate) override {
         return ::vkCreateDescriptorUpdateTemplate(device, pCreateInfo, nullptr, pDescriptorUpdateTemplate);
     }
-    VkResult on_vkCreatePrivateDataSlot(VkDevice device, const VkPrivateDataSlotCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkPrivateDataSlot* pPrivateDataSlot) override {
+    VkResult on_vkCreatePrivateDataSlot(VkDevice device, const VkPrivateDataSlotCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkPrivateDataSlot* pPrivateDataSlot) override {
         return ::vkCreatePrivateDataSlot(device, pCreateInfo, nullptr, pPrivateDataSlot);
     }
-    VkResult on_vkCreateQueryPool(VkDevice device, const VkQueryPoolCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkQueryPool* pQueryPool) override {
+    VkResult on_vkCreateQueryPool(VkDevice device, const VkQueryPoolCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkQueryPool* pQueryPool) override {
         return ::vkCreateQueryPool(device, pCreateInfo, nullptr, pQueryPool);
     }
-    VkResult on_vkCreateRenderPass2(VkDevice device, const VkRenderPassCreateInfo2* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkRenderPass* pRenderPass) override {
+    VkResult on_vkCreateRenderPass2(VkDevice device, const VkRenderPassCreateInfo2* pCreateInfo, const VkAllocationCallbacks*, VkRenderPass* pRenderPass) override {
         return ::vkCreateRenderPass2(device, pCreateInfo, nullptr, pRenderPass);
     }
-    VkResult on_vkCreateSamplerYcbcrConversion(VkDevice device, const VkSamplerYcbcrConversionCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSamplerYcbcrConversion* pYcbcrConversion) override {
+    VkResult on_vkCreateSamplerYcbcrConversion(VkDevice device, const VkSamplerYcbcrConversionCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkSamplerYcbcrConversion* pYcbcrConversion) override {
         return ::vkCreateSamplerYcbcrConversion(device, pCreateInfo, nullptr, pYcbcrConversion);
     }
-    void on_vkDestroyBufferView(VkDevice device, VkBufferView bufferView, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyBufferView(VkDevice device, VkBufferView bufferView, const VkAllocationCallbacks*) override {
         ::vkDestroyBufferView(device, bufferView, nullptr);
     }
-    void on_vkDestroyDescriptorUpdateTemplate(VkDevice device, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyDescriptorUpdateTemplate(VkDevice device, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const VkAllocationCallbacks*) override {
         ::vkDestroyDescriptorUpdateTemplate(device, descriptorUpdateTemplate, nullptr);
     }
-    void on_vkDestroyPrivateDataSlot(VkDevice device, VkPrivateDataSlot privateDataSlot, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyPrivateDataSlot(VkDevice device, VkPrivateDataSlot privateDataSlot, const VkAllocationCallbacks*) override {
         ::vkDestroyPrivateDataSlot(device, privateDataSlot, nullptr);
     }
-    void on_vkDestroyQueryPool(VkDevice device, VkQueryPool queryPool, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyQueryPool(VkDevice device, VkQueryPool queryPool, const VkAllocationCallbacks*) override {
         ::vkDestroyQueryPool(device, queryPool, nullptr);
     }
-    void on_vkDestroySamplerYcbcrConversion(VkDevice device, VkSamplerYcbcrConversion ycbcrConversion, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroySamplerYcbcrConversion(VkDevice device, VkSamplerYcbcrConversion ycbcrConversion, const VkAllocationCallbacks*) override {
         ::vkDestroySamplerYcbcrConversion(device, ycbcrConversion, nullptr);
     }
     VkResult on_vkEnumeratePhysicalDeviceGroups(VkInstance instance, uint32_t* pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties) override {
@@ -767,19 +767,19 @@ public:
     void on_vkCmdWriteTimestamp2KHR(VkCommandBuffer commandBuffer, VkPipelineStageFlags2 stage, VkQueryPool queryPool, uint32_t query) override {
         ::vkCmdWriteTimestamp2(commandBuffer, stage, queryPool, query);
     }
-    VkResult on_vkCreateDescriptorUpdateTemplateKHR(VkDevice device, const VkDescriptorUpdateTemplateCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDescriptorUpdateTemplate* pDescriptorUpdateTemplate) override {
+    VkResult on_vkCreateDescriptorUpdateTemplateKHR(VkDevice device, const VkDescriptorUpdateTemplateCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkDescriptorUpdateTemplate* pDescriptorUpdateTemplate) override {
         return ::vkCreateDescriptorUpdateTemplate(device, pCreateInfo, nullptr, pDescriptorUpdateTemplate);
     }
-    VkResult on_vkCreateRenderPass2KHR(VkDevice device, const VkRenderPassCreateInfo2* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkRenderPass* pRenderPass) override {
+    VkResult on_vkCreateRenderPass2KHR(VkDevice device, const VkRenderPassCreateInfo2* pCreateInfo, const VkAllocationCallbacks*, VkRenderPass* pRenderPass) override {
         return ::vkCreateRenderPass2(device, pCreateInfo, nullptr, pRenderPass);
     }
-    VkResult on_vkCreateSamplerYcbcrConversionKHR(VkDevice device, const VkSamplerYcbcrConversionCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSamplerYcbcrConversion* pYcbcrConversion) override {
+    VkResult on_vkCreateSamplerYcbcrConversionKHR(VkDevice device, const VkSamplerYcbcrConversionCreateInfo* pCreateInfo, const VkAllocationCallbacks*, VkSamplerYcbcrConversion* pYcbcrConversion) override {
         return ::vkCreateSamplerYcbcrConversion(device, pCreateInfo, nullptr, pYcbcrConversion);
     }
-    void on_vkDestroyDescriptorUpdateTemplateKHR(VkDevice device, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyDescriptorUpdateTemplateKHR(VkDevice device, VkDescriptorUpdateTemplate descriptorUpdateTemplate, const VkAllocationCallbacks*) override {
         ::vkDestroyDescriptorUpdateTemplate(device, descriptorUpdateTemplate, nullptr);
     }
-    void on_vkDestroySamplerYcbcrConversionKHR(VkDevice device, VkSamplerYcbcrConversion ycbcrConversion, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroySamplerYcbcrConversionKHR(VkDevice device, VkSamplerYcbcrConversion ycbcrConversion, const VkAllocationCallbacks*) override {
         ::vkDestroySamplerYcbcrConversion(device, ycbcrConversion, nullptr);
     }
     VkResult on_vkEnumeratePhysicalDeviceGroupsKHR(VkInstance instance, uint32_t* pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties) override {
@@ -1427,7 +1427,7 @@ public:
         }
         return pfn_vkCopyMemoryToImageEXT_(device, pCopyMemoryToImageInfo);
     }
-    VkResult on_vkCreateAccelerationStructureKHR(VkDevice device, const VkAccelerationStructureCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkAccelerationStructureKHR* pAccelerationStructure) override {
+    VkResult on_vkCreateAccelerationStructureKHR(VkDevice device, const VkAccelerationStructureCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks*, VkAccelerationStructureKHR* pAccelerationStructure) override {
         if (pfn_vkCreateAccelerationStructureKHR_ == nullptr) {
             pfn_vkCreateAccelerationStructureKHR_ = reinterpret_cast<PFN_vkCreateAccelerationStructureKHR>(::vkGetInstanceProcAddr(instance_, "vkCreateAccelerationStructureKHR"));
         }
@@ -1436,7 +1436,7 @@ public:
         }
         return pfn_vkCreateAccelerationStructureKHR_(device, pCreateInfo, nullptr, pAccelerationStructure);
     }
-    VkResult on_vkCreateDeferredOperationKHR(VkDevice device, const VkAllocationCallbacks* pAllocator, VkDeferredOperationKHR* pDeferredOperation) override {
+    VkResult on_vkCreateDeferredOperationKHR(VkDevice device, const VkAllocationCallbacks*, VkDeferredOperationKHR* pDeferredOperation) override {
         if (pfn_vkCreateDeferredOperationKHR_ == nullptr) {
             pfn_vkCreateDeferredOperationKHR_ = reinterpret_cast<PFN_vkCreateDeferredOperationKHR>(::vkGetInstanceProcAddr(instance_, "vkCreateDeferredOperationKHR"));
         }
@@ -1445,7 +1445,7 @@ public:
         }
         return pfn_vkCreateDeferredOperationKHR_(device, nullptr, pDeferredOperation);
     }
-    VkResult on_vkCreateRayTracingPipelinesKHR(VkDevice device, VkDeferredOperationKHR deferredOperation, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkRayTracingPipelineCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines) override {
+    VkResult on_vkCreateRayTracingPipelinesKHR(VkDevice device, VkDeferredOperationKHR deferredOperation, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkRayTracingPipelineCreateInfoKHR* pCreateInfos, const VkAllocationCallbacks*, VkPipeline* pPipelines) override {
         if (pfn_vkCreateRayTracingPipelinesKHR_ == nullptr) {
             pfn_vkCreateRayTracingPipelinesKHR_ = reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(::vkGetInstanceProcAddr(instance_, "vkCreateRayTracingPipelinesKHR"));
         }
@@ -1454,7 +1454,7 @@ public:
         }
         return pfn_vkCreateRayTracingPipelinesKHR_(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos, nullptr, pPipelines);
     }
-    VkResult on_vkCreateShadersEXT(VkDevice device, uint32_t createInfoCount, const VkShaderCreateInfoEXT* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkShaderEXT* pShaders) override {
+    VkResult on_vkCreateShadersEXT(VkDevice device, uint32_t createInfoCount, const VkShaderCreateInfoEXT* pCreateInfos, const VkAllocationCallbacks*, VkShaderEXT* pShaders) override {
         if (pfn_vkCreateShadersEXT_ == nullptr) {
             pfn_vkCreateShadersEXT_ = reinterpret_cast<PFN_vkCreateShadersEXT>(::vkGetInstanceProcAddr(instance_, "vkCreateShadersEXT"));
         }
@@ -1472,7 +1472,7 @@ public:
         }
         return pfn_vkDeferredOperationJoinKHR_(device, operation);
     }
-    void on_vkDestroyAccelerationStructureKHR(VkDevice device, VkAccelerationStructureKHR accelerationStructure, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyAccelerationStructureKHR(VkDevice device, VkAccelerationStructureKHR accelerationStructure, const VkAllocationCallbacks*) override {
         if (pfn_vkDestroyAccelerationStructureKHR_ == nullptr) {
             pfn_vkDestroyAccelerationStructureKHR_ = reinterpret_cast<PFN_vkDestroyAccelerationStructureKHR>(::vkGetInstanceProcAddr(instance_, "vkDestroyAccelerationStructureKHR"));
         }
@@ -1481,7 +1481,7 @@ public:
         }
         pfn_vkDestroyAccelerationStructureKHR_(device, accelerationStructure, nullptr);
     }
-    void on_vkDestroyDeferredOperationKHR(VkDevice device, VkDeferredOperationKHR operation, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyDeferredOperationKHR(VkDevice device, VkDeferredOperationKHR operation, const VkAllocationCallbacks*) override {
         if (pfn_vkDestroyDeferredOperationKHR_ == nullptr) {
             pfn_vkDestroyDeferredOperationKHR_ = reinterpret_cast<PFN_vkDestroyDeferredOperationKHR>(::vkGetInstanceProcAddr(instance_, "vkDestroyDeferredOperationKHR"));
         }
@@ -1490,7 +1490,7 @@ public:
         }
         pfn_vkDestroyDeferredOperationKHR_(device, operation, nullptr);
     }
-    void on_vkDestroyShaderEXT(VkDevice device, VkShaderEXT shader, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyShaderEXT(VkDevice device, VkShaderEXT shader, const VkAllocationCallbacks*) override {
         if (pfn_vkDestroyShaderEXT_ == nullptr) {
             pfn_vkDestroyShaderEXT_ = reinterpret_cast<PFN_vkDestroyShaderEXT>(::vkGetInstanceProcAddr(instance_, "vkDestroyShaderEXT"));
         }
@@ -1652,7 +1652,7 @@ public:
         }
         pfn_vkCmdBindIndexBuffer2KHR_(commandBuffer, buffer, offset, size, indexType);
     }
-    VkResult on_vkCreatePipelineBinariesKHR(VkDevice device, const VkPipelineBinaryCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkPipelineBinaryHandlesInfoKHR* pBinaries) override {
+    VkResult on_vkCreatePipelineBinariesKHR(VkDevice device, const VkPipelineBinaryCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks*, VkPipelineBinaryHandlesInfoKHR* pBinaries) override {
         if (pfn_vkCreatePipelineBinariesKHR_ == nullptr) {
             pfn_vkCreatePipelineBinariesKHR_ = reinterpret_cast<PFN_vkCreatePipelineBinariesKHR>(::vkGetInstanceProcAddr(instance_, "vkCreatePipelineBinariesKHR"));
         }
@@ -1661,7 +1661,7 @@ public:
         }
         return pfn_vkCreatePipelineBinariesKHR_(device, pCreateInfo, nullptr, pBinaries);
     }
-    void on_vkDestroyPipelineBinaryKHR(VkDevice device, VkPipelineBinaryKHR pipelineBinary, const VkAllocationCallbacks* pAllocator) override {
+    void on_vkDestroyPipelineBinaryKHR(VkDevice device, VkPipelineBinaryKHR pipelineBinary, const VkAllocationCallbacks*) override {
         if (pfn_vkDestroyPipelineBinaryKHR_ == nullptr) {
             pfn_vkDestroyPipelineBinaryKHR_ = reinterpret_cast<PFN_vkDestroyPipelineBinaryKHR>(::vkGetInstanceProcAddr(instance_, "vkDestroyPipelineBinaryKHR"));
         }
@@ -1706,7 +1706,7 @@ public:
         }
         pfn_vkGetRenderingAreaGranularityKHR_(device, pRenderingAreaInfo, pGranularity);
     }
-    VkResult on_vkReleaseCapturedPipelineDataKHR(VkDevice device, const VkReleaseCapturedPipelineDataInfoKHR* pInfo, const VkAllocationCallbacks* pAllocator) override {
+    VkResult on_vkReleaseCapturedPipelineDataKHR(VkDevice device, const VkReleaseCapturedPipelineDataInfoKHR* pInfo, const VkAllocationCallbacks*) override {
         if (pfn_vkReleaseCapturedPipelineDataKHR_ == nullptr) {
             pfn_vkReleaseCapturedPipelineDataKHR_ = reinterpret_cast<PFN_vkReleaseCapturedPipelineDataKHR>(::vkGetInstanceProcAddr(instance_, "vkReleaseCapturedPipelineDataKHR"));
         }

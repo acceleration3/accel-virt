@@ -79,6 +79,16 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
 
 /* Only a command that asks for an answer is given somewhere to write it, so
  * a later command cannot overwrite the answer kept. */
+FaultCode BatchExecutor::fault_for(Status status) const
+{
+    if (status == Status::malformed) return FaultCode::undecodable;
+    /* A library answering outside the ABI is a different problem from a GPU
+     * that died, and the guest is told which so an operator looks in the right
+     * place (feature 042). */
+    if (status == Status::not_supported) return FaultCode::broken_executor;
+    return FaultCode::device_lost;
+}
+
 Status BatchExecutor::run_command(const CommandHeader &header, const uint8_t *payload, bool &answered, size_t &answer)
 {
     if (header.generates_reply() && reply_.length() == 0u) {
@@ -99,7 +109,7 @@ Status BatchExecutor::run_command(const CommandHeader &header, const uint8_t *pa
         return Status::ok;
     }
     if (status != Status::ok) {
-        fault_ = status == Status::malformed ? FaultCode::undecodable : FaultCode::device_lost;
+        fault_ = fault_for(status);
         return status;
     }
     fences_.heartbeat();

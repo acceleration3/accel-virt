@@ -57,6 +57,10 @@ public:
     bool invariants_hold() const;
 
 private:
+    /* Which fault a failed command is, from the status the executor's answer
+     * became. */
+    FaultCode fault_for(Status status) const;
+
     [[nodiscard]] Status run_command(const CommandHeader &header, const uint8_t *payload, bool &answered,
                                      size_t &answer);
     void                 write_reply(uint64_t fence_id, size_t answer);
