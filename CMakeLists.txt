@@ -71,7 +71,11 @@ set(AV_GENERATED_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_server.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_server.cpp
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_command_names.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_command_names.cpp
+  # The OpenGL host decode path, which compiles now that the sync hooks are
+  # fields on RealGl rather than free functions with nowhere to keep state
+  # (feature 042).
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_dispatch_server.cpp)
 
 # The OpenGL tree writes its own gl_types.h from the registry and includes it by
 # name, so it needs its own directory on the include path and no external header.

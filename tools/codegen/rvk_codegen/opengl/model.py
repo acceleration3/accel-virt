@@ -136,7 +136,7 @@ class Command:
         A GLsync is opaque: made, waited on, deleted, never inspected.
         So the guest invents the number and the server records which of
         its own the number stands for, and the create stops being a
-        round trip. See proto/gl_sync_table.hpp.
+        round trip. See the rvk_sync_* fields on RealGl.
         """
         return (self.return_type.base == "GLsync"
                 and self.return_type.pointer_depth == 0)

@@ -24,6 +24,16 @@ struct RealGl {
     // that names one is refused rather than guessed at.
     std::uint8_t* (*rvk_blob)(void*, std::uint64_t, std::uint64_t) = nullptr;
     void* rvk_blob_user = nullptr;
+
+    // A guest mints a sync token; the host binds it to whatever
+    // glFenceSync made and looks it up again by the token. Fields
+    // rather than free functions for the reason rvk_blob is one:
+    // a parameterless hook cannot reach one context's state, and
+    // this project has no file-scope place to put it (042).
+    void (*rvk_bind_sync)(void*, std::uint64_t, void*) = nullptr;
+    void* (*rvk_sync_for)(void*, std::uint64_t) = nullptr;
+    void (*rvk_forget_sync)(void*, std::uint64_t) = nullptr;
+    void* rvk_sync_user = nullptr;
     void (*glActiveShaderProgram)(GLuint, GLuint) = nullptr;
     void (*glActiveTexture)(GLenum) = nullptr;
     void (*glAttachShader)(GLuint, GLuint) = nullptr;

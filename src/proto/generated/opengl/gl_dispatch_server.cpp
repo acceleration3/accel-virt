@@ -9,7 +9,6 @@
 
 #include "gl_protocol_ids.h"
 #include "gl_sizes.h"
-#include "proto/gl_sync_table.hpp"
 
 namespace av::glproto {
 
@@ -1769,7 +1768,7 @@ static bool decode_glClientWaitSync(const RealGl& rvk_gl, ::av::WireReader& rvk_
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     std::uint64_t sync_token = 0;
     if (!rvk_r.read_pod(sync_token)) return false;
-    GLsync sync = static_cast<GLsync>(::av::glproto::sync_for(sync_token));
+    GLsync sync = static_cast<GLsync>((rvk_gl.rvk_sync_for == nullptr ? nullptr : rvk_gl.rvk_sync_for(rvk_gl.rvk_sync_user, sync_token)));
     GLbitfield flags{};
     { std::uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       flags = static_cast<GLbitfield>(rvk_v); }
@@ -3515,10 +3514,10 @@ static bool decode_glDeleteSync(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     std::uint64_t sync_token = 0;
     if (!rvk_r.read_pod(sync_token)) return false;
-    GLsync sync = static_cast<GLsync>(::av::glproto::sync_for(sync_token));
+    GLsync sync = static_cast<GLsync>((rvk_gl.rvk_sync_for == nullptr ? nullptr : rvk_gl.rvk_sync_for(rvk_gl.rvk_sync_user, sync_token)));
     if (rvk_gl.glDeleteSync == nullptr) return false;
     rvk_gl.glDeleteSync(sync);
-    ::av::glproto::forget_sync(sync_token);
+    if (rvk_gl.rvk_forget_sync != nullptr) { rvk_gl.rvk_forget_sync(rvk_gl.rvk_sync_user, sync_token); }
     return true;
 }
 
@@ -4334,7 +4333,7 @@ static bool decode_glFenceSync(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
       flags = static_cast<GLbitfield>(rvk_v); }
     if (rvk_gl.glFenceSync == nullptr) return false;
     const auto rvk_ret = rvk_gl.glFenceSync(condition, flags);
-    ::av::glproto::bind_sync(rvk_token, rvk_ret);
+    if (rvk_gl.rvk_bind_sync != nullptr) { rvk_gl.rvk_bind_sync(rvk_gl.rvk_sync_user, rvk_token, rvk_ret); }
     return true;
 }
 
@@ -6866,7 +6865,7 @@ static bool decode_glGetObjectPtrLabel(const RealGl& rvk_gl, ::av::WireReader& r
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     std::uint64_t ptr_token = 0;
     if (!rvk_r.read_pod(ptr_token)) return false;
-    GLsync ptr = static_cast<GLsync>(::av::glproto::sync_for(ptr_token));
+    GLsync ptr = static_cast<GLsync>((rvk_gl.rvk_sync_for == nullptr ? nullptr : rvk_gl.rvk_sync_for(rvk_gl.rvk_sync_user, ptr_token)));
     GLsizei bufSize{};
     { std::uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       bufSize = static_cast<GLsizei>(rvk_v); }
@@ -8359,7 +8358,7 @@ static bool decode_glGetSynciv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     std::uint64_t sync_token = 0;
     if (!rvk_r.read_pod(sync_token)) return false;
-    GLsync sync = static_cast<GLsync>(::av::glproto::sync_for(sync_token));
+    GLsync sync = static_cast<GLsync>((rvk_gl.rvk_sync_for == nullptr ? nullptr : rvk_gl.rvk_sync_for(rvk_gl.rvk_sync_user, sync_token)));
     GLenum pname{};
     { std::uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       pname = static_cast<GLenum>(rvk_v); }
@@ -10525,7 +10524,7 @@ static bool decode_glIsSync(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av:
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     std::uint64_t sync_token = 0;
     if (!rvk_r.read_pod(sync_token)) return false;
-    GLsync sync = static_cast<GLsync>(::av::glproto::sync_for(sync_token));
+    GLsync sync = static_cast<GLsync>((rvk_gl.rvk_sync_for == nullptr ? nullptr : rvk_gl.rvk_sync_for(rvk_gl.rvk_sync_user, sync_token)));
     if (rvk_gl.glIsSync == nullptr) return false;
     const auto rvk_ret = rvk_gl.glIsSync(sync);
     rvk_reply.write_varint(static_cast<std::uint64_t>(rvk_ret));
@@ -11519,7 +11518,7 @@ static bool decode_glObjectPtrLabel(const RealGl& rvk_gl, ::av::WireReader& rvk_
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     std::uint64_t ptr_token = 0;
     if (!rvk_r.read_pod(ptr_token)) return false;
-    GLsync ptr = static_cast<GLsync>(::av::glproto::sync_for(ptr_token));
+    GLsync ptr = static_cast<GLsync>((rvk_gl.rvk_sync_for == nullptr ? nullptr : rvk_gl.rvk_sync_for(rvk_gl.rvk_sync_user, ptr_token)));
     GLsizei length{};
     { std::uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       length = static_cast<GLsizei>(rvk_v); }
@@ -20507,7 +20506,7 @@ static bool decode_glWaitSync(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     std::uint64_t sync_token = 0;
     if (!rvk_r.read_pod(sync_token)) return false;
-    GLsync sync = static_cast<GLsync>(::av::glproto::sync_for(sync_token));
+    GLsync sync = static_cast<GLsync>((rvk_gl.rvk_sync_for == nullptr ? nullptr : rvk_gl.rvk_sync_for(rvk_gl.rvk_sync_user, sync_token)));
     GLbitfield flags{};
     { std::uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;
       flags = static_cast<GLbitfield>(rvk_v); }

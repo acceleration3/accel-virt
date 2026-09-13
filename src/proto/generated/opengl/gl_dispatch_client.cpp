@@ -14,7 +14,6 @@
 #include "gl_protocol_ids.h"
 #include "gl_sizes.h"
 #include "proto/client_blob_arena.hpp"
-#include "proto/gl_sync_table.hpp"
 
 namespace av::glproto {
 

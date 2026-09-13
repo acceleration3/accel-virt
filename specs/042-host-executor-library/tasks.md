@@ -106,13 +106,13 @@ description: "Tasks: the host executor"
 
 **Purpose**: three things must exist before `gl_dispatch_server.cpp` compiles at all.
 
-- [ ] T029 The generated OpenGL sync hooks gain a user pointer. They are parameterless free functions today - `sync_for`, `bind_sync`, `forget_sync`, nine call sites - and a parameterless function cannot reach one context's state without thread-local or file-scope storage, which this project does not have. They join `rvk_blob` as fields on `RealGl` with an `rvk_sync_user` beside `rvk_blob_user`. An emitter change in `tools/codegen/rvk_codegen/opengl/emit.py`, regenerated and gated; no id moves (research §6)
-- [ ] T030 [P] Write `tests/unit/device/executor/test_sync_tokens.cpp` first, then `SyncTokens` (system class) and `src/proto/gl_sync_table.hpp`, `max_sync_tokens = 256` (data-model: past any real pipeline depth, and a guest that never deletes must be bounded)
-- [ ] T031 [P] Write `tests/unit/device/executor/test_guest_region.cpp` first: an offset and length inside the region resolve; one past it answers null; a length that overflows answers null. Then `GuestRegion` (object class) - the resolver `RealGl::rvk_blob` names, consulted at **1016** call sites, where null means every one of them refuses
-- [ ] T032 A blob with more than one extent is refused by `GuestRegion` rather than stitched: it must answer a host pointer and a scattered blob has none. Vulkan and OpenCL are unaffected - the device hands them one `UDMABUF_CREATE_LIST` dma-buf (research §6)
-- [ ] T033 `OpenGlBackend` (object class): EGL through `EGL_EXT_platform_device` and `eglQueryDevicesEXT`, **not** `EGL_MESA_platform_surfaceless`, which gives no GPU choice and landed on the wrong GPU in the probe; `create()` is given a UUID and must honour it. Device enumeration returns entries that fail `eglInitialize` and must be tolerated, not indexed into (research §3)
-- [ ] T034 The four mapping commands the generator refused to guess - `glMapBuffer`, `glMapBufferRange`, `glUnmapBuffer`, `glFlushMappedBufferRange` - because a pointer into host GL memory cannot cross the wire
-- [ ] T035 `gl_dispatch_server.cpp` joins `AV_GENERATED_SOURCES`, which it cannot today
+- [X] T033 The generated OpenGL sync hooks gain a user pointer. They became three function-pointer fields on `RealGl` beside `rvk_blob`, with an `rvk_sync_user`, and `gl_dispatch_server.cpp` compiles standalone for the first time. They are parameterless free functions today - `sync_for`, `bind_sync`, `forget_sync`, nine call sites - and a parameterless function cannot reach one context's state without thread-local or file-scope storage, which this project does not have. They join `rvk_blob` as fields on `RealGl` with an `rvk_sync_user` beside `rvk_blob_user`. An emitter change in `tools/codegen/rvk_codegen/opengl/emit.py`, regenerated and gated; no id moves (research §6)
+- [X] T034 [P] Write `tests/unit/device/executor/test_sync_tokens.cpp` first, then `SyncTokens` (system class) and `src/proto/gl_sync_table.hpp`, `max_sync_tokens = 256` (data-model: past any real pipeline depth, and a guest that never deletes must be bounded)
+- [X] T035 [P] Write `tests/unit/device/executor/test_guest_region.cpp` first: an offset and length inside the region resolve; one past it answers null; a length that overflows answers null. Then `GuestRegion` (object class) - the resolver `RealGl::rvk_blob` names, consulted at **1016** call sites, where null means every one of them refuses
+- [ ] T036 A blob with more than one extent is refused by `GuestRegion` rather than stitched: it must answer a host pointer and a scattered blob has none. Vulkan and OpenCL are unaffected - the device hands them one `UDMABUF_CREATE_LIST` dma-buf (research §6)
+- [ ] T037 `OpenGlBackend` (object class): EGL through `EGL_EXT_platform_device` and `eglQueryDevicesEXT`, **not** `EGL_MESA_platform_surfaceless`, which gives no GPU choice and landed on the wrong GPU in the probe; `create()` is given a UUID and must honour it. Device enumeration returns entries that fail `eglInitialize` and must be tolerated, not indexed into (research §3)
+- [ ] T038 The four mapping commands the generator refused to guess - `glMapBuffer`, `glMapBufferRange`, `glUnmapBuffer`, `glFlushMappedBufferRange` - because a pointer into host GL memory cannot cross the wire
+- [X] T039 `gl_dispatch_server.cpp` joins `AV_GENERATED_SOURCES`, which it cannot today
 
 **Checkpoint**: OpenGL runs. Commit.
 
@@ -120,9 +120,9 @@ description: "Tasks: the host executor"
 
 ## Phase 7: OpenCL
 
-- [ ] T036 `OpenClBackend` (object class) deriving from `av::clproto::RealDispatch`; the one reserved id, `clGetKernelSuggestedLocalWorkSize`, answered unknown deliberately
-- [ ] T037 Import by dma-buf where the device offers it, probed through `CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR` rather than by matching the extension string: Intel NEO advertises dma-buf through the query while listing only `cl_khr_external_memory` at provisional 0.9.1, and NVIDIA's `opaque_fd` is a CUDA handle that cannot take a memfd (research §3). `CL_MEM_USE_HOST_PTR` is not a zero-copy guarantee and is not treated as one
-- [ ] T038 A blob larger than `CL_DEVICE_MAX_MEM_ALLOC_SIZE` cannot become one `cl_mem` at all - 1.914 GiB on the NVIDIA here - and is refused rather than truncated
+- [ ] T040 `OpenClBackend` (object class) deriving from `av::clproto::RealDispatch`; the one reserved id, `clGetKernelSuggestedLocalWorkSize`, answered unknown deliberately
+- [ ] T041 Import by dma-buf where the device offers it, probed through `CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR` rather than by matching the extension string: Intel NEO advertises dma-buf through the query while listing only `cl_khr_external_memory` at provisional 0.9.1, and NVIDIA's `opaque_fd` is a CUDA handle that cannot take a memfd (research §3). `CL_MEM_USE_HOST_PTR` is not a zero-copy guarantee and is not treated as one
+- [ ] T042 A blob larger than `CL_DEVICE_MAX_MEM_ALLOC_SIZE` cannot become one `cl_mem` at all - 1.914 GiB on the NVIDIA here - and is refused rather than truncated
 
 **Checkpoint**: three APIs behind one ABI. Commit.
 
@@ -130,10 +130,10 @@ description: "Tasks: the host executor"
 
 ## Phase 8: What the feature promised
 
-- [ ] T039 SC-002's three workloads in the conformance suite: a Vulkan triangle, an OpenGL clear, an OpenCL vector add, built with the generated serializers and read back from the reply. Driving the same three from a real guest is feature 044
-- [ ] T040 `docs/protocol.md` and `docs/kb/11-implementation-plan.md` describe version 2 and the import path
-- [ ] T041 Feature 063's `contracts/generated_code.md` records that the no-STL line did not move, which is what settles its T016 for good
-- [ ] T042 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
+- [ ] T043 SC-002's three workloads in the conformance suite: a Vulkan triangle, an OpenGL clear, an OpenCL vector add, built with the generated serializers and read back from the reply. Driving the same three from a real guest is feature 044
+- [ ] T044 `docs/protocol.md` and `docs/kb/11-implementation-plan.md` describe version 2 and the import path
+- [ ] T045 Feature 063's `contracts/generated_code.md` records that the no-STL line did not move, which is what settles its T016 for good
+- [ ] T046 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
 
 ---
 

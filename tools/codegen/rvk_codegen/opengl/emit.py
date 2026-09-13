@@ -628,7 +628,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
          '#include "gl_protocol_ids.h"',
          '#include "gl_sizes.h"',
          '#include "proto/client_blob_arena.hpp"',
-         '#include "proto/gl_sync_table.hpp"\n',
+         '',
          "namespace av::glproto {\n",
          "// Below one page a blob lease costs more than the reply slot",
          "// it would replace: the allocator rounds to a page either way.",
@@ -646,7 +646,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         if cmd.mints_handle:
             # The handle the guest is about to answer with, written
             # first so the server binds it before it decodes anything
-            # that could fail. See proto/gl_sync_table.hpp for
+            # that could fail. See the rvk_sync_* fields on RealGl for
             # why the guest gets to choose it at all.
             c.append("    const std::uint64_t rvk_token = "
                      "::av::glproto::mint_sync_token();")
@@ -717,11 +717,11 @@ def _decode_param(p: Param, out: list[str]) -> None:
         # The guest's token, not the host's pointer. The table says
         # which of the host's fences it stands for; an unknown token
         # resolves to null, which is what GL does with a handle that was
-        # never a handle. See proto/gl_sync_table.hpp.
+        # never a handle. See the rvk_sync_* fields on RealGl.
         out.append(f"    std::uint64_t {name}_token = 0;")
         out.append(f"    if (!rvk_r.read_pod({name}_token)) return false;")
         out.append(f"    GLsync {name} = static_cast<GLsync>("
-                   f"::av::glproto::sync_for({name}_token));")
+                   f"(rvk_gl.rvk_sync_for == nullptr ? nullptr : rvk_gl.rvk_sync_for(rvk_gl.rvk_sync_user, {name}_token)));")
         return
     if p.role is Role.OFFSET_ARRAY:
         out.append(f"    const void** {name} = nullptr;")
@@ -1012,7 +1012,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
          "#include <cstddef>", "#include <cstring>\n",
          '#include "gl_protocol_ids.h"',
          '#include "gl_sizes.h"',
-         '#include "proto/gl_sync_table.hpp"\n',
+         '',
          "namespace av::glproto {\n",
          "// How many values the largest state query GL has answers",
          "// with: a four-by-four matrix, and room to spare. A query's",
@@ -1050,7 +1050,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         if cmd.mints_handle:
             # The guest already answered with the token; all that is
             # owed here is the note of which fence it meant.
-            c.append("    ::av::glproto::bind_sync(rvk_token, rvk_ret);")
+            c.append("    if (rvk_gl.rvk_bind_sync != nullptr) { rvk_gl.rvk_bind_sync(rvk_gl.rvk_sync_user, rvk_token, rvk_ret); }")
         if kind == "scalar":
             c.append("    rvk_reply.write_varint(static_cast<std::uint64_t>(rvk_ret));")
         elif kind == "sync" and not cmd.mints_handle:
@@ -1077,7 +1077,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         if cmd.name == "glDeleteSync":
             # The host's object is gone; without this the table keeps a
             # dead entry per fence, and a game makes one a frame.
-            c.append("    ::av::glproto::forget_sync(sync_token);")
+            c.append("    if (rvk_gl.rvk_forget_sync != nullptr) { rvk_gl.rvk_forget_sync(rvk_gl.rvk_sync_user, sync_token); }")
         c.append("    return true;")
         c.append("}")
         c.append("")
@@ -1117,7 +1117,17 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            "    // that names one is refused rather than guessed at.",
            "    std::uint8_t* (*rvk_blob)(void*, std::uint64_t, std::uint64_t)"
            " = nullptr;",
-           "    void* rvk_blob_user = nullptr;"]
+           "    void* rvk_blob_user = nullptr;",
+           "",
+           "    // A guest mints a sync token; the host binds it to whatever",
+           "    // glFenceSync made and looks it up again by the token. Fields",
+           "    // rather than free functions for the reason rvk_blob is one:",
+           "    // a parameterless hook cannot reach one context's state, and",
+           "    // this project has no file-scope place to put it (042).",
+           "    void (*rvk_bind_sync)(void*, std::uint64_t, void*) = nullptr;",
+           "    void* (*rvk_sync_for)(void*, std::uint64_t) = nullptr;",
+           "    void (*rvk_forget_sync)(void*, std::uint64_t) = nullptr;",
+           "    void* rvk_sync_user = nullptr;"]
     for cmd in reg.commands.values():
         params = ", ".join(p.type.cpp() for p in cmd.params) or "void"
         out.append(f"    {cmd.return_type.cpp()} (*{cmd.name})({params}) = nullptr;")
