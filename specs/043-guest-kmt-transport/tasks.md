@@ -53,8 +53,8 @@ description: "Tasks: the guest transport"
 - [X] T006 [US1] `ContextTable::create` accepts private data of `RvkContextRecord::encoded_size` and builds an `RvkContextBinding` beside the scheduling `Context` (`src/core/scheduling/context_table.cpp`, whose line 21 refuses all private data today)
 - [X] T007 [US1] Write `tests/unit/core/rvk/test_context_blob_publisher.cpp` first: the three named allocations become guest blobs the device can name; an allocation not resident, or not the whole blob, is refused; teardown unpins them
 - [X] T008 [US1] `ContextBlobPublisher` (system class) in `src/core/rvk/context_blob_publisher.{hpp,cpp}`: turns a context's ring, fence and reply aperture allocations into `RESOURCE_CREATE_BLOB` GUEST resources over the pages VidMm handed the driver (`Allocation::map_aperture`), so RVKC can name them by id. The allocations are `AccessedPhysically` in the aperture segment (research §3)
-- [ ] T009 [US1] Write `tests/unit/core/rvk/test_rvk_context_binding.cpp` first: a binding drives `ContextRequestSequence` to CTX_CREATE, three blobs and setup; a setup the device refuses faults the binding; teardown reverses it
-- [ ] T010 [US1] `RvkContextBinding` (object class, KMD) in `src/core/rvk/rvk_context_binding.{hpp,cpp}`: owns the `GuestContext` a dxgkrnl context maps to, and drives its setup and teardown through the publisher's blob ids. PASSIVE for setup, DISPATCH for service (`GuestContext`'s existing annotations)
+- [X] T009 [US1] Write `tests/unit/core/rvk/test_rvk_context_binding.cpp` first: a binding drives `ContextRequestSequence` to CTX_CREATE, three blobs and setup; a setup the device refuses faults the binding; teardown reverses it
+- [X] T010 [US1] `RvkContextBinding` (object class, KMD) in `src/core/rvk/rvk_context_binding.{hpp,cpp}`: owns the `GuestContext` a dxgkrnl context maps to, and drives its setup and teardown through the publisher's blob ids. PASSIVE for setup, DISPATCH for service (`GuestContext`'s existing annotations)
 
 ### Submission and the wait
 
