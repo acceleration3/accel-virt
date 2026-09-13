@@ -1,0 +1,74 @@
+#include "device/probe/probe_result.hpp"
+
+#include "core/support/text_buffer.hpp"
+
+namespace av {
+
+ProbeResult::ProbeResult() : outcome_(Outcome::not_run), reason_(Status::ok), errno_(0), measured_(0u) {}
+
+Status ProbeResult::record_pass(uint64_t measured)
+{
+    if (outcome_ != Outcome::not_run) return Status::invalid_state;
+    outcome_ = Outcome::passed;
+    measured_ = measured;
+    return Status::ok;
+}
+
+Status ProbeResult::record_failure(Status reason, int32_t host_error)
+{
+    if (outcome_ != Outcome::not_run) return Status::invalid_state;
+    outcome_ = Outcome::failed;
+    reason_ = reason;
+    errno_ = host_error;
+    return Status::ok;
+}
+
+bool ProbeResult::ran() const
+{
+    return outcome_ != Outcome::not_run;
+}
+
+bool ProbeResult::passed() const
+{
+    return outcome_ == Outcome::passed;
+}
+
+Status ProbeResult::reason() const
+{
+    return reason_;
+}
+
+int32_t ProbeResult::errno_value() const
+{
+    return errno_;
+}
+
+uint64_t ProbeResult::measured() const
+{
+    return measured_;
+}
+
+void ProbeResult::describe(TextBuffer &line) const
+{
+    if (outcome_ == Outcome::not_run) {
+        line.append("not run");
+        return;
+    }
+    if (outcome_ == Outcome::passed) {
+        line.append("passed, ");
+        line.append_decimal(measured_);
+        return;
+    }
+    line.append("failed, status ");
+    line.append_decimal(static_cast<uint64_t>(reason_));
+    if (errno_ == 0) return;
+    line.append(", host ");
+    if (errno_ < 0) {
+        line.append("-");
+        line.append_decimal(static_cast<uint64_t>(-static_cast<int64_t>(errno_)));
+        return;
+    }
+    line.append_decimal(static_cast<uint64_t>(errno_));
+}
+
+}  // namespace av

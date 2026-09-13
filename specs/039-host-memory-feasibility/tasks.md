@@ -24,8 +24,8 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 
 **Purpose**: the folder the probes live in, and the result type all three share.
 
-- [ ] T001 Write `tests/unit/device/probe/test_probe_result.cpp` first: an unanswered result is `not_run` and not `passed`; `record_pass(bytes)` then `passed()` with `measured()`; `record_failure(reason, host_error)` then `reason()` and `errno_value()`; a second answer of either kind is refused with `Status::invalid_state` and leaves the first; `describe(TextBuffer &)` names outcome and reason
-- [ ] T002 Implement `ProbeResult` (object class) in `src/device/probe/probe_result.{hpp,cpp}` with `Outcome{not_run, passed, failed}`, `Status reason_`, `int32_t errno_`, `uint64_t measured_`
+- [X] T001 Write `tests/unit/device/probe/test_probe_result.cpp` first: an unanswered result is `not_run` and not `passed`; `record_pass(bytes)` then `passed()` with `measured()`; `record_failure(reason, host_error)` then `reason()` and `errno_value()`; a second answer of either kind is refused with `Status::invalid_state` and leaves the first; `describe(TextBuffer &)` names outcome and reason
+- [X] T002 Implement `ProbeResult` (object class) in `src/device/probe/probe_result.{hpp,cpp}` with `Outcome{not_run, passed, failed}`, `Status reason_`, `int32_t errno_`, `uint64_t measured_`
 
 **Checkpoint**: the shared result type exists and is exhaustively tested.
 
