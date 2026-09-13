@@ -260,7 +260,8 @@ TEST(allocation_report_to, a_cpu_visible_allocation_is_asked_for_in_host_memory)
 { MockPlatform platform;
   Segments segments(platform);
   segments.offer_host_visible(platform, 64u << 20u);
-  Allocation allocation(platform, segments.segments(), shadow, 0x1000u);
+  const AllocationDescriptor client(AllocationKind::client, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
+  Allocation allocation(platform, segments.segments(), client, 0x1000u);
   DxgkAllocationInfoRecord info = {};
   allocation.report_to(info);
   CHECK_EQ(info.PreferredSegment, av::HostVisibleSegment::segment_id);
@@ -274,7 +275,8 @@ TEST(allocation_report_to, a_cpu_visible_allocation_is_asked_for_in_host_memory)
 TEST(allocation_report_to, without_a_region_the_same_allocation_is_guest_backed)
 { MockPlatform platform;
   Segments segments(platform);
-  Allocation allocation(platform, segments.segments(), shadow, 0x1000u);
+  const AllocationDescriptor client(AllocationKind::client, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
+  Allocation allocation(platform, segments.segments(), client, 0x1000u);
   DxgkAllocationInfoRecord info = {};
   allocation.report_to(info);
   CHECK_EQ(info.PreferredSegment, 2u);   /* VidMm's own system memory */
@@ -364,3 +366,38 @@ TEST(allocation_invariants, an_open_with_no_holder_is_detected)
   CHECK(!allocation.invariants_hold());
   AllocationProbe(allocation).set_opens(1u);
   CHECK_STATUS(allocation.close(), Status::ok); }
+
+/* Windows marks its own standard allocations CPU-visible - a GDI texture, a
+ * staging surface - and the desktop is composed from those. They must stay
+ * where they were: sent to a segment with nowhere to be evicted to and no way
+ * to move bytes out of, composition stops and the primary never gets an
+ * address. A live guest showed exactly that (feature 041). */
+TEST(allocation_report_to, windows_own_cpu_visible_surfaces_stay_out_of_host_memory)
+{ MockPlatform platform;
+  Segments segments(platform);
+  segments.offer_host_visible(platform, 64u << 20u);
+  const AllocationKind windows_own[] = {AllocationKind::shadow, AllocationKind::staging, AllocationKind::gdi};
+  for (const AllocationKind kind : windows_own) {
+      const AllocationDescriptor surface(kind, true, SurfaceLayout(8u, 8u, 21u, 32u), 256u, ScanoutTarget());
+      Allocation allocation(platform, segments.segments(), surface, 0x1000u);
+      DxgkAllocationInfoRecord info = {};
+      allocation.report_to(info);
+      CHECK_EQ(info.PreferredSegment, 3u);   /* VidMm's own, after the two this adapter reports */
+      CHECK_EQ(info.Flags, 1u);              /* still CPU-visible, still guest-backed */
+  } }
+
+/* The transport's own pages go where a process can map them. */
+TEST(allocation_report_to, a_ring_and_a_fence_page_are_asked_for_in_host_memory)
+{ MockPlatform platform;
+  Segments segments(platform);
+  segments.offer_host_visible(platform, 64u << 20u);
+  const AllocationDescriptor transport[] = {
+      AllocationDescriptor(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget()),
+      AllocationDescriptor(AllocationKind::fence_page, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
+  };
+  for (const AllocationDescriptor &descriptor : transport) {
+      Allocation allocation(platform, segments.segments(), descriptor, descriptor.size());
+      DxgkAllocationInfoRecord info = {};
+      allocation.report_to(info);
+      CHECK_EQ(info.PreferredSegment, av::HostVisibleSegment::segment_id);
+  } }

@@ -33,12 +33,23 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * is the one this driver reports, and a primary pinned there arrives as an
      * address with pages behind it. */
     const bool scanned_out = descriptor_.kind() == AllocationKind::shared_primary;
-    /* Memory a process asked to map is the host's, where this adapter has any:
-     * that segment is the only one it supports, so VidMm has one place to put
-     * it and - with no eviction segment - nowhere to move it to. That is what
-     * makes the mapping a process gets the host's memory and not a copy of it
-     * (feature 041, FR-001). */
-    const bool host_visible = !scanned_out && descriptor_.cpu_visible() && segments_.offers_host_visible();
+
+    /* Memory a process asked *us* for is the host's, where this adapter has
+     * any: that segment is the only one it supports, so VidMm has one place to
+     * put it and - with no eviction segment - nowhere to move it to. That is
+     * what makes the mapping a process gets the host's memory and not a copy of
+     * it (feature 041, FR-001).
+     *
+     * Only our own kinds go there. Windows marks its own standard allocations
+     * CPU-visible too - a GDI texture, a staging surface - and those are what
+     * the desktop is composed from: sent to a segment with nowhere to be
+     * evicted to and no way to move bytes out of, composition stops and the
+     * primary never gets an address. A live guest showed exactly that, with the
+     * source hidden and no SetVidPnSourceAddress at all. */
+    const AllocationKind kind = descriptor_.kind();
+    const bool ours = kind == AllocationKind::client || kind == AllocationKind::context_ring ||
+                      kind == AllocationKind::fence_page;
+    const bool host_visible = ours && descriptor_.cpu_visible() && segments_.offers_host_visible();
     uint32_t segment = segments_.system_memory_segment_id();
     if (scanned_out) segment = ApertureSegment::segment_id;
     if (host_visible) segment = HostVisibleSegment::segment_id;
