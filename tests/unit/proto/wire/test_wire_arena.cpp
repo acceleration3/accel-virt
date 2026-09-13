@@ -97,3 +97,20 @@ TEST(wire_arena, characters_come_from_the_same_block)
   std::memcpy(text, "abcd", 5u);
   CHECK_EQ(arena.used(), 5u);
   CHECK(std::strcmp(text, "abcd") == 0); }
+
+/* A decoder reads part of what it is about to write - the generated pNext
+ * codec walks the destination's chain before filling it - so what the arena
+ * hands out has to start at zero rather than at whatever the last frame left. */
+TEST(wire_arena, what_it_hands_out_is_zeroed)
+{ std::uint8_t block[64];
+  std::memset(block, 0xAB, sizeof block);
+  WireArena arena(block, sizeof block);
+  auto *const first = arena.allocate<std::uint64_t>(2u);
+  CHECK(first != nullptr);
+  CHECK_EQ(first[0], 0u);
+  CHECK_EQ(first[1], 0u);
+  first[0] = 0x1122334455667788ull;
+  arena.reset();
+  auto *const again = arena.allocate<std::uint64_t>(2u);
+  CHECK_EQ(again[0], 0u);
+  CHECK(arena.invariants_hold()); }

@@ -271,6 +271,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             if (!r.read_varint(n)) return false;
             if (n > 0) {
                 char* tmp_str = arena.allocate_chars(static_cast<std::size_t>(n));
+                if (tmp_str == nullptr) { return false; }
                 if (!r.read(tmp_str, static_cast<std::size_t>(n))) return false;
                 pLayerName = tmp_str;
             }
@@ -4567,9 +4568,11 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         {
             const std::uint32_t __n_outer = static_cast<std::uint32_t>(infoCount);
             auto** __ptrs = arena.allocate<const VkAccelerationStructureBuildRangeInfoKHR*>(__n_outer);
+            if (__ptrs == nullptr) { return false; }
             for (std::uint32_t __i = 0; __i < __n_outer; ++__i) {
                 const std::uint32_t __n = static_cast<std::uint32_t>(pInfos_storage[__i].geometryCount);
                 auto* __inner = arena.allocate<VkAccelerationStructureBuildRangeInfoKHR>(__n);
+                if (__inner == nullptr) { return false; }
                 for (std::uint32_t __j = 0; __j < __n; ++__j) {
                     if (!deserialize_VkAccelerationStructureBuildRangeInfoKHR(r, &__inner[__j], arena)) return false;
                 }
@@ -4677,9 +4680,11 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         {
             const std::uint32_t __n_outer = static_cast<std::uint32_t>(infoCount);
             auto** __ptrs = arena.allocate<const uint32_t*>(__n_outer);
+            if (__ptrs == nullptr) { return false; }
             for (std::uint32_t __i = 0; __i < __n_outer; ++__i) {
                 const std::uint32_t __n = static_cast<std::uint32_t>(pInfos_storage[__i].geometryCount);
                 auto* __inner = arena.allocate<uint32_t>(__n);
+                if (__inner == nullptr) { return false; }
                 for (std::uint32_t __j = 0; __j < __n; ++__j) {
                     if (!r.read_pod(__inner[__j])) return false;
                 }
@@ -4708,9 +4713,11 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         {
             const std::uint32_t __n_outer = static_cast<std::uint32_t>(infoCount);
             auto** __ptrs = arena.allocate<const VkAccelerationStructureBuildRangeInfoKHR*>(__n_outer);
+            if (__ptrs == nullptr) { return false; }
             for (std::uint32_t __i = 0; __i < __n_outer; ++__i) {
                 const std::uint32_t __n = static_cast<std::uint32_t>(pInfos_storage[__i].geometryCount);
                 auto* __inner = arena.allocate<VkAccelerationStructureBuildRangeInfoKHR>(__n);
+                if (__inner == nullptr) { return false; }
                 for (std::uint32_t __j = 0; __j < __n; ++__j) {
                     if (!deserialize_VkAccelerationStructureBuildRangeInfoKHR(r, &__inner[__j], arena)) return false;
                 }

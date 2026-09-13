@@ -17,6 +17,13 @@ void *WireArena::claim(size_t count, size_t size, size_t alignment)
     const size_t start = used_ + padding;
     if (bytes > capacity_ - start) return nullptr;
     used_ = start + bytes;
+    /* Zeroed, because a decoder reads some of what it is about to write: the
+     * generated pNext codec walks the destination's existing chain to decide
+     * whether to fill a node in place or adopt a new one, and a nested struct
+     * decoded into fresh arena memory would have walked whatever was there.
+     * Found by tests/fuzz/fuzz_generated_decode.cpp on its first run. */
+    for (size_t i = 0u; i < bytes; i++)
+        block_[start + i] = 0u;
     return block_ + start;
 }
 

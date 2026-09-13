@@ -2133,6 +2133,7 @@ inline void serialize_optional_sampler(::av::WireWriter& buf, const VkSampler* p
     if (!r.read_pod(present)) { return false; }
     if (!present) { *out = nullptr; return true; }
     auto* v = arena.allocate<VkSampler>();
+    if (v == nullptr) { return false; }
     if (!deserialize_VkSampler(r, *v)) { return false; }
     *out = v;
     return true;
@@ -2149,6 +2150,7 @@ inline void serialize_optional_image_info(::av::WireWriter& buf, const VkDescrip
     if (!r.read_pod(present)) { return false; }
     if (!present) { *out = nullptr; return true; }
     auto* v = arena.allocate<VkDescriptorImageInfo>();
+    if (v == nullptr) { return false; }
     if (!deserialize_VkDescriptorImageInfo(r, v, arena)) { return false; }
     *out = v;
     return true;
@@ -2203,6 +2205,7 @@ inline void serialize_VkAccelerationStructureBuildGeometryInfoKHR(::av::WireWrit
             out->pGeometries = nullptr;
         } else {
             auto* arr = arena.allocate<VkAccelerationStructureGeometryKHR>(static_cast<std::size_t>(out->geometryCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->geometryCount); ++i) {
                 if (!deserialize_VkAccelerationStructureGeometryKHR(r, &arr[i], arena)) { return false; }
             }
@@ -2513,6 +2516,7 @@ inline void serialize_VkAccelerationStructureTrianglesOpacityMicromapEXT(::av::W
             out->pUsageCounts = nullptr;
         } else {
             auto* arr = arena.allocate<VkMicromapUsageEXT>(static_cast<std::size_t>(out->usageCountsCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->usageCountsCount); ++i) {
                 if (!deserialize_VkMicromapUsageEXT(r, &arr[i], arena)) { return false; }
             }
@@ -2550,6 +2554,7 @@ inline void serialize_VkAccelerationStructureVersionInfoKHR(::av::WireWriter& bu
             out->pVersionData = nullptr;
         } else {
             auto* arr = arena.allocate<uint8_t>(static_cast<std::size_t>(2*VK_UUID_SIZE));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(2*VK_UUID_SIZE); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -2636,6 +2641,7 @@ inline void serialize_VkApplicationInfo(::av::WireWriter& buf, const VkApplicati
             out->pApplicationName = nullptr;
         } else {
             char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
             out->pApplicationName = s;
         }
@@ -2648,6 +2654,7 @@ inline void serialize_VkApplicationInfo(::av::WireWriter& buf, const VkApplicati
             out->pEngineName = nullptr;
         } else {
             char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
             out->pEngineName = s;
         }
@@ -2801,6 +2808,7 @@ inline void serialize_VkAttachmentSampleCountInfoAMD(::av::WireWriter& buf, cons
             out->pColorAttachmentSamples = nullptr;
         } else {
             auto* arr = arena.allocate<VkSampleCountFlagBits>(static_cast<std::size_t>(out->colorAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -2854,6 +2862,7 @@ inline void serialize_VkSampleLocationsInfoEXT(::av::WireWriter& buf, const VkSa
             out->pSampleLocations = nullptr;
         } else {
             auto* arr = arena.allocate<VkSampleLocationEXT>(static_cast<std::size_t>(out->sampleLocationsCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->sampleLocationsCount); ++i) {
                 if (!deserialize_VkSampleLocationEXT(r, &arr[i], arena)) { return false; }
             }
@@ -2902,6 +2911,7 @@ inline void serialize_VkBindBufferMemoryDeviceGroupInfo(::av::WireWriter& buf, c
             out->pDeviceIndices = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->deviceIndexCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->deviceIndexCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -2966,6 +2976,7 @@ inline void serialize_VkBindImageMemoryDeviceGroupInfo(::av::WireWriter& buf, co
             out->pDeviceIndices = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->deviceIndexCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->deviceIndexCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -2980,6 +2991,7 @@ inline void serialize_VkBindImageMemoryDeviceGroupInfo(::av::WireWriter& buf, co
             out->pSplitInstanceBindRegions = nullptr;
         } else {
             auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(out->splitInstanceBindRegionCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->splitInstanceBindRegionCount); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
@@ -3120,6 +3132,7 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
             out->pWaitSemaphores = nullptr;
         } else {
             auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(out->waitSemaphoreCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->waitSemaphoreCount); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
@@ -3134,6 +3147,7 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
             out->pBufferBinds = nullptr;
         } else {
             auto* arr = arena.allocate<VkSparseBufferMemoryBindInfo>(static_cast<std::size_t>(out->bufferBindCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bufferBindCount); ++i) {
                 if (!deserialize_VkSparseBufferMemoryBindInfo(r, &arr[i], arena)) { return false; }
             }
@@ -3148,6 +3162,7 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
             out->pImageOpaqueBinds = nullptr;
         } else {
             auto* arr = arena.allocate<VkSparseImageOpaqueMemoryBindInfo>(static_cast<std::size_t>(out->imageOpaqueBindCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->imageOpaqueBindCount); ++i) {
                 if (!deserialize_VkSparseImageOpaqueMemoryBindInfo(r, &arr[i], arena)) { return false; }
             }
@@ -3162,6 +3177,7 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
             out->pImageBinds = nullptr;
         } else {
             auto* arr = arena.allocate<VkSparseImageMemoryBindInfo>(static_cast<std::size_t>(out->imageBindCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->imageBindCount); ++i) {
                 if (!deserialize_VkSparseImageMemoryBindInfo(r, &arr[i], arena)) { return false; }
             }
@@ -3176,6 +3192,7 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
             out->pSignalSemaphores = nullptr;
         } else {
             auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(out->signalSemaphoreCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->signalSemaphoreCount); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
@@ -3235,6 +3252,7 @@ inline void serialize_VkBlitImageInfo2(::av::WireWriter& buf, const VkBlitImageI
             out->pRegions = nullptr;
         } else {
             auto* arr = arena.allocate<VkImageBlit2>(static_cast<std::size_t>(out->regionCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
                 if (!deserialize_VkImageBlit2(r, &arr[i], arena)) { return false; }
             }
@@ -3312,6 +3330,7 @@ inline void serialize_VkBufferCreateInfo(::av::WireWriter& buf, const VkBufferCr
             out->pQueueFamilyIndices = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->queueFamilyIndexCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->queueFamilyIndexCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -3694,6 +3713,7 @@ inline void serialize_VkCoarseSampleOrderCustomNV(::av::WireWriter& buf, const V
             out->pSampleLocations = nullptr;
         } else {
             auto* arr = arena.allocate<VkCoarseSampleLocationNV>(static_cast<std::size_t>(out->sampleLocationCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->sampleLocationCount); ++i) {
                 if (!deserialize_VkCoarseSampleLocationNV(r, &arr[i], arena)) { return false; }
             }
@@ -3786,6 +3806,7 @@ inline void serialize_VkCommandBufferBeginInfo(::av::WireWriter& buf, const VkCo
             out->pInheritanceInfo = nullptr;
         } else {
             auto* p = arena.allocate<VkCommandBufferInheritanceInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkCommandBufferInheritanceInfo(r, p, arena)) { return false; }
             out->pInheritanceInfo = p;
         }
@@ -3881,6 +3902,7 @@ inline void serialize_VkCommandBufferInheritanceRenderingInfo(::av::WireWriter& 
             out->pColorAttachmentFormats = nullptr;
         } else {
             auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(out->colorAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -3922,6 +3944,7 @@ inline void serialize_VkCommandBufferInheritanceViewportScissorInfoNV(::av::Wire
             out->pViewportDepths = nullptr;
         } else {
             auto* p = arena.allocate<VkViewport>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkViewport(r, p, arena)) { return false; }
             out->pViewportDepths = p;
         }
@@ -4018,6 +4041,7 @@ inline void serialize_VkPipelineShaderStageCreateInfo(::av::WireWriter& buf, con
             out->pName = nullptr;
         } else {
             char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
             out->pName = s;
         }
@@ -4029,6 +4053,7 @@ inline void serialize_VkPipelineShaderStageCreateInfo(::av::WireWriter& buf, con
             out->pSpecializationInfo = nullptr;
         } else {
             auto* p = arena.allocate<VkSpecializationInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkSpecializationInfo(r, p, arena)) { return false; }
             out->pSpecializationInfo = p;
         }
@@ -4177,6 +4202,7 @@ inline void serialize_VkCopyBufferInfo2(::av::WireWriter& buf, const VkCopyBuffe
             out->pRegions = nullptr;
         } else {
             auto* arr = arena.allocate<VkBufferCopy2>(static_cast<std::size_t>(out->regionCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
                 if (!deserialize_VkBufferCopy2(r, &arr[i], arena)) { return false; }
             }
@@ -4219,6 +4245,7 @@ inline void serialize_VkCopyBufferToImageInfo2(::av::WireWriter& buf, const VkCo
             out->pRegions = nullptr;
         } else {
             auto* arr = arena.allocate<VkBufferImageCopy2>(static_cast<std::size_t>(out->regionCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
                 if (!deserialize_VkBufferImageCopy2(r, &arr[i], arena)) { return false; }
             }
@@ -4303,6 +4330,7 @@ inline void serialize_VkCopyImageInfo2(::av::WireWriter& buf, const VkCopyImageI
             out->pRegions = nullptr;
         } else {
             auto* arr = arena.allocate<VkImageCopy2>(static_cast<std::size_t>(out->regionCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
                 if (!deserialize_VkImageCopy2(r, &arr[i], arena)) { return false; }
             }
@@ -4345,6 +4373,7 @@ inline void serialize_VkCopyImageToBufferInfo2(::av::WireWriter& buf, const VkCo
             out->pRegions = nullptr;
         } else {
             auto* arr = arena.allocate<VkBufferImageCopy2>(static_cast<std::size_t>(out->regionCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
                 if (!deserialize_VkBufferImageCopy2(r, &arr[i], arena)) { return false; }
             }
@@ -4391,6 +4420,7 @@ inline void serialize_VkCopyImageToImageInfo(::av::WireWriter& buf, const VkCopy
             out->pRegions = nullptr;
         } else {
             auto* arr = arena.allocate<VkImageCopy2>(static_cast<std::size_t>(out->regionCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
                 if (!deserialize_VkImageCopy2(r, &arr[i], arena)) { return false; }
             }
@@ -4433,6 +4463,7 @@ inline void serialize_VkCopyImageToMemoryInfo(::av::WireWriter& buf, const VkCop
             out->pRegions = nullptr;
         } else {
             auto* arr = arena.allocate<VkImageToMemoryCopy>(static_cast<std::size_t>(out->regionCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
                 if (!deserialize_VkImageToMemoryCopy(r, &arr[i], arena)) { return false; }
             }
@@ -4485,12 +4516,14 @@ inline void serialize_VkCopyMemoryToImageInfo(::av::WireWriter& buf, const VkCop
     if (!r.read_pod(out->dstImageLayout)) { return false; }
     if (!r.read_pod(out->regionCount)) { return false; }
     auto* regions = arena.allocate<VkMemoryToImageCopy>(out->regionCount);
+    if (regions == nullptr) { return false; }
     for (std::uint32_t i = 0; i < out->regionCount; ++i) {
         if (!deserialize_VkMemoryToImageCopy(r, &regions[i], arena)) { return false; }
         std::uint64_t n = 0;
         if (!r.read_varint(n)) { return false; }
         if (n == 0) { regions[i].pHostPointer = nullptr; continue; }
         char* blob = arena.allocate_chars(static_cast<std::size_t>(n));
+        if (blob == nullptr) { return false; }
         if (!r.read(blob, static_cast<std::size_t>(n))) { return false; }
         regions[i].pHostPointer = blob;
     }
@@ -4572,6 +4605,7 @@ inline void serialize_VkDebugUtilsObjectNameInfoEXT(::av::WireWriter& buf, const
             out->pObjectName = nullptr;
         } else {
             char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
             out->pObjectName = s;
         }
@@ -4672,6 +4706,7 @@ inline void serialize_VkDependencyInfo(::av::WireWriter& buf, const VkDependency
             out->pMemoryBarriers = nullptr;
         } else {
             auto* arr = arena.allocate<VkMemoryBarrier2>(static_cast<std::size_t>(out->memoryBarrierCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->memoryBarrierCount); ++i) {
                 if (!deserialize_VkMemoryBarrier2(r, &arr[i], arena)) { return false; }
             }
@@ -4686,6 +4721,7 @@ inline void serialize_VkDependencyInfo(::av::WireWriter& buf, const VkDependency
             out->pBufferMemoryBarriers = nullptr;
         } else {
             auto* arr = arena.allocate<VkBufferMemoryBarrier2>(static_cast<std::size_t>(out->bufferMemoryBarrierCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bufferMemoryBarrierCount); ++i) {
                 if (!deserialize_VkBufferMemoryBarrier2(r, &arr[i], arena)) { return false; }
             }
@@ -4700,6 +4736,7 @@ inline void serialize_VkDependencyInfo(::av::WireWriter& buf, const VkDependency
             out->pImageMemoryBarriers = nullptr;
         } else {
             auto* arr = arena.allocate<VkImageMemoryBarrier2>(static_cast<std::size_t>(out->imageMemoryBarrierCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->imageMemoryBarrierCount); ++i) {
                 if (!deserialize_VkImageMemoryBarrier2(r, &arr[i], arena)) { return false; }
             }
@@ -4796,6 +4833,7 @@ inline void serialize_VkDescriptorPoolCreateInfo(::av::WireWriter& buf, const Vk
             out->pPoolSizes = nullptr;
         } else {
             auto* arr = arena.allocate<VkDescriptorPoolSize>(static_cast<std::size_t>(out->poolSizeCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->poolSizeCount); ++i) {
                 if (!deserialize_VkDescriptorPoolSize(r, &arr[i], arena)) { return false; }
             }
@@ -4860,6 +4898,7 @@ inline void serialize_VkDescriptorSetAllocateInfo(::av::WireWriter& buf, const V
             out->pSetLayouts = nullptr;
         } else {
             auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<std::size_t>(out->descriptorSetCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorSetCount); ++i) {
                 if (!deserialize_VkDescriptorSetLayout(r, arr[i])) { return false; }
             }
@@ -4898,6 +4937,7 @@ inline void serialize_VkDescriptorSetLayoutBinding(::av::WireWriter& buf, const 
             out->pImmutableSamplers = nullptr;
         } else {
             auto* arr = arena.allocate<VkSampler>(static_cast<std::size_t>(out->descriptorCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorCount); ++i) {
                 if (!deserialize_VkSampler(r, arr[i])) { return false; }
             }
@@ -4934,6 +4974,7 @@ inline void serialize_VkDescriptorSetLayoutBindingFlagsCreateInfo(::av::WireWrit
             out->pBindingFlags = nullptr;
         } else {
             auto* arr = arena.allocate<VkDescriptorBindingFlags>(static_cast<std::size_t>(out->bindingCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bindingCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -4972,6 +5013,7 @@ inline void serialize_VkDescriptorSetLayoutCreateInfo(::av::WireWriter& buf, con
             out->pBindings = nullptr;
         } else {
             auto* arr = arena.allocate<VkDescriptorSetLayoutBinding>(static_cast<std::size_t>(out->bindingCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bindingCount); ++i) {
                 if (!deserialize_VkDescriptorSetLayoutBinding(r, &arr[i], arena)) { return false; }
             }
@@ -5022,6 +5064,7 @@ inline void serialize_VkDescriptorSetVariableDescriptorCountAllocateInfo(::av::W
             out->pDescriptorCounts = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->descriptorSetCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorSetCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -5079,6 +5122,7 @@ inline void serialize_VkDescriptorUpdateTemplateCreateInfo(::av::WireWriter& buf
             out->pDescriptorUpdateEntries = nullptr;
         } else {
             auto* arr = arena.allocate<VkDescriptorUpdateTemplateEntry>(static_cast<std::size_t>(out->descriptorUpdateEntryCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorUpdateEntryCount); ++i) {
                 if (!deserialize_VkDescriptorUpdateTemplateEntry(r, &arr[i], arena)) { return false; }
             }
@@ -5146,6 +5190,7 @@ inline void serialize_VkDeviceBufferMemoryRequirements(::av::WireWriter& buf, co
             out->pCreateInfo = nullptr;
         } else {
             auto* p = arena.allocate<VkBufferCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkBufferCreateInfo(r, p, arena)) { return false; }
             out->pCreateInfo = p;
         }
@@ -5225,6 +5270,7 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
             out->pQueueCreateInfos = nullptr;
         } else {
             auto* arr = arena.allocate<VkDeviceQueueCreateInfo>(static_cast<std::size_t>(out->queueCreateInfoCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->queueCreateInfoCount); ++i) {
                 if (!deserialize_VkDeviceQueueCreateInfo(r, &arr[i], arena)) { return false; }
             }
@@ -5239,6 +5285,7 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
             out->ppEnabledLayerNames = nullptr;
         } else {
             auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(out->enabledLayerCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->enabledLayerCount); ++i) {
                 std::uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
@@ -5246,6 +5293,7 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
                     arr[i] = nullptr;
                 } else {
                     char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+                    if (s == nullptr) { return false; }
                     if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
                     arr[i] = s;
                 }
@@ -5261,6 +5309,7 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
             out->ppEnabledExtensionNames = nullptr;
         } else {
             auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(out->enabledExtensionCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->enabledExtensionCount); ++i) {
                 std::uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
@@ -5268,6 +5317,7 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
                     arr[i] = nullptr;
                 } else {
                     char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+                    if (s == nullptr) { return false; }
                     if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
                     arr[i] = s;
                 }
@@ -5282,6 +5332,7 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
             out->pEnabledFeatures = nullptr;
         } else {
             auto* p = arena.allocate<VkPhysicalDeviceFeatures>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPhysicalDeviceFeatures(r, p, arena)) { return false; }
             out->pEnabledFeatures = p;
         }
@@ -5380,6 +5431,7 @@ inline void serialize_VkDeviceGroupDeviceCreateInfo(::av::WireWriter& buf, const
             out->pPhysicalDevices = nullptr;
         } else {
             auto* arr = arena.allocate<VkPhysicalDevice>(static_cast<std::size_t>(out->physicalDeviceCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->physicalDeviceCount); ++i) {
                 if (!deserialize_VkPhysicalDevice(r, arr[i])) { return false; }
             }
@@ -5434,6 +5486,7 @@ inline void serialize_VkDeviceGroupRenderPassBeginInfo(::av::WireWriter& buf, co
             out->pDeviceRenderAreas = nullptr;
         } else {
             auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(out->deviceRenderAreaCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->deviceRenderAreaCount); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
@@ -5490,6 +5543,7 @@ inline void serialize_VkDeviceGroupSubmitInfo(::av::WireWriter& buf, const VkDev
             out->pWaitSemaphoreDeviceIndices = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->waitSemaphoreCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->waitSemaphoreCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -5504,6 +5558,7 @@ inline void serialize_VkDeviceGroupSubmitInfo(::av::WireWriter& buf, const VkDev
             out->pCommandBufferDeviceMasks = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->commandBufferCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->commandBufferCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -5518,6 +5573,7 @@ inline void serialize_VkDeviceGroupSubmitInfo(::av::WireWriter& buf, const VkDev
             out->pSignalSemaphoreDeviceIndices = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->signalSemaphoreCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->signalSemaphoreCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -5553,6 +5609,7 @@ inline void serialize_VkDeviceImageMemoryRequirements(::av::WireWriter& buf, con
             out->pCreateInfo = nullptr;
         } else {
             auto* p = arena.allocate<VkImageCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkImageCreateInfo(r, p, arena)) { return false; }
             out->pCreateInfo = p;
         }
@@ -5595,6 +5652,7 @@ inline void serialize_VkDeviceImageSubresourceInfo(::av::WireWriter& buf, const 
             out->pCreateInfo = nullptr;
         } else {
             auto* p = arena.allocate<VkImageCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkImageCreateInfo(r, p, arena)) { return false; }
             out->pCreateInfo = p;
         }
@@ -5606,6 +5664,7 @@ inline void serialize_VkDeviceImageSubresourceInfo(::av::WireWriter& buf, const 
             out->pSubresource = nullptr;
         } else {
             auto* p = arena.allocate<VkImageSubresource2>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkImageSubresource2(r, p, arena)) { return false; }
             out->pSubresource = p;
         }
@@ -5700,6 +5759,7 @@ inline void serialize_VkDeviceQueueCreateInfo(::av::WireWriter& buf, const VkDev
             out->pQueuePriorities = nullptr;
         } else {
             auto* arr = arena.allocate<float>(static_cast<std::size_t>(out->queueCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->queueCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -5800,6 +5860,7 @@ inline void serialize_VkDirectDriverLoadingListLUNARG(::av::WireWriter& buf, con
             out->pDrivers = nullptr;
         } else {
             auto* arr = arena.allocate<VkDirectDriverLoadingInfoLUNARG>(static_cast<std::size_t>(out->driverCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->driverCount); ++i) {
                 if (!deserialize_VkDirectDriverLoadingInfoLUNARG(r, &arr[i], arena)) { return false; }
             }
@@ -5864,6 +5925,7 @@ inline void serialize_VkDrmFormatModifierPropertiesList2EXT(::av::WireWriter& bu
             out->pDrmFormatModifierProperties = nullptr;
         } else {
             auto* arr = arena.allocate<VkDrmFormatModifierProperties2EXT>(static_cast<std::size_t>(out->drmFormatModifierCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->drmFormatModifierCount); ++i) {
                 if (!deserialize_VkDrmFormatModifierProperties2EXT(r, &arr[i], arena)) { return false; }
             }
@@ -5900,6 +5962,7 @@ inline void serialize_VkDrmFormatModifierPropertiesListEXT(::av::WireWriter& buf
             out->pDrmFormatModifierProperties = nullptr;
         } else {
             auto* arr = arena.allocate<VkDrmFormatModifierPropertiesEXT>(static_cast<std::size_t>(out->drmFormatModifierCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->drmFormatModifierCount); ++i) {
                 if (!deserialize_VkDrmFormatModifierPropertiesEXT(r, &arr[i], arena)) { return false; }
             }
@@ -6243,6 +6306,7 @@ inline void serialize_VkFragmentShadingRateAttachmentInfoKHR(::av::WireWriter& b
             out->pFragmentShadingRateAttachment = nullptr;
         } else {
             auto* p = arena.allocate<VkAttachmentReference2>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkAttachmentReference2(r, p, arena)) { return false; }
             out->pFragmentShadingRateAttachment = p;
         }
@@ -6301,6 +6365,7 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
             out->pImages = nullptr;
         } else {
             auto* arr = arena.allocate<VkImage>(static_cast<std::size_t>(out->imageCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->imageCount); ++i) {
                 if (!deserialize_VkImage(r, arr[i])) { return false; }
             }
@@ -6315,6 +6380,7 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
             out->pBuffers = nullptr;
         } else {
             auto* arr = arena.allocate<VkBuffer>(static_cast<std::size_t>(out->bufferCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bufferCount); ++i) {
                 if (!deserialize_VkBuffer(r, arr[i])) { return false; }
             }
@@ -6334,6 +6400,7 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
             out->pTag = nullptr;
         } else {
             char* blob = arena.allocate_chars(static_cast<std::size_t>(out->tagSize));
+            if (blob == nullptr) { return false; }
             if (!r.read(blob, static_cast<std::size_t>(out->tagSize))) { return false; }
             out->pTag = blob;
         }
@@ -6378,6 +6445,7 @@ inline void serialize_VkFramebufferAttachmentImageInfo(::av::WireWriter& buf, co
             out->pViewFormats = nullptr;
         } else {
             auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(out->viewFormatCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->viewFormatCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -6414,6 +6482,7 @@ inline void serialize_VkFramebufferAttachmentsCreateInfo(::av::WireWriter& buf, 
             out->pAttachmentImageInfos = nullptr;
         } else {
             auto* arr = arena.allocate<VkFramebufferAttachmentImageInfo>(static_cast<std::size_t>(out->attachmentImageInfoCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentImageInfoCount); ++i) {
                 if (!deserialize_VkFramebufferAttachmentImageInfo(r, &arr[i], arena)) { return false; }
             }
@@ -6457,6 +6526,7 @@ inline void serialize_VkFramebufferCreateInfo(::av::WireWriter& buf, const VkFra
             out->pAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<VkImageView>(static_cast<std::size_t>(out->attachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentCount); ++i) {
                 if (!deserialize_VkImageView(r, arr[i])) { return false; }
             }
@@ -6584,6 +6654,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
             out->pStages = nullptr;
         } else {
             auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<std::size_t>(out->stageCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->stageCount); ++i) {
                 if (!deserialize_VkPipelineShaderStageCreateInfo(r, &arr[i], arena)) { return false; }
             }
@@ -6597,6 +6668,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
             out->pVertexInputState = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineVertexInputStateCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineVertexInputStateCreateInfo(r, p, arena)) { return false; }
             out->pVertexInputState = p;
         }
@@ -6608,6 +6680,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
             out->pInputAssemblyState = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineInputAssemblyStateCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineInputAssemblyStateCreateInfo(r, p, arena)) { return false; }
             out->pInputAssemblyState = p;
         }
@@ -6619,6 +6692,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
             out->pTessellationState = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineTessellationStateCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineTessellationStateCreateInfo(r, p, arena)) { return false; }
             out->pTessellationState = p;
         }
@@ -6630,6 +6704,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
             out->pViewportState = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineViewportStateCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineViewportStateCreateInfo(r, p, arena)) { return false; }
             out->pViewportState = p;
         }
@@ -6641,6 +6716,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
             out->pRasterizationState = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineRasterizationStateCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineRasterizationStateCreateInfo(r, p, arena)) { return false; }
             out->pRasterizationState = p;
         }
@@ -6652,6 +6728,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
             out->pMultisampleState = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineMultisampleStateCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineMultisampleStateCreateInfo(r, p, arena)) { return false; }
             out->pMultisampleState = p;
         }
@@ -6663,6 +6740,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
             out->pDepthStencilState = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineDepthStencilStateCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineDepthStencilStateCreateInfo(r, p, arena)) { return false; }
             out->pDepthStencilState = p;
         }
@@ -6674,6 +6752,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
             out->pColorBlendState = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineColorBlendStateCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineColorBlendStateCreateInfo(r, p, arena)) { return false; }
             out->pColorBlendState = p;
         }
@@ -6685,6 +6764,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
             out->pDynamicState = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineDynamicStateCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineDynamicStateCreateInfo(r, p, arena)) { return false; }
             out->pDynamicState = p;
         }
@@ -6748,6 +6828,7 @@ inline void serialize_VkGraphicsPipelineShaderGroupsCreateInfoNV(::av::WireWrite
             out->pGroups = nullptr;
         } else {
             auto* arr = arena.allocate<VkGraphicsShaderGroupCreateInfoNV>(static_cast<std::size_t>(out->groupCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->groupCount); ++i) {
                 if (!deserialize_VkGraphicsShaderGroupCreateInfoNV(r, &arr[i], arena)) { return false; }
             }
@@ -6762,6 +6843,7 @@ inline void serialize_VkGraphicsPipelineShaderGroupsCreateInfoNV(::av::WireWrite
             out->pPipelines = nullptr;
         } else {
             auto* arr = arena.allocate<VkPipeline>(static_cast<std::size_t>(out->pipelineCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->pipelineCount); ++i) {
                 if (!deserialize_VkPipeline(r, arr[i])) { return false; }
             }
@@ -6816,6 +6898,7 @@ inline void serialize_VkGraphicsShaderGroupCreateInfoNV(::av::WireWriter& buf, c
             out->pStages = nullptr;
         } else {
             auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<std::size_t>(out->stageCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->stageCount); ++i) {
                 if (!deserialize_VkPipelineShaderStageCreateInfo(r, &arr[i], arena)) { return false; }
             }
@@ -6829,6 +6912,7 @@ inline void serialize_VkGraphicsShaderGroupCreateInfoNV(::av::WireWriter& buf, c
             out->pVertexInputState = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineVertexInputStateCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineVertexInputStateCreateInfo(r, p, arena)) { return false; }
             out->pVertexInputState = p;
         }
@@ -6840,6 +6924,7 @@ inline void serialize_VkGraphicsShaderGroupCreateInfoNV(::av::WireWriter& buf, c
             out->pTessellationState = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineTessellationStateCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineTessellationStateCreateInfo(r, p, arena)) { return false; }
             out->pTessellationState = p;
         }
@@ -6980,6 +7065,7 @@ inline void serialize_VkImageCompressionControlEXT(::av::WireWriter& buf, const 
             out->pFixedRateFlags = nullptr;
         } else {
             auto* arr = arena.allocate<VkImageCompressionFixedRateFlagsEXT>(static_cast<std::size_t>(out->compressionControlPlaneCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->compressionControlPlaneCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -7093,6 +7179,7 @@ inline void serialize_VkImageCreateInfo(::av::WireWriter& buf, const VkImageCrea
             out->pQueueFamilyIndices = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->queueFamilyIndexCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->queueFamilyIndexCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -7132,6 +7219,7 @@ inline void serialize_VkImageDrmFormatModifierExplicitCreateInfoEXT(::av::WireWr
             out->pPlaneLayouts = nullptr;
         } else {
             auto* arr = arena.allocate<VkSubresourceLayout>(static_cast<std::size_t>(out->drmFormatModifierPlaneCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->drmFormatModifierPlaneCount); ++i) {
                 if (!deserialize_VkSubresourceLayout(r, &arr[i], arena)) { return false; }
             }
@@ -7168,6 +7256,7 @@ inline void serialize_VkImageDrmFormatModifierListCreateInfoEXT(::av::WireWriter
             out->pDrmFormatModifiers = nullptr;
         } else {
             auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(out->drmFormatModifierCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->drmFormatModifierCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -7204,6 +7293,7 @@ inline void serialize_VkImageFormatListCreateInfo(::av::WireWriter& buf, const V
             out->pViewFormats = nullptr;
         } else {
             auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(out->viewFormatCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->viewFormatCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -7718,6 +7808,7 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
             out->pApplicationInfo = nullptr;
         } else {
             auto* p = arena.allocate<VkApplicationInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkApplicationInfo(r, p, arena)) { return false; }
             out->pApplicationInfo = p;
         }
@@ -7730,6 +7821,7 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
             out->ppEnabledLayerNames = nullptr;
         } else {
             auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(out->enabledLayerCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->enabledLayerCount); ++i) {
                 std::uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
@@ -7737,6 +7829,7 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
                     arr[i] = nullptr;
                 } else {
                     char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+                    if (s == nullptr) { return false; }
                     if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
                     arr[i] = s;
                 }
@@ -7752,6 +7845,7 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
             out->ppEnabledExtensionNames = nullptr;
         } else {
             auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(out->enabledExtensionCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->enabledExtensionCount); ++i) {
                 std::uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
@@ -7759,6 +7853,7 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
                     arr[i] = nullptr;
                 } else {
                     char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+                    if (s == nullptr) { return false; }
                     if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
                     arr[i] = s;
                 }
@@ -7840,6 +7935,7 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
             out->pLayerName = nullptr;
         } else {
             char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
             out->pLayerName = s;
         }
@@ -7851,6 +7947,7 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
             out->pSettingName = nullptr;
         } else {
             char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
             out->pSettingName = s;
         }
@@ -7864,6 +7961,7 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
             out->pValues = nullptr;
         } else {
             char* blob = arena.allocate_chars(static_cast<std::size_t>(out->valueCount));
+            if (blob == nullptr) { return false; }
             if (!r.read(blob, static_cast<std::size_t>(out->valueCount))) { return false; }
             out->pValues = blob;
         }
@@ -7898,6 +7996,7 @@ inline void serialize_VkLayerSettingsCreateInfoEXT(::av::WireWriter& buf, const 
             out->pSettings = nullptr;
         } else {
             auto* arr = arena.allocate<VkLayerSettingEXT>(static_cast<std::size_t>(out->settingCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->settingCount); ++i) {
                 if (!deserialize_VkLayerSettingEXT(r, &arr[i], arena)) { return false; }
             }
@@ -8316,6 +8415,7 @@ inline void serialize_VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM(::av:
             out->pPerViewRenderAreas = nullptr;
         } else {
             auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(out->perViewRenderAreaCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->perViewRenderAreaCount); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
@@ -8352,6 +8452,7 @@ inline void serialize_VkMutableDescriptorTypeCreateInfoEXT(::av::WireWriter& buf
             out->pMutableDescriptorTypeLists = nullptr;
         } else {
             auto* arr = arena.allocate<VkMutableDescriptorTypeListEXT>(static_cast<std::size_t>(out->mutableDescriptorTypeListCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->mutableDescriptorTypeListCount); ++i) {
                 if (!deserialize_VkMutableDescriptorTypeListEXT(r, &arr[i], arena)) { return false; }
             }
@@ -8384,6 +8485,7 @@ inline void serialize_VkMutableDescriptorTypeListEXT(::av::WireWriter& buf, cons
             out->pDescriptorTypes = nullptr;
         } else {
             auto* arr = arena.allocate<VkDescriptorType>(static_cast<std::size_t>(out->descriptorTypeCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorTypeCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -10738,6 +10840,7 @@ inline void serialize_VkPhysicalDeviceHostImageCopyProperties(::av::WireWriter& 
             out->pCopySrcLayouts = nullptr;
         } else {
             auto* arr = arena.allocate<VkImageLayout>(static_cast<std::size_t>(out->copySrcLayoutCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->copySrcLayoutCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -10752,6 +10855,7 @@ inline void serialize_VkPhysicalDeviceHostImageCopyProperties(::av::WireWriter& 
             out->pCopyDstLayouts = nullptr;
         } else {
             auto* arr = arena.allocate<VkImageLayout>(static_cast<std::size_t>(out->copyDstLayoutCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->copyDstLayoutCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -10902,6 +11006,7 @@ inline void serialize_VkPhysicalDeviceImageDrmFormatModifierInfoEXT(::av::WireWr
             out->pQueueFamilyIndices = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->queueFamilyIndexCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->queueFamilyIndexCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -11196,6 +11301,7 @@ inline void serialize_VkPhysicalDeviceLayeredApiPropertiesListKHR(::av::WireWrit
             out->pLayeredApis = nullptr;
         } else {
             auto* arr = arena.allocate<VkPhysicalDeviceLayeredApiPropertiesKHR>(static_cast<std::size_t>(out->layeredApiCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->layeredApiCount); ++i) {
                 if (!deserialize_VkPhysicalDeviceLayeredApiPropertiesKHR(r, &arr[i], arena)) { return false; }
             }
@@ -14968,6 +15074,7 @@ inline void serialize_VkPipelineBinaryCreateInfoKHR(::av::WireWriter& buf, const
             out->pKeysAndDataInfo = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineBinaryKeysAndDataKHR>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineBinaryKeysAndDataKHR(r, p, arena)) { return false; }
             out->pKeysAndDataInfo = p;
         }
@@ -14980,6 +15087,7 @@ inline void serialize_VkPipelineBinaryCreateInfoKHR(::av::WireWriter& buf, const
             out->pPipelineCreateInfo = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineCreateInfoKHR>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineCreateInfoKHR(r, p, arena)) { return false; }
             out->pPipelineCreateInfo = p;
         }
@@ -15026,6 +15134,7 @@ inline void serialize_VkPipelineBinaryDataKHR(::av::WireWriter& buf, const VkPip
             out->pData = nullptr;
         } else {
             char* blob = arena.allocate_chars(static_cast<std::size_t>(out->dataSize));
+            if (blob == nullptr) { return false; }
             if (!r.read(blob, static_cast<std::size_t>(out->dataSize))) { return false; }
             out->pData = blob;
         }
@@ -15060,6 +15169,7 @@ inline void serialize_VkPipelineBinaryHandlesInfoKHR(::av::WireWriter& buf, cons
             out->pPipelineBinaries = nullptr;
         } else {
             auto* arr = arena.allocate<VkPipelineBinaryKHR>(static_cast<std::size_t>(out->pipelineBinaryCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->pipelineBinaryCount); ++i) {
                 if (!deserialize_VkPipelineBinaryKHR(r, arr[i])) { return false; }
             }
@@ -15096,6 +15206,7 @@ inline void serialize_VkPipelineBinaryInfoKHR(::av::WireWriter& buf, const VkPip
             out->pPipelineBinaries = nullptr;
         } else {
             auto* arr = arena.allocate<VkPipelineBinaryKHR>(static_cast<std::size_t>(out->binaryCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->binaryCount); ++i) {
                 if (!deserialize_VkPipelineBinaryKHR(r, arr[i])) { return false; }
             }
@@ -15153,6 +15264,7 @@ inline void serialize_VkPipelineBinaryKeysAndDataKHR(::av::WireWriter& buf, cons
             out->pPipelineBinaryKeys = nullptr;
         } else {
             auto* arr = arena.allocate<VkPipelineBinaryKeyKHR>(static_cast<std::size_t>(out->binaryCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->binaryCount); ++i) {
                 if (!deserialize_VkPipelineBinaryKeyKHR(r, &arr[i], arena)) { return false; }
             }
@@ -15166,6 +15278,7 @@ inline void serialize_VkPipelineBinaryKeysAndDataKHR(::av::WireWriter& buf, cons
             out->pPipelineBinaryData = nullptr;
         } else {
             auto* arr = arena.allocate<VkPipelineBinaryDataKHR>(static_cast<std::size_t>(out->binaryCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->binaryCount); ++i) {
                 if (!deserialize_VkPipelineBinaryDataKHR(r, &arr[i], arena)) { return false; }
             }
@@ -15206,6 +15319,7 @@ inline void serialize_VkPipelineCacheCreateInfo(::av::WireWriter& buf, const VkP
             out->pInitialData = nullptr;
         } else {
             char* blob = arena.allocate_chars(static_cast<std::size_t>(out->initialDataSize));
+            if (blob == nullptr) { return false; }
             if (!r.read(blob, static_cast<std::size_t>(out->initialDataSize))) { return false; }
             out->pInitialData = blob;
         }
@@ -15289,6 +15403,7 @@ inline void serialize_VkPipelineColorBlendStateCreateInfo(::av::WireWriter& buf,
             out->pAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<VkPipelineColorBlendAttachmentState>(static_cast<std::size_t>(out->attachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentCount); ++i) {
                 if (!deserialize_VkPipelineColorBlendAttachmentState(r, &arr[i], arena)) { return false; }
             }
@@ -15326,6 +15441,7 @@ inline void serialize_VkPipelineColorWriteCreateInfoEXT(::av::WireWriter& buf, c
             out->pColorWriteEnables = nullptr;
         } else {
             auto* arr = arena.allocate<VkBool32>(static_cast<std::size_t>(out->attachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -15382,6 +15498,7 @@ inline void serialize_VkPipelineCoverageModulationStateCreateInfoNV(::av::WireWr
             out->pCoverageModulationTable = nullptr;
         } else {
             auto* arr = arena.allocate<float>(static_cast<std::size_t>(out->coverageModulationTableCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->coverageModulationTableCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -15498,6 +15615,7 @@ inline void serialize_VkPipelineCreationFeedbackCreateInfo(::av::WireWriter& buf
             out->pPipelineCreationFeedback = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineCreationFeedback>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineCreationFeedback(r, p, arena)) { return false; }
             out->pPipelineCreationFeedback = p;
         }
@@ -15510,6 +15628,7 @@ inline void serialize_VkPipelineCreationFeedbackCreateInfo(::av::WireWriter& buf
             out->pPipelineStageCreationFeedbacks = nullptr;
         } else {
             auto* arr = arena.allocate<VkPipelineCreationFeedback>(static_cast<std::size_t>(out->pipelineStageCreationFeedbackCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->pipelineStageCreationFeedbackCount); ++i) {
                 if (!deserialize_VkPipelineCreationFeedback(r, &arr[i], arena)) { return false; }
             }
@@ -15604,6 +15723,7 @@ inline void serialize_VkPipelineDiscardRectangleStateCreateInfoEXT(::av::WireWri
             out->pDiscardRectangles = nullptr;
         } else {
             auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(out->discardRectangleCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->discardRectangleCount); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
@@ -15642,6 +15762,7 @@ inline void serialize_VkPipelineDynamicStateCreateInfo(::av::WireWriter& buf, co
             out->pDynamicStates = nullptr;
         } else {
             auto* arr = arena.allocate<VkDynamicState>(static_cast<std::size_t>(out->dynamicStateCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->dynamicStateCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -15742,6 +15863,7 @@ inline void serialize_VkPipelineLayoutCreateInfo(::av::WireWriter& buf, const Vk
             out->pSetLayouts = nullptr;
         } else {
             auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<std::size_t>(out->setLayoutCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->setLayoutCount); ++i) {
                 if (!deserialize_VkDescriptorSetLayout(r, arr[i])) { return false; }
             }
@@ -15756,6 +15878,7 @@ inline void serialize_VkPipelineLayoutCreateInfo(::av::WireWriter& buf, const Vk
             out->pPushConstantRanges = nullptr;
         } else {
             auto* arr = arena.allocate<VkPushConstantRange>(static_cast<std::size_t>(out->pushConstantRangeCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->pushConstantRangeCount); ++i) {
                 if (!deserialize_VkPushConstantRange(r, &arr[i], arena)) { return false; }
             }
@@ -15792,6 +15915,7 @@ inline void serialize_VkPipelineLibraryCreateInfoKHR(::av::WireWriter& buf, cons
             out->pLibraries = nullptr;
         } else {
             auto* arr = arena.allocate<VkPipeline>(static_cast<std::size_t>(out->libraryCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->libraryCount); ++i) {
                 if (!deserialize_VkPipeline(r, arr[i])) { return false; }
             }
@@ -15836,6 +15960,7 @@ inline void serialize_VkPipelineMultisampleStateCreateInfo(::av::WireWriter& buf
             out->pSampleMask = nullptr;
         } else {
             auto* arr = arena.allocate<VkSampleMask>(static_cast<std::size_t>((out->rasterizationSamples + 31) / 32));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>((out->rasterizationSamples + 31) / 32); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -16010,6 +16135,7 @@ inline void serialize_VkPipelineRenderingCreateInfo(::av::WireWriter& buf, const
             out->pColorAttachmentFormats = nullptr;
         } else {
             auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(out->colorAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -16098,6 +16224,7 @@ inline void serialize_VkPipelineShaderStageModuleIdentifierCreateInfoEXT(::av::W
             out->pIdentifier = nullptr;
         } else {
             auto* arr = arena.allocate<uint8_t>(static_cast<std::size_t>(out->identifierSize));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->identifierSize); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -16178,6 +16305,7 @@ inline void serialize_VkPipelineVertexInputDivisorStateCreateInfo(::av::WireWrit
             out->pVertexBindingDivisors = nullptr;
         } else {
             auto* arr = arena.allocate<VkVertexInputBindingDivisorDescription>(static_cast<std::size_t>(out->vertexBindingDivisorCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->vertexBindingDivisorCount); ++i) {
                 if (!deserialize_VkVertexInputBindingDivisorDescription(r, &arr[i], arena)) { return false; }
             }
@@ -16226,6 +16354,7 @@ inline void serialize_VkPipelineVertexInputStateCreateInfo(::av::WireWriter& buf
             out->pVertexBindingDescriptions = nullptr;
         } else {
             auto* arr = arena.allocate<VkVertexInputBindingDescription>(static_cast<std::size_t>(out->vertexBindingDescriptionCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->vertexBindingDescriptionCount); ++i) {
                 if (!deserialize_VkVertexInputBindingDescription(r, &arr[i], arena)) { return false; }
             }
@@ -16240,6 +16369,7 @@ inline void serialize_VkPipelineVertexInputStateCreateInfo(::av::WireWriter& buf
             out->pVertexAttributeDescriptions = nullptr;
         } else {
             auto* arr = arena.allocate<VkVertexInputAttributeDescription>(static_cast<std::size_t>(out->vertexAttributeDescriptionCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->vertexAttributeDescriptionCount); ++i) {
                 if (!deserialize_VkVertexInputAttributeDescription(r, &arr[i], arena)) { return false; }
             }
@@ -16278,6 +16408,7 @@ inline void serialize_VkPipelineViewportCoarseSampleOrderStateCreateInfoNV(::av:
             out->pCustomSampleOrders = nullptr;
         } else {
             auto* arr = arena.allocate<VkCoarseSampleOrderCustomNV>(static_cast<std::size_t>(out->customSampleOrderCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->customSampleOrderCount); ++i) {
                 if (!deserialize_VkCoarseSampleOrderCustomNV(r, &arr[i], arena)) { return false; }
             }
@@ -16314,6 +16445,7 @@ inline void serialize_VkPipelineViewportDepthClampControlCreateInfoEXT(::av::Wir
             out->pDepthClampRange = nullptr;
         } else {
             auto* p = arena.allocate<VkDepthClampRangeEXT>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkDepthClampRangeEXT(r, p, arena)) { return false; }
             out->pDepthClampRange = p;
         }
@@ -16362,6 +16494,7 @@ inline void serialize_VkPipelineViewportExclusiveScissorStateCreateInfoNV(::av::
             out->pExclusiveScissors = nullptr;
         } else {
             auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(out->exclusiveScissorCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->exclusiveScissorCount); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
@@ -16400,6 +16533,7 @@ inline void serialize_VkPipelineViewportShadingRateImageStateCreateInfoNV(::av::
             out->pShadingRatePalettes = nullptr;
         } else {
             auto* arr = arena.allocate<VkShadingRatePaletteNV>(static_cast<std::size_t>(out->viewportCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->viewportCount); ++i) {
                 if (!deserialize_VkShadingRatePaletteNV(r, &arr[i], arena)) { return false; }
             }
@@ -16448,6 +16582,7 @@ inline void serialize_VkPipelineViewportStateCreateInfo(::av::WireWriter& buf, c
             out->pViewports = nullptr;
         } else {
             auto* arr = arena.allocate<VkViewport>(static_cast<std::size_t>(out->viewportCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->viewportCount); ++i) {
                 if (!deserialize_VkViewport(r, &arr[i], arena)) { return false; }
             }
@@ -16462,6 +16597,7 @@ inline void serialize_VkPipelineViewportStateCreateInfo(::av::WireWriter& buf, c
             out->pScissors = nullptr;
         } else {
             auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(out->scissorCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->scissorCount); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
@@ -16500,6 +16636,7 @@ inline void serialize_VkPipelineViewportSwizzleStateCreateInfoNV(::av::WireWrite
             out->pViewportSwizzles = nullptr;
         } else {
             auto* arr = arena.allocate<VkViewportSwizzleNV>(static_cast<std::size_t>(out->viewportCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->viewportCount); ++i) {
                 if (!deserialize_VkViewportSwizzleNV(r, &arr[i], arena)) { return false; }
             }
@@ -16538,6 +16675,7 @@ inline void serialize_VkPipelineViewportWScalingStateCreateInfoNV(::av::WireWrit
             out->pViewportWScalings = nullptr;
         } else {
             auto* arr = arena.allocate<VkViewportWScalingNV>(static_cast<std::size_t>(out->viewportCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->viewportCount); ++i) {
                 if (!deserialize_VkViewportWScalingNV(r, &arr[i], arena)) { return false; }
             }
@@ -16654,6 +16792,7 @@ inline void serialize_VkQueryPoolPerformanceCreateInfoKHR(::av::WireWriter& buf,
             out->pCounterIndices = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->counterIndexCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->counterIndexCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -16877,6 +17016,7 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
             out->pStages = nullptr;
         } else {
             auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<std::size_t>(out->stageCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->stageCount); ++i) {
                 if (!deserialize_VkPipelineShaderStageCreateInfo(r, &arr[i], arena)) { return false; }
             }
@@ -16891,6 +17031,7 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
             out->pGroups = nullptr;
         } else {
             auto* arr = arena.allocate<VkRayTracingShaderGroupCreateInfoKHR>(static_cast<std::size_t>(out->groupCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->groupCount); ++i) {
                 if (!deserialize_VkRayTracingShaderGroupCreateInfoKHR(r, &arr[i], arena)) { return false; }
             }
@@ -16905,6 +17046,7 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
             out->pLibraryInfo = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineLibraryCreateInfoKHR>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineLibraryCreateInfoKHR(r, p, arena)) { return false; }
             out->pLibraryInfo = p;
         }
@@ -16916,6 +17058,7 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
             out->pLibraryInterface = nullptr;
         } else {
             auto* p = arena.allocate<VkRayTracingPipelineInterfaceCreateInfoKHR>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkRayTracingPipelineInterfaceCreateInfoKHR(r, p, arena)) { return false; }
             out->pLibraryInterface = p;
         }
@@ -16927,6 +17070,7 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
             out->pDynamicState = nullptr;
         } else {
             auto* p = arena.allocate<VkPipelineDynamicStateCreateInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkPipelineDynamicStateCreateInfo(r, p, arena)) { return false; }
             out->pDynamicState = p;
         }
@@ -17020,6 +17164,7 @@ inline void serialize_VkRenderPassAttachmentBeginInfo(::av::WireWriter& buf, con
             out->pAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<VkImageView>(static_cast<std::size_t>(out->attachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentCount); ++i) {
                 if (!deserialize_VkImageView(r, arr[i])) { return false; }
             }
@@ -17062,6 +17207,7 @@ inline void serialize_VkRenderPassBeginInfo(::av::WireWriter& buf, const VkRende
             out->pClearValues = nullptr;
         } else {
             auto* arr = arena.allocate<VkClearValue>(static_cast<std::size_t>(out->clearValueCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->clearValueCount); ++i) {
                 if (!deserialize_VkClearValue(r, &arr[i], arena)) { return false; }
             }
@@ -17120,6 +17266,7 @@ inline void serialize_VkRenderPassCreateInfo(::av::WireWriter& buf, const VkRend
             out->pAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<VkAttachmentDescription>(static_cast<std::size_t>(out->attachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentCount); ++i) {
                 if (!deserialize_VkAttachmentDescription(r, &arr[i], arena)) { return false; }
             }
@@ -17134,6 +17281,7 @@ inline void serialize_VkRenderPassCreateInfo(::av::WireWriter& buf, const VkRend
             out->pSubpasses = nullptr;
         } else {
             auto* arr = arena.allocate<VkSubpassDescription>(static_cast<std::size_t>(out->subpassCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->subpassCount); ++i) {
                 if (!deserialize_VkSubpassDescription(r, &arr[i], arena)) { return false; }
             }
@@ -17148,6 +17296,7 @@ inline void serialize_VkRenderPassCreateInfo(::av::WireWriter& buf, const VkRend
             out->pDependencies = nullptr;
         } else {
             auto* arr = arena.allocate<VkSubpassDependency>(static_cast<std::size_t>(out->dependencyCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->dependencyCount); ++i) {
                 if (!deserialize_VkSubpassDependency(r, &arr[i], arena)) { return false; }
             }
@@ -17216,6 +17365,7 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
             out->pAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<VkAttachmentDescription2>(static_cast<std::size_t>(out->attachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentCount); ++i) {
                 if (!deserialize_VkAttachmentDescription2(r, &arr[i], arena)) { return false; }
             }
@@ -17230,6 +17380,7 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
             out->pSubpasses = nullptr;
         } else {
             auto* arr = arena.allocate<VkSubpassDescription2>(static_cast<std::size_t>(out->subpassCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->subpassCount); ++i) {
                 if (!deserialize_VkSubpassDescription2(r, &arr[i], arena)) { return false; }
             }
@@ -17244,6 +17395,7 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
             out->pDependencies = nullptr;
         } else {
             auto* arr = arena.allocate<VkSubpassDependency2>(static_cast<std::size_t>(out->dependencyCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->dependencyCount); ++i) {
                 if (!deserialize_VkSubpassDependency2(r, &arr[i], arena)) { return false; }
             }
@@ -17258,6 +17410,7 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
             out->pCorrelatedViewMasks = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->correlatedViewMaskCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->correlatedViewMaskCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -17306,6 +17459,7 @@ inline void serialize_VkRenderPassCreationFeedbackCreateInfoEXT(::av::WireWriter
             out->pRenderPassFeedback = nullptr;
         } else {
             auto* p = arena.allocate<VkRenderPassCreationFeedbackInfoEXT>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkRenderPassCreationFeedbackInfoEXT(r, p, arena)) { return false; }
             out->pRenderPassFeedback = p;
         }
@@ -17364,6 +17518,7 @@ inline void serialize_VkRenderPassInputAttachmentAspectCreateInfo(::av::WireWrit
             out->pAspectReferences = nullptr;
         } else {
             auto* arr = arena.allocate<VkInputAttachmentAspectReference>(static_cast<std::size_t>(out->aspectReferenceCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->aspectReferenceCount); ++i) {
                 if (!deserialize_VkInputAttachmentAspectReference(r, &arr[i], arena)) { return false; }
             }
@@ -17420,6 +17575,7 @@ inline void serialize_VkRenderPassMultiviewCreateInfo(::av::WireWriter& buf, con
             out->pViewMasks = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->subpassCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->subpassCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -17434,6 +17590,7 @@ inline void serialize_VkRenderPassMultiviewCreateInfo(::av::WireWriter& buf, con
             out->pViewOffsets = nullptr;
         } else {
             auto* arr = arena.allocate<int32_t>(static_cast<std::size_t>(out->dependencyCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->dependencyCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -17448,6 +17605,7 @@ inline void serialize_VkRenderPassMultiviewCreateInfo(::av::WireWriter& buf, con
             out->pCorrelationMasks = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->correlationMaskCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->correlationMaskCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -17494,6 +17652,7 @@ inline void serialize_VkRenderPassSampleLocationsBeginInfoEXT(::av::WireWriter& 
             out->pAttachmentInitialSampleLocations = nullptr;
         } else {
             auto* arr = arena.allocate<VkAttachmentSampleLocationsEXT>(static_cast<std::size_t>(out->attachmentInitialSampleLocationsCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->attachmentInitialSampleLocationsCount); ++i) {
                 if (!deserialize_VkAttachmentSampleLocationsEXT(r, &arr[i], arena)) { return false; }
             }
@@ -17508,6 +17667,7 @@ inline void serialize_VkRenderPassSampleLocationsBeginInfoEXT(::av::WireWriter& 
             out->pPostSubpassSampleLocations = nullptr;
         } else {
             auto* arr = arena.allocate<VkSubpassSampleLocationsEXT>(static_cast<std::size_t>(out->postSubpassSampleLocationsCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->postSubpassSampleLocationsCount); ++i) {
                 if (!deserialize_VkSubpassSampleLocationsEXT(r, &arr[i], arena)) { return false; }
             }
@@ -17544,6 +17704,7 @@ inline void serialize_VkRenderPassStripeBeginInfoARM(::av::WireWriter& buf, cons
             out->pStripeInfos = nullptr;
         } else {
             auto* arr = arena.allocate<VkRenderPassStripeInfoARM>(static_cast<std::size_t>(out->stripeInfoCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->stripeInfoCount); ++i) {
                 if (!deserialize_VkRenderPassStripeInfoARM(r, &arr[i], arena)) { return false; }
             }
@@ -17594,6 +17755,7 @@ inline void serialize_VkRenderPassStripeSubmitInfoARM(::av::WireWriter& buf, con
             out->pStripeSemaphoreInfos = nullptr;
         } else {
             auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<std::size_t>(out->stripeSemaphoreInfoCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->stripeSemaphoreInfoCount); ++i) {
                 if (!deserialize_VkSemaphoreSubmitInfo(r, &arr[i], arena)) { return false; }
             }
@@ -17628,6 +17790,7 @@ inline void serialize_VkRenderPassSubpassFeedbackCreateInfoEXT(::av::WireWriter&
             out->pSubpassFeedback = nullptr;
         } else {
             auto* p = arena.allocate<VkRenderPassSubpassFeedbackInfoEXT>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkRenderPassSubpassFeedbackInfoEXT(r, p, arena)) { return false; }
             out->pSubpassFeedback = p;
         }
@@ -17694,6 +17857,7 @@ inline void serialize_VkRenderingAreaInfo(::av::WireWriter& buf, const VkRenderi
             out->pColorAttachmentFormats = nullptr;
         } else {
             auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(out->colorAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -17760,6 +17924,7 @@ inline void serialize_VkRenderingAttachmentLocationInfo(::av::WireWriter& buf, c
             out->pColorAttachmentLocations = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->colorAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -17856,6 +18021,7 @@ inline void serialize_VkRenderingInfo(::av::WireWriter& buf, const VkRenderingIn
             out->pColorAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<VkRenderingAttachmentInfo>(static_cast<std::size_t>(out->colorAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
                 if (!deserialize_VkRenderingAttachmentInfo(r, &arr[i], arena)) { return false; }
             }
@@ -17869,6 +18035,7 @@ inline void serialize_VkRenderingInfo(::av::WireWriter& buf, const VkRenderingIn
             out->pDepthAttachment = nullptr;
         } else {
             auto* p = arena.allocate<VkRenderingAttachmentInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkRenderingAttachmentInfo(r, p, arena)) { return false; }
             out->pDepthAttachment = p;
         }
@@ -17880,6 +18047,7 @@ inline void serialize_VkRenderingInfo(::av::WireWriter& buf, const VkRenderingIn
             out->pStencilAttachment = nullptr;
         } else {
             auto* p = arena.allocate<VkRenderingAttachmentInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkRenderingAttachmentInfo(r, p, arena)) { return false; }
             out->pStencilAttachment = p;
         }
@@ -17918,6 +18086,7 @@ inline void serialize_VkRenderingInputAttachmentIndexInfo(::av::WireWriter& buf,
             out->pColorAttachmentInputIndices = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->colorAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -17966,6 +18135,7 @@ inline void serialize_VkResolveImageInfo2(::av::WireWriter& buf, const VkResolve
             out->pRegions = nullptr;
         } else {
             auto* arr = arena.allocate<VkImageResolve2>(static_cast<std::size_t>(out->regionCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->regionCount); ++i) {
                 if (!deserialize_VkImageResolve2(r, &arr[i], arena)) { return false; }
             }
@@ -18299,6 +18469,7 @@ inline void serialize_VkSemaphoreWaitInfo(::av::WireWriter& buf, const VkSemapho
             out->pSemaphores = nullptr;
         } else {
             auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(out->semaphoreCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->semaphoreCount); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
@@ -18312,6 +18483,7 @@ inline void serialize_VkSemaphoreWaitInfo(::av::WireWriter& buf, const VkSemapho
             out->pValues = nullptr;
         } else {
             auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(out->semaphoreCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->semaphoreCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -18397,6 +18569,7 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
             out->pCode = nullptr;
         } else {
             char* blob = arena.allocate_chars(static_cast<std::size_t>(out->codeSize));
+            if (blob == nullptr) { return false; }
             if (!r.read(blob, static_cast<std::size_t>(out->codeSize))) { return false; }
             out->pCode = blob;
         }
@@ -18408,6 +18581,7 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
             out->pName = nullptr;
         } else {
             char* s = arena.allocate_chars(static_cast<std::size_t>(n));
+            if (s == nullptr) { return false; }
             if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
             out->pName = s;
         }
@@ -18420,6 +18594,7 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
             out->pSetLayouts = nullptr;
         } else {
             auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<std::size_t>(out->setLayoutCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->setLayoutCount); ++i) {
                 if (!deserialize_VkDescriptorSetLayout(r, arr[i])) { return false; }
             }
@@ -18434,6 +18609,7 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
             out->pPushConstantRanges = nullptr;
         } else {
             auto* arr = arena.allocate<VkPushConstantRange>(static_cast<std::size_t>(out->pushConstantRangeCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->pushConstantRangeCount); ++i) {
                 if (!deserialize_VkPushConstantRange(r, &arr[i], arena)) { return false; }
             }
@@ -18447,6 +18623,7 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
             out->pSpecializationInfo = nullptr;
         } else {
             auto* p = arena.allocate<VkSpecializationInfo>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkSpecializationInfo(r, p, arena)) { return false; }
             out->pSpecializationInfo = p;
         }
@@ -18487,6 +18664,7 @@ inline void serialize_VkShaderModuleCreateInfo(::av::WireWriter& buf, const VkSh
             out->pCode = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->codeSize / 4));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->codeSize / 4); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -18533,6 +18711,7 @@ inline void serialize_VkShadingRatePaletteNV(::av::WireWriter& buf, const VkShad
             out->pShadingRatePaletteEntries = nullptr;
         } else {
             auto* arr = arena.allocate<VkShadingRatePaletteEntryNV>(static_cast<std::size_t>(out->shadingRatePaletteEntryCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->shadingRatePaletteEntryCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -18567,6 +18746,7 @@ inline void serialize_VkSparseBufferMemoryBindInfo(::av::WireWriter& buf, const 
             out->pBinds = nullptr;
         } else {
             auto* arr = arena.allocate<VkSparseMemoryBind>(static_cast<std::size_t>(out->bindCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bindCount); ++i) {
                 if (!deserialize_VkSparseMemoryBind(r, &arr[i], arena)) { return false; }
             }
@@ -18649,6 +18829,7 @@ inline void serialize_VkSparseImageMemoryBindInfo(::av::WireWriter& buf, const V
             out->pBinds = nullptr;
         } else {
             auto* arr = arena.allocate<VkSparseImageMemoryBind>(static_cast<std::size_t>(out->bindCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bindCount); ++i) {
                 if (!deserialize_VkSparseImageMemoryBind(r, &arr[i], arena)) { return false; }
             }
@@ -18715,6 +18896,7 @@ inline void serialize_VkSparseImageOpaqueMemoryBindInfo(::av::WireWriter& buf, c
             out->pBinds = nullptr;
         } else {
             auto* arr = arena.allocate<VkSparseMemoryBind>(static_cast<std::size_t>(out->bindCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->bindCount); ++i) {
                 if (!deserialize_VkSparseMemoryBind(r, &arr[i], arena)) { return false; }
             }
@@ -18773,6 +18955,7 @@ inline void serialize_VkSpecializationInfo(::av::WireWriter& buf, const VkSpecia
             out->pMapEntries = nullptr;
         } else {
             auto* arr = arena.allocate<VkSpecializationMapEntry>(static_cast<std::size_t>(out->mapEntryCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->mapEntryCount); ++i) {
                 if (!deserialize_VkSpecializationMapEntry(r, &arr[i], arena)) { return false; }
             }
@@ -18791,6 +18974,7 @@ inline void serialize_VkSpecializationInfo(::av::WireWriter& buf, const VkSpecia
             out->pData = nullptr;
         } else {
             char* blob = arena.allocate_chars(static_cast<std::size_t>(out->dataSize));
+            if (blob == nullptr) { return false; }
             if (!r.read(blob, static_cast<std::size_t>(out->dataSize))) { return false; }
             out->pData = blob;
         }
@@ -18886,6 +19070,7 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
             out->pWaitSemaphores = nullptr;
         } else {
             auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(out->waitSemaphoreCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->waitSemaphoreCount); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
@@ -18899,6 +19084,7 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
             out->pWaitDstStageMask = nullptr;
         } else {
             auto* arr = arena.allocate<VkPipelineStageFlags>(static_cast<std::size_t>(out->waitSemaphoreCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->waitSemaphoreCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -18913,6 +19099,7 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
             out->pCommandBuffers = nullptr;
         } else {
             auto* arr = arena.allocate<VkCommandBuffer>(static_cast<std::size_t>(out->commandBufferCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->commandBufferCount); ++i) {
                 if (!deserialize_VkCommandBuffer(r, arr[i])) { return false; }
             }
@@ -18927,6 +19114,7 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
             out->pSignalSemaphores = nullptr;
         } else {
             auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(out->signalSemaphoreCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->signalSemaphoreCount); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
@@ -18985,6 +19173,7 @@ inline void serialize_VkSubmitInfo2(::av::WireWriter& buf, const VkSubmitInfo2& 
             out->pWaitSemaphoreInfos = nullptr;
         } else {
             auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<std::size_t>(out->waitSemaphoreInfoCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->waitSemaphoreInfoCount); ++i) {
                 if (!deserialize_VkSemaphoreSubmitInfo(r, &arr[i], arena)) { return false; }
             }
@@ -18999,6 +19188,7 @@ inline void serialize_VkSubmitInfo2(::av::WireWriter& buf, const VkSubmitInfo2& 
             out->pCommandBufferInfos = nullptr;
         } else {
             auto* arr = arena.allocate<VkCommandBufferSubmitInfo>(static_cast<std::size_t>(out->commandBufferInfoCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->commandBufferInfoCount); ++i) {
                 if (!deserialize_VkCommandBufferSubmitInfo(r, &arr[i], arena)) { return false; }
             }
@@ -19013,6 +19203,7 @@ inline void serialize_VkSubmitInfo2(::av::WireWriter& buf, const VkSubmitInfo2& 
             out->pSignalSemaphoreInfos = nullptr;
         } else {
             auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<std::size_t>(out->signalSemaphoreInfoCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->signalSemaphoreInfoCount); ++i) {
                 if (!deserialize_VkSemaphoreSubmitInfo(r, &arr[i], arena)) { return false; }
             }
@@ -19151,6 +19342,7 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
             out->pInputAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<VkAttachmentReference>(static_cast<std::size_t>(out->inputAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->inputAttachmentCount); ++i) {
                 if (!deserialize_VkAttachmentReference(r, &arr[i], arena)) { return false; }
             }
@@ -19165,6 +19357,7 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
             out->pColorAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<VkAttachmentReference>(static_cast<std::size_t>(out->colorAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
                 if (!deserialize_VkAttachmentReference(r, &arr[i], arena)) { return false; }
             }
@@ -19178,6 +19371,7 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
             out->pResolveAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<VkAttachmentReference>(static_cast<std::size_t>(out->colorAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
                 if (!deserialize_VkAttachmentReference(r, &arr[i], arena)) { return false; }
             }
@@ -19191,6 +19385,7 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
             out->pDepthStencilAttachment = nullptr;
         } else {
             auto* p = arena.allocate<VkAttachmentReference>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkAttachmentReference(r, p, arena)) { return false; }
             out->pDepthStencilAttachment = p;
         }
@@ -19203,6 +19398,7 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
             out->pPreserveAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->preserveAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->preserveAttachmentCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -19283,6 +19479,7 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
             out->pInputAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<std::size_t>(out->inputAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->inputAttachmentCount); ++i) {
                 if (!deserialize_VkAttachmentReference2(r, &arr[i], arena)) { return false; }
             }
@@ -19297,6 +19494,7 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
             out->pColorAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<std::size_t>(out->colorAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
                 if (!deserialize_VkAttachmentReference2(r, &arr[i], arena)) { return false; }
             }
@@ -19310,6 +19508,7 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
             out->pResolveAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<std::size_t>(out->colorAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->colorAttachmentCount); ++i) {
                 if (!deserialize_VkAttachmentReference2(r, &arr[i], arena)) { return false; }
             }
@@ -19323,6 +19522,7 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
             out->pDepthStencilAttachment = nullptr;
         } else {
             auto* p = arena.allocate<VkAttachmentReference2>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkAttachmentReference2(r, p, arena)) { return false; }
             out->pDepthStencilAttachment = p;
         }
@@ -19335,6 +19535,7 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
             out->pPreserveAttachments = nullptr;
         } else {
             auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(out->preserveAttachmentCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->preserveAttachmentCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -19373,6 +19574,7 @@ inline void serialize_VkSubpassDescriptionDepthStencilResolve(::av::WireWriter& 
             out->pDepthStencilResolveAttachment = nullptr;
         } else {
             auto* p = arena.allocate<VkAttachmentReference2>();
+            if (p == nullptr) { return false; }
             if (!deserialize_VkAttachmentReference2(r, p, arena)) { return false; }
             out->pDepthStencilResolveAttachment = p;
         }
@@ -19419,6 +19621,7 @@ inline void serialize_VkSubpassFragmentDensityMapOffsetEndInfoQCOM(::av::WireWri
             out->pFragmentDensityOffsets = nullptr;
         } else {
             auto* arr = arena.allocate<VkOffset2D>(static_cast<std::size_t>(out->fragmentDensityOffsetCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->fragmentDensityOffsetCount); ++i) {
                 if (!deserialize_VkOffset2D(r, &arr[i], arena)) { return false; }
             }
@@ -19567,6 +19770,7 @@ inline void serialize_VkTimelineSemaphoreSubmitInfo(::av::WireWriter& buf, const
             out->pWaitSemaphoreValues = nullptr;
         } else {
             auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(out->waitSemaphoreValueCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->waitSemaphoreValueCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -19581,6 +19785,7 @@ inline void serialize_VkTimelineSemaphoreSubmitInfo(::av::WireWriter& buf, const
             out->pSignalSemaphoreValues = nullptr;
         } else {
             auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(out->signalSemaphoreValueCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->signalSemaphoreValueCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -19627,6 +19832,7 @@ inline void serialize_VkValidationFeaturesEXT(::av::WireWriter& buf, const VkVal
             out->pEnabledValidationFeatures = nullptr;
         } else {
             auto* arr = arena.allocate<VkValidationFeatureEnableEXT>(static_cast<std::size_t>(out->enabledValidationFeatureCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->enabledValidationFeatureCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -19641,6 +19847,7 @@ inline void serialize_VkValidationFeaturesEXT(::av::WireWriter& buf, const VkVal
             out->pDisabledValidationFeatures = nullptr;
         } else {
             auto* arr = arena.allocate<VkValidationFeatureDisableEXT>(static_cast<std::size_t>(out->disabledValidationFeatureCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->disabledValidationFeatureCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -19677,6 +19884,7 @@ inline void serialize_VkValidationFlagsEXT(::av::WireWriter& buf, const VkValida
             out->pDisabledValidationChecks = nullptr;
         } else {
             auto* arr = arena.allocate<VkValidationCheckEXT>(static_cast<std::size_t>(out->disabledValidationCheckCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->disabledValidationCheckCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
@@ -19935,6 +20143,7 @@ inline void serialize_VkVideoProfileListInfoKHR(::av::WireWriter& buf, const VkV
             out->pProfiles = nullptr;
         } else {
             auto* arr = arena.allocate<VkVideoProfileInfoKHR>(static_cast<std::size_t>(out->profileCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->profileCount); ++i) {
                 if (!deserialize_VkVideoProfileInfoKHR(r, &arr[i], arena)) { return false; }
             }
@@ -20045,6 +20254,7 @@ inline void serialize_VkWriteDescriptorSet(::av::WireWriter& buf, const VkWriteD
             out->pImageInfo = nullptr;
         } else {
             auto* arr = arena.allocate<VkDescriptorImageInfo>(static_cast<std::size_t>(out->descriptorCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorCount); ++i) {
                 if (!deserialize_VkDescriptorImageInfo(r, &arr[i], arena)) { return false; }
             }
@@ -20058,6 +20268,7 @@ inline void serialize_VkWriteDescriptorSet(::av::WireWriter& buf, const VkWriteD
             out->pBufferInfo = nullptr;
         } else {
             auto* arr = arena.allocate<VkDescriptorBufferInfo>(static_cast<std::size_t>(out->descriptorCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorCount); ++i) {
                 if (!deserialize_VkDescriptorBufferInfo(r, &arr[i], arena)) { return false; }
             }
@@ -20071,6 +20282,7 @@ inline void serialize_VkWriteDescriptorSet(::av::WireWriter& buf, const VkWriteD
             out->pTexelBufferView = nullptr;
         } else {
             auto* arr = arena.allocate<VkBufferView>(static_cast<std::size_t>(out->descriptorCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->descriptorCount); ++i) {
                 if (!deserialize_VkBufferView(r, arr[i])) { return false; }
             }
@@ -20107,6 +20319,7 @@ inline void serialize_VkWriteDescriptorSetAccelerationStructureKHR(::av::WireWri
             out->pAccelerationStructures = nullptr;
         } else {
             auto* arr = arena.allocate<VkAccelerationStructureKHR>(static_cast<std::size_t>(out->accelerationStructureCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->accelerationStructureCount); ++i) {
                 if (!deserialize_VkAccelerationStructureKHR(r, arr[i])) { return false; }
             }
@@ -20143,6 +20356,7 @@ inline void serialize_VkWriteDescriptorSetAccelerationStructureNV(::av::WireWrit
             out->pAccelerationStructures = nullptr;
         } else {
             auto* arr = arena.allocate<VkAccelerationStructureNV>(static_cast<std::size_t>(out->accelerationStructureCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->accelerationStructureCount); ++i) {
                 if (!deserialize_VkAccelerationStructureNV(r, arr[i])) { return false; }
             }
@@ -20177,6 +20391,7 @@ inline void serialize_VkWriteDescriptorSetInlineUniformBlock(::av::WireWriter& b
             out->pData = nullptr;
         } else {
             char* blob = arena.allocate_chars(static_cast<std::size_t>(out->dataSize));
+            if (blob == nullptr) { return false; }
             if (!r.read(blob, static_cast<std::size_t>(out->dataSize))) { return false; }
             out->pData = blob;
         }
@@ -20211,6 +20426,7 @@ inline void serialize_VkWriteDescriptorSetPartitionedAccelerationStructureNV(::a
             out->pAccelerationStructures = nullptr;
         } else {
             auto* arr = arena.allocate<VkDeviceAddress>(static_cast<std::size_t>(out->accelerationStructureCount));
+            if (arr == nullptr) { return false; }
             for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(out->accelerationStructureCount); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }

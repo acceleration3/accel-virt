@@ -65,7 +65,8 @@ set(AV_KHRONOS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/khronos/include)
 # registry (042). They are generated and committed all the same, because the
 # gate compares the whole tree; each joins a build when its feature arrives.
 set(AV_GENERATED_SOURCES
-  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_command_names.cpp)
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_command_names.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp)
 if(EXISTS ${AV_KHRONOS_INCLUDE}/vulkan/vulkan_core.h)
   set(AV_GENERATED ON)
   message(STATUS "generated sources: compiled against ${AV_KHRONOS_INCLUDE}")
@@ -271,6 +272,11 @@ if(AV_FUZZ)
     set(ENV{AV_FUZZ_SECONDS} 60)
   endif()
   file(GLOB AV_FUZZ_SOURCES CONFIGURE_DEPENDS tests/fuzz/fuzz_*.cpp)
+  # The generated decoder's target includes the API's own header, which arrives
+  # with the registry fetch; without it there is nothing to fuzz.
+  if(NOT AV_GENERATED)
+    list(REMOVE_ITEM AV_FUZZ_SOURCES ${CMAKE_SOURCE_DIR}/tests/fuzz/fuzz_generated_decode.cpp)
+  endif()
   foreach(src ${AV_FUZZ_SOURCES})
     get_filename_component(name ${src} NAME_WE)
     add_executable(${name} ${src})
