@@ -45,6 +45,11 @@ public:
 
     Status status() const;
     size_t offset() const;
+    /* Every byte the answer asked for, whether or not it fitted. An encoder
+     * writes every field and checks status() once, so this is what a refused
+     * answer has to report back: the device tells the guest the length it
+     * needs, and the guest allocates and asks again (feature 042). */
+    size_t wanted() const;
 
     bool invariants_hold() const;
 
@@ -56,6 +61,7 @@ private:
     uint8_t *bytes_;
     size_t   capacity_;
     size_t   offset_;
+    size_t   wanted_;
     Status   status_;
 
     friend struct WireWriterProbe;

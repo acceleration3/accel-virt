@@ -3,11 +3,14 @@
 namespace av {
 
 WireWriter::WireWriter(uint8_t *bytes, size_t capacity)
-    : bytes_(bytes), capacity_(bytes != nullptr ? capacity : 0u), offset_(0u),
+    : bytes_(bytes), capacity_(bytes != nullptr ? capacity : 0u), offset_(0u), wanted_(0u),
       status_(Status::ok) {}
 
 uint8_t *WireWriter::claim(size_t count)
 {
+    /* Counted before the room is checked, and counted whether or not this one
+     * fits: the answer's length is the answer's, not the prefix that fitted. */
+    wanted_ += count;
     if (status_ != Status::ok || count > capacity_ - offset_) {
         status_ = Status::too_large;
         return nullptr;
@@ -63,10 +66,11 @@ void WireWriter::write_varint_bits(uint64_t value)
 
 Status WireWriter::status() const { return status_; }
 size_t WireWriter::offset() const { return offset_; }
+size_t WireWriter::wanted() const { return wanted_; }
 
 bool WireWriter::invariants_hold() const
 {
-    return offset_ <= capacity_ && (bytes_ != nullptr || capacity_ == 0u);
+    return offset_ <= capacity_ && offset_ <= wanted_ && (bytes_ != nullptr || capacity_ == 0u);
 }
 
 }  // namespace av

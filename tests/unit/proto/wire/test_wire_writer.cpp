@@ -155,3 +155,31 @@ TEST(wire_writer_write_varint, a_varint_that_does_not_fit_writes_nothing)
   CHECK_STATUS(writer.status(), Status::too_large);
   CHECK_EQ(writer.offset(), 0u);
   CHECK_EQ(bytes[0], 0xEEu); }
+
+/* An answer that does not fit has to say how much room it wanted, because the
+ * device promises the guest a length it can allocate against and then ask
+ * again (feature 042, the executor ABI's A7). */
+TEST(wire_writer, says_how_much_room_the_whole_answer_wanted)
+{ std::uint8_t frame[8];
+  WireWriter writer(frame, sizeof frame);
+  writer.write_u32(1u);
+  CHECK_EQ(writer.wanted(), 4u);
+  writer.write_u64(2u);
+  CHECK_STATUS(writer.status(), Status::too_large);
+  /* Four written, twelve wanted: the rest of the answer is still counted. */
+  CHECK_EQ(writer.offset(), 4u);
+  CHECK_EQ(writer.wanted(), 12u);
+  /* And what follows a refusal is counted too, so the length is the answer's
+   * and not the prefix that happened to fit. */
+  writer.write_u16(3u);
+  CHECK_EQ(writer.wanted(), 14u);
+  CHECK(writer.invariants_hold()); }
+
+TEST(wire_writer, an_answer_that_fits_wanted_exactly_what_it_wrote)
+{ std::uint8_t frame[16];
+  WireWriter writer(frame, sizeof frame);
+  writer.write_u64(1u);
+  writer.write_u32(2u);
+  CHECK_STATUS(writer.status(), Status::ok);
+  CHECK_EQ(writer.wanted(), writer.offset());
+  CHECK_EQ(writer.wanted(), 12u); }

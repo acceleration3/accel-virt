@@ -11,16 +11,22 @@
 #define AV_EXECUTOR_ROOT_HPP
 
 #include "core/support/status.hpp"
+#include "device/executor/context_session.hpp"
 #include "device/executor/host_gpu_set.hpp"
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace av {
 
 class HostApis;
+class SessionBackend;
 
 class ExecutorRoot {
 public:
+    /* Sessions this library will hand out at once. */
+    static constexpr uint32_t sessions = 64u;
+
     ExecutorRoot();
     ExecutorRoot(const ExecutorRoot &) = delete;
     ExecutorRoot &operator=(const ExecutorRoot &) = delete;
@@ -37,11 +43,34 @@ public:
      * Zero for a GPU nobody has, which is also what a null UUID gets. */
     uint32_t import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) const;
 
+    /* A session for one context of `sub_api` on the GPU `gpu_uuid` names, or
+     * null: for a sub-API that GPU does not run, for a GPU nobody has, and
+     * when every slot is taken. The device turns a null into a context fault
+     * and keeps running, so this is a refusal rather than a failure.
+     *
+     * `backend` is what will run the commands; the caller owns it, because a
+     * backend outlives the session as the GPU outlives the context. */
+    ContextSession *open(uint32_t sub_api, const uint8_t *gpu_uuid, SessionBackend &backend);
+    /* Gives a session's slot and block back. Safe on a null, which is what the
+     * device passes if it ever destroys twice. */
+    void            close(ContextSession *session);
+    uint32_t        live() const;
+
     bool invariants_hold() const;
 
 private:
-    HostGpuSet gpus_;
-    bool       asked_;
+    /* DeviceContextTable::max_contexts, which the capset publishes: the device
+     * can never ask for another, so a second ceiling would be one nobody
+     * enforces. */
+    static constexpr uint32_t max_sessions = sessions;
+
+    /* Whether `session` is one of ours rather than a pointer the device
+     * invented or already gave back. */
+    bool owns(const ContextSession *session) const;
+
+    HostGpuSet     gpus_;
+    ContextSession sessions_[max_sessions];
+    bool           asked_;
 };
 
 }  // namespace av

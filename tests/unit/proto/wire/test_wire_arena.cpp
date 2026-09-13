@@ -145,3 +145,30 @@ TEST(wire_arena, counts_what_it_would_not_give_room_for)
   arena.reset();
   CHECK_EQ(arena.refusals(), 3u);
   CHECK(arena.invariants_hold()); }
+
+/* One arena serves one context, and a context is a slot the device reuses. The
+ * block changes; what it refused over its life does not. */
+TEST(wire_arena, takes_a_different_block_and_keeps_the_count)
+{ std::uint8_t first[16];
+  std::uint8_t second[64];
+  WireArena arena(first, sizeof first);
+  CHECK(arena.allocate<std::uint8_t>(32u) == nullptr);
+  CHECK_EQ(arena.refusals(), 1u);
+  CHECK(arena.allocate<std::uint8_t>(16u) != nullptr);
+
+  arena.attach(second, sizeof second);
+  CHECK_EQ(arena.capacity(), 64u);
+  CHECK_EQ(arena.used(), 0u);
+  CHECK_EQ(arena.refusals(), 1u);
+  CHECK(arena.allocate<std::uint8_t>(32u) != nullptr);
+  CHECK(arena.invariants_hold()); }
+
+/* No block is an arena that refuses everything, which is what an unbound one
+ * has to answer. */
+TEST(wire_arena, no_block_refuses_everything)
+{ std::uint8_t block[16];
+  WireArena arena(block, sizeof block);
+  arena.attach(nullptr, 64u);
+  CHECK_EQ(arena.capacity(), 0u);
+  CHECK(arena.allocate<std::uint8_t>(1u) == nullptr);
+  CHECK(arena.invariants_hold()); }

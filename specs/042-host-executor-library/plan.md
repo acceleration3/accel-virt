@@ -92,6 +92,7 @@ No violations.
 | `HostApis` | interface | nothing; it is the seam | Say what this host's own loaders can do |
 | `LoaderHostApis` | object | the opened loader, its instance and what it enumerated | Ask this host's loaders |
 | `ContextSession` | object | one context's backend, arena block and imports | Run one context's commands |
+| `SessionBackend` | interface | nothing; it is the seam | Say what a session requires of a host API |
 | `DecodeArena` | object | the block one decode unflattens into, and how often it refused | Hand the generated decoder room for one command |
 | `VulkanBackend` | object | one context's Vulkan instance, device and queues | Run Vulkan commands on the host |
 | `OpenGlBackend` | object | one context's EGL display, context and `RealGl` table | Run OpenGL commands on the host |

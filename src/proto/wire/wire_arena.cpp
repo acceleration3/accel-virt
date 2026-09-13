@@ -32,6 +32,13 @@ char *WireArena::allocate_chars(size_t count)
     return static_cast<char *>(claim(count, sizeof(char), alignof(char)));
 }
 
+void WireArena::attach(uint8_t *block, size_t capacity)
+{
+    block_ = block;
+    capacity_ = block == nullptr ? 0u : capacity;
+    used_ = 0u;
+}
+
 void *WireArena::refuse()
 {
     refusals_++;

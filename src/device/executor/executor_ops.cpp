@@ -8,6 +8,7 @@
  */
 #include "core/support/object_storage.hpp"
 #include "device/abi/rvk_executor.h"
+#include "device/executor/context_session.hpp"
 #include "device/executor/executor_root.hpp"
 #include "device/shim/loader_host_apis.hpp"
 
@@ -17,6 +18,19 @@ namespace {
  * the process ends, and a destructor here would run after the device has gone. */
 class Library {
 public:
+    /* A session, or null: the device turns a null into a context fault and
+     * keeps every other context running.
+     *
+     * Null for everything today, because a session needs a backend to run its
+     * commands and the first of those - Vulkan over the generated server
+     * dispatch - arrives with the next phase. The root, the slots and the
+     * blocks they decode into are already here and already tested; what is
+     * missing is the host API underneath, and saying so is better than
+     * handing the device a session that answers nothing. */
+    av::ContextSession *create(uint32_t, const uint8_t *) { return nullptr; }
+
+    void destroy(av::ContextSession *session) { root().close(session); }
+
     av::ExecutorRoot &root()
     {
         if (!asked_) {
@@ -40,16 +54,38 @@ private:
 
 Library library;
 
+/* The device holds a session as an opaque RvkExecutor *; these two are the
+ * only places that spelling is crossed. */
+av::ContextSession *session_of(RvkExecutor *executor)
+{
+    return static_cast<av::ContextSession *>(static_cast<void *>(executor));
+}
+
+RvkExecutor *handle_of(av::ContextSession *session)
+{
+    return static_cast<RvkExecutor *>(static_cast<void *>(session));
+}
+
 uint32_t sub_apis(void *) { return library.root().sub_apis(); }
 
-RvkExecutor *create(void *, uint32_t, const uint8_t *) { return nullptr; }
-
-void destroy(void *, RvkExecutor *) {}
-
-uint32_t execute(void *, RvkExecutor *, uint32_t, const uint8_t *, size_t, uint8_t *, size_t,
-                 size_t *)
+RvkExecutor *create(void *, uint32_t sub_api, const uint8_t *gpu_uuid)
 {
-    return RVK_DEVICE_LOST;
+    return handle_of(library.create(sub_api, gpu_uuid));
+}
+
+void destroy(void *, RvkExecutor *executor) { library.destroy(session_of(executor)); }
+
+uint32_t execute(void *, RvkExecutor *executor, uint32_t command_id, const uint8_t *payload,
+                 size_t size, uint8_t *reply, size_t reply_capacity, size_t *reply_size)
+{
+    av::ContextSession *const session = session_of(executor);
+    size_t                    answer = 0u;
+    const uint32_t result = session != nullptr
+                                ? session->execute(command_id, payload, size, reply, reply_capacity,
+                                                   answer)
+                                : RVK_DEVICE_LOST;
+    if (reply_size != nullptr) *reply_size = answer;
+    return result;
 }
 
 uint32_t import_kinds(void *, uint32_t sub_api, const uint8_t *gpu_uuid)

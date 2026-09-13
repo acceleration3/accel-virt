@@ -36,6 +36,12 @@ public:
     /* The generated decoders name characters separately. */
     char *allocate_chars(size_t count);
 
+    /* A different block, for the next thing that decodes into this arena. The
+     * refusal count is not reset: it counts what this arena would not give room
+     * for over its whole life, which is what says the block is the wrong size.
+     * A null block is an arena that refuses everything, which is what an
+     * unbound one must answer (feature 042). */
+    void   attach(uint8_t *block, size_t capacity);
     /* The next decode starts at the top of the block again. */
     void   reset();
     size_t used() const;

@@ -38,11 +38,11 @@ description: "Tasks: the host executor"
 
 **Purpose**: the decode path and the session, which no story can do without.
 
-- [ ] T007 [P] Write `tests/unit/device/executor/test_decode_arena.cpp` first: a decode that fits leaves `refusals() == 0`; one that does not is refused and counted; `reset()` starts the next decode and not the count
-- [ ] T008 `DecodeArena` (object class) in `src/device/executor/decode_arena.{hpp,cpp}`: owns the block and the `WireArena` over it. `arena_bytes = 1 MiB` (data-model: no largest command exists - every count comes off the wire - so this is a cost decision at 64 MiB across the 64 sessions the device can ask for, and the refusal count is the signal to raise it)
-- [ ] T009 [P] Write `tests/unit/device/executor/test_context_session.cpp` first: a session runs a command and answers executed; an undecodable payload answers undecodable and counts no refusal; a payload the arena will not hold answers undecodable **and** counts one, which is how the two are told apart (contract §C)
-- [ ] T010 `ContextSession` (object class) in `src/device/executor/context_session.{hpp,cpp}`: one context's backend, arena and imports. States are created → running → faulted → destroyed (data-model)
-- [ ] T011 `ExecutorLibrary` (system class) in `src/device/executor/executor_library.{hpp,cpp}` - **the library-side one**; the device already has `src/device/execution/executor_library.*` and the two are different things. Owns the `HostGpuSet` and at most `max_sessions = 64` sessions, which is `DeviceContextTable::max_contexts` (`src/device/context/device_context_table.hpp:25`) rather than a second cap nobody enforces
+- [X] T007 [P] Write `tests/unit/device/executor/test_decode_arena.cpp` first: a decode that fits leaves `refusals() == 0`; one that does not is refused and counted; `reset()` starts the next decode and not the count
+- [X] T008 `DecodeArena` (object class) in `src/device/executor/decode_arena.{hpp,cpp}`: owns the block and the `WireArena` over it. `arena_bytes = 1 MiB` (data-model: no largest command exists - every count comes off the wire - so this is a cost decision at 64 MiB across the 64 sessions the device can ask for, and the refusal count is the signal to raise it)
+- [X] T009 [P] Write `tests/unit/device/executor/test_context_session.cpp` first: a session runs a command and answers executed; an undecodable payload answers undecodable and counts no refusal; a payload the arena will not hold answers undecodable **and** counts one, which is how the two are told apart (contract §C)
+- [X] T010 `ContextSession` (object class) in `src/device/executor/context_session.{hpp,cpp}`: one context's backend, arena and imports. States are created → running → faulted → destroyed (data-model)
+- [X] T011 `ExecutorLibrary` (system class) in `src/device/executor/executor_library.{hpp,cpp}` - **the library-side one**; the device already has `src/device/execution/executor_library.*` and the two are different things. Owns the `HostGpuSet` and at most `max_sessions = 64` sessions, which is `DeviceContextTable::max_contexts` (`src/device/context/device_context_table.hpp:25`) rather than a second cap nobody enforces
 
 **Checkpoint**: the ABI answers for real, with no host API behind it yet. Commit.
 

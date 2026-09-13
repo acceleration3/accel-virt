@@ -25,6 +25,9 @@ EXCLUDE = {
                                     "exercised through every transport test",
     "src/guest/kmt/kmt.hpp": "the D3DKMT contract, implemented by src/um over gdi32 and by MockKmt "
                              "in tests/harness, and exercised through every guest suite test",
+    "src/device/executor/session_backend.hpp": "what a session requires of a host API, implemented "
+                             "by the Vulkan, OpenGL and OpenCL backends and by MockSessionBackend "
+                             "in tests/harness, and exercised through every session test",
 }
 
 
