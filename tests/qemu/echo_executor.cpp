@@ -17,6 +17,8 @@
 //   RVK_ECHO_STALL_MS      every command sleeps this long before answering
 //   RVK_ECHO_FAULT_AFTER   the Nth command on each executor answers
 //                          RVK_DEVICE_LOST, whatever it asked for
+//   RVK_ECHO_ONLY_NTH      both apply only to the Nth executor created, so one
+//                          context can stall or fault while another completes
 //
 // A stall longer than TdrDelay is what dxgkrnl times out on; the guest suite's
 // tdr scenario sets them for the run that needs them.
@@ -38,8 +40,13 @@ constexpr std::uint32_t count = 0x10004u;
 struct Executor {
     pthread_t     thread;
     std::uint64_t executed;
+    /* Which executor this is, counted from one in the order they were created:
+     * what RVK_ECHO_ONLY_NTH names. */
+    std::uint64_t ordinal;
     bool          one_thread;
 };
+
+std::uint64_t created = 0u;
 
 /* A number the environment names, or 0. */
 std::uint64_t from_environment(const char *name)
@@ -67,6 +74,7 @@ RvkExecutor *create(void *, std::uint32_t, const std::uint8_t *)
     if (std::getenv("RVK_ECHO_FAIL_CREATE") != nullptr) return nullptr;
     auto *const executor = static_cast<Executor *>(std::calloc(1u, sizeof(Executor)));
     executor->thread = pthread_self();
+    executor->ordinal = ++created;
     executor->one_thread = true;
     return static_cast<RvkExecutor *>(static_cast<void *>(executor));
 }
@@ -80,10 +88,14 @@ std::uint32_t execute(void *, RvkExecutor *handle, std::uint32_t id, const std::
     executor->one_thread = executor->one_thread && pthread_equal(executor->thread, pthread_self()) != 0;
     *reply_size = 0u;
     /* The host taking too long, and the host losing the device: what a guest
-     * cannot ask for and a test has to be able to produce. */
-    stall(from_environment("RVK_ECHO_STALL_MS"));
+     * cannot ask for and a test has to be able to produce. Either is aimed at
+     * one executor where the run named one, so that what happens to a context
+     * can be told apart from what happens to the device. */
+    const std::uint64_t only = from_environment("RVK_ECHO_ONLY_NTH");
+    const bool steered = only == 0u || only == executor->ordinal;
+    if (steered) stall(from_environment("RVK_ECHO_STALL_MS"));
     const std::uint64_t fault_after = from_environment("RVK_ECHO_FAULT_AFTER");
-    if (fault_after != 0u && executor->executed + 1u >= fault_after) return RVK_DEVICE_LOST;
+    if (steered && fault_after != 0u && executor->executed + 1u >= fault_after) return RVK_DEVICE_LOST;
     switch (id) {
     case echo:
         *reply_size = size;

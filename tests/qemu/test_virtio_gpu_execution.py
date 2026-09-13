@@ -128,6 +128,23 @@ class VirtioGpuExecution(unittest.TestCase):
                 self.assertTrue(healthy.run(command(ECHO, b"still", GENERATE_REPLY)))
                 self.assertEqual(healthy.answer()[1], b"still")
 
+    def test_a_fault_aimed_at_one_executor_leaves_the_other_running(self):
+        """What the guest suite's tdr and fault runs need: a host that goes
+        wrong for one context only, so that losing that context can be told
+        apart from losing the device (feature 040, US3 and US4). The executors
+        are created in the order their contexts are set up."""
+        os.environ["RVK_ECHO_ONLY_NTH"], os.environ["RVK_ECHO_FAULT_AFTER"] = "2", "1"
+        try:
+            gpu = self.open()
+        finally:
+            del os.environ["RVK_ECHO_ONLY_NTH"], os.environ["RVK_ECHO_FAULT_AFTER"]
+        healthy = Context(self, gpu, 1, 7)
+        faulting = Context(self, gpu, 2, 8, reply_bytes=0)
+        self.assertFalse(faulting.run(command(ECHO)))
+        self.assertTrue(wait_for(lambda: "context faulted" in gpu.qtest.printed()))
+        self.assertTrue(healthy.run(command(ECHO, b"unaffected", GENERATE_REPLY)))
+        self.assertEqual(healthy.answer()[1], b"unaffected")
+
     def test_a_context_whose_executor_cannot_be_created_consumes_nothing(self):
         os.environ["RVK_ECHO_FAIL_CREATE"] = "1"
         try:
