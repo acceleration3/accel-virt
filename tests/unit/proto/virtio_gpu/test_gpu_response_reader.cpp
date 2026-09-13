@@ -97,3 +97,32 @@ TEST(gpu_response_reader_decode, survives_the_hostile_sweep)
   const av::HostileSweep sweep(rejects, whole.bytes(), whole.length());
   sweep.run();
   CHECK(sweep.cases_run() > 1000u); }
+
+/* Feature 041: the answer to RESOURCE_MAP_BLOB. The device says how the guest
+ * may cache what it just mapped, and the driver has to read it rather than
+ * assume it: a blob it thinks is mapped and is not would hand a process
+ * somebody else's memory. */
+TEST(gpu_response_reader_decode, reads_the_map_info_a_mapped_blob_answers)
+{ GpuResponse mapped;
+  mapped.set_map_info(GpuResponse::map_cache_cached);
+  GpuResponseReader reader;
+  CHECK_STATUS(reader.decode(mapped.bytes(), mapped.length()), Status::ok);
+  CHECK_EQ(reader.type(), GpuResponse::ok_map_info);
+  CHECK(reader.ok());
+  CHECK_EQ(reader.map_info(), GpuResponse::map_cache_cached); }
+
+TEST(gpu_response_reader_decode, a_short_map_info_is_malformed)
+{ GpuResponse mapped;
+  mapped.set_map_info(GpuResponse::map_cache_cached);
+  GpuResponseReader reader;
+  CHECK_STATUS(reader.decode(mapped.bytes(), 27u), Status::malformed);
+  CHECK_EQ(reader.map_info(), 0u); }
+
+/* Every other answer leaves the map info where it was: zero, which is no
+ * caching anyone asked for. */
+TEST(gpu_response_reader_decode, an_answer_that_is_not_map_info_carries_none)
+{ GpuResponse nodata;
+  nodata.set(GpuResponse::ok_nodata);
+  GpuResponseReader reader;
+  CHECK_STATUS(reader.decode(nodata.bytes(), nodata.length()), Status::ok);
+  CHECK_EQ(reader.map_info(), 0u); }

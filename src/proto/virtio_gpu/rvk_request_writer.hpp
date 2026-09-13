@@ -29,6 +29,14 @@ public:
     [[nodiscard]] Status destroy_context(uint32_t context_id);
     /* Guest memory at `address` of `length` bytes, one entry covering the blob. */
     [[nodiscard]] Status guest_blob(uint32_t resource_id, uint64_t address, uint32_t length);
+    /* Memory of the host's, mappable into the hostmem region: no memory entries,
+     * a page-multiple size, and nothing of the guest behind it. */
+    [[nodiscard]] Status host_blob(uint32_t resource_id, uint64_t size);
+    /* Where in the hostmem region the device is to place it: the offset is the
+     * guest's to choose, and the device refuses one that does not fit
+     * (docs/protocol.md). */
+    [[nodiscard]] Status map_blob(uint32_t resource_id, uint64_t offset);
+    [[nodiscard]] Status unmap_blob(uint32_t resource_id);
     [[nodiscard]] Status unref(uint32_t resource_id);
     [[nodiscard]] Status setup(uint32_t context_id, const ContextSetup &setup);
     /* Bytes of the last request written; zero after one that did not fit. */
@@ -40,6 +48,8 @@ private:
         get_capset = 0x0109u,
         resource_unref = 0x0102u,
         resource_create_blob = 0x010Cu,
+        resource_map_blob = 0x0208u,
+        resource_unmap_blob = 0x0209u,
         ctx_create = 0x0200u,
         ctx_destroy = 0x0201u,
         submit_3d = 0x0207u,
@@ -48,9 +58,13 @@ private:
     static constexpr size_t   short_request_size = 32u;
     static constexpr size_t   create_context_size = 96u;
     static constexpr size_t   guest_blob_size = 72u;
+    static constexpr size_t   host_blob_size = 56u;
+    static constexpr size_t   map_blob_size = 40u;
     static constexpr size_t   setup_size = 64u;
     static constexpr uint32_t name_bytes = 64u;
     static constexpr uint32_t blob_memory_guest = 1u;
+    static constexpr uint32_t blob_memory_host3d = 2u;
+    static constexpr uint32_t blob_flag_mappable = 1u;
 
     /* Starts a request of `size` bytes with its header; false when it cannot fit. */
     bool begin(WireWriter &writer, uint32_t type, uint32_t context_id, size_t size);

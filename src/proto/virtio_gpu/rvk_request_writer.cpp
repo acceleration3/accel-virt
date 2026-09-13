@@ -70,6 +70,38 @@ Status RvkRequestWriter::guest_blob(uint32_t resource_id, uint64_t address, uint
     return Status::ok;
 }
 
+Status RvkRequestWriter::host_blob(uint32_t resource_id, uint64_t size)
+{
+    WireWriter writer(bytes_, capacity_);
+    if (!begin(writer, resource_create_blob, 0u, host_blob_size)) return Status::too_large;
+    writer.write_u32(resource_id);
+    writer.write_u32(blob_memory_host3d);
+    writer.write_u32(blob_flag_mappable);
+    writer.write_u32(0u);   /* no memory entries: the memory is the host's */
+    writer.write_u64(0u);
+    writer.write_u64(size);
+    return Status::ok;
+}
+
+Status RvkRequestWriter::map_blob(uint32_t resource_id, uint64_t offset)
+{
+    WireWriter writer(bytes_, capacity_);
+    if (!begin(writer, resource_map_blob, 0u, map_blob_size)) return Status::too_large;
+    writer.write_u32(resource_id);
+    writer.write_zeros(4u);
+    writer.write_u64(offset);
+    return Status::ok;
+}
+
+Status RvkRequestWriter::unmap_blob(uint32_t resource_id)
+{
+    WireWriter writer(bytes_, capacity_);
+    if (!begin(writer, resource_unmap_blob, 0u, short_request_size)) return Status::too_large;
+    writer.write_u32(resource_id);
+    writer.write_zeros(4u);
+    return Status::ok;
+}
+
 Status RvkRequestWriter::unref(uint32_t resource_id)
 {
     WireWriter writer(bytes_, capacity_);

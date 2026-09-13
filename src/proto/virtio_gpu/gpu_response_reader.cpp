@@ -5,7 +5,7 @@
 namespace av {
 
 GpuResponseReader::GpuResponseReader()
-    : type_(0u), capset_id_(0u), capset_max_version_(0u), capset_max_size_(0u), capset_() {}
+    : type_(0u), capset_id_(0u), capset_max_version_(0u), capset_max_size_(0u), map_info_(0u), capset_() {}
 
 Status GpuResponseReader::decode(const uint8_t *bytes, size_t length)
 {
@@ -17,6 +17,10 @@ Status GpuResponseReader::decode(const uint8_t *bytes, size_t length)
         candidate.capset_id_ = reader.read_u32();
         candidate.capset_max_version_ = reader.read_u32();
         candidate.capset_max_size_ = reader.read_u32();
+        static_cast<void>(reader.read_u32());   /* padding */
+    }
+    if (candidate.type_ == ok_map_info) {
+        candidate.map_info_ = reader.read_u32();
         static_cast<void>(reader.read_u32());   /* padding */
     }
     if (reader.status() != Status::ok) return reader.status();
@@ -32,6 +36,7 @@ bool              GpuResponseReader::ok() const                 { return type_ >
 uint32_t          GpuResponseReader::capset_id() const          { return capset_id_; }
 uint32_t          GpuResponseReader::capset_max_version() const { return capset_max_version_; }
 uint32_t          GpuResponseReader::capset_max_size() const    { return capset_max_size_; }
+uint32_t          GpuResponseReader::map_info() const           { return map_info_; }
 const CapsetInfo &GpuResponseReader::capset() const             { return capset_; }
 
 }  // namespace av

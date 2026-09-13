@@ -25,7 +25,7 @@ name segment 2.
 
 | Step | Request | Fields this feature pins |
 |---|---|---|
-| create | `RESOURCE_CREATE_BLOB` (0x010C) | `blob_mem = 2` (HOST3D), `flags = 2` (USE_MAPPABLE), `nr_entries = 0`, `blob_id = 0`, `size` = the allocation's size rounded to a page |
+| create | `RESOURCE_CREATE_BLOB` (0x010C) | `blob_mem = 2` (HOST3D), `flags = 1` (USE_MAPPABLE), `nr_entries = 0`, `blob_id = 0`, `size` = the allocation's size rounded to a page |
 | map | `RESOURCE_MAP_BLOB` (0x0208) | `resource_id`, `offset` = the placement, page-aligned and wholly inside the region |
 | the answer | `OK_MAP_INFO` (0x1106) | `map_info = 1` (`MAP_CACHE_CACHED`); anything else leaves the blob unmapped |
 | unmap | `RESOURCE_UNMAP_BLOB` (0x0209) | `resource_id` |

@@ -23,7 +23,7 @@ description: "Tasks: KMD host-visible memory a process can map"
 
 **Purpose**: the driver has never created a host blob, never mapped one, and never read `OK_MAP_INFO`. Nothing above can be built until it can.
 
-- [ ] T001 [P] Write `tests/unit/proto/virtio_gpu/test_rvk_request_writer.cpp` first for the three requests: a host blob is `RESOURCE_CREATE_BLOB` with `blob_mem = 2` (HOST3D), `flags = 2` (USE_MAPPABLE), `nr_entries = 0`, `blob_id = 0` and a page-multiple size; a map is `RESOURCE_MAP_BLOB` (0x0208) with the resource id and a 64-bit offset; an unmap is `RESOURCE_UNMAP_BLOB` (0x0209); each refuses a buffer too small without writing to it
+- [ ] T001 [P] Write `tests/unit/proto/virtio_gpu/test_rvk_request_writer.cpp` first for the three requests: a host blob is `RESOURCE_CREATE_BLOB` with `blob_mem = 2` (HOST3D), `flags = 1` (USE_MAPPABLE), `nr_entries = 0`, `blob_id = 0` and a page-multiple size; a map is `RESOURCE_MAP_BLOB` (0x0208) with the resource id and a 64-bit offset; an unmap is `RESOURCE_UNMAP_BLOB` (0x0209); each refuses a buffer too small without writing to it
 - [ ] T002 Implement `host_blob`, `map_blob` and `unmap_blob` in `src/proto/virtio_gpu/rvk_request_writer.{hpp,cpp}`
 - [ ] T003 [P] Write `tests/unit/proto/virtio_gpu/test_gpu_response_reader.cpp` first for `OK_MAP_INFO` (0x1106): the 32-byte answer decodes, `map_info` is readable, `MAP_CACHE_CACHED` is 1, a short answer is `malformed`, and a type that is not `OK_MAP_INFO` is not read as one
 - [ ] T004 Implement the `OK_MAP_INFO` case in `src/proto/virtio_gpu/gpu_response_reader.{hpp,cpp}`
