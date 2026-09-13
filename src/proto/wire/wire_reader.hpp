@@ -26,6 +26,28 @@ public:
 
     /* Zero-fills the destination when the bytes are not there. */
     void copy_bytes(uint8_t *destination, size_t count);
+
+    /* What the generated deserializers call. Each answers whether it read what
+     * it was asked for, and latches `malformed` when it could not - so an
+     * emitted decoder may check once at the end or at every field and get the
+     * same answer (feature 063). */
+    [[nodiscard]] bool read(void *destination, size_t count);
+    template <typename T>
+    [[nodiscard]] bool read_pod(T &out)
+    {
+        static_assert(__is_trivially_copyable(T), "a field on the wire is plain data");
+        return read(&out, sizeof(T));
+    }
+    /* Seven bits a byte, low group first; a value that needs more bits than `T`
+     * has, or a run that never ends, is malformed. */
+    template <typename T>
+    [[nodiscard]] bool read_varint(T &out)
+    {
+        uint64_t value = 0u;
+        if (!read_varint_bits(value, sizeof(T) * 8u)) return false;
+        out = static_cast<T>(value);
+        return true;
+    }
     /* Reserved fields: any non-zero byte is malformed. */
     void expect_zero(size_t count);
 
@@ -37,6 +59,12 @@ public:
     bool invariants_hold() const;
 
 private:
+    /* Ten groups of seven bits is every value a 64-bit field can hold. */
+    static constexpr size_t max_varint_bits = 70u;
+
+    /* At most `bits` wide; the loop's own bound is what stops a frame that
+     * never ends. */
+    [[nodiscard]] bool read_varint_bits(uint64_t &value, size_t bits);
     /* The start of the next `count` bytes, or null after latching failure. */
     const uint8_t *take(size_t count);
     uint64_t       read_little_endian(size_t count);

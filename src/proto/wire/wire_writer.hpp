@@ -25,12 +25,31 @@ public:
     void copy_bytes(const uint8_t *source, size_t count);
     void write_zeros(size_t count);
 
+    /* What the generated serializers call: a field of the registry's own type,
+     * a run of bytes, and a varint for a length that is usually small. A field
+     * that does not fit writes nothing and latches, as every other write does
+     * (feature 063). */
+    void write(const void *source, size_t count);
+    template <typename T>
+    void write_pod(const T &value)
+    {
+        static_assert(__is_trivially_copyable(T), "a field on the wire is plain data");
+        write(&value, sizeof(T));
+    }
+    /* Seven bits a byte, low group first. */
+    template <typename T>
+    void write_varint(T value)
+    {
+        write_varint_bits(static_cast<uint64_t>(value));
+    }
+
     Status status() const;
     size_t offset() const;
 
     bool invariants_hold() const;
 
 private:
+    void     write_varint_bits(uint64_t value);
     uint8_t *claim(size_t count);
     void     write_little_endian(uint64_t value, size_t count);
 

@@ -41,6 +41,26 @@ void WireWriter::write_zeros(size_t count)
     for (size_t i = 0u; start != nullptr && i < count; i++) start[i] = 0u;
 }
 
+void WireWriter::write(const void *source, size_t count)
+{
+    copy_bytes(static_cast<const uint8_t *>(source), count);
+}
+
+/* Written into a scratch of its own first, so a varint that does not fit
+ * leaves nothing behind - what every other write here promises. */
+void WireWriter::write_varint_bits(uint64_t value)
+{
+    uint8_t groups[10] = {};
+    size_t  count = 0u;
+    do {
+        uint8_t group = static_cast<uint8_t>(value & 0x7Fu);
+        value >>= 7u;
+        if (value != 0u) group |= 0x80u;
+        groups[count++] = group;
+    } while (value != 0u);
+    copy_bytes(groups, count);
+}
+
 Status WireWriter::status() const { return status_; }
 size_t WireWriter::offset() const { return offset_; }
 

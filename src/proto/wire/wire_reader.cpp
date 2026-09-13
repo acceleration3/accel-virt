@@ -46,6 +46,35 @@ void WireReader::expect_zero(size_t count)
     }
 }
 
+bool WireReader::read(void *destination, size_t count)
+{
+    if (count == 0u) return status_ == Status::ok;
+    auto *const bytes = static_cast<uint8_t *>(destination);
+    const size_t before = offset_;
+    copy_bytes(bytes, count);
+    return status_ == Status::ok && offset_ == before + count;
+}
+
+bool WireReader::read_varint_bits(uint64_t &value, size_t bits)
+{
+    value = 0u;
+    for (size_t shift = 0u; shift < max_varint_bits; shift += 7u) {
+        const uint8_t byte = read_u8();
+        if (status_ != Status::ok) return false;
+        const uint64_t group = static_cast<uint64_t>(byte & 0x7Fu);
+        /* A group whose bits do not fit the destination is a frame claiming a
+         * value the field cannot hold. */
+        if (shift >= bits || (shift + 7u > bits && (group >> (bits - shift)) != 0u)) {
+            status_ = Status::malformed;
+            return false;
+        }
+        value |= group << shift;
+        if ((byte & 0x80u) == 0u) return true;
+    }
+    status_ = Status::malformed;
+    return false;
+}
+
 Status WireReader::status() const    { return status_; }
 size_t WireReader::offset() const    { return offset_; }
 /* Zero after a failure, so a loop reading until nothing remains always ends. */

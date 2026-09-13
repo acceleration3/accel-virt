@@ -1,6 +1,7 @@
 #include "core/support/status.hpp"
 #include "harness/framework/guarded_buffer.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 #include <cstddef>
@@ -20,6 +21,7 @@ struct WireWriterProbe {
 using av::GuardedBuffer;
 using av::WireWriterProbe;
 using av::Status;
+using av::WireReader;
 using av::WireWriter;
 
 TEST(wire_writer, writes_little_endian_fields_in_order)
@@ -103,3 +105,53 @@ TEST(wire_writer_invariants, a_capacity_without_bytes_is_detected)
   WireWriter writer(buffer.data(), buffer.size());
   WireWriterProbe(writer).drop_bytes();
   CHECK(!writer.invariants_hold()); }
+
+/* What the generated serializers call: fields of the registry's own types by
+ * size, runs of bytes, and varints for lengths that are usually small
+ * (feature 063). */
+TEST(wire_writer_write_pod, writes_a_field_of_the_registry_s_own_type)
+{ struct Extent { std::uint32_t width; std::uint32_t height; };
+  std::uint8_t bytes[16] = {};
+  WireWriter writer(bytes, sizeof bytes);
+  const Extent extent = {1600u, 1200u};
+  writer.write_pod(extent);
+  CHECK_STATUS(writer.status(), Status::ok);
+  CHECK_EQ(writer.offset(), sizeof extent);
+  WireReader reader(bytes, sizeof bytes);
+  Extent read_back = {};
+  CHECK(reader.read_pod(read_back));
+  CHECK_EQ(read_back.width, 1600u);
+  CHECK_EQ(read_back.height, 1200u); }
+
+TEST(wire_writer_write_pod, a_field_that_does_not_fit_writes_nothing)
+{ std::uint8_t bytes[3] = {0xEE, 0xEE, 0xEE};
+  WireWriter writer(bytes, sizeof bytes);
+  writer.write_pod(std::uint32_t{0x11223344u});
+  CHECK_STATUS(writer.status(), Status::too_large);
+  CHECK_EQ(writer.offset(), 0u);
+  CHECK_EQ(bytes[0], 0xEEu); }
+
+/* Every varint the writer emits is one the reader takes back, which is the
+ * only property either of them owes the other. */
+TEST(wire_writer_write_varint, round_trips_every_width)
+{ const std::uint64_t values[] = {0u, 1u, 127u, 128u, 300u, 0xFFFFFFFFu,
+                                  0xFFFFFFFFFFFFFFFFull};
+  for (const std::uint64_t value : values) {
+      std::uint8_t bytes[16] = {};
+      WireWriter writer(bytes, sizeof bytes);
+      writer.write_varint(value);
+      CHECK_STATUS(writer.status(), Status::ok);
+      WireReader reader(bytes, writer.offset());
+      std::uint64_t read_back = 0u;
+      CHECK(reader.read_varint(read_back));
+      CHECK(read_back == value);
+      CHECK_EQ(reader.remaining(), 0u);
+  } }
+
+TEST(wire_writer_write_varint, a_varint_that_does_not_fit_writes_nothing)
+{ std::uint8_t bytes[1] = {0xEE};
+  WireWriter writer(bytes, sizeof bytes);
+  writer.write_varint(std::uint32_t{300u});
+  CHECK_STATUS(writer.status(), Status::too_large);
+  CHECK_EQ(writer.offset(), 0u);
+  CHECK_EQ(bytes[0], 0xEEu); }

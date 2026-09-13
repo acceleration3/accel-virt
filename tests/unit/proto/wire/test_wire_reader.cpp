@@ -126,3 +126,74 @@ TEST(wire_reader, nothing_remains_after_a_failure_so_read_loops_end)
   (void)reader.read_u64();
   CHECK_STATUS(reader.status(), Status::malformed);
   CHECK_EQ(reader.remaining(), 0u); }
+
+/* What the generated deserializers call. A command's fields are plain data of
+ * the registry's own types, so the reader takes them by size rather than by
+ * name, and a varint is how a length that is usually small is spelt on the
+ * wire (feature 063). */
+TEST(wire_reader_read_pod, reads_a_field_of_the_registry_s_own_type)
+{ struct Extent { std::uint32_t width; std::uint32_t height; };
+  const std::uint8_t bytes[] = {0x40, 0x06, 0, 0, 0xB0, 0x04, 0, 0};
+  WireReader reader(bytes, sizeof bytes);
+  Extent extent = {};
+  CHECK(reader.read_pod(extent));
+  CHECK_EQ(extent.width, 1600u);
+  CHECK_EQ(extent.height, 1200u);
+  CHECK_STATUS(reader.status(), Status::ok); }
+
+TEST(wire_reader_read_pod, a_field_that_is_not_there_is_refused_and_latched)
+{ const std::uint8_t bytes[] = {1, 2, 3};
+  WireReader reader(bytes, sizeof bytes);
+  std::uint32_t value = 0xEEEEEEEEu;
+  CHECK(!reader.read_pod(value));
+  CHECK_STATUS(reader.status(), Status::malformed);
+  /* Zeroed, not half-read: the reader's own rule, so a decoder that ignores
+   * one answer cannot go on to use bytes that were never on the wire. */
+  CHECK_EQ(value, 0u); }
+
+TEST(wire_reader_read, takes_a_run_of_bytes_or_none_at_all)
+{ const std::uint8_t bytes[] = {1, 2, 3, 4};
+  WireReader reader(bytes, sizeof bytes);
+  std::uint8_t into[4] = {};
+  CHECK(reader.read(into, 2u));
+  CHECK_EQ(into[0], 1u);
+  CHECK_EQ(into[1], 2u);
+  CHECK(!reader.read(into, 3u));
+  CHECK_STATUS(reader.status(), Status::malformed); }
+
+/* A varint is seven bits a byte, low group first; ten bytes is the most a
+ * 64-bit value can take, and an eleventh is a frame lying about its length. */
+TEST(wire_reader_read_varint, reads_what_the_writer_wrote)
+{ const std::uint8_t bytes[] = {0x00, 0x7F, 0x80, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F};
+  WireReader reader(bytes, sizeof bytes);
+  std::uint32_t value = 0u;
+  CHECK(reader.read_varint(value));
+  CHECK_EQ(value, 0u);
+  CHECK(reader.read_varint(value));
+  CHECK_EQ(value, 127u);
+  CHECK(reader.read_varint(value));
+  CHECK_EQ(value, 128u);
+  CHECK(reader.read_varint(value));
+  CHECK_EQ(value, 0xFFFFFFFFu);
+  CHECK_STATUS(reader.status(), Status::ok); }
+
+TEST(wire_reader_read_varint, refuses_one_that_never_ends_or_does_not_fit)
+{ const std::uint8_t forever[] = {0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80};
+  WireReader running(forever, sizeof forever);
+  std::uint64_t wide = 0u;
+  CHECK(!running.read_varint(wide));
+  CHECK_STATUS(running.status(), Status::malformed);
+
+  /* A value that needs more bits than the destination has. */
+  const std::uint8_t wider[] = {0xFF, 0xFF, 0xFF, 0xFF, 0x1F};
+  WireReader narrow(wider, sizeof wider);
+  std::uint32_t small = 0u;
+  CHECK(!narrow.read_varint(small));
+  CHECK_STATUS(narrow.status(), Status::malformed);
+
+  /* And one that simply runs out of frame. */
+  const std::uint8_t cut[] = {0x80};
+  WireReader truncated(cut, sizeof cut);
+  std::uint32_t value = 0u;
+  CHECK(!truncated.read_varint(value));
+  CHECK_STATUS(truncated.status(), Status::malformed); }
