@@ -179,8 +179,8 @@ TEST(display_scanout_refresh, leaves_a_hidden_source_alone)
 
 TEST(display_scanout, refuses_a_source_it_does_not_have)
 { Fixture fixture;
-  CHECK_STATUS(fixture.scanout().configure(DisplaySources::source_count, mode), Status::invalid_parameter);
-  CHECK_STATUS(fixture.scanout().disable(DisplaySources::source_count), Status::invalid_parameter);
+  CHECK_STATUS(fixture.scanout().configure(DisplaySources::max_sources, mode), Status::invalid_parameter);
+  CHECK_STATUS(fixture.scanout().disable(DisplaySources::max_sources), Status::invalid_parameter);
   CHECK(fixture.scanout().invariants_hold()); }
 
 TEST(display_scanout_disable, takes_the_source_off_the_host)

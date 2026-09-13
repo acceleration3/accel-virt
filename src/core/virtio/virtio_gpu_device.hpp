@@ -55,12 +55,16 @@ public:
     [[nodiscard]] Status harvest_cursor(uint32_t &completed);
 
     uint64_t features() const;
+    /* virtio_gpu_config.num_scanouts as the device reported it at start, which
+     * is how many displays it has; zero before a start and after a stop. */
+    uint32_t scanouts() const;
     bool     invariants_hold() const;
 
 private:
     enum : uint16_t { config_source = 0u, control_source = 1u, cursor_source = 2u, source_count = 3u };
     enum : uint16_t { control_queue = 0u, cursor_queue = 1u };
     static constexpr uint16_t no_vector = 0xFFFFu;
+    static constexpr uint64_t num_scanouts_offset = 8u;   /* struct virtio_gpu_config */
 
     uint16_t vector_for(uint16_t source, uint32_t message_interrupts) const;
     [[nodiscard]] Status harvest(GpuCommandQueue &queue, uint32_t &completed, const char *refusal);
@@ -73,6 +77,7 @@ private:
     VirtioPciTransport   transport_;
     GpuCommandQueue      control_;
     GpuCommandQueue      cursor_;
+    uint32_t             scanouts_;
     bool                 running_;
 
     friend struct VirtioGpuDeviceProbe;

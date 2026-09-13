@@ -104,7 +104,7 @@ TEST(vidpn_commit_apply, a_path_powering_off_changes_nothing)
 
 TEST(vidpn_commit_apply, a_source_the_adapter_lacks_is_invalid)
 { Commit commit;
-  commit.request().AffectedVidPnSourceId = DisplaySources::source_count;
+  commit.request().AffectedVidPnSourceId = DisplaySources::max_sources;
   CHECK_EQ(commit.apply(), invalid_parameter); }
 
 TEST(vidpn_commit_apply, every_refusal_fails_without_a_leak)
@@ -120,7 +120,7 @@ TEST(vidpn_commit_apply, every_refusal_fails_without_a_leak)
 
 TEST(vidpn_commit, is_passive_only)
 { Commit commit;
-  commit.request().AffectedVidPnSourceId = DisplaySources::source_count;
+  commit.request().AffectedVidPnSourceId = DisplaySources::max_sources;
   VidPnCommit vidpn_commit(commit.fixture().platform(), commit.fixture().dxgkrnl(), commit.modes(), commit.sources(),
                            commit.request());
   commit.fixture().platform().set_irql(Irql::dispatch);

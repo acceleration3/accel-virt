@@ -116,6 +116,9 @@ public:
     std::uint32_t logged() const;
     /* The last message logged, empty before the first, cut at its capacity. */
     const char   *last_log() const;
+    /* Whether any line logged so far holds `text`: a line written in the middle
+     * of a DDI is not the last one by the time the test looks. */
+    bool          logged_line(const char *text) const;
     void         *registered_driver_object() const;
     void         *registered_registry_path() const;
     const DdiTable *registered_table() const;
@@ -182,6 +185,9 @@ private:
     bool          verbose_;
     std::uint32_t logged_;
     char          last_log_[192] = {};
+    static constexpr std::size_t log_capacity = 8192u;
+    char          lines_[log_capacity] = {};
+    std::size_t   lines_used_ = 0u;
     LogRecord    *record_ = nullptr;
     std::uint32_t registration_status_;
     void         *registered_driver_object_;

@@ -196,10 +196,47 @@ from, before it is fixed (FR-007).
 
 ## Phase 5 (US4): several outputs, and display power
 
-- [ ] T018 [US4] Tests then the live output count in src/core/display/display_sources.{hpp,cpp}, read from virtio-gpu's `num_scanouts` with the array bound staying a compile-time maximum; a device reporting more than the maximum is clamped and the value logged
-- [ ] T019 [US4] Child enumeration, the VidPn classes and `DisplayScanout` follow the live count, in src/core/adapter/adapter.cpp and src/core/vidpn/; L1 and L2 tests with two outputs
-- [ ] T020 [US4] Runner: a `max_outputs=2` scenario where each output has its own scanout and mode, in tools/guest/run_guest_suite.py
-- [ ] T021 [US4] A guest run with two outputs: the desktop extends onto both, display power off and on resumes scanout at the same mode, and the host disabling one output drops it without a TDR; record what it found here
+- [X] T018 [US4] Tests then the live output count in src/core/display/display_sources.{hpp,cpp}, read from virtio-gpu's `num_scanouts` with the array bound staying a compile-time maximum; a device reporting more than the maximum is clamped and the value logged
+- [X] T019 [US4] Child enumeration, the VidPn classes and `DisplayScanout` follow the live count, in src/core/adapter/adapter.cpp and src/core/vidpn/; L1 and L2 tests with two outputs
+- [X] T020 [US4] Runner: a `max_outputs=2` scenario where each output has its own scanout and mode, in tools/guest/run_guest_suite.py
+- [X] T021 [US4] A guest run with two outputs: the desktop extends onto both, display power off and on resumes scanout at the same mode, and the host disabling one output drops it without a TDR; record what it found here
+
+  **What it took.** `DisplaySources` keeps a live output count, set from
+  virtio-gpu's `num_scanouts` at StartDevice and clamped to the four its arrays
+  hold, and every bound in the display and VidPn classes is that count rather
+  than a constant - which is why `HardwareCursor`, `MonitorModes`,
+  `CofuncModality` and `VidPnSupportCheck` are now given the sources. Child
+  enumeration reports one video output per display, `DisplayScanout` holds a
+  resource per output, and the runner takes `--outputs N`, extends the desktop,
+  and reads a screendump per head.
+
+  **What the two-output run found.** `max_outputs=2` gives the guest two
+  monitors, both parented to this adapter - the driver's second source and child
+  are real to Windows - and the first head scans out the committed 1280x800.
+  The desktop does not extend onto the second: `SetDisplayConfig` with
+  `SDC_TOPOLOGY_EXTEND` answers ERROR_ACCESS_DENIED (5) to the agent, because
+  the console session's topology is not a session 0 service's to change, which
+  is the same limit T014 found for a mode switch. So the run says so and asserts
+  the first head; the second stays at QEMU's 640x480 default because nothing
+  ever commits a mode on it.
+
+  **Display power works.** With the policy's timeout set to a minute, the display
+  goes dark - dxgkrnl hides the source, the driver takes it off the host's
+  scanout - and an injected mouse move brings it back at the same 1280x800. That
+  needs no session, which is what makes it testable where the mode switch is
+  not, and it is now a step of every guest run.
+
+  **One acceptance is not tested.** "The host disables one output" needs QEMU to
+  drop a scanout, which `-display none` gives no way to do: the guest's display
+  info is answered from the device's configuration and nothing changes it from
+  outside. The driver's side of it - a display info answer that disables a
+  scanout - is covered at L1.
+
+  **One mode list, and a line when that is not enough.** Every output is offered
+  the list the first scanout's rectangle allows. QEMU gives every head the same
+  rectangle, so that is right today; a device whose displays differ is logged
+  ("display 2 is 1280x600, not the first display's size") rather than silently
+  offered the wrong modes.
 
 **Checkpoint**: commit.
 

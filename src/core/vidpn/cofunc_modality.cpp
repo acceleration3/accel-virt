@@ -11,8 +11,9 @@
 namespace av {
 
 CofuncModality::CofuncModality(Platform &platform, DxgkrnlInterface &dxgkrnl, LogBudget &budget,
-                               const DisplayModeList &modes, const DxgkargEnumVidPnCofuncModalityRecord &request)
-    : platform_(platform), budget_(budget), modes_(modes), request_(request),
+                               const DisplayModeList &modes, const DisplaySources &sources,
+                               const DxgkargEnumVidPnCofuncModalityRecord &request)
+    : platform_(platform), sources_(sources), budget_(budget), modes_(modes), request_(request),
       vidpn_(platform, dxgkrnl, request.hConstrainingVidPn) {}
 
 NtStatus CofuncModality::enumerate()
@@ -26,7 +27,7 @@ NtStatus CofuncModality::enumerate()
 Status CofuncModality::visit(const D3dkmdtVidPnPresentPathRecord &path)
 {
     platform_.require_irql_at_most(Irql::passive, "CofuncModality::visit");
-    if (path.VidPnSourceId >= DisplaySources::source_count || path.VidPnTargetId >= DisplaySources::target_count)
+    if (path.VidPnSourceId >= sources_.count() || path.VidPnTargetId >= sources_.count())
         return Status::invalid_parameter;
     D3dkmdtVidPnSourceModeRecord pinned = {};
     const Status source_pin = copy_pinned_source(path.VidPnSourceId, pinned);

@@ -93,7 +93,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
-      cursor_(platform, device_), scanout_(platform, budget_, device_), presented_fence_(0u),
+      cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u),
       display_changed_(0u), started_(false), present_(true) {}
 
 Adapter::~Adapter() { static_cast<void>(stop_device()); }
@@ -167,13 +167,14 @@ int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_inte
         return NtStatus(status).value();
     }
     undo.dismiss();
+    follow_output_count(device_.object().scanouts());
     /* A device that will not say what its displays are leaves the standard
      * mode list standing, which is a working display, so this never fails the
      * start - but it is logged, because the modes offered are then not the
      * host's. */
     log_status("rvkgpu: display info", NtStatus(follow_display_info()).value());
-    *sources = DisplaySources::source_count;
-    *children = DisplaySources::target_count;
+    *sources = sources_.count();
+    *children = sources_.count();
     started_ = true;
     platform_.log("rvkgpu: StartDevice");
     return NtStatus(Status::ok).value();
@@ -244,26 +245,31 @@ void Adapter::dpc_routine()
     dxgkrnl_.notify_dpc();
 }
 
+/* One video output per display the device has. dxgkrnl's array holds one
+ * descriptor more than the children StartDevice reported, zeroed, so the buffer
+ * is checked against that. */
 int32_t Adapter::query_child_relations(DxgkChildDescriptorRecord *relations, uint32_t size)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_child_relations");
     if (relations == nullptr) return NtStatus(Status::invalid_parameter).value();
-    if (size < sizeof *relations) return NtStatus(NtStatus::buffer_too_small).value();
+    if (size < (sources_.count() + 1u) * sizeof *relations) return NtStatus(NtStatus::buffer_too_small).value();
     platform_.log("rvkgpu: QueryChildRelations");
-    relations->ChildDeviceType = type_video_output;
-    relations->InterfaceTechnology = output_technology_other;
-    relations->MonitorOrientationAwareness = orientation_awareness_none;
-    relations->SupportsSdtvModes = 0u;
-    relations->HpdAwareness = hpd_interruptible;
-    relations->AcpiUid = 0u;
-    relations->ChildUid = 0u;
+    for (uint32_t child = 0u; child < sources_.count(); child++) {
+        relations[child].ChildDeviceType = type_video_output;
+        relations[child].InterfaceTechnology = output_technology_other;
+        relations[child].MonitorOrientationAwareness = orientation_awareness_none;
+        relations[child].SupportsSdtvModes = 0u;
+        relations[child].HpdAwareness = hpd_interruptible;
+        relations[child].AcpiUid = 0u;
+        relations[child].ChildUid = child;
+    }
     return NtStatus(Status::ok).value();
 }
 
 int32_t Adapter::query_child_status(DxgkChildStatusRecord *status, uint8_t)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_child_status");
-    if (status == nullptr || status->ChildUid != 0u) return NtStatus(Status::invalid_parameter).value();
+    if (status == nullptr || status->ChildUid >= sources_.count()) return NtStatus(Status::invalid_parameter).value();
     if (status->Type == status_rotation) return NtStatus(Status::invalid_parameter).value();
     int32_t answered = NtStatus(Status::not_supported).value();
     if (status->Type == status_connection) {
@@ -277,7 +283,7 @@ int32_t Adapter::query_child_status(DxgkChildStatusRecord *status, uint8_t)
 int32_t Adapter::query_device_descriptor(uint32_t child, DxgkDeviceDescriptorRecord *descriptor)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_device_descriptor");
-    if (child != 0u || descriptor == nullptr) return NtStatus(Status::invalid_parameter).value();
+    if (child >= sources_.count() || descriptor == nullptr) return NtStatus(Status::invalid_parameter).value();
     follow_display_change();
     /* The monitor's mode set is built from this EDID, so a bring-up that never
      * reaches a committable VidPn needs the answer visible. */
@@ -561,7 +567,7 @@ int32_t Adapter::is_supported_vidpn(DxgkargIsSupportedVidPnRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::is_supported_vidpn");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    const int32_t decided = VidPnSupportCheck(platform_, dxgkrnl_, *request).decide().value();
+    const int32_t decided = VidPnSupportCheck(platform_, dxgkrnl_, sources_, *request).decide().value();
     log_status("rvkgpu: IsSupportedVidPn", decided);
     return decided;
 }
@@ -589,6 +595,24 @@ void Adapter::log_handle(const char *step, const void *handle, int32_t status)
     platform_.log(message.text());
 }
 
+/* The device says how many displays it has; the driver offers a VidPn source
+ * for each, up to what its arrays hold. A count it cannot serve is clamped, and
+ * one of zero leaves the single source a display needs - either way the value
+ * is logged, because the outputs the guest sees are then not the host's. */
+void Adapter::follow_output_count(uint32_t outputs)
+{
+    platform_.require_irql_at_most(Irql::passive, "Adapter::follow_output_count");
+    const Status status = sources_.set_count(outputs);
+    if (status == Status::ok || !budget_.allows()) return;
+    char       bytes[96];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append("rvkgpu: the device reports ");
+    message.append_decimal(outputs);
+    message.append(" displays, offering ");
+    message.append_decimal(sources_.count());
+    platform_.log(message.text());
+}
+
 Status Adapter::follow_display_info()
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::follow_display_info");
@@ -608,7 +632,33 @@ Status Adapter::follow_display_info()
     const Status followed = modes_.follow(display_info_, 0u);
     if (followed != Status::ok) return followed;
     edid_.follow(modes_.preferred());
+    log_unlike_outputs();
     return Status::ok;
+}
+
+/* Every output is offered the list the first scanout's rectangle allows, which
+ * is right while the device gives them all the same rectangle - QEMU does. A
+ * host that does not is worth a line, because the modes the other outputs are
+ * offered are then not theirs. */
+void Adapter::log_unlike_outputs()
+{
+    for (uint32_t source = 1u; source < sources_.count(); source++) {
+        if (display_info_.width(source) == display_info_.width(0u) &&
+            display_info_.height(source) == display_info_.height(0u))
+            continue;
+        if (!budget_.allows()) return;
+        char       bytes[96];
+        TextBuffer message(bytes, sizeof bytes);
+        message.append("rvkgpu: display ");
+        message.append_decimal(source);
+        message.append(" is ");
+        message.append_decimal(display_info_.width(source));
+        message.append("x");
+        message.append_decimal(display_info_.height(source));
+        message.append(", not the first display's size");
+        platform_.log(message.text());
+        return;
+    }
 }
 
 void Adapter::follow_display_change()
@@ -634,7 +684,7 @@ int32_t Adapter::enum_vidpn_cofunc_modality(const DxgkargEnumVidPnCofuncModality
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::enum_vidpn_cofunc_modality");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
-    const int32_t enumerated = CofuncModality(platform_, dxgkrnl_, budget_, modes_, *request).enumerate().value();
+    const int32_t enumerated = CofuncModality(platform_, dxgkrnl_, budget_, modes_, sources_, *request).enumerate().value();
     log_status("rvkgpu: EnumVidPnCofuncModality", enumerated);
     return enumerated;
 }
@@ -661,8 +711,8 @@ Status Adapter::follow_commit(uint32_t source)
 int32_t Adapter::update_active_vidpn_present_path(const D3dkmdtVidPnPresentPathRecord *path)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::update_active_vidpn_present_path");
-    if (path == nullptr || path->VidPnSourceId >= DisplaySources::source_count ||
-        path->VidPnTargetId >= DisplaySources::target_count)
+    if (path == nullptr || path->VidPnSourceId >= sources_.count() ||
+        path->VidPnTargetId >= sources_.count())
         return NtStatus(Status::invalid_parameter).value();
     if (path->ContentTransformationScaling != transformation_identity ||
         path->ContentTransformationRotation != transformation_identity)
@@ -675,7 +725,7 @@ int32_t Adapter::recommend_monitor_modes(const DxgkargRecommendMonitorModesRecor
     platform_.require_irql_at_most(Irql::passive, "Adapter::recommend_monitor_modes");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     follow_display_change();
-    const int32_t recommended = MonitorModes(platform_, modes_, *request).recommend().value();
+    const int32_t recommended = MonitorModes(platform_, modes_, sources_, *request).recommend().value();
     log_status("rvkgpu: RecommendMonitorModes", recommended);
     return recommended;
 }
@@ -692,7 +742,7 @@ int32_t Adapter::recommend_vidpn_topology(const DxgkargRecommendVidPnTopologyRec
 int32_t Adapter::get_scan_line(DxgkargGetScanLineRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::get_scan_line");
-    if (request == nullptr || request->VidPnTargetId >= DisplaySources::target_count)
+    if (request == nullptr || request->VidPnTargetId >= sources_.count())
         return NtStatus(Status::invalid_parameter).value();
     const DisplayMode *mode = sources_.committed_mode(request->VidPnTargetId);
     if (mode == nullptr) return NtStatus(Status::invalid_state).value();
@@ -731,6 +781,22 @@ int32_t Adapter::set_vidpn_source_address(const DxgkargSetVidPnSourceAddressReco
         .value();
 }
 
+/* Which source dxgkrnl showed or hid, and not only that it asked: a display the
+ * power policy turned off comes back through this, and the log is the only way
+ * to see whether it did. */
+void Adapter::log_visibility(const DxgkargSetVidPnSourceVisibilityRecord &request, int32_t status)
+{
+    if (!budget_.allows()) return;
+    char       bytes[96];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append("rvkgpu: SetVidPnSourceVisibility source ");
+    message.append_decimal(request.VidPnSourceId);
+    message.append(request.Visible != 0u ? " visible" : " hidden");
+    message.append(" status 0x");
+    message.append_hex(static_cast<uint32_t>(status), 8u);
+    platform_.log(message.text());
+}
+
 void Adapter::log_scanout(const DxgkargSetVidPnSourceAddressRecord &request)
 {
     if (platform_.current_irql() >= Irql::dispatch || !budget_.allows()) return;
@@ -750,7 +816,7 @@ int32_t Adapter::set_vidpn_source_visibility(const DxgkargSetVidPnSourceVisibili
     platform_.require_irql_at_most(Irql::passive, "Adapter::set_vidpn_source_visibility");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t set = NtStatus(sources_.set_visible(request->VidPnSourceId, request->Visible != 0u)).value();
-    log_status("rvkgpu: SetVidPnSourceVisibility", set);
+    log_visibility(*request, set);
     return set;
 }
 
@@ -811,7 +877,7 @@ int32_t Adapter::query_vidpn_hw_capability(DxgkargQueryVidPnHwCapabilityRecord *
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_vidpn_hw_capability");
     if (request == nullptr || request->hFunctionalVidPn == nullptr ||
-        request->SourceId >= DisplaySources::source_count || request->TargetId >= DisplaySources::target_count)
+        request->SourceId >= sources_.count() || request->TargetId >= sources_.count())
         return NtStatus(Status::invalid_parameter).value();
     request->VidPnHWCaps = 0u;
     return NtStatus(Status::ok).value();
@@ -864,7 +930,7 @@ int32_t Adapter::notify_surprise_removal(int32_t removal_type)
 int32_t Adapter::stop_device_and_release_post_display_ownership(uint32_t target, DxgkDisplayInformationRecord *display)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::stop_device_and_release_post_display_ownership");
-    if (display == nullptr || target >= DisplaySources::target_count) return NtStatus(Status::invalid_parameter).value();
+    if (display == nullptr || target >= sources_.count()) return NtStatus(Status::invalid_parameter).value();
     *display = DxgkDisplayInformationRecord{};
     return stop_device();
 }
@@ -872,7 +938,7 @@ int32_t Adapter::stop_device_and_release_post_display_ownership(uint32_t target,
 int32_t Adapter::get_child_container_id(uint32_t child, DxgkChildContainerIdRecord *container)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::get_child_container_id");
-    if (container == nullptr || child >= DisplaySources::target_count) return NtStatus(Status::invalid_parameter).value();
+    if (container == nullptr || child >= sources_.count()) return NtStatus(Status::invalid_parameter).value();
     edid_.describe(*container);
     return NtStatus(Status::ok).value();
 }
@@ -1003,7 +1069,7 @@ int32_t Adapter::control_mode_behavior(DxgkargControlModeBehaviorRecord *request
 int32_t Adapter::update_monitor_link_info(DxgkargUpdateMonitorLinkInfoRecord *request)
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::update_monitor_link_info");
-    if (request == nullptr || request->VideoPresentTargetId >= DisplaySources::target_count)
+    if (request == nullptr || request->VideoPresentTargetId >= sources_.count())
         return NtStatus(Status::invalid_parameter).value();
     edid_.describe_link(*request);
     return NtStatus(Status::ok).value();

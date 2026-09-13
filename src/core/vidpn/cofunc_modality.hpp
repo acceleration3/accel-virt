@@ -16,6 +16,7 @@
 namespace av {
 
 class DisplayModeList;
+class DisplaySources;
 class DxgkrnlInterface;
 class LogBudget;
 struct DxgkargEnumVidPnCofuncModalityRecord;
@@ -23,7 +24,8 @@ struct DxgkargEnumVidPnCofuncModalityRecord;
 class CofuncModality final : public PathVisitor {
 public:
     CofuncModality(Platform &platform, DxgkrnlInterface &dxgkrnl, LogBudget &budget,
-                   const DisplayModeList &modes, const DxgkargEnumVidPnCofuncModalityRecord &request);
+                   const DisplayModeList &modes, const DisplaySources &sources,
+                   const DxgkargEnumVidPnCofuncModalityRecord &request);
 
     NtStatus enumerate();
     [[nodiscard]] Status visit(const D3dkmdtVidPnPresentPathRecord &path) override;
@@ -50,6 +52,7 @@ private:
                                   const D3dkmdtVidPnSourceModeRecord *pinned_source, bool target_pinned);
 
     Platform                                   &platform_;
+    const DisplaySources                       &sources_;
     LogBudget                                  &budget_;
     const DisplayModeList                      &modes_;
     const DxgkargEnumVidPnCofuncModalityRecord &request_;

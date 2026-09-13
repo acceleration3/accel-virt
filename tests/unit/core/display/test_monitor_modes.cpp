@@ -1,5 +1,6 @@
 #include "core/ddi/dxgkarg_recommend_monitor_modes_record.hpp"
 #include "core/display/display_mode_list.hpp"
+#include "core/display/display_sources.hpp"
 #include "core/display/monitor_modes.hpp"
 #include "core/support/nt_status.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -31,8 +32,9 @@ constexpr std::int32_t  not_preferred = 2;
 std::uint32_t recommend(MockPlatform &platform, FakeVidPn &vidpn, std::uint32_t target = 0u)
 {
     const DisplayModeList modes;
+    const av::DisplaySources sources(platform);
     const DxgkargRecommendMonitorModesRecord request = {target, 0u, vidpn.monitor_mode_set(), &vidpn.monitor_interface()};
-    return static_cast<std::uint32_t>(MonitorModes(platform, modes, request).recommend().value());
+    return static_cast<std::uint32_t>(MonitorModes(platform, modes, sources, request).recommend().value());
 }
 
 }  // namespace
@@ -79,10 +81,13 @@ TEST(monitor_modes_recommend, another_target_or_a_missing_mode_set_is_invalid)
   FakeVidPn vidpn;
   CHECK_EQ(recommend(platform, vidpn, 1u), invalid_parameter);
   const DisplayModeList modes;
+  const av::DisplaySources sources(platform);
   DxgkargRecommendMonitorModesRecord request = {0u, 0u, nullptr, &vidpn.monitor_interface()};
-  CHECK_EQ(static_cast<std::uint32_t>(MonitorModes(platform, modes, request).recommend().value()), invalid_parameter);
+  CHECK_EQ(static_cast<std::uint32_t>(MonitorModes(platform, modes, sources, request).recommend().value()),
+           invalid_parameter);
   request = {0u, 0u, vidpn.monitor_mode_set(), nullptr};
-  CHECK_EQ(static_cast<std::uint32_t>(MonitorModes(platform, modes, request).recommend().value()), invalid_parameter);
+  CHECK_EQ(static_cast<std::uint32_t>(MonitorModes(platform, modes, sources, request).recommend().value()),
+           invalid_parameter);
   CHECK_EQ(vidpn.monitor_modes().modes(), 0u); }
 
 TEST(monitor_modes, is_passive_only)

@@ -12,11 +12,13 @@ namespace av {
 
 class DisplayMode;
 class DisplayModeList;
+class DisplaySources;
 struct DxgkargRecommendMonitorModesRecord;
 
 class MonitorModes {
 public:
-    MonitorModes(Platform &platform, const DisplayModeList &modes, const DxgkargRecommendMonitorModesRecord &request);
+    MonitorModes(Platform &platform, const DisplayModeList &modes, const DisplaySources &sources,
+                 const DxgkargRecommendMonitorModesRecord &request);
     MonitorModes(const MonitorModes &) = delete;
     MonitorModes &operator=(const MonitorModes &) = delete;
 
@@ -35,6 +37,7 @@ private:
     [[nodiscard]] Status add(const DisplayMode &mode);
 
     Platform                                 &platform_;
+    const DisplaySources                     &sources_;
     const DisplayModeList                    &modes_;
     const DxgkargRecommendMonitorModesRecord &request_;
 };

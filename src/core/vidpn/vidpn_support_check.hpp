@@ -13,12 +13,15 @@
 
 namespace av {
 
+class DisplaySources;
+
 class DxgkrnlInterface;
 struct DxgkargIsSupportedVidPnRecord;
 
 class VidPnSupportCheck final : public PathVisitor {
 public:
-    VidPnSupportCheck(Platform &platform, DxgkrnlInterface &dxgkrnl, DxgkargIsSupportedVidPnRecord &request);
+    VidPnSupportCheck(Platform &platform, DxgkrnlInterface &dxgkrnl, const DisplaySources &sources,
+                      DxgkargIsSupportedVidPnRecord &request);
 
     /* Success whether or not the VidPn is supported; IsVidPnSupported says. */
     NtStatus decide();
@@ -28,6 +31,7 @@ private:
     static constexpr uint32_t max_paths = 1u;
 
     Platform                      &platform_;
+    const DisplaySources          &sources_;
     DxgkargIsSupportedVidPnRecord &request_;
     VidPn                          vidpn_;
     uint32_t                       paths_;

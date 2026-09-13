@@ -17,7 +17,7 @@ NtStatus VidPnCommit::apply()
 {
     platform_.require_irql_at_most(Irql::passive, "VidPnCommit::apply");
     const uint32_t source = request_.AffectedVidPnSourceId;
-    if (source >= DisplaySources::source_count) return NtStatus(Status::invalid_parameter);
+    if (source >= sources_.count()) return NtStatus(Status::invalid_parameter);
     if ((request_.Flags & path_powered_off) != 0u) return NtStatus(Status::ok);
     uint64_t paths = 0u;
     Status   status = vidpn_.initialize();

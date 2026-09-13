@@ -19,8 +19,8 @@ TEST(display_sources_set_private_format, remembers_it_per_source)
 
 TEST(display_sources_set_private_format, a_source_the_adapter_does_not_have_is_invalid)
 { MockPlatform platform; DisplaySources sources(platform);
-  CHECK_STATUS(sources.set_private_format(DisplaySources::source_count, 1u), Status::invalid_parameter);
-  CHECK_EQ(sources.private_format(DisplaySources::source_count), 0u); }
+  CHECK_STATUS(sources.set_private_format(sources.count(), 1u), Status::invalid_parameter);
+  CHECK_EQ(sources.private_format(sources.count()), 0u); }
 
 TEST(display_sources_commit, remembers_the_mode_until_another_or_none)
 { MockPlatform platform; DisplaySources sources(platform);
@@ -36,8 +36,8 @@ TEST(display_sources_commit, remembers_the_mode_until_another_or_none)
 TEST(display_sources_commit, a_source_the_adapter_does_not_have_is_invalid)
 { MockPlatform platform; DisplaySources sources(platform);
   const av::DisplayMode mode(640u, 480u);
-  CHECK_STATUS(sources.commit(DisplaySources::source_count, &mode), Status::invalid_parameter);
-  CHECK(sources.committed_mode(DisplaySources::source_count) == nullptr); }
+  CHECK_STATUS(sources.commit(sources.count(), &mode), Status::invalid_parameter);
+  CHECK(sources.committed_mode(sources.count()) == nullptr); }
 
 TEST(display_sources_set_vsync, records_whether_vsync_interrupts_are_wanted)
 { MockPlatform platform; DisplaySources sources(platform);
@@ -61,9 +61,9 @@ TEST(display_sources_set_scanout, remembers_the_primary_address_and_allocation_u
 
 TEST(display_sources_set_scanout, a_source_the_adapter_does_not_have_is_invalid)
 { MockPlatform platform; DisplaySources sources(platform);
-  CHECK_STATUS(sources.set_scanout(DisplaySources::source_count, 0x1000, nullptr), Status::invalid_parameter);
-  CHECK_EQ(sources.scanout_address(DisplaySources::source_count), 0u);
-  CHECK(sources.primary(DisplaySources::source_count) == nullptr); }
+  CHECK_STATUS(sources.set_scanout(sources.count(), 0x1000, nullptr), Status::invalid_parameter);
+  CHECK_EQ(sources.scanout_address(sources.count()), 0u);
+  CHECK(sources.primary(sources.count()) == nullptr); }
 
 /* The DPC reads the handle; an allocation being destroyed must not leave one
  * behind for it to follow. */
@@ -83,8 +83,8 @@ TEST(display_sources_set_visible, remembers_visibility_per_source)
   CHECK(!sources.visible(0u));
   CHECK_STATUS(sources.set_visible(0u, true), Status::ok);
   CHECK(sources.visible(0u));
-  CHECK_STATUS(sources.set_visible(DisplaySources::source_count, true), Status::invalid_parameter);
-  CHECK(!sources.visible(DisplaySources::source_count)); }
+  CHECK_STATUS(sources.set_visible(sources.count(), true), Status::invalid_parameter);
+  CHECK(!sources.visible(sources.count())); }
 
 TEST(display_sources, scanout_is_readable_and_writable_at_device_irql)
 { MockPlatform platform; DisplaySources sources(platform);
@@ -110,3 +110,56 @@ TEST(display_sources, is_passive_only)
   platform.set_irql(Irql::passive);
   for (int call = 0; call < 6; call++) CHECK(platform.claim(Violation::irql_ceiling));
   CHECK(!platform.claim(Violation::irql_ceiling)); }
+
+/* The device says how many displays it has; the driver's arrays say how many it
+ * can offer, and a count outside that is clamped with the value answered. */
+TEST(display_sources_set_count, follows_the_device_up_to_what_the_arrays_hold)
+{ MockPlatform platform; DisplaySources sources(platform);
+  CHECK_EQ(sources.count(), 1u);
+  CHECK_STATUS(sources.set_count(2u), Status::ok);
+  CHECK_EQ(sources.count(), 2u);
+  CHECK_STATUS(sources.set_count(DisplaySources::max_sources), Status::ok);
+  CHECK_EQ(sources.count(), DisplaySources::max_sources);
+  CHECK_STATUS(sources.set_count(DisplaySources::max_sources + 1u), Status::too_large);
+  CHECK_EQ(sources.count(), DisplaySources::max_sources);
+  CHECK_STATUS(sources.set_count(0u), Status::invalid_parameter);
+  CHECK_EQ(sources.count(), DisplaySources::max_sources);
+  CHECK(sources.invariants_hold()); }
+
+/* Every source the device reports keeps its own mode, primary and visibility. */
+TEST(display_sources, keeps_each_output_apart)
+{ MockPlatform platform; DisplaySources sources(platform);
+  CHECK_STATUS(sources.set_count(2u), Status::ok);
+  const av::DisplayMode first(1280u, 800u);
+  const av::DisplayMode second(1024u, 768u);
+  CHECK_STATUS(sources.commit(0u, &first), Status::ok);
+  CHECK_STATUS(sources.commit(1u, &second), Status::ok);
+  CHECK_STATUS(sources.set_scanout(0u, 0x1000, nullptr), Status::ok);
+  CHECK_STATUS(sources.set_visible(1u, true), Status::ok);
+  CHECK_EQ(sources.committed_mode(0u)->width(), 1280u);
+  CHECK_EQ(sources.committed_mode(1u)->width(), 1024u);
+  CHECK_EQ(sources.scanout_address(0u), 0x1000u);
+  CHECK_EQ(sources.scanout_address(1u), 0u);
+  CHECK(!sources.visible(0u));
+  CHECK(sources.visible(1u));
+  CHECK_STATUS(sources.commit(2u, &first), Status::invalid_parameter); }
+
+namespace av {
+
+/* The state the invariant guards, which correct code never reaches. */
+struct DisplaySourcesProbe {
+    static void offer_nothing(DisplaySources &sources) { sources.count_ = 0u; }
+    static void offer_more_than_it_holds(DisplaySources &sources)
+    { sources.count_ = DisplaySources::max_sources + 1u; }
+};
+
+}  // namespace av
+
+TEST(display_sources_invariants, no_outputs_and_more_than_it_holds_are_detected)
+{ MockPlatform platform; DisplaySources sources(platform);
+  CHECK(sources.invariants_hold());
+  av::DisplaySourcesProbe::offer_nothing(sources);
+  CHECK(!sources.invariants_hold());
+  DisplaySources other(platform);
+  av::DisplaySourcesProbe::offer_more_than_it_holds(other);
+  CHECK(!other.invariants_hold()); }

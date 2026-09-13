@@ -308,3 +308,16 @@ TEST(virtio_gpu_device_ask_control, needs_a_running_device)
   CHECK_STATUS(device.start(3u), Status::ok);
   /* Running, but the device answers nothing. */
   CHECK_STATUS(device.ask_control(request, sizeof request, answer, sizeof answer, written), Status::not_found); }
+
+/* The displays the device has, from its configuration: what decides how many
+ * VidPn sources the driver offers. */
+TEST(virtio_gpu_device_scanouts, are_what_the_device_configuration_says)
+{ MappedFunction mapped;
+  CHECK_STATUS(mapped.map(), Status::ok);
+  mapped.function().device_config().set_u32(8u, 2u);   /* num_scanouts */
+  VirtioGpuDevice device(mapped.platform(), mapped.mappings(), mapped.layout());
+  CHECK_EQ(device.scanouts(), 0u);
+  CHECK_STATUS(device.start(3u), Status::ok);
+  CHECK_EQ(device.scanouts(), 2u);
+  CHECK_STATUS(device.stop(), Status::ok);
+  CHECK_EQ(device.scanouts(), 0u); }

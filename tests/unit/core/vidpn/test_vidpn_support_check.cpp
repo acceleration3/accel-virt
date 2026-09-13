@@ -1,5 +1,6 @@
 #include "core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
 #include "core/support/nt_status.hpp"
+#include "core/display/display_sources.hpp"
 #include "core/vidpn/vidpn_support_check.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/violation.hpp"
@@ -24,7 +25,9 @@ std::int32_t decide(VidPnFixture &fixture, void *vidpn, std::uint8_t &supported)
     DxgkargIsSupportedVidPnRecord request = {};
     request.hDesiredVidPn = vidpn;
     request.IsVidPnSupported = 7u;
-    const std::int32_t status = VidPnSupportCheck(fixture.platform(), fixture.dxgkrnl(), request).decide().value();
+    const av::DisplaySources sources(fixture.platform());
+    const std::int32_t status =
+        VidPnSupportCheck(fixture.platform(), fixture.dxgkrnl(), sources, request).decide().value();
     supported = request.IsVidPnSupported;
     return status;
 }
@@ -73,7 +76,8 @@ TEST(vidpn_support_check_decide, a_vidpn_it_cannot_read_fails)
 TEST(vidpn_support_check, is_passive_only)
 { VidPnFixture fixture;
   DxgkargIsSupportedVidPnRecord request = {};
-  VidPnSupportCheck check(fixture.platform(), fixture.dxgkrnl(), request);
+  const av::DisplaySources sources(fixture.platform());
+  VidPnSupportCheck check(fixture.platform(), fixture.dxgkrnl(), sources, request);
   fixture.platform().set_irql(Irql::dispatch);
   static_cast<void>(check.decide());
   static_cast<void>(check.visit(fixture.vidpn().path(0u)));

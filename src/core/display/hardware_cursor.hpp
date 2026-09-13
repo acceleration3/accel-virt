@@ -14,6 +14,7 @@
 
 namespace av {
 
+class DisplaySources;
 class VirtioGpuDevice;
 struct DxgkargSetPointerPositionRecord;
 struct DxgkargSetPointerShapeRecord;
@@ -24,7 +25,7 @@ public:
     static constexpr uint32_t resource_id = 1u;
     static constexpr uint32_t max_side = 64u;
 
-    HardwareCursor(Platform &platform, ObjectStorage<VirtioGpuDevice> &device);
+    HardwareCursor(Platform &platform, const DisplaySources &sources, ObjectStorage<VirtioGpuDevice> &device);
     ~HardwareCursor();
     HardwareCursor(const HardwareCursor &) = delete;
     HardwareCursor &operator=(const HardwareCursor &) = delete;
@@ -46,6 +47,7 @@ private:
     [[nodiscard]] Status update(VirtioGpuDevice &device, uint32_t resource);
 
     Platform                       &platform_;
+    const DisplaySources           &sources_;
     ObjectStorage<VirtioGpuDevice> &device_;
     uint8_t                        *backing_;
     bool                            resource_created_;

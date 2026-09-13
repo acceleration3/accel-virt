@@ -1,5 +1,6 @@
 #include "core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
 #include "core/display/display_mode_list.hpp"
+#include "core/display/display_sources.hpp"
 #include "core/platform/log_budget.hpp"
 #include "core/support/nt_status.hpp"
 #include "core/vidpn/cofunc_modality.hpp"
@@ -47,7 +48,7 @@ D3dkmdtVidPnSourceModeRecord source_mode(std::uint32_t width, std::uint32_t heig
 
 class Enumeration {
 public:
-    Enumeration() : fixture_(), budget_(fixture_.platform()), modes_(), request_{},
+    Enumeration() : fixture_(), budget_(fixture_.platform()), modes_(), sources_(fixture_.platform()), request_{},
                     path_(fixture_.vidpn().add_path(0u, 0u))
     {
         request_.hConstrainingVidPn = fixture_.handle();
@@ -61,13 +62,14 @@ public:
     std::uint32_t run()
     {
         return static_cast<std::uint32_t>(
-            CofuncModality(fixture_.platform(), fixture_.dxgkrnl(), budget_, modes_, request_).enumerate().value());
+            CofuncModality(fixture_.platform(), fixture_.dxgkrnl(), budget_, modes_, sources_, request_).enumerate().value());
     }
 
 private:
     VidPnFixture                          fixture_;
     av::LogBudget                         budget_;
     DisplayModeList                       modes_;
+    av::DisplaySources                    sources_;
     DxgkargEnumVidPnCofuncModalityRecord  request_;
     av::D3dkmdtVidPnPresentPathRecord     &path_;
 };
@@ -208,10 +210,11 @@ TEST(cofunc_modality_visit, a_path_to_another_source_or_target_is_invalid)
       VidPnFixture fixture;
       av::LogBudget budget(fixture.platform());
       DisplayModeList modes;
+      const av::DisplaySources sources(fixture.platform());
       fixture.vidpn().add_path(end[0], end[1]);
       DxgkargEnumVidPnCofuncModalityRecord request = {fixture.handle(), no_pivot, 0u, 0u, 0u};
-      CHECK_EQ(static_cast<std::uint32_t>(
-                   CofuncModality(fixture.platform(), fixture.dxgkrnl(), budget, modes, request).enumerate().value()),
+      CHECK_EQ(static_cast<std::uint32_t>(CofuncModality(fixture.platform(), fixture.dxgkrnl(), budget, modes,
+                                                        sources, request).enumerate().value()),
                invalid_parameter);
   } }
 
@@ -234,8 +237,9 @@ TEST(cofunc_modality_enumerate, every_refusal_fails_without_a_leak)
 TEST(cofunc_modality, is_passive_only)
 { Enumeration enumeration;
   DisplayModeList modes;
+  const av::DisplaySources sources(enumeration.fixture().platform());
   CofuncModality cofunc(enumeration.fixture().platform(), enumeration.fixture().dxgkrnl(), enumeration.budget(),
-                        modes, enumeration.request());
+                        modes, sources, enumeration.request());
   enumeration.fixture().platform().set_irql(Irql::dispatch);
   static_cast<void>(cofunc.visit(enumeration.vidpn().path(0u)));
   enumeration.fixture().platform().set_irql(Irql::passive);

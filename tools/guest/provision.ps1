@@ -16,14 +16,22 @@
 #            and the one in force as "current: WxH"
 #   setmode  switch the display to -Width by -Height; "set: <result>", where 0
 #            is DISP_CHANGE_SUCCESSFUL and anything else is a refusal
+#   extend   the desktop across every attached display; "extend: <result>",
+#            where 0 is success
+#   monitortimeout  the power policy's display timeout, in -Minutes; 0 never
+#            turns it off. Needs no session: the system's idle timer is what
+#            turns the display off, and that is the path a display driver must
+#            survive
 #   collect  diagnostics into C:\rvk\diag, then one "file <path>" or
 #            "dump <path>" line per file for the runner to pull
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('prepare', 'sign', 'install', 'check', 'modes', 'setmode', 'collect')][string]$Stage,
+    [ValidateSet('prepare', 'sign', 'install', 'check', 'modes', 'setmode', 'extend', 'monitortimeout',
+                 'collect')][string]$Stage,
     [string]$Package = 'C:\rvk\package',
     [int]$Width = 0,
     [int]$Height = 0,
+    [int]$Minutes = 0,
     [switch]$MemoryDump
 )
 $ErrorActionPreference = 'Stop'
@@ -106,6 +114,19 @@ public struct DEVMODE {
 }
 
 public class Display {
+    [DllImport("user32.dll")]
+    private static extern int SetDisplayConfig(uint numPathArrayElements, IntPtr pathArray,
+                                               uint numModeInfoArrayElements, IntPtr modeInfoArray, uint flags);
+
+    private const uint TopologyExtend = 0x00000004;
+    private const uint Apply = 0x00000080;
+
+    /* The desktop across every attached display, as DisplaySwitch /extend does.
+       0 is success. */
+    public static int Extend() {
+        return SetDisplayConfig(0, IntPtr.Zero, 0, IntPtr.Zero, TopologyExtend | Apply);
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Ansi)]
     private static extern bool EnumDisplaySettings(string device, int mode, ref DEVMODE devmode);
     [DllImport("user32.dll", CharSet = CharSet.Ansi)]
@@ -201,7 +222,13 @@ switch ($Stage) {
         $dwm = @(Get-Process -Name dwm -ErrorAction SilentlyContinue).Count
         $displays = (Get-PnpDevice -Class Display -Status OK -ErrorAction SilentlyContinue |
             ForEach-Object { (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_Service).Data }) -join ','
-        Write-Output "display: dwm=$dwm services=$displays"
+        # One monitor per output the device reports, which is what US4 asks.
+        # Only the ones this adapter is the parent of: an image that has run
+        # another display driver keeps its monitors.
+        $monitors = @(Get-PnpDevice -Class Monitor -Status OK -ErrorAction SilentlyContinue | Where-Object {
+            (Get-PnpDeviceProperty -InstanceId $_.InstanceId -KeyName DEVPKEY_Device_Parent).Data -eq
+                $device.InstanceId }).Count
+        Write-Output "display: dwm=$dwm services=$displays monitors=$monitors"
         # Last, so a failure's tail - all the runner reports - names the problem.
         Write-Output "device: $($device.InstanceId) status=$($device.Status) problem=$problem problem-status=$status service=$service"
         if ($device.Status -ne 'OK' -or $service -ne 'rvkgpu') { exit 1 }
@@ -224,6 +251,18 @@ switch ($Stage) {
         Add-Type -TypeDefinition $DisplayApi -ErrorAction Stop
         Write-Output "set: $([Display]::Switch($Width, $Height))"
         exit 0
+    }
+    'extend' {
+        Add-Type -TypeDefinition $DisplayApi -ErrorAction Stop
+        Write-Output "extend: $([Display]::Extend())"
+        exit 0
+    }
+    'monitortimeout' {
+        powercfg /change monitor-timeout-ac $Minutes
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        powercfg /change monitor-timeout-dc $Minutes
+        Write-Output "timeout: $Minutes"
+        exit $LASTEXITCODE
     }
     'collect' {
         Remove-Item $Diagnostics -Recurse -Force -ErrorAction SilentlyContinue

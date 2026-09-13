@@ -8,20 +8,23 @@ namespace av {
 
 namespace {
 
-/* One resource per source, each with the source's index; an array member cannot
- * be built in a loop, and the count is fixed. */
-static_assert(DisplaySources::source_count == 1u, "give each source its resource when there are more");
+/* One resource per output the driver can offer, each with its own index: an
+ * array member cannot be built in a loop, so the maximum is written out. */
+static_assert(DisplaySources::max_sources == 4u, "give each source its resource when there are more");
 
 }  // namespace
 
 DisplayScanout::DisplayScanout(Platform &platform, LogBudget &budget, ObjectStorage<VirtioGpuDevice> &device)
-    : platform_(platform), resources_{ScanoutResource(platform, budget, device, 0u)} {}
+    : platform_(platform), resources_{ScanoutResource(platform, budget, device, 0u),
+                                      ScanoutResource(platform, budget, device, 1u),
+                                      ScanoutResource(platform, budget, device, 2u),
+                                      ScanoutResource(platform, budget, device, 3u)} {}
 
 Status DisplayScanout::configure(uint32_t source, const DisplayMode &mode)
 {
     platform_.require_irql_at_most(Irql::passive, "DisplayScanout::configure");
     InvariantScope<DisplayScanout> guard(platform_, *this, "configure");
-    if (source >= DisplaySources::source_count) return Status::invalid_parameter;
+    if (source >= DisplaySources::max_sources) return Status::invalid_parameter;
     return resources_[source].configure(mode);
 }
 
@@ -29,7 +32,7 @@ Status DisplayScanout::disable(uint32_t source)
 {
     platform_.require_irql_at_most(Irql::passive, "DisplayScanout::disable");
     InvariantScope<DisplayScanout> guard(platform_, *this, "disable");
-    if (source >= DisplaySources::source_count) return Status::invalid_parameter;
+    if (source >= DisplaySources::max_sources) return Status::invalid_parameter;
     return resources_[source].disable();
 }
 
@@ -46,7 +49,7 @@ Status DisplayScanout::refresh(DisplaySources &sources, bool presented)
     platform_.require_irql_at_most(Irql::dispatch, "DisplayScanout::refresh");
     InvariantScope<DisplayScanout> guard(platform_, *this, "refresh");
     Status carried = Status::ok;
-    for (uint32_t source = 0u; source < DisplaySources::source_count; source++) {
+    for (uint32_t source = 0u; source < sources.count(); source++) {
         if (!sources.visible(source)) continue;
         const uint64_t address = sources.scanout_address(source);
         GuestPageList  pages;

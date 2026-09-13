@@ -6,9 +6,9 @@
 
 namespace av {
 
-VidPnSupportCheck::VidPnSupportCheck(Platform &platform, DxgkrnlInterface &dxgkrnl,
+VidPnSupportCheck::VidPnSupportCheck(Platform &platform, DxgkrnlInterface &dxgkrnl, const DisplaySources &sources,
                                      DxgkargIsSupportedVidPnRecord &request)
-    : platform_(platform), request_(request), vidpn_(platform, dxgkrnl, request.hDesiredVidPn), paths_(0u),
+    : platform_(platform), sources_(sources), request_(request), vidpn_(platform, dxgkrnl, request.hDesiredVidPn), paths_(0u),
       supported_(true) {}
 
 /* A null VidPn asks whether the adapter can have no display at all. */
@@ -33,8 +33,8 @@ Status VidPnSupportCheck::visit(const D3dkmdtVidPnPresentPathRecord &path)
 {
     platform_.require_irql_at_most(Irql::passive, "VidPnSupportCheck::visit");
     paths_++;
-    supported_ = paths_ <= max_paths && path.VidPnSourceId < DisplaySources::source_count &&
-                 path.VidPnTargetId < DisplaySources::target_count;
+    supported_ = paths_ <= max_paths && path.VidPnSourceId < sources_.count() &&
+                 path.VidPnTargetId < sources_.count();
     return supported_ ? Status::ok : Status::not_supported;
 }
 

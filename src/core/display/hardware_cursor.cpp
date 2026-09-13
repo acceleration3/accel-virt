@@ -9,8 +9,9 @@
 
 namespace av {
 
-HardwareCursor::HardwareCursor(Platform &platform, ObjectStorage<VirtioGpuDevice> &device)
-    : platform_(platform), device_(device), backing_(nullptr), resource_created_(false), shape_set_(false),
+HardwareCursor::HardwareCursor(Platform &platform, const DisplaySources &sources,
+                              ObjectStorage<VirtioGpuDevice> &device)
+    : platform_(platform), sources_(sources), device_(device), backing_(nullptr), resource_created_(false), shape_set_(false),
       visible_(false), hot_x_(0u), hot_y_(0u), x_(0), y_(0) {}
 
 HardwareCursor::~HardwareCursor() { release(); }
@@ -67,7 +68,7 @@ Status HardwareCursor::set_shape(const DxgkargSetPointerShapeRecord &shape)
 {
     platform_.require_irql_at_most(Irql::passive, "HardwareCursor::set_shape");
     if (backing_ == nullptr || !device_.constructed()) return Status::invalid_state;
-    if (shape.VidPnSourceId >= DisplaySources::source_count) return Status::invalid_parameter;
+    if (shape.VidPnSourceId >= sources_.count()) return Status::invalid_parameter;
     Status status = CursorImage(platform_, shape).draw(backing_);
     if (status != Status::ok) return status;
     VirtioGpuDevice &device = device_.object();
@@ -89,7 +90,7 @@ Status HardwareCursor::set_position(const DxgkargSetPointerPositionRecord &posit
 {
     platform_.require_irql_at_most(Irql::passive, "HardwareCursor::set_position");
     if (!device_.constructed()) return Status::invalid_state;
-    if (position.VidPnSourceId >= DisplaySources::source_count) return Status::invalid_parameter;
+    if (position.VidPnSourceId >= sources_.count()) return Status::invalid_parameter;
     VirtioGpuDevice &device = device_.object();
     const bool was_visible = visible_;
     visible_ = (position.Flags & flag_visible) != 0u;

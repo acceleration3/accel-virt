@@ -17,7 +17,8 @@ VirtioGpuDevice::VirtioGpuDevice(Platform &platform, const BarMappings &mappings
       transport_(platform, common_, notify_, isr_, device_, layout.notify_multiplier()),
       control_(platform, transport_, control_queue, GpuRequestWriter::max_response_size,
                GpuRequestWriter::max_backing_request_size, LockRank::control_queue),
-      cursor_(platform, transport_, cursor_queue, 0u, 0u, LockRank::cursor_queue), running_(false) {}
+      cursor_(platform, transport_, cursor_queue, 0u, 0u, LockRank::cursor_queue), scanouts_(0u),
+      running_(false) {}
 
 /* The device must stop using the rings before the members release them. */
 VirtioGpuDevice::~VirtioGpuDevice() { transport_.abandon(); }
@@ -44,6 +45,10 @@ Status VirtioGpuDevice::start(uint32_t message_interrupts)
     if (status == Status::ok) status = cursor_.activate(vector_for(cursor_source, message_interrupts));
     if (status == Status::ok) status = transport_.start();
     if (status != Status::ok) return status;
+    /* The displays the device has: the driver offers a VidPn source for each,
+     * and the caller judges a count it cannot serve. */
+    scanouts_ = 0u;
+    static_cast<void>(transport_.read_device_u32(num_scanouts_offset, scanouts_));
     failed.dismiss();
     running_ = true;
     return Status::ok;
@@ -54,6 +59,7 @@ Status VirtioGpuDevice::stop()
     platform_.require_irql_at_most(Irql::passive, "VirtioGpuDevice::stop");
     InvariantScope<VirtioGpuDevice> guard(platform_, *this, "stop");
     running_ = false;
+    scanouts_ = 0u;
     return transport_.reset();
 }
 
@@ -115,6 +121,12 @@ Status VirtioGpuDevice::harvest(GpuCommandQueue &queue, uint32_t &completed, con
     transport_.fail();
     running_ = false;
     return status;
+}
+
+uint32_t VirtioGpuDevice::scanouts() const
+{
+    platform_.require_irql_at_most(Irql::dispatch, "VirtioGpuDevice::scanouts");
+    return scanouts_;
 }
 
 uint64_t VirtioGpuDevice::features() const { return transport_.features(); }

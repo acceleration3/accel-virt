@@ -383,6 +383,13 @@ void MockPlatform::log(const char *message)
     std::snprintf(last_log_, sizeof last_log_, "%s", message);
     if (record_ != nullptr) record_->write(message);
     if (verbose_) std::fprintf(stderr, "%s\n", message);
+    const std::size_t length = std::strlen(message);
+    if (lines_used_ + length + 2u < log_capacity) {
+        std::memcpy(lines_ + lines_used_, message, length);
+        lines_used_ += length;
+        lines_[lines_used_++] = '\n';
+        lines_[lines_used_] = '\0';
+    }
 }
 
 std::int32_t MockPlatform::register_miniport(void *driver_object, void *registry_path, const DdiTable &table)
@@ -426,6 +433,8 @@ std::uint32_t MockPlatform::allocations_made() const { return allocation_sequenc
 std::uint32_t MockPlatform::locks_held() const       { return held_count_; }
 std::uint32_t MockPlatform::logged() const           { return logged_; }
 const char   *MockPlatform::last_log() const         { return last_log_; }
+
+bool MockPlatform::logged_line(const char *text) const { return std::strstr(lines_, text) != nullptr; }
 void         *MockPlatform::registered_driver_object() const { return registered_driver_object_; }
 void         *MockPlatform::registered_registry_path() const { return registered_registry_path_; }
 const DdiTable *MockPlatform::registered_table() const { return registered_table_; }

@@ -255,6 +255,11 @@ private:
     /* The host's scanout follows what was committed: the mode's resource, or
      * nothing when the path is gone. */
     [[nodiscard]] Status follow_commit(uint32_t source);
+    /* The displays the device says it has, as the sources the driver offers. */
+    void                 follow_output_count(uint32_t outputs);
+    /* A device whose displays are not all the same size, which the one mode
+     * list this driver offers cannot describe. */
+    void                 log_unlike_outputs();
     /* The device's own display info, followed into the mode list and the EDID.
      * Passive only: it waits for the device's answer. */
     [[nodiscard]] Status follow_display_info();
@@ -263,6 +268,8 @@ private:
      * monitor asks, because asking waits and the DPC may not. */
     void                 follow_display_change();
     void                 log_status(const char *step, int32_t status);
+    /* Which source dxgkrnl showed or hid. */
+    void                 log_visibility(const DxgkargSetVidPnSourceVisibilityRecord &request, int32_t status);
     /* Where dxgkrnl points a source, which is the only place the scanout can
      * look for a frame. Skipped at device IRQL, where the budget's lock is
      * illegal; dxgkrnl only calls there for an MMIO flip on vsync, which this

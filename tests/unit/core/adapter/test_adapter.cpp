@@ -135,6 +135,13 @@ constexpr std::uint8_t  failed_bit = 0x80u;
 
 std::uint32_t nt(std::int32_t status) { return static_cast<std::uint32_t>(status); }
 
+/* One little-endian field of a request the device saw. */
+std::uint32_t u32(const std::uint8_t *bytes, std::size_t offset)
+{
+    return std::uint32_t{bytes[offset]} | std::uint32_t{bytes[offset + 1u]} << 8u |
+           std::uint32_t{bytes[offset + 2u]} << 16u | std::uint32_t{bytes[offset + 3u]} << 24u;
+}
+
 /* The display info a host with one 1280x800 scanout answers. */
 class DisplayInfoAnswer {
 public:
@@ -313,8 +320,8 @@ TEST(adapter_start_device, logs_the_step_it_reached)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
   CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: StartDevice") == 0);
-  av::DxgkChildDescriptorRecord relations = {};
-  CHECK_EQ(nt(fixture.adapter().query_child_relations(&relations, sizeof relations)), success);
+  av::DxgkChildDescriptorRecord relations[2] = {};
+  CHECK_EQ(nt(fixture.adapter().query_child_relations(relations, sizeof relations)), success);
   CHECK(std::strcmp(fixture.platform().last_log(), "rvkgpu: QueryChildRelations") == 0); }
 
 TEST(adapter_start_device, brings_the_device_to_driver_ok_and_reports_one_source_and_child)
@@ -587,9 +594,10 @@ TEST(adapter_query_child_relations, reports_one_hot_pluggable_video_output)
 TEST(adapter_query_child_relations, no_room_is_buffer_too_small_and_no_buffer_invalid)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
-  DxgkChildDescriptorRecord relation;
-  CHECK_EQ(nt(fixture.adapter().query_child_relations(&relation, sizeof relation - 1u)), buffer_too_small);
-  CHECK_EQ(nt(fixture.adapter().query_child_relations(nullptr, sizeof relation)), invalid_parameter); }
+  DxgkChildDescriptorRecord relations[2];
+  /* dxgkrnl's array holds one more descriptor than the children reported. */
+  CHECK_EQ(nt(fixture.adapter().query_child_relations(relations, sizeof relations - 1u)), buffer_too_small);
+  CHECK_EQ(nt(fixture.adapter().query_child_relations(nullptr, sizeof relations)), invalid_parameter); }
 
 TEST(adapter_query_child_status, the_one_child_is_connected)
 { Fixture fixture;
@@ -1758,7 +1766,7 @@ TEST(adapter, each_step_of_the_display_path_says_what_it_answered)
   av::DxgkargSetVidPnSourceVisibilityRecord visibility = {};
   CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&visibility)), success);
   CHECK(std::strcmp(fixture.platform().last_log(),
-                    "rvkgpu: SetVidPnSourceVisibility status 0x00000000") == 0);
+                    "rvkgpu: SetVidPnSourceVisibility source 0 hidden status 0x00000000") == 0);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success);
   CHECK_EQ(shadow.destroy(), success);
   CHECK_EQ(nt(fixture.adapter().stop_device()), success);
@@ -2317,3 +2325,122 @@ TEST(adapter_dpc_routine, a_failing_harvest_is_silent_once_the_window_is_spent)
    * own line about it is what the spent window keeps quiet. */
   CHECK_EQ(fixture.platform().logged(), spent + 1u);
   CHECK(std::strstr(fixture.platform().last_log(), "harvest failed in the DPC") == nullptr); }
+
+/* ---- Several outputs (feature 038, US4) ------------------------------------- */
+
+/* The device says how many displays it has, and every one of them gets a VidPn
+ * source, a child, an EDID and a scanout of its own. */
+TEST(adapter_start_device, offers_a_source_and_a_child_for_every_display)
+{ Fixture fixture;
+  fixture.function().device_config().set_u32(8u, 2u);   /* num_scanouts */
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(fixture.sources(), 2u);
+  CHECK_EQ(fixture.children(), 2u);
+  DxgkChildDescriptorRecord relations[3];
+  std::memset(relations, 0xEE, sizeof relations);
+  CHECK_EQ(nt(fixture.adapter().query_child_relations(relations, sizeof relations)), success);
+  CHECK_EQ(relations[0].ChildUid, 0u);
+  CHECK_EQ(relations[1].ChildUid, 1u);
+  CHECK_EQ(relations[1].ChildDeviceType, 1);
+  CHECK_EQ(relations[2].ChildDeviceType, static_cast<std::int32_t>(0xEEEEEEEEu));
+  av::DxgkChildStatusRecord status = {};
+  status.Type = 1;   /* StatusConnection */
+  status.ChildUid = 1u;
+  CHECK_EQ(nt(fixture.adapter().query_child_status(&status, 0u)), success);
+  CHECK_EQ(status.HotPlugConnected, 1u);
+  status.ChildUid = 2u;
+  CHECK_EQ(nt(fixture.adapter().query_child_status(&status, 0u)), invalid_parameter);
+  av::DxgkDeviceDescriptorRecord descriptor = {};
+  std::uint8_t edid[av::Edid::block_bytes] = {};
+  descriptor.DescriptorLength = sizeof edid;
+  descriptor.DescriptorBuffer = edid;
+  CHECK_EQ(nt(fixture.adapter().query_device_descriptor(1u, &descriptor)), success);
+  CHECK_EQ(nt(fixture.adapter().query_device_descriptor(2u, &descriptor)), invalid_parameter); }
+
+/* Each source has its own resource and its own scanout on the host. */
+TEST(adapter_commit_vidpn, the_second_display_scans_out_on_its_own)
+{ Fixture fixture;
+  fixture.function().device_config().set_u32(8u, 2u);
+  CHECK_EQ(fixture.start(), success);
+  av::FakeVirtqueueDevice &control = fixture.control();
+  av::FakeVidPn vidpn;
+  vidpn.add_path(1u, 1u);
+  av::D3dkmdtVidPnSourceModeRecord pinned = {};
+  av::DisplayMode(1024u, 768u).describe(pinned);
+  vidpn.source_modes(1u).seed(pinned, true);
+  const av::DxgkargCommitVidPnRecord commit = {&vidpn, 1u, 0, nullptr, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().commit_vidpn(&commit)), success);
+  const av::DxgkargSetVidPnSourceVisibilityRecord visible = {1u, 1u, {}};
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&visible)), success);
+  const Primary primary(fixture, 1024u, 768u);
+  av::DxgkargSetVidPnSourceAddressRecord address = {};
+  address.VidPnSourceId = 1u;
+  address.PrimaryAddress = primary.address();
+  address.PrimarySegment = av::ApertureSegment::segment_id;
+  address.hAllocation = primary.handle();
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_address(&address)), success);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(control.respond_all(0x1100u), 5u);
+  /* Request 0 was StartDevice's display info; the resource and the scanout are
+   * the second source's. */
+  CHECK_EQ(control.request_type(1u), 0x0101u);
+  CHECK_EQ(u32(control.request(1u), 24u), av::ScanoutResource::first_resource_id + 1u);
+  CHECK_EQ(u32(control.request(1u), 32u), 1024u);
+  CHECK_EQ(control.request_type(3u), 0x0103u);
+  CHECK_EQ(u32(control.request(3u), 40u), 1u);   /* scanout 1 */
+  CHECK_EQ(u32(control.request(3u), 44u), av::ScanoutResource::first_resource_id + 1u); }
+
+/* One mode list cannot describe displays of different sizes, so the driver says
+ * when the device gives it some. */
+TEST(adapter_start_device, says_when_the_displays_are_not_all_one_size)
+{ Fixture fixture;
+  fixture.function().device_config().set_u32(8u, 2u);
+  fixture.display_info().describe(1u, 1024u, 768u);
+  CHECK_EQ(fixture.start(), success);
+  CHECK(fixture.platform().logged_line("display 1 is 1024x768, not the first display's size")); }
+
+/* A device with no displays, or more than this driver offers, is clamped and
+ * the count it gave is logged: the outputs the guest sees are then not the
+ * host's. */
+TEST(adapter_start_device, clamps_a_display_count_it_cannot_serve)
+{ const std::uint32_t counts[] = {0u, av::DisplaySources::max_sources + 1u};
+  const std::uint32_t offered[] = {1u, av::DisplaySources::max_sources};
+  for (std::uint32_t index = 0u; index < 2u; index++) {
+      Fixture fixture;
+      fixture.function().device_config().set_u32(8u, counts[index]);
+      CHECK_EQ(fixture.start(), success);
+      CHECK_EQ(fixture.sources(), offered[index]);
+      CHECK(fixture.platform().logged_line("the device reports"));
+  } }
+
+/* The window can be spent before StartDevice says any of this. */
+TEST(adapter_start_device, says_nothing_about_the_displays_once_the_window_is_spent)
+{ Fixture fixture;
+  fixture.function().device_config().set_u32(8u, av::DisplaySources::max_sources + 1u);
+  fixture.display_info().describe(2u, 800u, 600u);
+  const av::DxgkargRecommendVidPnTopologyRecord topology = {};
+  for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++)
+      static_cast<void>(fixture.adapter().recommend_vidpn_topology(&topology));
+  const std::uint32_t spent = fixture.platform().logged();
+  CHECK_EQ(fixture.start(), success);
+  /* StartDevice's own line is not from the budget; everything this task added
+   * is. */
+  CHECK_EQ(fixture.platform().logged(), spent + 1u);
+  CHECK(!fixture.platform().logged_line("display 2 is"));
+  CHECK(!fixture.platform().logged_line("the device reports"));
+  const av::DxgkargSetVidPnSourceVisibilityRecord visible = {0u, 1u, {}};
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(&visible)), success);
+  CHECK_EQ(fixture.platform().logged(), spent + 1u); }
+
+/* Only the display that differs is named, and the ones that match are passed
+ * over. */
+TEST(adapter_start_device, names_the_display_that_is_not_the_first_s_size)
+{ Fixture fixture;
+  fixture.function().device_config().set_u32(8u, 3u);
+  fixture.display_info().describe(1u, 1280u, 800u);
+  fixture.display_info().describe(2u, 1280u, 600u);
+  CHECK_EQ(fixture.start(), success);
+  CHECK(fixture.platform().logged_line("display 2 is 1280x600, not the first display's size"));
+  CHECK(!fixture.platform().logged_line("display 1 is")); }

@@ -29,7 +29,8 @@ public:
     /* The host stops showing `source`. */
     [[nodiscard]] Status disable(uint32_t source);
     /* Every source's primary carried to the host, given where each one is and
-     * whether a frame was presented since the last call. */
+     * whether a frame was presented since the last call; the sources say how
+     * many the device has. */
     [[nodiscard]] Status refresh(DisplaySources &sources, bool presented);
     /* StopDevice: the host holds nothing of ours afterwards. */
     void                 release();
@@ -39,7 +40,7 @@ public:
 
 private:
     Platform       &platform_;
-    ScanoutResource resources_[DisplaySources::source_count];
+    ScanoutResource resources_[DisplaySources::max_sources];
 
     friend struct DisplayScanoutProbe;
 };

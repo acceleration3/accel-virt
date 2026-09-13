@@ -1,5 +1,6 @@
 #include "core/ddi/dxgkarg_set_pointer_position_record.hpp"
 #include "core/ddi/dxgkarg_set_pointer_shape_record.hpp"
+#include "core/display/display_sources.hpp"
 #include "core/display/hardware_cursor.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
@@ -40,7 +41,7 @@ const std::uint8_t arrow[4 * 4u] = {1, 2, 3, 0xFF, 4, 5, 6, 0xFF, 7, 8, 9, 0xFF,
 /* A started virtio-gpu device the cursor sends on, and a cursor with its backing. */
 class Fixture {
 public:
-    Fixture() : mapped_(), storage_(), cursor_(mapped_.platform(), storage_)
+    Fixture() : mapped_(), storage_(), sources_(mapped_.platform()), cursor_(mapped_.platform(), sources_, storage_)
     {
         CHECK_STATUS(mapped_.map(), Status::ok);
         CHECK_STATUS(storage_.construct(mapped_.platform(), mapped_.mappings(), mapped_.layout()), Status::ok);
@@ -61,6 +62,7 @@ public:
 private:
     av::MappedVirtioFunction       mapped_;
     ObjectStorage<VirtioGpuDevice> storage_;
+    av::DisplaySources             sources_;
     HardwareCursor                 cursor_;
 };
 
@@ -184,7 +186,8 @@ TEST(hardware_cursor_set_shape, a_refused_attach_or_transfer_is_reported)
 TEST(hardware_cursor_initialize, out_of_memory)
 { av::MappedVirtioFunction mapped;
   ObjectStorage<VirtioGpuDevice> storage;
-  HardwareCursor cursor(mapped.platform(), storage);
+  const av::DisplaySources sources(mapped.platform());
+  HardwareCursor cursor(mapped.platform(), sources, storage);
   mapped.platform().fail_allocation_at(1u);
   CHECK_STATUS(cursor.initialize(), Status::no_memory);
   CHECK_EQ(no_memory, 0xC0000017u); }

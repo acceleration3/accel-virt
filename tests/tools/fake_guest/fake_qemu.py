@@ -128,6 +128,18 @@ class Guest:
         if self.device and panic is not None and name == panic["during"] and count == 0:
             threading.Thread(target=self.crash, daemon=True).start()
             return {"exited": False}
+        if name == "monitortimeout" and name not in self.script.get("outputs", {}):
+            minutes = argument(arguments, "-Minutes")
+            if minutes != "0" and not self.script.get("power_stays_lit"):
+                self.script["screendump_dark"] = True
+            return {"exited": True, "exitcode": 0,
+                    "out-data": base64.b64encode(f"timeout: {minutes}\n".encode()).decode(), "err-data": ""}
+        if name == "extend" and name not in self.script.get("outputs", {}):
+            heads = self.script.get("extend_heads", 0)
+            if heads != 0:
+                self.script["screendump_heads"] = heads
+            return {"exited": True, "exitcode": 0,
+                    "out-data": base64.b64encode(b"extend: 0\n").decode(), "err-data": ""}
         if name in ("modes", "setmode") and name not in self.script.get("outputs", {}):
             code, text = self.mode_stage(name, arguments)
             return {"exited": True, "exitcode": code,
@@ -225,15 +237,21 @@ class Guest:
                     return
 
     def qmp_command(self, request):
-        """screendump writes a PPM of the scripted size, as QEMU would."""
+        """screendump writes a PPM of the scripted size, as QEMU would; input
+        events wake a display the power policy turned off."""
+        if request.get("execute") == "input-send-event":
+            self.note("input-send-event")
+            self.script.pop("screendump_dark", None)
+            return
         if request.get("execute") != "screendump":
             return
         width, height = self.script.get("screendump", [1280, 800])[:2]
         frame = self.script.get("screendump_frame", 0)
+        head = request.get("arguments", {}).get("head", 0)
         path = request.get("arguments", {})["filename"]
         with open(path, "wb") as dump:
             dump.write(f"P6\n{width} {height}\n255\n".encode())
-            if self.script.get("screendump_placeholder"):
+            if self.script.get("screendump_placeholder") or self.script.get("screendump_dark"):
                 # QEMU's "display output is not active": grey text on black.
                 pixels = bytearray(b"\x00" * (width * height * 3))
                 pixels[:2052] = b"\xaa" * 2052
@@ -243,7 +261,7 @@ class Guest:
                 bytes_needed = width * height * 3
                 ramp = bytes(range(frame & 0xFF, 256)) + bytes(range(frame & 0xFF))
                 dump.write((ramp * (bytes_needed // len(ramp) + 1))[:bytes_needed])
-        self.note(f"screendump {width}x{height}")
+        self.note(f"screendump {width}x{height}" + (f" head {head}" if head != 0 else ""))
 
     def serve_qmp(self, path):
         server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)

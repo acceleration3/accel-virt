@@ -85,9 +85,9 @@ class Provisioning(unittest.TestCase):
 
     def test_offers_exactly_the_stages_the_runner_calls(self):
         script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
-        offered = re.search(r"ValidateSet\(([^)]*)\)", script).group(1)
+        offered = re.search(r"ValidateSet\(([^)]*)\)", script, re.S).group(1)
         runner = (ROOT / "tools" / "guest" / "run_guest_suite.py").read_text()
-        called = set(re.findall(r'self\.(?:stage|provision)\("(\w+)"', runner))
-        self.assertEqual(sorted(called), sorted(name.strip(" '") for name in offered.split(",")))
+        called = set(re.findall(r'self\.(?:stage|stage_output|provision|provision_ok)\("(\w+)"', runner))
+        self.assertEqual(sorted(called), sorted(name.strip(" '\n") for name in offered.split(",")))
         self.assertIn("-CatalogFilePath \"$Package\\rvkgpu.cat\"", script)
         self.assertIn('PACKAGE_DIRECTORY = GUEST_DIRECTORY + "\\\\package"', runner)

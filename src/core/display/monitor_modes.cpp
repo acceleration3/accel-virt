@@ -6,14 +6,14 @@
 
 namespace av {
 
-MonitorModes::MonitorModes(Platform &platform, const DisplayModeList &modes,
+MonitorModes::MonitorModes(Platform &platform, const DisplayModeList &modes, const DisplaySources &sources,
                            const DxgkargRecommendMonitorModesRecord &request)
-    : platform_(platform), modes_(modes), request_(request) {}
+    : platform_(platform), sources_(sources), modes_(modes), request_(request) {}
 
 NtStatus MonitorModes::recommend()
 {
     platform_.require_irql_at_most(Irql::passive, "MonitorModes::recommend");
-    if (request_.VideoPresentTargetId >= DisplaySources::target_count || request_.hMonitorSourceModeSet == nullptr ||
+    if (request_.VideoPresentTargetId >= sources_.count() || request_.hMonitorSourceModeSet == nullptr ||
         request_.pMonitorSourceModeSetInterface == nullptr)
         return NtStatus(Status::invalid_parameter);
     Status status = Status::ok;

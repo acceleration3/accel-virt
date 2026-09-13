@@ -97,6 +97,8 @@ def arguments():
     parser.add_argument("--firmware-vars", default="/usr/share/edk2/x64/OVMF_VARS.4m.fd")
     parser.add_argument("--memory", type=int, default=4096, help="MiB")
     parser.add_argument("--cpus", type=int, default=4)
+    parser.add_argument("--outputs", type=int, default=1, help="the device's max_outputs")
+    parser.add_argument("--power-poll", type=float, default=5.0, help="seconds between display-power screendumps")
     parser.add_argument("--accel", default="kvm")
     parser.add_argument("--boot-timeout", type=float, default=900.0)
     parser.add_argument("--step-timeout", type=float, default=600.0)
@@ -119,7 +121,8 @@ def arguments():
 def qemu_command(args, work, disk, rescue):
     """QEMU for a run; a rescue boot leaves the device out so the driver never loads."""
     suffix = "-rescue" if rescue else ""
-    device = [] if rescue else ["-device", f"virtio-gpu-rvk-pci,host-gpu=auto,executor={args.executor}"]
+    device = [] if rescue else ["-device", f"virtio-gpu-rvk-pci,id={DISPLAY_DEVICE},host-gpu=auto,"
+                                          f"executor={args.executor},max_outputs={args.outputs}"]
     command = [
         args.qemu, "-machine", f"q35,accel={args.accel},memory-backend=ram",
         "-cpu", f"host,{HYPERV}" if args.accel == "kvm" else "max",
@@ -168,6 +171,8 @@ DISPLAY_SIZE = (1280, 800)
 """The mode the guest commits with QEMU's default -display size."""
 PLACEHOLDER_GREY = b"\xaa\xaa\xaa"
 """The grey QEMU draws its "display output is not active" text in."""
+DISPLAY_DEVICE = "gpu"
+"""The device id screendump names when it asks for a head other than the first."""
 REFRESH_HZ = 60
 """DisplayMode::refresh_hz: the rate every mode is committed at."""
 VSYNC_TOLERANCE_PERCENT = 5
@@ -175,6 +180,11 @@ VSYNC_TOLERANCE_PERCENT = 5
 TICKS_PER_SECOND = 10000000
 """The 100 ns units the driver's interrupt time counts in."""
 VSYNC_LINE = re.compile(r"rvkgpu: vsync (\d+) blanks in (\d+) ticks, enabled (\d+) times")
+ACCESS_DENIED = 5
+"""What SetDisplayConfig answers a caller outside the console session."""
+POWER_ATTEMPTS = 24
+"""Screendumps to wait for the display to go dark or come back: with the default
+poll that is two minutes, and the policy's shortest timeout is one."""
 SETTLE_SECONDS = 1.0
 """Long enough for the DPC that follows a commit to have run."""
 OFFERED_MODES = ["1024x768", "1280x800"]
@@ -205,10 +215,14 @@ class Screendump:
     def __init__(self, path):
         self.path = pathlib.Path(path)
 
-    def capture(self, qmp):
-        """Writes the dump; raises StepFailed when QEMU refuses or writes nothing."""
+    def capture(self, qmp, head=0):
+        """Writes the dump of `head`; raises StepFailed when QEMU refuses or
+        writes nothing."""
+        arguments = {"filename": str(self.path)}
+        if head != 0:
+            arguments.update({"device": DISPLAY_DEVICE, "head": head})
         try:
-            qmp.execute("screendump", {"filename": str(self.path)})
+            qmp.execute("screendump", arguments)
         except AgentError as error:
             raise StepFailed("screendump", str(error))
         if not self.path.exists() or self.path.stat().st_size == 0:
@@ -248,6 +262,8 @@ class GuestRun:
         self.qmp_lost = False
         self.agent = None
         self.log = []
+        self.colours = 0
+        self.heads = 0
 
     def say(self, line):
         self.log.append(line)
@@ -355,6 +371,26 @@ class GuestRun:
             POWERSHELL, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", GUEST_DIRECTORY + "\\provision.ps1",
                          "-Stage", name, *extra], self.args.step_timeout))
 
+    def check_monitors(self, output):
+        """US4: Windows attaches one monitor to every output the device
+        reports, and the check stage counted them."""
+        monitors = re.search(r"monitors=(\d+)", output)
+        if monitors is None:
+            raise StepFailed("check", "the check stage did not count the guest's monitors")
+        if int(monitors.group(1)) != self.args.outputs:
+            raise StepFailed("check", f"the guest has {monitors.group(1)} monitors, not {self.args.outputs}")
+        self.say(f"check ok: {monitors.group(1)} monitor(s)")
+
+    def stage_output(self, name, saved=None):
+        """The stage's own output, for a step that reads what it said."""
+        code, out, error = self.provision(name)
+        text = (out + error).decode(errors="replace")
+        if saved is not None:
+            (self.work / saved).write_bytes(out + error)
+        if code not in (0, REBOOT_REQUIRED):
+            raise StepFailed(name, f"exited {code}: {text.strip()[-400:]}")
+        return text
+
     def stage(self, name, saved=None):
         """Runs one provisioning stage: whether it asked for a reboot."""
         code, out, error = self.provision(name)
@@ -388,28 +424,17 @@ class GuestRun:
         the rest of the proof: the primary's aperture pages were recorded, and no
         frame was refused for want of a backing.
         """
-        dump = Screendump(self.work / "screen.ppm").capture(self.qmp)
-        width, height = dump.size()
-        if width == 0 or height == 0:
-            raise StepFailed("display", f"the screendump is not a PPM: {dump.path}")
-        pixels = dump.pixels()
-        body = pixels[pixels.index(b"255\n") + 4:]
-        if len(body) < width * height * 3:
-            raise StepFailed("display", f"the screendump holds {len(body)} bytes for {width}x{height}")
-        if (width, height) != DISPLAY_SIZE:
-            raise StepFailed("display", f"the host scans out {width}x{height}, not "
-                                        f"{DISPLAY_SIZE[0]}x{DISPLAY_SIZE[1]}")
-        colours = collections.Counter(body[at:at + 3] for at in range(0, width * height * 3, 3))
-        if len(colours) != 1 and PLACEHOLDER_GREY in colours:
-            raise StepFailed("display", "the scanout is QEMU's placeholder, not the guest's primary")
+        self.heads = self.args.outputs if self.args.outputs == 1 or self.extend_desktop() else 1
+        for head in range(self.heads):
+            self.display_head(head)
         driver = self.driver_log()
         if "rvkgpu: aperture map segment 1" not in driver:
             raise StepFailed("display", "the primary's aperture pages were never recorded")
         refused = [line for line in driver.splitlines() if line.startswith("rvkgpu: scanout ")]
         if refused:
             raise StepFailed("display", f"a frame was not carried: {refused[0]}")
-        self.say(f"display ok: {width}x{height} scanned out of the guest's primary, "
-                 f"{len(colours)} colour(s)")
+        self.say(f"display ok: {self.heads} head(s) of {DISPLAY_SIZE[0]}x{DISPLAY_SIZE[1]} scanned out of "
+                 f"the guest's primaries, {self.colours} colour(s)")
 
     def guest_modes(self):
         """Every mode the driver offers the guest, and the one in force."""
@@ -438,7 +463,7 @@ class GuestRun:
         """The host's scanout, once the driver has had a frame to follow a
         commit: the address is programmed from the DPC, not from the switch."""
         time.sleep(SETTLE_SECONDS)
-        dump = Screendump(self.work / "screen.ppm").capture(self.qmp)
+        dump = Screendump(self.work / "screen0.ppm").capture(self.qmp)
         width, height = dump.size()
         if width == 0 or height == 0:
             raise StepFailed(name, f"the screendump is not a PPM: {dump.path}")
@@ -494,6 +519,103 @@ class GuestRun:
                                       f"{REFRESH_HZ} within {VSYNC_TOLERANCE_PERCENT}%")
         self.say(f"vsync ok: {rate:.2f} blanks a second")
 
+    def extend_desktop(self):
+        """US4: Windows attaches a monitor to every output but leaves the
+        desktop on the first until something extends it. Whether this run can is
+        what it answers: SetDisplayConfig refuses a caller that is not the
+        console session's (ERROR_ACCESS_DENIED), and the agent is a session 0
+        service, so a run without an interactive logon asserts the first head
+        and says why the others are dark."""
+        code, out, error = self.provision("extend")
+        if code != 0:
+            raise StepFailed("extend", f"exited {code}: {(out + error).decode(errors='replace').strip()[-400:]}")
+        answer = next((line.split(":", 1)[1].strip() for line in out.decode(errors="replace").splitlines()
+                       if line.startswith("extend:")), "")
+        if answer == "0":
+            time.sleep(SETTLE_SECONDS)
+            self.say(f"extend ok: the desktop is across {self.args.outputs} displays")
+            return True
+        if answer != str(ACCESS_DENIED):
+            raise StepFailed("extend", f"the guest answered {answer!r} extending the desktop")
+        self.say("extend ok: the console session's topology is not a session 0 service's to change "
+                 f"(error {ACCESS_DENIED}); only the first display is asserted")
+        return False
+
+    def display_power(self):
+        """US4: the power policy turns the display off and a key turns it back
+        on, and the host scans out the same mode again. The system's idle timer
+        needs no session, which is what makes this testable where a mode switch
+        is not."""
+        self.provision_ok("monitortimeout", ("-Minutes", "1"))
+        try:
+            self.await_dark()
+            # A key and a mouse move: whichever the guest's power policy counts
+            # as the input that ends its idle.
+            self.qmp.execute("input-send-event", {"events": [
+                {"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": "shift"}}},
+                {"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": "shift"}}}]})
+            self.qmp.execute("input-send-event", {"events": [
+                {"type": "rel", "data": {"axis": "x", "value": 10}},
+                {"type": "rel", "data": {"axis": "y", "value": 10}}]})
+            self.await_lit()
+        finally:
+            self.provision_ok("monitortimeout", ("-Minutes", "0"))
+        self.say(f"power ok: the display went dark and came back at {DISPLAY_SIZE[0]}x{DISPLAY_SIZE[1]}")
+
+    def provision_ok(self, name, extra=()):
+        code, out, error = self.provision(name, extra)
+        if code != 0:
+            raise StepFailed(name, f"exited {code}: {(out + error).decode(errors='replace').strip()[-400:]}")
+
+    def await_dark(self):
+        """Until the host has no scanout of ours: the driver takes the source off
+        the screen when dxgkrnl hides it."""
+        for _attempt in range(POWER_ATTEMPTS):
+            time.sleep(self.args.power_poll)
+            if self.placeholder(0):
+                return
+        raise StepFailed("power", f"the display never went dark within {POWER_ATTEMPTS * self.args.power_poll:.0f} s "
+                                  "of the policy's minute")
+
+    def await_lit(self):
+        for _attempt in range(POWER_ATTEMPTS):
+            time.sleep(self.args.power_poll)
+            if not self.placeholder(0):
+                self.display_head(0)
+                return
+        raise StepFailed("power", "the display never came back")
+
+    def placeholder(self, head):
+        """Whether the head shows QEMU's "display output is not active" rather
+        than a scanout of ours."""
+        dump = Screendump(self.work / f"screen{head}.ppm").capture(self.qmp, head)
+        width, height = dump.size()
+        if width == 0 or height == 0:
+            return True
+        pixels = dump.pixels()
+        body = pixels[pixels.index(b"255\n") + 4:]
+        colours = collections.Counter(body[at:at + 3] for at in range(0, width * height * 3, 3))
+        return (width, height) != DISPLAY_SIZE or (len(colours) != 1 and PLACEHOLDER_GREY in colours)
+
+    def display_head(self, head):
+        """One head's scanout: the committed size, and our resource rather than
+        QEMU's placeholder."""
+        dump = Screendump(self.work / f"screen{head}.ppm").capture(self.qmp, head)
+        width, height = dump.size()
+        if width == 0 or height == 0:
+            raise StepFailed("display", f"the screendump is not a PPM: {dump.path}")
+        pixels = dump.pixels()
+        body = pixels[pixels.index(b"255\n") + 4:]
+        if len(body) < width * height * 3:
+            raise StepFailed("display", f"the screendump holds {len(body)} bytes for {width}x{height}")
+        if (width, height) != DISPLAY_SIZE:
+            raise StepFailed("display", f"the host scans out {width}x{height} on head {head}, not "
+                                        f"{DISPLAY_SIZE[0]}x{DISPLAY_SIZE[1]}")
+        colours = collections.Counter(body[at:at + 3] for at in range(0, width * height * 3, 3))
+        if len(colours) != 1 and PLACEHOLDER_GREY in colours:
+            raise StepFailed("display", f"head {head} scans out QEMU's placeholder, not the guest's primary")
+        self.colours = len(colours)
+
     def driver_log(self):
         path = self.work / "rvkgpu.log"
         return path.read_text(errors="replace") if path.exists() else ""
@@ -503,9 +625,10 @@ class GuestRun:
             self.reboot("sign")
         if self.stage("install"):
             self.reboot("install")
-        self.stage("check", saved="device.txt")
+        self.check_monitors(self.stage_output("check", saved="device.txt"))
         self.display()
         self.mode_switch()
+        self.display_power()
         self.suite()
         self.vsync()
 

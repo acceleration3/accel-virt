@@ -15,16 +15,24 @@
 namespace av {
 
 class DisplayMode;
+struct DisplaySourcesProbe;
 
 class DisplaySources {
 public:
-    /* StartDevice reports one video present source and one child. */
-    static constexpr uint32_t source_count = 1u;
-    static constexpr uint32_t target_count = 1u;
+    /* The most outputs this driver offers, which is what its arrays are sized
+     * for; the device says how many it has. */
+    static constexpr uint32_t max_sources = 4u;
 
     explicit DisplaySources(Platform &platform);
     DisplaySources(const DisplaySources &) = delete;
     DisplaySources &operator=(const DisplaySources &) = delete;
+
+    /* The outputs the device reports: what StartDevice answers as its video
+     * present sources and children. A device with none, or with more than this
+     * driver offers, is clamped and the value logged by the caller. */
+    [[nodiscard]] Status set_count(uint32_t outputs);
+    /* One until the device has been asked. Any IRQL: every bound is this. */
+    uint32_t             count() const;
 
     [[nodiscard]] Status set_private_format(uint32_t source, uint32_t attribute);
     /* Zero for a source never set, or not the adapter's. */
@@ -51,18 +59,23 @@ public:
     /* Dispatch at most: the DPC asks before carrying a frame. */
     bool                 visible(uint32_t source);
 
+    bool invariants_hold() const;
+
 private:
     Platform          &platform_;
-    uint32_t           private_formats_[source_count];
-    const DisplayMode *committed_[source_count];
+    uint32_t           count_;
+    uint32_t           private_formats_[max_sources];
+    const DisplayMode *committed_[max_sources];
     bool               vsync_enabled_;
-    uint64_t           scanout_addresses_[source_count];
+    uint64_t           scanout_addresses_[max_sources];
     /* The primary's allocation handle, stored as an integer because it is
      * written at device IRQL and read from the DPC. */
-    uint64_t           primaries_[source_count];
+    uint64_t           primaries_[max_sources];
     /* Written at PASSIVE, read from the DPC that carries the frame, so it is
      * atomic rather than a bool the reader might tear. */
-    uint64_t           visible_[source_count];
+    uint64_t           visible_[max_sources];
+
+    friend struct DisplaySourcesProbe;
 };
 
 }  // namespace av

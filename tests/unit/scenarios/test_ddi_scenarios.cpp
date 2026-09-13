@@ -1308,3 +1308,47 @@ TEST(ddi_scenario, a_wddm_3_2_display_adapter_starts_with_the_3_2_slots_null)
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().live_allocations(), 0u);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* ---- Several outputs (feature 038, US4) ------------------------------------- */
+
+/* A device with two displays: dxgkrnl is told two sources and two children,
+ * each child answers, and each source scans out its own resource on its own
+ * host scanout. */
+TEST(ddi_scenario, two_displays_get_a_source_a_child_and_a_scanout_each)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  device.function().device_config().set_u32(8u, 2u);   /* num_scanouts */
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  CHECK_EQ(device.fdo().sources(), 2u);
+  CHECK_EQ(device.fdo().children(), 2u);
+  void           *adapter = device.fdo().context();
+  const DdiTable &table = driver.table();
+  av::DxgkChildDescriptorRecord relations[3] = {};
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, av::DxgkChildDescriptorRecord *, std::uint32_t)>(
+               table.routine(DdiSlot::DxgkDdiQueryChildRelations))(adapter, relations, sizeof relations),
+           0);
+  CHECK_EQ(relations[1].ChildUid, 1u);
+  av::FakeVirtqueueDevice &control = device.control();
+  for (std::uint32_t source = 0u; source < 2u; source++) {
+      av::FakeVidPn vidpn;
+      vidpn.add_path(source, source);
+      av::D3dkmdtVidPnSourceModeRecord pinned = {};
+      av::DisplayMode(1280u, 800u).describe(pinned);
+      vidpn.source_modes(source).seed(pinned, true);
+      const av::DxgkargCommitVidPnRecord commit = {&vidpn, source, 0, nullptr, 0u, 0u};
+      CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargCommitVidPnRecord *)>(
+                   table.routine(DdiSlot::DxgkDdiCommitVidPn))(adapter, &commit),
+               0);
+      const av::DxgkargSetVidPnSourceVisibilityRecord visible = {source, 1u, {}};
+      CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSetVidPnSourceVisibilityRecord *)>(
+                   table.routine(DdiSlot::DxgkDdiSetVidPnSourceVisibility))(adapter, &visible),
+               0);
+  }
+  /* Two creates, one per source, each with its own resource id. */
+  CHECK_EQ(control.respond_all(0x1100u), 2u);
+  CHECK_EQ(control.request_type(1u), 0x0101u);
+  CHECK_EQ(u32(control.request(1u), 24u), av::ScanoutResource::first_resource_id);
+  CHECK_EQ(control.request_type(2u), 0x0101u);
+  CHECK_EQ(u32(control.request(2u), 24u), av::ScanoutResource::first_resource_id + 1u);
+  CHECK_EQ(device.fdo().remove_device(), 0); }

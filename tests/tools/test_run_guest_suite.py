@@ -19,6 +19,8 @@ from run_guest_suite import Screendump, StepFailed, describe_panic  # noqa: E402
 
 RUNNER = ROOT / "tools" / "guest" / "run_guest_suite.py"
 FAKES = ROOT / "tests" / "tools" / "fake_guest"
+ONE_MONITOR = "display: dwm=1 services=rvkgpu monitors=1\n"
+"""What the check stage says about a guest with one output."""
 PASSING_REPORT = "ok adapter.find\nrvktest: 23 passed, 0 failed\n"
 COLLECTED = "file C:\\rvk\\diag\\system.txt\r\ndump C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp\r\n"
 GUEST_FILES = {"C:\\rvk\\diag\\system.txt": "System events\n",
@@ -43,13 +45,15 @@ class GuestSuiteRun(unittest.TestCase):
 
     def script(self, **behaviour):
         behaviour.setdefault("stages", {"sign": [3010], "install": [3010], "check": [0]})
-        behaviour.setdefault("outputs", {"check": "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+        behaviour.setdefault("outputs", {"check": ONE_MONITOR +
+                                                  "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
                                          "rvktest": PASSING_REPORT, "collect": COLLECTED})
         behaviour.setdefault("files", GUEST_FILES)
         (self.scratch / "script.json").write_text(json.dumps(behaviour))
 
     def run_suite(self, *extra, environment=None, stdin=""):
-        arguments = ["--image", self.image, "--work", self.work, "--qemu", FAKES / "fake_qemu.py",
+        arguments = ["--image", self.image, "--work", self.work, "--power-poll", "0.1",
+                     "--qemu", FAKES / "fake_qemu.py",
                      "--qemu-img", FAKES / "fake_qemu_img.py", "--executor", "/nowhere/librvk_echo_executor.so",
                      "--driver", self.scratch / "rvkgpu.sys", "--test", self.scratch / "rvktest.exe",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
@@ -76,7 +80,8 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         lines = self.journal_lines()
         argv = lines[0]
-        self.assertIn("virtio-gpu-rvk-pci,host-gpu=auto,executor=/nowhere/librvk_echo_executor.so", argv)
+        self.assertIn("virtio-gpu-rvk-pci,id=gpu,host-gpu=auto,executor=/nowhere/librvk_echo_executor.so,"
+                      "max_outputs=1", argv)
         self.assertIn("isa-debugcon,iobase=0x402,chardev=debugcon", argv)
         self.assertIn("name=org.qemu.guest_agent.0", argv)
         self.assertIn(",hv-crash", argv)
@@ -86,7 +91,8 @@ class GuestSuiteRun(unittest.TestCase):
         events = [line.split(" ")[0] if line.startswith(("exec", "file", "pull")) else line for line in lines[1:]]
         self.assertEqual(self.stage_calls(),
                          ["sign", "install", "check", "modes", "setmode -Width 1024 -Height 768",
-                          "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800", "collect"])
+                          "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800",
+                          "monitortimeout -Minutes 1", "monitortimeout -Minutes 0", "collect"])
         self.assertEqual(events.count("file"), 4)
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.sys 1000", lines)
@@ -95,7 +101,7 @@ class GuestSuiteRun(unittest.TestCase):
                  if line in ("reboot", "powerdown") or (line.startswith("exec") and ("-Stage" in line or "rvktest" in line))]
         self.assertEqual([o if o in ("reboot", "powerdown") else o.split()[-1] for o in order],
                          ["sign", "reboot", "install", "reboot", "check", "modes", "768", "1600", "800",
-                          "C:\\rvk\\rvktest.exe", "collect", "powerdown"])
+                          "1", "0", "C:\\rvk\\rvktest.exe", "collect", "powerdown"])
         self.assertEqual((self.work / "report.txt").read_text(), PASSING_REPORT)
         self.assertIn("service=rvkgpu", (self.work / "device.txt").read_text())
         self.assertIn("rvkgpu: DriverEntry", (self.work / "rvkgpu.log").read_text())
@@ -133,19 +139,20 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("guest: collect failed: exited 5", result.stdout)
         self.script(stages={"sign": [0], "install": [0], "check": [0]},
-                    outputs={"rvktest": PASSING_REPORT, "collect": "file C:\\rvk\\diag\\absent.txt\n"})
+                    outputs={"check": ONE_MONITOR, "rvktest": PASSING_REPORT,
+                             "collect": "file C:\\rvk\\diag\\absent.txt\n"})
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("guest: collect.pull failed: guest agent error: no file C:\\rvk\\diag\\absent.txt", result.stdout)
         self.assert_clean()
 
     def test_a_report_with_failures_or_without_its_summary_fails_the_run(self):
-        self.script(rvktest=2, outputs={"check": "", "rvktest": "FAIL submission.wait\nrvktest: 21 passed, 2 failed\n"})
+        self.script(rvktest=2, outputs={"check": ONE_MONITOR, "rvktest": "FAIL submission.wait\nrvktest: 21 passed, 2 failed\n"})
         result = self.run_suite()
         self.assertEqual(result.returncode, 1)
         self.assertIn("guest: report failed: 2 step(s) failed, exit 2", result.stdout)
         self.assert_clean()
-        self.script(outputs={"check": "", "rvktest": "ok adapter.find\n"})
+        self.script(outputs={"check": ONE_MONITOR, "rvktest": "ok adapter.find\n"})
         result = self.run_suite()
         self.assertEqual(result.returncode, 1)
         self.assertIn("guest: report failed: no summary line (exit 0)", result.stdout)
@@ -153,7 +160,7 @@ class GuestSuiteRun(unittest.TestCase):
 
     def test_a_bugcheck_is_named_and_its_kernel_dump_pulled_after_the_guest_reboots(self):
         self.script(panic={"during": "rvktest", "code": 0xD1},
-                    outputs={"check": "", "rvktest": PASSING_REPORT, "collect": WITH_MEMORY_DUMP})
+                    outputs={"check": ONE_MONITOR, "rvktest": PASSING_REPORT, "collect": WITH_MEMORY_DUMP})
         result = self.run_suite("--memory-dump")
         self.assertEqual(result.returncode, 1)
         self.assertIn("guest: rvktest failed: timed out waiting for an answer", result.stdout)
@@ -193,7 +200,7 @@ class GuestSuiteRun(unittest.TestCase):
         the manifest with it. Four bring-up runs of feature 037 lost their
         minidumps that way; the kernel dump is now opt-in."""
         self.script(panic={"during": "rvktest", "code": 0xD1},
-                    outputs={"check": "", "rvktest": PASSING_REPORT, "collect": COLLECTED})
+                    outputs={"check": ONE_MONITOR, "rvktest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite()
         self.assertEqual(result.returncode, 1)
         self.assertEqual(self.stage_calls()[-1], "collect")
@@ -318,8 +325,8 @@ class GuestSuiteRun(unittest.TestCase):
         self.script(screendump=[1280, 800])
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("display ok: 1280x800 scanned out of the guest's primary", result.stdout)
-        self.assertEqual(Screendump(self.work / "screen.ppm").size(), (1280, 800))
+        self.assertIn("display ok: 1 head(s) of 1280x800 scanned out of the guest's primaries", result.stdout)
+        self.assertEqual(Screendump(self.work / "screen0.ppm").size(), (1280, 800))
         self.assertIn("screendump 1280x800", self.journal_lines())
 
     def test_a_mode_the_driver_offers_must_reach_the_guest(self):
@@ -387,11 +394,81 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("the guest took 2560x1600, which the driver never offered",
                       (self.work / "verdict.txt").read_text())
 
+    def test_a_guest_with_the_wrong_monitor_count_fails_the_run(self):
+        """US4: Windows attaches a monitor to every output the device reports."""
+        self.script(screendump=[1280, 800],
+                    outputs={"check": "display: dwm=1 services=rvkgpu monitors=2\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the guest has 2 monitors, not 1", (self.work / "verdict.txt").read_text())
+
+    def test_a_check_stage_that_counted_no_monitors_fails_the_run(self):
+        self.script(screendump=[1280, 800],
+                    outputs={"check": "device: PCI\\VEN_1AF4 status=OK\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("did not count the guest's monitors", (self.work / "verdict.txt").read_text())
+
+    def test_two_outputs_are_each_scanned_out(self):
+        """US4: with max_outputs=2 the desktop is extended and each head shows
+        the committed size."""
+        self.script(screendump=[1280, 800],
+                    outputs={"check": "display: dwm=1 services=rvkgpu monitors=2\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite("--outputs", "2")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("extend ok: the desktop is across 2 displays", result.stdout)
+        self.assertIn("display ok: 2 head(s) of 1280x800", result.stdout)
+        self.assertEqual(Screendump(self.work / "screen1.ppm").size(), (1280, 800))
+        self.assertIn("max_outputs=2", self.journal_lines()[0])
+        self.assertIn("screendump 1280x800 head 1", self.journal_lines())
+
+    def test_a_desktop_that_will_not_extend_fails_the_run(self):
+        """A guest that refuses the topology for a reason of its own is a
+        failure; only the console session's access is not."""
+        self.script(screendump=[1280, 800],
+                    outputs={"check": "display: dwm=1 services=rvkgpu monitors=2\n", "extend": "extend: -1\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite("--outputs", "2")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the guest answered '-1' extending the desktop", (self.work / "verdict.txt").read_text())
+
+    def test_a_topology_the_session_0_service_may_not_change_asserts_the_first_head(self):
+        """No user is logged in, so SetDisplayConfig answers ERROR_ACCESS_DENIED
+        and the displays past the first stay dark - the run says so."""
+        self.script(screendump=[1280, 800],
+                    outputs={"check": "display: dwm=1 services=rvkgpu monitors=2\n", "extend": "extend: 5\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite("--outputs", "2")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("not a session 0 service's to change", result.stdout)
+        self.assertIn("display ok: 1 head(s) of 1280x800", result.stdout)
+
+    def test_the_display_goes_dark_by_policy_and_comes_back_with_a_key(self):
+        """US4: the power policy turns the display off without a session, and the
+        host scans out the same mode again once the guest sees input."""
+        self.script(screendump=[1280, 800])
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("power ok: the display went dark and came back at 1280x800", result.stdout)
+        self.assertIn("input-send-event", self.journal_lines())
+        self.assertIn("exec C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile "
+                      "-ExecutionPolicy Bypass -File C:\\rvk\\provision.ps1 -Stage monitortimeout -Minutes 0",
+                      self.journal_lines())
+
+    def test_a_display_that_never_goes_dark_fails_the_run(self):
+        self.script(screendump=[1280, 800], power_stays_lit=True)
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the display never went dark", (self.work / "verdict.txt").read_text())
+
     def test_a_scanout_of_the_wrong_size_fails_the_run(self):
         self.script(screendump=[640, 480])
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("the host scans out 640x480, not 1280x800", (self.work / "verdict.txt").read_text())
+        self.assertIn("the host scans out 640x480 on head 0, not 1280x800", (self.work / "verdict.txt").read_text())
 
     def test_qemus_placeholder_is_not_a_scanout(self):
         """QEMU draws "display output is not active" in grey on black when no
@@ -399,7 +476,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.script(screendump=[1280, 800], screendump_placeholder=True)
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("QEMU's placeholder, not the guest's primary", (self.work / "verdict.txt").read_text())
+        self.assertIn("head 0 scans out QEMU's placeholder", (self.work / "verdict.txt").read_text())
 
     def test_a_primary_with_no_recorded_pages_fails_the_run(self):
         """Without DXGK_OPERATION_MAP_APERTURE_SEGMENT the driver has no pages
