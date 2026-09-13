@@ -138,7 +138,8 @@ class GuestSuiteRun(unittest.TestCase):
         adapter back each time."""
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "cycle": [0]},
                     outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
-                             "cycle": "cycle: 50 done\npool: Current Pool Allocations: 0\n",
+                             # The guest ends its lines the Windows way.
+                             "cycle": "cycle: 50 done\r\npool: Current Pool Allocations: 0\r\n",
                              "rvktest": PASSING_REPORT, "collect": COLLECTED})
         result = self.run_suite("--power-cycles", "50")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

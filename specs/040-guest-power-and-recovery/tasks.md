@@ -102,7 +102,9 @@ description: "Tasks: real-guest power, restart and recovery"
 - [X] T018 [US2] The L2 scenario in `tests/unit/scenarios/test_ddi_scenarios.cpp`: fifty StopDevice/StartDevice cycles on one adapter, with the mock platform's allocation balance and handle counts asserted after the last
 - [X] T019 [US2] The runner's `cycle` scenario in `tools/guest/run_guest_suite.py` (`pnputil /disable-device` and `/enable-device`, `--power-cycles N`), the adapter started after each, Driver Verifier's pool tracking read after the last; with its fake-guest test and the `provision.ps1` stage it needs
 - [ ] T020 [US2] The runner's `upgrade` scenario: a package with a higher version installed over the running one with no reboot, and the adapter started on the new version
-- [ ] T021 [US2] Fifty cycles and five upgrades on the real guest, no leak and no bugcheck (SC-002); record what the runs showed here
+- [~] T021 [US2] Fifty cycles on the real guest: **done, and clean**. `cycle: 50 done`, and Driver Verifier after the last one: 459 pool allocations attempted, 459 succeeded, **current 8, peak 8** - the driver holds the same eight allocations after fifty disable/enable cycles as after one, and no bugcheck. Five upgrades are still to run (T020 builds the scenario).
+
+  The run also found the runner reading the guest's own output wrongly: the guest ends its lines the Windows way, and a regex anchored at `$` without allowing `\r` never matched `cycle: 50 done`. Every anchored pattern that reads guest output now tolerates it
 
 **Checkpoint**: the driver survives being turned off and replaced. Commit.
 

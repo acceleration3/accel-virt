@@ -45,9 +45,11 @@ PACKAGE_DIRECTORY = GUEST_DIRECTORY + "\\package"
 POWERSHELL = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
 REBOOT_REQUIRED = 3010
 SUMMARY = re.compile(rb"^rvktest: (\d+) passed, (\d+) failed$", re.M)
-CYCLES_DONE = re.compile(r"^cycle: (\d+) done$", re.M)
-STRESS_FENCES = re.compile(rb"^ok stress\.fences (\d+)$", re.M)
-STRESS_WORST = re.compile(rb"^ok stress\.worst_wait_us (\d+)$", re.M)
+# The guest ends its lines the Windows way, so nothing anchored at $ may
+# assume the line stops at the newline.
+CYCLES_DONE = re.compile(r"^cycle: (\d+) done\r?$", re.M)
+STRESS_FENCES = re.compile(rb"^ok stress\.fences (\d+)\r?$", re.M)
+STRESS_WORST = re.compile(rb"^ok stress\.worst_wait_us (\d+)\r?$", re.M)
 MANIFEST = re.compile(r"^(file|dump) (.+?)\r?$", re.M)
 # The enlightenments Windows expects of KVM, and hv-crash: Windows writes its
 # bugcheck code and parameters to the crash MSRs, which QEMU reports as
