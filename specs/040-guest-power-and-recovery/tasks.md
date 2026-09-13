@@ -45,6 +45,32 @@ description: "Tasks: real-guest power, restart and recovery"
 - [X] T009 [US1] The runner's `suspend` and `hibernate` scenarios in `tools/guest/run_guest_suite.py` (agent `guest-suspend-ram`, QMP `system_wakeup`; hibernation enabled inside the overlay for `guest-suspend-disk`, then the overlay booted again), each reported skipped with its reason where the machine does not offer the transition, with fake-guest tests in `tests/tools/test_run_guest_suite.py`
 - [ ] T010 [US1] Five S4 resumes with a passing `rvktest.exe` (SC-001), and S3 likewise where offered; record what the runs showed here
 
+  **S3 on this machine cannot resume, and it is the firmware, not the driver.**
+  The first live S3 bugchecked the guest. The driver's own log said where it was
+  not: `SetPowerState D3 done status 0`, and then no D0 at all - the machine
+  died between entering S3 and being powered back up. Two real driver defects
+  came out of chasing it, both fixed and both tested:
+
+  - the synthetic vertical blank kept its timer across D3 and reported a blank
+    to an adapter dxgkrnl had not powered up yet, which Windows bugchecks for;
+  - the ISR and the DPC checked only that the device object existed, so an
+    interrupt arriving while `power_up` was between constructing and starting it
+    harvested from queues that were not there.
+
+  With both fixed the driver completes D0 cleanly - `SetPowerState D0 device`,
+  `vsync`, `done`, all status 0 - and the guest agent answers again. The guest
+  then still bugchecks, and the minidump names it: **0x5C
+  HAL_INITIALIZATION_FAILED (0x201, ..., 0xC0000001)**, which is the guest's own
+  HAL failing to come back, not a display driver. OVMF on q35 advertises S3
+  through ACPI and cannot resume from it.
+
+  So the machine stops advertising what it cannot do: the runner passes
+  `-global ICH9-LPC.disable_s3=1` unless `--s3` says otherwise, Windows then
+  reports `standby=no`, and the scenario skips with that reason instead of
+  crashing the guest. SC-001's S3 half is "where offered", and it is not offered
+  here; S4 is what this machine can actually do, and what the rest of this task
+  measures.
+
 **Checkpoint**: the guest sleeps and wakes with the adapter running. Commit.
 
 ---

@@ -114,6 +114,8 @@ def arguments():
     parser.add_argument("--cpus", type=int, default=4)
     parser.add_argument("--outputs", type=int, default=1, help="the device's max_outputs")
     parser.add_argument("--power-poll", type=float, default=5.0, help="seconds between display-power screendumps")
+    parser.add_argument("--s3", action="store_true",
+                        help="let the machine advertise S3; this firmware cannot resume from it")
     parser.add_argument("--hibernate", action="store_true",
                         help="also suspend to disk and boot the overlay again (feature 040, US1)")
     parser.add_argument("--stress-minutes", type=float, default=0.0,
@@ -145,6 +147,12 @@ def qemu_command(args, work, disk, rescue):
                                           f"executor={args.executor},max_outputs={args.outputs}"]
     command = [
         args.qemu, "-machine", f"q35,accel={args.accel},memory-backend=ram",
+        # OVMF on q35 advertises S3 through ACPI and cannot resume from it: the
+        # guest wakes and its HAL bugchecks 0x5C HAL_INITIALIZATION_FAILED
+        # (0x201, ..., STATUS_UNSUCCESSFUL) before anything the driver does
+        # after D0. The machine says so instead of lying, unless --s3 says the
+        # firmware here can do it (feature 040, US1).
+        "-global", f"ICH9-LPC.disable_s3={0 if args.s3 else 1}",
         "-cpu", f"host,{HYPERV}" if args.accel == "kvm" else "max",
         "-smp", str(args.cpus), "-m", f"{args.memory}M",
         "-object", f"memory-backend-memfd,id=ram,size={args.memory}M,share=on",
