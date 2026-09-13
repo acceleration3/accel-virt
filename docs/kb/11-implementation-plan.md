@@ -125,6 +125,7 @@ guest vCPU stores to doorbell[ctx]
   └ KVM ioeventfd (memory_region_add_eventfd)  — completed in the kernel, no BQL
       └ worker thread for ctx wakes
           decode   (the generated server dispatch)
+          import   (a blob, as a host pointer or a dma-buf, once per blob)
           execute  (host Vulkan / GL / CL)
           advance fence value in the ctx's fence page
           event_notifier_set(guest notifier) → irqfd, KVM injects MSI-X, no BQL

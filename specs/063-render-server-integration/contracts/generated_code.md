@@ -241,3 +241,25 @@ owns the list, and a generated call site is the only caller of each.
 - put generated code in a namespace that is not `av::`;
 - re-introduce a logging or profiling macro into generated output - if a
   generated path needs to say something, the hand-written caller says it.
+
+## G. What feature 042 settled, and what it changed here
+
+**The no-STL line did not move**, which is what section D left open. The host
+executor is built freestanding like everything else here - no standard library,
+no exceptions, no RTTI - so the `server_dispatch` emitter does not get its
+`std::vector` back, and the arena storage that replaced it is what the emitted
+code uses on the host as well as anywhere else.
+
+Four changes to what the generators emit came out of running the output rather
+than reading it, and each is a rule for every emitter here:
+
+| What | Why |
+|---|---|
+| Every handle crosses through `handle_to_wire` and comes back through `wire_to_handle` | The inbound direction used to be a `reinterpret_cast`, so a guest naming any address had the host dereference it. A fuzz target reached `vkDestroyInstance` with a guest-chosen pointer in seconds |
+| A decoded field is read through `as_number` wherever its value is used | A field off the wire holds whatever a guest sent, and loading an enum-typed one whose value the enum does not have is undefined. Length expressions did exactly that |
+| A string off the wire is terminated by the decoder, and an empty one in an array is an empty string rather than a null | The driver `strcmp`s what it is handed, and the elements of a string array are strings it reads |
+| An extension entry point is resolved at first use, never linked | Which extension symbols a loader exports is a property of the machine. One missing OpenCL symbol made the whole executor library unloadable on a host whose loader had no GL sharing |
+
+The OpenGL sync hooks became fields on `RealGl` for the reason `rvk_blob`
+already was one: a parameterless hook cannot reach one context's state, and
+this project has no file-scope place to keep it.

@@ -226,7 +226,7 @@ Every call must return: `CTX_DESTROY` and a reset wait for a worker's call to
 finish.
 
 
-`src/device/abi/rvk_executor.h`, version 1, is what runs a context's commands on
+`src/device/abi/rvk_executor.h`, now version 2, is what runs a context's commands on
 the host's API: `sub_apis`, `create(sub_api, gpu_uuid)`, `destroy`, and
 `execute(id, payload, size, reply, capacity, &reply_size)` answering executed,
 unknown, undecodable or device lost. The QEMU device loads the library its
@@ -237,6 +237,27 @@ only that thread calls it. The executor that answers for real is this
 project's own, built on the generated server dispatch in
 `src/proto/generated/*/` over host API backends (feature 042); the qemu
 configuration builds `rvk_echo_executor` for the tests.
+
+**Version 2 adds a memory channel**, because version 1 had none: the only bytes
+an executor could see were one command's payload, so a command naming a blob had
+nothing to name it with. It adds `import_kinds`, `import_blob` and
+`release_blob`, and changes nothing else. The device accepts both versions and a
+version 1 library simply imports nothing; a table claiming version 2 and
+carrying only part of it is refused at realize rather than found out one blob
+later on a worker.
+
+A blob crosses as a tagged handle - a host pointer or a dma-buf, whichever the
+API can take without a copy - with no offset, because the device hands over a
+handle naming exactly the range and OpenCL's own import has no offset property.
+`import_kinds` is asked per sub-API and per GPU, on the main loop, while the
+capset is being described; `import_blob` and `release_blob` run on the context's
+worker like `execute`. The capset's `feature_guest_memory_import` bit means both
+halves are true: this device can build a handle, and the library will take one.
+
+Which handle kinds work is a property of the host, not of the protocol: a host
+pointer imports into Vulkan on every GPU measured, while OpenGL and OpenCL take
+a dma-buf and only on some drivers. Where neither works the guest is copied at
+the boundary and the capset bit is clear.
 
 ## Ring header (shared, both write)
 
