@@ -13,13 +13,12 @@ DeviceCapset::DeviceCapset(Host &host) : host_(host), info_(), described_(false)
 
 /* A device type Vulkan does not define is reported as other, so the capset
  * stays decodable. */
-void DeviceCapset::describe(uint32_t gpu_index, uint32_t sub_apis)
+void DeviceCapset::describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t features)
 {
     host_.require_main_loop("DeviceCapset::describe");
     if (sub_apis == 0u) return;
     const GpuIdentity gpu = host_.gpu_identity(gpu_index);
     const uint32_t type = gpu.device_type() > GpuIdentity::cpu ? GpuIdentity::other_gpu : gpu.device_type();
-    const uint64_t features = host_.hostmem_size() != 0u ? CapsetInfo::feature_host_visible_memory : 0u;
     info_ = CapsetInfo(ProtocolVersion(ProtocolVersion::current_major, ProtocolVersion::current_minor),
                        sub_apis, DeviceContextTable::max_contexts,
                        RingHeader::lowest_order, RingHeader::highest_order, features,

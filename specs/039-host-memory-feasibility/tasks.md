@@ -89,13 +89,29 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 
 **Independent Test**: L1 tests of every bit set and clear; the L4 loopback suite passes with each bit cleared.
 
-- [ ] T018 [P] [US4] Write `tests/unit/proto/context/test_capset_info.cpp` additions first: `feature_gpu_exported_memory` (bit 2) and `feature_guest_memory_import` (bit 4) round-trip through `encode`/`decode`, and an unknown bit still survives
-- [ ] T019 [US4] Add the two constants to `src/proto/context/capset_info.hpp`
-- [ ] T020 [P] [US4] Write `tests/unit/device/probe/test_host_feasibility.cpp` first: `decide()` runs both memory probes once; `features()` carries a bit only for a probe that passed; `feature_host_visible_memory` follows the hostmem region; deciding twice changes nothing; `interrupts()` hands out the same stress probe
-- [ ] T021 [US4] Implement `HostFeasibility` (system class) in `src/device/probe/host_feasibility.{hpp,cpp}`
-- [ ] T022 [US4] Make `DeviceCapset::describe` take its feature mask from `HostFeasibility` in `src/device/capset/device_capset.{hpp,cpp}`, and update `tests/unit/device/capset/test_device_capset.cpp` so no bit is set without a passed probe (constitution VI)
-- [ ] T023 [US4] Run the probes at realize in `src/device/module/virtio_gpu_rvk.{hpp,cpp}`, logging one line per probe with its outcome and reason; a failed probe never fails realize (FR-004), asserted in `tests/unit/device/module/test_virtio_gpu_rvk.cpp`
+- [X] T018 [P] [US4] Write `tests/unit/proto/context/test_capset_info.cpp` additions first: `feature_gpu_exported_memory` (bit 2) and `feature_guest_memory_import` (bit 4) round-trip through `encode`/`decode`, and an unknown bit still survives
+- [X] T019 [US4] Add the two constants to `src/proto/context/capset_info.hpp`
+- [X] T020 [P] [US4] Write `tests/unit/device/probe/test_host_feasibility.cpp` first: `decide()` runs both memory probes once; `features()` carries a bit only for a probe that passed; `feature_host_visible_memory` follows the hostmem region; deciding twice changes nothing; `interrupts()` hands out the same stress probe
+- [X] T021 [US4] Implement `HostFeasibility` (system class) in `src/device/probe/host_feasibility.{hpp,cpp}`
+- [X] T022 [US4] Make `DeviceCapset::describe` take its feature mask from `HostFeasibility` in `src/device/capset/device_capset.{hpp,cpp}`, and update `tests/unit/device/capset/test_device_capset.cpp` so no bit is set without a passed probe (constitution VI)
+- [X] T023 [US4] Run the probes at realize in `src/device/module/virtio_gpu_rvk.{hpp,cpp}`, logging one line per probe with its outcome and reason; a failed probe never fails realize (FR-004), asserted in `tests/unit/device/module/test_virtio_gpu_rvk.cpp`
 - [ ] T024 [US4] Prove the fallbacks at L4: the loopback suite runs with each new bit cleared in `tests/loopback/`, and the guest takes the copy path without error
+
+  **What the probes answered on the development host.** Run with a 256 MiB
+  hostmem region and memfd-backed guest RAM, both GPUs pass both probes - but
+  NVIDIA only after the export learned a second handle type. Its proprietary
+  driver exports `VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT` memory that
+  `mmap` refuses with EINVAL, which is exactly the risk kb 11's M2 spike list
+  names; its `DMA_BUF` export maps, and the guest reads it. Intel's Mesa ANV
+  takes either. The export now tries opaque fd, then dma-buf, and only then
+  gives up.
+
+  Two more things the live run found, both in the glue, both about realize
+  being earlier than it looks: the device has no DMA address space until the
+  bus plugs it in (mapping guest RAM through it segfaulted QEMU, so the probes
+  map through the machine's own address space), and a realize now says one line
+  per probe, which the smoke test had to learn is the device working rather
+  than complaining.
 
 **Checkpoint**: every bit has a probe behind it and a fallback under it. Commit.
 

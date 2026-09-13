@@ -22,19 +22,12 @@ Status GuestImportProbe::matches(void *imported, uint64_t offset)
     return Status::ok;
 }
 
-uint64_t GuestImportProbe::copy_rate(const void *window)
+uint64_t GuestImportProbe::copy(uint8_t *to, const uint8_t *from)
 {
-    void       *destination = nullptr;
-    void *const block = host_.create_host_memory(probe_bytes, destination);
-    if (block == nullptr || destination == nullptr) return 0u;
-    ScopeExit destroy([&] { host_.destroy_host_memory(block); });
-    const uint8_t *const from = static_cast<const uint8_t *>(window);
-    uint8_t *const       to = static_cast<uint8_t *>(destination);
-    const uint64_t       started = host_.monotonic_nanoseconds();
+    const uint64_t started = host_.monotonic_nanoseconds();
     for (uint64_t offset = 0u; offset < probe_bytes; offset++) to[offset] = from[offset];
     const uint64_t elapsed = host_.monotonic_nanoseconds() - started;
-    if (elapsed == 0u) return 0u;
-    return probe_bytes * nanoseconds_per_second / elapsed;
+    return elapsed == 0u ? 0u : probe_bytes * nanoseconds_per_second / elapsed;
 }
 
 void GuestImportProbe::run(uint64_t guest_address)
@@ -55,20 +48,39 @@ void GuestImportProbe::run(uint64_t guest_address)
         static_cast<void>(result_.record_failure(Status::not_supported, 0));
         return;
     }
+    /* Somewhere to keep the guest's own bytes while the pattern is in their
+     * place; copying them there is the fallback, and its rate is the answer a
+     * refusal carries. */
+    void       *kept = nullptr;
+    void *const block = host_.create_host_memory(probe_bytes, kept);
+    if (block == nullptr || kept == nullptr) {
+        static_cast<void>(result_.record_failure(Status::no_memory, 0));
+        return;
+    }
+    ScopeExit destroy([&] { host_.destroy_host_memory(block); });
     uint8_t *const bytes = static_cast<uint8_t *>(window);
+    const uint64_t rate = copy(static_cast<uint8_t *>(kept), bytes);
+    ScopeExit restore([&] {
+        for (uint64_t offset = 0u; offset < probe_bytes; offset++)
+            bytes[offset] = static_cast<const uint8_t *>(kept)[offset];
+    });
     for (uint64_t offset = 0u; offset < probe_bytes; offset++) bytes[offset] = expected(offset);
     int32_t     host_error = 0;
     void *const imported = host_.import_guest_memory(window, probe_bytes, host_error);
     if (imported == nullptr) {
         static_cast<void>(result_.record_failure(Status::not_supported, host_error));
-        result_.measure(copy_rate(window));
+        result_.measure(rate);
         return;
     }
     ScopeExit release([&] { host_.release_guest_memory(imported); });
     Status carried = matches(imported, 0u);
     if (carried == Status::ok) carried = matches(imported, probe_bytes - sample_bytes);
-    static_cast<void>(carried == Status::ok ? result_.record_pass(probe_bytes)
-                                            : result_.record_failure(carried, 0));
+    if (carried == Status::ok) {
+        static_cast<void>(result_.record_pass(probe_bytes));
+        return;
+    }
+    static_cast<void>(result_.record_failure(carried, 0));
+    result_.measure(rate);
 }
 
 const ProbeResult &GuestImportProbe::result() const

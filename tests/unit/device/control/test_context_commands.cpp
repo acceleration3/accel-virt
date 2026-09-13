@@ -102,7 +102,8 @@ public:
         static_cast<void>(library_.accept(&ops_.table()));
         host_.add_gpu(uuid);
         host_.set_hostmem_size(0x10000u);
-        capset_.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan));
+        capset_.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan),
+                         av::CapsetInfo::feature_host_visible_memory);
         static_cast<void>(blobs_.create_host(ring, 0x2000u));
         static_cast<void>(blobs_.create_host(fence, 0x1000u));
         static_cast<void>(blobs_.create_host(small_ring, 0x1000u));
@@ -283,7 +284,7 @@ TEST(context_commands, a_device_without_a_capset_refuses_capset_queries_and_cont
   DeviceContextTable contexts(host, blobs, interrupts, library);
   const GpuRequestBuilder requests[] = {capset_info(0u), capset(0x72u, 1u), create(1u)};
   DeviceCapset undescribed(host);
-  undescribed.describe(0u, 0u);
+  undescribed.describe(0u, 0u, 0u);
   ContextCommands commands(host, contexts, undescribed);
   for (const GpuRequestBuilder &builder : requests) {
       MockRequest mock(builder.bytes(), builder.size());

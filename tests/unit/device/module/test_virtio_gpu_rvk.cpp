@@ -284,9 +284,10 @@ TEST(virtio_gpu_rvk_status, the_fence_interrupts_follow_the_drivers_status_byte)
   device.reset();                           /* the reset QEMU delivers after it */
   CHECK(!host.fence_interrupts_connected());
   host.fail_fence_connect_at(1u);
+  const std::uint32_t before = host.logged();
   device.status(DriverStatus::driver_ok);
   CHECK(!host.fence_interrupts_connected());
-  CHECK_EQ(host.logged(), 1u);
+  CHECK_EQ(host.logged(), before + 1u);
   CHECK_STATUS(device.create_context(1u), Status::invalid_state);
   device.status(DriverStatus::driver_ok);
   CHECK(host.fence_interrupts_connected());
@@ -305,7 +306,8 @@ TEST(virtio_gpu_rvk_realize, a_host_without_a_mutex_for_fence_interrupts_is_refu
   CHECK(!device.realized());
   TextBuffer again(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, nullptr, again), Status::ok);
-  CHECK_EQ(host.logged(), 1u); }
+  /* The refusal, and one line for each probe realize ran. */
+  CHECK_EQ(host.logged(), 3u); }
 
 TEST(virtio_gpu_rvk, lifecycle_is_main_loop_only)
 { MockHost host;

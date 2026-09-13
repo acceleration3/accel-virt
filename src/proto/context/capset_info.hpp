@@ -20,6 +20,11 @@ public:
     static constexpr uint32_t capset_id    = 0x72u;
     static constexpr size_t   encoded_size = 128u;
     static constexpr uint64_t feature_host_visible_memory = 1u;
+    /* Feature 039's probes, each set only where its probe passed on this host:
+     * memory the host GPU exports that reaches the guest through the hostmem
+     * region, and guest pages the host GPU addresses directly. */
+    static constexpr uint64_t feature_gpu_exported_memory = 2u;
+    static constexpr uint64_t feature_guest_memory_import = 4u;
 
     CapsetInfo();
     CapsetInfo(const ProtocolVersion &version, uint32_t sub_apis, uint32_t max_contexts,

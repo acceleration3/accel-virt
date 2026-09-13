@@ -8,8 +8,12 @@
 
 namespace av {
 
+/* Conventional low RAM: present on every machine before the guest runs, and the
+ * import probe puts back what it found there. */
+constexpr uint64_t guest_probe_address = 0x100000u;
+
 VirtioGpuRvk::VirtioGpuRvk(Host &host)
-    : host_(host), binding_(host), library_(), capset_(host), blobs_(host), interrupts_(host),
+    : host_(host), binding_(host), library_(), feasibility_(host), capset_(host), blobs_(host), interrupts_(host),
       status_(host, interrupts_), contexts_(host, blobs_, interrupts_, library_) {}
 
 Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExecutorOps *executor,
@@ -34,7 +38,11 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
         return Status::no_memory;
     }
     const Status status = binding_.bind(host_gpu, message);
-    if (status == Status::ok) capset_.describe(binding_.index(), library_.sub_apis());
+    if (status != Status::ok) return status;
+    /* What this host can actually do, asked once, on the GPU just bound: a
+     * probe that fails leaves its bit clear and the device starts anyway. */
+    feasibility_.decide(guest_probe_address);
+    capset_.describe(binding_.index(), library_.sub_apis(), feasibility_.features());
     return status;
 }
 

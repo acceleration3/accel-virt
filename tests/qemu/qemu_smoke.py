@@ -62,6 +62,14 @@ class Qemu:
         return process.returncode, stderr
 
 
+def complaints(stderr):
+    """What the device said beyond its probe verdicts. A realize says what each
+    feasibility probe found (feature 039) whether it passed or not, so those
+    lines are the device working, not the device complaining."""
+    return "\n".join(line for line in stderr.splitlines()
+                     if "virtio-gpu-rvk" in line and ": probe " not in line)
+
+
 def check(condition, message):
     if not condition:
         print(f"qemu_smoke: {message}", file=sys.stderr)
@@ -76,7 +84,9 @@ def main():
     (identity, subsystem), stderr = qemu.config_registers("auto", (0x00, 0x2C))
     check(identity == VIRTIO_GPU, f"vendor/device 0x{identity:08x}, want 0x{VIRTIO_GPU:08x}")
     check(subsystem == RVK_SUBSYSTEM, f"subsystem 0x{subsystem:08x}, want 0x{RVK_SUBSYSTEM:08x}")
-    check("virtio-gpu-rvk" not in stderr, f"a device realized on auto logged: {stderr}")
+    check(not complaints(stderr), f"a device realized on auto logged: {stderr}")
+    check(": probe exported memory: " in stderr and ": probe guest import: " in stderr,
+          f"a realize said nothing about its probes: {stderr}")
 
     for host_gpu, reason in (("not-a-uuid", "is neither auto nor a device UUID"),
                              ("00000000-0000-0000-0000-000000000001", "no host Vulkan device has UUID")):
@@ -89,7 +99,7 @@ def main():
         check(code != 0, f"executor={executor} realized")
         check(reason in stderr, f"executor={executor}: {stderr.strip()}")
     (identity, _), stderr = qemu.config_registers_with("auto", f",executor={sys.argv[2]}", (0x00, 0x2C))
-    check(identity == VIRTIO_GPU and "virtio-gpu-rvk" not in stderr, f"the echo executor: {stderr}")
+    check(identity == VIRTIO_GPU and not complaints(stderr), f"the echo executor: {stderr}")
     print("qemu_smoke: ok")
 
 

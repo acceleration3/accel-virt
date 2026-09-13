@@ -88,15 +88,33 @@ TEST(guest_import_probe_run, a_refused_import_measures_the_copy_the_fallback_wou
   CHECK_EQ(host.live_host_memory(), 0u);
   CHECK_EQ(host.live_guest_mappings(), 0u); }
 
-TEST(guest_import_probe_run, a_copy_the_host_has_no_memory_for_measures_nothing)
+/* The window is the guest's memory: without somewhere to keep what is in it,
+ * the probe writes nothing it could not put back. */
+TEST(guest_import_probe_run, a_host_with_nowhere_to_keep_the_window_never_writes_it)
 { MockHost host;
   with_ram(host);
-  host.refuse_import_at(1u, 0);
+  host.guest_ram(window)[0] = 0xC7u;
   host.fail_host_memory_at(1u);
   GuestImportProbe probe(host);
   probe.run(window);
   CHECK(!probe.result().passed());
+  CHECK_STATUS(probe.result().reason(), Status::no_memory);
   CHECK_EQ(probe.result().measured(), 0u);
+  CHECK_EQ(host.guest_ram(window)[0], 0xC7u);
+  CHECK_EQ(host.live_host_memory(), 0u);
+  CHECK_EQ(host.live_imports(), 0u); }
+
+TEST(guest_import_probe_run, leaves_the_guest_window_holding_what_it_held)
+{ MockHost host;
+  with_ram(host);
+  std::uint8_t *const ram = host.guest_ram(window);
+  ram[0] = 0x11u;
+  ram[GuestImportProbe::probe_bytes - 1u] = 0x22u;
+  GuestImportProbe probe(host);
+  probe.run(window);
+  CHECK(probe.result().passed());
+  CHECK_EQ(ram[0], 0x11u);
+  CHECK_EQ(ram[GuestImportProbe::probe_bytes - 1u], 0x22u);
   CHECK_EQ(host.live_host_memory(), 0u); }
 
 /* A clock that does not move cannot answer a rate, and dividing by it would be

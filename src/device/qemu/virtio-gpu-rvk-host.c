@@ -20,6 +20,7 @@
 #include "qapi/error.h"
 #include "system/dma.h"
 #include "system/memory.h"
+#include "system/address-spaces.h"
 #include "hw/virtio/virtio-gpu-bswap.h"
 #include "hw/virtio/virtio-bus.h"
 #include "hw/virtio/virtio-gpu-rvk.h"
@@ -169,6 +170,17 @@ static void rvk_release(void *opaque, void *block)
     g_free(block);
 }
 
+/* The device has no DMA address space of its own until the bus plugs it in,
+ * which is after realize - and the feasibility probes run inside realize. The
+ * machine's memory is the same RAM the guest will see, so it answers the
+ * question they ask. */
+static AddressSpace *rvk_address_space(VirtIOGPURvk *r)
+{
+    AddressSpace *device = VIRTIO_DEVICE(r)->dma_as;
+
+    return device ? device : &address_space_memory;
+}
+
 /* A bounce buffer is not guest RAM, and a copy the guest cannot see is no
  * blob; the core refuses one it is told about. */
 static void *rvk_map_guest(void *opaque, uint64_t address, uint64_t *length, int *direct)
@@ -176,7 +188,7 @@ static void *rvk_map_guest(void *opaque, uint64_t address, uint64_t *length, int
     VirtIOGPURvk *r = opaque;
     dma_addr_t mapped = *length;
     ram_addr_t offset;
-    void *pointer = dma_memory_map(VIRTIO_DEVICE(r)->dma_as, address, &mapped, DMA_DIRECTION_TO_DEVICE,
+    void *pointer = dma_memory_map(rvk_address_space(r), address, &mapped, DMA_DIRECTION_TO_DEVICE,
                                    MEMTXATTRS_UNSPECIFIED);
 
     *length = pointer ? mapped : 0;
@@ -188,7 +200,7 @@ static void rvk_unmap_guest(void *opaque, void *pointer, uint64_t length)
 {
     VirtIOGPURvk *r = opaque;
 
-    dma_memory_unmap(VIRTIO_DEVICE(r)->dma_as, pointer, length, DMA_DIRECTION_TO_DEVICE, 0);
+    dma_memory_unmap(rvk_address_space(r), pointer, length, DMA_DIRECTION_TO_DEVICE, 0);
 }
 
 static void *rvk_create_host_memory(void *opaque, uint64_t size, void **pointer)
@@ -335,14 +347,15 @@ static int rvk_bind_gpu(void *opaque, uint32_t index)
     return 0;
 }
 
-/* Memory of the host GPU's own, exported as a file descriptor so the hostmem
- * placement can map it into the guest exactly as a memfd block is mapped. */
-static void *rvk_export_gpu_memory(void *opaque, uint64_t size, void **pointer, int32_t *host_error)
+/* One attempt at exporting `size` bytes as `handle_type`: the memory, its fd and
+ * the CPU mapping of that fd, or nothing with *host_error saying which step the
+ * driver refused. */
+static int rvk_export_handle(VirtIOGPURvk *r, uint64_t size, VkExternalMemoryHandleTypeFlagBits handle_type,
+                             VkDeviceMemory *memory, int *fd, void **mapped, int32_t *host_error)
 {
-    VirtIOGPURvk *r = opaque;
     VkExportMemoryAllocateInfo export_info = {
         .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
-        .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
+        .handleTypes = handle_type,
     };
     VkMemoryAllocateInfo allocate = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -351,44 +364,72 @@ static void *rvk_export_gpu_memory(void *opaque, uint64_t size, void **pointer, 
     };
     VkMemoryGetFdInfoKHR fd_info = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
-        .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
+        .handleType = handle_type,
     };
-    PFN_vkGetMemoryFdKHR get_fd;
+    PFN_vkGetMemoryFdKHR get_fd = (PFN_vkGetMemoryFdKHR)vkGetDeviceProcAddr(r->gpu, "vkGetMemoryFdKHR");
+    VkResult answered;
+
+    *memory = VK_NULL_HANDLE;
+    *fd = -1;
+    *mapped = NULL;
+    if (!get_fd || !rvk_memory_type(r->bound, UINT32_MAX, &allocate.memoryTypeIndex)) {
+        return 1;
+    }
+    answered = vkAllocateMemory(r->gpu, &allocate, NULL, memory);
+    if (answered != VK_SUCCESS) {
+        *host_error = answered;
+        return 1;
+    }
+    fd_info.memory = *memory;
+    answered = get_fd(r->gpu, &fd_info, fd);
+    if (answered != VK_SUCCESS) {
+        *host_error = answered;
+        vkFreeMemory(r->gpu, *memory, NULL);
+        *memory = VK_NULL_HANDLE;
+        return 1;
+    }
+    *mapped = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, *fd, 0);
+    if (*mapped == MAP_FAILED) {
+        /* NVIDIA's proprietary driver exports an opaque fd nothing can mmap;
+         * its dma-buf export is the one a KVM memslot can take. */
+        *host_error = -errno;
+        close(*fd);
+        vkFreeMemory(r->gpu, *memory, NULL);
+        *memory = VK_NULL_HANDLE;
+        *fd = -1;
+        *mapped = NULL;
+        return 1;
+    }
+    return 0;
+}
+
+/* Memory of the host GPU's own, exported as a file descriptor so the hostmem
+ * placement can map it into the guest exactly as a memfd block is mapped.
+ * Drivers differ in which export a CPU mapping works on, so both are tried. */
+static void *rvk_export_gpu_memory(void *opaque, uint64_t size, void **pointer, int32_t *host_error)
+{
+    static const VkExternalMemoryHandleTypeFlagBits handle_types[] = {
+        VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
+        VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+    };
+    VirtIOGPURvk *r = opaque;
     VirtIOGPURvkBlock *block;
     VkDeviceMemory memory = VK_NULL_HANDLE;
-    VkResult allocated;
     int fd = -1;
-    void *mapped;
+    void *mapped = NULL;
 
     *pointer = NULL;
     *host_error = 0;
     if (!r->gpu) {
         return NULL;
     }
-    if (!rvk_memory_type(r->bound, UINT32_MAX, &allocate.memoryTypeIndex)) {
-        return NULL;
+    for (uint32_t i = 0; i < ARRAY_SIZE(handle_types); i++) {
+        if (!rvk_export_handle(r, size, handle_types[i], &memory, &fd, &mapped, host_error)) {
+            *host_error = 0;
+            break;
+        }
     }
-    get_fd = (PFN_vkGetMemoryFdKHR)vkGetDeviceProcAddr(r->gpu, "vkGetMemoryFdKHR");
-    if (!get_fd) {
-        return NULL;
-    }
-    allocated = vkAllocateMemory(r->gpu, &allocate, NULL, &memory);
-    if (allocated != VK_SUCCESS) {
-        *host_error = allocated;
-        return NULL;
-    }
-    fd_info.memory = memory;
-    allocated = get_fd(r->gpu, &fd_info, &fd);
-    if (allocated != VK_SUCCESS) {
-        *host_error = allocated;
-        vkFreeMemory(r->gpu, memory, NULL);
-        return NULL;
-    }
-    mapped = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (mapped == MAP_FAILED) {
-        *host_error = -errno;
-        close(fd);
-        vkFreeMemory(r->gpu, memory, NULL);
+    if (!mapped) {
         return NULL;
     }
     block = g_new0(VirtIOGPURvkBlock, 1);

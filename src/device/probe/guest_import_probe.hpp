@@ -3,7 +3,13 @@
  * pattern into it, and compares what the GPU sees through the import. A host
  * that cannot import is a clean refusal - the copy fallback is what the guest
  * then uses - but a GPU that sees something else is a lie worth a bit's
- * absence. */
+ * absence.
+ *
+ * The window is guest memory, so the probe keeps a copy of it and puts it back:
+ * it needs that copy anyway, because copying it is exactly what the fallback
+ * would have to do, and timing it is the number the refusal is worth. Without
+ * somewhere to keep it the probe refuses rather than write over guest memory it
+ * cannot restore. */
 #ifndef AV_GUEST_IMPORT_PROBE_HPP
 #define AV_GUEST_IMPORT_PROBE_HPP
 
@@ -34,10 +40,9 @@ private:
 
     uint8_t              expected(uint64_t offset) const;
     [[nodiscard]] Status matches(void *imported, uint64_t offset);
-    /* Bytes a second for the copy a fallback would have to do over this window,
-     * or 0 when the host has no memory for it or no clock fine enough to time
-     * it. What 041 is choosing between when the import is refused. */
-    uint64_t             copy_rate(const void *window);
+    /* `probe_bytes` from `from` to `to`, and how many bytes a second that was;
+     * 0 when the clock could not see it. */
+    uint64_t             copy(uint8_t *to, const uint8_t *from);
 
     Host       &host_;
     ProbeResult result_;

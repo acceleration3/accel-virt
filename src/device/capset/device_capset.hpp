@@ -22,8 +22,10 @@ public:
     DeviceCapset(const DeviceCapset &) = delete;
     DeviceCapset &operator=(const DeviceCapset &) = delete;
 
-    /* Main loop. With no sub-API to offer there is no capset. */
-    void              describe(uint32_t gpu_index, uint32_t sub_apis);
+    /* Main loop. With no sub-API to offer there is no capset. `features` is
+     * what the host's probes proved (HostFeasibility), which is the only
+     * source of a feature bit. */
+    void              describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t features);
     bool              described() const;
     const CapsetInfo &info() const;
 

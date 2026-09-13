@@ -12,6 +12,7 @@
 #include "device/module/driver_status.hpp"
 #include "device/gpu/gpu_binding.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/probe/host_feasibility.hpp"
 
 #include <stdint.h>
 
@@ -58,6 +59,7 @@ private:
     Host              &host_;
     GpuBinding         binding_;
     ExecutorLibrary    library_;
+    HostFeasibility    feasibility_;
     DeviceCapset       capset_;
     /* Before the contexts, which unpin blobs and stop raising interrupts as
      * they are destroyed. */
