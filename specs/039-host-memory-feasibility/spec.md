@@ -40,7 +40,11 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `ProbeResult` | object | the outcome (not run, passed, failed), the host's errno or VkResult, and what it measured | Carry what one probe found |
+| `HostMemoryProbe` | object | its result, and the exported block and hostmem offset while it runs | Decide whether host GPU memory reaches the guest through the hostmem region |
+| `GuestImportProbe` | object | its result, and the guest window it locked while it runs | Decide whether the host GPU imports a window over guest pages |
+| `InterruptStressProbe` | object | the fences raised, the ones acknowledged, the worst delay, and whether one arrived while the guest had its interrupt disabled | Judge whether interrupt injection survives masking under load |
+| `HostFeasibility` | system | the three results, decided once at realize | Answer which host capabilities this device may offer |
 
 ### Test requirements
 
