@@ -260,6 +260,21 @@ Status GdiKmt::create_context(uint32_t device, uint32_t &context)
     return status;
 }
 
+Status GdiKmt::create_context_virtual(uint32_t device, const uint8_t *private_data, uint32_t size,
+                                      uint32_t &context)
+{
+    D3DKMT_CREATECONTEXTVIRTUAL request = {};
+    request.hDevice = device;
+    request.NodeOrdinal = 0u;
+    request.EngineAffinity = 1u;
+    request.ClientHint = D3DKMT_CLIENTHINT_UNKNOWN;
+    request.pPrivateDriverData = const_cast<uint8_t *>(private_data);
+    request.PrivateDriverDataSize = size;
+    const Status status = answer(D3DKMTCreateContextVirtual(&request));
+    context = status == Status::ok ? request.hContext : 0u;
+    return status;
+}
+
 Status GdiKmt::destroy_context(uint32_t context)
 {
     D3DKMT_DESTROYCONTEXT request = {};

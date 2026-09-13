@@ -10,6 +10,8 @@ uint64_t TransportFence::open()
     return next_++;
 }
 
+uint64_t TransportFence::peek() const { return full() ? 0u : next_; }
+
 void TransportFence::close(uint64_t fence_id)
 {
     if (fence_id > completed_ && fence_id < next_) completed_ = fence_id;

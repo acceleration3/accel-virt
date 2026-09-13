@@ -216,3 +216,51 @@ TEST(mock_kmt, counts_every_call_naming_a_handle_it_never_gave_or_out_of_order)
   CHECK_STATUS(kmt.create_context(other_device, other_context), Status::ok);
   CHECK_STATUS(kmt.submit(other_context, address, 16u), Status::invalid_parameter);
   CHECK_EQ(kmt.misuses(), 30u); }
+
+/* Several allocations can be locked at once, each with its own view, and the
+ * mock keeps what is written through each. */
+TEST(mock_kmt, holds_several_views_at_once)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  std::uint32_t adapters[1] = {};
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(adapters, 1u, count), Status::ok);
+  std::uint32_t device = 0u;
+  CHECK_STATUS(kmt.create_device(adapters[0], device), Status::ok);
+  const ClientDescriptor descriptor(4096u);
+  std::uint32_t first = 0u, second = 0u;
+  CHECK_STATUS(kmt.create_allocation(device, descriptor.bytes(), descriptor.size(), first), Status::ok);
+  CHECK_STATUS(kmt.create_allocation(device, descriptor.bytes(), descriptor.size(), second), Status::ok);
+  void *first_view = nullptr;
+  void *second_view = nullptr;
+  CHECK_STATUS(kmt.lock(device, first, first_view), Status::ok);
+  CHECK_STATUS(kmt.lock(device, second, second_view), Status::ok);
+  CHECK(first_view != nullptr && second_view != nullptr && first_view != second_view);
+  CHECK(kmt.view_of(first) == first_view);
+  /* Locking the same allocation twice is refused. */
+  void *again = nullptr;
+  CHECK_STATUS(kmt.lock(device, first, again), Status::invalid_parameter);
+  CHECK_STATUS(kmt.unlock(device, first), Status::ok);
+  CHECK_STATUS(kmt.unlock(device, second), Status::ok);
+  CHECK_EQ(kmt.open_objects(), 4u); }
+
+/* A virtual context records the private data the transport asked it with. */
+TEST(mock_kmt, a_virtual_context_records_its_private_data)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  std::uint32_t adapters[1] = {};
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(adapters, 1u, count), Status::ok);
+  std::uint32_t device = 0u;
+  CHECK_STATUS(kmt.create_device(adapters[0], device), Status::ok);
+  const std::uint8_t record[] = {0x52u, 0x56u, 0x4Bu, 0x54u, 1u, 2u, 3u, 4u};
+  std::uint32_t context = 0u;
+  CHECK_STATUS(kmt.create_context_virtual(device, record, sizeof record, context), Status::ok);
+  CHECK(context != 0u);
+  CHECK_EQ(kmt.last_private_size(), static_cast<std::uint32_t>(sizeof record));
+  bool same = true;
+  for (std::size_t i = 0u; i < sizeof record; i++) same = same && kmt.last_private()[i] == record[i];
+  CHECK(same);
+  /* No private data at all is a misuse. */
+  std::uint32_t bad = 0u;
+  CHECK_STATUS(kmt.create_context_virtual(device, nullptr, 0u, bad), Status::invalid_parameter); }

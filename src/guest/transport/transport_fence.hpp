@@ -22,6 +22,8 @@ public:
     /* The next fence id, now outstanding; 0 when `max_outstanding` are already
      * in flight - the producer must wait for one to complete first. */
     uint64_t open();
+    /* The id open() would return next, without committing it: 0 when full. */
+    uint64_t peek() const;
     /* The device completed up to `fence_id`; retires it and every earlier one.
      * A completion not greater than what is done, or past what was opened, is
      * ignored. */

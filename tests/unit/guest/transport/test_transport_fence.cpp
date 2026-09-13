@@ -33,7 +33,9 @@ TEST(transport_fence, opens_fences_from_one_and_none_is_pending_at_first)
 
 TEST(transport_fence, each_open_is_the_next_id_and_becomes_outstanding)
 { TransportFence fence;
+  CHECK_EQ(fence.peek(), 1u);   /* peek does not commit */
   CHECK_EQ(fence.open(), 1u);
+  CHECK_EQ(fence.peek(), 2u);
   CHECK_EQ(fence.open(), 2u);
   CHECK_EQ(fence.open(), 3u);
   CHECK_EQ(fence.outstanding(), 3u);
@@ -89,6 +91,7 @@ TEST(transport_fence, refuses_a_sixty_fifth_outstanding_fence)
   for (std::uint32_t i = 0u; i < TransportFence::max_outstanding; i++)
       CHECK(fence.open() != 0u);
   CHECK(fence.full());
+  CHECK_EQ(fence.peek(), 0u);
   CHECK_EQ(fence.open(), 0u);
   fence.close(1u);
   CHECK(!fence.full());

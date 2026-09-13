@@ -1,0 +1,267 @@
+/* One sub-API context's transport, over MockKmt. Setting it up creates and maps
+ * the ring, reply and DMA allocations and a virtual context carrying the record
+ * as private data; a command sent async lands a batch in the ring and a
+ * submission on the context; a synchronous command reads back the answer the
+ * device wrote to the reply slot (the test plays the device). */
+#include "core/support/status.hpp"
+#include "guest/transport/guest_connection.hpp"
+#include "guest/transport/kmt_transport.hpp"
+#include "harness/framework/test_registry.hpp"
+#include "harness/guest/mock_kmt.hpp"
+#include "proto/context/sub_api.hpp"
+#include "proto/submission/batch_header.hpp"
+#include "proto/submission/command_header.hpp"
+#include "proto/submission/reply_header.hpp"
+#include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
+
+#include <cstdint>
+#include <cstring>
+
+using av::BatchHeader;
+using av::CommandHeader;
+using av::GuestConnection;
+using av::KmtTransport;
+using av::MockKmt;
+using av::PciIdentity;
+using av::ReplyHeader;
+using av::RvkContextRecord;
+using av::Status;
+using av::SubApi;
+using av::TransportResult;
+using av::WireReader;
+using av::WireWriter;
+
+namespace av {
+
+struct KmtTransportProbe {
+    static std::uint32_t ring_allocation(const KmtTransport &t) { return t.allocations_[0]; }
+    static std::uint32_t reply_allocation(const KmtTransport &t) { return t.allocations_[1]; }
+    /* An established context with its DMA buffer gone: what it never builds. */
+    static void orphan(KmtTransport &t) { t.context_ = 1u; t.dma_view_ = nullptr; }
+};
+
+}  // namespace av
+
+using av::KmtTransportProbe;
+
+namespace {
+
+const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
+
+RvkContextRecord record() { return RvkContextRecord(SubApi::vulkan, 12u, 10u, 11u, 12u); }
+
+class Fixture {
+public:
+    Fixture() : connection_(kmt_) { kmt_.add_adapter(rvk, 3200u); }
+    MockKmt         &kmt() { return kmt_; }
+    GuestConnection &connection() { return connection_; }
+    Status open() { return connection_.open(); }
+
+private:
+    MockKmt         kmt_;
+    GuestConnection connection_;
+};
+
+}  // namespace
+
+TEST(kmt_transport, is_unestablished_until_initialized)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  KmtTransport transport(fixture.connection(), record());
+  CHECK(!transport.established());
+  CHECK(transport.invariants_hold()); }
+
+TEST(kmt_transport, initialize_maps_the_ring_and_creates_the_virtual_context)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  KmtTransport transport(fixture.connection(), record());
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK(transport.established());
+  /* The record was carried as private data. */
+  CHECK_EQ(fixture.kmt().last_private_size(), RvkContextRecord::encoded_size);
+  /* A second initialize is refused. */
+  CHECK_STATUS(transport.initialize(), Status::invalid_state);
+  CHECK(transport.invariants_hold());
+  transport.teardown();
+  CHECK(!transport.established()); }
+
+/* A command sent async is framed into a batch in the ring and submitted. */
+TEST(kmt_transport, an_async_command_lands_a_batch_and_a_submission)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  KmtTransport transport(fixture.connection(), record());
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(0xCAFEu);
+  CHECK(transport.send_async(0x10001u, writer) == TransportResult::ok);
+  /* The ring holds a batch of fence 1 whose command is the one sent. */
+  const std::uint8_t *ring = fixture.kmt().view_of(KmtTransportProbe::ring_allocation(transport));
+  CHECK(ring != nullptr);
+  BatchHeader batch;
+  CHECK_STATUS(batch.decode(ring + 32u, BatchHeader::encoded_size), Status::ok);
+  CHECK_EQ(batch.fence_id(), 1u);
+  CommandHeader command;
+  CHECK_STATUS(command.decode(ring + 32u + BatchHeader::encoded_size, CommandHeader::encoded_size), Status::ok);
+  CHECK_EQ(command.id(), 0x10001u); }
+
+/* A writer that overflowed its slot is refused, not sent. */
+TEST(kmt_transport, an_overflowed_writer_is_refused)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  KmtTransport transport(fixture.connection(), record());
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  WireWriter writer = transport.request_writer();
+  writer.write_zeros(KmtTransport::max_command + 1u);
+  CHECK_STATUS(writer.status(), Status::too_large);
+  CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed); }
+
+/* A synchronous command reads back the answer the device wrote for its fence. */
+TEST(kmt_transport, a_sync_command_reads_the_reply_the_device_wrote)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  KmtTransport transport(fixture.connection(), record());
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  /* Play the device: the first sync command takes fence 1, so write its answer
+   * into the reply slot before the call reads it. */
+  std::uint8_t *reply = fixture.kmt().view_of(KmtTransportProbe::reply_allocation(transport));
+  CHECK(reply != nullptr);
+  static_cast<void>(ReplyHeader(1u, 8u).encode(reply, ReplyHeader::encoded_size));
+  const std::uint8_t answer[8] = {1u, 0u, 0u, 0u, 2u, 0u, 0u, 0u};
+  std::memcpy(reply + ReplyHeader::encoded_size, answer, sizeof answer);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(7u);
+  WireReader got(nullptr, 0u);
+  CHECK(transport.send_sync(0x10002u, writer, got) == TransportResult::ok);
+  CHECK_EQ(got.read_u32(), 1u);
+  CHECK_EQ(got.read_u32(), 2u); }
+
+/* Sending before setup is refused; the decode arena and blob arena refuse. */
+TEST(kmt_transport, before_setup_and_the_refusing_arenas)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  KmtTransport transport(fixture.connection(), record());
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(1u);
+  CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed);
+  CHECK(transport.decode_arena().allocate<std::uint8_t>(1u) == nullptr);
+  CHECK(!transport.blobs().ready()); }
+
+namespace {
+
+/* An open connection and a transport over it, for the failure paths. */
+void refuse_setup(MockKmt::Call call, std::uint32_t nth)
+{
+    MockKmt kmt;
+    kmt.add_adapter(rvk, 3200u);
+    GuestConnection connection(kmt);
+    CHECK_STATUS(connection.open(), Status::ok);
+    kmt.fail_at(call, nth, MockKmt::invalid_parameter);
+    KmtTransport transport(connection, record());
+    CHECK(transport.initialize() != Status::ok);
+    CHECK(!transport.established());
+    CHECK(transport.invariants_hold());
+}
+
+}  // namespace
+
+TEST(kmt_transport, a_failure_at_each_setup_step_leaves_it_unestablished)
+{ refuse_setup(MockKmt::Call::create_allocation, 1u);   /* ring */
+  refuse_setup(MockKmt::Call::create_allocation, 2u);   /* reply */
+  refuse_setup(MockKmt::Call::create_allocation, 3u);   /* dma */
+  refuse_setup(MockKmt::Call::make_resident, 1u);
+  refuse_setup(MockKmt::Call::wait_for_fence, 1u);      /* ring residency */
+  refuse_setup(MockKmt::Call::map_gpu_virtual_address, 1u);
+  refuse_setup(MockKmt::Call::wait_for_fence, 4u);      /* dma mapping */
+  refuse_setup(MockKmt::Call::lock, 1u);
+  refuse_setup(MockKmt::Call::create_context_virtual, 1u); }
+
+/* A lock that hands back a null view cannot bind the ring. */
+TEST(kmt_transport, a_null_ring_view_is_refused)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(), Status::ok);
+  kmt.zero_next(MockKmt::Call::lock);   /* the ring lock returns no view */
+  KmtTransport transport(connection, record());
+  CHECK(transport.initialize() != Status::ok);
+  CHECK(!transport.established()); }
+
+/* A submission the device refuses fails the send. */
+TEST(kmt_transport, a_refused_submission_fails_the_send)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(), Status::ok);
+  KmtTransport transport(connection, record());
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  kmt.fail_at(MockKmt::Call::submit, 1u, MockKmt::invalid_parameter);
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(1u);
+  CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed); }
+
+/* With every fence in flight the next send is refused. */
+TEST(kmt_transport, a_full_fence_table_refuses_the_next_send)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(), Status::ok);
+  KmtTransport transport(connection, record());
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  for (std::uint32_t i = 0u; i < 64u; i++) {
+      WireWriter writer = transport.request_writer();
+      writer.write_u32(i);
+      CHECK(transport.send_async(0x10001u, writer) == TransportResult::ok);
+  }
+  WireWriter writer = transport.request_writer();
+  writer.write_u32(64u);
+  CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed); }
+
+/* A batch with no room in the ring is refused before the fence table fills. */
+TEST(kmt_transport, a_full_ring_refuses_the_send)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(), Status::ok);
+  KmtTransport transport(connection, record());
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  bool refused = false;
+  for (std::uint32_t i = 0u; i < 64u && !refused; i++) {
+      WireWriter writer = transport.request_writer();
+      writer.write_zeros(900u);   /* a big command; a few fill an order-12 ring */
+      refused = transport.send_async(0x10001u, writer) == TransportResult::failed;
+  }
+  CHECK(refused); }
+
+/* send_sync fails a call that could not be published, a device that will not
+ * wait, and an answer the device never wrote. */
+TEST(kmt_transport, send_sync_failure_paths)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(), Status::ok);
+  KmtTransport transport(connection, record());
+  /* Before setup: nothing to publish. */
+  WireWriter early = transport.request_writer();
+  early.write_u32(1u);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_sync(0x10002u, early, reply) == TransportResult::failed);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  /* The device will not answer the wait. */
+  kmt.fail_at(MockKmt::Call::wait_for_context, 1u, MockKmt::invalid_parameter);
+  WireWriter w1 = transport.request_writer();
+  w1.write_u32(1u);
+  CHECK(transport.send_sync(0x10002u, w1, reply) == TransportResult::failed);
+  /* The wait succeeds but the reply slot holds no answer for the fence. */
+  WireWriter w2 = transport.request_writer();
+  w2.write_u32(2u);
+  CHECK(transport.send_sync(0x10002u, w2, reply) == TransportResult::failed); }
+
+TEST(kmt_transport, the_invariant_catches_an_established_context_with_no_buffer)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(), Status::ok);
+  KmtTransport transport(connection, record());
+  KmtTransportProbe::orphan(transport);
+  CHECK(!transport.invariants_hold()); }

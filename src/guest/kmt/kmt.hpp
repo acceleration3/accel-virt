@@ -42,7 +42,14 @@ public:
     virtual Status   free_gpu_virtual_address(uint32_t adapter, uint64_t address, uint64_t pages) = 0;
     virtual Status   wait_for_fence(uint32_t device, uint32_t fence_object, uint64_t fence) = 0;
     virtual Status   create_context(uint32_t device, uint32_t &context) = 0;
+    /* A virtual context carrying private driver data - the RvkContextRecord an
+     * rvk transport asks its context with; the miniport decodes it. */
+    virtual Status   create_context_virtual(uint32_t device, const uint8_t *private_data, uint32_t size,
+                                            uint32_t &context) = 0;
     virtual Status   destroy_context(uint32_t context) = 0;
+    /* On a context made with create_context_virtual, dxgkrnl routes this to the
+     * DxgkDdiSubmitCommandVirtual DDI; `commands` is the DMA buffer VA that
+     * holds the submission descriptor. */
     virtual Status   submit(uint32_t context, uint64_t commands, uint64_t length) = 0;
     /* Until everything submitted on the context so far has completed. */
     virtual Status   wait_for_context(uint32_t device, uint32_t context) = 0;

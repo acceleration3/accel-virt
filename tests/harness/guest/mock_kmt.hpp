@@ -35,6 +35,7 @@ public:
         free_gpu_virtual_address,
         wait_for_fence,
         create_context,
+        create_context_virtual,
         destroy_context,
         submit,
         wait_for_context,
@@ -47,8 +48,11 @@ public:
     static constexpr std::uint64_t page_bytes = 4096u;
     /* The performance counter this answers, in the 100ns units Windows uses. */
     static constexpr std::uint64_t ticks_per_second = 10000000u;
-    /* The memory one lock at a time addresses. */
-    static constexpr std::uint32_t view_capacity = 4096u;
+    /* The memory each lock addresses; several may be held at once. */
+    static constexpr std::uint32_t view_capacity = 8192u;
+    static constexpr std::uint32_t max_locks = 4u;
+    /* The largest context private data this records for a test to read back. */
+    static constexpr std::uint32_t max_private = 64u;
 
     MockKmt();
 
@@ -71,6 +75,8 @@ public:
     Status        free_gpu_virtual_address(std::uint32_t adapter, std::uint64_t address, std::uint64_t pages) override;
     Status        wait_for_fence(std::uint32_t device, std::uint32_t fence_object, std::uint64_t fence) override;
     Status        create_context(std::uint32_t device, std::uint32_t &context) override;
+    Status        create_context_virtual(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
+                                        std::uint32_t &context) override;
     Status        destroy_context(std::uint32_t context) override;
     Status        submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length) override;
     Status        wait_for_context(std::uint32_t device, std::uint32_t context) override;
@@ -104,6 +110,12 @@ public:
     /* Bytes of the view this mock hands out that are not zero: what was
      * written through the pointer a lock answered. */
     std::uint32_t view_filled() const;
+    /* The buffer a locked allocation's view points into, or null: how a test
+     * plays the device, reading and writing the guest's mapped memory. */
+    std::uint8_t *view_of(std::uint32_t allocation);
+    /* The private data of the last create_context_virtual, and its size. */
+    const std::uint8_t *last_private() const;
+    std::uint32_t       last_private_size() const;
 
 private:
     enum class Kind : unsigned { none, adapter, device, allocation, queue, context, mapping };
@@ -124,6 +136,7 @@ private:
     std::uint32_t open(Kind kind, std::uint32_t owner, std::uint64_t address, std::uint64_t pages);
     Object       *find(Kind kind, std::uint32_t handle);
     Object       *find_mapping(std::uint64_t address);
+    bool          is_locked(std::uint32_t allocation) const;
     Status        close(Kind kind, std::uint32_t handle);
     Status        misuse();
 
@@ -137,8 +150,10 @@ private:
     bool          zeroing_[static_cast<unsigned>(Call::count)];
     std::uint32_t calls_[static_cast<unsigned>(Call::count)];
     Object        objects_[max_objects];
-    std::uint8_t  view_[view_capacity];
-    std::uint32_t locked_;
+    std::uint8_t  views_[max_locks][view_capacity];
+    std::uint32_t locked_[max_locks];
+    std::uint8_t  private_[max_private];
+    std::uint32_t private_size_;
     std::uint32_t next_handle_;
     std::uint64_t next_address_;
     std::uint64_t next_fence_;
