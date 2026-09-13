@@ -133,6 +133,30 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertFalse((self.work / "panic.txt").exists())
         self.assert_clean()
 
+    def test_the_cycle_scenario_disables_and_enables_the_adapter(self):
+        """Feature 040 US2: what pnputil does to an adapter, N times, and the
+        adapter back each time."""
+        self.script(stages={"sign": [3010], "install": [3010], "check": [0], "cycle": [0]},
+                    outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
+                             "cycle": "cycle: 50 done\npool: Current Pool Allocations: 0\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite("--power-cycles", "50")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("cycle -Minutes 50", self.stage_calls())
+        self.assertIn("guest: cycle ok: 50 disable and enable cycles", result.stdout)
+        self.assertIn("Current Pool Allocations", (self.work / "cycle.txt").read_text())
+        self.assert_clean()
+
+    def test_a_cycle_the_guest_could_not_finish_fails_the_run(self):
+        self.script(stages={"sign": [3010], "install": [3010], "check": [0], "cycle": [1]},
+                    outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
+                             "cycle": "cycle: 7 of 50 left problem 43\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite("--power-cycles", "50")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("cycle failed", result.stdout)
+        self.assert_clean()
+
     def test_the_executor_controls_reach_qemus_environment(self):
         """Feature 040 US3: a real TDR needs the host to stall, and the test
         executor is told to from outside - no rebuild, no test-only command in

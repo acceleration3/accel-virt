@@ -45,6 +45,7 @@ PACKAGE_DIRECTORY = GUEST_DIRECTORY + "\\package"
 POWERSHELL = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
 REBOOT_REQUIRED = 3010
 SUMMARY = re.compile(rb"^rvktest: (\d+) passed, (\d+) failed$", re.M)
+CYCLES_DONE = re.compile(r"^cycle: (\d+) done$", re.M)
 STRESS_FENCES = re.compile(rb"^ok stress\.fences (\d+)$", re.M)
 STRESS_WORST = re.compile(rb"^ok stress\.worst_wait_us (\d+)$", re.M)
 MANIFEST = re.compile(r"^(file|dump) (.+?)\r?$", re.M)
@@ -114,6 +115,8 @@ def arguments():
     parser.add_argument("--cpus", type=int, default=4)
     parser.add_argument("--outputs", type=int, default=1, help="the device's max_outputs")
     parser.add_argument("--power-poll", type=float, default=5.0, help="seconds between display-power screendumps")
+    parser.add_argument("--power-cycles", type=int, default=0,
+                        help="disable and enable the adapter this many times (feature 040, US2)")
     parser.add_argument("--stall-ms", type=int, default=0,
                         help="make the test executor take this long per command (feature 040, US3)")
     parser.add_argument("--fault-after", type=int, default=0,
@@ -423,9 +426,9 @@ class GuestRun:
             raise StepFailed("check", f"the guest has {monitors.group(1)} monitors, not {self.args.outputs}")
         self.say(f"check ok: {monitors.group(1)} monitor(s)")
 
-    def stage_output(self, name, saved=None):
+    def stage_output(self, name, saved=None, extra=()):
         """The stage's own output, for a step that reads what it said."""
-        code, out, error = self.provision(name)
+        code, out, error = self.provision(name, extra)
         text = (out + error).decode(errors="replace")
         if saved is not None:
             (self.work / saved).write_bytes(out + error)
@@ -686,6 +689,21 @@ class GuestRun:
             self.sleep_states = self.stage_output("sleepstates", saved="sleepstates.txt")
         return f"{state}=yes" in self.sleep_states
 
+    def cycle(self):
+        """US2 of feature 040: what pnputil does to an adapter, as often as the
+        run asks. The stage disables and enables the device itself - a round
+        trip through the agent per cycle would spend the run's time on the
+        agent rather than on the driver - and says what Driver Verifier tracked
+        after the last one."""
+        if not self.args.power_cycles:
+            return
+        output = self.stage_output("cycle", saved="cycle.txt", extra=("-Minutes", str(self.args.power_cycles)))
+        done = CYCLES_DONE.search(output)
+        if done is None:
+            raise StepFailed("cycle", f"the guest did not finish its cycles: {output.strip()[-300:]}")
+        self.check_monitors(self.stage_output("check", saved="device-after-cycles.txt"))
+        self.say(f"cycle ok: {done.group(1)} disable and enable cycles, the adapter back each time")
+
     def suspend(self):
         """US1 of feature 040: S3 through the guest agent, woken with QMP, and
         the adapter still there afterwards. A machine that does not offer S3
@@ -732,6 +750,7 @@ class GuestRun:
         self.display()
         self.mode_switch()
         self.display_power()
+        self.cycle()
         self.suspend()
         self.hibernate()
         self.suite()

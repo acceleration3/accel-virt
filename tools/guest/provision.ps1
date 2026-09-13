@@ -27,7 +27,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('prepare', 'sign', 'install', 'check', 'modes', 'setmode', 'extend', 'monitortimeout',
-                 'sleepstates', 'hibernate', 'collect')][string]$Stage,
+                 'sleepstates', 'hibernate', 'cycle', 'collect')][string]$Stage,
     [string]$Package = 'C:\rvk\package',
     [int]$Width = 0,
     [int]$Height = 0,
@@ -257,10 +257,39 @@ switch ($Stage) {
         Write-Output "extend: $([Display]::Extend())"
         exit 0
     }
+    'cycle' {
+        # What an administrator does with pnputil, $Minutes times over: disable
+        # the adapter and enable it again, checking it came back each time
+        # (feature 040, US2). A cycle that leaves the device with a problem code
+        # stops the loop where it happened.
+        $device = RvkDevice
+        if (-not $device) { Write-Output 'cycle: the adapter is absent'; exit 1 }
+        for ($cycle = 1; $cycle -le $Minutes; $cycle++) {
+            Disable-PnpDevice -InstanceId $device.InstanceId -Confirm:$false -ErrorAction Stop
+            Enable-PnpDevice -InstanceId $device.InstanceId -Confirm:$false -ErrorAction Stop
+            $problem = (Get-PnpDeviceProperty -InstanceId $device.InstanceId `
+                -KeyName DEVPKEY_Device_ProblemCode).Data
+            if ($problem -ne 0) {
+                Write-Output "cycle: $cycle of $Minutes left problem $problem"
+                exit 1
+            }
+        }
+        # What Driver Verifier tracked for this driver after the last cycle: a
+        # pool allocation that outlives every disable is a leak.
+        $pool = (verifier /query | Select-String -Pattern 'Current Pool Allocations|Pool Allocations') -join '; '
+        Write-Output "cycle: $Minutes done"
+        Write-Output "pool: $pool"
+        exit 0
+    }
+
     'sleepstates' {
-        # What this machine actually offers: QEMU's q35 has no S3 unless the
-        # firmware says so, and the prepared image keeps hibernation off.
-        $available = (powercfg /availablesleepstates | Out-String)
+        # What this machine actually offers. powercfg prints what is available
+        # and then what is not, and the second list names the same states: only
+        # the text before "not available" counts, or every state reads as
+        # offered (feature 040, US1).
+        $all = (powercfg /availablesleepstates | Out-String)
+        $split = $all -split 'not available'
+        $available = $split[0]
         $standby = if ($available -match 'Standby \(S3\)') { 'yes' } else { 'no' }
         $hibernate = if ($available -match 'Hibernate') { 'yes' } else { 'no' }
         Write-Output "sleep: standby=$standby hibernate=$hibernate"
