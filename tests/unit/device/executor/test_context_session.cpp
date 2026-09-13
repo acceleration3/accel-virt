@@ -3,6 +3,8 @@
 #include "device/abi/rvk_executor.h"
 #include "device/executor/context_session.hpp"
 #include "device/executor/decode_arena.hpp"
+#include "device/executor/import_table.hpp"
+#include "device/executor/imported_blob.hpp"
 #include "harness/executor/mock_session_backend.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -188,3 +190,83 @@ TEST(context_session, a_released_session_is_not_still_faulted)
   session.release();
   CHECK(session.invariants_hold());
   CHECK(!session.live()); }
+
+
+namespace {
+
+std::uint8_t blob_backing[av::ImportedBlob::page_bytes];
+
+RvkBlobHandle blob_handle(std::uint64_t size = av::ImportedBlob::page_bytes)
+{ RvkBlobHandle handle = {};
+  handle.kind = RVK_BLOB_HOST_POINTER;
+  handle.pointer = blob_backing;
+  handle.fd = -1;
+  handle.size = size;
+  return handle; }
+
+}  // namespace
+
+TEST(context_session_import, a_blob_the_backend_takes_is_held_until_released)
+{ Bound bound;
+  CHECK_EQ(bound.session().imports(), 0u);
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_EXECUTED});
+  CHECK_EQ(bound.session().imports(), 1u);
+  CHECK_EQ(bound.backend().adopted(), 1u);
+
+  bound.session().release_blob(5u);
+  CHECK_EQ(bound.session().imports(), 0u);
+  CHECK_EQ(bound.backend().abandoned(), 1u);
+  CHECK(bound.session().invariants_hold()); }
+
+/* Release is idempotent: the device may release an id whose import failed. */
+TEST(context_session_import, releasing_one_it_never_took_is_nothing)
+{ Bound bound;
+  bound.session().release_blob(5u);
+  CHECK_EQ(bound.backend().abandoned(), 0u);
+  CHECK(bound.session().invariants_hold()); }
+
+/* An id already imported is refused rather than silently torn down. */
+TEST(context_session_import, the_same_id_twice_is_refused)
+{ Bound bound;
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_EXECUTED});
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_UNDECODABLE});
+  CHECK_EQ(bound.session().imports(), 1u);
+  CHECK_EQ(bound.backend().adopted(), 1u); }
+
+TEST(context_session_import, a_handle_the_abi_refuses_never_reaches_the_backend)
+{ Bound bound;
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle(1u)), std::uint32_t{RVK_UNDECODABLE});
+  CHECK_EQ(bound.backend().adopted(), 0u);
+  CHECK_EQ(bound.session().imports(), 0u); }
+
+/* An API that cannot take this kind is not a fault: the device is told no and
+ * the guest is copied through instead, and the slot goes back. */
+TEST(context_session_import, a_backend_that_will_not_take_it_costs_no_slot)
+{ Bound bound;
+  bound.backend().set_adopts(false);
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_UNDECODABLE});
+  CHECK_EQ(bound.session().imports(), 0u);
+  bound.backend().set_adopts(true);
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_EXECUTED});
+  CHECK_EQ(bound.session().imports(), 1u); }
+
+/* A guest that never releases leaks nothing: destroying the session gives back
+ * what it never did, which is what an imported host pointer needs, since the
+ * device unmaps it afterwards. */
+TEST(context_session_import, releasing_the_session_gives_back_what_the_guest_did_not)
+{ Bound bound;
+  for (std::uint64_t id = 1u; id <= 3u; id++) {
+      CHECK_EQ(bound.session().import_blob(id, blob_handle()), std::uint32_t{RVK_EXECUTED});
+  }
+  CHECK_EQ(bound.session().imports(), 3u);
+  bound.session().release();
+  CHECK_EQ(bound.backend().abandoned(), 3u);
+  CHECK_EQ(bound.session().imports(), 0u);
+  CHECK(bound.session().invariants_hold()); }
+
+TEST(context_session_import, a_session_with_no_backend_imports_nothing)
+{ ContextSession session;
+  CHECK_EQ(session.import_blob(5u, blob_handle()), std::uint32_t{RVK_UNDECODABLE});
+  CHECK_EQ(session.imports(), 0u);
+  session.release_blob(5u);
+  CHECK(session.invariants_hold()); }

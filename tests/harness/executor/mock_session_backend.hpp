@@ -32,16 +32,26 @@ public:
     /* How long long_answer_id's answer is. */
     void          set_answer_bytes(std::size_t bytes);
     std::uint32_t ran() const;
+    /* Whether adopt takes what it is offered. A backend that refuses is a real
+     * case: an API that cannot import this kind is copied through instead. */
+    void          set_adopts(bool adopts);
+    std::uint32_t adopted() const;
+    std::uint32_t abandoned() const;
 
     bool knows(std::uint32_t command_id) const override;
     [[nodiscard]] bool run(std::uint32_t command_id, WireReader &payload, WireWriter &reply,
                            WireArena &arena) override;
     bool lost() const override;
+    [[nodiscard]] bool adopt(ImportedBlob &blob) override;
+    void abandon(ImportedBlob &blob) override;
 
 private:
     std::size_t   answer_bytes_;
     std::uint32_t ran_;
+    std::uint32_t adopted_;
+    std::uint32_t abandoned_;
     bool          lost_;
+    bool          adopts_;
 };
 
 }  // namespace av

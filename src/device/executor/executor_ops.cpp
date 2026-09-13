@@ -104,12 +104,19 @@ uint32_t import_kinds(void *, uint32_t sub_api, const uint8_t *gpu_uuid)
     return library.root().import_kinds(sub_api, gpu_uuid);
 }
 
-uint32_t import_blob(void *, RvkExecutor *, uint64_t, const RvkBlobHandle *)
+uint32_t import_blob(void *, RvkExecutor *executor, uint64_t blob_id,
+                     const RvkBlobHandle *handle)
 {
-    return RVK_UNDECODABLE;
+    av::ContextSession *const session = session_of(executor);
+    if (session == nullptr || handle == nullptr) return RVK_UNDECODABLE;
+    return session->import_blob(blob_id, *handle);
 }
 
-void release_blob(void *, RvkExecutor *, uint64_t) {}
+void release_blob(void *, RvkExecutor *executor, uint64_t blob_id)
+{
+    av::ContextSession *const session = session_of(executor);
+    if (session != nullptr) session->release_blob(blob_id);
+}
 
 const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               nullptr,

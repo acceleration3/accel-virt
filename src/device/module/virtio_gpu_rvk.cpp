@@ -44,6 +44,12 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
     feasibility_.decide(guest_probe_address);
     if (feasibility_.interrupts().initialize() == Status::ok) interrupts_.report_to(feasibility_.interrupts());
     capset_.describe(binding_.index(), library_.sub_apis(), feasibility_.features());
+    /* The probe proved this device can hand a guest blob to a host API; only
+     * the library knows whether the API will take one. Both have to be true
+     * before the guest is told its memory arrives without a copy. */
+    if (capset_.described() &&
+        library_.import_kinds(SubApi::vulkan, capset_.info().gpu().uuid()) == 0u)
+        capset_.withdraw_guest_import();
     return status;
 }
 

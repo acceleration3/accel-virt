@@ -4,6 +4,8 @@
  * give: whether an id is carried at all, and whether a frame decoded. The
  * driver's own answer is deliberately not asserted - these must pass on a
  * machine with no GPU, where every command decodes and every VkResult says so. */
+#include "device/abi/rvk_executor.h"
+#include "device/executor/imported_blob.hpp"
 #include "device/executor/vulkan_backend.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
@@ -111,3 +113,65 @@ TEST(vulkan_backend, a_command_the_arena_will_not_hold_is_refused_and_counted)
   WireWriter answer(reply, sizeof reply);
   CHECK(!backend.run(av::vkproto::kCmd_vkCreateInstance, payload, answer, arena));
   CHECK(arena.refusals() > 0u); }
+
+/* The import path, on whatever this machine has. A host with no GPU refuses
+ * every import and that is the honest answer, so what is asserted is the rule
+ * rather than the outcome: a kind this backend never offers is never adopted,
+ * and abandoning what was never adopted is nothing. */
+TEST(vulkan_backend, a_kind_it_does_not_offer_is_not_adopted)
+{ VulkanBackend backend;
+  av::ImportedBlob blob;
+  RvkBlobHandle handle = {};
+  handle.kind = RVK_BLOB_DMA_BUF;
+  handle.fd = 3;
+  handle.size = av::ImportedBlob::page_bytes;
+  CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
+  /* A dma-buf lands in memory the host cannot map on one of the two GPUs
+   * measured, so this backend offers only the host pointer and takes only it. */
+  CHECK(!backend.adopt(blob));
+  CHECK_EQ(blob.object(), 0u); }
+
+/* No device, no import: a VkDeviceMemory belongs to a device, and a context
+ * that has not made one has nowhere to put a blob. */
+TEST(vulkan_backend, without_a_device_nothing_is_adopted)
+{ VulkanBackend backend;
+  av::ImportedBlob blob;
+  alignas(4096) static std::uint8_t page[av::ImportedBlob::page_bytes];
+  RvkBlobHandle handle = {};
+  handle.kind = RVK_BLOB_HOST_POINTER;
+  handle.pointer = page;
+  handle.fd = -1;
+  handle.size = sizeof page;
+  CHECK_STATUS(blob.take(1u, handle), av::Status::ok);
+  CHECK(!backend.adopt(blob));
+  /* And giving back what was never taken is nothing, which is what a session
+   * being destroyed does for every blob it still holds. */
+  backend.abandon(blob);
+  CHECK_EQ(blob.object(), 0u); }
+
+/* The device a context makes is the one an import belongs to, and destroying
+ * it takes that away again. Driven through the wire, because that is the only
+ * way the guest can reach on_vkCreateDevice and on_vkDestroyDevice. */
+TEST(vulkan_backend, the_device_the_guest_makes_is_the_one_imports_belong_to)
+{ VulkanBackend backend;
+  std::uint8_t block[block_bytes];
+  WireArena arena(block, sizeof block);
+  std::uint8_t reply[256] = {};
+
+  std::uint8_t frame[1024];
+  const std::size_t length = create_instance_frame(frame, sizeof frame);
+  WireReader payload(frame, length);
+  WireWriter answer(reply, sizeof reply);
+  CHECK(backend.run(av::vkproto::kCmd_vkCreateInstance, payload, answer, arena));
+
+  /* Destroying a device this backend never saw leaves it as it was, which is
+   * the case a guest can drive with a handle it invented. */
+  std::uint8_t destroy_frame[64];
+  WireWriter destroy_writer(destroy_frame, sizeof destroy_frame);
+  VkDevice stranger = VK_NULL_HANDLE;
+  av::vkproto::serialize_VkDevice(destroy_writer, stranger);
+  WireReader destroy_payload(destroy_frame, destroy_writer.offset());
+  WireWriter destroy_answer(reply, sizeof reply);
+  arena.reset();
+  CHECK(backend.run(av::vkproto::kCmd_vkDestroyDevice, destroy_payload, destroy_answer, arena));
+  CHECK(!backend.lost()); }

@@ -17,6 +17,8 @@
 
 namespace av {
 
+class ImportedBlob;
+
 class VulkanBackend final : public vkproto::RealVulkanDispatch, public SessionBackend {
 public:
     VulkanBackend();
@@ -25,6 +27,17 @@ public:
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
                            WireArena &arena) override;
     bool lost() const override;
+
+    /* The two commands this backend interposes rather than forwards
+     * untouched: an imported blob has to become memory of some device, and
+     * nothing else says which. */
+    VkResult on_vkCreateDevice(VkPhysicalDevice physicalDevice,
+                               const VkDeviceCreateInfo *pCreateInfo,
+                               const VkAllocationCallbacks *pAllocator, VkDevice *pDevice) override;
+    void     on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator) override;
+
+    [[nodiscard]] bool adopt(ImportedBlob &blob) override;
+    void abandon(ImportedBlob &blob) override;
 
     /* Commands run since this backend was made, which is what a conformance
      * run counts. */
@@ -36,6 +49,16 @@ private:
      * itself rather than a guest doing something. */
     static constexpr uint32_t vulkan_api = 1u;
 
+    /* The memory type an imported pointer may be bound through, from
+     * vkGetMemoryHostPointerPropertiesEXT and never assumed: the mask is 0x7f
+     * on one GPU here and 0x18 on the other, so an imported pointer cannot be
+     * device-local on the second. `found` is set only when one exists. */
+    bool memory_type_for(void *pointer, uint32_t &type) const;
+
+    /* The device the imports belong to. A VkDeviceMemory is a device's, and
+     * the guest makes exactly one per context through vkCreateDevice, so this
+     * is taken from the command that made it rather than guessed. */
+    VkDevice device_;
     uint64_t ran_;
     bool     lost_;
 };

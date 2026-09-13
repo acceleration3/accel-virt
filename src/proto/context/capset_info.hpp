@@ -35,6 +35,11 @@ public:
     uint32_t               max_contexts() const;
     const GpuIdentity     &gpu() const;
     bool                   offers(SubApi api) const;
+    /* Drops a feature this device turned out not to have after all: the
+     * executor is asked what it can import only once a library is loaded, and
+     * a bit already set from the host's own probe would otherwise promise what
+     * the library cannot do (feature 042). */
+    void                   withdraw(uint64_t feature);
     bool                   accepts_ring_order(uint8_t order) const;
     /* Unknown bits are kept, so a newer device's capabilities round-trip. */
     bool                   has_feature(uint64_t feature) const;

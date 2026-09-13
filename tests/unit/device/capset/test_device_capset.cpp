@@ -122,3 +122,27 @@ TEST(device_capset, describe_is_main_loop_only)
                Status::ok);
   host.join_thread(thread);
   CHECK(host.claim(HostViolation::main_loop_required)); }
+
+/* A guest blob reaching the host GPU without a copy needs two things: this
+ * device able to build a handle, which its own probe proves, and the executor
+ * able to take one, which only the executor knows. A bit set from the probe
+ * alone promises what the library may not keep (feature 042). */
+TEST(device_capset_withdraw, takes_back_the_import_bit_the_probe_alone_claimed)
+{ MockHost host;
+  host.add_gpu(first);
+  DeviceCapset capset(host);
+  capset.describe(0u, 1u,
+                  CapsetInfo::feature_host_visible_memory | CapsetInfo::feature_guest_memory_import);
+  CHECK(capset.described());
+  CHECK(capset.info().has_feature(CapsetInfo::feature_guest_memory_import));
+
+  capset.withdraw_guest_import();
+  CHECK(!capset.info().has_feature(CapsetInfo::feature_guest_memory_import));
+  /* Only that one: what the host visibly has is not withdrawn with it. */
+  CHECK(capset.info().has_feature(CapsetInfo::feature_host_visible_memory)); }
+
+TEST(device_capset_withdraw, withdrawing_from_a_capset_nobody_described_is_nothing)
+{ MockHost host;
+  DeviceCapset capset(host);
+  capset.withdraw_guest_import();
+  CHECK(!capset.described()); }

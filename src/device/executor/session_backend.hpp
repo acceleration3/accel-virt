@@ -15,6 +15,7 @@
 
 namespace av {
 
+class ImportedBlob;
 class WireArena;
 class WireReader;
 class WireWriter;
@@ -36,6 +37,14 @@ public:
     /* Whether the host API has lost the device this backend runs on. Asked
      * after every command, because nothing else would notice. */
     virtual bool lost() const = 0;
+
+    /* Turns a checked handle into whatever this API holds memory as, recording
+     * it on the blob. False for a handle this API cannot take - which is not a
+     * fault, only a blob the guest will have to be copied through. */
+    [[nodiscard]] virtual bool adopt(ImportedBlob &blob) = 0;
+    /* Gives back whatever adopt made. Called for every blob still held when a
+     * session ends, so a guest that never releases leaks nothing. */
+    virtual void abandon(ImportedBlob &blob) = 0;
 
 protected:
     SessionBackend() = default;

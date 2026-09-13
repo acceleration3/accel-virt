@@ -26,6 +26,12 @@ public:
      * what the host's probes proved (HostFeasibility), which is the only
      * source of a feature bit. */
     void              describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t features);
+    /* Clears the guest-memory-import bit. A guest blob reaching the host GPU
+     * without a copy needs two things - the device able to build a handle,
+     * which its own probe proved, and the executor able to take one, which
+     * only the executor knows - so a bit set from the probe alone is a promise
+     * the library may not keep (feature 042). */
+    void              withdraw_guest_import();
     bool              described() const;
     const CapsetInfo &info() const;
 

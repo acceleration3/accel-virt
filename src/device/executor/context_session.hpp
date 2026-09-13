@@ -9,9 +9,12 @@
 
 #include "core/support/status.hpp"
 #include "device/executor/decode_arena.hpp"
+#include "device/executor/import_table.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
+
+struct RvkBlobHandle;
 
 namespace av {
 
@@ -38,6 +41,15 @@ public:
     uint32_t execute(uint32_t command_id, const uint8_t *payload, size_t size, uint8_t *reply,
                      size_t reply_capacity, size_t &answer);
 
+    /* Makes `blob_id` usable by this session's commands. RVK_EXECUTED, or
+     * RVK_UNDECODABLE for a handle the ABI refuses, an id already imported, a
+     * table that is full, or an API that cannot take this kind. */
+    uint32_t import_blob(uint64_t blob_id, const RvkBlobHandle &handle);
+    /* Drops one. Nothing for an id that was never imported, because the device
+     * may release one whose import failed. */
+    void     release_blob(uint64_t blob_id);
+    uint32_t imports() const;
+
     /* Commands this session refused because the block was too small rather
      * than because the frame was bad. The guest is told the same thing either
      * way; this is what an operator sees. */
@@ -48,6 +60,7 @@ public:
 private:
     SessionBackend *backend_;
     DecodeArena     arena_;
+    ImportTable     imports_;
     size_t          starved_;
     bool            faulted_;
 };
