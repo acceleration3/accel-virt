@@ -152,6 +152,10 @@ public:
         return started;
     }
 
+    /* A power cycle programs the queue afresh, so a test that cycles power
+     * takes a new view of it. */
+    void forget_control() { control_.reset(); }
+
     /* The device side of the control queue, shared with that answer. */
     av::FakeVirtqueueDevice &control()
     {
@@ -584,6 +588,80 @@ TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
   CHECK_EQ(u32(control.request(2u), 32u), 0x40000000u);
   CHECK_EQ(u32(control.request(2u), 40u), 1280u * 800u * 4u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
+
+/* Suspend and resume as dxgkrnl drives it (feature 040, US1): the whole table,
+ * a source scanning out, D3, and D0 - after which the guest's own objects are
+ * untouched and the host is asked for the scanout again. What dxgkrnl sends
+ * after a resume is the address it already had, which is what re-attaches the
+ * pages. */
+TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  void           *adapter = device.fdo().context();
+  const DdiTable &table = driver.table();
+  Runtime         runtime(table, adapter, 1280u, 800u);
+  CHECK_EQ(runtime.create_primary(), 0);
+  CHECK_EQ(runtime.map_aperture(driver.platform(), 1000u), 0);
+  av::FakeVidPn vidpn;
+  vidpn.add_path(0u, 0u);
+  av::D3dkmdtVidPnSourceModeRecord pinned = {};
+  av::DisplayMode(1280u, 800u).describe(pinned);
+  vidpn.source_modes(0u).seed(pinned, true);
+  const av::DxgkargCommitVidPnRecord commit = {&vidpn, 0u, 0, nullptr, 0u, 0u};
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargCommitVidPnRecord *)>(
+               table.routine(DdiSlot::DxgkDdiCommitVidPn))(adapter, &commit),
+           0);
+  const av::DxgkargSetVidPnSourceVisibilityRecord visible = {0u, 1u, {}};
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSetVidPnSourceVisibilityRecord *)>(
+               table.routine(DdiSlot::DxgkDdiSetVidPnSourceVisibility))(adapter, &visible),
+           0);
+  av::DxgkargSetVidPnSourceAddressRecord address = {};
+  address.PrimaryAddress = av::ApertureSegment::base_address;
+  address.PrimarySegment = av::ApertureSegment::segment_id;
+  address.hAllocation = runtime.primary();
+  const auto set_address = reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSetVidPnSourceAddressRecord *)>(
+      table.routine(DdiSlot::DxgkDdiSetVidPnSourceAddress));
+  const auto dpc = reinterpret_cast<void (*)(void *)>(table.routine(DdiSlot::DxgkDdiDpcRoutine));
+  driver.platform().set_irql(av::Irql::isr);
+  CHECK_EQ(set_address(adapter, &address), 0);
+  driver.platform().set_irql(av::Irql::dispatch);
+  dpc(adapter);
+  driver.platform().set_irql(av::Irql::passive);
+  CHECK_EQ(device.control().respond_all(0x1100u), 5u);
+
+  CHECK_EQ(device.fdo().set_power_state(power_d3), 0);
+  CHECK_EQ(device.function().common().status(), 0u);
+  /* Nothing of the guest's went away with the device. */
+  CHECK_EQ(device.fdo().set_power_state(power_d0), 0);
+  CHECK_EQ(device.function().common().status(), driver_ok_status);
+  device.forget_control();
+  av::FakeVirtqueueDevice &resumed = device.control();
+  /* The resume's own work: the resource for the source that was scanning out. */
+  CHECK_EQ(resumed.respond_all(0x1100u), 1u);
+  CHECK_EQ(resumed.request_type(0u), 0x0101u);        /* RESOURCE_CREATE_2D */
+
+  /* What dxgkrnl sends after a resume is the address it already had, and that
+   * is what puts the pages and the scanout back. */
+  driver.platform().set_irql(av::Irql::isr);
+  CHECK_EQ(set_address(adapter, &address), 0);
+  driver.platform().set_irql(av::Irql::dispatch);
+  dpc(adapter);
+  driver.platform().set_irql(av::Irql::passive);
+  static_cast<void>(resumed.respond_all(0x1100u));
+  std::uint32_t created = 0u, attached = 0u, scanned = 0u;
+  for (std::uint32_t index = 0u; index < resumed.requests(); index++) {
+      const std::uint32_t type = resumed.request_type(index);
+      created += type == 0x0101u ? 1u : 0u;
+      attached += type == 0x0106u ? 1u : 0u;
+      scanned += type == 0x0103u ? 1u : 0u;
+  }
+  CHECK_EQ(created, 1u);     /* the resource the resume created */
+  CHECK_EQ(attached, 1u);    /* the pages the guest's own address brought back */
+  CHECK_EQ(scanned, 1u);     /* and the source scanning out again */
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 TEST(ddi_scenario, a_primary_lives_from_standard_allocation_to_destruction)
 { LoadedDriver driver;
