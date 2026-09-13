@@ -16,7 +16,6 @@
 #include "core/memory/aperture_segment.hpp"
 #include "core/memory/host_visible_blob.hpp"
 #include "core/memory/host_visible_segment.hpp"
-#include "core/memory/hostmem_placement.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/gpu_mmu_geometry.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
@@ -318,7 +317,6 @@ private:
     ApertureSegment                segment_;
     HostVisibleSegment             host_visible_;
     HostVisibleBlob                region_blob_;
-    HostmemPlacement               placement_;
     MemorySegments                 memory_;
     DisplayInfoResponse            display_info_;
     DisplayModeList                modes_;

@@ -42,7 +42,6 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 |---|---|---|---|
 | `HostVisibleSegment` | object | the hostmem region's guest physical base and size, and whether the device offers it | Describe the CPU-visible segment to VidMm |
 | `MemorySegments` | system | the segments this adapter reports, in the order VidMm numbers them | Answer what memory this adapter has |
-| `HostmemPlacement` | system | which pages of the hostmem region are taken, and by which allocation | Place a host-visible allocation inside the region |
 | `HostVisibleBlob` | object | one allocation's blob: its resource id, its placement, and whether it is mapped | Keep one allocation's memory on the device |
 
 ### Test requirements

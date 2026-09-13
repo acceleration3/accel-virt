@@ -48,29 +48,13 @@ only right while there was one.
 **Invariant**: the host-visible segment is reported if and only if it is
 offered, and segment identifiers are 1..`count()` with no gap.
 
-## `HostmemPlacement` (system class)
+## `HostmemPlacement` - not built
 
-The record of what VidMm placed where. VidMm owns the segment's address space;
-what this owns is the judgement the device will make of an offset -
-`RESOURCE_MAP_BLOB` carries it, and the device refuses one that is misaligned,
-outside the region or overlapping another.
-
-| State | Meaning |
-|---|---|
-| `taken_[max_blobs]` | each live placement: its offset, its length in pages, and the allocation that holds it |
-| `count_` | how many are live |
-| `size_` | the region's size, so a placement can be judged against it |
-| `mutex_` | PASSIVE only; paging and allocation both reach it |
-
-**Operations.** `take(offset, bytes, owner)` - records the offset VidMm placed
-an allocation at, judged the way the device will judge it: page-aligned, wholly
-inside the region, overlapping nothing already held, one range per allocation.
-`release(owner)` - forgets that allocation's placement. `holder(offset)` - which
-allocation holds a byte, so a stale mapping can never be mistaken for a live
-one. VidMm owns the segment's address space; this owns the record of it.
-
-**Invariants**: no two placements share a byte; every placement lies wholly
-inside the region and is page-aligned; `count_` matches the live entries.
+It was to record which allocation held which part of the region. With the
+region mapped as one blob and VidMm owning the segment's address space, nothing
+in this feature asks that question, and the constitution's rule against
+speculative structure says not to answer it yet. Feature 042's executor is the
+caller that will need it.
 
 ## `HostVisibleBlob` (object class)
 

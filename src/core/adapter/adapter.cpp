@@ -91,7 +91,7 @@ enum : int32_t {
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), budget_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
       resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), geometry_(platform),
-      segment_(platform), host_visible_(platform), region_blob_(platform), placement_(platform),
+      segment_(platform), host_visible_(platform), region_blob_(platform),
       memory_(platform, segment_, host_visible_),
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_, memory_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
@@ -141,7 +141,6 @@ void Adapter::remember_device()
 void Adapter::open_region()
 {
     if (!host_visible_.offered()) return;
-    placement_.open(host_visible_.size());
     const Status created = region_blob_.create(device_.object(), HostVisibleBlob::first_resource_id,
                                                host_visible_.size());
     const Status mapped = created == Status::ok ? region_blob_.map(device_.object(), 0u) : created;
@@ -154,7 +153,6 @@ void Adapter::open_region()
 void Adapter::close_region()
 {
     region_blob_.abandon();
-    placement_.close();
 }
 
 void Adapter::judge_device()

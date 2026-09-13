@@ -85,8 +85,14 @@ No violations.
 |---|---|---|---|
 | `HostVisibleSegment` | object | the hostmem region's guest physical base and size, and whether the device offers it | Describe the CPU-visible segment to VidMm |
 | `MemorySegments` | system | the segments this adapter reports, in the order VidMm numbers them | Answer what memory this adapter has |
-| `HostmemPlacement` | system | which pages of the hostmem region are taken, and by which allocation | Place a host-visible allocation inside the region |
 | `HostVisibleBlob` | object | one allocation's blob: its resource id, its placement, and whether it is mapped | Keep one allocation's memory on the device |
+
+`HostmemPlacement` was a fourth class here and is not one any more: with the
+region mapped as a single blob, VidMm owning the segment's address space and
+mapping a process's view itself, nothing in this feature needs to know which
+allocation holds which range. What will need it is the executor being told
+where a context's buffer is (feature 042), and it can be written then against a
+caller that exists.
 
 `RvkRequestWriter` gains the two requests the driver has never sent -
 `RESOURCE_CREATE_BLOB` for a host blob and `RESOURCE_MAP_BLOB` - and
@@ -99,7 +105,6 @@ not new types.
 ```text
 src/core/memory/host_visible_segment.{hpp,cpp}    # FR-001, FR-006
 src/core/memory/memory_segments.{hpp,cpp}         # FR-001
-src/core/memory/hostmem_placement.{hpp,cpp}       # FR-001, FR-005
 src/core/memory/host_visible_blob.{hpp,cpp}       # FR-001, FR-005
 src/core/memory/allocation.{hpp,cpp}              # where a cpu-visible allocation goes
 src/core/memory/paging_request.{hpp,cpp}          # residency in the new segment
@@ -109,7 +114,6 @@ src/proto/virtio_gpu/gpu_response_reader.{hpp,cpp}# OK_MAP_INFO
 
 tests/unit/core/memory/test_host_visible_segment.cpp
 tests/unit/core/memory/test_memory_segments.cpp
-tests/unit/core/memory/test_hostmem_placement.cpp
 tests/unit/core/memory/test_host_visible_blob.cpp
 tests/unit/scenarios/test_ddi_scenarios.cpp       # the residency sequence
 tests/qemu/test_virtio_gpu_blobs.py               # the requests the driver emits
