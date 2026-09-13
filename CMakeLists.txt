@@ -121,6 +121,12 @@ find_library(AV_OPENCL_LIBRARY NAMES OpenCL)
 if(AV_OPENCL_LIBRARY)
   target_link_libraries(av_core PUBLIC ${AV_OPENCL_LIBRARY})
 endif()
+# EGL, which is how an OpenGL context is made without a window. Everything past
+# EGL 1.5 is resolved through eglGetProcAddress, so only the loader is linked.
+find_library(AV_EGL_LIBRARY NAMES EGL)
+if(AV_EGL_LIBRARY)
+  target_link_libraries(av_core PUBLIC ${AV_EGL_LIBRARY})
+endif()
 if(AV_GENERATED)
   target_include_directories(av_core PUBLIC ${AV_KHRONOS_INCLUDE} ${AV_GENERATED_OPENGL_INCLUDE})
 endif()

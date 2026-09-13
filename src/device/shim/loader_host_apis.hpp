@@ -50,6 +50,11 @@ private:
      * the same sixteen bytes Vulkan reports - so the two APIs agree on which
      * GPU is which without this having to guess from a name. */
     bool serves_opencl(const uint8_t *uuid) const;
+    /* Whether a context can be made on the GPU `uuid` names. Asked by making
+     * one and closing it, because every cheaper answer - an EGL device count,
+     * a vendor string - has been wrong on this host at least once. Once, at
+     * realize, on the main loop. */
+    bool serves_opengl(const uint8_t *uuid) const;
     /* Which RVK_BLOB_* kinds `device` can import, asked of its extensions
      * rather than assumed: a device without the host-pointer extension imports
      * nothing and the guest is told to copy. */

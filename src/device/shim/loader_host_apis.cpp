@@ -2,6 +2,8 @@
 
 #include "device/abi/rvk_executor.h"
 
+#include "device/shim/gl_context.hpp"
+
 #include <CL/cl.h>
 #include <CL/cl_ext.h>
 #include <string.h>
@@ -62,6 +64,7 @@ void LoaderHostApis::enumerate()
         /* OpenCL is reported only where a device on this host says it is the
          * same GPU, rather than because the host has OpenCL at all. */
         if (serves_opencl(uuids_[i])) sub_apis_[i] |= RVK_EXECUTOR_SUB_API_OPENCL;
+        if (serves_opengl(uuids_[i])) sub_apis_[i] |= RVK_EXECUTOR_SUB_API_OPENGL;
     }
     count_ = found;
 }
@@ -114,6 +117,14 @@ uint32_t LoaderHostApis::import_kinds(uint32_t index, uint32_t sub_api)
     if (sub_api == RVK_EXECUTOR_SUB_API_VULKAN) return vulkan_kinds_[index];
     if (sub_api == RVK_EXECUTOR_SUB_API_OPENCL) return opencl_kinds_[index];
     return 0u;
+}
+
+bool LoaderHostApis::serves_opengl(const uint8_t *uuid) const
+{
+    GlContext context;
+    const bool opened = context.open(uuid);
+    context.close();
+    return opened;
 }
 
 bool LoaderHostApis::serves_opencl(const uint8_t *uuid) const

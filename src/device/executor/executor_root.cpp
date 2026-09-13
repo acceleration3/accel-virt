@@ -15,7 +15,7 @@ alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][DecodeArena::arena_byt
 
 }  // namespace
 
-ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, vulkan_{}, opencl_{}, asked_(false) {}
+ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, asked_(false) {}
 
 Status ExecutorRoot::initialize(HostApis &apis)
 {
@@ -50,6 +50,12 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid)
         SessionBackend *backend = nullptr;
         if (sub_api == RVK_EXECUTOR_SUB_API_VULKAN) backend = &vulkan_[slot];
         if (sub_api == RVK_EXECUTOR_SUB_API_OPENCL) backend = &opencl_[slot];
+        if (sub_api == RVK_EXECUTOR_SUB_API_OPENGL) {
+            /* The only backend that has to open something before it can run
+             * anything: a GL context belongs to a GPU and is made for one. */
+            if (!opengl_[slot].initialize(gpu_uuid)) return nullptr;
+            backend = &opengl_[slot];
+        }
         /* A sub-API with no backend yet is refused rather than given a session
          * that would answer nothing: OpenGL is the one, and it is refused at
          * the capset too, because no GPU here reports running it. */
@@ -73,6 +79,7 @@ void ExecutorRoot::close(ContextSession *session)
         if (&sessions_[slot] != session) continue;
         vulkan_[slot].shut_down();
         opencl_[slot].shut_down();
+        opengl_[slot].shut_down();
     }
 }
 
