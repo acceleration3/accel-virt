@@ -368,6 +368,34 @@ TEST(fence_stress_scenario, no_seconds_is_no_run)
   CHECK_EQ(kmt.calls(MockKmt::Call::submit), 0u);
   CHECK_STATUS(search.close(), Status::ok); }
 
+/* No adapter is no run, and the driver is asked for nothing at all. */
+TEST(fence_stress_scenario, without_an_adapter_it_asks_the_driver_for_nothing)
+{ MockKmt kmt;
+  AdapterSearch search(kmt);
+  GuestReport report;
+  FenceStressScenario stress(kmt, report, search, 2u);
+  stress.run();
+  CHECK(has_line(report, "FAIL stress.adapter"));
+  CHECK_EQ(kmt.calls(MockKmt::Call::create_device), 0u);
+  CHECK_EQ(stress.completed(), 0u); }
+
+/* A device that will not open stops every step after it, and the fences are
+ * never reached. */
+TEST(fence_stress_scenario, a_device_that_will_not_open_stops_the_run_at_once)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.fail_at(MockKmt::Call::create_device, 1u, 0xC0000017u);
+  AdapterSearch search(kmt);
+  CHECK_STATUS(search.find(rvk), Status::ok);
+  GuestReport report;
+  FenceStressScenario stress(kmt, report, search, 2u);
+  stress.run();
+  CHECK(has_line(report, "FAIL stress.device"));
+  CHECK(!has_line(report, "stress.allocation"));
+  CHECK(!has_line(report, "stress.fences"));
+  CHECK_STATUS(search.close(), Status::ok);
+  CHECK_EQ(kmt.open_objects(), 0u); }
+
 /* A stress that cannot even set up says so at the step that refused, and never
  * submits: the run is the fences, and there are none. */
 TEST(fence_stress_scenario, a_setup_that_fails_never_reaches_the_fences)
@@ -402,6 +430,24 @@ TEST(fence_stress_scenario, a_submission_that_fails_stops_the_run)
   CHECK(has_line(report, "FAIL stress.fences"));
   CHECK_EQ(stress.completed(), 2u);
   CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_context), 2u);
+  CHECK_STATUS(search.close(), Status::ok);
+  CHECK_EQ(kmt.open_objects(), 0u); }
+
+/* The blank between batches is part of the run: one that never comes ends it,
+ * because the masking it drives is what the run is testing. */
+TEST(fence_stress_scenario, a_blank_that_never_comes_ends_the_run)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.spend_on_wait(MockKmt::ticks_per_second / 100u);
+  kmt.set_blank_period(0u);
+  kmt.fail_at(MockKmt::Call::wait_for_vertical_blank, 1u, 0xC0000001u);
+  AdapterSearch search(kmt);
+  CHECK_STATUS(search.find(rvk), Status::ok);
+  GuestReport report;
+  FenceStressScenario stress(kmt, report, search, 2u);
+  stress.run();
+  CHECK(has_line(report, "FAIL stress.fences"));
+  CHECK_EQ(stress.completed(), av::FenceStressScenario::fences_per_blank);
   CHECK_STATUS(search.close(), Status::ok);
   CHECK_EQ(kmt.open_objects(), 0u); }
 

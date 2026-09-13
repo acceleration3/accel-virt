@@ -95,4 +95,9 @@ TEST(probe_result_describe, names_the_outcome_and_what_it_was_for)
   CHECK(std::strcmp(described(failed, bytes, sizeof bytes), "failed, status 6, host -19") == 0);
   ProbeResult refused;
   CHECK_STATUS(refused.record_failure(Status::malformed, 0), Status::ok);
-  CHECK(std::strcmp(described(refused, bytes, sizeof bytes), "failed, status 9") == 0); }
+  CHECK(std::strcmp(described(refused, bytes, sizeof bytes), "failed, status 9") == 0);
+  /* Not every host number is negative: VK_NOT_READY and its neighbours are
+   * positive, and a driver that answers one has still refused. */
+  ProbeResult positive;
+  CHECK_STATUS(positive.record_failure(Status::not_supported, 3), Status::ok);
+  CHECK(std::strcmp(described(positive, bytes, sizeof bytes), "failed, status 6, host 3") == 0); }
