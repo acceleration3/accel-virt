@@ -6,10 +6,12 @@
 #include "core/rvk/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "device/module/driver_status.hpp"
+#include "harness/executor/mock_executor_ops.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/loopback/loopback_rig.hpp"
 #include "harness/ring/guest_ring.hpp"
 #include "proto/context/capset_info.hpp"
+#include "proto/submission/fault_code.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/sub_api.hpp"
@@ -195,6 +197,35 @@ TEST(loopback_faults, a_faulted_context_reports_its_code_while_another_completes
   CHECK(!rig.context(0u).faulted());
   CHECK(rig.context(0u).invariants_hold());
   CHECK(rig.context(1u).invariants_hold()); }
+
+/* US4 of feature 040: the host loses its device on one context's work. That
+ * context is told - the fault code is the device's, not a framing mistake of
+ * the guest's - the other keeps completing, and when both are retired the
+ * device holds no context and no blob of theirs (FR-004). */
+TEST(loopback_faults, an_executor_that_loses_the_device_loses_one_context_and_no_other)
+{ LoopbackRig rig;
+  CHECK(rig.read_capset());
+  CHECK(rig.establish(0u));
+  CHECK(rig.establish(1u));
+  std::uint8_t lost[CommandHeader::encoded_size] = {};
+  CHECK_STATUS(CommandHeader(av::MockExecutorOps::lost_id, sizeof lost, 1u).encode(lost, sizeof lost), Status::ok);
+  GuestRing losing(rig.context(0u).ring(), LoopbackRig::ring_order);
+  losing.write_batch(1u, lost, sizeof lost);
+  CHECK_STATUS(rig.submit(0u, 1u, 0u, losing.tail()), Status::ok);
+  GuestRing healthy(rig.context(1u).ring(), LoopbackRig::ring_order);
+  healthy.write_batch(1u, 64u);
+  CHECK_STATUS(rig.submit(1u, 1u, 0u, healthy.tail()), Status::ok);
+
+  CHECK(!rig.driver().serve_until(rig.context(0u), rig.line(0u), 1u));
+  CHECK(rig.context(0u).faulted());
+  CHECK_EQ(rig.context(0u).fault_code(), static_cast<std::uint32_t>(av::FaultCode::device_lost));
+  CHECK(rig.driver().serve_until(rig.context(1u), rig.line(1u), 1u));
+  CHECK(!rig.context(1u).faulted());
+
+  CHECK(rig.retire(0u));
+  CHECK(rig.retire(1u));
+  CHECK_EQ(rig.device().device().contexts(), 0u);
+  CHECK_EQ(rig.device().device().blobs(), 0u); }
 
 TEST(loopback_reset, after_a_device_reset_serving_finds_nothing_more_and_a_new_context_sets_up)
 { LoopbackRig rig;

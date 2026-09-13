@@ -85,7 +85,7 @@ description: "Tasks: real-guest power, restart and recovery"
 - [X] T012 [US3] Implement `ContextLoss` (system class) in `src/core/scheduling/context_loss.{hpp,cpp}`
 - [X] T013 [US3] `Adapter::reset_engine` records the contexts whose work it aborted as lost, and reports them, in `src/core/adapter/adapter.cpp`; `tests/unit/core/adapter/test_adapter.cpp` asserts the other device's context is untouched
 - [X] T014 [US3] The L2 timeout and reset scenario in `tests/unit/scenarios/test_ddi_scenarios.cpp`: `QueryEngineStatus` deferring once, then refusing, then `ResetEngine` aborting only that node - and the driver returning at the IRQL it was called at, which `DdiResetEngine` (dxgkrnl.sys @14006e0a4) checks
-- [ ] T015 [US3] The echo executor gains stall and fault controls read from its environment at load, in `tests/qemu/echo_executor.cpp`, with the L4 loopback run that uses them
+- [X] T015 [US3] The echo executor gains stall and fault controls read from its environment at load, in `tests/qemu/echo_executor.cpp`, with the L4 loopback run that uses them
 - [ ] T016 [US3] The runner's `tdr` scenario: one context stalled past the timeout, the other still completing, event 4101 in the System log, the live kernel report collected; with its fake-guest test
 - [ ] T017 [US3] An injected 5 s stall recovers within 10 s with the other context unaffected (SC-003); record what the run showed here
 
@@ -112,7 +112,7 @@ description: "Tasks: real-guest power, restart and recovery"
 
 **Goal**: a fault loses the faulted context and nothing else.
 
-- [ ] T022 [US4] The L4 scenario with a faulting executor in `tests/loopback/`: the faulted context is reported lost to its owner, the other completes, and the device holds no leftover context or blob (FR-004)
+- [X] T022 [US4] The L4 scenario with a faulting executor in `tests/loopback/`: the faulted context is reported lost to its owner, the other completes, and the device holds no leftover context or blob (FR-004)
 - [ ] T023 [US4] The runner's fault injection, alongside the stall, and the L5 run showing only the faulted context lost (SC-004); record what the run showed here
 
 **Checkpoint**: a fault is not an outage. Commit.
