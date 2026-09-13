@@ -47,7 +47,12 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| — | — | — | — |
+
+**None, deliberately.** This feature is tooling and the sources that tooling
+writes: the generator is Python, and the C++ it emits declares the types the
+Khronos registries dictate. The classes that *use* the generated wire belong to
+features 042 and 043 and are named there.
 
 ### Test requirements
 

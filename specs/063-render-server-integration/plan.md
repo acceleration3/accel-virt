@@ -1,113 +1,141 @@
-# Implementation Plan: [FEATURE]
+# Implementation Plan: the generators, vendored
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+**Branch**: `063-render-server-integration` | **Date**: 2026-09-13 | **Spec**: [spec.md](./spec.md)
 
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
-
-**Note**: This template is filled in by the `/speckit-plan` command; its definition describes the execution workflow.
+**Input**: Feature specification from `/specs/063-render-server-integration/spec.md`
 
 ## Summary
 
-[Extract from feature spec: primary requirement + technical approach from research]
+Three graphics APIs' worth of serialization is not something to write by hand,
+and render-server already has a generator that reads the Khronos registries and
+emits it. This feature takes **the generator and nothing else**: it is vendored
+into this repository, owned here, and pointed at this project's own wire types;
+what it emits is committed, reviewed and compiled like any other source, and a
+gate re-runs it to prove the committed tree is what the generator would write.
+
+Four things have to be true, and the third is the work:
+
+1. **The generator is here**, under `tools/codegen/`, with the profile and
+   protocol-id files that steer it. Nothing fetches render-server, at build time
+   or ever.
+2. **The registries are pinned**: `vk.xml`, `gl.xml` and `cl.xml` fetched by
+   revision and verified by hash, like QEMU and the Windows kit. The build never
+   needs them, because what it compiles is committed; only regenerating does.
+3. **The emitters speak this project's language.** What render-server's
+   generator emits today includes `rvk/protocol/buffer.hpp`, its logging, and
+   in two backends `std::vector`. This repository has `WireReader` and
+   `WireWriter` of its own, builds `-ffreestanding -fno-exceptions -fno-rtti`,
+   and has no STL in `src/proto` or `src/device` at all. Owning the generator
+   means changing what it emits, not wrapping what it emits in a shim that would
+   outlive the reason for it.
+4. **The gates judge machine-written code by rules it can keep**: the design and
+   coverage gates exclude generated directories by an explicit rule, the
+   compiler does not, and whatever decodes a frame from outside gets a fuzz
+   target.
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
+**Language/Version**: Python 3 for the generator (vendored); C++23 for what it
+emits, compiled under this repository's existing flags.
 
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]
+**Primary Dependencies**: the Khronos registries; the wire types this repository
+already has in `src/proto/wire/`; feature 032's `rvk_executor.h`, which stays
+this project's ABI.
 
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
+**Testing**: the generator's own `--check` as a ctest gate; compilation of the
+emitted sources in both the device and guest builds; a fuzz target over the
+generated decoder with a committed corpus; and the existing image gates for any
+guest artefact.
 
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
+**Target Platform**: the generator runs on the developer's Linux machine; its
+output compiles for the QEMU device (Linux x86-64, freestanding) and for the
+Windows guest (x64, and x86 when a guest driver needs it).
 
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]
+**Performance Goals**: none of its own. The generated decoder is on the
+submission path later; this feature only has to not make that impossible.
 
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+**Constraints**: `src/proto` and `src/device` have no STL and no exceptions, and
+the guest driver has no C runtime at all. Generated code that lands there obeys
+the same rules. A host-side executor library is an ordinary Linux shared object
+and may use more, which is a decision to make per emitted file rather than once.
 
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]
-
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]
-
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]
-
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Scale/Scope**: three registries; on render-server's numbers about 8 MB of
+emitted C++ across 37 files for Vulkan alone, which is why it is committed and
+gated rather than regenerated on every build.
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+| Principle | How this feature satisfies it |
+|---|---|
+| I. Specification precedes implementation | The spec was rewritten before any code when the scope changed from "consume render-server" to "take its generators". |
+| II. The core is portable; the shim is not | Generated code targets `src/proto` and the host executor, neither of which is kernel-only; nothing generated reaches `src/km`. |
+| III. Object-oriented, with state | This feature adds no C++ class of its own: it adds tooling and the code that tooling writes. The table below says so rather than inventing one. |
+| IV. Test-first and exhaustive | The gate that proves the committed tree matches the generator is written before the tree is committed; the decoder's fuzz target and corpus land with the decoder. |
+| V. Everything from outside is hostile | A generated decoder is exactly where a hostile frame lands first, which is why FR-006 requires the fuzz target there. |
+| VI. Feature levels are phases | Vulkan first, then OpenGL and OpenCL; each is a phase that can stop cleanly. |
+| VII. IRQL and locking are typed | Generated code runs at PASSIVE in the guest driver and in ordinary user space on the host; nothing it emits is reachable from a DPC. |
+| VIII. No speculative structure | No shim headers standing in for render-server's types, and no abstraction over the three APIs until two of them are in. |
+| IX. Reproducible and observable | The whole feature is one claim: a clean checkout plus a fetch reproduces the committed tree byte for byte, and the gate says which file disagrees. |
 
-[Gates determined based on constitution file]
+No violations.
+
+## Classes this feature introduces
+
+| Class | Kind | State it owns | Responsibility (no "and") |
+|---|---|---|---|
+| — | — | — | — |
+
+**None, deliberately.** This feature is tooling and the sources that tooling
+writes. The generator is Python, vendored under `tools/codegen/`; the C++ it
+emits declares types the Khronos registries dictate, not types this project
+designs. The classes that *use* the generated wire - the host executor's
+backends, the guest transport - belong to features 042 and 043 and are named
+there. An entry in this table for a class with no state would be a mistake
+written down, which is what the constitution says about stateless classes.
 
 ## Project Structure
 
-### Documentation (this feature)
-
 ```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit-plan command output)
-├── research.md          # Phase 0 output (/speckit-plan command)
-├── data-model.md        # Phase 1 output (/speckit-plan command)
-├── quickstart.md        # Phase 1 output (/speckit-plan command)
-├── contracts/           # Phase 1 output (/speckit-plan command)
-└── tasks.md             # Phase 2 output (/speckit-tasks command - NOT created by /speckit-plan)
+tools/codegen/                       # the vendored generator, owned here
+tools/codegen/profiles/*.toml        # which commands and ids, this project's
+tools/fetch_khronos_registries.sh    # vk.xml, gl.xml, cl.xml by revision + hash
+tools/check_generated.py             # re-runs the generator, fails on a difference
+tools/check_design.py                # excludes generated directories
+tools/check_coverage.py              # the same exclusion, named once
+
+src/proto/generated/vulkan/          # committed, compiled, never hand-edited
+src/proto/generated/opengl/
+src/proto/generated/opencl/
+
+tests/fuzz/fuzz_generated_decode.cpp # a hostile frame into the generated decoder
+tests/corpus/fuzz_generated_decode/
 ```
 
-### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
+**Structure Decision**: generated sources live under `src/proto/`, beside the
+hand-written wire they are built on, because that is what they are: more of this
+project's protocol. They are in a `generated/` directory so that one rule names
+them for every gate that has to treat them differently.
 
-```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
+## Phase 0: research
 
-tests/
-├── contract/
-├── integration/
-└── unit/
+`research.md` answers what the generator needs to be lifted out of
+render-server's tree, what its emitters assume about the runtime around them,
+which of those assumptions this repository can satisfy as-is (`WireReader`,
+`WireWriter`) and which need the emitters changed (`std::vector` in two
+backends, render-server's logging, its buffer headers), where the registries
+come from and at what revision, and how much emitted code there is.
 
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
+## Phase 1: design
 
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
-```
-
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+`data-model.md` describes the generator's inputs and outputs as data - registry,
+profile, protocol ids, emitted files - and the rules that make a regeneration
+reproducible. `contracts/` records what the emitted serialization must satisfy
+to compile here: the wire types it may name, the headers it may include, what it
+may not use. `quickstart.md` is how to fetch, generate, check and fuzz.
 
 ## Complexity Tracking
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
-
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+The one thing that will look like complexity and is not: the generator is
+vendored rather than fetched. That was chosen deliberately - the code it emits
+is this project's to own, and a pinned upstream whose generator we must patch
+to use our own types is a coupling with no payoff.
