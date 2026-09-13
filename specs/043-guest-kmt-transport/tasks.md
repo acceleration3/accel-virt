@@ -105,7 +105,7 @@ description: "Tasks: the guest transport"
 
 ## Phase 6: Hostile input and the fuzz target
 
-- [ ] T030 `tests/fuzz/fuzz_reply_reader.cpp` with a committed corpus: a hostile reply slot and a hostile fence page into `ReplyReader` and `FenceObserver`, the required outcome a refusal or a fault, never a read past the mapping or a crash (SC-002, constitution V)
+- [X] T030 `tests/fuzz/fuzz_reply_reader.cpp` with a committed corpus: a hostile reply slot and a hostile fence page into `ReplyReader` and `FenceObserver`, the required outcome a refusal or a fault, never a read past the mapping or a crash (SC-002, constitution V)
 - [ ] T031 The transport core is 100% branch covered, invariants asserted after every mutation, and a hostile-mapping table drives every refusal (SC-002); `coverage_gate` green
 
 **Checkpoint**: the transport distrusts its mappings the way the device distrusts the guest's. Commit.
