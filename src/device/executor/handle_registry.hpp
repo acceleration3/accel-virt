@@ -42,6 +42,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct HandleRegistryProbe;
+
     uint64_t handles_[max_handles];
     uint32_t count_;
 };

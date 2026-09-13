@@ -6,7 +6,9 @@
  * rather than whether a driver drew anything. A host with no EGL fails to open
  * a context and every command is refused, which is also asserted. */
 #include "device/executor/imported_blob.hpp"
+#include "device/abi/rvk_executor.h"
 #include "device/executor/opengl_backend.hpp"
+#include "device/shim/loader_host_apis.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/opengl/gl_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
@@ -26,7 +28,12 @@ using av::WireWriter;
 extern "C" const char *__lsan_default_suppressions(void);
 extern "C" const char *__lsan_default_suppressions(void)
 {
-    return "leak:libEGL\n"
+    /* The host's enumeration asks OpenCL as well as EGL which GPU is which. */
+    return "leak:libOpenCL\n"
+           "leak:intelocl\n"
+           "leak:libigdrcl\n"
+           "leak:libvulkan\n"
+           "leak:libEGL\n"
            "leak:libGLX\n"
            "leak:libnvidia\n"
            "leak:iris_dri\n"
@@ -108,3 +115,54 @@ TEST(opengl_backend, takes_no_blob_and_says_so)
   CHECK(!backend.adopt(blob));
   backend.abandon(blob);
   CHECK_EQ(blob.object(), 0u); }
+
+/* A real context on a real GPU, found from this host's own enumeration rather
+ * than a UUID written into the test. A host with no GPU that runs OpenGL has
+ * nothing below this line to judge, which is said rather than faked. */
+TEST(opengl_backend, a_context_on_a_real_gpu_runs_a_command_and_refuses_a_broken_one)
+{ av::LoaderHostApis host;
+  host.open();
+  std::uint8_t uuid[16] = {};
+  bool found = false;
+  for (std::uint32_t i = 0u; i < host.gpu_count() && !found; i++) {
+      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_OPENGL) == 0u) continue;
+      host.gpu_uuid(i, uuid);
+      found = true;
+  }
+  host.close();
+  if (!found) return;
+
+  OpenGlBackend backend;
+  CHECK(backend.initialize(uuid));
+  CHECK(backend.resolved() > 0u);
+
+  std::uint8_t block[4096];
+  WireArena arena(block, sizeof block);
+  /* OpenGL's wire carries scalars as varints, so GL_COLOR_BUFFER_BIT is three
+   * bytes here rather than four - and a frame written as a raw u32 would have
+   * decoded, from its first byte alone, as glClear(0). */
+  std::uint8_t frame[16];
+  WireWriter clear(frame, sizeof frame);
+  clear.write_varint<std::uint32_t>(0x4000u);
+  CHECK_EQ(clear.offset(), 3u);
+  std::uint8_t reply[16] = {};
+  WireReader payload(frame, clear.offset());
+  WireWriter answer(reply, sizeof reply);
+  CHECK(backend.run(av::glproto::kCmd_glClear, payload, answer, arena));
+  CHECK_EQ(backend.ran(), 1u);
+
+  /* A varint cut before its last byte is refused by the decoder even with a
+   * context current, and does not count as having run. */
+  arena.reset();
+  WireReader short_payload(frame, 1u);
+  WireWriter short_answer(reply, sizeof reply);
+  CHECK(!backend.run(av::glproto::kCmd_glClear, short_payload, short_answer, arena));
+  CHECK_EQ(backend.ran(), 1u);
+
+  backend.shut_down();
+  CHECK_EQ(backend.resolved(), 0u);
+  /* And after shutting down the context is gone, so nothing runs. */
+  arena.reset();
+  WireReader again(frame, clear.offset());
+  WireWriter again_answer(reply, sizeof reply);
+  CHECK(!backend.run(av::glproto::kCmd_glClear, again, again_answer, arena)); }

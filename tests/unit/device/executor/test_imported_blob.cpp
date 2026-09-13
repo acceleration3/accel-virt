@@ -3,11 +3,13 @@
  * the ABI states is checked before any host API sees it. */
 #include "device/abi/rvk_executor.h"
 #include "device/executor/imported_blob.hpp"
+#include "harness/executor/imported_blob_probe.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
 
 using av::ImportedBlob;
+using av::ImportedBlobProbe;
 using av::Status;
 
 namespace {
@@ -136,3 +138,75 @@ TEST(imported_blob, remembers_what_the_host_api_made_of_it)
   blob.set_object(0xDEADBEEFu);
   CHECK_EQ(blob.object(), 0xDEADBEEFu);
   CHECK(blob.invariants_hold()); }
+
+/* An empty slot answers pointer() and descriptor() like any other, so anything
+ * it still carries is a stale address or a descriptor this library already gave
+ * back. One field at a time, on a slot that never held anything. */
+TEST(imported_blob_invariants, an_empty_slot_with_a_kind_breaks_them)
+{ ImportedBlob blob;
+  ImportedBlobProbe(blob).set_kind(RVK_BLOB_HOST_POINTER);
+  CHECK(!blob.invariants_hold()); }
+
+TEST(imported_blob_invariants, an_empty_slot_with_a_size_breaks_them)
+{ ImportedBlob blob;
+  ImportedBlobProbe(blob).set_size(ImportedBlob::page_bytes);
+  CHECK(!blob.invariants_hold()); }
+
+TEST(imported_blob_invariants, an_empty_slot_with_a_pointer_breaks_them)
+{ ImportedBlob blob;
+  ImportedBlobProbe(blob).set_pointer(backing);
+  CHECK(!blob.invariants_hold()); }
+
+TEST(imported_blob_invariants, an_empty_slot_with_a_descriptor_breaks_them)
+{ ImportedBlob blob;
+  ImportedBlobProbe(blob).set_descriptor(11);
+  CHECK(!blob.invariants_hold()); }
+
+/* A live blob of no size, or of part of a page, is one no host API can map;
+ * take refuses both, so a live one holding either was never taken. */
+TEST(imported_blob_invariants, a_live_blob_of_no_size_breaks_them)
+{ ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, host_pointer(ImportedBlob::page_bytes)), Status::ok);
+  ImportedBlobProbe(blob).set_size(0u);
+  CHECK(!blob.invariants_hold()); }
+
+TEST(imported_blob_invariants, a_live_blob_that_is_not_whole_pages_breaks_them)
+{ ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, host_pointer(ImportedBlob::page_bytes)), Status::ok);
+  ImportedBlobProbe(blob).set_size(ImportedBlob::page_bytes + 1u);
+  CHECK(!blob.invariants_hold()); }
+
+/* A host pointer is what Vulkan imports, so one that is null is a mapping of
+ * address zero, and one carrying a descriptor too is two answers to one ask. */
+TEST(imported_blob_invariants, a_host_pointer_blob_with_no_pointer_breaks_them)
+{ ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, host_pointer(ImportedBlob::page_bytes)), Status::ok);
+  ImportedBlobProbe(blob).set_pointer(nullptr);
+  CHECK(!blob.invariants_hold()); }
+
+TEST(imported_blob_invariants, a_host_pointer_blob_with_a_descriptor_breaks_them)
+{ ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, host_pointer(ImportedBlob::page_bytes)), Status::ok);
+  ImportedBlobProbe(blob).set_descriptor(11);
+  CHECK(!blob.invariants_hold()); }
+
+/* A dma-buf is handed over as a descriptor alone: a pointer beside it is an
+ * address nobody said the meaning of, and no descriptor is nothing to import. */
+TEST(imported_blob_invariants, a_dma_buf_blob_with_a_pointer_breaks_them)
+{ ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, dma_buf(11, ImportedBlob::page_bytes)), Status::ok);
+  ImportedBlobProbe(blob).set_pointer(backing);
+  CHECK(!blob.invariants_hold()); }
+
+TEST(imported_blob_invariants, a_dma_buf_blob_with_no_descriptor_breaks_them)
+{ ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, dma_buf(11, ImportedBlob::page_bytes)), Status::ok);
+  ImportedBlobProbe(blob).set_descriptor(-1);
+  CHECK(!blob.invariants_hold()); }
+
+/* A live blob of no kind, or of both, is one no backend knows how to adopt. */
+TEST(imported_blob_invariants, a_live_blob_of_a_kind_nobody_defined_breaks_them)
+{ ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, host_pointer(ImportedBlob::page_bytes)), Status::ok);
+  ImportedBlobProbe(blob).set_kind(RVK_BLOB_HOST_POINTER | RVK_BLOB_DMA_BUF);
+  CHECK(!blob.invariants_hold()); }

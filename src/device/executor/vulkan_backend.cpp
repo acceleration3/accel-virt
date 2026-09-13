@@ -46,7 +46,8 @@ bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
 }  // namespace
 
 VulkanBackend::VulkanBackend()
-    : instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), handles_(), ran_(0u), lost_(false)
+    : instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), handles_(), import_(), ran_(0u),
+      lost_(false)
 {}
 
 void VulkanBackend::made(uint64_t raw)
@@ -62,10 +63,10 @@ VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateI
                                             const VkAllocationCallbacks *, VkInstance *pInstance)
 {
     const VkResult result = RealVulkanDispatch::on_vkCreateInstance(pCreateInfo, nullptr, pInstance);
-    if (result == VK_SUCCESS && pInstance != nullptr) {
-        instance_ = *pInstance;
-        if (!handles_.remember(number_of(*pInstance))) lost_ = true;
-    }
+    /* Kept so shut_down can destroy what a dying context never did. Which
+     * handles the guest may name back is not decided here: every handle leaves
+     * through handle_to_wire, and that is where it is remembered. */
+    if (result == VK_SUCCESS) instance_ = *pInstance;
     return result;
 }
 
@@ -74,40 +75,6 @@ void VulkanBackend::on_vkDestroyInstance(VkInstance instance, const VkAllocation
     handles_.forget(number_of(instance));
     if (instance == instance_) instance_ = VK_NULL_HANDLE;
     RealVulkanDispatch::on_vkDestroyInstance(instance, nullptr);
-}
-
-VkResult VulkanBackend::on_vkEnumeratePhysicalDevices(VkInstance instance,
-                                                      uint32_t *pPhysicalDeviceCount,
-                                                      VkPhysicalDevice *pPhysicalDevices)
-{
-    const VkResult result = RealVulkanDispatch::on_vkEnumeratePhysicalDevices(
-        instance, pPhysicalDeviceCount, pPhysicalDevices);
-    if (pPhysicalDevices == nullptr || pPhysicalDeviceCount == nullptr) return result;
-    for (uint32_t i = 0u; i < *pPhysicalDeviceCount; i++) {
-        if (!handles_.remember(number_of(pPhysicalDevices[i]))) lost_ = true;
-    }
-    return result;
-}
-
-void VulkanBackend::on_vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex,
-                                        uint32_t queueIndex, VkQueue *pQueue)
-{
-    RealVulkanDispatch::on_vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, pQueue);
-    if (pQueue != nullptr && !handles_.remember(number_of(*pQueue))) lost_ = true;
-}
-
-VkResult VulkanBackend::on_vkAllocateCommandBuffers(VkDevice device,
-                                                    const VkCommandBufferAllocateInfo *pAllocateInfo,
-                                                    VkCommandBuffer *pCommandBuffers)
-{
-    const VkResult result =
-        RealVulkanDispatch::on_vkAllocateCommandBuffers(device, pAllocateInfo, pCommandBuffers);
-    if (result != VK_SUCCESS || pCommandBuffers == nullptr || pAllocateInfo == nullptr)
-        return result;
-    for (uint32_t i = 0u; i < pAllocateInfo->commandBufferCount; i++) {
-        if (!handles_.remember(number_of(pCommandBuffers[i]))) lost_ = true;
-    }
-    return result;
 }
 
 bool VulkanBackend::knows(uint32_t command_id) const
@@ -137,13 +104,10 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
 {
     const VkResult result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, pCreateInfo,
                                                                   nullptr, pDevice);
-    /* Remembered because a VkDeviceMemory belongs to a device, and an import
-     * arrives out of band with no command to carry one. A context makes one
-     * device; a second replaces the first, which is what the guest sees too. */
-    if (result == VK_SUCCESS && pDevice != nullptr) {
-        device_ = *pDevice;
-        if (!handles_.remember(number_of(*pDevice))) lost_ = true;
-    }
+    /* Kept because a VkDeviceMemory belongs to a device and an import arrives
+     * out of band with no command to carry one. A context makes one device; a
+     * second replaces the first, which is what the guest sees too. */
+    if (result == VK_SUCCESS) device_ = *pDevice;
     return result;
 }
 
@@ -154,52 +118,16 @@ void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallba
     RealVulkanDispatch::on_vkDestroyDevice(device, nullptr);
 }
 
-bool VulkanBackend::memory_type_for(void *pointer, uint32_t &type) const
-{
-    auto *const properties = reinterpret_cast<PFN_vkGetMemoryHostPointerPropertiesEXT>(
-        ::vkGetDeviceProcAddr(device_, "vkGetMemoryHostPointerPropertiesEXT"));
-    if (properties == nullptr) return false;
-
-    VkMemoryHostPointerPropertiesEXT host = {};
-    host.sType = VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT;
-    if (properties(device_, VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, pointer,
-                   &host) != VK_SUCCESS)
-        return false;
-    if (host.memoryTypeBits == 0u) return false;
-
-    for (uint32_t candidate = 0u; candidate < 32u; candidate++) {
-        if ((host.memoryTypeBits & (1u << candidate)) != 0u) {
-            type = candidate;
-            return true;
-        }
-    }
-    return false;
-}
-
 bool VulkanBackend::adopt(ImportedBlob &blob)
 {
     /* Only a host pointer, because that is the only kind this backend offers
      * through import_kinds, and a dma-buf imported here would land in memory
-     * the host cannot map on one of the two GPUs measured. */
+     * the host cannot map on one of the two GPUs measured. And only onto a
+     * device the guest has made, because device memory belongs to one. */
     if (blob.kind() != RVK_BLOB_HOST_POINTER || device_ == VK_NULL_HANDLE) return false;
-
-    uint32_t type = 0u;
-    if (!memory_type_for(blob.pointer(), type)) return false;
-
-    VkImportMemoryHostPointerInfoEXT imported = {};
-    imported.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT;
-    imported.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
-    imported.pHostPointer = blob.pointer();
-
-    VkMemoryAllocateInfo allocate = {};
-    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocate.pNext = &imported;
-    allocate.allocationSize = blob.size();
-    allocate.memoryTypeIndex = type;
-
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    if (::vkAllocateMemory(device_, &allocate, nullptr, &memory) != VK_SUCCESS) return false;
-    blob.set_object(reinterpret_cast<uint64_t>(memory));
+    uint64_t memory = 0u;
+    if (!import_.import(device_, blob.pointer(), blob.size(), memory)) return false;
+    blob.set_object(memory);
     return true;
 }
 
@@ -209,7 +137,7 @@ void VulkanBackend::abandon(ImportedBlob &blob)
     if (object == 0u || device_ == VK_NULL_HANDLE) return;
     /* The pointer itself is the device's and stays mapped; what this made of
      * it is this library's to free. */
-    ::vkFreeMemory(device_, reinterpret_cast<VkDeviceMemory>(object), nullptr);
+    import_.release(device_, object);
     blob.set_object(0u);
 }
 

@@ -65,11 +65,16 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ExecutorRootProbe;
+
     /* DeviceContextTable::max_contexts, which the capset publishes: the device
      * can never ask for another, so a second ceiling would be one nobody
      * enforces. */
     static constexpr uint32_t max_sessions = sessions;
 
+    /* The backend of `sub_api` in `slot`, or null for a value that is not one
+     * of the three sub-APIs. */
+    SessionBackend *backend_in(uint32_t slot, uint32_t sub_api);
     /* Whether `session` is one of ours rather than a pointer the device
      * invented or already gave back. */
     bool owns(const ContextSession *session) const;

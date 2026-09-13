@@ -31,6 +31,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct GuestRegionProbe;
+
     uint8_t *base_;
     uint64_t length_;
 };

@@ -51,6 +51,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ImportedBlobProbe;
+
     uint64_t id_;
     uint32_t kind_;
     uint64_t size_;

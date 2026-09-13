@@ -4,13 +4,14 @@
 #include "device/abi/rvk_executor.h"
 #include "device/executor/host_gpu.hpp"
 #include "harness/executor/mock_host_apis.hpp"
+#include "harness/executor/host_gpu_probe.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
 
 using av::HostGpu;
+using av::HostGpuProbe;
 using av::MockHostApis;
-using av::Status;
 
 namespace {
 
@@ -27,7 +28,7 @@ TEST(host_gpu, answers_the_name_the_device_uses_and_what_it_runs)
   apis.add_gpu(intel, all_three, RVK_BLOB_HOST_POINTER | RVK_BLOB_DMA_BUF, RVK_BLOB_DMA_BUF,
                RVK_BLOB_DMA_BUF);
   HostGpu gpu;
-  CHECK_STATUS(gpu.initialize(apis, 0u), Status::ok);
+  gpu.describe(apis, 0u);
   CHECK(gpu.matches(intel));
   CHECK(!gpu.matches(nvidia));
   CHECK_EQ(gpu.sub_apis(), all_three);
@@ -40,7 +41,7 @@ TEST(host_gpu, import_kinds_differ_per_api_on_one_gpu)
 { MockHostApis apis;
   apis.add_gpu(nvidia, all_three, RVK_BLOB_HOST_POINTER, 0u, 0u);
   HostGpu gpu;
-  CHECK_STATUS(gpu.initialize(apis, 0u), Status::ok);
+  gpu.describe(apis, 0u);
   CHECK_EQ(gpu.import_kinds(RVK_EXECUTOR_SUB_API_VULKAN), std::uint32_t{RVK_BLOB_HOST_POINTER});
   CHECK_EQ(gpu.import_kinds(RVK_EXECUTOR_SUB_API_OPENGL), 0u);
   CHECK_EQ(gpu.import_kinds(RVK_EXECUTOR_SUB_API_OPENCL), 0u);
@@ -53,7 +54,7 @@ TEST(host_gpu, an_api_it_cannot_run_imports_nothing)
   apis.add_gpu(intel, RVK_EXECUTOR_SUB_API_VULKAN, RVK_BLOB_HOST_POINTER, RVK_BLOB_DMA_BUF,
                RVK_BLOB_DMA_BUF);
   HostGpu gpu;
-  CHECK_STATUS(gpu.initialize(apis, 0u), Status::ok);
+  gpu.describe(apis, 0u);
   CHECK_EQ(gpu.sub_apis(), std::uint32_t{RVK_EXECUTOR_SUB_API_VULKAN});
   CHECK_EQ(gpu.import_kinds(RVK_EXECUTOR_SUB_API_OPENGL), 0u);
   CHECK(gpu.invariants_hold()); }
@@ -64,20 +65,11 @@ TEST(host_gpu, an_api_nobody_defined_imports_nothing)
 { MockHostApis apis;
   apis.add_gpu(intel, all_three, RVK_BLOB_HOST_POINTER, RVK_BLOB_DMA_BUF, RVK_BLOB_DMA_BUF);
   HostGpu gpu;
-  CHECK_STATUS(gpu.initialize(apis, 0u), Status::ok);
+  gpu.describe(apis, 0u);
   CHECK_EQ(gpu.import_kinds(0u), 0u);
   CHECK_EQ(gpu.import_kinds(8u), 0u);
   CHECK_EQ(gpu.import_kinds(RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENGL), 0u); }
 
-TEST(host_gpu, an_index_the_host_does_not_have_is_not_found)
-{ MockHostApis apis;
-  apis.add_gpu(intel, all_three, 0u, 0u, 0u);
-  HostGpu gpu;
-  CHECK_STATUS(gpu.initialize(apis, 1u), Status::not_found);
-  /* And it stays unknown rather than half-filled. */
-  CHECK(!gpu.matches(intel));
-  CHECK_EQ(gpu.sub_apis(), 0u);
-  CHECK(gpu.invariants_hold()); }
 
 TEST(host_gpu, a_gpu_nobody_asked_about_matches_nothing)
 { HostGpu gpu;
@@ -85,3 +77,13 @@ TEST(host_gpu, a_gpu_nobody_asked_about_matches_nothing)
   CHECK(!gpu.matches(nullptr));
   CHECK_EQ(gpu.sub_apis(), 0u);
   CHECK(gpu.invariants_hold()); }
+
+/* An import kind for an API the GPU does not run is an offer of zero-copy to a
+ * context that could never be opened, which is what the capset must not carry. */
+TEST(host_gpu_invariants, an_import_kind_for_an_api_it_does_not_run_breaks_them)
+{ MockHostApis apis;
+  apis.add_gpu(intel, all_three, RVK_BLOB_HOST_POINTER, 0u, RVK_BLOB_DMA_BUF);
+  HostGpu gpu;
+  gpu.describe(apis, 0u);
+  HostGpuProbe(gpu).set_sub_apis(RVK_EXECUTOR_SUB_API_VULKAN);
+  CHECK(!gpu.invariants_hold()); }

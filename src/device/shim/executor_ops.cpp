@@ -1,5 +1,11 @@
 /* The one symbol this library exports, and the table it answers.
  *
+ * In the shim because it is the process's own wiring: it builds the loaders
+ * the host really has and hands them to the root, and nothing but a dlopen of
+ * the finished library ever reaches it. The conformance suite is what holds it
+ * to the ABI; a unit test linking the core has no way to be the process that
+ * loaded it.
+ *
  * An ABI boundary the constitution permits and the only place in the library
  * where a function is not a method: `rvk_executor_ops()` takes no argument, so
  * there is nowhere to put a `this`, and the root lives in storage of its own

@@ -4,19 +4,18 @@
 
 namespace av {
 
-HostGpuSet::HostGpuSet() : gpus_{}, count_(0u) {}
+HostGpuSet::HostGpuSet() : gpus_{}, count_(0u), overflowed_(false) {}
 
-Status HostGpuSet::initialize(HostApis &apis)
+void HostGpuSet::initialize(HostApis &apis)
 {
     const uint32_t found = apis.gpu_count();
     const uint32_t taken = found < max_gpus ? found : max_gpus;
-    for (uint32_t i = 0u; i < taken; i++) {
-        const Status status = gpus_[i].initialize(apis, i);
-        if (status != Status::ok) return status;
-        count_ = i + 1u;
-    }
-    return found > max_gpus ? Status::no_space : Status::ok;
+    for (uint32_t i = 0u; i < taken; i++) gpus_[i].describe(apis, i);
+    count_ = taken;
+    overflowed_ = found > max_gpus;
 }
+
+bool HostGpuSet::overflowed() const { return overflowed_; }
 
 uint32_t HostGpuSet::count() const { return count_; }
 

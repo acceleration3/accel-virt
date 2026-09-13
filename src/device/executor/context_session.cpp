@@ -27,8 +27,11 @@ void ContextSession::release()
     /* Whatever the guest never released is released here: an imported host
      * pointer must not outlive the mapping the device keeps for it, and an
      * adopted descriptor is this library's to close. */
+    /* An import exists only while there is a backend - import_blob needs one
+     * and this is the only place that drops it - so every blob here has one to
+     * go back to. */
     for (ImportedBlob *blob = imports_.any(); blob != nullptr; blob = imports_.any()) {
-        if (backend_ != nullptr) backend_->abandon(*blob);
+        backend_->abandon(*blob);
         (void)imports_.drop(blob->id());
         blob->give_back();
     }
@@ -92,7 +95,7 @@ void ContextSession::release_blob(uint64_t blob_id)
 {
     ImportedBlob *const blob = imports_.drop(blob_id);
     if (blob == nullptr) return;
-    if (backend_ != nullptr) backend_->abandon(*blob);
+    backend_->abandon(*blob);
     blob->give_back();
 }
 

@@ -58,6 +58,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct ContextSessionProbe;
+
     SessionBackend *backend_;
     DecodeArena     arena_;
     ImportTable     imports_;

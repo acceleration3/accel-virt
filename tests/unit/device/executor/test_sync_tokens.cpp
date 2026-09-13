@@ -2,11 +2,13 @@
  * the driver, so what is asserted is that a token the host never bound names
  * nothing - which is what stops a guest handing the driver a pointer it chose. */
 #include "device/executor/sync_tokens.hpp"
+#include "harness/executor/sync_tokens_probe.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
 
 using av::SyncTokens;
+using av::SyncTokensProbe;
 
 namespace {
 
@@ -69,3 +71,29 @@ TEST(sync_tokens, a_guest_that_never_deletes_is_refused_not_served)
   CHECK(!tokens.bind(SyncTokens::max_tokens + 1u, &second));
   CHECK(tokens.fence_for(1u) == &first);
   CHECK(tokens.invariants_hold()); }
+
+/* A count past the table is one `fence_for` would walk off the end of, handing
+ * the driver whatever lies beyond as a GLsync. Every slot is bound first, so
+ * nothing but the count is wrong. */
+TEST(sync_tokens_invariants, a_count_past_the_table_breaks_them)
+{ SyncTokens tokens;
+  for (std::uint64_t token = 1u; token <= SyncTokens::max_tokens; token++)
+      CHECK(tokens.bind(token, &first));
+  SyncTokensProbe(tokens).set_count(SyncTokens::max_tokens + 1u);
+  CHECK(!tokens.invariants_hold()); }
+
+/* bind refuses both of these, so a held one was never bound: a zero token is
+ * the guest failing to mint one, a null fence is glFenceSync having failed. */
+TEST(sync_tokens_invariants, a_zero_token_in_the_table_breaks_them)
+{ SyncTokens tokens;
+  CHECK(tokens.bind(1u, &first));
+  CHECK(tokens.bind(2u, &second));
+  SyncTokensProbe(tokens).set_token(1u, 0u);
+  CHECK(!tokens.invariants_hold()); }
+
+TEST(sync_tokens_invariants, a_null_fence_in_the_table_breaks_them)
+{ SyncTokens tokens;
+  CHECK(tokens.bind(1u, &first));
+  CHECK(tokens.bind(2u, &second));
+  SyncTokensProbe(tokens).set_fence(1u, nullptr);
+  CHECK(!tokens.invariants_hold()); }

@@ -391,3 +391,48 @@ TEST(virtio_gpu_rvk_invariants, fence_interrupts_connected_without_driver_ok_are
   CHECK(!device.invariants_hold());
   av::VirtioGpuRvkProbe::disconnect_behind_the_status(device);
   CHECK(device.invariants_hold()); }
+
+namespace {
+
+/* The capset's feature word, as a guest reads it: GET_CAPSET, then eight bytes
+ * at 24 past the 24-byte response header. */
+std::uint32_t features_of(VirtioGpuRvk &device)
+{ GpuRequestBuilder request(0x0109u);
+  request.u32(0x72u).u32(1u);
+  MockRequest answer(request.bytes(), request.size());
+  if (!device.control(&answer, 0x0109u)) return 0xFFFFFFFFu;
+  return answer.response_u32(24u + 24u); }
+
+}  // namespace
+
+/* Guest memory reaching the host GPU without a copy needs this device able to
+ * build a handle, which its probe proves, and the executor able to take one,
+ * which only the executor knows. The same probe result gives the bit to a
+ * library that imports and withholds it from one that does not. */
+TEST(virtio_gpu_rvk_realize, the_import_bit_needs_the_library_to_import_as_well)
+{ constexpr std::uint32_t guest_memory_import = 4u;
+
+  MockHost importing_host;
+  importing_host.add_gpu(first);
+  importing_host.set_hostmem_size(0x100000u);
+  importing_host.add_guest_ram(0x100000u, 0x100000u);
+  av::MockExecutorOps importing(RVK_EXECUTOR_SUB_API_VULKAN);
+  importing.set_import_kinds(RVK_BLOB_HOST_POINTER);
+  VirtioGpuRvk with_import(importing_host);
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  CHECK_STATUS(with_import.realize("auto", false, &importing.table(), message), Status::ok);
+  with_import.status(DriverStatus::driver_ok);
+
+  MockHost copying_host;
+  copying_host.add_gpu(first);
+  copying_host.set_hostmem_size(0x100000u);
+  copying_host.add_guest_ram(0x100000u, 0x100000u);
+  av::MockExecutorOps copying(RVK_EXECUTOR_SUB_API_VULKAN);
+  VirtioGpuRvk without_import(copying_host);
+  TextBuffer other(bytes, sizeof bytes);
+  CHECK_STATUS(without_import.realize("auto", false, &copying.table(), other), Status::ok);
+  without_import.status(DriverStatus::driver_ok);
+
+  CHECK((features_of(with_import) & guest_memory_import) != 0u);
+  CHECK_EQ(features_of(without_import) & guest_memory_import, 0u); }

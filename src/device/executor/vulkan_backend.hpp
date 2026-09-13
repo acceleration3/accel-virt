@@ -12,6 +12,7 @@
 
 #include "device/executor/handle_registry.hpp"
 #include "device/executor/session_backend.hpp"
+#include "device/shim/vulkan_host_import.hpp"
 #include "proto/generated/vulkan/vk_real_dispatch.h"
 
 #include <stdint.h>
@@ -32,18 +33,11 @@ public:
     /* The two commands this backend interposes rather than forwards
      * untouched: an imported blob has to become memory of some device, and
      * nothing else says which. */
-    /* The five handles the loader dereferences, remembered as this backend
-     * makes them so that wire_to_handle can refuse every other number. */
+    /* The two commands whose results this backend keeps: the instance and the
+     * device a dying context still owns, so shut_down can destroy them. */
     VkResult on_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                  const VkAllocationCallbacks *pAllocator,
                                  VkInstance *pInstance) override;
-    VkResult on_vkEnumeratePhysicalDevices(VkInstance instance, uint32_t *pPhysicalDeviceCount,
-                                           VkPhysicalDevice *pPhysicalDevices) override;
-    void     on_vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex,
-                                 VkQueue *pQueue) override;
-    VkResult on_vkAllocateCommandBuffers(VkDevice device,
-                                         const VkCommandBufferAllocateInfo *pAllocateInfo,
-                                         VkCommandBuffer *pCommandBuffers) override;
     void     on_vkDestroyInstance(VkInstance instance,
                                   const VkAllocationCallbacks *pAllocator) override;
 
@@ -82,18 +76,13 @@ private:
      * itself rather than a guest doing something. */
     static constexpr uint32_t vulkan_api = 1u;
 
-    /* The memory type an imported pointer may be bound through, from
-     * vkGetMemoryHostPointerPropertiesEXT and never assumed: the mask is 0x7f
-     * on one GPU here and 0x18 on the other, so an imported pointer cannot be
-     * device-local on the second. `found` is set only when one exists. */
-    bool memory_type_for(void *pointer, uint32_t &type) const;
-
     /* The device the imports belong to. A VkDeviceMemory is a device's, and
      * the guest makes exactly one per context through vkCreateDevice, so this
      * is taken from the command that made it rather than guessed. */
     VkInstance     instance_;
-    VkDevice       device_;
-    HandleRegistry handles_;
+    VkDevice         device_;
+    HandleRegistry   handles_;
+    VulkanHostImport import_;
     uint64_t ran_;
     bool     lost_;
 };

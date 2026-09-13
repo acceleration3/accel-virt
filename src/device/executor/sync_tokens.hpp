@@ -38,6 +38,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct SyncTokensProbe;
+
     uint64_t tokens_[max_tokens];
     void    *fences_[max_tokens];
     uint32_t count_;

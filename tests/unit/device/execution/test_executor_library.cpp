@@ -96,3 +96,10 @@ TEST(executor_library_import_kinds, come_from_the_library_for_one_api_and_one_gp
   CHECK_STATUS(library.accept(&ops.table()), Status::ok);
   CHECK(library.imports());
   CHECK_EQ(library.import_kinds(SubApi::vulkan, uuid), std::uint32_t{RVK_BLOB_HOST_POINTER}); }
+
+/* A device with no executor library at all imports nothing and offers no kind,
+ * rather than dereferencing a table it was never given. */
+TEST(executor_library_import_kinds, a_device_with_no_library_imports_nothing)
+{ ExecutorLibrary library;
+  CHECK(!library.imports());
+  CHECK_EQ(library.import_kinds(SubApi::vulkan, nullptr), 0u); }

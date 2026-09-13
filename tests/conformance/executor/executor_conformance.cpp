@@ -268,9 +268,11 @@ void ExecutorConformance::check_workload(RvkExecutor *executor, uint32_t sub_api
         length = writer.offset();
     } else {
         /* An OpenGL clear, which needs a context that is current and a driver
-         * that answers - and asks for nothing back. */
+         * that answers - and asks for nothing back. OpenGL's wire carries
+         * scalars as varints: written as a raw u32 this decoded, from its first
+         * byte, as glClear(0), and passed for the wrong reason. */
         av::WireWriter writer(frame, sizeof frame);
-        writer.write_pod<std::uint32_t>(0x4000u);
+        writer.write_varint<std::uint32_t>(0x4000u);
         command = av::glproto::kCmd_glClear;
         length = writer.offset();
     }

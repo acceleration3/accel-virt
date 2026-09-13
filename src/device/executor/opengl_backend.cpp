@@ -56,7 +56,11 @@ bool OpenGlBackend::initialize(const uint8_t *uuid)
     gl_.rvk_sync_user = this;
     gl_.rvk_blob = blob_at;
     gl_.rvk_blob_user = this;
-    return resolved_ != 0u;
+    /* Opened is served. A driver that resolves fewer entry points than the
+     * table has is not refused here: the decoder refuses each command whose
+     * entry point is null, one command at a time, which is the degradation a
+     * guest can live with rather than a context it cannot have at all. */
+    return true;
 }
 
 void OpenGlBackend::shut_down()

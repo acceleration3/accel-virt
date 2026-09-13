@@ -6,6 +6,7 @@
  * machine with no GPU, where every command decodes and every VkResult says so. */
 #include "device/abi/rvk_executor.h"
 #include "device/executor/imported_blob.hpp"
+#include "device/executor/handle_registry.hpp"
 #include "device/executor/vulkan_backend.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
@@ -298,3 +299,58 @@ TEST(vulkan_backend, inside_a_dispatch_a_handle_it_never_made_is_refused)
   WireWriter answer(reply, sizeof reply);
   CHECK(!backend.run(av::vkproto::kCmd_vkDestroyDevice, payload, answer, arena));
   CHECK(av::VulkanBackend::deciding() == nullptr); }
+
+/* A registry that cannot remember a handle it is about to hand out loses the
+ * device rather than hand out one it would refuse when the guest sent it back. */
+TEST(vulkan_backend, a_handle_it_cannot_remember_loses_the_device)
+{ VulkanBackend backend;
+  for (std::uint64_t raw = 1u; raw <= av::HandleRegistry::max_handles; raw++) backend.made(raw);
+  CHECK(!backend.lost());
+  backend.made(av::HandleRegistry::max_handles + 1u);
+  CHECK(backend.lost());
+  backend.shut_down();
+  CHECK(!backend.lost()); }
+
+/* Outside a dispatch nobody is deciding, in both directions: a handle goes out
+ * as the number it is without being remembered, and a non-dispatchable one comes
+ * back as the number it was. That is the guest side of one shared archive. */
+TEST(vulkan_backend, outside_a_dispatch_handles_cross_as_numbers)
+{ std::uint8_t frame[16];
+  WireWriter writer(frame, sizeof frame);
+  VkBuffer buffer = VK_NULL_HANDLE;
+  std::uint64_t raw = 0xABCDu;
+  std::memcpy(&buffer, &raw, sizeof buffer);
+  av::vkproto::serialize_VkBuffer(writer, buffer);
+  CHECK_EQ(writer.offset(), 8u);
+
+  WireReader reader(frame, writer.offset());
+  VkBuffer back = VK_NULL_HANDLE;
+  CHECK(av::vkproto::deserialize_VkBuffer(reader, back));
+  std::uint64_t returned = 0u;
+  std::memcpy(&returned, &back, sizeof back);
+  CHECK_EQ(returned, 0xABCDu); }
+
+/* A create the driver refuses records nothing: there is no instance to destroy
+ * later. A layer that does not exist is how to ask for one. */
+TEST(vulkan_backend, an_instance_the_driver_refuses_is_not_kept)
+{ VulkanBackend backend;
+  std::uint8_t frame[1024];
+  WireWriter writer(frame, sizeof frame);
+  VkInstanceCreateInfo create = {};
+  create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  const char *layers[] = {"VK_LAYER_accel_virt_no_such_layer"};
+  create.enabledLayerCount = 1u;
+  create.ppEnabledLayerNames = layers;
+  av::vkproto::serialize_VkInstanceCreateInfo(writer, create);
+
+  std::uint8_t block[block_bytes];
+  WireArena arena(block, sizeof block);
+  std::uint8_t reply[64] = {};
+  WireReader payload(frame, writer.offset());
+  WireWriter answer(reply, sizeof reply);
+  CHECK(backend.run(av::vkproto::kCmd_vkCreateInstance, payload, answer, arena));
+  WireReader read(reply, answer.offset());
+  std::int32_t returned = 0;
+  CHECK(read.read_pod(returned));
+  CHECK(returned != 0);
+  backend.shut_down(); }

@@ -1,0 +1,23 @@
+/* Reaches into a HandleRegistry so invariant tests can corrupt it. Declared a
+ * friend by HandleRegistry; nothing outside the tests uses it. */
+#ifndef AV_HANDLE_REGISTRY_PROBE_HPP
+#define AV_HANDLE_REGISTRY_PROBE_HPP
+
+#include "device/executor/handle_registry.hpp"
+
+#include <stdint.h>
+
+namespace av {
+
+struct HandleRegistryProbe {
+    explicit HandleRegistryProbe(HandleRegistry &target);
+
+    void set_count(uint32_t count);
+    void set_handle(uint32_t index, uint64_t handle);
+
+    HandleRegistry &registry;
+};
+
+}  // namespace av
+
+#endif  // AV_HANDLE_REGISTRY_PROBE_HPP

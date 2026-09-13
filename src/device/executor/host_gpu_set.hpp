@@ -6,7 +6,6 @@
 #ifndef AV_HOST_GPU_SET_HPP
 #define AV_HOST_GPU_SET_HPP
 
-#include "core/support/status.hpp"
 #include "device/executor/host_gpu.hpp"
 
 #include <stdint.h>
@@ -25,11 +24,13 @@ public:
     HostGpuSet(const HostGpuSet &) = delete;
     HostGpuSet &operator=(const HostGpuSet &) = delete;
 
-    /* Asks `apis` once. A host with no GPU is an empty set and ok: the library
-     * still loads, still answers, and offers no sub-API - which is what stops
-     * the device advertising a capset it cannot honour. More GPUs than
-     * max_gpus keeps the first max_gpus and says no_space. */
-    [[nodiscard]] Status initialize(HostApis &apis);
+    /* Asks `apis` once. A host with no GPU is an empty set: the library still
+     * loads, still answers, and offers no sub-API - which is what stops the
+     * device advertising a capset it cannot honour. There is no way for this to
+     * fail, only to keep fewer GPUs than the host has; overflowed() says so. */
+    void initialize(HostApis &apis);
+    /* Whether the host had more GPUs than max_gpus, so the rest went unseen. */
+    bool overflowed() const;
 
     uint32_t       count() const;
     /* The GPU whose deviceUUID is `uuid`, or null. */
@@ -41,8 +42,11 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct HostGpuSetProbe;
+
     HostGpu  gpus_[max_gpus];
     uint32_t count_;
+    bool     overflowed_;
 };
 
 }  // namespace av

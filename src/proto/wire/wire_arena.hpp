@@ -56,6 +56,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct WireArenaProbe;
+
     /* `count * size` bytes at the next multiple of `alignment`, or null. */
     void *claim(size_t count, size_t size, size_t alignment);
     /* Null, counted. */

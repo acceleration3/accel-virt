@@ -15,9 +15,8 @@ constexpr uint32_t sub_api_bits[] = {RVK_EXECUTOR_SUB_API_VULKAN, RVK_EXECUTOR_S
 
 HostGpu::HostGpu() : uuid_{}, sub_apis_(0u), kinds_{}, index_(0u), known_(false) {}
 
-Status HostGpu::initialize(HostApis &apis, uint32_t index)
+void HostGpu::describe(HostApis &apis, uint32_t index)
 {
-    if (index >= apis.gpu_count()) return Status::not_found;
     apis.gpu_uuid(index, uuid_);
     sub_apis_ = apis.sub_apis(index);
     for (uint32_t slot = 0u; slot < sub_api_count; slot++) {
@@ -29,7 +28,6 @@ Status HostGpu::initialize(HostApis &apis, uint32_t index)
     }
     index_ = index;
     known_ = true;
-    return Status::ok;
 }
 
 bool HostGpu::matches(const uint8_t *uuid) const

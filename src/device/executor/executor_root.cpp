@@ -20,10 +20,9 @@ ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, vulkan_{}, opencl_{}, openg
 Status ExecutorRoot::initialize(HostApis &apis)
 {
     if (asked_) return Status::invalid_state;
-    const Status status = gpus_.initialize(apis);
-    /* A host with more GPUs than the set holds is a host this still serves,
-     * with the ones it kept. Anything else is a failure to answer at all. */
-    if (status != Status::ok && status != Status::no_space) return status;
+    /* A host with more GPUs than the set holds is still one this serves, with
+     * the ones it kept. */
+    gpus_.initialize(apis);
     asked_ = true;
     return Status::ok;
 }
@@ -45,27 +44,38 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid)
      * could have been. */
     if ((gpu->sub_apis() & sub_api) == 0u) return nullptr;
 
+    SessionBackend *const kind = backend_in(0u, sub_api);
+    /* A value that names no single sub-API - two bits at once - passed the GPU
+     * check above and has no backend. */
+    if (kind == nullptr) return nullptr;
+
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
-        if (sessions_[slot].live()) continue;
-        SessionBackend *backend = nullptr;
-        if (sub_api == RVK_EXECUTOR_SUB_API_VULKAN) backend = &vulkan_[slot];
-        if (sub_api == RVK_EXECUTOR_SUB_API_OPENCL) backend = &opencl_[slot];
-        if (sub_api == RVK_EXECUTOR_SUB_API_OPENGL) {
-            /* The only backend that has to open something before it can run
-             * anything: a GL context belongs to a GPU and is made for one. */
-            if (!opengl_[slot].initialize(gpu_uuid)) return nullptr;
-            backend = &opengl_[slot];
-        }
-        /* A sub-API with no backend yet is refused rather than given a session
-         * that would answer nothing: OpenGL is the one, and it is refused at
-         * the capset too, because no GPU here reports running it. */
-        if (backend == nullptr) return nullptr;
-        if (sessions_[slot].initialize(*backend, decode_blocks[slot], DecodeArena::arena_bytes) !=
-            Status::ok)
+        /* A slot in use refuses to be bound again, which is the test for in use
+         * rather than a second one beside it. */
+        if (sessions_[slot].initialize(*backend_in(slot, sub_api), decode_blocks[slot],
+                                       DecodeArena::arena_bytes) != Status::ok)
+            continue;
+        /* The only backend that has to open something before it can run
+         * anything: a GL context belongs to a GPU and is made for one. A GPU
+         * the capset said runs OpenGL can still refuse a context, and then the
+         * slot goes back. */
+        if (sub_api == RVK_EXECUTOR_SUB_API_OPENGL && !opengl_[slot].initialize(gpu_uuid)) {
+            sessions_[slot].release();
             return nullptr;
+        }
         return &sessions_[slot];
     }
     return nullptr;
+}
+
+SessionBackend *ExecutorRoot::backend_in(uint32_t slot, uint32_t sub_api)
+{
+    switch (sub_api) {
+    case RVK_EXECUTOR_SUB_API_VULKAN: return &vulkan_[slot];
+    case RVK_EXECUTOR_SUB_API_OPENCL: return &opencl_[slot];
+    case RVK_EXECUTOR_SUB_API_OPENGL: return &opengl_[slot];
+    default: return nullptr;
+    }
 }
 
 void ExecutorRoot::close(ContextSession *session)

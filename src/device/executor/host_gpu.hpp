@@ -3,8 +3,6 @@
 #ifndef AV_HOST_GPU_HPP
 #define AV_HOST_GPU_HPP
 
-#include "core/support/status.hpp"
-
 #include <stdint.h>
 
 namespace av {
@@ -19,11 +17,13 @@ public:
     HostGpu(const HostGpu &) = delete;
     HostGpu &operator=(const HostGpu &) = delete;
 
-    /* Caches what `apis` says about `index`. not_found for an index the host
-     * does not have. Asking once is the point: sub_apis() is answered on
-     * QEMU's main loop during realize, and the answer is frozen into the capset
-     * for the device's lifetime. */
-    [[nodiscard]] Status initialize(HostApis &apis, uint32_t index);
+    /* Caches what `apis` says about `index`, which must be below
+     * `apis.gpu_count()`. The only caller is HostGpuSet, which asks for exactly
+     * the indices below the count it just read, so a range check here would be
+     * one no caller can fail. Asking once is the point: sub_apis() is answered
+     * on QEMU's main loop during realize, and the answer is frozen into the
+     * capset for the device's lifetime. */
+    void describe(HostApis &apis, uint32_t index);
 
     bool     matches(const uint8_t *uuid) const;
     uint32_t sub_apis() const;
@@ -37,6 +37,8 @@ public:
     bool invariants_hold() const;
 
 private:
+    friend struct HostGpuProbe;
+
     /* Vulkan, OpenGL, OpenCL: the three bits the ABI defines, and the only
      * sub-APIs a context can name. */
     static constexpr uint32_t sub_api_count = 3u;

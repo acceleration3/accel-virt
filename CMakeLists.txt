@@ -93,7 +93,7 @@ endif()
 # belong to that shared object and to nothing else: linked into av_core or
 # rvk_device they would export rvk_executor_ops from a library nobody loads by
 # that name (feature 042).
-set(AV_EXECUTOR_ENTRY ${CMAKE_SOURCE_DIR}/src/device/executor/executor_ops.cpp)
+set(AV_EXECUTOR_ENTRY ${CMAKE_SOURCE_DIR}/src/device/shim/executor_ops.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_EXECUTOR_ENTRY})
 
 file(GLOB_RECURSE AV_GENERATED_ALL CONFIGURE_DEPENDS src/proto/generated/*.cpp)

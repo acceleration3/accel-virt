@@ -4,15 +4,41 @@
 #include "device/abi/rvk_executor.h"
 #include "device/executor/context_session.hpp"
 #include "device/executor/executor_root.hpp"
+#include "device/shim/loader_host_apis.hpp"
 #include "harness/executor/mock_host_apis.hpp"
+#include "harness/executor/executor_root_probe.hpp"
+#include "harness/executor/host_gpu_probe.hpp"
+#include "harness/executor/host_gpu_set_probe.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
 
 using av::ContextSession;
 using av::ExecutorRoot;
+using av::ExecutorRootProbe;
+using av::HostGpuProbe;
+using av::HostGpuSetProbe;
 using av::MockHostApis;
 using av::Status;
+
+/* The real-GPU test enumerates the host's own loaders, which allocate things
+ * they never give back. Named rather than leak detection being turned off. */
+extern "C" const char *__lsan_default_suppressions(void);
+extern "C" const char *__lsan_default_suppressions(void)
+{
+    return "leak:libOpenCL\n"
+           "leak:intelocl\n"
+           "leak:libigdrcl\n"
+           "leak:libvulkan\n"
+           "leak:libEGL\n"
+           "leak:libGLX\n"
+           "leak:libnvidia\n"
+           "leak:nvidia_icd\n"
+           "leak:iris_dri\n"
+           "leak:libdbus-1\n"
+           "leak:libglapi\n"
+           "leak:libz\n";
+}
 
 namespace {
 
@@ -180,3 +206,65 @@ TEST(executor_root_open, a_session_it_never_handed_out_is_not_closed)
 TEST(executor_root_open, opens_nothing_until_it_has_asked)
 { ExecutorRoot root;
   CHECK(root.open(RVK_EXECUTOR_SUB_API_VULKAN, intel) == nullptr); }
+
+/* The root answers the capset from its GPUs, so one broken GPU is a broken
+ * root. */
+TEST(executor_root_invariants, a_gpu_that_breaks_its_own_breaks_them)
+{ Opened opened;
+  CHECK_STATUS(opened.status(), Status::ok);
+  HostGpuSetProbe set(ExecutorRootProbe(opened.root()).gpus());
+  HostGpuProbe(set.gpu_at(0u)).set_sub_apis(RVK_EXECUTOR_SUB_API_OPENCL);
+  CHECK(!opened.root().invariants_hold()); }
+
+/* GPUs it has not asked about are GPUs sub_apis() would hide and open() would
+ * refuse, while the set says they are there. */
+TEST(executor_root_invariants, gpus_it_never_asked_about_break_them)
+{ Opened opened;
+  CHECK_STATUS(opened.status(), Status::ok);
+  ExecutorRootProbe(opened.root()).set_asked(false);
+  CHECK(!opened.root().invariants_hold()); }
+
+/* Two sub-API bits at once pass a GPU that runs both and still name no single
+ * backend, so no session is made rather than one bound to the wrong API. */
+TEST(executor_root_open, a_value_naming_two_sub_apis_at_once_gets_no_session)
+{ Opened opened;
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENCL, intel) ==
+        nullptr);
+  CHECK_EQ(opened.root().live(), 0u); }
+
+/* A GPU the host says runs OpenGL can still refuse a context - this mock GPU
+ * has no EGL device behind it at all - and then the slot it would have used is
+ * given back rather than left bound to a backend that cannot run anything.
+ * `absent` rather than `intel`: the Intel UUID in this file is a real one, and
+ * on the machine it came from OpenGL opens. */
+TEST(executor_root_open, an_opengl_context_that_will_not_open_gives_the_slot_back)
+{ MockHostApis apis;
+  apis.add_gpu(absent, RVK_EXECUTOR_SUB_API_OPENGL, 0u, 0u, 0u);
+  ExecutorRoot root;
+  CHECK_STATUS(root.initialize(apis), Status::ok);
+  CHECK(root.open(RVK_EXECUTOR_SUB_API_OPENGL, absent) == nullptr);
+  CHECK_EQ(root.live(), 0u);
+  CHECK(root.invariants_hold()); }
+
+/* And one on a GPU this host really has, found from its own enumeration. A
+ * host with no GPU that runs OpenGL has nothing here to judge. */
+TEST(executor_root_open, an_opengl_context_on_a_real_gpu_is_a_session)
+{ av::LoaderHostApis host;
+  host.open();
+  ExecutorRoot root;
+  CHECK_STATUS(root.initialize(host), Status::ok);
+  std::uint8_t uuid[16] = {};
+  bool found = false;
+  for (std::uint32_t i = 0u; i < host.gpu_count() && !found; i++) {
+      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_OPENGL) == 0u) continue;
+      host.gpu_uuid(i, uuid);
+      found = true;
+  }
+  if (found) {
+      ContextSession *const session = root.open(RVK_EXECUTOR_SUB_API_OPENGL, uuid);
+      CHECK(session != nullptr);
+      CHECK_EQ(root.live(), 1u);
+      root.close(session);
+      CHECK_EQ(root.live(), 0u);
+  }
+  host.close(); }

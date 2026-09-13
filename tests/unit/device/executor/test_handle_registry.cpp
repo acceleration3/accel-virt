@@ -2,11 +2,13 @@
  * here is the property a guest cannot be allowed to break: a number this host
  * did not produce is not a handle. */
 #include "device/executor/handle_registry.hpp"
+#include "harness/executor/handle_registry_probe.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
 
 using av::HandleRegistry;
+using av::HandleRegistryProbe;
 
 TEST(handle_registry, knows_only_what_it_made)
 { HandleRegistry registry;
@@ -71,3 +73,22 @@ TEST(handle_registry, forgetting_everything_leaves_a_registry_that_knows_nothing
   CHECK(!registry.knows(4u));
   CHECK(registry.knows(0u));
   CHECK(registry.invariants_hold()); }
+
+/* A count past the table is one `knows` would walk off the end of, reading
+ * whatever lies beyond as handles this host made. Every slot is filled first,
+ * so nothing but the count is wrong. */
+TEST(handle_registry_invariants, a_count_past_the_table_breaks_them)
+{ HandleRegistry registry;
+  for (std::uint64_t handle = 1u; handle <= HandleRegistry::max_handles; handle++)
+      CHECK(registry.remember(handle));
+  HandleRegistryProbe(registry).set_count(HandleRegistry::max_handles + 1u);
+  CHECK(!registry.invariants_hold()); }
+
+/* The null handle is always known without being held; one held is a slot
+ * `forget(0)` can never give back. */
+TEST(handle_registry_invariants, a_null_handle_in_the_table_breaks_them)
+{ HandleRegistry registry;
+  CHECK(registry.remember(1u));
+  CHECK(registry.remember(2u));
+  HandleRegistryProbe(registry).set_handle(1u, 0u);
+  CHECK(!registry.invariants_hold()); }

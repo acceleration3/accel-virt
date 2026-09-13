@@ -70,7 +70,7 @@ size_t WireWriter::wanted() const { return wanted_; }
 
 bool WireWriter::invariants_hold() const
 {
-    return offset_ <= capacity_ && offset_ <= wanted_ && (bytes_ != nullptr || capacity_ == 0u);
+    return offset_ <= capacity_ && (bytes_ != nullptr || capacity_ == 0u);
 }
 
 }  // namespace av

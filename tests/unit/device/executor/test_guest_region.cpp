@@ -1,11 +1,13 @@
 /* One context's view of guest memory. Every offset and length asked of it came
  * off the wire, and OpenGL's decoder asks at more than a thousand sites. */
 #include "device/executor/guest_region.hpp"
+#include "harness/executor/guest_region_probe.hpp"
 #include "harness/framework/test_registry.hpp"
 
 #include <cstdint>
 
 using av::GuestRegion;
+using av::GuestRegionProbe;
 
 namespace {
 
@@ -61,3 +63,10 @@ TEST(guest_region, giving_it_back_leaves_nothing_to_answer_with)
   CHECK_EQ(region.length(), 0u);
   CHECK(region.at(0u, 1u) == nullptr);
   CHECK(region.invariants_hold()); }
+
+/* A length with nothing behind it is a region that would answer bounds checks
+ * for memory nobody mapped, if `at` ever stopped checking the base first. */
+TEST(guest_region_invariants, a_length_with_no_mapping_behind_it_breaks_them)
+{ GuestRegion region;
+  GuestRegionProbe(region).set_length(sizeof mapping);
+  CHECK(!region.invariants_hold()); }

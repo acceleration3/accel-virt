@@ -2,9 +2,13 @@
  * which of the ABI's four results comes back, and how long the answer was. */
 #include "device/abi/rvk_executor.h"
 #include "device/executor/context_session.hpp"
+#include "harness/wire/wire_arena_probe.hpp"
+#include "proto/wire/wire_arena.hpp"
 #include "device/executor/decode_arena.hpp"
 #include "device/executor/import_table.hpp"
 #include "device/executor/imported_blob.hpp"
+#include "harness/executor/context_session_probe.hpp"
+#include "harness/executor/imported_blob_probe.hpp"
 #include "harness/executor/mock_session_backend.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -12,6 +16,8 @@
 #include <cstdint>
 
 using av::ContextSession;
+using av::ContextSessionProbe;
+using av::ImportedBlobProbe;
 using av::MockSessionBackend;
 using av::Status;
 
@@ -270,3 +276,51 @@ TEST(context_session_import, a_session_with_no_backend_imports_nothing)
   CHECK_EQ(session.imports(), 0u);
   session.release_blob(5u);
   CHECK(session.invariants_hold()); }
+
+/* Nothing is handed to a host device that is gone, a blob included: the
+ * backend would be adopting memory into a device that will never run. */
+TEST(context_session_import, a_lost_device_imports_nothing)
+{ Bound bound;
+  std::size_t answer = 0u;
+  CHECK_EQ(bound.session().execute(MockSessionBackend::lose_id, payload, sizeof payload, nullptr,
+                                   0u, answer),
+           std::uint32_t{RVK_DEVICE_LOST});
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_UNDECODABLE});
+  CHECK_EQ(bound.backend().adopted(), 0u);
+  CHECK_EQ(bound.session().imports(), 0u);
+  CHECK(bound.session().invariants_hold()); }
+
+/* A session holding a blob the ABI would refuse is one whose backend was handed
+ * something take never let through. */
+TEST(context_session_invariants, an_import_that_breaks_its_own_breaks_them)
+{ Bound bound;
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_EXECUTED});
+  ContextSessionProbe probe(bound.session());
+  ImportedBlobProbe(*probe.imports().find(5u)).set_size(1u);
+  CHECK(!bound.session().invariants_hold()); }
+
+/* A fault belongs to a host device; a session with none has nothing to be
+ * faulted on, and the next context bound to the slot would inherit the fault. */
+TEST(context_session_invariants, a_fault_with_no_backend_breaks_them)
+{ ContextSession session;
+  ContextSessionProbe(session).set_faulted(true);
+  CHECK(!session.invariants_hold()); }
+
+/* Imports with no backend are blobs nobody can abandon, so an imported host
+ * pointer would outlive the mapping the device keeps for it. */
+TEST(context_session_invariants, imports_with_no_backend_break_them)
+{ Bound bound;
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_EXECUTED});
+  ContextSessionProbe(bound.session()).drop_backend();
+  CHECK(!bound.session().invariants_hold()); }
+
+/* The one clause a public call cannot break: the arena's mark past its room. It
+ * is what would let a decode hand out memory beyond the block, so it is proven
+ * to be noticed rather than assumed never to happen. */
+TEST(context_session_invariants, an_arena_used_past_its_room_breaks_it)
+{ Bound bound;
+  CHECK(bound.session().invariants_hold());
+  av::ContextSessionProbe session(bound.session());
+  av::WireArenaProbe arena(session.arena());
+  arena.set_used(block_bytes + 1u);
+  CHECK(!bound.session().invariants_hold()); }
