@@ -23,8 +23,8 @@ description: "Tasks: the guest transport"
 
 **Purpose**: the one piece both sides share, before either side is built.
 
-- [ ] T001 [P] Write `tests/unit/proto/context/test_rvk_context_record.cpp` first: a well-formed record round-trips; a bad magic, an unknown sub-API, an order outside 12..24, and a reply id colliding with the ring or fence id are each refused - modelled on `test_context_setup.cpp`
-- [ ] T002 `RvkContextRecord` (object class, shared) in `src/proto/context/rvk_context_record.{hpp,cpp}`: the 32-byte private-data record a process puts on `D3DKMTCreateContextVirtual` - magic `RVKT` 0x544B5652, major/minor, sub_api (exactly one bit), ring_order (12..24), and the three allocation indices for ring, fence and reply (reply 0 means none, otherwise distinct from ring and fence). `decode` validates every field as hostile input; `encode` for the user side. No doorbell field: the miniport owns the doorbell (research §5)
+- [X] T001 [P] Write `tests/unit/proto/context/test_rvk_context_record.cpp` first: a well-formed record round-trips; a bad magic, an unknown sub-API, an order outside 12..24, and a reply id colliding with the ring or fence id are each refused - modelled on `test_context_setup.cpp`
+- [X] T002 `RvkContextRecord` (object class, shared) in `src/proto/context/rvk_context_record.{hpp,cpp}`: the 32-byte private-data record a process puts on `D3DKMTCreateContextVirtual` - magic `RVKT` 0x544B5652, major/minor, sub_api (exactly one bit), ring_order (12..24), and the three allocation indices for ring, fence and reply (reply 0 means none, otherwise distinct from ring and fence). `decode` validates every field as hostile input; `encode` for the user side. No doorbell field: the miniport owns the doorbell (research §5)
 
 **Checkpoint**: the record encodes and decodes, and refuses a bad one. Commit.
 
