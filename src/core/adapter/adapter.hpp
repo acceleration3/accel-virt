@@ -246,7 +246,6 @@ private:
      * raises when the driver was granted one per source. */
     static constexpr uint8_t  isr_configuration_changed = 0x2u;
     static constexpr uint32_t config_message = 0u;
-    enum : int32_t { transformation_identity = 1 };   /* D3DKMDT_VPPS_IDENTITY, D3DKMDT_VPPR_IDENTITY */
 
     [[nodiscard]] Status discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface);
     [[nodiscard]] Status power_up();

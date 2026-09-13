@@ -65,6 +65,45 @@ TEST(vidpn_support_check_visit, a_second_path_or_another_source_or_target_is_not
   CHECK_EQ(decide(fixture, fixture.handle(), supported), 0);
   CHECK_EQ(supported, 0u); }
 
+/* FR-006: the answer is "not supported", so DMM never commits a VidPn the
+ * adapter would have to refuse halfway through UpdateActiveVidPnPresentPath. */
+TEST(vidpn_support_check_visit, a_path_pinning_scaling_rotation_or_a_gamma_ramp_is_not_supported)
+{ const std::int32_t scalings[] = {2, 3, 4, 5, 253};   /* Centered .. Custom, and Reserved1 */
+  for (const std::int32_t scaling : scalings) {
+      VidPnFixture fixture;
+      fixture.vidpn().add_path(0u, 0u).ContentTransformationScaling = scaling;
+      std::uint8_t supported = 1u;
+      CHECK_EQ(decide(fixture, fixture.handle(), supported), 0);
+      CHECK_EQ(supported, 0u);
+  }
+  const std::int32_t rotations[] = {2, 3, 4, 5, 16};   /* Rotate90 .. Rotate270, and the Offset rotations */
+  for (const std::int32_t rotation : rotations) {
+      VidPnFixture fixture;
+      fixture.vidpn().add_path(0u, 0u).ContentTransformationRotation = rotation;
+      std::uint8_t supported = 1u;
+      CHECK_EQ(decide(fixture, fixture.handle(), supported), 0);
+      CHECK_EQ(supported, 0u);
+  }
+  VidPnFixture fixture;
+  fixture.vidpn().add_path(0u, 0u).GammaRampType = 2;   /* D3DDDI_GAMMARAMP_RGB256x3x16 */
+  std::uint8_t supported = 1u;
+  CHECK_EQ(decide(fixture, fixture.handle(), supported), 0);
+  CHECK_EQ(supported, 0u); }
+
+/* Unpinned and NotSpecified are what a VidPn under construction carries, and
+ * they are not a claim to refuse. */
+TEST(vidpn_support_check_visit, an_undecided_transformation_keeps_the_vidpn_supported)
+{ const std::int32_t undecided[][2] = {{254, 254}, {255, 255}, {1, 1}, {0, 0}};
+  for (const auto &pair : undecided) {
+      VidPnFixture fixture;
+      av::D3dkmdtVidPnPresentPathRecord &path = fixture.vidpn().add_path(0u, 0u);
+      path.ContentTransformationScaling = pair[0];
+      path.ContentTransformationRotation = pair[1];
+      std::uint8_t supported = 0u;
+      CHECK_EQ(decide(fixture, fixture.handle(), supported), 0);
+      CHECK_EQ(supported, 1u);
+  } }
+
 TEST(vidpn_support_check_decide, a_vidpn_it_cannot_read_fails)
 { VidPnFixture fixture;
   fixture.vidpn().add_path(0u, 0u);

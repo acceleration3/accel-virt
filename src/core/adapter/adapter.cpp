@@ -66,6 +66,7 @@
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/vidpn/cofunc_modality.hpp"
+#include "core/vidpn/path_transformation.hpp"
 #include "core/vidpn/vidpn_commit.hpp"
 #include "core/vidpn/vidpn_support_check.hpp"
 #include "core/virtio/virtio_capability_walk.hpp"
@@ -714,10 +715,7 @@ int32_t Adapter::update_active_vidpn_present_path(const D3dkmdtVidPnPresentPathR
     if (path == nullptr || path->VidPnSourceId >= sources_.count() ||
         path->VidPnTargetId >= sources_.count())
         return NtStatus(Status::invalid_parameter).value();
-    if (path->ContentTransformationScaling != transformation_identity ||
-        path->ContentTransformationRotation != transformation_identity)
-        return NtStatus(NtStatus::path_content_geometry_transformation_not_supported).value();
-    return NtStatus(Status::ok).value();
+    return PathTransformation(*path).accepted().value();
 }
 
 int32_t Adapter::recommend_monitor_modes(const DxgkargRecommendMonitorModesRecord *request)

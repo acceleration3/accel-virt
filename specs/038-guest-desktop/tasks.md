@@ -242,5 +242,57 @@ from, before it is fixed (FR-007).
 
 ## Phase 6: What the feature promised
 
-- [ ] T022 Rotation, scaling, gamma and multi-plane overlay asserted refused, not ignored, in L1 tests (FR-006, constitution VI)
+- [X] T022 Rotation, scaling, gamma and multi-plane overlay asserted refused, not ignored, in L1 tests (FR-006, constitution VI)
+
+  **What was already refused, and what was only ignored.** Scaling and rotation
+  were refused where it counts - `Adapter::update_active_vidpn_present_path`
+  answers `STATUS_GRAPHICS_PATH_CONTENT_GEOMETRY_TRANSFORMATION_NOT_SUPPORTED`
+  for anything but identity, and `CofuncModality::update_support` offers only
+  Identity scaling and Identity|Offset0 rotation. Multi-plane overlay was
+  refused twice over: `SupportMultiPlaneOverlay` and every overlay count stay
+  zero in `DXGK_DRIVERCAPS`, no `CheckMultiPlaneOverlaySupport*`,
+  `GetMultiPlaneOverlayCaps` or `PostMultiPlaneOverlayPresent` slot is filled,
+  and the one MPO entry point the table does carry answers `not_supported`.
+
+  Gamma was the one that was *ignored*: `GammaRampCaps` is zero, but the driver
+  read no part of a path's `GammaRamp`, so a ramp arriving on
+  `UpdateActiveVidPnPresentPath` was accepted and then never programmed - the
+  frame would stay uncorrected with the OS believing otherwise. It is now
+  refused with `STATUS_GRAPHICS_GAMMA_RAMP_NOT_SUPPORTED` (0xC01E0348).
+
+  **The class.** `PathTransformation` (object class,
+  `src/core/vidpn/path_transformation.{hpp,cpp}`) owns the three things one
+  present path asks of the content - scaling, rotation, gamma ramp type - and
+  answers two different questions with them, because the two callers ask
+  different ones. `accepted()` is for a path being made active, where every
+  attribute is decided: identity scaling, identity rotation, Default or
+  Uninitialized ramp, else the status that names what was refused.
+  `supportable()` is for `IsSupportedVidPn`, where a VidPn still under
+  construction legitimately carries Uninitialized, Unpinned (254) or
+  NotSpecified (255) - none of those pins anything - while every other value is
+  a transformation to refuse.
+
+  **A VidPn that pins a rotation is now unsupported, not committed and then
+  rolled back.** `VidPnSupportCheck::visit` consults `PathTransformation`, so
+  `IsVidPnSupported` is 0 for a desired VidPn with a pinned scaling, rotation
+  or ramp instead of yes-then-no halfway through the commit. The guest's own
+  logs justify the value set: the 038 runs only ever show `scaling 1|254
+  rotation 1|254`, so nothing the working topology carries is refused.
+
+  **Watch the enum values.** `D3DKMDT_VPPS_UNPINNED`/`NOTSPECIFIED` and
+  `D3DKMDT_VPPR_UNPINNED`/`NOTSPECIFIED` are 254 and 255, not 6/7 - the first
+  draft of this task treated 6 and 7 as "undecided" when 6 is
+  `D3DKMDT_VPPR_ROTATE90_OFFSET90`, a real rotation. The Offset rotations are
+  refused too: `IDENTITY_OFFSET90` still asks the driver to turn identity
+  content 90 degrees itself.
+
+  **Tests.** `tests/unit/core/vidpn/test_path_transformation.cpp` (both answers
+  over every enum value that matters), `test_vidpn_support_check.cpp` (pinned
+  scaling/rotation/ramp unsupported, undecided still supported),
+  `test_adapter.cpp` (every non-identity transformation and every real ramp
+  refused by name), `test_driver_capabilities.cpp` (`GammaRampCaps`,
+  `SupportSmoothRotation`, `SupportMultiPlaneOverlay*`, `MaxOverlays`,
+  `MaxOverlayPlanes`, `MaxQueuedMultiPlaneOverlayFlipVSync` asserted zero
+  individually, not only by the block comparison), and `test_miniport.cpp` (the
+  overlay and gamma slots left empty).
 - [ ] T023 Five consecutive guest runs reach the desktop (SC-001) with no Verifier violation or display TDR (SC-005); `AV_GUEST_IMAGE=... tools/gate.sh` passes; docs/testing.md gains the screendump and mode-switch scenarios; merge; push

@@ -365,11 +365,13 @@ can leave the guest with no display.
 
 ### As built
 
-- **The suite** is `src/guest/`: `GuestSuite` runs four scenarios - the adapter
+- **The suite** is `src/guest/`: `GuestSuite` runs five scenarios - the adapter
   (found by PCI identity `1af4:1050` subsystem `1af4:5256`, WDDM 3.2), an
   allocation and a refused hostile descriptor, a GPU mapping through a paging
-  queue, and a submission awaited through a CPU notification - over the `Kmt`
-  contract. It is portable and held to the same gates as `src/core`: on Linux,
+  queue, a submission awaited through a CPU notification, and the vertical
+  blank (`VsyncScenario` waits for a fixed number of blanks on source 0 and
+  judges the rate the performance counter measured against the mode's 60 Hz,
+  within 5%) - over the `Kmt` contract. It is portable and held to the same gates as `src/core`: on Linux,
   `MockKmt` (`tests/harness/guest/`) scripts every call's failure, zero handles
   and hostile enumerations, at 100% branch coverage.
 - **The program** is `src/um/`: `GdiKmt` translates `Kmt` into gdi32's D3DKMT
@@ -387,10 +389,44 @@ can leave the guest with no display.
   `virtio-gpu-rvk-pci`, the agent channel, QMP and `isa-debugcon`; pushes the
   package, `rvktest.exe` and the script; signs, installs with Driver Verifier's
   standard checks on `rvkgpu.sys`, waits through each reboot on QMP's `RESET`;
-  checks the adapter started on `rvkgpu`; runs the suite; collects the guest's
-  diagnostics whatever happened; and powers off. Every wait names its step when
+  checks the adapter started on `rvkgpu`; runs the display scenarios below;
+  runs the suite; collects the guest's diagnostics whatever happened; and
+  powers off. Every wait names its step when
   it times out. Its tests run it against a fake QEMU with a scripted guest
   (`tests/tools/fake_guest/`), bugchecks and boot loops included.
+- **The display scenarios** are what only a real desktop can answer, and each
+  is a runner step with the host, not the guest, as the oracle:
+  - `check`: how many monitors Windows has, and that each is parented to this
+    adapter's device instance (`DEVPKEY_Device_Parent`), so a monitor belonging
+    to some other display path cannot be mistaken for ours.
+  - `display`: **the screendump**. QMP `screendump` writes a PPM per head from
+    the host's scanout; the runner asserts each dump is the committed mode's
+    size and counts its colours, and that it is not QEMU's "display output is
+    not active" placeholder - which is exactly what an earlier 038 run mistook
+    for a working scanout. It then reads the driver's own log for the rest: the
+    primary's aperture pages were recorded, and no frame was refused for want of
+    a backing. What a dump cannot prove yet is that the picture is a desktop:
+    DWM composites with the GPU and nothing executes GPU work until features
+    042-044, so the primary's pages are still zeros.
+  - `modes`: `EnumDisplaySettings` lists at least the modes the driver offers,
+    and the mode in force is one of them.
+  - `setmode`: **the mode switch**. `ChangeDisplaySettings` to a second offered
+    mode, then a screendump: the host's scanout is that mode's size if the guest
+    took the switch, and the committed mode's if it refused it - a session 0
+    service cannot move the console session's mode, so the step asserts whatever
+    the guest actually did and never lets a refusal pass as a switch. A mode the
+    driver never offered must be refused, and a refused switch must leave the
+    host scanning out the size it already was.
+  - `extend`: `SetDisplayConfig(SDC_TOPOLOGY_EXTEND)` with two outputs. A
+    session 0 service cannot change the console session's topology - it answers
+    ERROR_ACCESS_DENIED (5) - so the step asserts the refusal and the first
+    display's scanout, and in-guest desktop extension waits for an interactive
+    session.
+  - `monitortimeout` and `power`: the policy's display power-off timeout is set
+    to a minute, the runner polls the scanout until it goes dark, sends a key
+    and a mouse move, and polls until it is lit at the same mode again. The
+    system's idle timer needs no session, which is what makes display power
+    testable where an in-guest mode switch is not.
 - **The gate**: `tools/gate.sh` runs it when `AV_GUEST_IMAGE` names a prepared
   image, and says it skipped the guest otherwise. From feature 037 on a skipped
   guest is not a pass: no feature merges until the suite has run live, because

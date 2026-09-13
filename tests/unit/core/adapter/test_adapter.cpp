@@ -643,6 +643,7 @@ namespace {
 
 constexpr std::uint32_t invalid_source_mode = 0xC01E0310u;
 constexpr std::uint32_t transformation_not_supported = 0xC01E0346u;
+constexpr std::uint32_t gamma_ramp_not_supported = 0xC01E0348u;
 constexpr std::uint32_t no_recommended_functional_vidpn = 0xC01E0323u;
 constexpr std::uint32_t no_recommended_vidpn_topology = 0xC01E031Au;
 constexpr std::int32_t  interrupt_crtc_vsync = 3;
@@ -833,11 +834,35 @@ TEST(adapter_update_active_vidpn_present_path, accepts_identity_transformation_o
   path.ContentTransformationScaling = 1;
   path.ContentTransformationRotation = 1;
   CHECK_EQ(nt(fixture.adapter().update_active_vidpn_present_path(&path)), success);
-  path.ContentTransformationScaling = 2;   /* D3DKMDT_VPPS_CENTERED */
-  CHECK_EQ(nt(fixture.adapter().update_active_vidpn_present_path(&path)), transformation_not_supported);
+  const std::int32_t scalings[] = {0, 2, 5, 254, 255};   /* Uninitialized, Centered, Custom, Unpinned, NotSpecified */
+  for (const std::int32_t scaling : scalings) {
+      path.ContentTransformationScaling = scaling;
+      CHECK_EQ(nt(fixture.adapter().update_active_vidpn_present_path(&path)), transformation_not_supported);
+  }
   path.ContentTransformationScaling = 1;
-  path.ContentTransformationRotation = 2;  /* D3DKMDT_VPPR_ROTATE90 */
-  CHECK_EQ(nt(fixture.adapter().update_active_vidpn_present_path(&path)), transformation_not_supported); }
+  /* Uninitialized, Rotate90, Rotate270, Identity_Offset90, Unpinned, NotSpecified */
+  const std::int32_t rotations[] = {0, 2, 4, 5, 254, 255};
+  for (const std::int32_t rotation : rotations) {
+      path.ContentTransformationRotation = rotation;
+      CHECK_EQ(nt(fixture.adapter().update_active_vidpn_present_path(&path)), transformation_not_supported);
+  } }
+
+/* FR-006: a gamma ramp is refused with its own status, not accepted and then
+ * never programmed, because GammaRampCaps claims nothing. */
+TEST(adapter_update_active_vidpn_present_path, refuses_every_gamma_ramp_it_cannot_program)
+{ Fixture fixture;
+  av::D3dkmdtVidPnPresentPathRecord path = {};
+  path.ContentTransformationScaling = 1;
+  path.ContentTransformationRotation = 1;
+  path.GammaRampType = 1;   /* D3DDDI_GAMMARAMP_DEFAULT */
+  CHECK_EQ(nt(fixture.adapter().update_active_vidpn_present_path(&path)), success);
+  std::uint16_t levels[3][256] = {};
+  for (std::int32_t ramp = 2; ramp <= 5; ramp++) {
+      path.GammaRampType = ramp;
+      path.GammaRampData = levels;
+      path.GammaRampDataSize = sizeof levels;
+      CHECK_EQ(nt(fixture.adapter().update_active_vidpn_present_path(&path)), gamma_ramp_not_supported);
+  } }
 
 TEST(adapter_update_active_vidpn_present_path, a_path_the_adapter_lacks_is_invalid)
 { Fixture fixture;

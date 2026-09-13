@@ -75,6 +75,24 @@ TEST(driver_capabilities_report_driver_caps, claims_wddm_3_2_gpu_mmu_and_what_ea
   expected.PointerCaps = 0x7u;   /* Monochrome | Color | MaskedColor */
   CHECK(std::memcmp(&caps, &expected, sizeof caps) == 0); }
 
+/* FR-006 named out loud: rotation, gamma and overlay planes are the three the
+ * display path would otherwise silently ignore, so each field that would claim
+ * one is asserted zero by name rather than only by the block comparison above. */
+TEST(driver_capabilities_report_driver_caps, claims_no_rotation_gamma_or_overlay)
+{ MockPlatform platform; const DriverCapabilities capabilities(platform);
+  DxgkDriverCapsRecord caps;
+  std::memset(&caps, 0xA5, sizeof caps);
+  const DxgkargQueryAdapterInfoRecord record = request(nullptr, 0u, &caps, sizeof caps);
+  CHECK_STATUS(capabilities.report_driver_caps(AdapterInfoQuery(platform, record)), Status::ok);
+  CHECK_EQ(caps.SupportSmoothRotation, 0u);
+  CHECK_EQ(caps.GammaRampCaps, 0u);
+  CHECK_EQ(caps.SupportMultiPlaneOverlay, 0u);
+  CHECK_EQ(caps.SupportMultiPlaneOverlayImmediateFlip, 0u);
+  CHECK_EQ(caps.CursorScaledWithMultiPlaneOverlayPlane0, 0u);
+  CHECK_EQ(caps.MaxOverlays, 0u);
+  CHECK_EQ(caps.MaxOverlayPlanes, 0u);
+  CHECK_EQ(caps.MaxQueuedMultiPlaneOverlayFlipVSync, 0u); }
+
 TEST(driver_capabilities_report_driver_caps, a_short_output_is_invalid)
 { MockPlatform platform; const DriverCapabilities capabilities(platform);
   std::uint8_t output[driver_caps_bytes] = {};

@@ -115,6 +115,19 @@ TEST(miniport, fills_exactly_the_slots_this_feature_implements)
       exact = exact && ((miniport.ddi_table().routine(DdiSlot{index}) != nullptr) == is_implemented(index));
   CHECK(exact); }
 
+/* FR-006: dxgkrnl asks whether an overlay configuration is supported before it
+ * flips one, so leaving those slots empty is what refuses multi-plane overlay;
+ * the one MPO slot the table does fill answers not_supported (test_adapter). */
+TEST(miniport, offers_no_multi_plane_overlay_or_gamma_slot)
+{ MockPlatform platform; Miniport miniport(platform);
+  const DdiSlot overlays[] = {
+      DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport, DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport2,
+      DdiSlot::DxgkDdiCheckMultiPlaneOverlaySupport3, DdiSlot::DxgkDdiGetMultiPlaneOverlayCaps,
+      DdiSlot::DxgkDdiPostMultiPlaneOverlayPresent,
+      DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay2,
+      DdiSlot::DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay3, DdiSlot::DxgkDdiSetTargetGamma};
+  for (const DdiSlot slot : overlays) CHECK(miniport.ddi_table().routine(slot) == nullptr); }
+
 TEST(miniport, its_table_passes_dxgkrnl_registration)
 { MockPlatform platform; Miniport miniport(platform); FakeDxgkrnl dxgkrnl;
   CHECK_STATUS(dxgkrnl.initialize(&miniport.ddi_table()), Status::ok); }

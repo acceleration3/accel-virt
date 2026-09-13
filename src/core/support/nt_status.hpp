@@ -17,6 +17,7 @@ public:
     static constexpr uint32_t mode_already_in_mode_set = 0xC01E0314u;
     static constexpr uint32_t invalid_video_present_source_mode = 0xC01E0310u;
     static constexpr uint32_t path_content_geometry_transformation_not_supported = 0xC01E0346u;
+    static constexpr uint32_t gamma_ramp_not_supported = 0xC01E0348u;
     static constexpr uint32_t no_recommended_functional_vidpn = 0xC01E0323u;
     static constexpr uint32_t no_recommended_vidpn_topology = 0xC01E031Au;
     /* DXGADAPTER::DdiQueryAdapterInfo accepts it as a declined query type. */

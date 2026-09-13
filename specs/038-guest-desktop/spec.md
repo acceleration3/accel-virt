@@ -43,6 +43,9 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 | `DisplayScanout` | system | one `ScanoutResource` per source, and the next resource id | Put each source's committed frame on the host's scanout |
 | `DisplayInfoResponse` | object | the per-scanout rectangles and enabled flags it validated, and how many the device reported | Answer what the device's display info says |
 | `VsyncScenario` | object | the vertical blanks it counted and the window it counted them in | Judge whether vertical blanks arrive at the committed rate |
+| `GuestPageList` | object | the page frames of one allocation's backing, as the host must be told them | Describe an allocation's guest pages to the device |
+| `AperturePages` | object | the page frames dxgkrnl mapped into one allocation's aperture window, and where that window starts | Remember where an allocation's pages are |
+| `PathTransformation` | object | the scaling, rotation and gamma ramp one present path asks for | Decide whether a path asks for something the adapter cannot do |
 
 ### Test requirements
 

@@ -33,6 +33,32 @@ implements is the smaller set:
 | `DxgkDdiSetTimingsFromVidPn` | Program the actual timings. |
 | `DxgkDdiResetDisplayEngine` (3.2) | Reset just the display engine. |
 
+### What a path can ask for, and what refusing it costs
+
+Three of a path's properties are transformations of the content, and a driver
+that claims none of them must still *refuse* them rather than ignore them:
+
+- **Scaling** (`D3DKMDT_VIDPN_PRESENT_PATH_SCALING`) and **rotation**
+  (`D3DKMDT_VIDPN_PRESENT_PATH_ROTATION`). Identity is 1 in both; 0 is
+  Uninitialized, and **Unpinned is 254 and NotSpecified is 255**, not the next
+  values after the real ones. Between them sit the transformations:
+  Centered..Custom (2..5) for scaling, and for rotation Rotate90..Rotate270
+  (2..4) plus the twelve WDDM 1.3 Offset rotations (5..16) - of which even
+  `IDENTITY_OFFSET90` asks the driver to turn identity content itself, so a
+  driver that only reports `Offset0` support must refuse it.
+- **Gamma** (`GammaRamp.Type`, `D3DDDI_GAMMARAMP_*`). Default is 1 and
+  Uninitialized is 0; anything from RGB256x3x16 (2) up is a ramp to program.
+
+`GammaRampCaps` zero is a claim, not a guarantee: nothing stops a ramp arriving
+on `UpdateActiveVidPnPresentPath`, and accepting one there tells the OS the
+correction was applied to a frame that was never touched. Refuse with
+`STATUS_GRAPHICS_GAMMA_RAMP_NOT_SUPPORTED` (0xC01E0348), as scaling and rotation
+are refused with `STATUS_GRAPHICS_PATH_CONTENT_GEOMETRY_TRANSFORMATION_NOT_SUPPORTED`
+(0xC01E0346). Cheaper still is `IsSupportedVidPn` answering no, so DMM never
+commits a topology the driver would have to refuse halfway through - but only
+for a value that is actually *pinned*: a VidPn under construction carries
+Uninitialized, Unpinned and NotSpecified, and refusing those refuses everything.
+
 For a virtual display, `EnumVidPnCofuncModality` is where implementations
 usually go wrong. The rule: for every path where the source mode set or target
 mode set is not pinned, you must populate it with every mode you can support

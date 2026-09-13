@@ -3,6 +3,7 @@
 #include "core/ddi/d3dkmdt_vidpn_present_path_record.hpp"
 #include "core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
 #include "core/display/display_sources.hpp"
+#include "core/vidpn/path_transformation.hpp"
 
 namespace av {
 
@@ -34,7 +35,7 @@ Status VidPnSupportCheck::visit(const D3dkmdtVidPnPresentPathRecord &path)
     platform_.require_irql_at_most(Irql::passive, "VidPnSupportCheck::visit");
     paths_++;
     supported_ = paths_ <= max_paths && path.VidPnSourceId < sources_.count() &&
-                 path.VidPnTargetId < sources_.count();
+                 path.VidPnTargetId < sources_.count() && PathTransformation(path).supportable();
     return supported_ ? Status::ok : Status::not_supported;
 }
 

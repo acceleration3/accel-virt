@@ -1,6 +1,6 @@
 /* DxgkDdiIsSupportedVidPn for one proposed VidPn: supported when it has at most
- * one path and that path joins the adapter's one source to its one target, as
- * basicdisplay.sys decides. */
+ * one path, that path joins a source to a target the adapter has, and it pins no
+ * transformation the adapter cannot do, as basicdisplay.sys decides. */
 #ifndef AV_VIDPN_SUPPORT_CHECK_HPP
 #define AV_VIDPN_SUPPORT_CHECK_HPP
 
