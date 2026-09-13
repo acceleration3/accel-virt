@@ -36,7 +36,7 @@ namespace av {
 
 struct KmtTransportProbe {
     static std::uint32_t ring_allocation(const KmtTransport &t) { return t.allocations_[0]; }
-    static std::uint32_t reply_allocation(const KmtTransport &t) { return t.allocations_[1]; }
+    static std::uint32_t reply_allocation(const KmtTransport &t) { return t.allocations_[2]; }
     /* An established context with its DMA buffer gone: what it never builds. */
     static void orphan(KmtTransport &t) { t.context_ = 1u; t.dma_view_ = nullptr; }
 };
@@ -49,7 +49,6 @@ namespace {
 
 const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 
-RvkContextRecord record() { return RvkContextRecord(SubApi::vulkan, 12u, 10u, 11u, 12u); }
 
 class Fixture {
 public:
@@ -68,14 +67,14 @@ private:
 TEST(kmt_transport, is_unestablished_until_initialized)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), record());
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
   CHECK(!transport.established());
   CHECK(transport.invariants_hold()); }
 
 TEST(kmt_transport, initialize_maps_the_ring_and_creates_the_virtual_context)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), record());
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK(transport.established());
   /* The record was carried as private data. */
@@ -90,7 +89,7 @@ TEST(kmt_transport, initialize_maps_the_ring_and_creates_the_virtual_context)
 TEST(kmt_transport, an_async_command_lands_a_batch_and_a_submission)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), record());
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
   CHECK_STATUS(transport.initialize(), Status::ok);
   WireWriter writer = transport.request_writer();
   writer.write_u32(0xCAFEu);
@@ -109,7 +108,7 @@ TEST(kmt_transport, an_async_command_lands_a_batch_and_a_submission)
 TEST(kmt_transport, an_overflowed_writer_is_refused)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), record());
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
   CHECK_STATUS(transport.initialize(), Status::ok);
   WireWriter writer = transport.request_writer();
   writer.write_zeros(KmtTransport::max_command + 1u);
@@ -120,7 +119,7 @@ TEST(kmt_transport, an_overflowed_writer_is_refused)
 TEST(kmt_transport, a_sync_command_reads_the_reply_the_device_wrote)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), record());
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
   CHECK_STATUS(transport.initialize(), Status::ok);
   /* Play the device: the first sync command takes fence 1, so write its answer
    * into the reply slot before the call reads it. */
@@ -140,7 +139,7 @@ TEST(kmt_transport, a_sync_command_reads_the_reply_the_device_wrote)
 TEST(kmt_transport, before_setup_and_the_refusing_arenas)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), record());
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
   WireWriter writer = transport.request_writer();
   writer.write_u32(1u);
   CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed);
@@ -157,7 +156,7 @@ void refuse_setup(MockKmt::Call call, std::uint32_t nth)
     GuestConnection connection(kmt);
     CHECK_STATUS(connection.open(), Status::ok);
     kmt.fail_at(call, nth, MockKmt::invalid_parameter);
-    KmtTransport transport(connection, record());
+    KmtTransport transport(connection, SubApi::vulkan, 12u);
     CHECK(transport.initialize() != Status::ok);
     CHECK(!transport.established());
     CHECK(transport.invariants_hold());
@@ -167,14 +166,35 @@ void refuse_setup(MockKmt::Call call, std::uint32_t nth)
 
 TEST(kmt_transport, a_failure_at_each_setup_step_leaves_it_unestablished)
 { refuse_setup(MockKmt::Call::create_allocation, 1u);   /* ring */
-  refuse_setup(MockKmt::Call::create_allocation, 2u);   /* reply */
-  refuse_setup(MockKmt::Call::create_allocation, 3u);   /* dma */
+  refuse_setup(MockKmt::Call::create_allocation, 2u);   /* fence */
+  refuse_setup(MockKmt::Call::create_allocation, 3u);   /* reply */
+  refuse_setup(MockKmt::Call::create_allocation, 4u);   /* dma */
   refuse_setup(MockKmt::Call::make_resident, 1u);
   refuse_setup(MockKmt::Call::wait_for_fence, 1u);      /* ring residency */
   refuse_setup(MockKmt::Call::map_gpu_virtual_address, 1u);
-  refuse_setup(MockKmt::Call::wait_for_fence, 4u);      /* dma mapping */
   refuse_setup(MockKmt::Call::lock, 1u);
   refuse_setup(MockKmt::Call::create_context_virtual, 1u); }
+
+/* The last residency wait a setup makes is the DMA buffer's mapping wait; a
+ * device that never reaches it fails the setup. Counting the waits keeps this
+ * robust as the allocation count changes. */
+TEST(kmt_transport, a_failed_mapping_wait_leaves_it_unestablished)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(), Status::ok);
+  KmtTransport counted(connection, SubApi::vulkan, 12u);
+  CHECK_STATUS(counted.initialize(), Status::ok);
+  const std::uint32_t waits = kmt.calls(MockKmt::Call::wait_for_fence);
+  counted.teardown();
+  MockKmt fresh;
+  fresh.add_adapter(rvk, 3200u);
+  GuestConnection other(fresh);
+  CHECK_STATUS(other.open(), Status::ok);
+  fresh.fail_at(MockKmt::Call::wait_for_fence, waits, MockKmt::invalid_parameter);
+  KmtTransport transport(other, SubApi::vulkan, 12u);
+  CHECK(transport.initialize() != Status::ok);
+  CHECK(!transport.established()); }
 
 /* A lock that hands back a null view cannot bind the ring. */
 TEST(kmt_transport, a_null_ring_view_is_refused)
@@ -183,7 +203,7 @@ TEST(kmt_transport, a_null_ring_view_is_refused)
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(), Status::ok);
   kmt.zero_next(MockKmt::Call::lock);   /* the ring lock returns no view */
-  KmtTransport transport(connection, record());
+  KmtTransport transport(connection, SubApi::vulkan, 12u);
   CHECK(transport.initialize() != Status::ok);
   CHECK(!transport.established()); }
 
@@ -193,7 +213,7 @@ TEST(kmt_transport, a_refused_submission_fails_the_send)
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(), Status::ok);
-  KmtTransport transport(connection, record());
+  KmtTransport transport(connection, SubApi::vulkan, 12u);
   CHECK_STATUS(transport.initialize(), Status::ok);
   kmt.fail_at(MockKmt::Call::submit, 1u, MockKmt::invalid_parameter);
   WireWriter writer = transport.request_writer();
@@ -206,7 +226,7 @@ TEST(kmt_transport, a_full_fence_table_refuses_the_next_send)
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(), Status::ok);
-  KmtTransport transport(connection, record());
+  KmtTransport transport(connection, SubApi::vulkan, 12u);
   CHECK_STATUS(transport.initialize(), Status::ok);
   for (std::uint32_t i = 0u; i < 64u; i++) {
       WireWriter writer = transport.request_writer();
@@ -223,7 +243,7 @@ TEST(kmt_transport, a_full_ring_refuses_the_send)
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(), Status::ok);
-  KmtTransport transport(connection, record());
+  KmtTransport transport(connection, SubApi::vulkan, 12u);
   CHECK_STATUS(transport.initialize(), Status::ok);
   bool refused = false;
   for (std::uint32_t i = 0u; i < 64u && !refused; i++) {
@@ -240,7 +260,7 @@ TEST(kmt_transport, send_sync_failure_paths)
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(), Status::ok);
-  KmtTransport transport(connection, record());
+  KmtTransport transport(connection, SubApi::vulkan, 12u);
   /* Before setup: nothing to publish. */
   WireWriter early = transport.request_writer();
   early.write_u32(1u);
@@ -262,6 +282,6 @@ TEST(kmt_transport, the_invariant_catches_an_established_context_with_no_buffer)
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(), Status::ok);
-  KmtTransport transport(connection, record());
+  KmtTransport transport(connection, SubApi::vulkan, 12u);
   KmtTransportProbe::orphan(transport);
   CHECK(!transport.invariants_hold()); }

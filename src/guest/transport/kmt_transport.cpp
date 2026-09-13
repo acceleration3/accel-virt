@@ -14,20 +14,18 @@
 namespace av {
 
 namespace {
-constexpr uint32_t ring_index  = 0u;
-constexpr uint32_t reply_index = 1u;
-constexpr uint32_t dma_index   = 2u;
-constexpr uint64_t page_bytes  = 4096u;
+constexpr uint64_t page_bytes = 4096u;
 }  // namespace
 
-KmtTransport::KmtTransport(GuestConnection &connection, const RvkContextRecord &record)
-    : connection_(connection), record_(record), allocations_{}, dma_address_(0u), context_(0u), ring_(),
-      reply_(), fences_(), dma_view_(nullptr), decode_arena_(nullptr, 0u), blobs_(), staging_{} {}
+KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t ring_order)
+    : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), allocations_{}, dma_address_(0u),
+      context_(0u), ring_(), reply_(), fences_(), dma_view_(nullptr), decode_arena_(nullptr, 0u), blobs_(),
+      staging_{} {}
 
 KmtTransport::~KmtTransport() { teardown(); }
 
-Status KmtTransport::setup_allocation(uint64_t bytes, bool map_gpu, uint32_t &allocation, uint8_t *&view,
-                                      uint64_t &address)
+Status KmtTransport::setup_allocation(uint64_t bytes, bool map_gpu, bool do_lock, uint32_t &allocation,
+                                      uint8_t *&view, uint64_t &address)
 {
     Kmt           &kmt = connection_.kmt();
     const uint32_t device = connection_.device();
@@ -50,10 +48,12 @@ Status KmtTransport::setup_allocation(uint64_t bytes, bool map_gpu, uint32_t &al
         const Status settled = kmt.wait_for_fence(device, connection_.fence_object(), map_fence);
         if (settled != Status::ok) return settled;
     }
-    void        *mapped_view = nullptr;
-    const Status locked = kmt.lock(device, allocation, mapped_view);
-    if (locked != Status::ok) return locked;
-    view = static_cast<uint8_t *>(mapped_view);
+    if (do_lock) {
+        void        *mapped_view = nullptr;
+        const Status locked = kmt.lock(device, allocation, mapped_view);
+        if (locked != Status::ok) return locked;
+        view = static_cast<uint8_t *>(mapped_view);
+    }
     return Status::ok;
 }
 
@@ -61,22 +61,33 @@ Status KmtTransport::initialize()
 {
     if (context_ != 0u) return Status::invalid_state;
     ScopeExit undo([&] { teardown(); });
-    const uint8_t order = record_.ring_order();
     uint8_t      *ring_view = nullptr;
     uint8_t      *reply_view = nullptr;
+    uint8_t      *fence_view = nullptr;
     uint64_t      unused = 0u;
-    const Status  ring_ready = setup_allocation(RingHeader::encoded_size + (uint64_t{1} << order), false,
-                                                allocations_[ring_index], ring_view, unused);
+    const Status  ring_ready = setup_allocation(RingHeader::encoded_size + (uint64_t{1} << ring_order_), false,
+                                                true, allocations_[ring_index], ring_view, unused);
     if (ring_ready != Status::ok) return ring_ready;
-    const Status reply_ready = setup_allocation(reply_bytes, false, allocations_[reply_index], reply_view, unused);
+    /* The fence page is the device's to write and the driver's to read; the
+     * guest only allocates it, so it is not locked here. */
+    const Status fence_ready = setup_allocation(page_bytes, false, false, allocations_[fence_index], fence_view,
+                                                unused);
+    if (fence_ready != Status::ok) return fence_ready;
+    const Status reply_ready = setup_allocation(reply_bytes, false, true, allocations_[reply_index], reply_view,
+                                                unused);
     if (reply_ready != Status::ok) return reply_ready;
-    const Status dma_ready = setup_allocation(dma_bytes, true, allocations_[dma_index], dma_view_, dma_address_);
+    const Status dma_ready = setup_allocation(dma_bytes, true, true, allocations_[dma_index], dma_view_,
+                                              dma_address_);
     if (dma_ready != Status::ok) return dma_ready;
-    const Status ring_bound = ring_.initialize(ring_view, order);
+    const Status ring_bound = ring_.initialize(ring_view, ring_order_);
     if (ring_bound != Status::ok) return ring_bound;
     reply_ = ReplyReader(reply_view, reply_bytes);
+    /* The record names the ring, fence and reply by the handles just allocated,
+     * so the miniport publishes exactly this context's memory. */
+    const RvkContextRecord record(sub_api_, ring_order_, allocations_[ring_index], allocations_[fence_index],
+                                  allocations_[reply_index]);
     uint8_t      private_data[RvkContextRecord::encoded_size] = {};
-    static_cast<void>(record_.encode(private_data, sizeof private_data));
+    static_cast<void>(record.encode(private_data, sizeof private_data));
     const Status made = connection_.kmt().create_context_virtual(connection_.device(), private_data,
                                                                  sizeof private_data, context_);
     if (made != Status::ok) return made;
@@ -92,8 +103,9 @@ void KmtTransport::teardown()
         static_cast<void>(kmt.destroy_context(context_));
         context_ = 0u;
     }
-    for (uint32_t index = 0u; index < blob_count; index++) {
+    for (uint32_t index = 0u; index < allocation_count; index++) {
         if (allocations_[index] == 0u) continue;
+        /* The fence page was never locked; unlock ignores one it did not lend. */
         static_cast<void>(kmt.unlock(device, allocations_[index]));
         if (index == dma_index && dma_address_ != 0u) {
             static_cast<void>(kmt.free_gpu_virtual_address(connection_.adapter(), dma_address_,
