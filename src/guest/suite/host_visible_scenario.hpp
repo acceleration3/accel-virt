@@ -1,0 +1,50 @@
+/* Host-visible memory a process writes into: a CPU-visible allocation is
+ * locked, a pattern written through the pointer D3DKMTLock2 answers, read back
+ * through that same pointer, and the allocation unlocked.
+ *
+ * The byte at offset n of the pattern is 1 + (n * 7) % 251, so no byte is zero
+ * and no page of it repeats another: the host reading the hostmem BAR back
+ * through QMP (feature 041, SC-003) can tell what the guest wrote from what the
+ * region held before it. The bytes that read back as written are the number on
+ * the report line, and a driver that handed out a copy of the memory instead of
+ * the memory is a number below the pattern's size. */
+#ifndef AV_HOST_VISIBLE_SCENARIO_HPP
+#define AV_HOST_VISIBLE_SCENARIO_HPP
+
+#include "guest/suite/scenario_steps.hpp"
+
+#include <stdint.h>
+
+namespace av {
+
+class AdapterSearch;
+class GuestReport;
+class Kmt;
+
+class HostVisibleScenario {
+public:
+    /* One page: the granularity VidMm maps a CPU-visible segment's views at. */
+    static constexpr uint32_t pattern_bytes = 4096u;
+
+    HostVisibleScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search);
+
+    void run();
+
+    /* Bytes of the pattern that read back as they were written; zero until it
+     * has held a view. */
+    uint32_t matched_bytes() const;
+
+private:
+    /* Through a volatile view, so the read back is what the memory answers and
+     * not the value the compiler knows was just stored into it. */
+    void write_and_read_back(volatile unsigned char *view);
+
+    Kmt                 &kmt_;
+    const AdapterSearch &search_;
+    ScenarioSteps        steps_;
+    uint32_t             matched_;
+};
+
+}  // namespace av
+
+#endif  // AV_HOST_VISIBLE_SCENARIO_HPP

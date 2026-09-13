@@ -3,7 +3,8 @@
  * NTSTATUS or answered with a zero handle, and a count of every object still
  * open and every call made with a handle it never gave. Allocations decode
  * their descriptor as the driver does; submissions must land inside a
- * mapping of the submitting context's device. */
+ * mapping of the submitting context's device; a lock hands out the one view
+ * this mock owns, which keeps what is written through it. */
 #ifndef AV_MOCK_KMT_HPP
 #define AV_MOCK_KMT_HPP
 
@@ -25,6 +26,8 @@ public:
         destroy_device,
         create_allocation,
         destroy_allocation,
+        lock,
+        unlock,
         create_paging_queue,
         destroy_paging_queue,
         make_resident,
@@ -44,6 +47,8 @@ public:
     static constexpr std::uint64_t page_bytes = 4096u;
     /* The performance counter this answers, in the 100ns units Windows uses. */
     static constexpr std::uint64_t ticks_per_second = 10000000u;
+    /* The memory one lock at a time addresses. */
+    static constexpr std::uint32_t view_capacity = 4096u;
 
     MockKmt();
 
@@ -56,6 +61,8 @@ public:
     Status        create_allocation(std::uint32_t device, const std::uint8_t *descriptor, std::uint32_t size,
                                     std::uint32_t &allocation) override;
     Status        destroy_allocation(std::uint32_t device, std::uint32_t allocation) override;
+    Status        lock(std::uint32_t device, std::uint32_t allocation, void *&view) override;
+    Status        unlock(std::uint32_t device, std::uint32_t allocation) override;
     Status        create_paging_queue(std::uint32_t device, std::uint32_t &queue, std::uint32_t &fence_object) override;
     Status        destroy_paging_queue(std::uint32_t queue) override;
     Status        make_resident(std::uint32_t queue, std::uint32_t allocation, std::uint64_t &paging_fence) override;
@@ -94,6 +101,9 @@ public:
     std::uint32_t open_objects() const;
     /* Calls naming a handle this mock never gave or already closed. */
     std::uint32_t misuses() const;
+    /* Bytes of the view this mock hands out that are not zero: what was
+     * written through the pointer a lock answered. */
+    std::uint32_t view_filled() const;
 
 private:
     enum class Kind : unsigned { none, adapter, device, allocation, queue, context, mapping };
@@ -127,6 +137,8 @@ private:
     bool          zeroing_[static_cast<unsigned>(Call::count)];
     std::uint32_t calls_[static_cast<unsigned>(Call::count)];
     Object        objects_[max_objects];
+    std::uint8_t  view_[view_capacity];
+    std::uint32_t locked_;
     std::uint32_t next_handle_;
     std::uint64_t next_address_;
     std::uint64_t next_fence_;

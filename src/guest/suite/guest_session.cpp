@@ -5,8 +5,8 @@
 namespace av {
 
 GuestSession::GuestSession(Kmt &kmt, uint32_t adapter)
-    : kmt_(kmt), adapter_(adapter), device_(0u), allocations_{}, addresses_{}, pages_{}, allocation_count_(0u),
-      queue_(0u), fence_object_(0u), context_(0u), teardown_code_(0u) {}
+    : kmt_(kmt), adapter_(adapter), device_(0u), allocations_{}, views_{}, addresses_{}, pages_{},
+      allocation_count_(0u), queue_(0u), fence_object_(0u), context_(0u), teardown_code_(0u) {}
 
 /* A scenario reports its own teardown; a destructor has no one to tell. */
 GuestSession::~GuestSession() { static_cast<void>(tear_down()); }
@@ -29,6 +29,28 @@ Status GuestSession::allocate(const uint8_t *descriptor, uint32_t size, uint32_t
     index = allocation_count_;
     allocations_[allocation_count_++] = allocation;
     return Status::ok;
+}
+
+Status GuestSession::lock(uint32_t index, void *&view)
+{
+    view = nullptr;
+    if (index >= allocation_count_ || views_[index] != nullptr) return Status::invalid_state;
+    void        *locked = nullptr;
+    const Status status = accept(kmt_.lock(device_, allocations_[index], locked), locked);
+    if (status != Status::ok) return status;
+    views_[index] = locked;
+    view = locked;
+    return Status::ok;
+}
+
+/* A view the driver would not take back is still held, so the teardown tries
+ * again before the allocation under it is destroyed. */
+Status GuestSession::unlock(uint32_t index)
+{
+    if (index >= allocation_count_ || views_[index] == nullptr) return Status::invalid_state;
+    const Status status = kmt_.unlock(device_, allocations_[index]);
+    if (status == Status::ok) views_[index] = nullptr;
+    return status;
 }
 
 /* A queue answered without its fence object is still destroyed at teardown. */
@@ -111,8 +133,11 @@ Status GuestSession::tear_down()
     if (queue_ != 0u) note(first, kmt_.destroy_paging_queue(queue_));
     queue_ = 0u;
     fence_object_ = 0u;
-    for (uint32_t index = allocation_count_; index != 0u; index--)
+    for (uint32_t index = allocation_count_; index != 0u; index--) {
+        if (views_[index - 1u] != nullptr) note(first, kmt_.unlock(device_, allocations_[index - 1u]));
+        views_[index - 1u] = nullptr;
         note(first, kmt_.destroy_allocation(device_, allocations_[index - 1u]));
+    }
     allocation_count_ = 0u;
     if (device_ != 0u) note(first, kmt_.destroy_device(device_));
     device_ = 0u;
@@ -122,12 +147,12 @@ Status GuestSession::tear_down()
 uint32_t GuestSession::teardown_code() const { return teardown_code_; }
 
 /* Nothing outlives the device it was made on, a fence object its queue, or a
- * mapping its allocation. */
+ * mapping or a view its allocation. */
 bool GuestSession::invariants_hold() const
 {
     bool mappings_held = true;
     for (uint32_t index = allocation_count_; index < max_allocations; index++)
-        mappings_held = mappings_held && addresses_[index] == 0u;
+        mappings_held = mappings_held && addresses_[index] == 0u && views_[index] == nullptr;
     const bool children = allocation_count_ != 0u || queue_ != 0u || context_ != 0u;
     return (device_ != 0u || !children) && (queue_ != 0u || fence_object_ == 0u) && mappings_held;
 }

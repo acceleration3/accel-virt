@@ -31,10 +31,13 @@ struct GuestSessionProbe {
         session.fence_object_ = fence_object;
         session.addresses_[0] = unheld_address;
     }
+    /* A view of a slot that holds no allocation. */
+    static void unheld_view(GuestSession &session, void *view) { session.views_[0] = view; }
     static void clear(GuestSession &session)
     {
         orphan(session, 0u, 0u, 0u);
         stray(session, 0u, 0u);
+        unheld_view(session, nullptr);
         session.device_ = 0u;
     }
 };
@@ -228,8 +231,61 @@ TEST(guest_session_invariants, an_orphaned_object_a_stray_fence_object_or_an_unh
   CHECK(!GuestSessionProbe::sound_with_device(session, 9u));
   GuestSessionProbe::stray(session, 0u, 0x1000u);
   CHECK(!GuestSessionProbe::sound_with_device(session, 9u));
+  GuestSessionProbe::stray(session, 0u, 0u);
+  unsigned char byte = 0u;
+  GuestSessionProbe::unheld_view(session, &byte);
+  CHECK(!GuestSessionProbe::sound_with_device(session, 9u));
   GuestSessionProbe::clear(session);
   CHECK(session.invariants_hold()); }
+
+/* A view is one the session asked for and has not given back: a slot it never
+ * filled, or a second view of the same allocation, is refused before the driver
+ * is asked for anything. */
+TEST(guest_session_lock, refuses_a_slot_it_never_filled_or_a_second_view_of_the_same_one)
+{ Fixture fixture;
+  GuestSession  session(fixture.kmt(), fixture.adapter());
+  void         *view = nullptr;
+  std::uint32_t index = 0u;
+  CHECK_STATUS(session.lock(0u, view), Status::invalid_state);
+  CHECK_STATUS(session.unlock(0u), Status::invalid_state);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::lock), 0u);
+  CHECK_STATUS(session.open_device(), Status::ok);
+  CHECK_STATUS(session.allocate(descriptor.bytes(), descriptor.size(), index), Status::ok);
+  CHECK_STATUS(session.unlock(index), Status::invalid_state);   /* nothing locked it */
+  fixture.kmt().fail_at(MockKmt::Call::lock, 1u, 0xC0000001u);
+  CHECK_STATUS(session.lock(index, view), Status::invalid_state);
+  CHECK(view == nullptr);
+  fixture.kmt().zero_next(MockKmt::Call::lock);
+  CHECK_STATUS(session.lock(index, view), Status::malformed);
+  CHECK(view == nullptr);
+  CHECK_STATUS(session.lock(index, view), Status::ok);
+  CHECK(view != nullptr);
+  CHECK(session.invariants_hold());
+  void *second = nullptr;
+  CHECK_STATUS(session.lock(index, second), Status::invalid_state);
+  CHECK(second == nullptr);
+  CHECK_STATUS(session.unlock(index), Status::ok);
+  CHECK_STATUS(session.unlock(index), Status::invalid_state);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::unlock), 1u);
+  CHECK_STATUS(session.tear_down(), Status::ok);
+  CHECK_EQ(fixture.kmt().misuses(), 0u); }
+
+/* A view nobody gave back is given back by the teardown, before the allocation
+ * it addresses is destroyed. */
+TEST(guest_session_lock, the_teardown_gives_back_a_view_that_was_left_open)
+{ Fixture fixture;
+  GuestSession  session(fixture.kmt(), fixture.adapter());
+  void         *view = nullptr;
+  std::uint32_t index = 0u;
+  CHECK_STATUS(session.open_device(), Status::ok);
+  CHECK_STATUS(session.allocate(descriptor.bytes(), descriptor.size(), index), Status::ok);
+  CHECK_STATUS(session.lock(index, view), Status::ok);
+  CHECK_STATUS(session.tear_down(), Status::ok);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::unlock), 1u);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::destroy_allocation), 1u);
+  CHECK(session.invariants_hold());
+  CHECK_EQ(fixture.kmt().open_objects(), 1u);
+  CHECK_EQ(fixture.kmt().misuses(), 0u); }
 
 /* The vertical blank is the adapter's, waited on through the session's device:
  * without one there is nothing to wait on. */

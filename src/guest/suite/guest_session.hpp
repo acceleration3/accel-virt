@@ -1,8 +1,9 @@
 /* The kernel objects one scenario creates on the adapter - a device, its
- * allocations and their GPU virtual addresses, a paging queue and a context -
- * each step refused until the object it needs exists, and all of them
- * destroyed in reverse by tear_down() or the destructor whatever failed. A
- * handle or address of 0 answered as success is malformed and not kept. */
+ * allocations with their GPU virtual addresses and CPU views, a paging queue
+ * and a context - each step refused until the object it needs exists, and all
+ * of them released in reverse by tear_down() or the destructor whatever
+ * failed. A handle, address or view of 0 answered as success is malformed and
+ * not kept. */
 #ifndef AV_GUEST_SESSION_HPP
 #define AV_GUEST_SESSION_HPP
 
@@ -26,6 +27,10 @@ public:
     [[nodiscard]] Status open_device();
     /* The slot the allocation took, in `index`. */
     [[nodiscard]] Status allocate(const uint8_t *descriptor, uint32_t size, uint32_t &index);
+    /* The CPU view of the allocation in that slot, held until unlock() or the
+     * teardown gives it back. */
+    [[nodiscard]] Status lock(uint32_t index, void *&view);
+    [[nodiscard]] Status unlock(uint32_t index);
     [[nodiscard]] Status open_paging_queue();
     /* Resident, then mapped over `pages`, each paging fence awaited. */
     [[nodiscard]] Status map(uint32_t index, uint64_t pages, uint64_t &address);
@@ -51,7 +56,7 @@ private:
     template <typename Handle>
     [[nodiscard]] Status accept(Status status, const Handle &value) const
     {
-        return status == Status::ok && value == 0u ? Status::malformed : status;
+        return status == Status::ok && value == Handle{} ? Status::malformed : status;
     }
     void                 note(Status &first, Status status);
 
@@ -59,6 +64,7 @@ private:
     uint32_t adapter_;
     uint32_t device_;
     uint32_t allocations_[max_allocations];
+    void    *views_[max_allocations];
     uint64_t addresses_[max_allocations];
     uint64_t pages_[max_allocations];
     uint32_t allocation_count_;

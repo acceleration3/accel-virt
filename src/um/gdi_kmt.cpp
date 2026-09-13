@@ -19,6 +19,10 @@ static_assert(__builtin_offsetof(D3DKMT_CREATEALLOCATION, pAllocationInfo2) == 0
 static_assert(__builtin_offsetof(D3DDDI_ALLOCATIONINFO2, hAllocation) == 0x00u);
 static_assert(__builtin_offsetof(D3DDDI_ALLOCATIONINFO2, pPrivateDriverData) == 0x10u);
 static_assert(__builtin_offsetof(D3DDDI_ALLOCATIONINFO2, PrivateDriverDataSize) == 0x18u);
+static_assert(__builtin_offsetof(D3DKMT_LOCK2, hDevice) == 0x00u);
+static_assert(__builtin_offsetof(D3DKMT_LOCK2, hAllocation) == 0x04u);
+static_assert(__builtin_offsetof(D3DKMT_LOCK2, pData) == 0x10u);
+static_assert(__builtin_offsetof(D3DKMT_UNLOCK2, hAllocation) == 0x04u);
 static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, hAdapter) == 0x00u);
 static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, hDevice) == 0x04u);
 static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, VidPnSourceId) == 0x08u);
@@ -152,6 +156,27 @@ Status GdiKmt::destroy_allocation(uint32_t device, uint32_t allocation)
     request.phAllocationList = &handle;
     request.AllocationCount = 1u;
     return answer(D3DKMTDestroyAllocation2(&request));
+}
+
+/* D3DDDICB_LOCK2FLAGS is one 32-bit Reserved field in WDDM 3.2: a user-mode
+ * lock asks for nothing and gets the view VidMm placed, which for an
+ * allocation in a CPU-visible segment is the hostmem BAR itself. */
+Status GdiKmt::lock(uint32_t device, uint32_t allocation, void *&view)
+{
+    D3DKMT_LOCK2 request = {};
+    request.hDevice = device;
+    request.hAllocation = allocation;
+    const Status status = answer(D3DKMTLock2(&request));
+    view = status == Status::ok ? request.pData : nullptr;
+    return status;
+}
+
+Status GdiKmt::unlock(uint32_t device, uint32_t allocation)
+{
+    D3DKMT_UNLOCK2 request = {};
+    request.hDevice = device;
+    request.hAllocation = allocation;
+    return answer(D3DKMTUnlock2(&request));
 }
 
 Status GdiKmt::create_paging_queue(uint32_t device, uint32_t &queue, uint32_t &fence_object)

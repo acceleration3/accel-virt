@@ -8,6 +8,7 @@
 #include "guest/suite/allocation_scenario.hpp"
 #include "guest/suite/fence_stress_scenario.hpp"
 #include "guest/suite/gpu_mapping_scenario.hpp"
+#include "guest/suite/host_visible_scenario.hpp"
 #include "guest/suite/submission_scenario.hpp"
 #include "guest/suite/timeout_scenario.hpp"
 #include "guest/suite/vsync_scenario.hpp"
@@ -42,6 +43,7 @@ private:
     AllocationScenario allocation_;
     GpuMappingScenario mapping_;
     SubmissionScenario submission_;
+    HostVisibleScenario host_visible_;
     VsyncScenario       vsync_;
     FenceStressScenario stress_;
     TimeoutScenario     timeout_;

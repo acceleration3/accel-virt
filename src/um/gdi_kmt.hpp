@@ -33,6 +33,8 @@ public:
     Status   create_allocation(uint32_t device, const uint8_t *descriptor, uint32_t size,
                                uint32_t &allocation) override;
     Status   destroy_allocation(uint32_t device, uint32_t allocation) override;
+    Status   lock(uint32_t device, uint32_t allocation, void *&view) override;
+    Status   unlock(uint32_t device, uint32_t allocation) override;
     Status   create_paging_queue(uint32_t device, uint32_t &queue, uint32_t &fence_object) override;
     Status   destroy_paging_queue(uint32_t queue) override;
     Status   make_resident(uint32_t queue, uint32_t allocation, uint64_t &paging_fence) override;

@@ -27,6 +27,11 @@ public:
     virtual Status   create_allocation(uint32_t device, const uint8_t *descriptor, uint32_t size,
                                        uint32_t &allocation) = 0;
     virtual Status   destroy_allocation(uint32_t device, uint32_t allocation) = 0;
+    /* The process's CPU view of an allocation, in `view`: for one in a
+     * CPU-visible segment, the host's own memory through the hostmem BAR. It
+     * stays addressable until unlock. */
+    virtual Status   lock(uint32_t device, uint32_t allocation, void *&view) = 0;
+    virtual Status   unlock(uint32_t device, uint32_t allocation) = 0;
     /* A paging queue and the synchronization object its fences are waited on. */
     virtual Status   create_paging_queue(uint32_t device, uint32_t &queue, uint32_t &fence_object) = 0;
     virtual Status   destroy_paging_queue(uint32_t queue) = 0;

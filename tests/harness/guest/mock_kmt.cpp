@@ -16,9 +16,9 @@ constexpr std::uint32_t io_timeout = 0xC00000B5u;
 
 MockKmt::MockKmt()
     : identities_{}, versions_{}, adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{},
-      zeroing_{}, calls_{}, objects_{}, next_handle_(first_handle), next_address_(first_address), next_fence_(0u),
-      success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u), blank_period_(ticks_per_second / 60u),
-      slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u) {}
+      zeroing_{}, calls_{}, objects_{}, view_{}, locked_(0u), next_handle_(first_handle),
+      next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
+      blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u) {}
 
 bool MockKmt::begin(Call call)
 {
@@ -164,10 +164,34 @@ Status MockKmt::destroy_allocation(std::uint32_t device, std::uint32_t allocatio
 {
     if (!begin(Call::destroy_allocation)) return refuse(last_code_);
     const Object *const object = find(Kind::allocation, allocation);
-    if (object == nullptr || object->owner != device) return misuse();
+    if (object == nullptr || object->owner != device || locked_ == allocation) return misuse();
     for (const Object &mapping : objects_)
         if (mapping.kind == Kind::mapping && mapping.owner == allocation) return misuse();
     return close(Kind::allocation, allocation);
+}
+
+/* One allocation holds the view at a time: a second lock is a driver handing
+ * out memory it has already given away. */
+Status MockKmt::lock(std::uint32_t device, std::uint32_t allocation, void *&view)
+{
+    view = nullptr;
+    if (!begin(Call::lock)) return refuse(last_code_);
+    const Object *const object = find(Kind::allocation, allocation);
+    if (object == nullptr || object->owner != device || locked_ != 0u) return misuse();
+    if (zeroed(Call::lock)) return succeed();
+    locked_ = allocation;
+    view = view_;
+    return succeed();
+}
+
+/* The view keeps what was written through it, as the host's memory does. */
+Status MockKmt::unlock(std::uint32_t device, std::uint32_t allocation)
+{
+    if (!begin(Call::unlock)) return refuse(last_code_);
+    const Object *const object = find(Kind::allocation, allocation);
+    if (object == nullptr || object->owner != device || locked_ != allocation) return misuse();
+    locked_ = 0u;
+    return succeed();
 }
 
 Status MockKmt::create_paging_queue(std::uint32_t device, std::uint32_t &queue, std::uint32_t &fence_object)
@@ -342,5 +366,12 @@ std::uint32_t MockKmt::open_objects() const
 }
 
 std::uint32_t MockKmt::misuses() const { return misuses_; }
+
+std::uint32_t MockKmt::view_filled() const
+{
+    std::uint32_t filled = 0u;
+    for (const std::uint8_t byte : view_) filled += byte != 0u ? 1u : 0u;
+    return filled;
+}
 
 }  // namespace av
