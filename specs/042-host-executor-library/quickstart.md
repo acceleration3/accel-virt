@@ -280,7 +280,8 @@ and from feature 037 on, a skipped guest is not a pass
 
 ```bash
 virsh --connect qemu:///session list --all      # win11 must read "shut off"
-AV_GUEST_IMAGE=/home/accel/.local/share/libvirt/images/win11.qcow2 tools/gate.sh
+virsh --connect qemu:///session domblklist win11   # the qcow2 the next line wants
+AV_GUEST_IMAGE=<that qcow2> tools/gate.sh
 ```
 
 The image is the `win11` **session** domain's disk, so the domain holds the
