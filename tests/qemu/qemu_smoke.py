@@ -4,6 +4,7 @@ qtest's port I/O reads the PCI function a guest driver would see, and the
 realize failures a bad host-gpu property produces.
 
   qemu_smoke.py <qemu build directory> <echo executor library> <table-less library>
+                <this project's executor library>
 """
 import os
 import subprocess
@@ -77,7 +78,7 @@ def check(condition, message):
 
 
 def main():
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 5:
         sys.exit(__doc__)
     qemu = Qemu(sys.argv[1])
 
@@ -104,6 +105,12 @@ def main():
         check(reason in stderr, f"executor={executor}: {stderr.strip()}")
     (identity, _), stderr = qemu.config_registers_with("auto", f",executor={sys.argv[2]}", (0x00, 0x2C))
     check(identity == VIRTIO_GPU and not complaints(stderr), f"the echo executor: {stderr}")
+    # The library that answers for real, loaded into the real device: it has to
+    # survive QEMU's own dlopen, answer version 2, and have its sub_apis reach a
+    # capset - the first place the executor and the device meet outside a unit
+    # test (feature 042).
+    (identity, _), stderr = qemu.config_registers_with("auto", f",executor={sys.argv[4]}", (0x00, 0x2C))
+    check(identity == VIRTIO_GPU and not complaints(stderr), f"this project's executor: {stderr}")
     print("qemu_smoke: ok")
 
 

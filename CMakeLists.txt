@@ -156,6 +156,38 @@ configure_file(cmake/rvk_device.pc.in ${CMAKE_BINARY_DIR}/rvk_device.pc.in @ONLY
 file(GENERATE OUTPUT ${CMAKE_BINARY_DIR}/pkgconfig/rvk_device.pc INPUT ${CMAKE_BINARY_DIR}/rvk_device.pc.in)
 
 # ---- the patched QEMU: its own configuration, since it needs nothing else ----
+# ---- the executor library: the other end of src/device/abi/rvk_executor.h ---
+# Built in every configuration, which is why it is defined before AV_QEMU's
+# return rather than after it: the conformance suite runs it under ASan and
+# UBSan in the default configuration, and the qemu configuration points a real
+# device at the same object through its executor= property (feature 042).
+add_library(rvk_executor SHARED ${AV_EXECUTOR_ENTRY})
+# The host's own Vulkan, the way the QEMU device already takes it
+# (src/device/qemu/virtio-gpu-rvk-host.c calls vkCreateInstance directly). A
+# host with the loader but no GPU still loads this and enumerates nothing.
+if(NOT AV_VULKAN_LIBRARY)
+  message(FATAL_ERROR "libvulkan not found; the executor library runs commands on it")
+endif()
+target_link_libraries(rvk_executor PRIVATE av_core)
+target_include_directories(rvk_executor PRIVATE src)
+set_target_properties(rvk_executor PROPERTIES CXX_VISIBILITY_PRESET hidden
+                                              VISIBILITY_INLINES_HIDDEN ON)
+# The archive it links carries the whole core with default visibility, and this
+# object has exactly one thing to say: the symbol QEMU looks up. Anything else
+# reaching the dynamic table is surface nobody asked for.
+target_link_options(rvk_executor PRIVATE -Wl,--exclude-libs,ALL)
+
+# ---- two libraries that exist to be held to the ABI ------------------------
+# Built in every configuration, before AV_QEMU's return: the qemu smoke and
+# virtio-gpu suites load them, and so does the conformance suite, which is only
+# worth running against more than this project's newest library.
+add_library(rvk_echo_executor SHARED tests/qemu/echo_executor.cpp)
+target_include_directories(rvk_echo_executor PRIVATE src/device/abi)
+# A library that loads and answers no table, so the smoke test can prove realize
+# fails rather than a capset-less device coming up (feature 042).
+add_library(rvk_null_ops_executor SHARED tests/qemu/null_ops_executor.cpp)
+target_include_directories(rvk_null_ops_executor PRIVATE src/device/abi)
+
 if(AV_QEMU)
   enable_testing()
   add_custom_target(qemu ALL
@@ -163,11 +195,10 @@ if(AV_QEMU)
     DEPENDS rvk_device
     USES_TERMINAL
     COMMENT "QEMU with virtio-gpu-rvk")
-  # The executor the qtest suites name: the device's execution path without render-server.
-
   add_test(NAME qemu_smoke
            COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tests/qemu/qemu_smoke.py ${CMAKE_BINARY_DIR}/qemu
-                   $<TARGET_FILE:rvk_echo_executor> $<TARGET_FILE:rvk_null_ops_executor>)
+                   $<TARGET_FILE:rvk_echo_executor> $<TARGET_FILE:rvk_null_ops_executor>
+                   $<TARGET_FILE:rvk_executor>)
   # The driver's own request bytes, sent to the real device by tests/qemu.
   add_executable(gpu_request_bytes tests/qemu/gpu_request_bytes.cpp)
   target_link_libraries(gpu_request_bytes PRIVATE av_core)
@@ -309,38 +340,6 @@ add_test(NAME design_rules
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_design.py ${CMAKE_SOURCE_DIR})
 add_test(NAME symbol_tests
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_symbol_tests.py ${CMAKE_SOURCE_DIR})
-
-# ---- the executor library: the other end of src/device/abi/rvk_executor.h ---
-# Built in every configuration, not only under AV_QEMU: the conformance suite
-# has to run it under ASan and UBSan, and AV_QEMU returns before those flags are
-# set. The qemu configuration additionally points a real device at this same
-# object through its executor= property (feature 042).
-add_library(rvk_executor SHARED ${AV_EXECUTOR_ENTRY})
-# The host's own Vulkan, the way the QEMU device already takes it
-# (src/device/qemu/virtio-gpu-rvk-host.c calls vkCreateInstance directly). A
-# host with the loader but no GPU still loads this and enumerates nothing.
-if(NOT AV_VULKAN_LIBRARY)
-  message(FATAL_ERROR "libvulkan not found; the executor library runs commands on it")
-endif()
-target_link_libraries(rvk_executor PRIVATE av_core)
-target_include_directories(rvk_executor PRIVATE src)
-set_target_properties(rvk_executor PROPERTIES CXX_VISIBILITY_PRESET hidden
-                                              VISIBILITY_INLINES_HIDDEN ON)
-# The archive it links carries the whole core with default visibility, and this
-# object has exactly one thing to say: the symbol QEMU looks up. Anything else
-# reaching the dynamic table is surface nobody asked for.
-target_link_options(rvk_executor PRIVATE -Wl,--exclude-libs,ALL)
-
-# ---- two libraries that exist to be held to the ABI ------------------------
-# Built in every configuration, not only under AV_QEMU: the conformance suite
-# runs against them, and a suite whose only library is this project's newest
-# one has tested nothing. Neither needs QEMU.
-add_library(rvk_echo_executor SHARED tests/qemu/echo_executor.cpp)
-target_include_directories(rvk_echo_executor PRIVATE src/device/abi)
-# A library that loads and answers no table, so the smoke test can prove realize
-# fails rather than a capset-less device coming up (feature 042).
-add_library(rvk_null_ops_executor SHARED tests/qemu/null_ops_executor.cpp)
-target_include_directories(rvk_null_ops_executor PRIVATE src/device/abi)
 
 # ---- any executor library, held to the ABI this repository owns (FR-001) ----
 # Not under AV_QEMU: the suite has to run sanitized, and that configuration
