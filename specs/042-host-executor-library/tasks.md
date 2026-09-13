@@ -133,7 +133,7 @@ description: "Tasks: the host executor"
 - [X] T043 SC-002's three workloads in the conformance suite. With `AV_CONFORMANCE_GPU` set to a host GPU's UUID the suite opens real executors and checks 50 statements rather than 14; without it, what needs an executor is reported as skipped, so a machine with no GPU still runs it honestly. a Vulkan triangle, an OpenGL clear, an OpenCL vector add, built with the generated serializers and read back from the reply. Driving the same three from a real guest is feature 044
 - [X] T044 `docs/protocol.md` and `docs/kb/11-implementation-plan.md` describe version 2 and the import path
 - [X] T045 Feature 063's `contracts/generated_code.md` records that the no-STL line did not move, which is what settles its T016 for good
-- [ ] T046 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
+- [X] T046 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
 
 ---
 
