@@ -31,6 +31,7 @@ import pathlib
 import re
 import shutil
 import signal
+import struct
 import subprocess
 import sys
 import time
@@ -62,8 +63,20 @@ BUGCHECKS = {
     0xC4: "DRIVER_VERIFIER_DETECTED_VIOLATION", 0xC9: "DRIVER_VERIFIER_IOMANAGER_VIOLATION",
     0xD1: "DRIVER_IRQL_NOT_LESS_OR_EQUAL", 0xEF: "CRITICAL_PROCESS_DIED", 0x10E: "VIDEO_MEMORY_MANAGEMENT_INTERNAL",
     0x113: "VIDEO_DXGKRNL_FATAL_ERROR", 0x116: "VIDEO_TDR_FAILURE", 0x119: "VIDEO_SCHEDULER_INTERNAL_ERROR",
-    0x133: "DPC_WATCHDOG_VIOLATION", 0x139: "KERNEL_SECURITY_CHECK_FAILURE",
+    0x117: "VIDEO_TDR_TIMEOUT_DETECTED", 0x133: "DPC_WATCHDOG_VIOLATION",
+    0x139: "KERNEL_SECURITY_CHECK_FAILURE", 0x141: "VIDEO_ENGINE_TIMEOUT_DETECTED",
+    0x1A8: "VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP",
 }
+# DUMP_HEADER64: the signature it starts with, and where it keeps BugCheckCode.
+LIVE_DUMP_HEADER = b"PAGEDU64"
+LIVE_DUMP_CODE = 0x38
+# A live kernel dump is the guest telling on itself without bugchecking, and its
+# code says what for. A black screen is the one this driver expects until
+# something renders into the primary (features 042-044): dxgkrnl takes the dump
+# because the source shows nothing, and our pages are still zeros. Every other
+# code - a TDR above all - is this driver's own failure, and SC-005 says so.
+BLACK_SCREEN_LIVEDUMP = 0x1A8
+MEMORY_DUMP = "MEMORY.DMP"
 
 
 class StepFailed(Exception):
@@ -264,6 +277,7 @@ class GuestRun:
         self.log = []
         self.colours = 0
         self.heads = 0
+        self.unexpected_dump = None
 
     def say(self, line):
         self.log.append(line)
@@ -690,6 +704,32 @@ class GuestRun:
             return pulled
 
         self.say(f"collect: {self.step('collect.pull', pull)} files in {diagnostics}")
+        self.judge_dumps(diagnostics / "dumps")
+
+    def judge_dumps(self, dumps):
+        """What the guest's live kernel dumps were for: an expected black screen is
+        said out loud, and anything else fails the run (SC-005)."""
+        unexpected = []
+        black_screens = 0
+        for dump in sorted(dumps.glob("*.dmp")):
+            # The kernel dump belongs to a bugcheck harvest_panics already named.
+            if dump.name.upper() == MEMORY_DUMP:
+                continue
+            head = dump.read_bytes()[:LIVE_DUMP_CODE + 4]
+            if not head.startswith(LIVE_DUMP_HEADER) or len(head) < LIVE_DUMP_CODE + 4:
+                unexpected.append(f"{dump.name} is not a kernel dump")
+                continue
+            code = struct.unpack_from("<I", head, LIVE_DUMP_CODE)[0]
+            if code == BLACK_SCREEN_LIVEDUMP:
+                black_screens += 1
+            else:
+                unexpected.append(f"{dump.name} 0x{code:X} {BUGCHECKS.get(code, 'unknown')}")
+        if unexpected:
+            self.unexpected_dump = ", ".join(unexpected)
+            self.say(f"dumps failed: {self.unexpected_dump}")
+        elif black_screens:
+            self.say(f"dumps ok: {black_screens} live dump(s), every one "
+                     f"{BUGCHECKS[BLACK_SCREEN_LIVEDUMP]} - nothing renders into the primary yet")
 
     def collect_evidence(self, panicked):
         if not self.reach_guest(panicked):
@@ -798,7 +838,7 @@ class GuestRun:
             self.aftermath(failure)
         finally:
             self.finish()
-        verdict = 0 if failure is None else 1
+        verdict = 0 if failure is None and self.unexpected_dump is None else 1
         if before is not None and fingerprint(self.args.image) != before:
             self.say("image failed: the base image changed")
             verdict = 1

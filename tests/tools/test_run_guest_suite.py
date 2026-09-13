@@ -7,6 +7,7 @@ import json
 import os
 import pathlib
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -23,9 +24,22 @@ ONE_MONITOR = "display: dwm=1 services=rvkgpu monitors=1\n"
 """What the check stage says about a guest with one output."""
 PASSING_REPORT = "ok adapter.find\nrvktest: 23 passed, 0 failed\n"
 COLLECTED = "file C:\\rvk\\diag\\system.txt\r\ndump C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp\r\n"
+
+
+def live_dump(code):
+    """A kernel dump's first bytes as the fake guest serves them, one byte per
+    character: DUMP_HEADER64's signature and the bugcheck code it was taken for."""
+    head = bytearray(0x40)
+    head[:8] = b"PAGEDU64"
+    struct.pack_into("<I", head, 0x38, code)
+    return bytes(head).decode("latin-1")
+
+
+BLACK_SCREEN = live_dump(0x1A8)
+"""VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP: expected until something renders."""
 GUEST_FILES = {"C:\\rvk\\diag\\system.txt": "System events\n",
-               "C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp": "live dump",
-               "C:\\Windows\\MEMORY.DMP": "kernel dump"}
+               "C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp": BLACK_SCREEN,
+               "C:\\Windows\\MEMORY.DMP": live_dump(0xD1)}
 WITH_MEMORY_DUMP = COLLECTED + "dump C:\\Windows\\MEMORY.DMP\r\n"
 
 
@@ -106,7 +120,8 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("service=rvkgpu", (self.work / "device.txt").read_text())
         self.assertIn("rvkgpu: DriverEntry", (self.work / "rvkgpu.log").read_text())
         self.assertEqual((self.work / "diag" / "system.txt").read_text(), "System events\n")
-        self.assertEqual((self.work / "diag" / "dumps" / "WD-1.dmp").read_text(), "live dump")
+        self.assertEqual((self.work / "diag" / "dumps" / "WD-1.dmp").read_bytes(), BLACK_SCREEN.encode("latin-1"))
+        self.assertIn("guest: dumps ok: 1 live dump(s), every one VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP", result.stdout)
         self.assertEqual(sorted(p.name for p in (self.work / "symbols").iterdir()), ["rvkgpu.pdb", "rvkgpu.sys"])
         self.assertIn("guest: report ok: 23 passed", result.stdout)
         self.assertIn("guest: vsync ok: 60.00 blanks a second", result.stdout)
@@ -158,6 +173,29 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: report failed: no summary line (exit 0)", result.stdout)
         self.assert_clean()
 
+    def test_a_live_dump_that_is_not_the_expected_black_screen_fails_the_run(self):
+        """SC-005: a display TDR leaves a live kernel dump and recovers, so every
+        step can still pass while the driver has just been reset. Only
+        VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP is expected - nothing renders into
+        the primary until features 042-044 - and anything else fails the run."""
+        dumps = dict(GUEST_FILES)
+        dumps["C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp"] = live_dump(0x117)
+        self.script(files=dumps)
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("guest: dumps failed: WD-1.dmp 0x117 VIDEO_TDR_TIMEOUT_DETECTED", result.stdout)
+        self.assertIn("guest: report ok: 23 passed", result.stdout)
+        self.assert_clean()
+
+    def test_a_dump_the_runner_cannot_read_is_not_taken_for_a_black_screen(self):
+        dumps = dict(GUEST_FILES)
+        dumps["C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp"] = "truncated"
+        self.script(files=dumps)
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("guest: dumps failed: WD-1.dmp is not a kernel dump", result.stdout)
+        self.assert_clean()
+
     def test_a_bugcheck_is_named_and_its_kernel_dump_pulled_after_the_guest_reboots(self):
         self.script(panic={"during": "rvktest", "code": 0xD1},
                     outputs={"check": ONE_MONITOR, "rvktest": PASSING_REPORT, "collect": WITH_MEMORY_DUMP})
@@ -169,7 +207,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual((self.work / "panic.txt").read_text(), named + "\n")
         self.assertIn("guest: panic.reset ok", result.stdout)
         self.assertEqual(self.stage_calls()[-1], "collect -MemoryDump")
-        self.assertEqual((self.work / "diag" / "dumps" / "MEMORY.DMP").read_text(), "kernel dump")
+        self.assertEqual((self.work / "diag" / "dumps" / "MEMORY.DMP").read_bytes(), live_dump(0xD1).encode("latin-1"))
         self.assertNotIn("rescue", result.stdout)
         self.assertEqual(self.journal_lines()[-1], "powerdown")
         self.assert_clean()
@@ -190,7 +228,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("rvkgpu-rescue.log", launches[1])
         self.assertTrue((self.work / "qemu-rescue.log").exists())
         self.assertIn("guest: rescue.boot ok", result.stdout)
-        self.assertEqual((self.work / "diag" / "dumps" / "MEMORY.DMP").read_text(), "kernel dump")
+        self.assertEqual((self.work / "diag" / "dumps" / "MEMORY.DMP").read_bytes(), live_dump(0xD1).encode("latin-1"))
         self.assertEqual(self.journal_lines()[-1], "powerdown")
         self.assert_clean()
 
@@ -205,7 +243,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(self.stage_calls()[-1], "collect")
         self.assertFalse((self.work / "diag" / "dumps" / "MEMORY.DMP").exists())
-        self.assertEqual((self.work / "diag" / "dumps" / "WD-1.dmp").read_text(), "live dump")
+        self.assertEqual((self.work / "diag" / "dumps" / "WD-1.dmp").read_bytes(), BLACK_SCREEN.encode("latin-1"))
         self.assert_clean()
 
     def test_a_rescue_that_cannot_boot_either_is_reported(self):

@@ -7,7 +7,8 @@ log, and answers guest-exec and guest-file-read from a script.
 The script is JSON at $FAKE_GUEST_SCRIPT:
   stages     {"sign": [3010, 0], ...}: exit codes of successive calls of a stage
   outputs    {"check": "...", "rvktest": "..."}: standard output by stage
-  files      {"C:\\guest\\path": "content"}: what guest-file-read returns
+  files      {"C:\\guest\\path": "content"}: what guest-file-read returns, byte
+             per character (latin-1), so a dump's binary header can be scripted
   rvktest    exit code of rvktest.exe
   panic      {"during": stage, "code": n, "loop": bool}: the guest bugchecks when
              the stage runs, then reboots; with loop, it bugchecks on every boot
@@ -175,7 +176,7 @@ class Guest:
             if arguments["mode"] == "rb" and path not in self.script.get("files", {}):
                 return json.dumps({"error": {"class": "GenericError", "desc": f"no file {path}"}}).encode()
             handle = len(self.files) + 1000
-            self.files[handle] = [path, b"", self.script.get("files", {}).get(path, "").encode()]
+            self.files[handle] = [path, b"", self.script.get("files", {}).get(path, "").encode("latin-1")]
             return json.dumps({"return": handle}).encode()
         if command == "guest-file-write":
             data = base64.b64decode(arguments["buf-b64"])

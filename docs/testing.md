@@ -427,6 +427,13 @@ can leave the guest with no display.
     and a mouse move, and polls until it is lit at the same mode again. The
     system's idle timer needs no session, which is what makes display power
     testable where an in-guest mode switch is not.
+- **The dumps are judged, not just kept.** A display TDR recovers: every step
+  can pass while the driver has just been reset, and the only trace is a live
+  kernel dump in `C:\Windows\LiveKernelReports`. The runner reads each pulled
+  dump's `DUMP_HEADER64.BugCheckCode` and fails the run for any code but
+  `VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP` (0x1A8) - which is expected until
+  something renders into the primary, since dxgkrnl takes that dump when a
+  source shows nothing. Two of feature 038's five consecutive runs left one.
 - **The gate**: `tools/gate.sh` runs it when `AV_GUEST_IMAGE` names a prepared
   image, and says it skipped the guest otherwise. From feature 037 on a skipped
   guest is not a pass: no feature merges until the suite has run live, because

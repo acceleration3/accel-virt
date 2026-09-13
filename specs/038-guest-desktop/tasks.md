@@ -295,4 +295,32 @@ from, before it is fixed (FR-007).
   `MaxOverlayPlanes`, `MaxQueuedMultiPlaneOverlayFlipVSync` asserted zero
   individually, not only by the block comparison), and `test_miniport.cpp` (the
   overlay and gamma slots left empty).
-- [ ] T023 Five consecutive guest runs reach the desktop (SC-001) with no Verifier violation or display TDR (SC-005); `AV_GUEST_IMAGE=... tools/gate.sh` passes; docs/testing.md gains the screendump and mode-switch scenarios; merge; push
+- [X] T023 Five consecutive guest runs reach the desktop (SC-001) with no Verifier violation or display TDR (SC-005); `AV_GUEST_IMAGE=... tools/gate.sh` passes; docs/testing.md gains the screendump and mode-switch scenarios; merge; push
+
+  **Five runs, all green.** One output each: 1 monitor parented to the adapter,
+  1280x800 scanned out of the guest's primary, 18 modes listed with both the
+  driver offers among them, the unoffered 2560x1600 refused, the display dark
+  and lit again at the same mode, `rvktest` 29 passed, and vertical blank at
+  58.64-58.74 Hz (60 Hz nominal, 5% tolerance). No Verifier violation in any
+  run, and no bugcheck.
+
+  **What five runs found that one did not.** Runs 2 and 3 left a live kernel
+  dump behind - `C:\Windows\LiveKernelReports\WATCHDOG-*.dmp`, bugcheck code
+  **0x1A8 VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP** - while runs 1, 4 and 5 did
+  not. It is dxgkrnl telling on itself: it noticed a source showing nothing and
+  took a live dump without bugchecking, which is exactly right, because nothing
+  renders into the primary until the host executor and guest transport land
+  (042-044) and its pages are all zeros. Intermittent because it takes the
+  display-power dark window to notice.
+
+  The defect it exposed is in the runner, not the driver: it pulled every dump
+  and judged none of them, so a **display TDR - which recovers, and leaves
+  exactly this kind of dump - would have passed every step and the run.** SC-005
+  was not actually being asserted. `judge_dumps` now reads each pulled dump's
+  `DUMP_HEADER64.BugCheckCode` (offset 0x38 after the `PAGEDU64` signature),
+  says `dumps ok: N live dump(s), every one VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP`
+  for the expected one, and fails the run for any other code or for a dump it
+  cannot read; `MEMORY.DMP` is left to the bugcheck `harvest_panics` already
+  names. The fake guest serves file content one byte per character (latin-1) so
+  a dump header can be scripted, and the runner's tests cover the TDR code and
+  the unreadable dump.
