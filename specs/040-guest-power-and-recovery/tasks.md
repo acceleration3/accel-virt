@@ -43,7 +43,25 @@ description: "Tasks: real-guest power, restart and recovery"
 - [X] T007 [US1] Every DDI that touches the device refuses while power is down, tested in `tests/unit/core/adapter/test_adapter.cpp`: a flip, a cursor update, a scan-line query and a present answer `invalid_state` between D3 and D0 instead of touching a destroyed device
 - [X] T008 [US1] The L2 suspend/resume scenario in `tests/unit/scenarios/test_ddi_scenarios.cpp`, driving the real table through the sequence the contract names
 - [X] T009 [US1] The runner's `suspend` and `hibernate` scenarios in `tools/guest/run_guest_suite.py` (agent `guest-suspend-ram`, QMP `system_wakeup`; hibernation enabled inside the overlay for `guest-suspend-disk`, then the overlay booted again), each reported skipped with its reason where the machine does not offer the transition, with fake-guest tests in `tests/tools/test_run_guest_suite.py`
-- [ ] T010 [US1] Five S4 resumes with a passing `rvktest.exe` (SC-001), and S3 likewise where offered; record what the runs showed here
+- [X] T010 [US1] Five S4 resumes with a passing `rvktest.exe` (SC-001), and S3 likewise where offered; record what the runs showed here
+
+  **Five S4 resumes, each with the whole in-guest suite passing after it.**
+  `--hibernate 5`: the guest suspended to disk, QEMU exited, the overlay booted
+  again on the same configuration and the adapter came back every time -
+  `hibernate ok: the adapter came back from S4, 1 of 5` through `5 of 5`, with
+  `report ok: 29 passed` after each resume.
+
+  Two measuring mistakes came out of those runs, both in what the run reads
+  rather than in what the driver does, and both fixed:
+
+  - the sleep states were read once and cached, and the first read happens
+    before the stage that turns hibernation on, so a machine that had just
+    gained S4 was reported as offering none;
+  - the driver's rate window counted *reported* blanks, which dxgkrnl turns off
+    the moment nothing is waiting, so five resumes with an idle desktop ended
+    with "2.30 vertical blanks a second" for a timer that never left 60 Hz. The
+    window now counts the timer's own periods and says how many were reported;
+    the live guest then measures 58.75.
 
   **S3 on this machine cannot resume, and it is the firmware, not the driver.**
   The first live S3 bugchecked the guest. The driver's own log said where it was
@@ -136,7 +154,10 @@ description: "Tasks: real-guest power, restart and recovery"
 - [X] T018 [US2] The L2 scenario in `tests/unit/scenarios/test_ddi_scenarios.cpp`: fifty StopDevice/StartDevice cycles on one adapter, with the mock platform's allocation balance and handle counts asserted after the last
 - [X] T019 [US2] The runner's `cycle` scenario in `tools/guest/run_guest_suite.py` (`pnputil /disable-device` and `/enable-device`, `--power-cycles N`), the adapter started after each, Driver Verifier's pool tracking read after the last; with its fake-guest test and the `provision.ps1` stage it needs
 - [X] T020 [US2] The runner's `upgrade` scenario: a package with a higher version installed over the running one with no reboot, and the adapter started on the new version
-- [~] T021 [US2] Fifty cycles on the real guest: **done, and clean**. `cycle: 50 done`, and Driver Verifier after the last one: 459 pool allocations attempted, 459 succeeded, **current 8, peak 8** - the driver holds the same eight allocations after fifty disable/enable cycles as after one, and no bugcheck. Five upgrades are still to run (T020 builds the scenario).
+- [X] T021 [US2] Fifty cycles on the real guest: **done, and clean**. `cycle: 50 done`, and Driver Verifier after the last one: 459 pool allocations attempted, 459 succeeded, **current 8, peak 8** - the driver holds the same eight allocations after fifty disable/enable cycles as after one, and no bugcheck. Five upgrades have since run on the same guest, each installed over the
+  running driver with no reboot and the adapter started on the new version:
+  `0.35.1.0`, `0.35.3.0`, `0.35.6.0`, `0.35.10.0`, `0.35.15.0`, and then
+  `report ok: 29 passed` and `vsync ok: 58.75 blanks a second`.
 
   The run also found the runner reading the guest's own output wrongly: the guest ends its lines the Windows way, and a regex anchored at `$` without allowing `\r` never matched `cycle: 50 done`. Every anchored pattern that reads guest output now tolerates it
 

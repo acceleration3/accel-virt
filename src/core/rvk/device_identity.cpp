@@ -1,0 +1,70 @@
+#include "core/rvk/device_identity.hpp"
+
+#include "proto/context/gpu_identity.hpp"
+
+namespace av {
+
+DeviceIdentity::DeviceIdentity(Platform &platform)
+    : platform_(platform), started_on_(), known_(false), changed_(false) {}
+
+void DeviceIdentity::remember(const CapsetInfo &capset)
+{
+    platform_.require_irql_at_most(Irql::passive, "DeviceIdentity::remember");
+    started_on_ = capset;
+    known_ = true;
+    changed_ = false;
+}
+
+bool DeviceIdentity::accept(const CapsetInfo &capset)
+{
+    platform_.require_irql_at_most(Irql::passive, "DeviceIdentity::accept");
+    if (!known_) return true;
+    if (same_gpu(capset) && same_protocol(capset)) return true;
+    if (!changed_) platform_.log("rvkgpu: the device under this adapter is not the one it started on");
+    changed_ = true;
+    return false;
+}
+
+bool DeviceIdentity::known() const
+{
+    platform_.require_irql_at_most(Irql::dispatch, "DeviceIdentity::known");
+    return known_;
+}
+
+bool DeviceIdentity::changed() const
+{
+    platform_.require_irql_at_most(Irql::dispatch, "DeviceIdentity::changed");
+    return changed_;
+}
+
+void DeviceIdentity::forget()
+{
+    platform_.require_irql_at_most(Irql::passive, "DeviceIdentity::forget");
+    known_ = false;
+    changed_ = false;
+}
+
+bool DeviceIdentity::same_gpu(const CapsetInfo &capset) const
+{
+    const uint8_t *const started = started_on_.gpu().uuid();
+    const uint8_t *const found = capset.gpu().uuid();
+    for (size_t byte = 0u; byte < GpuIdentity::uuid_bytes; byte++)
+        if (started[byte] != found[byte]) return false;
+    return true;
+}
+
+/* The same major, and no older a minor: the device agreed to speak what this
+ * adapter started on, and cannot be asked to finish work in a dialect it has
+ * since lost. */
+bool DeviceIdentity::same_protocol(const CapsetInfo &capset) const
+{
+    return capset.version().major_version() == started_on_.version().major_version() &&
+           capset.version().minor_version() >= started_on_.version().minor_version();
+}
+
+bool DeviceIdentity::invariants_hold() const
+{
+    return known_ || !changed_;
+}
+
+}  // namespace av
