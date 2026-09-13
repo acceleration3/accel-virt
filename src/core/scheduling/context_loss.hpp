@@ -27,9 +27,10 @@ public:
     ContextLoss(const ContextLoss &) = delete;
     ContextLoss &operator=(const ContextLoss &) = delete;
 
-    /* DISPATCH: the TDR path runs in a DPC. `fence` is the submission the
-     * context died on, `why` what killed it. */
-    void                 lose(uint32_t context, uint32_t fence, Status why);
+    /* DISPATCH: the TDR path runs in a DPC. `context` is the handle dxgkrnl
+     * gave for it - the identity dxgkrnl itself uses - `fence` the submission
+     * it died on, and `why` what killed it. */
+    void                 lose(void *context, uint32_t fence, Status why);
     /* Losses whose owner has not been told. */
     uint32_t             pending() const;
     /* DISPATCH: tells dxgkrnl about every pending loss, stopping at the first
@@ -42,7 +43,7 @@ private:
     void log(uint32_t index) const;
 
     Platform &platform_;
-    uint32_t  contexts_[max_lost];
+    void     *contexts_[max_lost];
     uint32_t  fences_[max_lost];
     Status    whys_[max_lost];
     bool      told_[max_lost];

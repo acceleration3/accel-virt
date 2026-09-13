@@ -1186,6 +1186,48 @@ TEST(adapter_reset_engine, aborts_what_the_node_was_executing_and_keeps_it_runni
 /* VidSchiCheckNodeTimeout (dxgmms2.sys @1400c9b50) takes a responsive answer as
  * "no timeout this round", so an engine with work that has stopped moving must
  * say so: an answer that is always yes defers a hung host forever. */
+/* US3 of feature 040: a reset throws away the work on the node, and the context
+ * that submitted it is told it cannot be finished. The other process's context
+ * is untouched - a reset of one engine is not an outage. */
+TEST(adapter_reset_engine, loses_the_context_whose_work_it_threw_away_and_no_other)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord first_device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&first_device)), success);
+  av::DxgkargCreateContextRecord first = {};
+  first.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(first_device.hDevice, &first)), success);
+  av::DxgkargCreateDeviceRecord second_device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&second_device)), success);
+  av::DxgkargCreateContextRecord second = {};
+  second.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(second_device.hDevice, &second)), success);
+
+  av::DxgkargSubmitCommandVirtualRecord submit = {};
+  submit.hContext = first.hContext;
+  submit.DmaBufferVirtualAddress = 0x8000000000ull;
+  submit.SubmissionFenceId = 1u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  av::DxgkargResetEngineRecord reset = {0u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().reset_engine(&reset)), success);
+  CHECK_EQ(reset.LastAbortedFenceId, 1u);
+  /* One fault reported: the first context's, and nobody else's. */
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before).InterruptType, 4);   /* DMA_FAULTED */
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before).FenceId, 1u);
+
+  /* The other context still submits, and a reset with nothing queued loses
+   * nobody. */
+  submit.hContext = second.hContext;
+  submit.SubmissionFenceId = 2u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(first.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(second.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(first_device.hDevice)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(second_device.hDevice)), success); }
+
 TEST(adapter_query_engine_status, an_engine_that_stopped_moving_is_admitted)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);

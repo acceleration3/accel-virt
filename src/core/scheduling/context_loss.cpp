@@ -8,7 +8,7 @@ namespace av {
 ContextLoss::ContextLoss(Platform &platform)
     : platform_(platform), contexts_{}, fences_{}, whys_{}, told_{}, count_(0u) {}
 
-void ContextLoss::lose(uint32_t context, uint32_t fence, Status why)
+void ContextLoss::lose(void *context, uint32_t fence, Status why)
 {
     platform_.require_irql_at_most(Irql::dispatch, "ContextLoss::lose");
     for (uint32_t index = 0u; index < count_; index++)
@@ -46,8 +46,8 @@ void ContextLoss::log(uint32_t index) const
 {
     char       bytes[96];
     TextBuffer line(bytes, sizeof bytes);
-    line.append("rvkgpu: context ");
-    line.append_decimal(contexts_[index]);
+    line.append("rvkgpu: context 0x");
+    line.append_hex(reinterpret_cast<uintptr_t>(contexts_[index]), 16u);
     line.append(" lost at fence ");
     line.append_decimal(fences_[index]);
     line.append(" status ");

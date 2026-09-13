@@ -25,6 +25,13 @@ using av::Status;
 
 namespace {
 
+/* The handle dxgkrnl would have given a context: an identity, not an address
+ * anything dereferences. */
+void *handle(std::uint32_t id)
+{
+    return reinterpret_cast<void *>(static_cast<std::uintptr_t>(id) + 0x1000u);
+}
+
 class Fixture {
 public:
     Fixture() : dxgkrnl_(platform_, function_), interface_(platform_), notification_(platform_, interface_),
@@ -53,14 +60,14 @@ private:
 TEST(context_loss_lose, records_a_context_and_says_so_once)
 { Fixture fixture;
   fixture.platform().set_irql(Irql::dispatch);
-  fixture.losses().lose(7u, 3u, Status::not_found);
+  fixture.losses().lose(handle(7u), 3u, Status::not_found);
   CHECK_EQ(fixture.losses().pending(), 1u);
   CHECK_EQ(fixture.platform().logged(), 1u);
   /* The same context lost twice is one loss, and one line. */
-  fixture.losses().lose(7u, 4u, Status::invalid_state);
+  fixture.losses().lose(handle(7u), 4u, Status::invalid_state);
   CHECK_EQ(fixture.losses().pending(), 1u);
   CHECK_EQ(fixture.platform().logged(), 1u);
-  fixture.losses().lose(9u, 5u, Status::not_found);
+  fixture.losses().lose(handle(9u), 5u, Status::not_found);
   CHECK_EQ(fixture.losses().pending(), 2u);
   CHECK_EQ(fixture.platform().logged(), 2u);
   fixture.platform().set_irql(Irql::passive);
@@ -69,8 +76,8 @@ TEST(context_loss_lose, records_a_context_and_says_so_once)
 TEST(context_loss_report, tells_the_owner_of_every_loss_once)
 { Fixture fixture;
   fixture.platform().set_irql(Irql::dispatch);
-  fixture.losses().lose(1u, 11u, Status::not_found);
-  fixture.losses().lose(2u, 22u, Status::invalid_state);
+  fixture.losses().lose(handle(1u), 11u, Status::not_found);
+  fixture.losses().lose(handle(2u), 22u, Status::invalid_state);
   CHECK_STATUS(fixture.losses().report(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.losses().pending(), 0u);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);
@@ -84,7 +91,7 @@ TEST(context_loss_report, tells_the_owner_of_every_loss_once)
 TEST(context_loss_report, a_refused_report_leaves_the_loss_to_tell)
 { Fixture fixture;
   fixture.platform().set_irql(Irql::dispatch);
-  fixture.losses().lose(4u, 44u, Status::not_found);
+  fixture.losses().lose(handle(4u), 44u, Status::not_found);
   fixture.dxgkrnl().refuse_synchronize(0xC0000001u);
   CHECK(fixture.losses().report(fixture.notification()) != Status::ok);
   CHECK_EQ(fixture.losses().pending(), 1u);
@@ -97,7 +104,7 @@ TEST(context_loss_lose, a_table_full_of_losses_keeps_the_first_ones)
 { Fixture fixture;
   fixture.platform().set_irql(Irql::dispatch);
   for (std::uint32_t context = 0u; context < ContextLoss::max_lost + 4u; context++)
-      fixture.losses().lose(context, context, Status::not_found);
+      fixture.losses().lose(handle(context), context, Status::not_found);
   CHECK_EQ(fixture.losses().pending(), ContextLoss::max_lost);
   CHECK_STATUS(fixture.losses().report(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), ContextLoss::max_lost);

@@ -28,6 +28,9 @@ public:
 
     /* invalid_parameter for a fence not above the last submitted, or a full queue. */
     [[nodiscard]] Status submit(uint32_t fence);
+    /* The same, remembering whose submission it is: SubmitCommandVirtual names
+     * a context, and a reset has to say whose work it threw away. */
+    [[nodiscard]] Status submit(uint32_t fence, void *owner);
     /* The latest request wins; reported at the next completion. */
     [[nodiscard]] Status preempt(uint32_t fence);
     /* Completes and reports every queued fence, then any preemption; stops at
@@ -46,6 +49,9 @@ public:
      * and answers the fence that was executing - the last completed one when
      * nothing was queued. */
     uint32_t             abort_pending();
+    /* The same, with the context that submitted the fence that was executing,
+     * or null for a submission that named none. */
+    uint32_t             abort_pending(void *&owner);
 
     bool invariants_hold() const;
 
@@ -65,6 +71,9 @@ private:
     bool      preemption_requested_;
     bool      stopped_;
     uint64_t  progress_time_;
+    void     *owners_[capacity];
+    /* The owner of the submission being queued, between the two submits. */
+    void     *pending_owner_;
 
     friend struct ExecutionNodeProbe;
 };

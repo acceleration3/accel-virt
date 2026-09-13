@@ -24,6 +24,7 @@
 #include "core/scheduling/context_table.hpp"
 #include "core/scheduling/device_table.hpp"
 #include "core/adapter/power_transition.hpp"
+#include "core/scheduling/context_loss.hpp"
 #include "core/scheduling/engine_progress.hpp"
 #include "core/scheduling/execution_node.hpp"
 #include "core/scheduling/hw_queue_submissions.hpp"
@@ -309,6 +310,7 @@ private:
     ExecutionNode                  node_;
     EngineProgress                 progress_;
     PowerTransition                transition_;
+    ContextLoss                    losses_;
     InterruptNotification          notification_;
     SyntheticVsync                 vsync_;
     HardwareCursor                 cursor_;

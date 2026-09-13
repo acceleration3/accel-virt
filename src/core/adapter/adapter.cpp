@@ -93,7 +93,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       segment_(platform),
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
-      hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
+      hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), losses_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u),
       display_changed_(0u), started_(false), present_(true) {}
 
@@ -945,7 +945,16 @@ int32_t Adapter::reset_engine(DxgkargResetEngineRecord *request)
     platform_.require_irql_at_most(Irql::passive, "Adapter::reset_engine");
     if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
-    request->LastAbortedFenceId = node_.abort_pending();
+    /* Whose work was thrown away: its owner is told it cannot be finished, and
+     * every other context keeps running - a reset of one engine is not an
+     * outage (FR-002, FR-003). */
+    void *owner = nullptr;
+    request->LastAbortedFenceId = node_.abort_pending(owner);
+    if (owner != nullptr) {
+        losses_.lose(owner, request->LastAbortedFenceId, Status::conflict);
+        const Status told = losses_.report(notification_);
+        if (told != Status::ok) log_status("rvkgpu: ResetEngine loss", NtStatus(told).value());
+    }
     return NtStatus(Status::ok).value();
 }
 
@@ -1059,7 +1068,7 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
     const Context *context = contexts_.find(request->hContext);
     if (context == nullptr || !context->admits(request->DmaBufferVirtualAddress))
         return NtStatus(Status::invalid_parameter).value();
-    const Status status = node_.submit(request->SubmissionFenceId);
+    const Status status = node_.submit(request->SubmissionFenceId, request->hContext);
     if (status == Status::ok) static_cast<void>(dxgkrnl_.queue_dpc());
     return NtStatus(status).value();
 }

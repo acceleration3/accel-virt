@@ -9,7 +9,7 @@ namespace av {
 ExecutionNode::ExecutionNode(Platform &platform)
     : platform_(platform), lock_(platform, LockRank::execution_node), pending_{}, head_(0u), count_(0u),
       last_submitted_(0u), last_completed_(0u), preemption_fence_(0u), preemption_requested_(false),
-      stopped_(false), progress_time_(0u) {}
+      stopped_(false), progress_time_(0u), owners_{}, pending_owner_(nullptr) {}
 
 Status ExecutionNode::submit(uint32_t fence)
 {
@@ -20,9 +20,21 @@ Status ExecutionNode::submit(uint32_t fence)
     if (fence <= last_submitted_ || count_ == capacity) return Status::invalid_parameter;
     if (count_ == 0u) progress_time_ = platform_.interrupt_time();
     pending_[(head_ + count_) % capacity] = fence;
+    owners_[(head_ + count_) % capacity] = pending_owner_;
     count_++;
     last_submitted_ = fence;
     return Status::ok;
+}
+
+/* The owner travels through the member rather than the queue's own call, so the
+ * two submission DDIs share one path into it. */
+Status ExecutionNode::submit(uint32_t fence, void *owner)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::submit");
+    pending_owner_ = owner;
+    const Status queued = submit(fence);
+    pending_owner_ = nullptr;
+    return queued;
 }
 
 Status ExecutionNode::preempt(uint32_t fence)
@@ -114,10 +126,17 @@ void ExecutionNode::restart()
 
 uint32_t ExecutionNode::abort_pending()
 {
+    void *owner = nullptr;
+    return abort_pending(owner);
+}
+
+uint32_t ExecutionNode::abort_pending(void *&owner)
+{
     platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::abort_pending");
     SpinLockGuard lock(lock_);
     InvariantScope<ExecutionNode> guard(platform_, *this, "abort_pending");
     const uint32_t executing = count_ != 0u ? pending_[head_] : last_completed_;
+    owner = count_ != 0u ? owners_[head_] : nullptr;
     head_ = 0u;
     count_ = 0u;
     preemption_requested_ = false;
