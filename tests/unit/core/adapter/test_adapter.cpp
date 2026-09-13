@@ -1114,11 +1114,34 @@ TEST(adapter_reset_engine, aborts_what_the_node_was_executing_and_keeps_it_runni
   }
   CHECK_EQ(nt(fixture.adapter().reset_engine(nullptr)), invalid_parameter); }
 
-TEST(adapter_query_engine_status, the_one_engine_is_responsive)
+/* VidSchiCheckNodeTimeout (dxgmms2.sys @1400c9b50) takes a responsive answer as
+ * "no timeout this round", so an engine with work that has stopped moving must
+ * say so: an answer that is always yes defers a hung host forever. */
+TEST(adapter_query_engine_status, an_engine_that_stopped_moving_is_admitted)
 { Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
   av::DxgkargQueryEngineStatusRecord status = {0u, 0u, 0u};
   CHECK_EQ(nt(fixture.adapter().query_engine_status(&status)), success);
-  CHECK_EQ(status.EngineStatus, 1u);
+  CHECK_EQ(status.EngineStatus, 1u);   /* nothing queued: an idle engine is not hung */
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::DxgkargSubmitCommandVirtualRecord submit = {};
+  submit.hContext = context.hContext;
+  submit.DmaBufferVirtualAddress = 0x8000000000ull;
+  submit.SubmissionFenceId = 1u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+  status.EngineStatus = 0u;
+  CHECK_EQ(nt(fixture.adapter().query_engine_status(&status)), success);
+  CHECK_EQ(status.EngineStatus, 1u);   /* the first answer about a busy engine defers */
+  fixture.platform().advance_time(100u);
+  status.EngineStatus = 0u;
+  CHECK_EQ(nt(fixture.adapter().query_engine_status(&status)), success);
+  CHECK_EQ(status.EngineStatus, 0u);   /* it has not moved since: dxgkrnl may reset it */
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success);
   const av::DxgkargQueryEngineStatusRecord refused[] = {{1u, 0u, 0u}, {0u, 1u, 0u}};
   for (const av::DxgkargQueryEngineStatusRecord &request : refused) {
       av::DxgkargQueryEngineStatusRecord copy = request;

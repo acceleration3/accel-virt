@@ -23,6 +23,7 @@
 #include "core/platform/platform.hpp"
 #include "core/scheduling/context_table.hpp"
 #include "core/scheduling/device_table.hpp"
+#include "core/scheduling/engine_progress.hpp"
 #include "core/scheduling/execution_node.hpp"
 #include "core/scheduling/hw_queue_submissions.hpp"
 #include "core/scheduling/hw_queue_table.hpp"
@@ -300,6 +301,7 @@ private:
     HwQueueTable                   hw_queues_;
     HwQueueSubmissions             hw_submissions_;
     ExecutionNode                  node_;
+    EngineProgress                 progress_;
     InterruptNotification          notification_;
     SyntheticVsync                 vsync_;
     HardwareCursor                 cursor_;
