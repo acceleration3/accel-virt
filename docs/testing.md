@@ -447,9 +447,23 @@ can leave the guest with no display.
   (`powercfg /availablesleepstates`, the *available* half of it) and waits for
   QEMU's own SUSPEND event before waking, because waking a machine that has not
   reached S3 wakes nothing; `hibernate` turns hibernation on inside the overlay,
-  suspends to disk, and boots the overlay again. S3 is disabled at the machine
+  suspends to disk, and boots the overlay again `--hibernate N` times, running
+  the whole in-guest suite after each resume. S3 is disabled at the machine
   unless `--s3` says the firmware can resume from it - OVMF on q35 cannot, and
   the guest's own HAL bugchecks 0x5C when it tries.
+- **The recovery scenario** is `tdr`, and a run asks for it by telling the host
+  to misbehave: `--stall-ms N` holds every command of one context that long and
+  `--fault-after N` loses the device on its Nth, both aimed at one executor with
+  `--stall-context` (`RVK_ECHO_ONLY_NTH`), so the other contexts keep
+  completing. The guest is then asked for `rvktest.exe tdr` - `TimeoutScenario`,
+  two devices with a context each - and nothing else, because every other
+  scenario would be measuring the injection. The run wants the guest's verdict,
+  dxgkrnl's own event 4101 (the `timeouts` stage), and the live kernel report
+  the reset leaves, which is the one live dump a run may leave besides the black
+  screen. Until a context's batches reach the host executor (features 042 and
+  043, live in 044) a held context holds nothing the guest waits on, so the
+  guest half of this cannot time out yet; what the injection proves today is at
+  L3 and L4.
 - **The long run** is `--stress-minutes N`: the suite's `stress` scenario
   submits one fence at a time and waits for each for N minutes, waiting out a
   vertical blank between batches so the blank's interrupt is enabled and
