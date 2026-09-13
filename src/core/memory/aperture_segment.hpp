@@ -43,10 +43,10 @@ public:
      * @1400c7990) turns the identifier into a segment set and indexes the
      * adapter's segment pointers by bit position, so zero reaches a segment that
      * was never created. basicrender.sys answers 1 for the same reason. */
-    /* The descriptor VidMm is given for this segment; invalid_state before
-     * initialize, leaving it alone. `MemorySegments` is what answers
-     * DXGKQAITYPE_QUERYSEGMENT4 with it. */
-    [[nodiscard]] Status describe(DxgkSegmentDescriptor4Record &descriptor) const;
+    /* The descriptor VidMm is given for this segment. `MemorySegments` is what
+     * answers DXGKQAITYPE_QUERYSEGMENT4 with it, and what establishes first
+     * that this segment has a size worth describing. */
+    void                 describe(DxgkSegmentDescriptor4Record &descriptor) const;
     uint64_t             size() const;
 
     bool invariants_hold() const;

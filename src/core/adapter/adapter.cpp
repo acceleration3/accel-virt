@@ -148,11 +148,14 @@ void Adapter::open_region()
     if (mapped != Status::ok) close_region();
 }
 
-/* The device is going away, or is already gone: nothing is told, because there
- * is nothing left to tell it to. */
+/* The device is going away, is already gone, or would not give the driver its
+ * region. Either way the adapter has no host memory: the segment stops being
+ * offered, because a segment reported without storage behind it is one VidMm
+ * places allocations in and then writes into nothing (docs/kb/04-memory.md). */
 void Adapter::close_region()
 {
     region_blob_.abandon();
+    host_visible_.forget();
 }
 
 void Adapter::judge_device()

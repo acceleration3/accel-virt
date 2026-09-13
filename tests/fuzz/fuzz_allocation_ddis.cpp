@@ -14,6 +14,8 @@
 #include "core/ddi/dxgkarg_open_allocation_record.hpp"
 #include "core/display/display_sources.hpp"
 #include "core/memory/allocation_table.hpp"
+#include "core/memory/host_visible_segment.hpp"
+#include "core/memory/memory_segments.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
 #include "core/scheduling/device_table.hpp"
@@ -38,7 +40,8 @@ class Harness {
 public:
     Harness()
         : dxgkrnl_(platform_, function_), interface_(platform_), adapter_(platform_, &pdo_), segment_(platform_),
-          sources_(platform_), allocations_(platform_, segment_), devices_(platform_, allocations_, interface_),
+          sources_(platform_), host_visible_(platform_), segments_(platform_, segment_, host_visible_),
+          allocations_(platform_, segment_, segments_), devices_(platform_, allocations_, interface_),
           allocation_handles_{}, kernel_handles_{}, device_handles_{}, open_handles_{}
     {
         if (interface_.initialize(&dxgkrnl_.record()) != av::Status::ok) __builtin_trap();
@@ -144,6 +147,8 @@ private:
     av::Adapter               adapter_;
     av::ApertureSegment       segment_;
     av::DisplaySources        sources_;
+    av::HostVisibleSegment    host_visible_;
+    av::MemorySegments        segments_;
     av::AllocationTable       allocations_;
     av::DeviceTable           devices_;
     void                     *allocation_handles_[max_handles];

@@ -29,6 +29,22 @@ using av::VirtioPciLayout;
 using av::VirtioRegion;
 using av::Violation;
 
+namespace av {
+
+struct HostVisibleSegmentProbe {
+    /* A segment offered over a region that is not there, or not whole pages:
+     * what discover() never builds, and what the invariant is there to catch. */
+    static void offer_without_a_region(HostVisibleSegment &segment) { segment.offered_ = true; }
+    static void offer_a_partial_page(HostVisibleSegment &segment, std::uint64_t size, std::uint64_t base)
+    {
+        segment.offered_ = true;
+        segment.size_ = size;
+        segment.base_ = base;
+    }
+};
+
+}  // namespace av
+
 namespace {
 
 constexpr std::uint64_t bar_address = 0x4000000000ull;
@@ -134,7 +150,7 @@ TEST(host_visible_segment, describes_a_cpu_visible_segment_at_the_bar)
   segment.discover(function.bars(), layout_with(VirtioRegion(region_bar, 0x1000u, region_bytes)));
   segment.offer(capset(CapsetInfo::feature_host_visible_memory));
   DxgkSegmentDescriptor4Record descriptor = {};
-  CHECK_STATUS(segment.describe(descriptor), Status::ok);
+  segment.describe(descriptor);
   CHECK_EQ(descriptor.Flags, 0x14u);            /* CpuVisible | CacheCoherent, no Aperture */
   CHECK(descriptor.BaseAddress == 0);
   CHECK_EQ(descriptor.Size, region_bytes);
@@ -143,13 +159,16 @@ TEST(host_visible_segment, describes_a_cpu_visible_segment_at_the_bar)
   CHECK_EQ(descriptor.CpuHostApertureSizeInPages, 0u);
   CHECK_EQ(descriptor.SystemMemoryEndAddress, 0u); }
 
+/* An unoffered segment describes a segment of nothing; what keeps it out of the
+ * answer VidMm gets is MemorySegments, which does not count it. */
 TEST(host_visible_segment, an_unoffered_segment_describes_nothing)
 { MockPlatform platform;
   HostVisibleSegment segment(platform);
   DxgkSegmentDescriptor4Record descriptor = {};
   descriptor.Flags = 0xAAu;
-  CHECK_STATUS(segment.describe(descriptor), Status::invalid_state);
-  CHECK_EQ(descriptor.Flags, 0xAAu); }
+  segment.describe(descriptor);
+  CHECK_EQ(descriptor.Size, 0u);
+  CHECK(descriptor.CpuTranslatedAddress == 0); }
 
 /* StopDevice: the next start looks again, because the device it looks at may
  * be another one (feature 040, FR-005). */
@@ -175,3 +194,23 @@ TEST(host_visible_segment, every_call_keeps_its_irql_ceiling)
   segment.offer(capset(CapsetInfo::feature_host_visible_memory));
   CHECK(platform.claim(Violation::irql_ceiling));
   platform.set_irql(Irql::passive); }
+
+/* A segment offered over a region that is not whole pages, or over none at all,
+ * would have VidMm place allocations in memory that is not there. */
+TEST(host_visible_segment_invariants, an_offer_without_a_whole_region_is_caught)
+{ MockPlatform platform;
+  HostVisibleSegment nothing(platform);
+  av::HostVisibleSegmentProbe::offer_without_a_region(nothing);
+  CHECK(!nothing.invariants_hold());
+
+  HostVisibleSegment partial(platform);
+  av::HostVisibleSegmentProbe::offer_a_partial_page(partial, region_bytes + 1u, bar_address);
+  CHECK(!partial.invariants_hold());
+
+  HostVisibleSegment unaligned(platform);
+  av::HostVisibleSegmentProbe::offer_a_partial_page(unaligned, region_bytes, bar_address + 1u);
+  CHECK(!unaligned.invariants_hold());
+
+  HostVisibleSegment whole(platform);
+  av::HostVisibleSegmentProbe::offer_a_partial_page(whole, region_bytes, bar_address);
+  CHECK(whole.invariants_hold()); }

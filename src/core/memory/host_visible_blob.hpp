@@ -18,6 +18,7 @@
 namespace av {
 
 class VirtioGpuDevice;
+struct HostVisibleBlobProbe;
 
 class HostVisibleBlob {
 public:
@@ -56,6 +57,11 @@ public:
 
 private:
     static constexpr uint32_t map_cache_cached = 1u;   /* VIRTIO_GPU_MAP_CACHE_CACHED */
+    /* The largest of the three requests this sends is the 56-byte create, so a
+     * writer over `request_` cannot refuse one and its answer is not a branch
+     * anybody can take. */
+    static constexpr size_t   request_bytes = 64u;
+    static constexpr size_t   answer_bytes = 64u;
 
     [[nodiscard]] Status exchange(VirtioGpuDevice &device, size_t length, uint32_t &map_info);
 
@@ -63,8 +69,10 @@ private:
     uint32_t  resource_;
     uint64_t  offset_;
     bool      mapped_;
-    uint8_t   request_[64];
-    uint8_t   answer_[64];
+    friend struct HostVisibleBlobProbe;
+
+    uint8_t   request_[request_bytes];
+    uint8_t   answer_[answer_bytes];
 };
 
 }  // namespace av

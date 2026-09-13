@@ -22,6 +22,20 @@ using av::Status;
 using av::VirtioGpuDevice;
 using av::Violation;
 
+namespace av {
+
+struct HostVisibleBlobProbe {
+    /* A blob that says it is mapped with no resource behind it: what the class
+     * never builds, and what its invariant is there to catch. */
+    static void map_without_a_resource(HostVisibleBlob &blob)
+    {
+        blob.resource_ = 0u;
+        blob.mapped_ = true;
+    }
+};
+
+}  // namespace av
+
 namespace {
 
 constexpr std::uint16_t control_queue = 0u;
@@ -38,6 +52,8 @@ public:
     void answer_map_with(std::uint32_t map_info) { map_info_ = map_info; }
     void refuse_next() { refuse_ = true; }
     void answer_nothing() { silent_ = true; }
+    /* Bytes no device sends: too short to be a response header. */
+    void answer_garbage() { garbage_ = true; }
     std::uint32_t answered() const { return answered_; }
     FakeVirtqueueDevice &queue() { return queue_; }
 
@@ -48,6 +64,12 @@ private:
         if (host->silent_) return;
         const std::uint32_t asked = host->queue_.pending_type();
         if (asked == 0u) return;
+        if (host->garbage_) {
+            const std::uint8_t rubbish[8] = {0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE};
+            host->answered_++;
+            static_cast<void>(host->queue_.respond_all(rubbish, sizeof rubbish));
+            return;
+        }
         GpuResponse answer;
         if (host->refuse_) {
             host->refuse_ = false;
@@ -66,6 +88,7 @@ private:
     std::uint32_t       map_info_ = GpuResponse::map_cache_cached;
     std::uint32_t       answered_ = 0u;
     bool                refuse_ = false;
+    bool                garbage_ = false;
     bool                silent_ = false;
 };
 
@@ -108,6 +131,7 @@ TEST(host_visible_blob, is_created_mapped_and_released_in_reverse)
   CHECK(!blob.mapped());
   CHECK_STATUS(blob.map(fixture.device(), 4u * page), Status::ok);
   CHECK(blob.mapped());
+  CHECK(blob.invariants_hold());   /* mapped, with the resource behind it */
   CHECK_EQ(blob.offset(), 4u * page);
   CHECK_STATUS(blob.unmap(fixture.device()), Status::ok);
   CHECK(!blob.mapped());
@@ -197,3 +221,84 @@ TEST(host_visible_blob, is_passive_only)
   fixture.mapped().platform().set_irql(Irql::passive);
   CHECK(fixture.mapped().platform().claim(Violation::irql_ceiling));
   while (fixture.mapped().platform().claim(Violation::irql_ceiling)) {} }
+
+/* The device refusing each step in turn: a create it will not make, an unmap it
+ * will not take, and an unref it refuses. Each leaves the blob where it was,
+ * because what the driver believes about the device's memory has to be what the
+ * device said. */
+TEST(host_visible_blob, a_device_that_refuses_a_step_leaves_it_where_it_was)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  HostVisibleBlob blob(fixture.mapped().platform());
+  host.refuse_next();
+  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::not_supported);
+  CHECK(!blob.created());
+
+  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::ok);
+  CHECK_STATUS(blob.map(fixture.device(), page), Status::ok);
+  host.refuse_next();
+  CHECK_STATUS(blob.unmap(fixture.device()), Status::not_supported);
+  CHECK(blob.mapped());                        /* still the device's to hold */
+  CHECK_EQ(blob.offset(), page);
+
+  /* Destroying it unmaps first, so a refused unmap stops the destroy before it
+   * unrefs something the device still has placed. */
+  host.refuse_next();
+  CHECK_STATUS(blob.destroy(fixture.device()), Status::not_supported);
+  CHECK(blob.created());
+  CHECK(blob.mapped());
+
+  CHECK_STATUS(blob.unmap(fixture.device()), Status::ok);
+  host.refuse_next();
+  CHECK_STATUS(blob.destroy(fixture.device()), Status::not_supported);
+  CHECK(blob.created());
+  CHECK_STATUS(blob.destroy(fixture.device()), Status::ok);
+  CHECK(!blob.created()); }
+
+/* A device that stops answering: the blob is left as it was, not as the driver
+ * hoped. */
+TEST(host_visible_blob, a_silent_device_leaves_every_step_undone)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  HostVisibleBlob blob(fixture.mapped().platform());
+  host.answer_nothing();
+  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::not_found);
+  CHECK(!blob.created()); }
+
+TEST(host_visible_blob_invariants, a_mapping_with_no_resource_is_caught)
+{ MappedVirtioFunction mapped;
+  HostVisibleBlob blob(mapped.platform());
+  CHECK(blob.invariants_hold());
+  av::HostVisibleBlobProbe::map_without_a_resource(blob);
+  CHECK(!blob.invariants_hold()); }
+
+/* The device that held it is gone - a power transition destroyed it - so there
+ * is nothing to tell and nothing left to hold. */
+TEST(host_visible_blob_abandon, forgets_a_blob_whose_device_went_away)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  HostVisibleBlob blob(fixture.mapped().platform());
+  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::ok);
+  CHECK_STATUS(blob.map(fixture.device(), page), Status::ok);
+  const std::uint32_t answered = host.answered();
+  blob.abandon();
+  CHECK(!blob.created());
+  CHECK(!blob.mapped());
+  CHECK_EQ(blob.offset(), 0u);
+  CHECK_EQ(host.answered(), answered);   /* nothing was said to a device that is gone */
+  CHECK(blob.invariants_hold()); }
+
+/* A device that answers bytes no device sends is not a device to believe: the
+ * blob is left as it was rather than recorded from a reply that did not
+ * decode. */
+TEST(host_visible_blob, an_answer_that_does_not_decode_is_malformed)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  host.answer_garbage();
+  HostVisibleBlob blob(fixture.mapped().platform());
+  CHECK_STATUS(blob.create(fixture.device(), resource, page), Status::malformed);
+  CHECK(!blob.created()); }

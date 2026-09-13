@@ -43,10 +43,9 @@ bool     HostVisibleSegment::offered() const { return offered_; }
 uint64_t HostVisibleSegment::base() const    { return offered_ ? base_ : 0u; }
 uint64_t HostVisibleSegment::size() const    { return offered_ ? size_ : 0u; }
 
-Status HostVisibleSegment::describe(DxgkSegmentDescriptor4Record &descriptor) const
+void HostVisibleSegment::describe(DxgkSegmentDescriptor4Record &descriptor) const
 {
     platform_.require_irql_at_most(Irql::passive, "HostVisibleSegment::describe");
-    if (!offered_) return Status::invalid_state;
     descriptor = DxgkSegmentDescriptor4Record{};
     descriptor.Flags = flags;
     /* Its own linear space, which is also the offsets the device places blobs
@@ -56,7 +55,6 @@ Status HostVisibleSegment::describe(DxgkSegmentDescriptor4Record &descriptor) co
     descriptor.Size = size_;
     descriptor.CommitLimit = size_;
     descriptor.CpuTranslatedAddress = static_cast<int64_t>(base_);
-    return Status::ok;
 }
 
 bool HostVisibleSegment::invariants_hold() const

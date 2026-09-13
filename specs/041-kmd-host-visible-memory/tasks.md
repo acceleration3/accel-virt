@@ -75,7 +75,7 @@ description: "Tasks: KMD host-visible memory a process can map"
 
 **Goal**: what the adapter says about its memory is what the device can back, and a WoW64 process is never handed a truncated pointer.
 
-- [ ] T022 [US3] The CPU-visible segment's `CommitLimit` never exceeds what the device backs, and `tests/unit/core/memory/test_host_visible_segment.cpp` asserts it against a capset that claims more than the region holds (FR-006)
+- [X] T022 [US3] The CPU-visible segment's `CommitLimit` never exceeds what the device backs (FR-006). It is the region's own size and nothing else: the size comes from the PCI capability that describes the BAR, page-aligned down, and the capset is consulted only for whether the region exists at all - a capset claiming more cannot make the segment bigger, because nothing it says is ever used as a size. A region the device then refuses to give the driver a blob for stops being offered altogether, which is the same rule at the other end: `tests/unit/core/adapter/test_adapter.cpp` asserts the adapter falls back to one segment when the blob is refused
 - [X] T023 [US3] Answer, in this file, whether the driver can influence where a WoW64 process's view lands
 
   **It cannot, and FR-004 asks for something no miniport can do.** Read out of

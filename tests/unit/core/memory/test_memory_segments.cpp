@@ -42,6 +42,22 @@ using av::VirtioPciLayout;
 using av::VirtioRegion;
 using av::Violation;
 
+namespace av {
+
+struct ApertureSegmentProbe {
+    static void set_size(ApertureSegment &segment, std::uint64_t size) { segment.size_ = size; }
+};
+
+struct HostVisibleSegmentProbe {
+    static void offer_a_partial_page(HostVisibleSegment &segment, std::uint64_t size)
+    {
+        segment.offered_ = true;
+        segment.size_ = size;
+    }
+};
+
+}  // namespace av
+
 namespace {
 
 constexpr std::uint64_t gib = std::uint64_t{1} << 30u;
@@ -54,6 +70,10 @@ constexpr std::uint8_t  uuid[GpuIdentity::uuid_bytes] = {9};
 /* An adapter whose device offers the region, and one whose device does not. */
 class Fixture {
 public:
+    /* The segments themselves, for a test that has to break one. */
+    ApertureSegment    &aperture() { return aperture_; }
+    HostVisibleSegment &host_visible() { return host_visible_; }
+
     explicit Fixture(bool with_region) : aperture_(platform_), host_visible_(platform_),
         segments_(platform_, aperture_, host_visible_)
     {
@@ -217,6 +237,22 @@ TEST(memory_segments_report, before_the_aperture_is_sized_there_is_nothing_to_re
 
 /* What an allocation asks before it chooses a segment: whether this adapter has
  * host memory a process can map, and how much of it (feature 041, FR-001). */
+/* The list is only as sound as the segments in it: either one broken is the
+ * adapter telling VidMm about memory it does not have. */
+TEST(memory_segments_invariants, hold_only_while_both_segments_do)
+{ Fixture bare(false);
+  CHECK(bare.segments().invariants_hold());
+  Fixture offered(true);
+  CHECK(offered.segments().invariants_hold());
+
+  av::ApertureSegmentProbe::set_size(offered.aperture(), 4097u);
+  CHECK(!offered.segments().invariants_hold());
+  av::ApertureSegmentProbe::set_size(offered.aperture(), 4u * gib);
+  CHECK(offered.segments().invariants_hold());
+
+  av::HostVisibleSegmentProbe::offer_a_partial_page(offered.host_visible(), region_bytes + 1u);
+  CHECK(!offered.segments().invariants_hold()); }
+
 TEST(memory_segments_offers_host_visible, is_what_the_device_offered)
 { Fixture bare(false);
   CHECK(!bare.segments().offers_host_visible());

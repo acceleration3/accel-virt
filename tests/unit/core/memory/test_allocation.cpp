@@ -30,6 +30,9 @@ struct AperturePagesProbe {
 struct AllocationProbe {
     explicit AllocationProbe(Allocation &target) : allocation(target) {}
     void set_size(std::uint64_t size) { allocation.size_ = size; }
+    /* Opens with nobody holding them: what open() and close() never leave
+     * behind, and what the invariant is there to catch. */
+    void set_opens(std::uint32_t opens) { allocation.opens_ = opens; }
     /* An allocation whose aperture pages lost their own invariant. */
     void break_aperture() { AperturePagesProbe::forget_capacity(allocation.aperture_); }
     Allocation &allocation;
@@ -344,3 +347,20 @@ TEST(allocation_open, a_fence_page_belongs_to_its_device_and_a_shadow_does_not)
   CHECK_STATUS(shared.open(&first_device), Status::ok);
   CHECK_STATUS(shared.open(&second_device), Status::ok);
   CHECK(shared.invariants_hold()); }
+
+/* An allocation that is open with nobody holding it, or held by somebody with
+ * no opens, is a handle this driver has lost track of. */
+TEST(allocation_invariants, an_open_with_no_holder_is_detected)
+{ MockPlatform platform;
+  Segments segments(platform);
+  int device = 0;
+  Allocation allocation(platform, segments.segments(), shadow, 0x1000u);
+  AllocationProbe(allocation).set_opens(1u);
+  CHECK(!allocation.invariants_hold());
+  AllocationProbe(allocation).set_opens(0u);
+  CHECK(allocation.invariants_hold());
+  CHECK_STATUS(allocation.open(&device), Status::ok);
+  AllocationProbe(allocation).set_opens(0u);
+  CHECK(!allocation.invariants_hold());
+  AllocationProbe(allocation).set_opens(1u);
+  CHECK_STATUS(allocation.close(), Status::ok); }

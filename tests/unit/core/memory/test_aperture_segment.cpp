@@ -52,7 +52,7 @@ TEST(aperture_segment_describe, is_guest_system_memory_as_an_aperture)
 { MockPlatform platform; ApertureSegment segment(platform);
   CHECK_STATUS(segment.initialize(static_cast<std::int64_t>(8u * gib)), Status::ok);
   DxgkSegmentDescriptor4Record descriptor = {};
-  CHECK_STATUS(segment.describe(descriptor), Status::ok);
+  segment.describe(descriptor);
   CHECK_EQ(descriptor.Flags, 0x15u);   /* Aperture | CpuVisible | CacheCoherent */
   CHECK(descriptor.BaseAddress == 0xC0000000);
   CHECK(descriptor.Size == 8u * gib);
@@ -60,19 +60,22 @@ TEST(aperture_segment_describe, is_guest_system_memory_as_an_aperture)
   CHECK(descriptor.CpuTranslatedAddress == 0);
   CHECK_EQ(descriptor.SystemMemoryEndAddress, 0u); }
 
-TEST(aperture_segment_describe, before_initialize_there_is_no_segment)
+/* Before initialize the segment has no size, and MemorySegments is what refuses
+ * to report one: what this describes is a segment of nothing. */
+TEST(aperture_segment_describe, before_initialize_it_describes_an_empty_segment)
 { MockPlatform platform; ApertureSegment segment(platform);
   DxgkSegmentDescriptor4Record descriptor = {};
   descriptor.Flags = 0xAAu;
-  CHECK_STATUS(segment.describe(descriptor), Status::invalid_state);
-  CHECK_EQ(descriptor.Flags, 0xAAu); }
+  segment.describe(descriptor);
+  CHECK_EQ(descriptor.Size, 0u);
+  CHECK_EQ(descriptor.CommitLimit, 0u); }
 
 TEST(aperture_segment, is_passive_only)
 { MockPlatform platform; ApertureSegment segment(platform);
   platform.set_irql(Irql::dispatch);
   static_cast<void>(segment.initialize(static_cast<std::int64_t>(gib)));
   DxgkSegmentDescriptor4Record descriptor = {};
-  static_cast<void>(segment.describe(descriptor));
+  segment.describe(descriptor);
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling));
   while (platform.claim(Violation::irql_ceiling)) {} }

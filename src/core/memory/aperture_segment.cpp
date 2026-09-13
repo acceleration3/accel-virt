@@ -16,16 +16,14 @@ Status ApertureSegment::initialize(int64_t system_memory_bytes)
     return Status::ok;
 }
 
-Status ApertureSegment::describe(DxgkSegmentDescriptor4Record &descriptor) const
+void ApertureSegment::describe(DxgkSegmentDescriptor4Record &descriptor) const
 {
     platform_.require_irql_at_most(Irql::passive, "ApertureSegment::describe");
-    if (size_ == 0u) return Status::invalid_state;
     descriptor = DxgkSegmentDescriptor4Record{};
     descriptor.Flags = flags;
     descriptor.BaseAddress = base_address;
     descriptor.Size = size_;
     descriptor.CommitLimit = size_;
-    return Status::ok;
 }
 
 uint64_t ApertureSegment::size() const { return size_; }

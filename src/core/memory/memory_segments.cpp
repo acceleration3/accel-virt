@@ -51,14 +51,15 @@ Status MemorySegments::report(const AdapterInfoQuery &query) const
     if (out.pSegmentDescriptor != nullptr) {
         if (out.NbSegment < segments || out.SegmentDescriptorStride < sizeof(DxgkSegmentDescriptor4Record))
             return Status::invalid_parameter;
+        /* Both segments exist by now: the aperture because a sized one is what
+         * the guard above demands, and the host-visible one because it is only
+         * counted when it is offered. */
         DxgkSegmentDescriptor4Record descriptor = {};
-        status = aperture_.describe(descriptor);
-        if (status != Status::ok) return status;
+        aperture_.describe(descriptor);
         auto *bytes = static_cast<uint8_t *>(out.pSegmentDescriptor);
         platform_.copy(bytes, &descriptor, sizeof descriptor);
         if (segments > 1u) {
-            status = host_visible_.describe(descriptor);
-            if (status != Status::ok) return status;
+            host_visible_.describe(descriptor);
             platform_.copy(bytes + out.SegmentDescriptorStride, &descriptor, sizeof descriptor);
         }
         out.PagingBufferSegmentId = ApertureSegment::segment_id;

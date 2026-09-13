@@ -17,6 +17,8 @@
 
 namespace av {
 
+struct HostVisibleSegmentProbe;
+
 class CapsetInfo;
 class PciBaseAddresses;
 class VirtioPciLayout;
@@ -48,8 +50,9 @@ public:
      * offered. */
     uint64_t             base() const;
     uint64_t             size() const;
-    /* invalid_state unless offered, leaving `descriptor` alone. */
-    [[nodiscard]] Status describe(DxgkSegmentDescriptor4Record &descriptor) const;
+    /* Only meaningful once offered, which is what `MemorySegments` establishes
+     * before it asks. */
+    void                 describe(DxgkSegmentDescriptor4Record &descriptor) const;
 
     bool invariants_hold() const;
 
@@ -59,6 +62,8 @@ private:
      * mapped into an aperture. */
     static constexpr uint32_t flags = 0x14u;
     static constexpr uint8_t  host_visible_region = 1u;
+
+    friend struct HostVisibleSegmentProbe;
 
     Platform &platform_;
     uint64_t  base_;

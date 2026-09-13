@@ -250,6 +250,8 @@ public:
      * another device (feature 040, FR-005). */
     void                   answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid); }
     /* Whether the driver made its region blob and mapped it. */
+    /* A device with no room left for the region's blob. */
+    void                   refuse_the_blob() { refuse_blob_ = true; }
     bool                   created_blob() const { return created_blob_; }
     bool                   mapped_region() const { return mapped_region_; }
 
@@ -271,6 +273,12 @@ private:
          * and maps when the device offers a region (feature 041). */
         if (asked == create_blob || asked == map_blob) {
             av::GpuResponse answer;
+            if (fixture->refuse_blob_) {
+                answer.set(av::GpuResponse::err_out_of_memory);
+                static_cast<void>(fixture->control().respond_all(answer.bytes(),
+                                                                 static_cast<std::uint32_t>(answer.length())));
+                return;
+            }
             if (asked == map_blob) {
                 fixture->mapped_region_ = true;
                 answer.set_map_info(av::GpuResponse::map_cache_cached);
@@ -308,6 +316,7 @@ private:
     Adapter               adapter_;
     DisplayInfoAnswer     display_info_;
     av::CapsetInfo        capset_ = host_capset(first_gpu);
+    bool                  refuse_blob_ = false;
     bool                  created_blob_ = false;
     bool                  mapped_region_ = false;
     Answer                answer_ = Answer::display_info;
@@ -2892,3 +2901,28 @@ TEST(adapter_start_device, a_device_with_no_region_asks_for_no_blob)
   CHECK_EQ(fixture.start(), success);
   CHECK(!fixture.created_blob());
   CHECK(!fixture.mapped_region()); }
+
+/* A device that cannot give the driver its region is a device the driver runs
+ * without one: the adapter still starts, and the segment it reported is the
+ * aperture alone, because memory nobody can reach is worse than memory nobody
+ * was promised (feature 041, FR-001). */
+TEST(adapter_start_device, a_region_the_device_refuses_leaves_the_adapter_without_one)
+{ Fixture fixture;
+  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  fixture.refuse_the_blob();
+  const std::uint32_t logged = fixture.platform().logged();
+  CHECK_EQ(fixture.start(), success);
+  CHECK(fixture.platform().logged() > logged);   /* said once, with the status that stopped it */
+
+  std::uint32_t physical_adapter = 0u;
+  av::DxgkQuerySegmentOut4Record out = {};
+  DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = 11;
+  query.pInputData = &physical_adapter;
+  query.InputDataSize = sizeof physical_adapter;
+  query.pOutputData = &out;
+  query.OutputDataSize = sizeof out;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  /* And the segment is not offered: a segment with no storage behind it is one
+   * VidMm places allocations in and then writes into nothing. */
+  CHECK_EQ(out.NbSegment, 1u); }
