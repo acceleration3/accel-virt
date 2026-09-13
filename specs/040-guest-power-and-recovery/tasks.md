@@ -122,7 +122,7 @@ description: "Tasks: real-guest power, restart and recovery"
 ## Phase 6: What the feature promised
 
 - [ ] T024 A device that changed across hibernation - a different host GPU UUID, an older protocol version - is refused with its contexts reported lost and the desktop still working (FR-005), tested at L2 and L4
-- [ ] T025 `docs/kb/05-scheduling.md` gains what the timeout path actually asks for, and `docs/testing.md` the new L5 scenarios
+- [X] T025 `docs/kb/05-scheduling.md` gains what the timeout path actually asks for, and `docs/testing.md` the new L5 scenarios
 - [ ] T026 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
 
 ---

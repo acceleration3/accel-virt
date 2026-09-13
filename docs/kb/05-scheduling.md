@@ -109,11 +109,58 @@ The KMD must implement, and mean, all of:
 |---|---|
 | `DxgkDdiPreemptCommand` | Stop the currently running packet as soon as you can. Report `DMA_PREEMPTED` with the fence id you actually got to. |
 | `DxgkDdiCancelCommand` | Remove a not-yet-started packet from the queue. |
-| `DxgkDdiQueryEngineStatus` | Is the engine progressing? Used by the TDR watchdog. |
+| `DxgkDdiQueryEngineStatus` | Is the engine progressing? Used by the TDR watchdog - and read what that answer *does*, below. |
 | `DxgkDdiResetEngine` / `ResetHwEngine` | Reset one engine, keep the rest of the GPU alive. |
 | `DxgkDdiResetFromTimeout` | Full adapter reset. Called at PASSIVE. |
 | `DxgkDdiRestartFromTimeout` | Resume after a reset. |
 | `DxgkDdiQueryDependentEngineGroup` | Which engines must be reset together. |
+
+### What "responsive" costs (read from dxgmms2, feature 040)
+
+`VidSchiCheckNodeTimeout` (dxgmms2.sys @1400c9b50) is the periodic check:
+
+1. Elapsed time on the node is a difference of checkpoints times
+   `KeQueryTimeIncrement()`, compared against `g_TdrConfig + 4` (`TdrDelay`)
+   times 10,000,000 - seconds in 100 ns units.
+2. Past that, **and only for a device that allows long-running packets**
+   (`VidSchiRunningDeviceAllowsLongRunningPackets` @14004505c: every queued
+   packet accounted for, none in flight), it calls `DdiQueryEngineStatus`
+   (dxgkrnl.sys @140027dc0).
+3. **A successful call whose answer has bit 0 set makes the check return zero -
+   no timeout this round.** Otherwise it captures the running process, marks
+   the node timed out and goes on to `VidSchiReportHwHang`.
+
+So "responsive" is a deferral, granted once per check. A driver that answers it
+unconditionally - as this one did until feature 040 - defers a hung host
+forever: no TDR, no engine reset, no event 4101, a guest that simply stops.
+Answer it from movement: idle, or progress that has changed since the last time
+the question was asked.
+
+**Both DDIs are called from that DPC**, not at PASSIVE: each wrapper reaches for
+the current thread only when IRQL is below 2, and `DdiResetEngine`
+(dxgkrnl.sys @14006e0a4) checks that the driver returns at the IRQL it entered -
+a mismatch logs the display watchdog's own 0x113 class entry.
+
+### What a power transition must not do (feature 040)
+
+Windows suspends a GPU by calling `DxgkDdiSetPowerState` toward D3 and back to
+D0, and keeps everything else: every allocation, the VidPn, every context. Two
+things bite a remoting driver here, both found on a live guest:
+
+- **Anything that interrupts on a timer must stop.** dxgkrnl keeps asking for
+  vertical blanks across a suspend, and a blank reported to an adapter it has
+  not powered up - which is where the timer fires on the way out of S3 - is a
+  report from a device that is not there. Windows bugchecks for it.
+- **The interrupt stays connected across the transition.** An ISR that only
+  checks "does my device object exist" will run while the device is being built
+  again, on queues that are not activated yet.
+
+And one that is not the driver's: OVMF on q35 advertises S3 through ACPI and
+cannot resume from it. The guest wakes and its own HAL bugchecks **0x5C
+HAL_INITIALIZATION_FAILED (0x201, ..., STATUS_UNSUCCESSFUL)**, after the driver
+has completed D0 cleanly. The suite disables S3 at the machine
+(`-global ICH9-LPC.disable_s3=1`) rather than testing a resume the firmware
+cannot do.
 | `DxgkDdiCollectDbgInfo` / `CollectDbgInfo2` (3.2) | Dump state for the TDR report. |
 
 Default TDR timeout is 2 seconds of no progress. **A remoting driver will trip

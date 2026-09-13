@@ -440,6 +440,16 @@ can leave the guest with no display.
   realize - whether memory the GPU exports reaches a guest through the hostmem
   BAR, and whether the GPU can address guest pages directly (feature 039). A
   refused probe is an answer; the per-GPU results live in `docs/kb/04-memory.md`.
+- **The power scenarios** are what a laptop does to a GPU every day
+  (feature 040): `cycle` disables and enables the adapter `--power-cycles N`
+  times inside one provisioning stage and reads Driver Verifier's pool tracking
+  afterwards; `suspend` asks the guest what it offers before asking it to sleep
+  (`powercfg /availablesleepstates`, the *available* half of it) and waits for
+  QEMU's own SUSPEND event before waking, because waking a machine that has not
+  reached S3 wakes nothing; `hibernate` turns hibernation on inside the overlay,
+  suspends to disk, and boots the overlay again. S3 is disabled at the machine
+  unless `--s3` says the firmware can resume from it - OVMF on q35 cannot, and
+  the guest's own HAL bugchecks 0x5C when it tries.
 - **The long run** is `--stress-minutes N`: the suite's `stress` scenario
   submits one fence at a time and waits for each for N minutes, waiting out a
   vertical blank between batches so the blank's interrupt is enabled and
