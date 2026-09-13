@@ -434,6 +434,12 @@ can leave the guest with no display.
   `VIDEO_DXGKRNL_BLACK_SCREEN_LIVEDUMP` (0x1A8) - which is expected until
   something renders into the primary, since dxgkrnl takes that dump when a
   source shows nothing. Two of feature 038's five consecutive runs left one.
+- **The host probes** are the other thing only real hardware answers, and they
+  need no guest at all: `tools/host/probe_host_memory.py --qemu build-qemu/qemu`
+  starts one device per host GPU and prints what its feasibility probes found at
+  realize - whether memory the GPU exports reaches a guest through the hostmem
+  BAR, and whether the GPU can address guest pages directly (feature 039). A
+  refused probe is an answer; the per-GPU results live in `docs/kb/04-memory.md`.
 - **The long run** is `--stress-minutes N`: the suite's `stress` scenario
   submits one fence at a time and waits for each for N minutes, waiting out a
   vertical blank between batches so the blank's interrupt is enabled and
