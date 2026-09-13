@@ -129,9 +129,11 @@ Status VidPn::obtain(int32_t (*call)(void *, uint32_t, void **, const ModeSetInt
     mode_set = nullptr;
     mode_set_interface = nullptr;
     const Status status = NtStatus(call(handle_, owner, &mode_set, &mode_set_interface)).status();
-    if (status == Status::ok && mode_set_interface != nullptr && mode_set != nullptr) return Status::ok;
+    if (status == Status::ok && mode_set_interface != nullptr) return Status::ok;
     /* A call that failed holds nothing, whatever it left in the out parameters:
-     * keeping its interface makes the caller release a set it never acquired. */
+     * dxgkrnl writes the interface table before it decides the owner is not one
+     * this VidPn has, and keeping that table makes the caller use and release a
+     * mode set it never acquired. */
     mode_set = nullptr;
     mode_set_interface = nullptr;
     return status == Status::ok ? Status::malformed : status;
