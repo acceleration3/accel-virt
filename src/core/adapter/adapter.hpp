@@ -14,7 +14,9 @@
 #include "core/display/synthetic_vsync.hpp"
 #include "core/memory/allocation_table.hpp"
 #include "core/memory/aperture_segment.hpp"
+#include "core/memory/host_visible_blob.hpp"
 #include "core/memory/host_visible_segment.hpp"
+#include "core/memory/hostmem_placement.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/gpu_mmu_geometry.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
@@ -258,6 +260,11 @@ private:
      * up to can be told apart from it. A device that will not say leaves
      * nothing to compare, and the adapter runs as it did before. */
     void                 remember_device();
+    /* The whole host-visible region as one blob, so every offset VidMm can
+     * place an allocation at already has host memory behind it: VidMm maps a
+     * process's view itself and tells the driver nothing (feature 041). */
+    void                 open_region();
+    void                 close_region();
     /* D0: a guest restored onto another device cannot finish what it holds, so
      * the work queued on the one that is gone is reported lost (FR-005). */
     void                 judge_device();
@@ -310,6 +317,8 @@ private:
     GpuMmuGeometry                 geometry_;
     ApertureSegment                segment_;
     HostVisibleSegment             host_visible_;
+    HostVisibleBlob                region_blob_;
+    HostmemPlacement               placement_;
     MemorySegments                 memory_;
     DisplayInfoResponse            display_info_;
     DisplayModeList                modes_;

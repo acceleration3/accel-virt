@@ -88,11 +88,9 @@ process. **VidMm maps; the driver is never called to map anything for the CPU.**
 The driver's whole job is to have storage at the offset VidMm chose, and the
 `CpuTranslatedAddress` it reported is what makes that offset an address.
 
-**Decision.** One blob per host-visible allocation, created and mapped into the
-region when the first paging operation names its offset in this segment, and
-released when the allocation is destroyed. The blob outlives an unmap - the
-device keeps its contents (`docs/protocol.md:416-420`) - so a later re-map at
-another offset does not lose what the process wrote.
+**First shape, kept here because it is what the next reader will also try.** One
+blob per host-visible allocation, created and mapped when a paging operation
+names its offset. See below for why that cannot work.
 
 **Decision: nothing is evicted out of this segment.** A host-visible allocation
 is reported with the host-visible segment as its only supported segment and an
@@ -103,12 +101,32 @@ device would mean copying the whole allocation through the BAR. The region
 filling up is then a creation failure, which VidMm turns into a budget failure
 (FR-006), not a bugcheck.
 
-**Open, and the live guest is what answers it.** Which paging operation carries
-that first offset - `DXGK_OPERATION_TRANSFER` into the segment, or
-`DXGK_OPERATION_FILL` - is not settled by reading: both name a destination
-segment and address, and which one Windows issues for a never-yet-resident
-CPU-visible allocation depends on the allocation's backing store. The driver
-therefore handles **both**, and the L5 run says which one arrived.
+**And then the hole in that.** For a GPU-MMU driver VidMm issues no physical
+FILL or TRANSFER at all - those go to WDDMv1 drivers only, which is why
+`PagingRequest` already refuses them - and the only paging operation that names
+a segment placement is `UPDATE_PAGE_TABLE`, whose entries carry a segment id and
+a page frame. That arrives for an allocation the GPU is given an address for.
+An allocation a process only *locks* never needs one: VidMm maps
+`CpuTranslatedAddress + offset` itself and calls nobody. So a per-allocation
+blob mapped on residency would leave exactly the case this feature exists for -
+a process mapping host memory - with a BAR window and no storage behind it,
+reading zeros and losing what it wrote.
+
+**Decision, and it is simpler than what it replaces: the region is one blob.**
+The driver creates a single host-visible blob the size of the whole region at
+StartDevice and maps it at offset 0. Every offset VidMm can choose then already
+has host memory behind it, whether or not the driver is ever told which offset
+that is. Per-allocation blobs, and the whole question of which paging operation
+would have carried the offset, disappear.
+
+`HostmemPlacement` stays, because who holds which range is still worth knowing -
+it is what the executor will be told to read (feature 042), and what makes a
+second allocation in the same bytes a refusal rather than corruption - but
+nothing has to be mapped per allocation for a process's view to work.
+
+The price is that the region is committed on the host when the adapter starts:
+one memfd of the region's size. That is what the segment already promises VidMm
+it has, so committing it is the honest reading of the promise.
 
 **Decision.** A process's writes go straight through the BAR: no command is
 sent per access, which is what SC-002 measures.

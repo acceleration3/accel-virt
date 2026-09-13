@@ -87,6 +87,14 @@ Status HostVisibleBlob::exchange(VirtioGpuDevice &device, size_t length, uint32_
     return Status::ok;
 }
 
+void HostVisibleBlob::abandon()
+{
+    platform_.require_irql_at_most(Irql::passive, "HostVisibleBlob::abandon");
+    resource_ = 0u;
+    offset_ = 0u;
+    mapped_ = false;
+}
+
 bool     HostVisibleBlob::created() const  { return resource_ != 0u; }
 bool     HostVisibleBlob::mapped() const   { return mapped_; }
 uint32_t HostVisibleBlob::resource() const { return resource_; }

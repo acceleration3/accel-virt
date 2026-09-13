@@ -74,7 +74,11 @@ inside the region and is page-aligned; `count_` matches the live entries.
 
 ## `HostVisibleBlob` (object class)
 
-One per host-visible allocation, living with the allocation.
+One per adapter: the whole hostmem region as a single blob, created and mapped
+at offset 0 when the segment is offered, so every offset VidMm can place an
+allocation at already has host memory behind it. (VidMm maps a process's view
+itself and tells the driver nothing, so there is no moment at which a
+per-allocation blob could be created in time.)
 
 | State | Meaning |
 |---|---|

@@ -91,7 +91,8 @@ enum : int32_t {
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), budget_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
       resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), geometry_(platform),
-      segment_(platform), host_visible_(platform), memory_(platform, segment_, host_visible_),
+      segment_(platform), host_visible_(platform), region_blob_(platform), placement_(platform),
+      memory_(platform, segment_, host_visible_),
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), losses_(platform), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
@@ -132,8 +133,28 @@ void Adapter::remember_device()
     if (read == Status::ok) {
         identity_.remember(capset);
         host_visible_.offer(capset);
+        open_region();
     }
     log_status("rvkgpu: device capset", NtStatus(read).value());
+}
+
+void Adapter::open_region()
+{
+    if (!host_visible_.offered()) return;
+    placement_.open(host_visible_.size());
+    const Status created = region_blob_.create(device_.object(), HostVisibleBlob::first_resource_id,
+                                               host_visible_.size());
+    const Status mapped = created == Status::ok ? region_blob_.map(device_.object(), 0u) : created;
+    log_status("rvkgpu: host-visible region", NtStatus(mapped).value());
+    if (mapped != Status::ok) close_region();
+}
+
+/* The device is going away, or is already gone: nothing is told, because there
+ * is nothing left to tell it to. */
+void Adapter::close_region()
+{
+    region_blob_.abandon();
+    placement_.close();
 }
 
 void Adapter::judge_device()
@@ -142,7 +163,13 @@ void Adapter::judge_device()
     CapsetInfo     capset;
     CapsetExchange exchange(platform_, device_.object());
     if (exchange.read(capset) != Status::ok) return;
-    if (identity_.accept(capset)) return;
+    if (identity_.accept(capset)) {
+        /* The same device, built again: its region holds nothing of what it
+         * held before, so the blob is made again on the device that is there
+         * now. */
+        open_region();
+        return;
+    }
     /* Whatever was queued on the device that is gone will never complete: its
      * owner is told now rather than left waiting for a fence nobody will
      * signal. The display is not this - it is the scanout the transition
@@ -232,6 +259,7 @@ int32_t Adapter::stop_device()
     cursor_.release();
     mappings_.unmap_all();
     identity_.forget();
+    close_region();
     host_visible_.forget();
     started_ = false;
     const int32_t stopped = NtStatus(status).value();
@@ -363,6 +391,7 @@ int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)
     if (power_state > power_d0 && power_state <= power_d3) {
         platform_.log("rvkgpu: SetPowerState D3");
         static_cast<void>(transition_.hold(device_.constructed(), scanning_out()));
+        close_region();
         /* Before the device goes: a vertical blank reported to an adapter that
          * is not powered - or to one on its way out of S3, before dxgkrnl has
          * powered it up - is what bugchecks the guest. */

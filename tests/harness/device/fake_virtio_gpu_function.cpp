@@ -8,7 +8,8 @@ namespace av {
 
 FakeVirtioGpuFunction::FakeVirtioGpuFunction()
     : config_{}, resources_(), message_interrupts_(3u), virtio_bar_length_(virtio_bar_length),
-      virtio_bar_present_(true), common_(), isr_(), device_config_(0x1000u), notify_(0x1000u)
+      virtio_bar_present_(true), common_(), isr_(), device_config_(0x1000u), notify_(0x1000u),
+      next_capability_(first_added_capability)
 {
     const FixtureFile fixture("virtio_gpu_pci_config.bin");
     std::memcpy(config_, fixture.bytes(), config_bytes);
@@ -24,6 +25,36 @@ FakeVirtioGpuFunction::FakeVirtioGpuFunction()
     device_config_.set_u32(8u, 1u);   /* num_scanouts */
     device_config_.set_u32(12u, 1u);  /* num_capsets */
     rebuild_resources();
+}
+
+void FakeVirtioGpuFunction::add_shared_memory_region(std::uint8_t id, std::uint8_t bar, std::uint64_t offset,
+                                                     std::uint64_t length, std::uint64_t bar_address)
+{
+    constexpr std::uint8_t vendor_capability = 0x09u;
+    constexpr std::uint8_t shared_memory_type = 8u;
+    constexpr std::uint8_t capability_bytes = 24u;
+    const std::uint8_t at = next_capability_;
+    next_capability_ = static_cast<std::uint8_t>(at + capability_bytes);
+    config_[at] = vendor_capability;
+    config_[at + 1u] = config_[0x34u];   /* the chain this one goes in front of */
+    config_[at + 2u] = capability_bytes;
+    config_[at + 3u] = shared_memory_type;
+    config_[at + 4u] = bar;
+    config_[at + 5u] = id;
+    const std::uint32_t offset_low = static_cast<std::uint32_t>(offset);
+    const std::uint32_t length_low = static_cast<std::uint32_t>(length);
+    const std::uint32_t offset_high = static_cast<std::uint32_t>(offset >> 32u);
+    const std::uint32_t length_high = static_cast<std::uint32_t>(length >> 32u);
+    std::memcpy(config_ + at + 8u, &offset_low, 4u);
+    std::memcpy(config_ + at + 12u, &length_low, 4u);
+    std::memcpy(config_ + at + 16u, &offset_high, 4u);
+    std::memcpy(config_ + at + 20u, &length_high, 4u);
+    config_[0x34u] = at;
+    const std::uint32_t low = static_cast<std::uint32_t>(bar_address) | 0xCu;
+    const std::uint32_t high = static_cast<std::uint32_t>(bar_address >> 32u);
+    std::memcpy(config_ + 0x10u + 4u * bar, &low, 4u);
+    std::memcpy(config_ + 0x14u + 4u * bar, &high, 4u);
+    resources_.add_memory(bar_address, static_cast<std::uint32_t>(length));
 }
 
 void FakeVirtioGpuFunction::rebuild_resources()

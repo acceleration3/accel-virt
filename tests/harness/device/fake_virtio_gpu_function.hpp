@@ -37,6 +37,11 @@ public:
     void set_message_interrupts(std::uint32_t count);
     void set_virtio_bar_length(std::uint32_t length);
     void remove_virtio_bar_resource();
+    /* A virtio shared memory capability (cfg_type 8) at the head of the
+     * capability list, as a device with a hostmem region presents one. The
+     * region needs a resource of its own, which firmware assigns like any BAR. */
+    void add_shared_memory_region(std::uint8_t id, std::uint8_t bar, std::uint64_t offset,
+                                  std::uint64_t length, std::uint64_t bar_address);
 
     std::uint8_t          *config_space();
     const FakeResourceList &resources() const;
@@ -56,6 +61,10 @@ private:
 
     std::uint8_t      config_[config_bytes];
     FakeResourceList  resources_;
+    /* Where a capability this harness adds goes: past everything the captured
+     * configuration space already holds. */
+    static constexpr std::uint8_t first_added_capability = 0xC0u;
+
     std::uint32_t     message_interrupts_;
     std::uint32_t     virtio_bar_length_;
     bool              virtio_bar_present_;
@@ -63,6 +72,7 @@ private:
     FakeIsrRegister   isr_;
     FakeRegisterBytes device_config_;
     FakeRegisterBytes notify_;
+    std::uint8_t      next_capability_;
 };
 
 }  // namespace av

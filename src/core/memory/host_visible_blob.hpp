@@ -41,6 +41,10 @@ public:
     /* Unmaps first if mapped, then unrefs: the device refuses to release a
      * resource still placed in its region. */
     [[nodiscard]] Status destroy(VirtioGpuDevice &device);
+    /* The device that held it is gone - a power transition destroyed it, or it
+     * turned out to be another device - so there is nothing to tell and
+     * nothing left to hold. */
+    void                 abandon();
 
     bool     created() const;
     bool     mapped() const;

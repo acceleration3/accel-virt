@@ -185,16 +185,22 @@ private:
 };
 
 /* One adapter as dxgkrnl sees it: AddDevice done, StartDevice not yet. */
+constexpr std::uint32_t create_blob = 0x010Cu;       /* VIRTIO_GPU_CMD_RESOURCE_CREATE_BLOB */
+constexpr std::uint32_t map_blob = 0x0208u;          /* VIRTIO_GPU_CMD_RESOURCE_MAP_BLOB */
 constexpr std::uint32_t get_capset_info = 0x0108u;   /* VIRTIO_GPU_CMD_GET_CAPSET_INFO */
 constexpr std::uint32_t get_capset = 0x0109u;        /* VIRTIO_GPU_CMD_GET_CAPSET */
+constexpr std::uint64_t host_region_address = 0x4000000000ull;
+constexpr std::uint64_t host_region_bytes = 16u << 20u;
 constexpr std::uint8_t  first_gpu[av::GpuIdentity::uuid_bytes] = {3};
 constexpr std::uint8_t  other_gpu[av::GpuIdentity::uuid_bytes] = {4};
 
+/* A device that says it has a host-visible region; whether it really presents
+ * one is the PCI walk's answer, and both have to agree (feature 041). */
 av::CapsetInfo host_capset(const std::uint8_t *uuid)
 {
     return av::CapsetInfo(av::ProtocolVersion(av::ProtocolVersion::current_major,
                                               av::ProtocolVersion::current_minor),
-                          1u, 64u, 12u, 24u, 0u,
+                          1u, 64u, 12u, 24u, av::CapsetInfo::feature_host_visible_memory,
                           av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, 0u, 0u, "the host's"));
 }
 
@@ -243,6 +249,9 @@ public:
     /* What the device says it is from the next ask on: another host GPU is
      * another device (feature 040, FR-005). */
     void                   answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid); }
+    /* Whether the driver made its region blob and mapped it. */
+    bool                   created_blob() const { return created_blob_; }
+    bool                   mapped_region() const { return mapped_region_; }
 
     MockPlatform          &platform() { return platform_; }
     FakeVirtioGpuFunction &function() { return function_; }
@@ -258,6 +267,21 @@ private:
         /* The adapter asks the device what it is as well as what it shows, and
          * the answers are told apart by what was asked (feature 040, FR-005). */
         const std::uint32_t asked = fixture->control().pending_type();
+        /* The whole host-visible region as one blob, which StartDevice creates
+         * and maps when the device offers a region (feature 041). */
+        if (asked == create_blob || asked == map_blob) {
+            av::GpuResponse answer;
+            if (asked == map_blob) {
+                fixture->mapped_region_ = true;
+                answer.set_map_info(av::GpuResponse::map_cache_cached);
+            } else {
+                fixture->created_blob_ = true;
+                answer.set(av::GpuResponse::ok_nodata);
+            }
+            static_cast<void>(fixture->control().respond_all(answer.bytes(),
+                                                             static_cast<std::uint32_t>(answer.length())));
+            return;
+        }
         if (asked == get_capset_info || asked == get_capset) {
             av::GpuResponse answer;
             if (asked == get_capset_info)
@@ -284,6 +308,8 @@ private:
     Adapter               adapter_;
     DisplayInfoAnswer     display_info_;
     av::CapsetInfo        capset_ = host_capset(first_gpu);
+    bool                  created_blob_ = false;
+    bool                  mapped_region_ = false;
     Answer                answer_ = Answer::display_info;
     std::optional<av::FakeVirtqueueDevice> control_;
     std::uint32_t         sources_;
@@ -2835,3 +2861,34 @@ TEST(adapter_reset_engine, a_loss_dxgkrnl_refuses_is_logged)
   CHECK(fixture.platform().logged() > logged);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* Feature 041, US1: VidMm maps a process's view of a CPU-visible segment
+ * itself and tells the driver nothing, so every offset it can place an
+ * allocation at must already have host memory behind it. The driver makes that
+ * true the only way it can: one blob the size of the region, mapped at offset
+ * zero when the device offers a region. */
+TEST(adapter_start_device, maps_the_whole_host_visible_region_as_one_blob)
+{ Fixture fixture;
+  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  CHECK_EQ(fixture.start(), success);
+  CHECK(fixture.created_blob());
+  CHECK(fixture.mapped_region());
+
+  std::uint32_t physical_adapter = 0u;
+  av::DxgkQuerySegmentOut4Record out = {};
+  DxgkargQueryAdapterInfoRecord query = {};
+  query.Type = 11;   /* DXGKQAITYPE_QUERYSEGMENT4 */
+  query.pInputData = &physical_adapter;
+  query.InputDataSize = sizeof physical_adapter;
+  query.pOutputData = &out;
+  query.OutputDataSize = sizeof out;
+  CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+  CHECK_EQ(out.NbSegment, 2u); }
+
+/* A device with no region is the adapter as it was: one segment, and no blob
+ * asked for. */
+TEST(adapter_start_device, a_device_with_no_region_asks_for_no_blob)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK(!fixture.created_blob());
+  CHECK(!fixture.mapped_region()); }
