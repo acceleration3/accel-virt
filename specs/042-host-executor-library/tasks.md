@@ -98,7 +98,7 @@ description: "Tasks: the host executor"
 - [X] T030 One backend per session rather than one per library, destroyed with it, so a context that dies without destroying its instance does not leak a host object. Found by the fuzz target in seconds; the reproducer is `tests/corpus/fuzz_executor_vulkan/instance_never_destroyed.bin` and leak detection is off in that target until this lands
 - [X] T031 Every non-dispatchable handle is checked the way the five dispatchable ones now are. A guest naming a VkBuffer this executor never made still reaches the driver, which is the same hole one layer down
 
-- [ ] T032 The strong `handle_to_wire` and `wire_to_handle` live in `av_core`, so every binary that links it gets the host's semantics - including the guest-side ICD feature 045 will build, which needs the identity default and would otherwise have every handle it decodes refused. The host's hooks belong to the executor library alone, and getting them there without the weak-symbol trap (a strong definition in an object nothing references is never pulled in) is the work
+- [X] T032 The strong `handle_to_wire` and `wire_to_handle` live in `av_core`, so every binary that links it gets the host's semantics - including the guest-side ICD feature 045 will build, which needs the identity default and would otherwise have every handle it decodes refused. The host's hooks belong to the executor library alone, and getting them there without the weak-symbol trap (a strong definition in an object nothing references is never pulled in) is the work
 
 ---
 

@@ -34,7 +34,11 @@ std::uint64_t number_of(const void *handle)
 template <typename H>
 bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
 {
-    if (raw != 0u && (backend == nullptr || !backend->knows_handle(raw))) return false;
+    if (backend == nullptr) {
+        memcpy(&out, &raw, sizeof out);
+        return true;
+    }
+    if (raw != 0u && !backend->knows_handle(raw)) return false;
     memcpy(&out, &raw, sizeof out);
     return true;
 }
@@ -253,18 +257,30 @@ uint64_t remember(VulkanBackend *backend, H value)
     return raw;
 }
 
-/* A handle the loader dispatches on. Null is never one of these: the loader
- * dereferences it to find the table to call through. */
+/* Nobody deciding means nobody is being defended against: the numbers are this
+ * process's own. That is the guest side, where an application's handles arrive
+ * through its own loader and identity is the whole of the mapping.
+ *
+ * On the host a backend is always deciding, because VulkanBackend::run sets it
+ * around every dispatch and a decode happens nowhere else. So this is not a way
+ * to lose the checking by accident - it is what makes one archive serve both
+ * sides without the guest's ICD having every handle it decodes refused
+ * (feature 042). */
+/* A handle the loader dispatches on. */
 template <typename H>
 bool answer(const VulkanBackend *backend, uint64_t raw, H &out)
 {
+    if (backend == nullptr) {
+        memcpy(&out, &raw, sizeof out);
+        return true;
+    }
     /* Null is a legitimate value for an optional handle and never for one of
      * these five: the loader dereferences a dispatchable handle to find the
      * table to call through, so a guest naming the null instance aborts the
      * process rather than getting an error back. The fuzz target found that in
      * vkCmdResetEvent2 (feature 042). */
     if (raw == 0u) return false;
-    if (backend == nullptr || !backend->knows_handle(raw)) return false;
+    if (!backend->knows_handle(raw)) return false;
     memcpy(&out, &raw, sizeof out);
     return true;
 }

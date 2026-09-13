@@ -265,3 +265,36 @@ TEST(vulkan_backend, shutting_down_gives_back_what_the_guest_never_destroyed)
   /* And shutting down twice is not a second destroy. */
   backend.shut_down();
   CHECK(!backend.knows_handle(raw)); }
+
+/* One archive serves the host and the guest. On the host a backend is always
+ * deciding, because run() sets it around every dispatch; outside one, the
+ * numbers are this process's own and identity is the whole of the mapping,
+ * which is what the guest's ICD needs. What must not happen is the checking
+ * going missing where it is meant to be. */
+TEST(vulkan_backend, outside_a_dispatch_a_handle_is_this_process_s_own)
+{ CHECK(av::VulkanBackend::deciding() == nullptr);
+  av::WireWriter writer(nullptr, 0u);
+  std::uint8_t frame[16];
+  av::WireWriter handle_writer(frame, sizeof frame);
+  handle_writer.write_pod<std::uint64_t>(0xDEADBEEFu);
+  av::WireReader reader(frame, handle_writer.offset());
+  VkDevice device = VK_NULL_HANDLE;
+  CHECK(av::vkproto::deserialize_VkDevice(reader, device));
+  std::uint64_t raw = 0u;
+  std::memcpy(&raw, &device, sizeof device);
+  CHECK_EQ(raw, 0xDEADBEEFu);
+  (void)writer; }
+
+/* And inside one it is refused, which is the same call with a backend set. */
+TEST(vulkan_backend, inside_a_dispatch_a_handle_it_never_made_is_refused)
+{ VulkanBackend backend;
+  std::uint8_t block[block_bytes];
+  WireArena arena(block, sizeof block);
+  std::uint8_t frame[16];
+  WireWriter handle_writer(frame, sizeof frame);
+  handle_writer.write_pod<std::uint64_t>(0xDEADBEEFu);
+  std::uint8_t reply[64] = {};
+  WireReader payload(frame, handle_writer.offset());
+  WireWriter answer(reply, sizeof reply);
+  CHECK(!backend.run(av::vkproto::kCmd_vkDestroyDevice, payload, answer, arena));
+  CHECK(av::VulkanBackend::deciding() == nullptr); }
