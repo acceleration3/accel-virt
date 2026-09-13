@@ -148,6 +148,29 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("Current Pool Allocations", (self.work / "cycle.txt").read_text())
         self.assert_clean()
 
+    def test_the_upgrade_scenario_installs_a_higher_version_without_a_reboot(self):
+        """Feature 040 US2: a package that arrives over the running one."""
+        self.script(stages={"sign": [3010], "install": [3010], "check": [0], "upgrade": [0]},
+                    outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
+                             "upgrade": "upgrade: installed 0.35.1.0 running 0.35.1.0 problem 0\r\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite("--upgrades", "1")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("upgrade -Minutes 1", self.stage_calls())
+        self.assertIn("guest: upgrade ok: version 0.35.1.0 running, no reboot", result.stdout)
+        self.assertNotIn("reboot", self.journal_lines()[-3:])
+        self.assert_clean()
+
+    def test_an_upgrade_the_adapter_did_not_take_fails_the_run(self):
+        self.script(stages={"sign": [3010], "install": [3010], "check": [0], "upgrade": [1]},
+                    outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
+                             "upgrade": "upgrade: installed 0.35.1.0 running 0.35.0.0 problem 0\r\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED})
+        result = self.run_suite("--upgrades", "1")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("upgrade failed", result.stdout)
+        self.assert_clean()
+
     def test_a_cycle_the_guest_could_not_finish_fails_the_run(self):
         self.script(stages={"sign": [3010], "install": [3010], "check": [0], "cycle": [1]},
                     outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,

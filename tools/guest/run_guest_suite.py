@@ -48,6 +48,7 @@ SUMMARY = re.compile(rb"^rvktest: (\d+) passed, (\d+) failed$", re.M)
 # The guest ends its lines the Windows way, so nothing anchored at $ may
 # assume the line stops at the newline.
 CYCLES_DONE = re.compile(r"^cycle: (\d+) done\r?$", re.M)
+UPGRADED = re.compile(r"^upgrade: installed (\S+) running (\S+) problem 0\r?$", re.M)
 STRESS_FENCES = re.compile(rb"^ok stress\.fences (\d+)\r?$", re.M)
 STRESS_WORST = re.compile(rb"^ok stress\.worst_wait_us (\d+)\r?$", re.M)
 MANIFEST = re.compile(r"^(file|dump) (.+?)\r?$", re.M)
@@ -117,6 +118,8 @@ def arguments():
     parser.add_argument("--cpus", type=int, default=4)
     parser.add_argument("--outputs", type=int, default=1, help="the device's max_outputs")
     parser.add_argument("--power-poll", type=float, default=5.0, help="seconds between display-power screendumps")
+    parser.add_argument("--upgrades", type=int, default=0,
+                        help="install this many higher-versioned packages over the running one (feature 040, US2)")
     parser.add_argument("--power-cycles", type=int, default=0,
                         help="disable and enable the adapter this many times (feature 040, US2)")
     parser.add_argument("--stall-ms", type=int, default=0,
@@ -691,6 +694,19 @@ class GuestRun:
             self.sleep_states = self.stage_output("sleepstates", saved="sleepstates.txt")
         return f"{state}=yes" in self.sleep_states
 
+    def upgrade(self):
+        """US2: a package with a higher version installed over the running one,
+        as an update arrives - no reboot, and the adapter running the new
+        version afterwards."""
+        for step in range(self.args.upgrades):
+            output = self.stage_output("upgrade", saved="upgrade.txt", extra=("-Minutes", str(step + 1)))
+            installed = UPGRADED.search(output)
+            if installed is None:
+                raise StepFailed("upgrade", f"the guest did not take the package: {output.strip()[-300:]}")
+            self.say(f"upgrade ok: version {installed.group(1)} running, no reboot")
+        if self.args.upgrades:
+            self.check_monitors(self.stage_output("check", saved="device-after-upgrade.txt"))
+
     def cycle(self):
         """US2 of feature 040: what pnputil does to an adapter, as often as the
         run asks. The stage disables and enables the device itself - a round
@@ -753,6 +769,7 @@ class GuestRun:
         self.mode_switch()
         self.display_power()
         self.cycle()
+        self.upgrade()
         self.suspend()
         self.hibernate()
         self.suite()

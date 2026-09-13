@@ -27,7 +27,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('prepare', 'sign', 'install', 'check', 'modes', 'setmode', 'extend', 'monitortimeout',
-                 'sleepstates', 'hibernate', 'cycle', 'collect')][string]$Stage,
+                 'sleepstates', 'hibernate', 'cycle', 'upgrade', 'collect')][string]$Stage,
     [string]$Package = 'C:\rvk\package',
     [int]$Width = 0,
     [int]$Height = 0,
@@ -257,6 +257,34 @@ switch ($Stage) {
         Write-Output "extend: $([Display]::Extend())"
         exit 0
     }
+    'upgrade' {
+        # A package with a higher DriverVer installed over the running one, as
+        # an update would arrive: no reboot, and the adapter running on the new
+        # version afterwards (feature 040, US2). The catalog is signed again
+        # because the INF it covers changed.
+        $inf = "$Package\rvkgpu.inf"
+        $text = Get-Content $inf -Raw
+        $match = [regex]::Match($text, 'DriverVer\s*=\s*([0-9/]+),([0-9.]+)')
+        if (-not $match.Success) { Write-Output 'upgrade: no DriverVer in the package'; exit 1 }
+        $parts = $match.Groups[2].Value.Split('.')
+        $parts[2] = [string]([int]$parts[2] + $Minutes)
+        $version = $parts -join '.'
+        Set-Content $inf ($text -replace 'DriverVer\s*=\s*[0-9/]+,[0-9.]+', "DriverVer   = $($match.Groups[1].Value),$version")
+        $certificate = SigningCertificate
+        Remove-Item "$Package\rvkgpu.cat" -ErrorAction SilentlyContinue
+        New-FileCatalog -Path $Package -CatalogFilePath "$Package\rvkgpu.cat" -CatalogVersion 2.0 | Out-Null
+        Sign "$Package\rvkgpu.cat" $certificate
+        pnputil /add-driver $inf /install
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $RebootRequired) { exit $LASTEXITCODE }
+        $device = RvkDevice
+        if (-not $device) { Write-Output 'upgrade: the adapter is absent'; exit 1 }
+        $running = (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_DriverVersion).Data
+        $problem = (Get-PnpDeviceProperty -InstanceId $device.InstanceId -KeyName DEVPKEY_Device_ProblemCode).Data
+        Write-Output "upgrade: installed $version running $running problem $problem"
+        if ($running -ne $version -or $problem -ne 0) { exit 1 }
+        exit 0
+    }
+
     'cycle' {
         # What an administrator does with pnputil, $Minutes times over: disable
         # the adapter and enable it again, checking it came back each time
