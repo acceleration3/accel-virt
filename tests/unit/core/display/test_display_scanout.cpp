@@ -7,6 +7,8 @@
 #include "core/platform/log_budget.hpp"
 #include "core/memory/allocation.hpp"
 #include "core/memory/allocation_table.hpp"
+#include "core/memory/host_visible_segment.hpp"
+#include "core/memory/memory_segments.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
@@ -82,7 +84,8 @@ constexpr std::int64_t  segment_bytes = std::int64_t{1} << 30u;
 class Fixture {
 public:
     Fixture()
-        : mapped_(), storage_(), segment_(mapped_.platform()), allocations_(mapped_.platform(), segment_),
+        : mapped_(), storage_(), segment_(mapped_.platform()), host_visible_(mapped_.platform()), segments_(mapped_.platform(), segment_, host_visible_),
+          allocations_(mapped_.platform(), segment_, segments_),
           sources_(mapped_.platform()), budget_(mapped_.platform()),
           scanout_(mapped_.platform(), budget_, storage_), frames_{}
     {
@@ -142,6 +145,8 @@ private:
     av::MappedVirtioFunction       mapped_;
     ObjectStorage<VirtioGpuDevice> storage_;
     ApertureSegment                segment_;
+    av::HostVisibleSegment        host_visible_;
+    av::MemorySegments            segments_;
     AllocationTable                allocations_;
     DisplaySources                 sources_;
     av::LogBudget                  budget_;

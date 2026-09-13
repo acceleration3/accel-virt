@@ -1,5 +1,8 @@
 #include "core/adapter/adapter.hpp"
 #include "core/memory/allocation.hpp"
+#include "core/memory/aperture_segment.hpp"
+#include "core/memory/host_visible_segment.hpp"
+#include "core/memory/memory_segments.hpp"
 #include "core/memory/device_allocation.hpp"
 #include "core/scheduling/device.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -17,7 +20,10 @@ TEST(device_allocation, joins_one_device_to_one_allocation)
 { MockPlatform platform; int pdo = 0;
   Adapter adapter(platform, &pdo);
   Device device(platform, adapter, nullptr, 0u);
-  Allocation allocation(platform, AllocationDescriptor(), 0x1000u);
+  av::ApertureSegment aperture(platform);
+  av::HostVisibleSegment host_visible(platform);
+  const av::MemorySegments segments(platform, aperture, host_visible);
+  Allocation allocation(platform, segments, AllocationDescriptor(), 0x1000u);
   const DeviceAllocation open(device, allocation);
   CHECK(&open.device() == &device);
   CHECK(&open.allocation() == &allocation); }

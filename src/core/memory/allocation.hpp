@@ -15,6 +15,7 @@
 namespace av {
 
 class GuestPageList;
+class MemorySegments;
 struct AllocationProbe;
 struct DxgkAllocationInfoRecord;
 struct DxgkBuildPagingBufferMapApertureSegmentRecord;
@@ -24,8 +25,10 @@ class Allocation {
 public:
     static constexpr uint64_t page_bytes = 0x1000u;
 
-    /* `size` is the descriptor's size rounded up to a page. */
-    Allocation(Platform &platform, const AllocationDescriptor &descriptor, uint64_t size);
+    /* `size` is the descriptor's size rounded up to a page. `segments` is what
+     * this adapter has, which decides where the allocation is asked to live. */
+    Allocation(Platform &platform, const MemorySegments &segments, const AllocationDescriptor &descriptor,
+               uint64_t size);
     Allocation(const Allocation &) = delete;
     Allocation &operator=(const Allocation &) = delete;
 
@@ -55,6 +58,7 @@ private:
     static constexpr uint32_t priority_normal = 0x28000000u;      /* D3DDDI_ALLOCATIONPRIORITY_NORMAL */
 
     Platform            &platform_;
+    const MemorySegments &segments_;
     AllocationDescriptor descriptor_;
     uint64_t             size_;
     uint32_t             opens_;

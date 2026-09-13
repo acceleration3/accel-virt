@@ -12,8 +12,9 @@
 
 namespace av {
 
-AllocationTable::AllocationTable(Platform &platform, const ApertureSegment &segment)
-    : platform_(platform), segment_(segment), mutex_(platform, LockRank::allocation_table), allocations_(platform) {}
+AllocationTable::AllocationTable(Platform &platform, const ApertureSegment &segment,
+                                 const MemorySegments &segments)
+    : platform_(platform), segment_(segment), segments_(segments), mutex_(platform, LockRank::allocation_table), allocations_(platform) {}
 
 Status AllocationTable::create_one(DxgkAllocationInfoRecord &info)
 {
@@ -27,7 +28,7 @@ Status AllocationTable::create_one(DxgkAllocationInfoRecord &info)
     if (descriptor.size() > segment_.size()) return Status::invalid_parameter;
     const uint64_t size = (descriptor.size() + Allocation::page_bytes - 1u) & ~(Allocation::page_bytes - 1u);
     Allocation *allocation = nullptr;
-    const Status status = allocations_.create(allocation, platform_, descriptor, size);
+    const Status status = allocations_.create(allocation, platform_, segments_, descriptor, size);
     if (status == Status::ok) allocation->report_to(info);
     return status;
 }

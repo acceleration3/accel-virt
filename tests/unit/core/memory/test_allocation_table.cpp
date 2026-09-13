@@ -5,6 +5,8 @@
 #include "core/display/display_sources.hpp"
 #include "core/memory/allocation.hpp"
 #include "core/memory/allocation_table.hpp"
+#include "core/memory/host_visible_segment.hpp"
+#include "core/memory/memory_segments.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -65,7 +67,8 @@ const AllocationDescriptor shadow(AllocationKind::shadow, true, SurfaceLayout(10
 
 class Fixture {
 public:
-    Fixture() : segment_(platform_), sources_(platform_), table_(platform_, segment_), infos_{}, descriptors_{}, request_{}
+    Fixture() : segment_(platform_), host_visible_(platform_), segments_(platform_, segment_, host_visible_),
+        sources_(platform_), table_(platform_, segment_, segments_), infos_{}, descriptors_{}, request_{}
     {
         if (segment_.initialize(segment_bytes) != Status::ok)
             av::TestRegistry::instance().record_failure(__FILE__, __LINE__, "segment");
@@ -108,6 +111,8 @@ public:
 private:
     MockPlatform                  platform_;
     ApertureSegment               segment_;
+    av::HostVisibleSegment        host_visible_;
+    av::MemorySegments            segments_;
     DisplaySources                sources_;
     AllocationTable               table_;
     DxgkAllocationInfoRecord      infos_[max_infos];

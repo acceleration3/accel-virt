@@ -24,6 +24,18 @@ uint32_t MemorySegments::system_memory_segment_id() const
     return count() + 1u;
 }
 
+bool MemorySegments::offers_host_visible() const
+{
+    platform_.require_irql_at_most(Irql::dispatch, "MemorySegments::offers_host_visible");
+    return host_visible_.offered();
+}
+
+uint64_t MemorySegments::host_visible_bytes() const
+{
+    platform_.require_irql_at_most(Irql::dispatch, "MemorySegments::host_visible_bytes");
+    return host_visible_.size();
+}
+
 Status MemorySegments::report(const AdapterInfoQuery &query) const
 {
     platform_.require_irql_at_most(Irql::passive, "MemorySegments::report");

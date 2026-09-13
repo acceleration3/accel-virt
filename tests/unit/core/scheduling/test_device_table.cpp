@@ -7,6 +7,8 @@
 #include "core/ddi/dxgkarg_open_allocation_record.hpp"
 #include "core/memory/allocation.hpp"
 #include "core/memory/allocation_table.hpp"
+#include "core/memory/host_visible_segment.hpp"
+#include "core/memory/memory_segments.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/memory/device_allocation.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
@@ -79,7 +81,8 @@ class Fixture {
 public:
     Fixture()
         : dxgkrnl_(platform_, function_), interface_(platform_), adapter_(platform_, &pdo_), segment_(platform_),
-          allocations_(platform_, segment_), devices_(platform_, allocations_, interface_), infos_{}, descriptors_{},
+          host_visible_(platform_), segments_(platform_, segment_, host_visible_),
+          allocations_(platform_, segment_, segments_), devices_(platform_, allocations_, interface_), infos_{}, descriptors_{},
           handles_{}, opens_{}
     {
         const AllocationDescriptor shadow(AllocationKind::shadow, true, SurfaceLayout(10u, 10u, 21u, 40u), 400u,
@@ -150,6 +153,8 @@ private:
     int                          runtime_device_ = 0;
     Adapter                      adapter_;
     ApertureSegment              segment_;
+    av::HostVisibleSegment        host_visible_;
+    av::MemorySegments            segments_;
     AllocationTable              allocations_;
     DeviceTable                  devices_;
     DxgkAllocationInfoRecord     infos_[allocation_count];

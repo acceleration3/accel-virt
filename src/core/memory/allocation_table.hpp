@@ -17,6 +17,7 @@
 namespace av {
 
 class ApertureSegment;
+class MemorySegments;
 struct AllocationTableProbe;
 class DisplaySources;
 struct DxgkargCreateAllocationRecord;
@@ -27,7 +28,7 @@ class AllocationTable {
 public:
     static constexpr uint32_t max_per_call = 1024u;
 
-    AllocationTable(Platform &platform, const ApertureSegment &segment);
+    AllocationTable(Platform &platform, const ApertureSegment &segment, const MemorySegments &segments);
     AllocationTable(const AllocationTable &) = delete;
     AllocationTable &operator=(const AllocationTable &) = delete;
 
@@ -50,6 +51,7 @@ private:
 
     Platform               &platform_;
     const ApertureSegment  &segment_;
+    const MemorySegments   &segments_;
     Mutex                   mutex_;
     ObjectPool<Allocation>  allocations_;
 

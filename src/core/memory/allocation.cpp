@@ -3,12 +3,15 @@
 #include "core/ddi/dxgk_allocation_info_record.hpp"
 #include "core/ddi/dxgk_build_paging_buffer_map_aperture_segment_record.hpp"
 #include "core/memory/aperture_segment.hpp"
+#include "core/memory/host_visible_segment.hpp"
+#include "core/memory/memory_segments.hpp"
 #include "core/support/invariant_scope.hpp"
 
 namespace av {
 
-Allocation::Allocation(Platform &platform, const AllocationDescriptor &descriptor, uint64_t size)
-    : platform_(platform), descriptor_(descriptor), size_(size), opens_(0u),
+Allocation::Allocation(Platform &platform, const MemorySegments &segments,
+                       const AllocationDescriptor &descriptor, uint64_t size)
+    : platform_(platform), segments_(segments), descriptor_(descriptor), size_(size), opens_(0u),
       aperture_(platform, static_cast<uint32_t>(size / page_bytes)) {}
 
 const AllocationDescriptor &Allocation::descriptor() const { return descriptor_; }
@@ -30,8 +33,15 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * is the one this driver reports, and a primary pinned there arrives as an
      * address with pages behind it. */
     const bool scanned_out = descriptor_.kind() == AllocationKind::shared_primary;
-    const uint32_t segment = scanned_out ? ApertureSegment::segment_id
-                                         : ApertureSegment::system_memory_segment_id;
+    /* Memory a process asked to map is the host's, where this adapter has any:
+     * that segment is the only one it supports, so VidMm has one place to put
+     * it and - with no eviction segment - nowhere to move it to. That is what
+     * makes the mapping a process gets the host's memory and not a copy of it
+     * (feature 041, FR-001). */
+    const bool host_visible = !scanned_out && descriptor_.cpu_visible() && segments_.offers_host_visible();
+    uint32_t segment = segments_.system_memory_segment_id();
+    if (scanned_out) segment = ApertureSegment::segment_id;
+    if (host_visible) segment = HostVisibleSegment::segment_id;
     info.PreferredSegment = segment;
     info.SupportedReadSegmentSet = 1u << (segment - 1u);
     info.SupportedWriteSegmentSet = 1u << (segment - 1u);

@@ -2,6 +2,8 @@
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/ddi/dxgkarg_create_device_record.hpp"
 #include "core/memory/allocation_table.hpp"
+#include "core/memory/host_visible_segment.hpp"
+#include "core/memory/memory_segments.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/memory/gpu_mmu_geometry.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
@@ -48,7 +50,8 @@ namespace {
 class Fixture {
 public:
     Fixture()
-        : interface_(platform_), adapter_(platform_, &pdo_), segment_(platform_), allocations_(platform_, segment_),
+        : interface_(platform_), adapter_(platform_, &pdo_), segment_(platform_), host_visible_(platform_), segments_(platform_, segment_, host_visible_),
+          allocations_(platform_, segment_, segments_),
           devices_(platform_, allocations_, interface_), geometry_(platform_), contexts_(platform_, devices_, geometry_),
           device_(nullptr)
     {
@@ -69,6 +72,8 @@ private:
     int              pdo_ = 0;
     Adapter          adapter_;
     ApertureSegment  segment_;
+    av::HostVisibleSegment        host_visible_;
+    av::MemorySegments            segments_;
     AllocationTable  allocations_;
     DeviceTable      devices_;
     GpuMmuGeometry   geometry_;

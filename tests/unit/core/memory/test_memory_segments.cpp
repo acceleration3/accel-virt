@@ -214,3 +214,13 @@ TEST(memory_segments_report, before_the_aperture_is_sized_there_is_nothing_to_re
   MemorySegments segments(platform, aperture, host_visible);
   SegmentQuery query;
   CHECK_STATUS(query.ask(platform, segments), Status::invalid_parameter); }
+
+/* What an allocation asks before it chooses a segment: whether this adapter has
+ * host memory a process can map, and how much of it (feature 041, FR-001). */
+TEST(memory_segments_offers_host_visible, is_what_the_device_offered)
+{ Fixture bare(false);
+  CHECK(!bare.segments().offers_host_visible());
+  CHECK_EQ(bare.segments().host_visible_bytes(), 0u);
+  Fixture offered(true);
+  CHECK(offered.segments().offers_host_visible());
+  CHECK_EQ(offered.segments().host_visible_bytes(), region_bytes); }

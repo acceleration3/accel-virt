@@ -28,6 +28,10 @@ public:
      * (CreatePhysicalAdapterSegments), which is where an allocation with no
      * segment of its own goes. */
     uint32_t system_memory_segment_id() const;
+    /* Whether this adapter has host memory a process can map, and how much of
+     * it there is (feature 041, FR-001). */
+    bool     offers_host_visible() const;
+    uint64_t host_visible_bytes() const;
     /* DXGKQAITYPE_QUERYSEGMENT4: the count when no descriptor array is given,
      * otherwise every segment at the caller's stride. The paging buffer is the
      * aperture's, whatever else is reported. */

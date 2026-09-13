@@ -94,7 +94,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       segment_(platform), host_visible_(platform), region_blob_(platform), placement_(platform),
       memory_(platform, segment_, host_visible_),
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
-      allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
+      allocations_(platform, segment_, memory_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), losses_(platform), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u),
       display_changed_(0u), started_(false), present_(true) {}
