@@ -35,6 +35,8 @@ public:
 
     /* Reads the capset: whether it completed. */
     bool   read_capset();
+    /* What the device offered, once read. */
+    const CapsetInfo &capset() const;
     /* Sets context `index` up with ids of its own: the set_up status, then
      * whether every request was answered and it is established. */
     Status set_up(std::uint32_t index);

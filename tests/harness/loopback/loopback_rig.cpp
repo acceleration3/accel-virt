@@ -26,6 +26,8 @@ LoopbackDriver &LoopbackRig::driver() { return driver_; }
 GuestContext   &LoopbackRig::context(std::uint32_t index) { return index == 0u ? first_ : second_; }
 std::uint32_t   LoopbackRig::line(std::uint32_t index) const { return index + 1u; }
 
+const CapsetInfo &LoopbackRig::capset() const { return query_.capset(); }
+
 bool LoopbackRig::read_capset() { return driver_.query(query_) == Status::ok && query_.complete(); }
 
 Status LoopbackRig::set_up(std::uint32_t index)

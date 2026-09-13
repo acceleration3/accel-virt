@@ -65,6 +65,24 @@ TEST(loopback_capset, the_driver_reads_the_devices_capset_and_refuses_another_ma
   CHECK(other.failed());
   CHECK(other.invariants_hold()); }
 
+/* Feature 039: the guest reads a memory path only where the device's probe
+ * passed on this host. The rig's MockHost has a hostmem region, so the export
+ * probe passes; nothing is mapped where the import probe looks, so that bit is
+ * clear - and the whole suite runs on the paths that exist today either way,
+ * which is what a cleared bit has to mean until 041 takes the fallback. */
+TEST(loopback_capset, offers_only_the_memory_paths_its_probes_proved)
+{ LoopbackRig rig;
+  CHECK(rig.read_capset());
+  CHECK(rig.capset().has_feature(CapsetInfo::feature_host_visible_memory));
+  CHECK(rig.capset().has_feature(CapsetInfo::feature_gpu_exported_memory));
+  CHECK(!rig.capset().has_feature(CapsetInfo::feature_guest_memory_import));
+  CHECK(rig.establish(0u));
+  GuestRing ring(rig.context(0u).ring(), LoopbackRig::ring_order);
+  ring.write_batch(1u, 64u);
+  CHECK_STATUS(rig.submit(0u, 1u, 0u, ring.tail()), Status::ok);
+  CHECK_STATUS(rig.serve(0u), Status::ok);
+  CHECK(rig.retire(0u)); }
+
 TEST(loopback_capset, the_device_refuses_a_setup_of_another_major)
 { LoopbackRig rig;
   ContextMemory memory(rig.platform());

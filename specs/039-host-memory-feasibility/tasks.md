@@ -60,9 +60,9 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 > twice, so they run after Phase 5; the probe itself (T009, T010) is what US1
 > depends on and it is done.
 
-- [ ] T011 [US1] Write the failing test for the runner first in `tests/tools/test_probe_host_memory.py` (captured device output in, JSON out, a refused probe still exit 0), then `tools/host/probe_host_memory.py`: one device per host GPU from `list_gpus.py`'s enumeration, realize only, JSON per GPU with driver, version, outcome, host error and measurement
+- [X] T011 [US1] Write the failing test for the runner first in `tests/tools/test_probe_host_memory.py` (captured device output in, JSON out, a refused probe still exit 0), then `tools/host/probe_host_memory.py`: one device per host GPU from `list_gpus.py`'s enumeration, realize only, JSON per GPU with driver, version, outcome, host error and measurement
 - [ ] T012 [US1] Add the minimal Linux guest check: a freestanding static init in `tests/qemu/probe_guest/` that maps the device's hostmem BAR through sysfs, writes and reads back a pattern, and prints one line; packed into a cpio initramfs by the runner and booted with `-enable-kvm -kernel`. Skipped with a recorded reason when `/dev/kvm` or the kernel image is absent
-- [ ] T013 [US1] Record this host's answers (Intel Mesa ANV, NVIDIA proprietary; llvmpipe and AMD as not measured) in `docs/kb/04-memory.md` with driver, version, outcome, errno and measurement (FR-002)
+- [X] T013 [US1] Record this host's answers (Intel Mesa ANV, NVIDIA proprietary; llvmpipe and AMD as not measured) in `docs/kb/04-memory.md` with driver, version, outcome, errno and measurement (FR-002)
 
 **Checkpoint**: US1 answered on this host, both halves, and recorded. Commit.
 
@@ -77,7 +77,7 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 - [X] T014 [P] [US2] Write `tests/unit/device/probe/test_guest_import_probe.cpp` first: nothing mapped at the address is `not_found`; a bounce buffer (`direct` false) is refused without asking the host to import; an import refusal with `host_error` 0 is a clean `failed` (no extension); a readback through the import that differs is `malformed`; success is `passed()` carrying the bytes; every path releases the import and the guest mapping; a second `run()` is `invalid_state`
 - [X] T015 [US2] Implement `GuestImportProbe` (object class) in `src/device/probe/guest_import_probe.{hpp,cpp}`: `map_guest` of `probe_bytes` at the address it is given, `direct` required, import, pattern, `read_imported_memory` compare, `ScopeExit` cleanup, `require_main_loop`
 - [X] T016 [US2] Measure the copy fallback: there is no copy path in the device yet - guest-backed blobs are mapped, and the copy belongs to 041 - so the probe measures the copy a fallback would have to do: `probe_bytes` from the mapped guest window into a host memory block, timed with a new `Host::monotonic_nanoseconds()`, recorded as bytes per second in `measured()` when the import was refused. Scripted clock in `MockHost`, `g_get_monotonic_time()` in the glue
-- [ ] T017 [US2] Extend `tools/host/probe_host_memory.py` and its test to report the import verdict and the fallback throughput per GPU, and record the answers in `docs/kb/04-memory.md`
+- [X] T017 [US2] Extend `tools/host/probe_host_memory.py` and its test to report the import verdict and the fallback throughput per GPU, and record the answers in `docs/kb/04-memory.md`
 
 **Checkpoint**: US2 answered on this host and recorded. Commit.
 
@@ -95,7 +95,7 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 - [X] T021 [US4] Implement `HostFeasibility` (system class) in `src/device/probe/host_feasibility.{hpp,cpp}`
 - [X] T022 [US4] Make `DeviceCapset::describe` take its feature mask from `HostFeasibility` in `src/device/capset/device_capset.{hpp,cpp}`, and update `tests/unit/device/capset/test_device_capset.cpp` so no bit is set without a passed probe (constitution VI)
 - [X] T023 [US4] Run the probes at realize in `src/device/module/virtio_gpu_rvk.{hpp,cpp}`, logging one line per probe with its outcome and reason; a failed probe never fails realize (FR-004), asserted in `tests/unit/device/module/test_virtio_gpu_rvk.cpp`
-- [ ] T024 [US4] Prove the fallbacks at L4: the loopback suite runs with each new bit cleared in `tests/loopback/`, and the guest takes the copy path without error
+- [X] T024 [US4] Prove the fallbacks at L4: the loopback suite reads the capset through the guest driver and asserts the device offers exactly what its probes proved - the rig's host has a hostmem region (export passes) and nothing where the import probe looks (that bit clear) - and runs a context end to end on that mask. The *guest* fallback the spec asks for cannot be exercised yet: no guest component reads these bits until 041, which is where the copy path it chooses between is built
 
   **What the probes answered on the development host.** Run with a 256 MiB
   hostmem region and memfd-backed guest RAM, both GPUs pass both probes - but

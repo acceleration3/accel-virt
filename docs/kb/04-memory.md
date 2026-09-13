@@ -165,3 +165,47 @@ construction, because the DMA buffer format is yours.
   identity, not the per-open handle.
 - `DxgkDdiDescribeAllocation` must work for any allocation VidMm might move,
   including standard allocations you did not author.
+
+## What the host GPUs here can actually do (feature 039)
+
+Measured, not assumed: `tools/host/probe_host_memory.py --qemu build-qemu/qemu`
+starts one device per host GPU and reads back what its probes found at realize.
+Each answer is a capset bit the guest gets only where the probe passed.
+
+| Host GPU | Driver | Exported memory in the hostmem BAR | Guest pages imported | Measured |
+|---|---|---|---|---|
+| Intel Iris Xe (ADL GT2), `8086:46a6` | Mesa ANV 26.2.2 | passed | passed | 1 MiB each way |
+| NVIDIA RTX 3070 Ti Laptop, `10de:24e0` | NVIDIA proprietary 580 | passed, **dma-buf only** | passed | 1 MiB each way |
+| AMD | — | not measured: no AMD GPU in this machine | not measured | — |
+| llvmpipe / lavapipe | — | not measured: not installed here | not measured | — |
+
+**The handle type is the whole answer on NVIDIA.** `vkAllocateMemory` with
+`VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT` succeeds and
+`vkGetMemoryFdKHR` gives a descriptor, and then `mmap` of that descriptor fails
+with `EINVAL`. The same allocation exported as
+`VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT` maps, is placed over the
+hostmem reservation with `MAP_FIXED`, and reads back what the device wrote.
+Mesa takes either. A driver that refuses both is not a broken host - it is a
+device whose `feature_gpu_exported_memory` bit stays clear and whose guest
+copies instead.
+
+**What the probes are, precisely.** Each runs once, inside realize, on the GPU
+the instance is bound to, over one megabyte it releases before realize returns:
+
+- *Exported memory*: allocate on the host GPU, place at offset 0 of the hostmem
+  region, write a pattern through the device's own mapping, and read the region
+  back - what the guest would read there, not what the block holds. A mapping
+  that exists and shows something else is worse than a refusal, and is recorded
+  as `malformed`.
+- *Guest import*: map a window of guest RAM, refuse anything that is not a
+  direct mapping (a bounce buffer is a copy the guest cannot see), import it
+  with `VK_EXT_external_memory_host`, and compare what the GPU reads at the
+  window's first and last sample with what was written. The window is the
+  guest's memory, so the probe keeps a copy and puts it back; timing that copy
+  is what a refused import reports as the fallback's throughput.
+
+**Two traps in the device's own realize**, both found live: a virtio device has
+no DMA address space until the bus plugs it in, which is after realize returns,
+so anything mapping guest RAM that early must use the machine's address space
+(`address_space_memory`) or segfault QEMU; and guest RAM must be
+`memory-backend-memfd,share=on` for the host GPU to import it at all.
