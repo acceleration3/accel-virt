@@ -689,6 +689,72 @@ TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
   CHECK_EQ(device.fdo().remove_device(), 0);
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
+/* The timeout sequence VidSch drives, through the real table (feature 040, US3).
+ * VidSchiCheckNodeTimeout (dxgmms2.sys @1400c9b50) decides a node is late, asks
+ * QueryEngineStatus, and takes a responsive answer as "no timeout this round";
+ * when the answer stops being responsive it resets the engine. DdiResetEngine
+ * (dxgkrnl.sys @14006e0a4) checks that the driver returns at the IRQL it was
+ * called at, so the whole sequence runs at dispatch and the mock holds us to
+ * it. */
+TEST(ddi_scenario, an_engine_that_stops_moving_is_reset_and_its_context_lost)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  void           *adapter = device.fdo().context();
+  const DdiTable &table = driver.table();
+  av::DxgkargCreateDeviceRecord created = {};
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, av::DxgkargCreateDeviceRecord *)>(
+               table.routine(DdiSlot::DxgkDdiCreateDevice))(adapter, &created),
+           0);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;   /* virtual addressing */
+  /* CreateContext is called on the device handle, not the adapter. */
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, av::DxgkargCreateContextRecord *)>(
+               table.routine(DdiSlot::DxgkDdiCreateContext))(created.hDevice, &context),
+           0);
+  av::DxgkargSubmitCommandVirtualRecord submit = {};
+  submit.hContext = context.hContext;
+  submit.DmaBufferVirtualAddress = 0x8000000000ull;
+  submit.SubmissionFenceId = 1u;
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargSubmitCommandVirtualRecord *)>(
+               table.routine(DdiSlot::DxgkDdiSubmitCommandVirtual))(adapter, &submit),
+           0);
+
+  const auto engine_status = reinterpret_cast<std::int32_t (*)(void *, av::DxgkargQueryEngineStatusRecord *)>(
+      table.routine(DdiSlot::DxgkDdiQueryEngineStatus));
+  driver.platform().set_irql(av::Irql::dispatch);
+  av::DxgkargQueryEngineStatusRecord status = {0u, 0u, 0u};
+  CHECK_EQ(engine_status(adapter, &status), 0);
+  CHECK_EQ(status.EngineStatus, 1u);        /* the one deferral a late node gets */
+  driver.platform().advance_time(20000000u);   /* two seconds, and nothing moved */
+  status.EngineStatus = 0u;
+  CHECK_EQ(engine_status(adapter, &status), 0);
+  CHECK_EQ(status.EngineStatus, 0u);        /* VidSch may now reset it */
+
+  const std::uint32_t before = device.dxgkrnl().interrupts();
+  av::DxgkargResetEngineRecord reset = {0u, 0u, 0u};
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, av::DxgkargResetEngineRecord *)>(
+               table.routine(DdiSlot::DxgkDdiResetEngine))(adapter, &reset),
+           0);
+  CHECK_EQ(reset.LastAbortedFenceId, 1u);
+  CHECK_EQ(device.dxgkrnl().interrupts(), before + 1u);
+  CHECK_EQ(device.dxgkrnl().interrupt(before).InterruptType, 4);   /* DMA_FAULTED */
+  /* An engine with nothing queued is responsive again. */
+  status.EngineStatus = 0u;
+  CHECK_EQ(engine_status(adapter, &status), 0);
+  CHECK_EQ(status.EngineStatus, 1u);
+  driver.platform().set_irql(av::Irql::passive);
+
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *)>(
+               table.routine(DdiSlot::DxgkDdiDestroyContext))(context.hContext),
+           0);
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *)>(
+               table.routine(DdiSlot::DxgkDdiDestroyDevice))(created.hDevice),
+           0);
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
 TEST(ddi_scenario, a_primary_lives_from_standard_allocation_to_destruction)
 { LoadedDriver driver;
   Device device(driver, 0u);

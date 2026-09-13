@@ -932,7 +932,10 @@ int32_t Adapter::query_dependent_engine_group(DxgkargQueryDependentEngineGroupRe
 
 int32_t Adapter::query_engine_status(DxgkargQueryEngineStatusRecord *request)
 {
-    platform_.require_irql_at_most(Irql::passive, "Adapter::query_engine_status");
+    /* VidSch asks from its timeout DPC: DdiQueryEngineStatus (dxgkrnl.sys
+     * @140027dc0) only reaches for the current thread when IRQL is below 2, so
+     * dispatch is a level it expects to be called at. */
+    platform_.require_irql_at_most(Irql::dispatch, "Adapter::query_engine_status");
     if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
     /* VidSchiCheckNodeTimeout takes responsive as "no timeout this round". */
@@ -942,7 +945,9 @@ int32_t Adapter::query_engine_status(DxgkargQueryEngineStatusRecord *request)
 
 int32_t Adapter::reset_engine(DxgkargResetEngineRecord *request)
 {
-    platform_.require_irql_at_most(Irql::passive, "Adapter::reset_engine");
+    /* The same DPC resets what it found stuck; DdiResetEngine (dxgkrnl.sys
+     * @14006e0a4) checks only that the driver returns at the IRQL it entered. */
+    platform_.require_irql_at_most(Irql::dispatch, "Adapter::reset_engine");
     if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
     /* Whose work was thrown away: its owner is told it cannot be finished, and

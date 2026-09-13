@@ -1364,15 +1364,22 @@ TEST(adapter, the_win8_ddis_declare_their_ceilings)
   fixture.platform().set_irql(Irql::passive);
   for (int call = 0; call < 5; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
 
-TEST(adapter, the_engine_ddis_are_passive_only)
+/* The two the timeout path uses are reachable from VidSch's DPC - its check and
+ * its reset both run there - so dispatch is their ceiling, not passive. The
+ * other two are asked on a thread. */
+TEST(adapter, the_engine_ddis_the_timeout_path_uses_are_dispatch_level)
 { Fixture fixture;
   fixture.platform().set_irql(Irql::dispatch);
-  static_cast<void>(fixture.adapter().query_dependent_engine_group(nullptr));
   static_cast<void>(fixture.adapter().query_engine_status(nullptr));
   static_cast<void>(fixture.adapter().reset_engine(nullptr));
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.platform().unclaimed_violations(), 0u);
+
+  fixture.platform().set_irql(Irql::dispatch);
+  static_cast<void>(fixture.adapter().query_dependent_engine_group(nullptr));
   static_cast<void>(fixture.adapter().cancel_command(nullptr));
   fixture.platform().set_irql(Irql::passive);
-  for (int call = 0; call < 4; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
+  for (int call = 0; call < 2; call++) CHECK(fixture.platform().claim(Violation::irql_ceiling)); }
 
 /* ---- WDDM 1.1 (feature 014) -------------------------------------------------- */
 
