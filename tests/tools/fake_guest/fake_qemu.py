@@ -314,6 +314,12 @@ class Guest:
                     connection.sendall(b'{"return": {}}\n')
 
 
+def append_later(path, lines, seconds):
+    time.sleep(seconds)
+    with open(path, "a") as log:
+        log.write("".join(line + "\n" for line in lines))
+
+
 def main():
     argv = sys.argv[1:]
     script = json.load(open(os.environ["FAKE_GUEST_SCRIPT"]))
@@ -338,6 +344,12 @@ def main():
                                           "rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
                                           "rvkgpu: vsync 600 blanks in 100000000 ticks, enabled 0 times"])
         log.write("".join(line + "\n" for line in lines) if device else "")
+    # A driver goes on logging while the run reads: what it says every 120
+    # blanks arrives long after the line before it.
+    late = script.get("driver_log_late", [])
+    if device and late:
+        threading.Thread(target=append_later, daemon=True,
+                         args=(debug, late, script.get("driver_log_late_seconds", 1.5))).start()
     threading.Thread(target=guest.serve_agent, args=(agent,), daemon=True).start()
     guest.serve_qmp(qmp)
 

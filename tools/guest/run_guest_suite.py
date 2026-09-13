@@ -118,6 +118,8 @@ def arguments():
     parser.add_argument("--cpus", type=int, default=4)
     parser.add_argument("--outputs", type=int, default=1, help="the device's max_outputs")
     parser.add_argument("--power-poll", type=float, default=5.0, help="seconds between display-power screendumps")
+    parser.add_argument("--vsync-wait", type=float, default=60.0,
+                        help="seconds to wait for the driver to log a window at its own period")
     parser.add_argument("--upgrades", type=int, default=0,
                         help="install this many higher-versioned packages over the running one (feature 040, US2)")
     parser.add_argument("--power-cycles", type=int, default=0,
@@ -219,6 +221,9 @@ VSYNC_TOLERANCE_PERCENT = 5
 """SC-003."""
 TICKS_PER_SECOND = 10000000
 """The 100 ns units the driver's interrupt time counts in."""
+VSYNC_POLL_SECONDS = 1.0
+"""Between reads of the driver's log while waiting for a window at its period."""
+
 VSYNC_LINE = re.compile(r"rvkgpu: vsync (\d+) blanks in (\d+) ticks, enabled (\d+) times")
 ACCESS_DENIED = 5
 STRESS_PATIENCE = 2.0
@@ -568,23 +573,37 @@ class GuestRun:
 
     def vsync_rate(self):
         """US3: the driver's own vertical blank rate, in hertz, from the fastest
-        window it logged. A waiter in the guest cannot see this - the blank is a
-        pulse it can miss - so it is read here, where the whole log is. The
-        fastest window is the one dxgkrnl left the blanks on through; a window it
-        turned them off in measures its power policy, not the driver's period."""
+        window it logged, or None while it has logged none. A waiter in the
+        guest cannot see this - the blank is a pulse it can miss - so it is read
+        here, where the whole log is. The fastest window is the one dxgkrnl left
+        the blanks on through; a window it turned them off in measures its power
+        policy, not the driver's period."""
         windows = [(int(blanks), int(ticks)) for blanks, ticks, _enables in VSYNC_LINE.findall(self.driver_log())
                    if int(ticks) != 0]
         if not windows:
-            raise StepFailed("vsync", "the driver logged no vertical blank window")
+            return None
         return max(blanks * TICKS_PER_SECOND / ticks for blanks, ticks in windows)
 
     def vsync(self):
-        rate = self.vsync_rate()
+        """The driver says its rate once every 120 blanks, so the window that
+        proves the period may not be written yet when the suite ends - after a
+        resume the only windows in the log are the ones dxgkrnl kept the blanks
+        off through, and they measure its power policy. Wait for a window at the
+        driver's period, and fail with the best one seen if none arrives."""
+        deadline = time.monotonic() + self.args.vsync_wait
         tolerance = REFRESH_HZ * VSYNC_TOLERANCE_PERCENT / 100.0
-        if abs(rate - REFRESH_HZ) > tolerance:
-            raise StepFailed("vsync", f"the driver reports {rate:.2f} vertical blanks a second, not "
-                                      f"{REFRESH_HZ} within {VSYNC_TOLERANCE_PERCENT}%")
-        self.say(f"vsync ok: {rate:.2f} blanks a second")
+        while True:
+            rate = self.vsync_rate()
+            if rate is not None and abs(rate - REFRESH_HZ) <= tolerance:
+                self.say(f"vsync ok: {rate:.2f} blanks a second")
+                return
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(VSYNC_POLL_SECONDS)
+        if rate is None:
+            raise StepFailed("vsync", "the driver logged no vertical blank window")
+        raise StepFailed("vsync", f"the driver reports {rate:.2f} vertical blanks a second, not "
+                                  f"{REFRESH_HZ} within {VSYNC_TOLERANCE_PERCENT}%")
 
     def extend_desktop(self):
         """US4: Windows attaches a monitor to every output but leaves the

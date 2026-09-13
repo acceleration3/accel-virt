@@ -501,7 +501,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.script(screendump=[1280, 800],
                     driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
                                 "rvkgpu: vsync 600 blanks in 200000000 ticks, enabled 0 times"])
-        result = self.run_suite()
+        result = self.run_suite("--vsync-wait", "0")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("the driver reports 30.00 vertical blanks a second, not 60 within 5%",
                       (self.work / "verdict.txt").read_text())
@@ -509,7 +509,7 @@ class GuestSuiteRun(unittest.TestCase):
     def test_a_driver_that_logged_no_vertical_blank_window_fails_the_run(self):
         self.script(screendump=[1280, 800],
                     driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0"])
-        result = self.run_suite()
+        result = self.run_suite("--vsync-wait", "0")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("the driver logged no vertical blank window", (self.work / "verdict.txt").read_text())
 
@@ -521,6 +521,20 @@ class GuestSuiteRun(unittest.TestCase):
                                 "rvkgpu: vsync 120 blanks in 700000000 ticks, enabled 120 times",
                                 "rvkgpu: vsync 120 blanks in 20000000 ticks, enabled 0 times"])
         result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: vsync ok: 60.00 blanks a second", result.stdout)
+
+    def test_a_window_at_the_drivers_period_is_waited_for(self):
+        """The driver says its rate once every 120 blanks, and after a resume
+        the windows already in the log are the ones dxgkrnl kept the blanks off
+        through. The run waits for one at the period rather than judging the
+        log the instant the suite ends (feature 040, US1)."""
+        self.script(screendump=[1280, 800],
+                    driver_log=["rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
+                                "rvkgpu: vsync 120 blanks in 700000000 ticks, enabled 120 times"],
+                    driver_log_late=["rvkgpu: vsync 120 blanks in 20000000 ticks, enabled 120 times"],
+                    driver_log_late_seconds=1.5)
+        result = self.run_suite("--vsync-wait", "20")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("guest: vsync ok: 60.00 blanks a second", result.stdout)
 

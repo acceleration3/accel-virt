@@ -39,10 +39,11 @@ public:
     void                 disable();
     /* Waits out a running tick: StopDevice. */
     void                 destroy();
-    /* Power went away: the timer stops and nothing is reported. dxgkrnl keeps
-     * asking for vertical blanks across a suspend, and a blank reported to an
-     * adapter that is not powered - or to one on its way out of S3, before
-     * dxgkrnl has powered it up - bugchecks the guest. */
+    /* Power went away: the timer stops, nothing is reported, and the rate
+     * window so far is dropped. dxgkrnl keeps asking for vertical blanks across
+     * a suspend, and a blank reported to an adapter that is not powered - or to
+     * one on its way out of S3, before dxgkrnl has powered it up - bugchecks
+     * the guest. */
     void                 suspend();
     /* Power is back: the reporting dxgkrnl asked for is put back, and nothing
      * more. */

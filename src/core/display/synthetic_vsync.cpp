@@ -54,6 +54,10 @@ void SyntheticVsync::suspend()
     reporting_ = false;
     running_ = false;
     timer_.stop();
+    /* Interrupt time counts the sleep, so a window that straddles the
+     * transition measures the sleep and not the period the timer kept. */
+    reported_ = 0u;
+    enables_ = 0u;
 }
 
 Status SyntheticVsync::resume()

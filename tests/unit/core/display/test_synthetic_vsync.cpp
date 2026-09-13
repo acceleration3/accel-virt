@@ -25,6 +25,8 @@ using av::Violation;
 namespace {
 
 constexpr std::uint64_t frame = 10000000u / 60u;
+/* Four seconds off the wall clock, as a hibernation is. */
+constexpr std::uint64_t asleep = 40000000u;
 constexpr std::int32_t  crtc_vsync = 3;
 constexpr std::uint32_t no_memory = 0xC0000017u;
 
@@ -189,7 +191,7 @@ TEST(synthetic_vsync_suspend, a_powered_down_adapter_reports_no_blanks)
   fixture.platform().set_irql(Irql::dispatch);
   fixture.vsync().tick();
   fixture.vsync().tick();
-  CHECK_EQ(fixture.vsync().reported(), 1u);          /* nothing while power is down */
+  CHECK_EQ(fixture.vsync().reported(), 0u);          /* nothing while power is down, and no window */
   fixture.platform().set_irql(Irql::passive);
 
   /* What dxgkrnl asked for survives the transition: the resume puts back the
@@ -197,8 +199,29 @@ TEST(synthetic_vsync_suspend, a_powered_down_adapter_reports_no_blanks)
   CHECK_STATUS(fixture.vsync().resume(), Status::ok);
   fixture.platform().set_irql(Irql::dispatch);
   fixture.vsync().tick();
-  CHECK_EQ(fixture.vsync().reported(), 2u);
+  CHECK_EQ(fixture.vsync().reported(), 1u);          /* the window began again with the power */
   fixture.platform().set_irql(Irql::passive);
+  fixture.vsync().destroy(); }
+
+/* KeQueryInterruptTime counts the time the machine spent asleep, so a rate
+ * window opened before a suspend and closed after the resume measures the
+ * sleep rather than the timer: the first live S4 run reported 20.72 blanks a
+ * second for a timer whose period never changed (feature 040, US1). Power
+ * takes the window with it, and the next one starts at the first blank after
+ * the resume. */
+TEST(synthetic_vsync_suspend, a_rate_window_does_not_span_a_power_transition)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.vsync().initialize(), Status::ok);
+  CHECK_STATUS(fixture.vsync().enable(), Status::ok);
+  fixture.platform().run_timers(frame * 60u);
+  CHECK_EQ(fixture.vsync().reported(), 60u);
+  fixture.vsync().suspend();
+  CHECK_EQ(fixture.vsync().reported(), 0u);
+  fixture.platform().advance_time(asleep);
+  CHECK_STATUS(fixture.vsync().resume(), Status::ok);
+  fixture.platform().run_timers(frame * 120u);
+  CHECK(std::strstr(fixture.platform().last_log(), "vsync 120 blanks in 19999920 ticks") != nullptr);
+  CHECK(std::strstr(fixture.platform().last_log(), "enabled 1 times") != nullptr);
   fixture.vsync().destroy(); }
 
 TEST(synthetic_vsync_resume, an_adapter_nobody_was_waiting_on_stays_quiet)
