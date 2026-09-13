@@ -78,7 +78,7 @@ def _emit_default(reg: Registry) -> str:
         "",
         '#include "vk_dispatch_server.h"',
         "",
-        "namespace rvk::vkproto {",
+        "namespace av::vkproto {",
         "",
         "// Concrete ServerDispatch with a no-op default for every command.",
         "// Subclasses override only the methods they care about; new commands",
@@ -96,7 +96,7 @@ def _emit_default(reg: Registry) -> str:
             lines.append("    }")
     lines.append("};")
     lines.append("")
-    lines.append("}  // namespace rvk::vkproto")
+    lines.append("}  // namespace av::vkproto")
     lines.append("")
     return "\n".join(lines[1:])
 
@@ -124,7 +124,7 @@ def _emit_real(reg: Registry) -> str:
         '#include "rvk/instr/profiler_macros.hpp"',
         '#include "vk_dispatch_server.h"',
         "",
-        "namespace rvk::vkproto {",
+        "namespace av::vkproto {",
         "",
         "// Concrete ServerDispatch that forwards every command into the host",
         "// Vulkan loader. Use this when the server should drive a real GPU.",
@@ -215,7 +215,7 @@ def _emit_real(reg: Registry) -> str:
     lines.extend(members)
     lines.append("};")
     lines.append("")
-    lines.append("}  // namespace rvk::vkproto")
+    lines.append("}  // namespace av::vkproto")
     lines.append("")
     return "\n".join(lines[1:])
 

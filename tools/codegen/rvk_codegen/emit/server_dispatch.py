@@ -23,9 +23,9 @@ def _interface_signature(cmd: Command) -> str:
 
 def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     is_void = cmd.return_type.base == "void"
-    lines: list[str] = [f"case ::rvk::vkproto::kCmd_{cmd.name}: {{"]
+    lines: list[str] = [f"case ::av::vkproto::kCmd_{cmd.name}: {{"]
 
-    decl_lines: list[str] = ["    ::rvk::protocol::Arena arena;", "    (void)arena;"]
+    decl_lines: list[str] = ["    ::av::WireArena arena;", "    (void)arena;"]
     decode_lines: list[str] = []
     call_args: list[str] = []
     out_after_call: list[str] = []
@@ -96,7 +96,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             decode_lines.append("        if (!r.read_varint(n)) return false;")
             decode_lines.append("        if (n > 0) {")
             decode_lines.append(
-                "            char* tmp_str = arena.alloc_chars(static_cast<std::size_t>(n));"
+                "            char* tmp_str = arena.allocate_chars(static_cast<std::size_t>(n));"
             )
             decode_lines.append(
                 "            if (!r.read(tmp_str, static_cast<std::size_t>(n))) return false;"
@@ -165,11 +165,11 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             decode_lines.append(
                 f"        const std::uint32_t __n_outer = static_cast<std::uint32_t>({srv_outer});")
             decode_lines.append(
-                f"        auto** __ptrs = arena.alloc<const {elem}*>(__n_outer);")
+                f"        auto** __ptrs = arena.allocate<const {elem}*>(__n_outer);")
             decode_lines.append("        for (std::uint32_t __i = 0; __i < __n_outer; ++__i) {")
             decode_lines.append(
                 f"            const std::uint32_t __n = static_cast<std::uint32_t>({sib}_storage[__i].{member});")
-            decode_lines.append(f"            auto* __inner = arena.alloc<{elem}>(__n);")
+            decode_lines.append(f"            auto* __inner = arena.allocate<{elem}>(__n);")
             decode_lines.append("            for (std::uint32_t __j = 0; __j < __n; ++__j) {")
             if kind == "in_struct_array2":
                 decode_lines.append(
@@ -321,10 +321,10 @@ def emit(reg: Registry, out_dir: Path) -> None:
         # dispatch_command's signature names both, so both must be
         # complete here — a forward declaration of BufferReader is not
         # enough for the declaration to compile.
-        '#include "rvk/protocol/buffer.hpp"',
-        '#include "rvk/protocol/buffer_reader.hpp"',
+        '#include "proto/wire/wire_writer.hpp"',
+        '#include "proto/wire/wire_reader.hpp"',
         "",
-        "namespace rvk::vkproto {",
+        "namespace av::vkproto {",
         "",
         "// User implements this; the dispatch table calls into it for every command.",
         "class ServerDispatch {",
@@ -341,10 +341,10 @@ def emit(reg: Registry, out_dir: Path) -> None:
     )
     header.append(
         "bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, "
-        "::rvk::protocol::BufferReader& r, ::rvk::protocol::Buffer& reply);"
+        "::av::WireReader& r, ::av::WireWriter& reply);"
     )
     header.append("")
-    header.append("}  // namespace rvk::vkproto")
+    header.append("}  // namespace av::vkproto")
     header.append("")
     write(out_dir / "vk_dispatch_server.h", header_guard("\n".join(header[1:])))
 
@@ -361,10 +361,10 @@ def emit(reg: Registry, out_dir: Path) -> None:
         '#include "vk_protocol_ids.h"',
         '#include "vk_serialize.h"',
         "",
-        "namespace rvk::vkproto {",
+        "namespace av::vkproto {",
         "",
         "bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, "
-        "::rvk::protocol::BufferReader& r, ::rvk::protocol::Buffer& reply) {",
+        "::av::WireReader& r, ::av::WireWriter& reply) {",
         "    switch (cmd_id) {",
     ]
     for cmd in cmds:
@@ -375,6 +375,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
     source.append("    }")
     source.append("}")
     source.append("")
-    source.append("}  // namespace rvk::vkproto")
+    source.append("}  // namespace av::vkproto")
     source.append("")
     write(out_dir / "vk_dispatch_server.cpp", "\n".join(source))

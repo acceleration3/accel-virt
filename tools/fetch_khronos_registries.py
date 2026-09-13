@@ -32,7 +32,10 @@ DEFAULT_INTO = ROOT / "third_party" / "khronos"
 # generators would otherwise fail much later with something less obvious.
 WANTED = {
     "vulkan": (("registry/vk.xml", "vk.xml"),
-               ("include/vulkan/vulkan_core.h", "include/vulkan/vulkan_core.h")),
+               ("include/vulkan/vulkan_core.h", "include/vulkan/vulkan_core.h"),
+               # vulkan_core.h includes it; a header that cannot be compiled is
+               # not a header the generated output can be checked against.
+               ("include/vulkan/vk_platform.h", "include/vulkan/vk_platform.h")),
     "opengl": (("xml/gl.xml", "gl.xml"),
                ("xml/wgl.xml", "wgl.xml")),
     "opencl": (("xml/cl.xml", "cl.xml"),),

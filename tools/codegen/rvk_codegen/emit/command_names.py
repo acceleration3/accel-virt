@@ -42,13 +42,13 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         "#include <cstdint>",
         "",
-        "namespace rvk::vkproto {",
+        "namespace av::vkproto {",
         "",
         "// Returns a static C-string name for a wire command id. Returns",
         "// ``\"unknown\"`` for unknown ids — never null. Cheap (one switch).",
         "[[nodiscard]] const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept;",
         "",
-        "}  // namespace rvk::vkproto",
+        "}  // namespace av::vkproto",
         "",
     ]
     write(out_dir / "vk_command_names.h", header_guard("\n".join(header[1:])))
@@ -58,7 +58,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         '#include "vk_command_names.h"',
         "",
-        "namespace rvk::vkproto {",
+        "namespace av::vkproto {",
         "",
         "const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept {",
         "    switch (cmd_id) {",
@@ -73,6 +73,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
     source.append("    }")
     source.append("}")
     source.append("")
-    source.append("}  // namespace rvk::vkproto")
+    source.append("}  // namespace av::vkproto")
     source.append("")
     write(out_dir / "vk_command_names.cpp", "\n".join(source))

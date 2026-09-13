@@ -60,12 +60,12 @@ def _emit_handle_helpers(name: str) -> list[str]:
         # default linkage (used by the server and by loopback tests) is
         # identity. See ``vk_handle_default.cpp``.
         return [
-            f"inline void serialize_{name}(::rvk::protocol::Buffer& buf, {name} v) noexcept {{",
+            f"inline void serialize_{name}(::av::WireWriter& buf, {name} v) noexcept {{",
             f"    buf.write_pod(handle_to_wire(v));",
             "}",
             "",
             "[[nodiscard]] inline bool "
-            f"deserialize_{name}(::rvk::protocol::BufferReader& r, {name}& out) noexcept {{",
+            f"deserialize_{name}(::av::WireReader& r, {name}& out) noexcept {{",
             "    std::uint64_t raw = 0;",
             "    if (!r.read_pod(raw)) {",
             "        return false;",
@@ -76,7 +76,7 @@ def _emit_handle_helpers(name: str) -> list[str]:
             "",
         ]
     return [
-        f"inline void serialize_{name}(::rvk::protocol::Buffer& buf, {name} v) noexcept {{",
+        f"inline void serialize_{name}(::av::WireWriter& buf, {name} v) noexcept {{",
         "    std::uint64_t raw = 0;",
         f"    static_assert(sizeof({name}) == sizeof(raw));",
         "    std::memcpy(&raw, &v, sizeof(raw));",
@@ -84,7 +84,7 @@ def _emit_handle_helpers(name: str) -> list[str]:
         "}",
         "",
         "[[nodiscard]] inline bool "
-        f"deserialize_{name}(::rvk::protocol::BufferReader& r, {name}& out) noexcept {{",
+        f"deserialize_{name}(::av::WireReader& r, {name}& out) noexcept {{",
         "    std::uint64_t raw = 0;",
         "    if (!r.read_pod(raw)) {",
         "        return false;",
@@ -361,7 +361,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "        if (n == 0) {",
             f"            out->{m.name} = nullptr;",
             "        } else {",
-            "            char* s = arena.alloc_chars(static_cast<std::size_t>(n));",
+            "            char* s = arena.allocate_chars(static_cast<std::size_t>(n));",
             "            if (!r.read(s, static_cast<std::size_t>(n))) { return false; }",
             f"            out->{m.name} = s;",
             "        }",
@@ -375,7 +375,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             "        if (present == 0) {",
             f"            out->{m.name} = nullptr;",
             "        } else {",
-            f"            auto* p = arena.alloc<{m.type.base}>();",
+            f"            auto* p = arena.allocate<{m.type.base}>();",
             f"            if (!deserialize_{m.type.base}(r, p, arena)) {{ return false; }}",
             f"            out->{m.name} = p;",
             "        }",
@@ -390,7 +390,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             f"        if (!present || {_expr_to_cpp(count, "out->")} == 0) {{",
             f"            out->{m.name} = nullptr;",
             "        } else {",
-            f"            auto* arr = arena.alloc<{m.type.base}>(static_cast<std::size_t>({_expr_to_cpp(count, "out->")}));",
+            f"            auto* arr = arena.allocate<{m.type.base}>(static_cast<std::size_t>({_expr_to_cpp(count, "out->")}));",
             f"            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>({_expr_to_cpp(count, "out->")}); ++i) {{",
             f"                if (!deserialize_{m.type.base}(r, &arr[i], arena)) {{ return false; }}",
             "            }",
@@ -407,7 +407,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             f"        if (!present || {_expr_to_cpp(size, "out->")} == 0) {{",
             f"            out->{m.name} = nullptr;",
             "        } else {",
-            f"            char* blob = arena.alloc_chars(static_cast<std::size_t>({_expr_to_cpp(size, "out->")}));",
+            f"            char* blob = arena.allocate_chars(static_cast<std::size_t>({_expr_to_cpp(size, "out->")}));",
             f"            if (!r.read(blob, static_cast<std::size_t>({_expr_to_cpp(size, "out->")}))) {{ return false; }}",
             f"            out->{m.name} = blob;",
             "        }",
@@ -424,7 +424,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             f"        if (!present || {_expr_to_cpp(count, "out->")} == 0) {{",
             f"            out->{m.name} = nullptr;",
             "        } else {",
-            f"            auto* arr = arena.alloc<{elem}>(static_cast<std::size_t>({_expr_to_cpp(count, "out->")}));",
+            f"            auto* arr = arena.allocate<{elem}>(static_cast<std::size_t>({_expr_to_cpp(count, "out->")}));",
             f"            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>({_expr_to_cpp(count, "out->")}); ++i) {{",
             "                if (!r.read_pod(arr[i])) { return false; }",
             "            }",
@@ -442,7 +442,7 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             f"        if (!present || {_expr_to_cpp(count, "out->")} == 0) {{",
             f"            out->{m.name} = nullptr;",
             "        } else {",
-            f"            auto* arr = arena.alloc<{elem}>(static_cast<std::size_t>({_expr_to_cpp(count, "out->")}));",
+            f"            auto* arr = arena.allocate<{elem}>(static_cast<std::size_t>({_expr_to_cpp(count, "out->")}));",
             f"            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>({_expr_to_cpp(count, "out->")}); ++i) {{",
             f"                if (!deserialize_{elem}(r, arr[i])) {{ return false; }}",
             "            }",
@@ -459,14 +459,14 @@ def _deserialize_member(reg: Registry, m: StructMember) -> list[str]:
             f"        if (!present || {_expr_to_cpp(count, "out->")} == 0) {{",
             f"            out->{m.name} = nullptr;",
             "        } else {",
-            f"            auto** arr = arena.alloc<const char*>(static_cast<std::size_t>({_expr_to_cpp(count, "out->")}));",
+            f"            auto** arr = arena.allocate<const char*>(static_cast<std::size_t>({_expr_to_cpp(count, "out->")}));",
             f"            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>({_expr_to_cpp(count, "out->")}); ++i) {{",
             "                std::uint64_t n = 0;",
             "                if (!r.read_varint(n)) { return false; }",
             "                if (n == 0) {",
             "                    arr[i] = nullptr;",
             "                } else {",
-            "                    char* s = arena.alloc_chars(static_cast<std::size_t>(n));",
+            "                    char* s = arena.allocate_chars(static_cast<std::size_t>(n));",
             "                    if (!r.read(s, static_cast<std::size_t>(n))) { return false; }",
             "                    arr[i] = s;",
             "                }",
@@ -549,7 +549,7 @@ def _emit_pnext_codec(reg: Registry) -> list[str]:
         "    }",
         "}",
         "",
-        "inline void serialize_pnext_chain(::rvk::protocol::Buffer& buf, const void* pNext) {",
+        "inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {",
         "    const auto* p = static_cast<const VkBaseInStructure*>(pNext);",
         "    while (p != nullptr && !pnext_is_encodable(p->sType)) { p = p->pNext; }",
         "    if (p == nullptr) { buf.write_varint(0); return; }",
@@ -569,8 +569,8 @@ def _emit_pnext_codec(reg: Registry) -> list[str]:
         "}",
         "",
         "[[nodiscard]] inline bool deserialize_pnext_chain("
-        "::rvk::protocol::BufferReader& r, VkBaseOutStructure* out, "
-        "::rvk::protocol::Arena& arena) {",
+        "::av::WireReader& r, VkBaseOutStructure* out, "
+        "::av::WireArena& arena) {",
         "    std::uint64_t present = 0;",
         "    if (!r.read_varint(present)) { return false; }",
         "    // Nothing on the wire: leave the caller's chain exactly as it is.",
@@ -593,7 +593,7 @@ def _emit_pnext_codec(reg: Registry) -> list[str]:
         lines.extend([
             f"    case {_stype_of(s)}: {{",
             f"        auto* typed = (dst != nullptr) ? reinterpret_cast<{s.name}*>(dst)",
-            f"                                       : arena.alloc<{s.name}>();",
+            f"                                       : arena.allocate<{s.name}>();",
             "        if (typed == nullptr) { return false; }",
             f"        if (!deserialize_{s.name}(r, typed, arena)) {{ return false; }}",
             "        if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }",
@@ -654,13 +654,13 @@ BESPOKE_STRUCT_BODIES: dict[str, tuple[list[str], list[str]]] = {
             "    if (!deserialize_VkImage(r, out->dstImage)) { return false; }",
             "    if (!r.read_pod(out->dstImageLayout)) { return false; }",
             "    if (!r.read_pod(out->regionCount)) { return false; }",
-            "    auto* regions = arena.alloc<VkMemoryToImageCopy>(out->regionCount);",
+            "    auto* regions = arena.allocate<VkMemoryToImageCopy>(out->regionCount);",
             "    for (std::uint32_t i = 0; i < out->regionCount; ++i) {",
             "        if (!deserialize_VkMemoryToImageCopy(r, &regions[i], arena)) { return false; }",
             "        std::uint64_t n = 0;",
             "        if (!r.read_varint(n)) { return false; }",
             "        if (n == 0) { regions[i].pHostPointer = nullptr; continue; }",
-            "        char* blob = arena.alloc_chars(static_cast<std::size_t>(n));",
+            "        char* blob = arena.allocate_chars(static_cast<std::size_t>(n));",
             "        if (!r.read(blob, static_cast<std::size_t>(n))) { return false; }",
             "        regions[i].pHostPointer = blob;",
             "    }",
@@ -754,13 +754,13 @@ def _emit_struct_helpers(reg: Registry, s: Struct) -> list[str]:
     if bespoke is not None:
         ser_body, de_body = bespoke
         return [
-            f"inline void serialize_{s.name}(::rvk::protocol::Buffer& buf, const {s.name}& v) {{",
+            f"inline void serialize_{s.name}(::av::WireWriter& buf, const {s.name}& v) {{",
             *ser_body,
             "}",
             "",
             "[[nodiscard]] inline bool "
-            f"deserialize_{s.name}(::rvk::protocol::BufferReader& r, {s.name}* out, "
-            "::rvk::protocol::Arena& arena) {",
+            f"deserialize_{s.name}(::av::WireReader& r, {s.name}* out, "
+            "::av::WireArena& arena) {",
             *de_body,
             "}",
             "",
@@ -772,13 +772,13 @@ def _emit_struct_helpers(reg: Registry, s: Struct) -> list[str]:
         # proxy supports: a host pointer means nothing on the far side of
         # the connection.
         return [
-            f"inline void serialize_{s.name}(::rvk::protocol::Buffer& buf, const {s.name}& v) {{",
+            f"inline void serialize_{s.name}(::av::WireWriter& buf, const {s.name}& v) {{",
             "    buf.write_pod(v.deviceAddress);",
             "}",
             "",
             "[[nodiscard]] inline bool "
-            f"deserialize_{s.name}(::rvk::protocol::BufferReader& r, {s.name}* out, "
-            "::rvk::protocol::Arena& arena) {",
+            f"deserialize_{s.name}(::av::WireReader& r, {s.name}* out, "
+            "::av::WireArena& arena) {",
             "    (void)arena;",
             "    return r.read_pod(out->deviceAddress);",
             "}",
@@ -791,13 +791,13 @@ def _emit_struct_helpers(reg: Registry, s: Struct) -> list[str]:
         # alternative would be to walk every member every time, which
         # reads invalid memory for inactive members.
         return [
-            f"inline void serialize_{s.name}(::rvk::protocol::Buffer& buf, const {s.name}& v) {{",
+            f"inline void serialize_{s.name}(::av::WireWriter& buf, const {s.name}& v) {{",
             "    buf.write(&v, sizeof(v));",
             "}",
             "",
             "[[nodiscard]] inline bool "
-            f"deserialize_{s.name}(::rvk::protocol::BufferReader& r, {s.name}* out, "
-            "::rvk::protocol::Arena& arena) {",
+            f"deserialize_{s.name}(::av::WireReader& r, {s.name}* out, "
+            "::av::WireArena& arena) {",
             "    (void)arena;",
             "    return r.read(out, sizeof(*out));",
             "}",
@@ -805,7 +805,7 @@ def _emit_struct_helpers(reg: Registry, s: Struct) -> list[str]:
         ]
     out: list[str] = []
     out.append(
-        f"inline void serialize_{s.name}(::rvk::protocol::Buffer& buf, const {s.name}& v) {{"
+        f"inline void serialize_{s.name}(::av::WireWriter& buf, const {s.name}& v) {{"
     )
     for m in s.members:
         out.extend(_serialize_member(reg, m))
@@ -813,8 +813,8 @@ def _emit_struct_helpers(reg: Registry, s: Struct) -> list[str]:
     out.append("")
     out.append(
         "[[nodiscard]] inline bool "
-        f"deserialize_{s.name}(::rvk::protocol::BufferReader& r, {s.name}* out, "
-        "::rvk::protocol::Arena& arena) {"
+        f"deserialize_{s.name}(::av::WireReader& r, {s.name}* out, "
+        "::av::WireArena& arena) {"
     )
     out.append("    (void)arena;")
     for m in s.members:
@@ -835,15 +835,15 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         "#include <vulkan/vulkan_core.h>",
         "",
-        '#include "rvk/protocol/arena.hpp"',
-        '#include "rvk/protocol/buffer.hpp"',
+        '#include "proto/wire/wire_arena.hpp"',
+        '#include "proto/wire/wire_writer.hpp"',
         # Every deserialize_* takes a BufferReader&, so this header is
         # not optional. It was missing from the emitter and present in
         # the committed output, which is one of the ways generated/ had
         # drifted out of reach of check-codegen.
-        '#include "rvk/protocol/buffer_reader.hpp"',
+        '#include "proto/wire/wire_reader.hpp"',
         "",
-        "namespace rvk::vkproto {",
+        "namespace av::vkproto {",
         "",
         "// All Vulkan handles cross the wire as 64-bit values. See docs/protocol.md.",
         "// That is the wire's width, not the host's: a 32-bit guest is a real",
@@ -884,21 +884,21 @@ def emit(reg: Registry, out_dir: Path) -> None:
         # helpers: a struct serializer emits its pNext through the codec,
         # and the codec dispatches back into a struct serializer.
         header.append(
-            "inline void serialize_pnext_chain(::rvk::protocol::Buffer&, const void*);"
+            "inline void serialize_pnext_chain(::av::WireWriter&, const void*);"
         )
         header.append(
             "[[nodiscard]] inline bool deserialize_pnext_chain("
-            "::rvk::protocol::BufferReader&, VkBaseOutStructure*, "
-            "::rvk::protocol::Arena&);"
+            "::av::WireReader&, VkBaseOutStructure*, "
+            "::av::WireArena&);"
         )
         for n in reg.struct_order:
             header.append(
-                f"inline void serialize_{n}(::rvk::protocol::Buffer&, const {n}&);"
+                f"inline void serialize_{n}(::av::WireWriter&, const {n}&);"
             )
             header.append(
                 "[[nodiscard]] inline bool "
-                f"deserialize_{n}(::rvk::protocol::BufferReader&, {n}*, "
-                "::rvk::protocol::Arena&);"
+                f"deserialize_{n}(::av::WireReader&, {n}*, "
+                "::av::WireArena&);"
             )
         header.append("")
         # Optional-pointer helpers used by the bespoke struct bodies. Each
@@ -906,25 +906,25 @@ def emit(reg: Registry, out_dir: Path) -> None:
         # arena on the way back in.
         header.extend([
             "// Optional pointer helpers (used by hand-written struct bodies).",
-            "inline void serialize_optional_sampler(::rvk::protocol::Buffer& buf, const VkSampler* p) {",
+            "inline void serialize_optional_sampler(::av::WireWriter& buf, const VkSampler* p) {",
             "    const std::uint8_t present = p != nullptr ? 1 : 0;",
             "    buf.write_pod(present);",
             "    if (present) { serialize_VkSampler(buf, *p); }",
             "}",
             "",
             "[[nodiscard]] inline bool deserialize_optional_sampler("
-            "::rvk::protocol::BufferReader& r, const VkSampler** out, "
-            "::rvk::protocol::Arena& arena) {",
+            "::av::WireReader& r, const VkSampler** out, "
+            "::av::WireArena& arena) {",
             "    std::uint8_t present = 0;",
             "    if (!r.read_pod(present)) { return false; }",
             "    if (!present) { *out = nullptr; return true; }",
-            "    auto* v = arena.alloc<VkSampler>();",
+            "    auto* v = arena.allocate<VkSampler>();",
             "    if (!deserialize_VkSampler(r, *v)) { return false; }",
             "    *out = v;",
             "    return true;",
             "}",
             "",
-            "inline void serialize_optional_image_info(::rvk::protocol::Buffer& buf, "
+            "inline void serialize_optional_image_info(::av::WireWriter& buf, "
             "const VkDescriptorImageInfo* p) {",
             "    const std::uint8_t present = p != nullptr ? 1 : 0;",
             "    buf.write_pod(present);",
@@ -932,12 +932,12 @@ def emit(reg: Registry, out_dir: Path) -> None:
             "}",
             "",
             "[[nodiscard]] inline bool deserialize_optional_image_info("
-            "::rvk::protocol::BufferReader& r, const VkDescriptorImageInfo** out, "
-            "::rvk::protocol::Arena& arena) {",
+            "::av::WireReader& r, const VkDescriptorImageInfo** out, "
+            "::av::WireArena& arena) {",
             "    std::uint8_t present = 0;",
             "    if (!r.read_pod(present)) { return false; }",
             "    if (!present) { *out = nullptr; return true; }",
-            "    auto* v = arena.alloc<VkDescriptorImageInfo>();",
+            "    auto* v = arena.allocate<VkDescriptorImageInfo>();",
             "    if (!deserialize_VkDescriptorImageInfo(r, v, arena)) { return false; }",
             "    *out = v;",
             "    return true;",
@@ -954,7 +954,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         # decision that caused it.
         if "VkDescriptorAddressInfoEXT" in reg.structs:
             header.extend([
-            "inline void serialize_optional_addr_info(::rvk::protocol::Buffer& buf, "
+            "inline void serialize_optional_addr_info(::av::WireWriter& buf, "
             "const VkDescriptorAddressInfoEXT* p) {",
             "    const std::uint8_t present = p != nullptr ? 1 : 0;",
             "    buf.write_pod(present);",
@@ -962,12 +962,12 @@ def emit(reg: Registry, out_dir: Path) -> None:
             "}",
             "",
             "[[nodiscard]] inline bool deserialize_optional_addr_info("
-            "::rvk::protocol::BufferReader& r, const VkDescriptorAddressInfoEXT** out, "
-            "::rvk::protocol::Arena& arena) {",
+            "::av::WireReader& r, const VkDescriptorAddressInfoEXT** out, "
+            "::av::WireArena& arena) {",
             "    std::uint8_t present = 0;",
             "    if (!r.read_pod(present)) { return false; }",
             "    if (!present) { *out = nullptr; return true; }",
-            "    auto* v = arena.alloc<VkDescriptorAddressInfoEXT>();",
+            "    auto* v = arena.allocate<VkDescriptorAddressInfoEXT>();",
             "    if (!deserialize_VkDescriptorAddressInfoEXT(r, v, arena)) { return false; }",
             "    *out = v;",
             "    return true;",
@@ -981,7 +981,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
     if reg.struct_order:
         header.extend(_emit_pnext_codec(reg))
 
-    header.append("}  // namespace rvk::vkproto")
+    header.append("}  // namespace av::vkproto")
     header.append("")
 
     write(out_dir / "vk_serialize.h", header_guard("\n".join(header[1:])))
@@ -1018,14 +1018,14 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         *weak,
         "",
-        "namespace rvk::vkproto {",
+        "namespace av::vkproto {",
         "",
         "// Default: no image registry here, so no pixels are sent.",
         "// The ICD overrides this; see icd/host_image_copy.cpp.",
         "RVK_HOOK_DEFAULT std::uint64_t host_image_copy_bytes("
         "VkImage, const VkMemoryToImageCopy&) noexcept { return 0; }",
         "",
-        "}  // namespace rvk::vkproto",
+        "}  // namespace av::vkproto",
         "",
     ]
     write(out_dir / "vk_host_image_default.cpp", "\n".join(host_image_default))
@@ -1041,7 +1041,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         *weak,
         "",
-        "namespace rvk::vkproto {",
+        "namespace av::vkproto {",
         "",
         "namespace {",
         "template<typename H>",
@@ -1062,6 +1062,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
             f"{{ return identity(v); }}"
         )
     handle_default.append("")
-    handle_default.append("}  // namespace rvk::vkproto")
+    handle_default.append("}  // namespace av::vkproto")
     handle_default.append("")
     write(out_dir / "vk_handle_default.cpp", "\n".join(handle_default))

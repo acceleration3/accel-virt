@@ -98,6 +98,10 @@ class CheckGenerated(unittest.TestCase):
             for path in entry[2:]:
                 if path.startswith("--"):
                     continue
+                # `@` stands for the repository root in the plan's extra
+                # arguments, which is how a path reaches the generator without
+                # the plan naming a machine.
+                path = path.removeprefix("@")
                 # Registry paths live under third_party and may not be fetched;
                 # everything else is committed and must be there.
                 if "third_party" in path:

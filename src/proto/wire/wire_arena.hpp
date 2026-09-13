@@ -26,9 +26,10 @@ public:
     WireArena &operator=(const WireArena &) = delete;
 
     /* `count` of T, aligned for T, or null: for no room, for a count of zero,
-     * and for a count whose size overflows. */
+     * and for a count whose size overflows. One is the common case - a decoder
+     * unflattening a single struct - and is the default for that reason. */
     template <typename T>
-    T *allocate(size_t count)
+    T *allocate(size_t count = 1u)
     {
         return static_cast<T *>(claim(count, sizeof(T), alignof(T)));
     }

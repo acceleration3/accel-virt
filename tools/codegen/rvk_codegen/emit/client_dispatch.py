@@ -61,7 +61,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     fmt_args_str = ("," + ", ".join(fmt_args)) if fmt_args else ""
     lines: list[str] = [
         f'RVK_TRACE("client {cmd.name}{fmt}"{fmt_args_str});',
-        "::rvk::protocol::Buffer payload;",
+        "::av::WireWriter payload;",
     ]
 
     # ---- Encode inputs ----
@@ -188,7 +188,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     # ---- Send / receive ----
     if is_async:
         lines.append(
-            f"(void)t.send_async(::rvk::vkproto::kCmd_{cmd.name}, payload.bytes());"
+            f"(void)t.send_async(::av::vkproto::kCmd_{cmd.name}, payload.bytes());"
         )
         lines.append(
             f'RVK_TRACE("client {cmd.name} -> (async, no reply expected)");'
@@ -200,14 +200,14 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append("return VK_SUCCESS;")
         return lines
 
-    lines.append("::rvk::protocol::Buffer reply;")
+    lines.append("::av::WireWriter reply;")
     lines.append(
-        f"if (t.send_sync(::rvk::vkproto::kCmd_{cmd.name}, payload.bytes(), &reply) "
+        f"if (t.send_sync(::av::vkproto::kCmd_{cmd.name}, payload.bytes(), &reply) "
         "!= ::rvk::protocol::TransportResult::Ok) {"
     )
     lines.append(on_fail)
     lines.append("}")
-    lines.append("::rvk::protocol::BufferReader r{reply.bytes()};")
+    lines.append("::av::WireReader r{reply.bytes()};")
     # Must match the width the server wrote — see classify.returns_wide.
     if classify.returns_wide(cmd):
         lines.append("std::uint64_t result_code = 0;")
@@ -230,7 +230,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             element_is_struct = arr.type.base in reg.structs
             element_is_handle = arr.type.base in reg.handles
             if element_is_struct:
-                lines.append("::rvk::protocol::Arena arena_arr;")
+                lines.append("::av::WireArena arena_arr;")
             lines.append("if (array_present) {")
             lines.append(f"    for (std::uint32_t k = 0; k < *{count.name}; ++k) {{")
             if element_is_struct:
@@ -262,7 +262,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append(on_fail)
             lines.append("}")
         elif kind == "out_struct":
-            lines.append("::rvk::protocol::Arena arena_out;")
+            lines.append("::av::WireArena arena_out;")
             lines.append(f"if (!deserialize_{p.type.base}(r, {p.name}, arena_out)) {{")
             lines.append(on_fail)
             lines.append("}")
@@ -283,7 +283,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         elif kind in ("out_handle_array", "out_struct_array", "out_pod_array"):
             elem = p.type.base
             if kind == "out_struct_array":
-                lines.append("::rvk::protocol::Arena arena_out_arr;")
+                lines.append("::av::WireArena arena_out_arr;")
             lines.append(
                 f"for (std::uint32_t __k = 0; __k < static_cast<std::uint32_t>({p.len_expr}); ++__k) {{"
             )
@@ -330,13 +330,13 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         '#include "rvk/protocol/transport.hpp"',
         "",
-        "namespace rvk::vkproto {",
+        "namespace av::vkproto {",
         "",
     ]
     for cmd in cmds:
         header.append(_signature(reg, cmd) + ";")
     header.append("")
-    header.append("}  // namespace rvk::vkproto")
+    header.append("}  // namespace av::vkproto")
     header.append("")
     write(out_dir / "vk_dispatch_client.h", header_guard("\n".join(header[1:])))
 
@@ -351,11 +351,11 @@ def emit(reg: Registry, out_dir: Path) -> None:
         # is why check-codegen could not pass and why regenerating broke
         # the build.
         '#include "rvk/instr/log.hpp"',
-        '#include "rvk/protocol/buffer.hpp"',
+        '#include "proto/wire/wire_writer.hpp"',
         '#include "vk_protocol_ids.h"',
         '#include "vk_serialize.h"',
         "",
-        "namespace rvk::vkproto {",
+        "namespace av::vkproto {",
         "",
     ]
     for cmd in cmds:
@@ -364,6 +364,6 @@ def emit(reg: Registry, out_dir: Path) -> None:
             source.append("    " + line)
         source.append("}")
         source.append("")
-    source.append("}  // namespace rvk::vkproto")
+    source.append("}  // namespace av::vkproto")
     source.append("")
     write(out_dir / "vk_dispatch_client.cpp", "\n".join(source))

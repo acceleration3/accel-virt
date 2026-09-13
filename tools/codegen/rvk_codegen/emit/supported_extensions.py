@@ -34,7 +34,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         "#include <cstddef>",
         "",
-        "namespace rvk::vkproto {",
+        "namespace av::vkproto {",
         "",
         "// Device extensions this build generated entry points for.",
         "//",
@@ -121,7 +121,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
     out += [
         "};",
         "",
-        "}  // namespace rvk::vkproto",
+        "}  // namespace av::vkproto",
         "",
     ]
     write(out_dir / "vk_supported_extensions.h",

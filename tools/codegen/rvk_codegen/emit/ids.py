@@ -14,7 +14,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         "#include <cstdint>",
         "",
-        "namespace rvk::vkproto {",
+        "namespace av::vkproto {",
         "",
         "// Stable wire-protocol command IDs. See codegen/protocol_ids.toml.",
         "enum CmdId : std::uint32_t {",
@@ -24,7 +24,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         lines.append(f"    kCmd_{cmd.name} = 0x{cmd.cmd_id:08X}u,")
     lines.append("};")
     lines.append("")
-    lines.append("}  // namespace rvk::vkproto")
+    lines.append("}  // namespace av::vkproto")
     lines.append("")
 
     write(out_dir / "vk_protocol_ids.h", header_guard("\n".join(lines[1:])))

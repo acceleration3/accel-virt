@@ -43,7 +43,8 @@ class FetchKhronosRegistries(unittest.TestCase):
         for name, root, files in (
             ("vulkan", "Vulkan-Headers-1.2.3",
              {"registry/vk.xml": "<registry><vulkan/></registry>\n",
-              "include/vulkan/vulkan_core.h": "#define VK_HEADER 1\n"}),
+              "include/vulkan/vulkan_core.h": "#define VK_HEADER 1\n",
+              "include/vulkan/vk_platform.h": "#define VK_PLATFORM 1\n"}),
             ("opengl", "OpenGL-Registry-abc",
              {"xml/gl.xml": "<registry><gl/></registry>\n",
               # The guest is Windows, so the WGL entry points come too.

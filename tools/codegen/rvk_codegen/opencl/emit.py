@@ -251,14 +251,14 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n", "#include <cstdint>",
          "#include <CL/cl.h>", "#include <CL/cl_gl.h>", "",
          '#include "rvk/protocol/transport.hpp"', "",
-         "namespace rvk::clproto {", ""]
+         "namespace av::clproto {", ""]
     c = [HEADER, '#include "cl_dispatch_client.h"', "",
          "#include <cstring>", "",
          '#include "cl_protocol_ids.h"',
          '#include "rvk/instr/profiler_macros.hpp"',
-         '#include "rvk/protocol/buffer.hpp"',
-         '#include "rvk/protocol/buffer_reader.hpp"', "",
-         "namespace rvk::clproto {", ""]
+         '#include "proto/wire/wire_writer.hpp"',
+         '#include "proto/wire/wire_reader.hpp"', "",
+         "namespace av::clproto {", ""]
 
     for cmd in reg.commands.values():
         sig = _client_signature(reg, cmd)
@@ -270,7 +270,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         # call sorts next to its server-side twin rather than being
         # mistaken for it.
         c.append(f'    RVK_PROF_SCOPE("cl:{cmd.name}");')
-        c.append("    ::rvk::protocol::Buffer b;")
+        c.append("    ::av::WireWriter b;")
         for p in cmd.params:
             _encode_param(reg, cmd, p, c)
         if cmd.is_async:
@@ -280,7 +280,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
             elif not cmd.returns_void:
                 c.append("    return CL_SUCCESS;")
         else:
-            c.append("    ::rvk::protocol::Buffer reply;")
+            c.append("    ::av::WireWriter reply;")
             c.append(f"    if (t.send_sync(kCmd_{cmd.name}, b.bytes(), &reply) !=")
             c.append("        ::rvk::protocol::TransportResult::Ok) {")
             if cmd.returns_handle:
@@ -290,15 +290,15 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
             else:
                 c.append("        return CL_OUT_OF_RESOURCES;")
             c.append("    }")
-            c.append("    ::rvk::protocol::BufferReader r{reply.bytes()};")
+            c.append("    ::av::WireReader r{reply.bytes()};")
             _decode_reply(reg, cmd, c)
             if cmd.returns_handle or not cmd.returns_void:
                 c.append("    return ret;")
         c.append("}")
         c.append("")
 
-    h += ["", "}  // namespace rvk::clproto", ""]
-    c += ["}  // namespace rvk::clproto", ""]
+    h += ["", "}  // namespace av::clproto", ""]
+    c += ["}  // namespace av::clproto", ""]
     (out_dir / "cl_dispatch_client.h").write_text("\n".join(h))
     (out_dir / "cl_dispatch_client.cpp").write_text("\n".join(c))
 
@@ -328,7 +328,7 @@ def _decode_param(reg: Registry, p: Param, out: list[str]) -> None:
         out.append("        if (present != 0) {")
         out.append("            std::uint64_t count = 0;")
         out.append("            if (!r.read_varint(count)) return false;")
-        out.append(f"            auto* items = arena.alloc<{elem}>(static_cast<std::size_t>(count) + 1);")
+        out.append(f"            auto* items = arena.allocate<{elem}>(static_cast<std::size_t>(count) + 1);")
         out.append("            if (items == nullptr) return false;")
         out.append("            for (std::uint64_t i = 0; i < count; ++i) {")
         if p.role == Role.HANDLE_ARRAY:
@@ -350,7 +350,7 @@ def _decode_param(reg: Registry, p: Param, out: list[str]) -> None:
         out.append("        if (present != 0) {")
         out.append("            std::uint64_t len = 0;")
         out.append("            if (!r.read_varint(len)) return false;")
-        out.append("            char* s = arena.alloc_chars(static_cast<std::size_t>(len) + 1);")
+        out.append("            char* s = arena.allocate_chars(static_cast<std::size_t>(len) + 1);")
         out.append("            if (s == nullptr) return false;")
         out.append("            if (len != 0 && !r.read(s, static_cast<std::size_t>(len))) return false;")
         out.append("            s[len] = '\\0';")
@@ -364,14 +364,14 @@ def _decode_param(reg: Registry, p: Param, out: list[str]) -> None:
         out.append("        if (present != 0) {")
         out.append("            std::uint64_t count = 0;")
         out.append("            if (!r.read_varint(count)) return false;")
-        out.append(f"            auto** items = arena.alloc<const {p.type.base}*>("
+        out.append(f"            auto** items = arena.allocate<const {p.type.base}*>("
                    "static_cast<std::size_t>(count) + 1);")
-        out.append("            auto* lens = arena.alloc<std::size_t>(static_cast<std::size_t>(count) + 1);")
+        out.append("            auto* lens = arena.allocate<std::size_t>(static_cast<std::size_t>(count) + 1);")
         out.append("            if (items == nullptr || lens == nullptr) return false;")
         out.append("            for (std::uint64_t i = 0; i < count; ++i) {")
         out.append("                std::uint64_t len = 0;")
         out.append("                if (!r.read_varint(len)) return false;")
-        out.append("                char* s = arena.alloc_chars(static_cast<std::size_t>(len) + 1);")
+        out.append("                char* s = arena.allocate_chars(static_cast<std::size_t>(len) + 1);")
         out.append("                if (s == nullptr) return false;")
         out.append("                if (len != 0 && !r.read(s, static_cast<std::size_t>(len))) return false;")
         out.append("                s[len] = '\\0';")
@@ -403,7 +403,7 @@ def _decode_param(reg: Registry, p: Param, out: list[str]) -> None:
         out.append("        std::uint8_t present = 0;")
         out.append("        if (!r.read_pod(present)) return false;")
         out.append("        if (present != 0) {")
-        out.append(f"            auto* s = arena.alloc<{p.element}>(1);")
+        out.append(f"            auto* s = arena.allocate<{p.element}>(1);")
         out.append("            if (s == nullptr) return false;")
         out.append(f"            if (!r.read(s, sizeof(*s))) return false;")
         out.append(f"            {n} = s;")
@@ -416,7 +416,7 @@ def _decode_param(reg: Registry, p: Param, out: list[str]) -> None:
         out.append("        if (present != 0) {")
         out.append("            std::uint64_t count = 0;")
         out.append("            if (!r.read_varint(count)) return false;")
-        out.append(f"            auto* items = arena.alloc<{p.type.base}>(static_cast<std::size_t>(count) + 1);")
+        out.append(f"            auto* items = arena.allocate<{p.type.base}>(static_cast<std::size_t>(count) + 1);")
         out.append("            if (items == nullptr) return false;")
         out.append("            for (std::uint64_t i = 0; i < count; ++i) {")
         out.append(f"                {HANDLE_T} v = 0;")
@@ -434,7 +434,7 @@ def _decode_param(reg: Registry, p: Param, out: list[str]) -> None:
         out.append("        if (present != 0) {")
         out.append("            std::uint64_t count = 0;")
         out.append("            if (!r.read_varint(count)) return false;")
-        out.append(f"            auto* items = arena.alloc<{p.type.base}>(static_cast<std::size_t>(count) + 1);")
+        out.append(f"            auto* items = arena.allocate<{p.type.base}>(static_cast<std::size_t>(count) + 1);")
         out.append("            if (items == nullptr) return false;")
         out.append("            for (std::uint64_t i = 0; i < count; ++i) {")
         out.append(f"                {HANDLE_T} v = 0;")
@@ -503,9 +503,9 @@ def _capacity_expr(cmd: Command, p: Param) -> str:
 def emit_server(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n", "#include <cstddef>", "#include <cstdint>",
          "#include <CL/cl.h>", "#include <CL/cl_gl.h>", "",
-         '#include "rvk/protocol/buffer.hpp"',
-         '#include "rvk/protocol/buffer_reader.hpp"', "",
-         "namespace rvk::clproto {", "",
+         '#include "proto/wire/wire_writer.hpp"',
+         '#include "proto/wire/wire_reader.hpp"', "",
+         "namespace av::clproto {", "",
          "// Implemented by the server; the table below calls into it.",
          "class ServerDispatch {", "public:",
          "    virtual ~ServerDispatch() = default;", ""]
@@ -513,19 +513,19 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
          "#include <cstring>", "#include <span>", "",
          '#include "cl_protocol_ids.h"',
          '#include "rvk/instr/profiler_macros.hpp"',
-         '#include "rvk/protocol/arena.hpp"', "",
-         "namespace rvk::clproto {", ""]
+         '#include "proto/wire/wire_arena.hpp"', "",
+         "namespace av::clproto {", ""]
 
     for cmd in reg.commands.values():
         h.append(f"    virtual {_server_signature2(reg, cmd)} = 0;")
 
         c.append(f"static bool decode_{cmd.name}(ServerDispatch& s, "
-                 "::rvk::protocol::BufferReader& r, "
-                 "::rvk::protocol::Buffer& reply) {")
+                 "::av::WireReader& r, "
+                 "::av::WireWriter& reply) {")
         # Decoding and the driver call together, which is what the
         # server spends on one command.
         c.append(f'    RVK_PROF_SCOPE("drv:{cmd.name}");')
-        c.append("    ::rvk::protocol::Arena arena;")
+        c.append("    ::av::WireArena arena;")
         c.append("    (void)arena;")
         # Locals, in declaration order.
         for p in cmd.params:
@@ -577,7 +577,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 cap = _capacity_expr(cmd, p)
                 c.append(f"    {p.element}* {n} = nullptr;")
                 c.append(f"    if ({n}_wanted) {{")
-                c.append(f"        {n} = arena.alloc<{p.element}>(static_cast<std::size_t>({cap}) + 1);")
+                c.append(f"        {n} = arena.allocate<{p.element}>(static_cast<std::size_t>({cap}) + 1);")
                 c.append(f"        if ({n} == nullptr) return false;")
                 c.append("    }")
             elif p.role in (Role.INFO_VALUE, Role.BYTES_OUT):
@@ -586,7 +586,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 c.append(f"    {ptr_t} {n} = nullptr;")
                 c.append(f"    if ({n}_wanted) {{")
                 c.append(f"        {n} = reinterpret_cast<{ptr_t}>("
-                         f"arena.alloc<std::uint8_t>(static_cast<std::size_t>({cap}) + 1));")
+                         f"arena.allocate<std::uint8_t>(static_cast<std::size_t>({cap}) + 1));")
                 c.append(f"        if ({n} == nullptr) return false;")
                 c.append("    }")
 
@@ -662,8 +662,8 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         c.append("")
 
     c.append("bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id,")
-    c.append("                      ::rvk::protocol::BufferReader& r,")
-    c.append("                      ::rvk::protocol::Buffer& reply) {")
+    c.append("                      ::av::WireReader& r,")
+    c.append("                      ::av::WireWriter& reply) {")
     c.append("    switch (cmd_id) {")
     for cmd in reg.commands.values():
         c.append(f"        case kCmd_{cmd.name}: return decode_{cmd.name}(s, r, reply);")
@@ -674,10 +674,10 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
 
     h += ["};", "",
           "bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id,",
-          "                      ::rvk::protocol::BufferReader& r,",
-          "                      ::rvk::protocol::Buffer& reply);", "",
-          "}  // namespace rvk::clproto", ""]
-    c += ["}  // namespace rvk::clproto", ""]
+          "                      ::av::WireReader& r,",
+          "                      ::av::WireWriter& reply);", "",
+          "}  // namespace av::clproto", ""]
+    c += ["}  // namespace av::clproto", ""]
     (out_dir / "cl_dispatch_server.h").write_text("\n".join(h))
     (out_dir / "cl_dispatch_server.cpp").write_text("\n".join(c))
 
@@ -686,7 +686,7 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
     """The interface implemented by calling the host's own OpenCL."""
     out = [HEADER, "#pragma once\n", "#include <CL/cl.h>", "#include <CL/cl_gl.h>", "",
            '#include "cl_dispatch_server.h"', "",
-           "namespace rvk::clproto {", "",
+           "namespace av::clproto {", "",
            "// Every command forwarded to whatever OpenCL this process",
            "// loaded. The handles the guest sent are this process's own",
            "// pointers, so there is nothing to translate.",
@@ -713,36 +713,36 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
         else:
             out.append(f"        return {call};")
         out.append("    }")
-    out += ["};", "", "}  // namespace rvk::clproto", ""]
+    out += ["};", "", "}  // namespace av::clproto", ""]
     (out_dir / "cl_real_dispatch.h").write_text("\n".join(out))
 
 
 def emit_ids(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n", "#include <cstdint>", "",
-           "namespace rvk::clproto {", ""]
+           "namespace av::clproto {", ""]
     for cmd in reg.commands.values():
         out.append(f"inline constexpr std::uint32_t kCmd_{cmd.name} = "
                    f"0x{cmd.cmd_id:08X}U;")
-    out += ["", "}  // namespace rvk::clproto", ""]
+    out += ["", "}  // namespace av::clproto", ""]
     (out_dir / "cl_protocol_ids.h").write_text("\n".join(out))
 
 
 def emit_names(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n", "#include <cstdint>", "",
-         "namespace rvk::clproto {", "",
+         "namespace av::clproto {", "",
          "// A static name for a wire id; \"unknown\" for anything else,",
          "// never null.",
          "[[nodiscard]] const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept;",
-         "", "}  // namespace rvk::clproto", ""]
+         "", "}  // namespace av::clproto", ""]
     c = [HEADER, '#include "cl_command_names.h"', "",
          '#include "cl_protocol_ids.h"', "",
-         "namespace rvk::clproto {", "",
+         "namespace av::clproto {", "",
          "const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept {",
          "    switch (cmd_id) {"]
     for cmd in reg.commands.values():
         c.append(f'        case kCmd_{cmd.name}: return "{cmd.name}";')
     c += ["        default: return \"unknown\";", "    }", "}", "",
-          "}  // namespace rvk::clproto", ""]
+          "}  // namespace av::clproto", ""]
     (out_dir / "cl_command_names.h").write_text("\n".join(h))
     (out_dir / "cl_command_names.cpp").write_text("\n".join(c))
 
@@ -814,7 +814,7 @@ def emit_icd_stubs(raw, reg: Registry, out_dir: Path) -> None:
            "#include <type_traits>", "",
            "#include <CL/cl.h>", "#include <CL/cl_gl.h>", "#include <CL/cl_icd.h>", "",
            '#include "rvk/client/stub_report.hpp"', "",
-           "namespace rvk::clproto {", "",
+           "namespace av::clproto {", "",
            "// Every one of these answers CL_INVALID_OPERATION, and says so",
            "// once: an application that asks for something this driver does",
            "// not carry gets a clean refusal, and whoever is reading the log",
@@ -945,6 +945,6 @@ def emit_icd_stubs(raw, reg: Registry, out_dir: Path) -> None:
             out.append("        }")
         out.append("    }")
     out.append("}")
-    out += ["", "}  // namespace rvk::clproto", ""]
+    out += ["", "}  // namespace av::clproto", ""]
     (out_dir / "cl_icd_stubs.h").write_text("\n".join(out))
     print(f"  stubs for {len(names)} commands, {len(implemented)} of them real")

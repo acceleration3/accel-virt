@@ -142,7 +142,7 @@ def _emit_create_instance(cmd: Command) -> list[str]:
         "    // server's handle in a VkInstance would narrow it on a 32-bit",
         "    // client and send back a handle no object is at.",
         "    std::uint64_t server_instance = 0;",
-        f"    const VkResult __rc = ::rvk::vkproto::rvk_{cmd.name}("
+        f"    const VkResult __rc = ::av::vkproto::rvk_{cmd.name}("
         + "conn->transport(), "
         + ", ".join(forwarded)
         + ");",
@@ -177,7 +177,7 @@ def _emit_destroy_instance(cmd: Command) -> list[str]:
         "        return;",
         "    }",
         f"    auto* conn = ::rvk::icd::connection_of({inst_param.name});",
-        f"    ::rvk::vkproto::rvk_{cmd.name}(conn->transport(), "
+        f"    ::av::vkproto::rvk_{cmd.name}(conn->transport(), "
         + ", ".join(forwarded) + ");",
         f"    ::rvk::icd::destroy_wrapper({inst_param.name});",
         "    ::rvk::icd::release_connection(conn);",
@@ -244,7 +244,7 @@ def _emit_default_body(cmd: Command) -> list[str]:
                     else:
                         forward_args.append(q.name)
                 pre_call.append(
-                    f"        return ::rvk::vkproto::rvk_{cmd.name}("
+                    f"        return ::av::vkproto::rvk_{cmd.name}("
                     + transport + ", " + ", ".join(forward_args) + ");"
                 )
                 pre_call.append("    }")
@@ -323,7 +323,7 @@ def _emit_default_body(cmd: Command) -> list[str]:
     body: list[str] = []
     body.extend(pre_call)
     call_str = (
-        f"::rvk::vkproto::rvk_{cmd.name}({transport}, "
+        f"::av::vkproto::rvk_{cmd.name}({transport}, "
         + ", ".join(call_args) + ")"
     )
     if is_void:

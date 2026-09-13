@@ -161,11 +161,11 @@ def _count_expr(p: Param) -> str:
         # The transport-taking overload: a few of these are lists whose
         # length only the driver knows, and a table that guessed too
         # high would write past the end of the caller's array.
-        return f"::rvk::glproto::pname_count(rvk_t, {length.reads[0]})"
+        return f"::av::glproto::pname_count(rvk_t, {length.reads[0]})"
     if length.kind is LengthKind.TYPED_COUNT:
         count, type_name = length.reads
         return (f"(static_cast<std::size_t>({count}) * "
-                f"::rvk::glproto::type_size({type_name}))")
+                f"::av::glproto::type_size({type_name}))")
     raise AssertionError(f"no count for {p.name}: {length.kind}")
 
 
@@ -183,28 +183,28 @@ def _bytes_expr(p: Param) -> str:
 
 def emit_ids(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n", "#include <cstdint>\n",
-           "namespace rvk::glproto {\n"]
+           "namespace av::glproto {\n"]
     for cmd in reg.commands.values():
         out.append(f"inline constexpr std::uint32_t kCmd_{cmd.name} = "
                    f"0x{cmd.command_id:08x};")
-    out += ["", "}  // namespace rvk::glproto", ""]
+    out += ["", "}  // namespace av::glproto", ""]
     (out_dir / "gl_protocol_ids.h").write_text("\n".join(out))
 
 
 def emit_names(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n", "#include <cstdint>\n",
-         "namespace rvk::glproto {\n",
+         "namespace av::glproto {\n",
          "const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept;\n",
-         "}  // namespace rvk::glproto", ""]
+         "}  // namespace av::glproto", ""]
     c = [HEADER, '#include "gl_command_names.h"\n',
          '#include "gl_protocol_ids.h"\n',
-         "namespace rvk::glproto {\n",
+         "namespace av::glproto {\n",
          "const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept {",
          "    switch (cmd_id) {"]
     for cmd in reg.commands.values():
         c.append(f'        case kCmd_{cmd.name}: return "{cmd.name}";')
     c += ['        default: return "unknown";', "    }", "}", "",
-          "}  // namespace rvk::glproto", ""]
+          "}  // namespace av::glproto", ""]
     (out_dir / "gl_command_names.h").write_text("\n".join(h))
     (out_dir / "gl_command_names.cpp").write_text("\n".join(c))
 
@@ -217,7 +217,7 @@ def emit_sizes(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n",
            "#include <cstddef>",
            "#include <cstdint>\n",
-           "namespace rvk::glproto {\n",
+           "namespace av::glproto {\n",
            "// How many values a query with this enum answers with.",
            "//",
            "// The registry says COMPSIZE(pname) and stops. Almost every",
@@ -261,7 +261,7 @@ def emit_sizes(reg: Registry, out_dir: Path) -> None:
             "    }",
             "}",
             "",
-            "}  // namespace rvk::glproto", ""]
+            "}  // namespace av::glproto", ""]
     (out_dir / "gl_sizes.h").write_text("\n".join(out))
 
 
@@ -280,7 +280,7 @@ def _lease_for_write(name: str, out: list[str], guard: str) -> None:
     out.append(f"    ::rvk::client::BlobArena::Lease {name}_lease{{}};")
     out.append(f"    bool {name}_via_blob = false;")
     out.append(f"    if ({guard} &&")
-    out.append(f"        {name}_want >= ::rvk::glproto::kPixelBlobFloor) {{")
+    out.append(f"        {name}_want >= ::av::glproto::kPixelBlobFloor) {{")
     out.append("        auto& rvk_blobs = ::rvk::client::BlobArena::for_transport(rvk_t);")
     out.append("        if (rvk_blobs.ready()) {")
     out.append(f"            {name}_lease = rvk_blobs.take({name}_want);")
@@ -369,7 +369,7 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
         out.append(f"    bool {name}_via_blob = false;")
         if not cmd.is_async:
             out.append(f"    if (!{name}_is_offset && {name} != nullptr &&")
-            out.append(f"        {name}_want >= ::rvk::glproto::kPixelBlobFloor) {{")
+            out.append(f"        {name}_want >= ::av::glproto::kPixelBlobFloor) {{")
             out.append("        auto& rvk_blobs = ::rvk::client::BlobArena::for_transport(rvk_t);")
             out.append("        if (rvk_blobs.ready()) {")
             out.append(f"            {name}_lease = rvk_blobs.take({name}_want);")
@@ -524,11 +524,11 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
          "#include <string>\n",
          '#include "rvk/protocol/transport.hpp"',
          '#include "gl_types.h"\n',
-         "namespace rvk::glproto {\n"]
+         "namespace av::glproto {\n"]
     c = [HEADER, '#include "gl_dispatch_client.h"\n',
          "#include <cstring>\n",
-         '#include "rvk/protocol/buffer.hpp"',
-         '#include "rvk/protocol/buffer_reader.hpp"',
+         '#include "proto/wire/wire_writer.hpp"',
+         '#include "proto/wire/wire_reader.hpp"',
          '#include "rvk/client/stub_report.hpp"',
          '#include "gl_helpers.h"',
          '#include "gl_protocol_ids.h"',
@@ -536,7 +536,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
          '#include "rvk/client/blob_arena.hpp"',
          '#include "rvk/instr/profiler_macros.hpp"',
          '#include "rvk/apis/opengl/sync_table.hpp"\n',
-         "namespace rvk::glproto {\n",
+         "namespace av::glproto {\n",
          "// Below one page a blob lease costs more than the reply slot",
          "// it would replace: the allocator rounds to a page either way.",
          "inline constexpr std::size_t kPixelBlobFloor = 4096;\n"]
@@ -563,14 +563,14 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         # rather than being mistaken for it. Compiled out entirely
         # without the profiler, and one predictable branch with it.
         c.append(f'    RVK_PROF_SCOPE("gl:{cmd.name}");')
-        c.append("    ::rvk::protocol::Buffer rvk_b;")
+        c.append("    ::av::WireWriter rvk_b;")
         if cmd.mints_handle:
             # The handle the guest is about to answer with, written
             # first so the server binds it before it decodes anything
             # that could fail. See rvk/apis/opengl/sync_table.hpp for
             # why the guest gets to choose it at all.
             c.append("    const std::uint64_t rvk_token = "
-                     "::rvk::glproto::mint_sync_token();")
+                     "::av::glproto::mint_sync_token();")
             c.append("    rvk_b.write_pod<std::uint64_t>(rvk_token);")
         for p in cmd.params:
             _encode_param(cmd, p, c)
@@ -599,19 +599,19 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         else:
             kind = _ret_kind(cmd)
             fail = fail_for(cmd)
-            c.append("    ::rvk::protocol::Buffer rvk_reply;")
+            c.append("    ::av::WireWriter rvk_reply;")
             c.append(f"    const bool rvk_sent = rvk_t.send_sync(kCmd_{cmd.name}, rvk_b.bytes(), &rvk_reply) ==")
             c.append("        ::rvk::protocol::TransportResult::Ok;")
             _hand_back_leases(cmd, c, sent=False)
             c.append("    if (!rvk_sent) {")
             c.append(f"        {fail}")
             c.append("    }")
-            c.append("    ::rvk::protocol::BufferReader rvk_r{rvk_reply.bytes()};")
+            c.append("    ::av::WireReader rvk_r{rvk_reply.bytes()};")
             _decode_reply(cmd, c)
             c.append("}")
         c.append("")
-    h += ["", "}  // namespace rvk::glproto", ""]
-    c += ["}  // namespace rvk::glproto", ""]
+    h += ["", "}  // namespace av::glproto", ""]
+    c += ["}  // namespace av::glproto", ""]
     (out_dir / "gl_dispatch_client.h").write_text("\n".join(h))
     (out_dir / "gl_dispatch_client.cpp").write_text("\n".join(c))
 
@@ -642,7 +642,7 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append(f"    std::uint64_t {name}_token = 0;")
         out.append(f"    if (!rvk_r.read_pod({name}_token)) return false;")
         out.append(f"    GLsync {name} = static_cast<GLsync>("
-                   f"::rvk::glproto::sync_for({name}_token));")
+                   f"::av::glproto::sync_for({name}_token));")
         return
     if p.role is Role.OFFSET_ARRAY:
         out.append(f"    const void** {name} = nullptr;")
@@ -652,7 +652,7 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("        if (rvk_present != 0) {")
         out.append("            std::uint64_t rvk_n = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_n)) return false;")
-        out.append("            auto** rvk_offsets = rvk_arena.alloc<const void*>(static_cast<std::size_t>(rvk_n) + 1);")
+        out.append("            auto** rvk_offsets = rvk_arena.allocate<const void*>(static_cast<std::size_t>(rvk_n) + 1);")
         out.append("            if (rvk_offsets == nullptr) return false;")
         out.append("            for (std::uint64_t rvk_i = 0; rvk_i < rvk_n; ++rvk_i) {")
         out.append("                std::uint64_t rvk_v = 0;")
@@ -747,7 +747,7 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("        if (rvk_present != 0) {")
         out.append("            std::uint64_t rvk_n = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_n)) return false;")
-        out.append(f"            auto* rvk_text = rvk_arena.alloc<{p.type.base}>(static_cast<std::size_t>(rvk_n) + 1);")
+        out.append(f"            auto* rvk_text = rvk_arena.allocate<{p.type.base}>(static_cast<std::size_t>(rvk_n) + 1);")
         out.append("            if (rvk_text == nullptr) return false;")
         out.append("            std::span<const std::uint8_t> rvk_src{};")
         out.append("            if (!rvk_r.read_view(static_cast<std::size_t>(rvk_n), rvk_src)) return false;")
@@ -766,12 +766,12 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("        if (rvk_present != 0) {")
         out.append("            std::uint64_t rvk_n = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_n)) return false;")
-        out.append(f"            auto** rvk_strings = rvk_arena.alloc<{base}*>(static_cast<std::size_t>(rvk_n) + 1);")
+        out.append(f"            auto** rvk_strings = rvk_arena.allocate<{base}*>(static_cast<std::size_t>(rvk_n) + 1);")
         out.append("            if (rvk_strings == nullptr) return false;")
         out.append("            for (std::uint64_t rvk_i = 0; rvk_i < rvk_n; ++rvk_i) {")
         out.append("                std::uint64_t rvk_len = 0;")
         out.append("                if (!rvk_r.read_varint(rvk_len)) return false;")
-        out.append(f"                auto* rvk_text = rvk_arena.alloc<{base}>(static_cast<std::size_t>(rvk_len) + 1);")
+        out.append(f"                auto* rvk_text = rvk_arena.allocate<{base}>(static_cast<std::size_t>(rvk_len) + 1);")
         out.append("                if (rvk_text == nullptr) return false;")
         out.append("                std::span<const std::uint8_t> rvk_src{};")
         out.append("                if (!rvk_r.read_view(static_cast<std::size_t>(rvk_len), rvk_src)) return false;")
@@ -845,24 +845,24 @@ def _decode_param(p: Param, out: list[str]) -> None:
 def emit_server(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
          "#include <cstdint>\n",
-         '#include "rvk/protocol/buffer.hpp"',
-         '#include "rvk/protocol/buffer_reader.hpp"',
+         '#include "proto/wire/wire_writer.hpp"',
+         '#include "proto/wire/wire_reader.hpp"',
          '#include "gl_real_dispatch.h"\n',
-         "namespace rvk::glproto {\n",
+         "namespace av::glproto {\n",
          "// Reads one command and calls the host's entry point for it.",
          "bool dispatch_command(const RealGl& gl, std::uint32_t cmd_id,",
-         "                      ::rvk::protocol::BufferReader& reader,",
-         "                      ::rvk::protocol::Buffer& reply) noexcept;\n",
-         "}  // namespace rvk::glproto", ""]
+         "                      ::av::WireReader& reader,",
+         "                      ::av::WireWriter& reply) noexcept;\n",
+         "}  // namespace av::glproto", ""]
     c = [HEADER, '#include "gl_dispatch_server.h"\n',
          "#include <algorithm>", "#include <cstring>", "#include <span>",
          "#include <vector>\n",
-         '#include "rvk/protocol/arena.hpp"',
+         '#include "proto/wire/wire_arena.hpp"',
          '#include "gl_protocol_ids.h"',
          '#include "gl_sizes.h"',
          '#include "rvk/instr/profiler_macros.hpp"',
          '#include "rvk/apis/opengl/sync_table.hpp"\n',
-         "namespace rvk::glproto {\n",
+         "namespace av::glproto {\n",
          "// How many values the largest state query GL has answers",
          "// with: a four-by-four matrix, and room to spare. A query's",
          "// buffer is never smaller than this, whatever the guest asked",
@@ -871,8 +871,8 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
          "static constexpr std::size_t kQuerySlack = 32;\n"]
     for cmd in reg.commands.values():
         c.append(f"static bool decode_{cmd.name}(const RealGl& rvk_gl, "
-                 "::rvk::protocol::BufferReader& rvk_r, "
-                 "::rvk::protocol::Buffer& rvk_reply) {")
+                 "::av::WireReader& rvk_r, "
+                 "::av::WireWriter& rvk_reply) {")
         # A span per call on the host side, matching the "drv:" the
         # Vulkan real-dispatch has always used.
         #
@@ -890,7 +890,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         # a value, a string, a pointer — to separate a decode that is
         # tens of nanoseconds from a driver call that is not.
         c.append(f'    RVK_PROF_SCOPE("drv:{cmd.name}");')
-        c.append("    ::rvk::protocol::Arena rvk_arena;")
+        c.append("    ::av::WireArena rvk_arena;")
         c.append("    (void)rvk_arena; (void)rvk_reply;")
         if cmd.mints_handle:
             c.append("    std::uint64_t rvk_token = 0;")
@@ -916,7 +916,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         if cmd.mints_handle:
             # The guest already answered with the token; all that is
             # owed here is the note of which fence it meant.
-            c.append("    ::rvk::glproto::bind_sync(rvk_token, rvk_ret);")
+            c.append("    ::av::glproto::bind_sync(rvk_token, rvk_ret);")
         if kind == "scalar":
             c.append("    rvk_reply.write_varint(static_cast<std::uint64_t>(rvk_ret));")
         elif kind == "sync" and not cmd.mints_handle:
@@ -943,18 +943,18 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         if cmd.name == "glDeleteSync":
             # The host's object is gone; without this the table keeps a
             # dead entry per fence, and a game makes one a frame.
-            c.append("    ::rvk::glproto::forget_sync(sync_token);")
+            c.append("    ::av::glproto::forget_sync(sync_token);")
         c.append("    return true;")
         c.append("}")
         c.append("")
     c.append("bool dispatch_command(const RealGl& rvk_gl, std::uint32_t cmd_id,")
-    c.append("                      ::rvk::protocol::BufferReader& rvk_r,")
-    c.append("                      ::rvk::protocol::Buffer& rvk_reply) noexcept {")
+    c.append("                      ::av::WireReader& rvk_r,")
+    c.append("                      ::av::WireWriter& rvk_reply) noexcept {")
     c.append("    switch (cmd_id) {")
     for cmd in reg.commands.values():
         c.append(f"        case kCmd_{cmd.name}: return decode_{cmd.name}(rvk_gl, rvk_r, rvk_reply);")
     c += ["        default: return false;", "    }", "}", "",
-          "}  // namespace rvk::glproto", ""]
+          "}  // namespace av::glproto", ""]
     (out_dir / "gl_dispatch_server.h").write_text("\n".join(h))
     (out_dir / "gl_dispatch_server.cpp").write_text("\n".join(c))
 
@@ -967,7 +967,7 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n",
            "#include <cstddef>", "#include <cstdint>\n",
            '#include "gl_types.h"\n',
-           "namespace rvk::glproto {\n",
+           "namespace av::glproto {\n",
            "// The host's OpenGL, by name.",
            "//",
            "// There is no OpenGL ABI past 1.1 on any platform worth the",
@@ -999,7 +999,7 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
                    f'load("{cmd.name}", user));')
         out.append(f"    if (gl.{cmd.name} != nullptr) ++found;")
     out += ["    return found;", "}", "",
-            "}  // namespace rvk::glproto", ""]
+            "}  // namespace av::glproto", ""]
     (out_dir / "gl_real_dispatch.h").write_text("\n".join(out))
 
 
@@ -1011,7 +1011,7 @@ def emit_tier(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n",
            "#include <cstdint>",
            "#include <cstring>\n",
-           "namespace rvk::glproto {\n",
+           "namespace av::glproto {\n",
            "// The version this driver carries, and may therefore claim.",
            "//",
            "// The host's own GL is newer than the tier — it is whatever",
@@ -1040,7 +1040,7 @@ def emit_tier(reg: Registry, out_dir: Path) -> None:
             "    return false;",
             "}",
             "",
-            "}  // namespace rvk::glproto", ""]
+            "}  // namespace av::glproto", ""]
     (out_dir / "gl_tier.h").write_text("\n".join(out))
 
 
@@ -1278,7 +1278,7 @@ def _icd_pixel_bytes(cmd: Command, p: Param) -> str:
         # A query answered by enum: how many values it is worth is the
         # same table every other such query uses, and how wide each one
         # is the parameter's own type says.
-        return (f"::rvk::glproto::pname_count(*rvk_t, pname) * "
+        return (f"::av::glproto::pname_count(*rvk_t, pname) * "
                 f"sizeof({p.type.base})")
     if "target" in reads and "level" in reads:
         # glGetTexImage: the extent is the level's, which only the
@@ -1360,17 +1360,17 @@ def emit_icd(reg: Registry, out_dir: Path) -> None:
             if cmd.name in BIND_SHADOW:
                 out.append(f"    if ({BIND_SHADOW[cmd.name]}) return;")
             out += prologue
-            out.append(f"    ::rvk::glproto::rvk_{cmd.name}({args});")
+            out.append(f"    ::av::glproto::rvk_{cmd.name}({args});")
         elif kind == "sync":
             out.append("    if (rvk_t == nullptr) return nullptr;")
             out += prologue
             out.append(f"    return reinterpret_cast<GLsync>("
                        f"static_cast<std::uintptr_t>("
-                       f"::rvk::glproto::rvk_{cmd.name}({args})));")
+                       f"::av::glproto::rvk_{cmd.name}({args})));")
         else:
             out.append(f"    if (rvk_t == nullptr) return 0;")
             out += prologue
-            out.append(f"    return ::rvk::glproto::rvk_{cmd.name}({args});")
+            out.append(f"    return ::av::glproto::rvk_{cmd.name}({args});")
         out.append("}")
         out.append("")
     out += ['}  // extern "C"', ""]
