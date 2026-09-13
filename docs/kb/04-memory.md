@@ -26,6 +26,49 @@ invent a fake local VRAM segment with no storage behind it — VidMm will place
 allocations there and then ask you to `DXGK_OPERATION_TRANSFER` bytes into a
 place that does not exist.
 
+### The CPU-visible segment, as feature 041 built it
+
+Three things were settled by reading `dxgmms2.sys`, and each of them changed the
+design:
+
+1. **VidMm maps a process's view itself.**
+   `VIDMM_GLOBAL::MapInCpuVisibleSegment` (@14009ea98) builds an MDL over the
+   segment's CPU range with `VidMmiBuildMdlForContiguousMmIo` — the MMIO case a
+   BAR is — and locks it. The driver is never called to map anything for the
+   CPU. Its whole job is to have storage at the offset VidMm chose, and the
+   `CpuTranslatedAddress` it reported is what turns that offset into an address.
+2. **A GPU-MMU driver is told about placement only through page tables.** VidMm
+   issues the physical `FILL` and `TRANSFER` operations to WDDMv1 drivers only;
+   for a WDDMv2 driver the sole paging operation naming a segment is
+   `UPDATE_PAGE_TABLE`, whose entries carry a segment id and a page frame — and
+   that arrives only for an allocation the GPU is given an address for. An
+   allocation a process merely locks produces no driver call at all.
+3. **Therefore the region is one blob.** The driver creates a single
+   host-visible blob the size of the whole region and maps it at offset 0 when
+   the adapter starts, so every offset VidMm can choose already has host memory
+   behind it. A blob per allocation cannot work: there is no call in which it
+   could be created in time, and the case that matters — a process mapping host
+   memory — would get a BAR window with nothing behind it, reading zeros and
+   losing what it wrote.
+
+What the segment says: `Flags` = `CpuVisible | CacheCoherent` and never
+`Aperture` (an aperture has no storage of its own and VidMm would ask for guest
+pages to be mapped into it), `BaseAddress` 0, `Size` and `CommitLimit` the
+region's size, `CpuTranslatedAddress` the region's guest physical base.
+`SupportsCpuHostAperture` stays clear, which is what makes the union in
+`DXGK_SEGMENTDESCRIPTOR4` mean `CpuTranslatedAddress` rather than a
+`DXGK_CPUHOSTAPERTURE`.
+
+An allocation that asks to be mapped names that segment as its only supported
+one with an empty `EvictionSegmentSet`: VidMm then has one place to put it and
+nowhere to move it to, which is what makes a process's view the host's memory
+rather than a copy of it — and keeps the driver out of transferring whole
+allocations through a BAR.
+
+Reporting a second segment also moves VidMm's own implicit system-memory
+segment from 2 to 3, so the number an allocation with no segment of its own is
+sent to follows the count of segments reported and cannot be a constant.
+
 ### What a primary's placement really turns on
 
 Reported and tested in feature 038 on a real Windows 11 guest: **an allocation

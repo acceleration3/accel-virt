@@ -50,7 +50,7 @@ virtio-gpu capset id **0x72**, capset version 1, returned by
 | 17 | u8 | max_ring_order | |
 | 18 | u16 | reserved | 0 |
 | 20 | u32 | reserved | 0 |
-| 24 | u64 | features | bit 0 `host_visible_memory`; unknown bits are ignored by the reader |
+| 24 | u64 | features | bits below; unknown bits are ignored by the reader |
 | 32 | u32 | vendor_id | `VkPhysicalDeviceProperties::vendorID` |
 | 36 | u32 | device_id | `::deviceID` |
 | 40 | u32 | device_type | `VkPhysicalDeviceType`: 0 other, 1 integrated, 2 discrete, 3 virtual, 4 cpu |
@@ -59,6 +59,21 @@ virtio-gpu capset id **0x72**, capset version 1, returned by
 | 64 | u64 | local_memory | bytes in device-local heaps |
 | 72 | u64 | shared_memory | bytes in host-visible, non-device-local heaps |
 | 80 | u8[48] | name | UTF-8, NUL-terminated inside the field, every byte after the first NUL zero |
+
+Each feature bit is something the host **proved**, not something it hopes for
+(`src/device/probe/host_feasibility.cpp`):
+
+| Bit | Name | What the device had to show |
+|---|---|---|
+| 0 | `host_visible_memory` | the device has a host-visible region at all: `hostmem=` is non-zero, so there is a BAR to place blobs in |
+| 1 | `gpu_exported_memory` | memory allocated on the bound host GPU can be placed in that region and read back correctly through it (feature 039's `HostMemoryProbe`; on NVIDIA this works through dma-buf and not through an opaque fd) |
+| 2 | `guest_memory_import` | the host GPU can address guest pages directly, `VK_EXT_external_memory_host` (feature 039's `GuestImportProbe`, which refuses anything that is not a direct mapping) |
+
+A guest driver reports a CPU-visible memory segment over the region only when
+bit 0 is set **and** it found shared memory region 1 in the device's PCI
+capabilities: two answers from the device, because a segment reported without
+storage behind it is how a guest ends up writing into memory that is not there
+(feature 041).
 
 Features are the only field where unknown values are tolerated: a newer device
 may advertise a capability an older guest does not use.
