@@ -114,7 +114,7 @@ description: "Tasks: KMD host-visible memory a process can map"
 ## Phase 5: What the feature promised
 
 - [X] T024 The in-guest suite gains a host-visible scenario in `src/guest/suite/`: create a CPU-visible allocation, write a pattern through the view `D3DKMTLock2` returns, read it back, and report what it wrote; `GdiKmt` gains the lock and unlock calls it needs, with `MockKmt` scripting every failure
-- [ ] T025 The runner gains `--hostmem N` (default 256 MiB, `0` for a device with no region) in `tools/guest/run_guest_suite.py`, a `segments` step that reads the driver's own log line for what it reported, and the read-back: after the guest writes, the host reads that BAR range through QMP and compares; with its fake-guest tests
+- [X] T025 The runner gains `--hostmem N` (default 256 MiB, `0` for a device with no region) in `tools/guest/run_guest_suite.py`, a `segments` step that reads the driver's own log line for what it reported, and the read-back: after the guest writes, the host reads that BAR range through QMP and compares; with its fake-guest tests
 - [ ] T026 A live run with the region and one without it (SC-003); record what each showed here
 - [X] T027 `docs/protocol.md` documents capset feature bits 1 and 2 beside bit 0, and `docs/kb/04-memory.md` gains the segment shape this feature reports and why the aperture variant was refused
 - [ ] T028 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
