@@ -121,11 +121,13 @@ class FetchKhronosRegistries(unittest.TestCase):
         self.assertFalse(self.tree.exists())
 
     def test_the_repository_s_own_pins_name_a_revision_and_a_hash(self):
-        """What ships: three registries, each with a full-length hash and a URL
-        that names a tag or a revision rather than a branch."""
+        """What ships: three registries and the headers one of them needs, each
+        with a full-length hash and a URL that names a tag or a revision rather
+        than a branch."""
         pins = (ROOT / "tools" / "khronos_pins.txt").read_text().split("\n")
         named = [line.split() for line in pins if line.strip() and not line.startswith("#")]
-        self.assertEqual({entry[0] for entry in named}, {"vulkan", "opengl", "opencl"})
+        self.assertEqual({entry[0] for entry in named},
+                         {"vulkan", "opengl", "opencl", "opencl_headers"})
         for name, url, digest in named:
             self.assertEqual(len(digest), 64, name)
             self.assertTrue(url.startswith("https://"), name)

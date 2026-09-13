@@ -58,8 +58,8 @@ description: "Tasks: the generators, vendored"
   - the generated code includes the API's own header, which arrives with the fetch, so a clean checkout would have stopped building. The generated sources join the build only when `third_party/khronos/include` is there, and the configure line says which state it is in;
   - **only the wire compiles today.** The generator also writes the guest's dispatch and ICD entries and the host's server dispatch, and those name types no feature has built yet - a transport (043), an ICD connection (045), a backend registry (042). They are generated and committed all the same, because the gate compares the whole tree, and each joins a build when its feature arrives;
   - neither the kernel miniport nor the no-CRT guest suite can compile `<cstdint>`, and nothing generated belongs in either: a graphics API's commands are decoded on the host
-- [ ] T012 [US3] Write `tests/fuzz/fuzz_generated_decode.cpp` and its corpus: a frame from outside into the generated decoder, with the corpus seeded from a real encode of each of a handful of commands, and the fuzz smoke gate passing
-- [ ] T013 [US3] A unit test that the generated encode and decode round-trip a command and that a truncated frame is refused rather than read past, in `tests/unit/proto/generated/test_generated_vulkan.cpp`
+- [X] T012 [US3] Write `tests/fuzz/fuzz_generated_decode.cpp` and its corpus: a frame from outside into the generated decoder, with the corpus seeded from a real encode of each of a handful of commands, and the fuzz smoke gate passing
+- [X] T013 [US3] A unit test that the generated encode and decode round-trip a command and that a truncated frame is refused rather than read past, in `tests/unit/proto/generated/test_generated_vulkan.cpp`
 
 **Checkpoint**: generated code is code this project can stand behind. Commit.
 
@@ -77,8 +77,8 @@ description: "Tasks: the generators, vendored"
 
 ## Phase 5: What the feature promised
 
-- [ ] T017 `docs/protocol.md` and the id files agree, and the gate fails while they do not (FR-007)
-- [ ] T018 `docs/kb/11-implementation-plan.md` stops describing `librvk_codec` as something render-server contributes, and says what this project generates instead
+- [X] T017 `docs/protocol.md` and the id files agree, and the gate fails while they do not (FR-007)
+- [X] T018 `docs/kb/11-implementation-plan.md` stops describing `librvk_codec` as something render-server contributes, and says what this project generates instead
 - [ ] T019 The specs for features 042 and 043 are corrected: they describe render-server's runtime as theirs to consume, and this project writes both against the generated wire
 - [ ] T020 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
 

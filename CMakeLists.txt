@@ -256,6 +256,10 @@ add_test(NAME tools_tests
 add_test(NAME generated_sources
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_generated.py)
 
+# ---- the documented id space and the generator's id files agree (FR-007) ----
+add_test(NAME protocol_ids
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_protocol_ids.py)
+
 # ---- constitution III and IV.5 --------------------------------------------
 add_test(NAME design_rules
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_design.py ${CMAKE_SOURCE_DIR})

@@ -10,8 +10,8 @@ Three things get built here:
   transport, memory mapping, fences, scanout and host execution.
 - **the wire protocol** between them.
 
-Command serialization comes from `render-server`'s `librvk_codec`, an external
-C-ABI library found through pkg-config. D3D is translated in the guest by
+Command serialization is generated here, by the Khronos-registry generator
+vendored in `tools/codegen/` and committed under `src/proto/generated/`. D3D is translated in the guest by
 vkd3d-proton and DXVK, which are ordinary Vulkan clients. The design is written
 up in [`docs/kb/11-implementation-plan.md`](docs/kb/11-implementation-plan.md),
 on top of a WDDM 3.2 knowledge base in [`docs/kb/`](docs/kb/) derived from the

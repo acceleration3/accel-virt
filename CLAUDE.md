@@ -6,8 +6,9 @@
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 display miniport
 (`rvkgpu.sys`), a custom in-process QEMU device (`virtio-gpu-rvk-pci`), and the
-wire protocol between them. Serialization comes from `render-server`'s
-`librvk_codec`, an external C-ABI library found through pkg-config.
+wire protocol between them. Serialization is generated here from the Khronos
+registries, by the generator vendored in `tools/codegen/`; what it writes is
+committed under `src/proto/generated/` and never hand-edited.
 
 **Read before writing code:** `.specify/memory/constitution.md` (the rules that
 govern the project), `docs/testing.md` (how a display miniport is unit tested),

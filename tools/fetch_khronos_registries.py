@@ -39,6 +39,12 @@ WANTED = {
     "opengl": (("xml/gl.xml", "gl.xml"),
                ("xml/wgl.xml", "wgl.xml")),
     "opencl": (("xml/cl.xml", "cl.xml"),),
+    # cl.xml describes commands over types only the headers declare, and the
+    # OpenCL registry and the OpenCL headers are two repositories.
+    "opencl_headers": tuple((f"CL/{name}", f"include/CL/{name}") for name in (
+        "cl.h", "cl_d3d10.h", "cl_d3d11.h", "cl_dx9_media_sharing.h", "cl_egl.h",
+        "cl_ext.h", "cl_function_types.h", "cl_gl.h", "cl_gl_ext.h", "cl_half.h",
+        "cl_icd.h", "cl_layer.h", "cl_platform.h", "cl_version.h")),
 }
 
 

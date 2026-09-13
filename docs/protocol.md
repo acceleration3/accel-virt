@@ -178,13 +178,21 @@ nothing more for it until `CTX_DESTROY` or a reset. Other contexts carry on.
 
 ## Execution (guest -> device, in batches)
 
-A batch's payload is a sequence of commands, framed as render-server frames its
-command streams (`rvk/wire/command_header.hpp`), filling the payload exactly:
+A batch's payload is a sequence of commands, each framed by the header below,
+filling the payload exactly:
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
 | 0 | u32 | id | top 16 bits: the API - 0 transport, 1 Vulkan, 2 OpenCL, 3 OpenGL |
 | 4 | u32 | size | low 24 bits: the command's bytes including this header, at least 8; top 8 bits: flags, bit 0 *generate reply*, the rest 0 |
+
+A command id's low 16 bits name the command within its API. Which id each
+command has is not written out here - there are close to two thousand of them -
+but they are not free either: they live in `tools/codegen/profiles/*_ids.toml`,
+one file per API, and the generator appends a new command at the next free id
+and never moves an existing one. `tools/check_protocol_ids.py` is the ctest gate
+that the ids in those files stay inside the range this table gives their API.
+Vulkan owns `0x1____`, OpenCL `0x2____`, OpenGL `0x3____`.
 
 The device copies the payload once, then walks it: a command of the
 context's sub-API runs through the context's executor; a transport command
@@ -225,9 +233,10 @@ unknown, undecodable or device lost. The QEMU device loads the library its
 `executor` property names and calls `rvk_executor_ops` for the table; a library
 that does not load, lacks the symbol, or has another ABI version fails realize.
 Each context's executor is created and destroyed on the context's worker, and
-only that thread calls it. render-server's `librvk_codec` is meant to
-implement this over its API backends; the qemu configuration builds
-`rvk_echo_executor` for the tests.
+only that thread calls it. The executor that answers for real is this
+project's own, built on the generated server dispatch in
+`src/proto/generated/*/` over host API backends (feature 042); the qemu
+configuration builds `rvk_echo_executor` for the tests.
 
 ## Ring header (shared, both write)
 

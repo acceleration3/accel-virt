@@ -9,3 +9,4 @@
 vulkan https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/v1.4.309.tar.gz 437925ada160d86ed763d29dcb9318c1bb0d024d7deaf77bc7c170b8eb6b6f10
 opengl https://github.com/KhronosGroup/OpenGL-Registry/archive/1cdd228e34966dd6b95bd203e9f84faba0f371a1.tar.gz d8ac2e70b4a8173d4e30ceb726eb8b3137883d459e4666983eb1d2444483c62c
 opencl https://github.com/KhronosGroup/OpenCL-Docs/archive/refs/tags/v3.0.18.tar.gz 40d067b37816e28708af0dfad8b0f95212fc5340ade6ecf575b400853281ea38
+opencl_headers https://github.com/KhronosGroup/OpenCL-Headers/archive/refs/tags/v2024.10.24.tar.gz 159f2a550592bae49859fee83d372acd152328fdf95c0dcd8b9409f8fad5db93

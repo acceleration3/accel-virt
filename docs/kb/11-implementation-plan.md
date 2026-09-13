@@ -7,9 +7,11 @@
 3. **The host side lives inside QEMU.** A new in-process device,
    `virtio-gpu-rvk-pci`, owns transport, memory mapping, fences, scanout and
    host execution. No separate backend process, no vhost-user.
-4. **`render-server` is serialization only.** It contributes generated
-   encoders (linked into guest ICDs/UMD) and generated decoders (linked into
-   the QEMU device). It is not a transport, not a server, not an executor.
+4. **Serialization is generated, and generated here.** `render-server`
+   contributed its Khronos-registry generators and nothing else; they are
+   vendored in `tools/codegen/` and own the encoders (linked into the guest
+   ICDs/UMD) and the decoders (linked into the QEMU device). The generated
+   code is not a transport, not a server, not an executor (feature 063).
 5. **D3D is translated in the guest** by vkd3d-proton and DXVK, which are
    ordinary Vulkan clients. Vulkan, OpenGL and OpenCL are the three serialized
    APIs.
@@ -37,11 +39,11 @@ scanout, and move serialized command streams to the device.
  │  ├ d3d11/dxgi  = DXVK          prebuilt  │     │     ├ VirtIOGPU base: 2D, scanout, EDID,    │
  │  ├ vulkan-1.dll (Khronos loader)         │     │     │  cursor, control queue   (stock QEMU) │
  │  │  └ rvk Vulkan ICD   ─┐                │     │     ├ capset + 3D commands                  │
- │  ├ opengl32 → rvk GL ICD ├ encoders from │     │     ├ hostmem BAR  (mappable host memory)   │
- │  └ OpenCL   → rvk CL ICD ┘ render-server │     │     ├ doorbell BAR (ioeventfd per context)  │
+ │  ├ opengl32 → rvk GL ICD ├ generated     │     │     ├ hostmem BAR  (mappable host memory)   │
+ │  └ OpenCL   → rvk CL ICD ┘ encoders      │     │     ├ doorbell BAR (ioeventfd per context)  │
  │        │ D3DKMT (gdi32)                  │     │     ├ fence pages + irqfd MSI-X             │
  │        ▼                                 │     │     ├ worker thread per context             │
- │ dxgkrnl.sys / dxgmms2.sys                │     │     ├ decoders from render-server (C ABI)   │
+ │ dxgkrnl.sys / dxgmms2.sys                │     │     ├ generated decoders                    │
  │        │ DDI (187 slots)                 │     │     └ executor: host libvulkan / GL / CL    │
  │        ▼                                 │     │                                             │
  │ rvkgpu.sys   WDDM 3.2 KMD       NEW      │◄───►│   PCI: virtio-gpu, MSI-X                    │
@@ -57,7 +59,7 @@ Four things get built:
 |---|---|---|
 | `rvkgpu.sys` — WDDM 3.2 miniport speaking virtio-gpu | C (kernel) | new driver project |
 | `virtio-gpu-rvk-pci` — QEMU device | C (QEMU style) | a patch on the QEMU package |
-| `librvk_codec` — encoders + decoders, C ABI | C++23 generated | `render-server` |
+| the serialization — encoders + decoders | C++23, generated | this repository, `src/proto/generated/` |
 | Guest ICDs moved onto D3DKMT, later `rvkumd.dll` | C++23 | guest driver project |
 
 ## The QEMU device: `virtio-gpu-rvk-pci`
@@ -90,8 +92,8 @@ update; keeping it to new files makes that trivial.
 
 QEMU's meson builds no C++ in modules and its modinfo collector reads only `.c`,
 so the device core is `librvk_device.a` from this repository's CMake, behind the
-C ABI in `rvk_device.h`, found through `pkg-config` - as is the codec's
-`librvk_codec.so` later. No C++ enters the QEMU tree.
+C ABI in `rvk_device.h`, found through `pkg-config` - as is the host executor
+later. No C++ enters the QEMU tree.
 
 ### Protocol
 
@@ -122,7 +124,7 @@ negotiated through the capset.
 guest vCPU stores to doorbell[ctx]
   └ KVM ioeventfd (memory_region_add_eventfd)  — completed in the kernel, no BQL
       └ worker thread for ctx wakes
-          decode   (librvk_codec)
+          decode   (the generated server dispatch)
           execute  (host Vulkan / GL / CL)
           advance fence value in the ctx's fence page
           event_notifier_set(guest notifier) → irqfd, KVM injects MSI-X, no BQL
@@ -190,7 +192,7 @@ A context whose host API call reports device loss, or whose decode fails, is
 marked faulted in its fence page and gets an interrupt. The device destroys
 the host context; the guest KMD reports `DXGK_INTERRUPT_DMA_FAULTED` and lets
 `dxgkrnl` run TDR for that device only. A malformed frame never asserts — it
-faults the context, per `render-server`'s "errors are values on the wire" rule.
+faults the context: errors are values on the wire, never assertions.
 
 **Security and stability trade-off, accepted deliberately:** guest-controlled
 bytes are decoded inside the QEMU process, which also hosts the host GPU
