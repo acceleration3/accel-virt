@@ -1,5 +1,7 @@
 #include "proto/virtio_gpu/rvk_request_writer.hpp"
 
+#include "proto/resources/guest_page_list.hpp"
+
 #include "proto/context/context_setup.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -67,7 +69,37 @@ Status RvkRequestWriter::guest_blob(uint32_t resource_id, uint64_t address, uint
     writer.write_u64(address);
     writer.write_u32(length);
     writer.write_zeros(4u);
-    return Status::ok;
+    return writer.status();
+}
+
+Status RvkRequestWriter::guest_blob_pages(uint32_t resource_id, const GuestPageList &pages)
+{
+    if (!pages.complete()) return Status::invalid_parameter;
+    const uint32_t runs = pages.runs();
+    uint64_t       size = 0u;
+    for (uint32_t page = 0u; page < pages.count();) {
+        const uint32_t run = pages.run_length(page);
+        size += static_cast<uint64_t>(run) * GuestPageList::page_bytes;
+        page += run;
+    }
+    WireWriter writer(bytes_, capacity_);
+    if (!begin(writer, resource_create_blob, 0u,
+               guest_blob_fixed + size_t{runs} * guest_blob_entry))
+        return Status::too_large;
+    writer.write_u32(resource_id);
+    writer.write_u32(blob_memory_guest);
+    writer.write_u32(0u);
+    writer.write_u32(runs);
+    writer.write_u64(0u);
+    writer.write_u64(size);
+    for (uint32_t page = 0u; page < pages.count();) {
+        const uint32_t run = pages.run_length(page);
+        writer.write_u64(pages.frame(page));
+        writer.write_u32(static_cast<uint32_t>(run * GuestPageList::page_bytes));
+        writer.write_zeros(4u);
+        page += run;
+    }
+    return writer.status();
 }
 
 Status RvkRequestWriter::host_blob(uint32_t resource_id, uint64_t size)

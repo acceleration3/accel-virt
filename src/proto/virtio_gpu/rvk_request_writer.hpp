@@ -14,6 +14,7 @@
 namespace av {
 
 class ContextSetup;
+class GuestPageList;
 class WireWriter;
 
 class RvkRequestWriter {
@@ -29,6 +30,11 @@ public:
     [[nodiscard]] Status destroy_context(uint32_t context_id);
     /* Guest memory at `address` of `length` bytes, one entry covering the blob. */
     [[nodiscard]] Status guest_blob(uint32_t resource_id, uint64_t address, uint32_t length);
+    /* The scattered guest pages of an aperture allocation as one GUEST blob,
+     * one memory entry per run of adjacent pages, its size their total - what a
+     * ring, fence or reply is. The device already decodes many entries; this is
+     * the writer catching up, mirroring attach_backing_pages. */
+    [[nodiscard]] Status guest_blob_pages(uint32_t resource_id, const GuestPageList &pages);
     /* Memory of the host's, mappable into the hostmem region: no memory entries,
      * a page-multiple size, and nothing of the guest behind it. */
     [[nodiscard]] Status host_blob(uint32_t resource_id, uint64_t size);
@@ -57,7 +63,9 @@ private:
     static constexpr size_t   header_size = 24u;
     static constexpr size_t   short_request_size = 32u;
     static constexpr size_t   create_context_size = 96u;
-    static constexpr size_t   guest_blob_size = 72u;
+    static constexpr size_t   guest_blob_fixed = 56u;   /* header + fields, before entries */
+    static constexpr size_t   guest_blob_entry = 16u;
+    static constexpr size_t   guest_blob_size = guest_blob_fixed + guest_blob_entry;
     static constexpr size_t   host_blob_size = 56u;
     static constexpr size_t   map_blob_size = 40u;
     static constexpr size_t   setup_size = 64u;

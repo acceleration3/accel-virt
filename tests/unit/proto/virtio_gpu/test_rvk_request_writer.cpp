@@ -10,6 +10,7 @@
 #include "proto/virtio_gpu/capset_request.hpp"
 #include "proto/virtio_gpu/context_request.hpp"
 #include "proto/virtio_gpu/create_blob_request.hpp"
+#include "proto/resources/guest_page_list.hpp"
 #include "proto/virtio_gpu/rvk_request_writer.hpp"
 #include "proto/wire/wire_reader.hpp"
 
@@ -19,6 +20,7 @@
 using av::BlobRequest;
 using av::ByteLayout;
 using av::CapsetRequest;
+using av::GuestPageList;
 using av::ContextRequest;
 using av::ContextSetup;
 using av::CreateBlobRequest;
@@ -113,6 +115,40 @@ TEST(rvk_request_writer_guest_blob, is_a_guest_blob_of_one_entry)
   CHECK(layout.at(56u, 8u) == 0x0000000123456000ull);
   CHECK(layout.at(64u, 4u) == 0x2000u);
   CHECK(layout.at(68u, 4u) == 0u); }
+
+/* An aperture allocation's scattered pages become one blob with a memory entry
+ * per run of adjacent frames, its size their total - two runs here, a lone page
+ * then a pair. */
+TEST(rvk_request_writer_guest_blob_pages, one_entry_per_run_of_adjacent_pages)
+{ Buffer buffer;
+  RvkRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  const std::uint64_t frames[] = {0x11111000ull, 0x22222000ull, 0x22223000ull};
+  const GuestPageList pages(frames, 3u);
+  CHECK_STATUS(writer.guest_blob_pages(40u, pages), Status::ok);
+  CHECK_EQ(writer.length(), 56u + 2u * 16u);
+  WireReader reader(buffer.bytes, writer.length());
+  CreateBlobRequest decoded;
+  CHECK_STATUS(decoded.decode(reader), Status::ok);
+  CHECK_EQ(decoded.resource_id(), 40u);
+  CHECK_EQ(decoded.memory(), CreateBlobRequest::memory_guest);
+  CHECK_EQ(decoded.entries(), 2u);
+  CHECK(decoded.size() == 0x3000u);
+  const ByteLayout layout(buffer.bytes, writer.length());
+  CHECK(layout.at(56u, 8u) == 0x11111000ull);
+  CHECK(layout.at(64u, 4u) == 0x1000u);
+  CHECK(layout.at(72u, 8u) == 0x22222000ull);
+  CHECK(layout.at(80u, 4u) == 0x2000u); }
+
+/* A list with a page that is not page-aligned is not complete and is refused;
+ * so is the empty list. */
+TEST(rvk_request_writer_guest_blob_pages, refuses_an_incomplete_list)
+{ Buffer buffer;
+  RvkRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  const std::uint64_t unaligned[] = {0x11111800ull};
+  CHECK_STATUS(writer.guest_blob_pages(40u, GuestPageList(unaligned, 1u)),
+               Status::invalid_parameter);
+  CHECK_STATUS(writer.guest_blob_pages(40u, GuestPageList()), Status::invalid_parameter);
+  CHECK_EQ(writer.length(), 0u); }
 
 TEST(rvk_request_writer_unref, is_resource_unref)
 { Buffer buffer;
