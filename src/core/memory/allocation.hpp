@@ -38,7 +38,11 @@ public:
 
     /* The DXGK_ALLOCATIONINFO fields the driver answers. */
     void report_to(DxgkAllocationInfoRecord &info);
-    [[nodiscard]] Status open();
+    /* `device` is the device opening it. The pages an rvk context runs on - its
+     * ring and its fence page - belong to the device that made them, and a
+     * second device asking for them is refused: they are the transport's, not
+     * shared memory (feature 041, FR-003). */
+    [[nodiscard]] Status open(const void *device);
     [[nodiscard]] Status close();
 
     /* The guest pages the aperture segment now reads this allocation from. */
@@ -62,6 +66,9 @@ private:
     AllocationDescriptor descriptor_;
     uint64_t             size_;
     uint32_t             opens_;
+    /* Which device holds it, while any does; only a ring or a fence page keeps
+     * anyone else out. */
+    const void          *owner_;
     AperturePages        aperture_;
 
     friend struct AllocationProbe;

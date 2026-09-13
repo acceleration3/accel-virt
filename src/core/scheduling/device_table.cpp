@@ -69,7 +69,7 @@ Status DeviceTable::open_one(Device &device, DxgkOpenAllocationInfoRecord &info)
     const Status created = opens_.create(open, device, *allocation);
     if (created != Status::ok) return created;
     info.hDeviceSpecificAllocation = open;
-    return allocations_.open(*allocation);
+    return allocations_.open(*allocation, &device);
 }
 
 /* The first `count` entries hold opens; the rest may still hold resolved

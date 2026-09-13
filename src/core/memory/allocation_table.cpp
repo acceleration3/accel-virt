@@ -105,11 +105,11 @@ Allocation *AllocationTable::find(void *handle)
     return allocations_.find(handle);
 }
 
-Status AllocationTable::open(Allocation &allocation)
+Status AllocationTable::open(Allocation &allocation, const void *device)
 {
     platform_.require_irql_at_most(Irql::apc, "AllocationTable::open");
     MutexGuard lock(mutex_);
-    return allocation.open();
+    return allocation.open(device);
 }
 
 Status AllocationTable::close(Allocation &allocation)

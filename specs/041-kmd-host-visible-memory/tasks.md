@@ -64,7 +64,7 @@ description: "Tasks: KMD host-visible memory a process can map"
 **Independent Test**: L1 over `MockKmt`-style fakes and the L2 create/destroy sequence; mapping one into a real process belongs to feature 043 and is not claimed here.
 
 - [X] T019 [P] [US2] Extend `src/proto/resources/allocation_kind.hpp` and `allocation_descriptor.{hpp,cpp}` with the ring and fence-page kinds, and `tests/unit/proto/resources/test_allocation_descriptor.cpp` with the hostile table: a ring whose size is not a power of two page multiple, a fence page of the wrong size, a kind outside the enumeration, a size that overflows when page-aligned - each refused with nothing created
-- [ ] T020 [US2] A ring or fence-page allocation is pinned for its context's lifetime and refused to a device that does not own it, in `src/core/memory/allocation.cpp` and `src/core/memory/allocation_table.cpp`, asserted in `tests/unit/core/memory/test_allocation_table.cpp`
+- [X] T020 [US2] A ring or fence-page allocation is refused to a device that does not own it, in `src/core/memory/allocation.cpp`: the first device to open one holds it until nobody does, and a second is refused - those pages are one context's submissions, not shared memory. **Pinning is not this feature's**: residency is VidMm's, and what holds a ring resident is the context that owns it, which is feature 043
 - [X] T021 [US2] `tests/corpus/fuzz_proto/`'s corpus gains a ring and a fence page - the descriptor fuzzer is `fuzz_proto`, not a target of its own - and the fuzz smoke passes
 
 **Checkpoint**: the transport's memory has a shape. Commit.

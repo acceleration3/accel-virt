@@ -11,7 +11,7 @@ namespace av {
 
 Allocation::Allocation(Platform &platform, const MemorySegments &segments,
                        const AllocationDescriptor &descriptor, uint64_t size)
-    : platform_(platform), segments_(segments), descriptor_(descriptor), size_(size), opens_(0u),
+    : platform_(platform), segments_(segments), descriptor_(descriptor), size_(size), opens_(0u), owner_(nullptr),
       aperture_(platform, static_cast<uint32_t>(size / page_bytes)) {}
 
 const AllocationDescriptor &Allocation::descriptor() const { return descriptor_; }
@@ -59,10 +59,14 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
     info.Flags2 = 0u;
 }
 
-Status Allocation::open()
+Status Allocation::open(const void *device)
 {
     platform_.require_irql_at_most(Irql::apc, "Allocation::open");
     InvariantScope<Allocation> guard(platform_, *this, "open");
+    const bool the_transport_s = descriptor_.kind() == AllocationKind::context_ring ||
+                                 descriptor_.kind() == AllocationKind::fence_page;
+    if (the_transport_s && owner_ != nullptr && owner_ != device) return Status::invalid_parameter;
+    if (opens_ == 0u) owner_ = device;
     opens_++;
     return Status::ok;
 }
@@ -73,6 +77,7 @@ Status Allocation::close()
     InvariantScope<Allocation> guard(platform_, *this, "close");
     if (opens_ == 0u) return Status::invalid_state;
     opens_--;
+    if (opens_ == 0u) owner_ = nullptr;
     return Status::ok;
 }
 
@@ -100,6 +105,7 @@ GuestPageList Allocation::pages_at(uint64_t segment_address, uint32_t page_count
 
 bool Allocation::invariants_hold() const
 {
+    if ((opens_ == 0u) != (owner_ == nullptr)) return false;
     return size_ != 0u && (size_ & (page_bytes - 1u)) == 0u && size_ >= descriptor_.size() &&
            aperture_.invariants_hold();
 }

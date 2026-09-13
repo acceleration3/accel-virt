@@ -144,9 +144,9 @@ TEST(allocation_report_to, a_gpu_only_allocation_is_not_cpu_visible)
 TEST(allocation_open, counts_opens_and_refuses_a_close_with_none)
 { MockPlatform platform; Segments segments(platform); Allocation allocation(platform, segments.segments(), shadow, 0x1000u);
   CHECK_STATUS(allocation.close(), Status::invalid_state);
-  CHECK_STATUS(allocation.open(), Status::ok);
+  CHECK_STATUS(allocation.open(&platform), Status::ok);
   CHECK(allocation.invariants_hold());
-  CHECK_STATUS(allocation.open(), Status::ok);
+  CHECK_STATUS(allocation.open(&platform), Status::ok);
   CHECK_EQ(allocation.opens(), 2u);
   CHECK_STATUS(allocation.close(), Status::ok);
   CHECK(allocation.invariants_hold());
@@ -156,7 +156,7 @@ TEST(allocation, is_legal_up_to_apc)
 { MockPlatform platform; Segments segments(platform); Allocation allocation(platform, segments.segments(), shadow, 0x1000u); DxgkAllocationInfoRecord info = {};
   platform.set_irql(Irql::dispatch);
   allocation.report_to(info);
-  static_cast<void>(allocation.open());
+  static_cast<void>(allocation.open(&platform));
   static_cast<void>(allocation.close());
   platform.set_irql(Irql::passive);
   CHECK(platform.claim(Violation::irql_ceiling));
@@ -304,3 +304,43 @@ TEST(allocation_report_to, a_gpu_only_allocation_stays_out_of_host_memory)
   allocation.report_to(info);
   CHECK_EQ(info.PreferredSegment, 3u);   /* VidMm's own, after the two this adapter reports */
   CHECK_EQ(info.Flags, 0u); }
+
+/* Feature 041, US2: the pages an rvk context runs on belong to the device that
+ * made them. A second device asking for the same ring is asking for another
+ * process's submissions, and is refused; anything else is shared memory and is
+ * not. */
+TEST(allocation_open, a_ring_belongs_to_the_device_that_opened_it)
+{ MockPlatform platform;
+  Segments segments(platform);
+  int first_device = 0;
+  int second_device = 0;
+  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
+  Allocation allocation(platform, segments.segments(), ring, 0x4000u);
+  CHECK_STATUS(allocation.open(&first_device), Status::ok);
+  CHECK_STATUS(allocation.open(&second_device), Status::invalid_parameter);
+  CHECK_STATUS(allocation.open(&first_device), Status::ok);   /* the same device, twice */
+  CHECK(allocation.invariants_hold());
+
+  /* Once nobody holds it, it is anybody's again: the handle is gone and what
+   * is left is memory. */
+  CHECK_STATUS(allocation.close(), Status::ok);
+  CHECK_STATUS(allocation.close(), Status::ok);
+  CHECK_STATUS(allocation.open(&second_device), Status::ok);
+  CHECK(allocation.invariants_hold());
+  CHECK_STATUS(allocation.close(), Status::ok); }
+
+TEST(allocation_open, a_fence_page_belongs_to_its_device_and_a_shadow_does_not)
+{ MockPlatform platform;
+  Segments segments(platform);
+  int first_device = 0;
+  int second_device = 0;
+  const AllocationDescriptor page_of_fences(AllocationKind::fence_page, true, SurfaceLayout(), 0x1000u,
+                                            ScanoutTarget());
+  Allocation fences(platform, segments.segments(), page_of_fences, 0x1000u);
+  CHECK_STATUS(fences.open(&first_device), Status::ok);
+  CHECK_STATUS(fences.open(&second_device), Status::invalid_parameter);
+
+  Allocation shared(platform, segments.segments(), shadow, 0x1000u);
+  CHECK_STATUS(shared.open(&first_device), Status::ok);
+  CHECK_STATUS(shared.open(&second_device), Status::ok);
+  CHECK(shared.invariants_hold()); }
