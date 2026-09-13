@@ -124,6 +124,39 @@ class VirtioGpuBlobs(unittest.TestCase):
         self.assertEqual(hex(self.send(gpu, named(CMD_RESOURCE_UNREF, 2))), hex(RESP_OK_NODATA))
         self.assertEqual(gpu.qtest.read_bytes(hostmem + 11 * PAGE, len(pattern)), bytes(len(pattern)))
 
+    def test_the_driver_s_own_region_blob_is_what_the_device_accepts(self):
+        """Feature 041: the guest driver maps the whole region as one blob at
+        offset 0 as soon as it starts, because VidMm maps a process's view
+        itself and never says where an allocation landed - so every offset it
+        can choose must already have host memory behind it. These are the exact
+        requests src/core/memory/host_visible_blob.cpp sends."""
+        gpu = self.open(RVK)
+        hostmem = self.hostmem(gpu)
+        resource = 0x1000   # HostVisibleBlob::first_resource_id
+        self.assertEqual(hex(self.send(gpu, create_blob(resource, BLOB_MEM_HOST3D, BLOB_FLAG_MAPPABLE, HOSTMEM))),
+                         hex(RESP_OK_NODATA))
+        response = gpu.control(map_blob(resource, 0), 32)
+        self.assertEqual(hex(response_type(response)), hex(RESP_OK_MAP_INFO))
+        self.assertEqual(struct.unpack_from("<I", response, 24)[0], MAP_CACHE_CACHED)
+        # Every offset VidMm could place an allocation at is the host's memory:
+        # the first page, the last, and one in the middle.
+        pattern = bytes(range(256))
+        for offset in (0, HOSTMEM // 2, HOSTMEM - len(pattern)):
+            gpu.qtest.write_bytes(hostmem + offset, pattern)
+            self.assertEqual(gpu.qtest.read_bytes(hostmem + offset, len(pattern)), pattern)
+        # Nothing else fits beside it, which is what one blob for the whole
+        # region means.
+        self.assertEqual(hex(self.send(gpu, create_blob(resource + 1, BLOB_MEM_HOST3D, BLOB_FLAG_MAPPABLE, PAGE))),
+                         hex(RESP_OK_NODATA))
+        self.assertEqual(hex(self.send(gpu, map_blob(resource + 1, 0))), hex(RESP_ERR_INVALID_PARAMETER))
+        self.assertEqual(hex(self.send(gpu, map_blob(resource + 1, HOSTMEM - PAGE))),
+                         hex(RESP_ERR_INVALID_PARAMETER))
+        # And the driver's own teardown order - unmap, then unref - is what the
+        # device accepts.
+        self.assertEqual(hex(self.send(gpu, named(CMD_RESOURCE_UNMAP_BLOB, resource))), hex(RESP_OK_NODATA))
+        self.assertEqual(hex(self.send(gpu, named(CMD_RESOURCE_UNREF, resource))), hex(RESP_OK_NODATA))
+        self.assertEqual(gpu.qtest.read_bytes(hostmem, len(pattern)), bytes(len(pattern)))
+
     def test_mappings_stay_inside_the_region_and_apart(self):
         gpu = self.open(RVK)
         for resource in (3, 4):
