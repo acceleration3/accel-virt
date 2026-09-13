@@ -67,6 +67,17 @@ TEST(rvk_context_record, a_well_formed_record_round_trips)
   CHECK_STATUS(decoded.encode(again, sizeof again), Status::ok);
   CHECK(std::memcmp(again, encoded.bytes(), sizeof again) == 0); }
 
+/* Each known sub-API decodes: OpenGL and OpenCL as well as Vulkan. */
+TEST(rvk_context_record, every_known_sub_api_decodes)
+{ for (SubApi api : {SubApi::vulkan, SubApi::opengl, SubApi::opencl}) {
+      RvkContextRecord record(api, 16u, 2u, 3u, 4u);
+      Encoded encoded(record);
+      CHECK_STATUS(encoded.status(), Status::ok);
+      RvkContextRecord decoded;
+      CHECK_STATUS(decoded.decode(encoded.bytes(), RvkContextRecord::encoded_size), Status::ok);
+      CHECK(decoded.sub_api() == api);
+  } }
+
 /* A reply of zero is a context that reads no answer back, which is legal. */
 TEST(rvk_context_record, a_reply_of_zero_is_no_reply_slot)
 { RvkContextRecord record(SubApi::opencl, 12u, 2u, 3u, 0u);
@@ -86,12 +97,13 @@ TEST(rvk_context_record, a_bad_magic_is_refused)
   encoded.bytes()[0] ^= 0xFFu;
   CHECK(rejects(encoded.bytes(), RvkContextRecord::encoded_size)); }
 
-/* Exactly one sub-API bit; zero, two, or an undefined value is refused. */
+/* Exactly one sub-API bit; zero, two, or an undefined value is refused. The
+ * sub_api field is the u32 at offset 4, past the magic. */
 TEST(rvk_context_record, a_sub_api_that_is_not_one_known_bit_is_refused)
 { for (std::uint32_t api : {0u, 3u, 8u, 7u}) {
       std::uint8_t bytes[RvkContextRecord::encoded_size] = {};
       CHECK_STATUS(sample().encode(bytes, sizeof bytes), Status::ok);
-      std::memcpy(bytes + 8u, &api, sizeof api);
+      std::memcpy(bytes + 4u, &api, sizeof api);
       CHECK(rejects(bytes, sizeof bytes));
   } }
 

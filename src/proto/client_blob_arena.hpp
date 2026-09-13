@@ -14,6 +14,8 @@
 
 namespace av {
 
+struct ClientBlobArenaProbe;
+
 /* The room one array was lent: where to copy it, and the offset the host reads
  * it back at. A lease of nothing - what `take` answers when it cannot - is one
  * `taken()` denies. */
@@ -57,6 +59,8 @@ private:
     uint8_t *block_;
     size_t   capacity_;
     size_t   used_;
+
+    friend struct ClientBlobArenaProbe;
 };
 
 }  // namespace av

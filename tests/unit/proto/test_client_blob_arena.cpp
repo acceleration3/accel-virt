@@ -8,7 +8,23 @@
 #include <cstdint>
 
 using av::ClientBlobArena;
+using av::ClientBlobArenaProbe;
 using av::ClientBlobLease;
+
+namespace av {
+
+struct ClientBlobArenaProbe {
+    /* States the class never builds: used past capacity, and a block that is
+     * gone while a capacity remains - both what the invariant is there to catch. */
+    static void overfill(ClientBlobArena &arena) { arena.used_ = arena.capacity_ + 1u; }
+    static void orphan_capacity(ClientBlobArena &arena)
+    {
+        arena.block_ = nullptr;
+        arena.capacity_ = 1u;
+    }
+};
+
+}  // namespace av
 
 TEST(client_blob_arena, an_arena_with_no_block_is_never_ready)
 { ClientBlobArena arena;
@@ -57,3 +73,33 @@ TEST(client_blob_arena, the_top_lease_comes_back_and_a_buried_one_does_not)
   /* Giving back the current top does free it. */
   arena.give_back(third);
   CHECK_EQ(arena.used(), 64u); }
+
+
+/* A null block, whatever the capacity says, is no arena: not ready, and it
+ * lends nothing. */
+TEST(client_blob_arena, a_null_block_is_no_arena)
+{ ClientBlobArena arena(nullptr, 256u);
+  CHECK(!arena.ready());
+  CHECK(!arena.take(16u).taken());
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(arena.invariants_hold()); }
+
+/* Giving back a lease that was never taken changes nothing. */
+TEST(client_blob_arena, an_untaken_lease_given_back_is_a_no_op)
+{ std::uint8_t block[64];
+  ClientBlobArena arena(block, sizeof block);
+  ClientBlobLease taken = arena.take(16u);
+  arena.give_back(ClientBlobLease{});
+  CHECK_EQ(arena.used(), 16u);
+  static_cast<void>(taken);
+  CHECK(arena.invariants_hold()); }
+
+/* The invariant catches the states the class never builds. */
+TEST(client_blob_arena, the_invariant_catches_impossible_states)
+{ std::uint8_t block[64];
+  ClientBlobArena overfilled(block, sizeof block);
+  ClientBlobArenaProbe::overfill(overfilled);
+  CHECK(!overfilled.invariants_hold());
+  ClientBlobArena orphaned(block, sizeof block);
+  ClientBlobArenaProbe::orphan_capacity(orphaned);
+  CHECK(!orphaned.invariants_hold()); }

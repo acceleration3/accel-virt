@@ -40,6 +40,11 @@ struct ContextBlobPublisherProbe {
         publisher.counts_[0] = 0u;
     }
     static void break_next_id(ContextBlobPublisher &publisher) { publisher.next_id_ = 0u; }
+    static void break_count_high(ContextBlobPublisher &publisher)
+    {
+        publisher.used_[0] = true;
+        publisher.counts_[0] = ContextBlobPublisher::blobs_per_context + 1u;
+    }
 };
 
 }  // namespace av
@@ -285,4 +290,7 @@ TEST(context_blob_publisher, the_invariant_catches_states_it_never_builds)
   CHECK(!bad_count.invariants_hold());
   ContextBlobPublisher bad_id(mapped.platform());
   ContextBlobPublisherProbe::break_next_id(bad_id);
-  CHECK(!bad_id.invariants_hold()); }
+  CHECK(!bad_id.invariants_hold());
+  ContextBlobPublisher too_many(mapped.platform());
+  ContextBlobPublisherProbe::break_count_high(too_many);
+  CHECK(!too_many.invariants_hold()); }
