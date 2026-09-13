@@ -265,6 +265,17 @@ foreach(src ${AV_UNIT_TESTS})
   add_test(NAME ${name} COMMAND ${name})
   set_tests_properties(${name} PROPERTIES
     ENVIRONMENT "LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/coverage/${name}.profraw")
+  # The generated VK/CL clients are not compiled into any runtime target yet
+  # (their home is the ICDs, 045+); this one test compiles and links them to
+  # prove the emitter's output builds against ClientTransport (feature 043).
+  if(name STREQUAL "test_generated_clients")
+    target_sources(${name} PRIVATE
+      ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_client.cpp
+      ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_client.cpp)
+    target_include_directories(${name} PRIVATE
+      ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan
+      ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl)
+  endif()
   if(AV_COVERAGE)
     set_tests_properties(${name} PROPERTIES
       FIXTURES_REQUIRED coverage_clean FIXTURES_SETUP coverage_profiles)
