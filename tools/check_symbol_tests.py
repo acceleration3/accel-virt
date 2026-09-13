@@ -12,7 +12,7 @@ import os
 import re
 import sys
 
-from header_scan import declared_classes
+from header_scan import declared_classes, is_shim
 
 # Headers that declare a *required* interface - what core calls and the
 # platform provides - rather than a provided one. Testing these would test the
@@ -46,6 +46,13 @@ def main():
     violations = []
     for declared in declared_classes(root):
         if declared.header in EXCLUDE:
+            continue
+        # Constitution II: the shim is the non-portable edge - dlopen, an
+        # instance, an enumeration - and a unit test on a machine that may have
+        # no GPU cannot name it into existence. L3 and L5 prove it instead, and
+        # the directory is the rule so moving a file out puts the gate back
+        # (feature 042).
+        if is_shim(declared.header):
             continue
         if not re.search(r"\b" + re.escape(declared.name) + r"\b", corpus):
             violations.append(f"{declared.header}: class {declared.name} has no test naming it")

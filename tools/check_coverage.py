@@ -19,6 +19,12 @@ SOURCE_DIRECTORIES = ("src/core/", "src/device/", "src/proto/", "src/guest/")
 # is held to the compiler and to check_generated.py, not to a branch count no
 # test could reach across thousands of registry commands (feature 063).
 GENERATED_DIRECTORY = "generated"
+# Constitution II: the core is portable, the shim is not. A file here does
+# nothing but call the host's own loaders - dlopen, an instance, an enumeration
+# - and a unit test on a machine that may have no GPU at all cannot drive it. It
+# is proven at L3 and L5 instead. The directory is the rule, so moving a file
+# out of it puts the gate back (feature 042).
+SHIM_DIRECTORY = "shim"
 BASELINE = "tests/untestable_baseline.txt"
 MARK_RE = re.compile(r'AV_UNTESTABLE\(\s*"([^"]*)"')
 
@@ -51,9 +57,15 @@ class CoverageVerdict:
             for base, _dirs, files in sorted(os.walk(os.path.join(self.root, directory))):
                 found += [os.path.join(base, name) for name in sorted(files)
                           if name.endswith(suffixes)
-                          and f"{os.sep}{GENERATED_DIRECTORY}{os.sep}"
-                          not in f"{os.sep}{os.path.relpath(os.path.join(base, name), self.root)}"]
+                          and not self.excluded(os.path.relpath(os.path.join(base, name), self.root))]
         return found
+
+    def excluded(self, relative):
+        """Machine-written code and the shim are compiled and judged, but not by
+        a branch count: one named rule each (features 063 and 042)."""
+        spelled = f"{os.sep}{relative}"
+        return (f"{os.sep}{GENERATED_DIRECTORY}{os.sep}" in spelled
+                or f"{os.sep}{SHIM_DIRECTORY}{os.sep}" in spelled)
 
     def unlinked(self):
         """A source no test references is dropped by the linker, so it never
@@ -65,7 +77,7 @@ class CoverageVerdict:
 
     def source_path(self, filename):
         relative = os.path.relpath(os.path.realpath(filename), self.root)
-        if f"{os.sep}{GENERATED_DIRECTORY}{os.sep}" in f"{os.sep}{relative}":
+        if self.excluded(relative):
             return None
         return relative if relative.startswith(SOURCE_DIRECTORIES) else None
 

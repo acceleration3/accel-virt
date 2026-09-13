@@ -86,3 +86,30 @@ private:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ShimDirectories(unittest.TestCase):
+    """Constitution II again: a class that only calls the host's own loaders
+    cannot be named by a unit test on a machine that may have no GPU, and the
+    L3 and L5 layers are where it is proven (feature 042)."""
+
+    def setUp(self):
+        self.tree = SourceTree()
+        self.addCleanup(self.tree.remove)
+        self.tree.write("tests/unit/test_nothing.cpp", "// names nothing\n")
+
+    def check(self):
+        return run(ROOT / "tools" / "check_symbol_tests.py", self.tree.root)
+
+    def test_a_shim_class_needs_no_test_naming_it(self):
+        self.tree.write("src/device/shim/loader.hpp",
+                        "class Loader {\npublic:\n  void open();\nprivate:\n  int fd_;\n};\n")
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_the_same_class_outside_one_still_does(self):
+        self.tree.write("src/device/portable/loader.hpp",
+                        "class Loader {\npublic:\n  void open();\nprivate:\n  int fd_;\n};\n")
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Loader", result.stdout + result.stderr)

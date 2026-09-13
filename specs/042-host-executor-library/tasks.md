@@ -23,12 +23,12 @@ description: "Tasks: the host executor"
 
 **Purpose**: a second implementation of the ABI, built in every configuration, before it does anything.
 
-- [ ] T001 `src/device/executor/` and a `rvk_executor` shared-library target in `CMakeLists.txt`, built in **every** configuration rather than only under `AV_QEMU`: the conformance suite must run sanitized, and `AV_QEMU` returns at `CMakeLists.txt:143` before the sanitizer flags (research §5)
-- [ ] T002 [P] Write `tests/unit/device/executor/test_host_gpu.cpp` first: a `HostGpu` answers its UUID, its render node and the sub-APIs it serves; one with no Vulkan answers no Vulkan rather than failing to construct
-- [ ] T003 `HostGpu` (object class) in `src/device/executor/host_gpu.{hpp,cpp}` - one host GPU: its 16-byte Vulkan device UUID, its DRM render node path, the sub-API bits and the `RVK_BLOB_*` kinds it can import. Two-phase: `initialize()` returns `Status`
-- [ ] T004 [P] Write `tests/unit/device/executor/test_host_gpu_set.cpp` first: a set with two GPUs finds each by UUID; an unknown UUID is not found; a host with no GPU at all is an empty set, not a failure
-- [ ] T005 `HostGpuSet` (system class) in `src/device/executor/host_gpu_set.{hpp,cpp}`, `max_gpus = 8` (data-model; this machine has two, a `HostGpu` is under 100 bytes)
-- [ ] T006 The `extern "C"` boundary in `src/device/executor/executor_ops.cpp`: `rvk_executor_ops()` answering a file-scope `const RvkExecutorOps`, each function one line into the library root held in `ObjectStorage`. This is the fourth process-lifetime object and `CLAUDE.md` now names it
+- [X] T001 `src/device/executor/` and a `rvk_executor` shared-library target in `CMakeLists.txt`, built in **every** configuration rather than only under `AV_QEMU`: the conformance suite must run sanitized, and `AV_QEMU` returns at `CMakeLists.txt:143` before the sanitizer flags (research §5)
+- [X] T002 [P] Write `tests/unit/device/executor/test_host_gpu.cpp` first: a `HostGpu` answers its UUID, its render node and the sub-APIs it serves; one with no Vulkan answers no Vulkan rather than failing to construct
+- [X] T003 `HostGpu` (object class) in `src/device/executor/host_gpu.{hpp,cpp}` - one host GPU: its 16-byte Vulkan device UUID, its DRM render node path, the sub-API bits and the `RVK_BLOB_*` kinds it can import. Two-phase: `initialize()` returns `Status`
+- [X] T004 [P] Write `tests/unit/device/executor/test_host_gpu_set.cpp` first: a set with two GPUs finds each by UUID; an unknown UUID is not found; a host with no GPU at all is an empty set, not a failure
+- [X] T005 `HostGpuSet` (system class) in `src/device/executor/host_gpu_set.{hpp,cpp}`, `max_gpus = 8` (data-model; this machine has two, a `HostGpu` is under 100 bytes)
+- [X] T006 The `extern "C"` boundary in `src/device/executor/executor_ops.cpp`: `rvk_executor_ops()` answering a file-scope `const RvkExecutorOps`, each function one line into the library root held in `ObjectStorage`. This is the fourth process-lifetime object and `CLAUDE.md` now names it
 
 **Checkpoint**: a library that loads, answers `sub_apis` and creates nothing. Commit.
 
@@ -70,7 +70,7 @@ description: "Tasks: the host executor"
 
 **Independent Test**: the conformance suite imports a host-visible blob, writes a pattern through the host's mapping, and reads it back through a Vulkan buffer bound to the imported memory.
 
-- [ ] T017 [US2] `src/device/abi/rvk_executor.h` becomes version 2: `RvkBlobHandle` with exactly the fields contract §B1 names, `import_kinds`, `import_blob`, `release_blob`. Version 1 keeps working and the device accepts both (FR-006); a v1 table simply imports nothing
+- [X] T017 [US2] `src/device/abi/rvk_executor.h` becomes version 2: `RvkBlobHandle` with exactly the fields contract §B1 names, `import_kinds`, `import_blob`, `release_blob`. Version 1 keeps working and the device accepts both (FR-006); a v1 table simply imports nothing
 - [ ] T018 [P] [US2] Write `tests/unit/device/executor/test_imported_blob.cpp` and `test_import_table.cpp` first: a handle whose `size` is not a whole number of pages is refused; a `kind` that is not exactly one bit is refused; `release_blob` on an id never imported is a no-op; a re-import of a live id is refused rather than silently tearing the old one down (research §3)
 - [ ] T019 [US2] `ImportedBlob` (object class) and `ImportTable` (system class) in `src/device/executor/`, `max_imports = 256` per session (data-model). Named `ImportTable` because `av::BlobTable` already exists at `src/device/memory/blob_table.hpp:22`
 - [ ] T020 [US2] `BlobHandleSource` (system class) in `src/device/memory/`: builds the handle on the **main loop** and caches it, because every host memory operation is main-loop-only and `execute` runs on the worker (contract §B4). A guest-backed blob becomes one dma-buf through `UDMABUF_CREATE_LIST`, which QEMU's own `hw/display/virtio-gpu-udmabuf.c:30-67` already does and which removes the device-side flattening copy entirely

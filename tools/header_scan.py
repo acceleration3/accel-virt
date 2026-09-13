@@ -22,6 +22,19 @@ def is_generated(relative):
     """Whether a repository-relative path is under a generated directory."""
     return f"{os.sep}{GENERATED_DIRECTORY}{os.sep}" in f"{os.sep}{relative}"
 
+
+# Constitution II: the core is portable, the shim is not. A file here does
+# nothing but call the host's own loaders, so a unit test on a machine that may
+# have no GPU cannot drive it; it is proven at L3 and L5 instead. The directory
+# is the rule so that moving a file out of it puts the coverage gate back
+# (feature 042).
+SHIM_DIRECTORY = "shim"
+
+
+def is_shim(relative):
+    """Whether a repository-relative path is under a shim directory."""
+    return f"{os.sep}{SHIM_DIRECTORY}{os.sep}" in f"{os.sep}{relative}"
+
 CLASS_RE = re.compile(r"^\s*(?:class|struct)\s+([A-Z]\w*)\s*(?:final\s*)?(?:[:{]|$)")
 METHOD_RE = re.compile(
     r"^\s*(?:\[\[nodiscard\]\]\s*)?"

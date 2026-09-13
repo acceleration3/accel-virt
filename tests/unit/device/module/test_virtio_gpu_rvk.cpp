@@ -207,12 +207,14 @@ TEST(virtio_gpu_rvk_realize, an_executor_table_this_abi_does_not_accept_is_refus
 { MockHost host;
   host.add_gpu(first);
   av::MockExecutorOps executor(RVK_EXECUTOR_SUB_API_VULKAN);
-  executor.editable().abi_version = 2u;
+  /* Two is this ABI now; a version nobody has written is what a device must
+   * refuse (feature 042). */
+  executor.editable().abi_version = RVK_EXECUTOR_ABI_VERSION + 1u;
   VirtioGpuRvk device(host);
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, &executor.table(), message), Status::invalid_parameter);
-  CHECK(std::strstr(message.text(), "not ABI version 1") != nullptr);
+  CHECK(std::strstr(message.text(), "not ABI version 1 or 2") != nullptr);
   CHECK(!device.realized());
   CHECK_EQ(host.logged(), 1u); }
 

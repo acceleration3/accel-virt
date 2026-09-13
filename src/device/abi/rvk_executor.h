@@ -21,7 +21,13 @@
 extern "C" {
 #endif
 
-#define RVK_EXECUTOR_ABI_VERSION 1u
+/* Version 1 has no memory channel at all: the only bytes an executor can see
+ * are one command's payload, so a command naming a blob has nothing to name it
+ * with. Version 2 adds the three operations that fix that and changes nothing
+ * else; the device accepts both, and a version 1 library simply imports
+ * nothing (feature 042). */
+#define RVK_EXECUTOR_ABI_VERSION 2u
+#define RVK_EXECUTOR_ABI_VERSION_MINIMUM 1u
 #define RVK_EXECUTOR_OPS_SYMBOL "rvk_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -34,6 +40,25 @@ extern "C" {
 #define RVK_UNKNOWN 1u          /* a command id this library does not know: skipped */
 #define RVK_UNDECODABLE 2u      /* the payload does not decode */
 #define RVK_DEVICE_LOST 3u      /* the host API lost its device: nothing more will run */
+
+/* What a blob is, to whichever host API is about to be handed it. No single
+ * identifier is zero-copy everywhere: Vulkan imports a host pointer on every
+ * GPU measured, while OpenGL and OpenCL import a dma-buf and only on some, so
+ * carrying one kind would concede a whole API on some hosts. Version 2 carries
+ * both and the device picks from what import_kinds offers. */
+#define RVK_BLOB_HOST_POINTER 1u /* `pointer`, page-aligned, stays mapped */
+#define RVK_BLOB_DMA_BUF 2u      /* `fd`, owned by the callee once imported */
+
+/* There is deliberately no offset: the device hands over a handle naming
+ * exactly the range the guest asked for, because OpenCL's import has no offset
+ * property and an offset here would buy a capability flag per API for nothing. */
+typedef struct RvkBlobHandle {
+    uint32_t kind;     /* exactly one RVK_BLOB_* value */
+    uint32_t reserved; /* 0 */
+    void *pointer;     /* RVK_BLOB_HOST_POINTER; NULL otherwise */
+    int fd;            /* RVK_BLOB_DMA_BUF; -1 otherwise */
+    uint64_t size;     /* bytes, a whole number of host pages */
+} RvkBlobHandle;
 
 typedef struct RvkExecutor RvkExecutor;
 
@@ -52,6 +77,25 @@ typedef struct RvkExecutorOps {
      * *reply_size to its length and writes nothing. */
     uint32_t (*execute)(void *opaque, RvkExecutor *executor, uint32_t command_id, const uint8_t *payload,
                         size_t size, uint8_t *reply, size_t reply_capacity, size_t *reply_size);
+
+    /* Version 2 onwards. A version 1 table ends above, and the device must not
+     * read past `execute` unless abi_version is 2 or more. */
+
+    /* Which RVK_BLOB_* kinds `sub_api` imports on the GPU `gpu_uuid` names, or
+     * 0 for "copy at the boundary". On the table rather than on an executor
+     * because the capset is described during realize, before any context
+     * exists; answered on QEMU's main loop. */
+    uint32_t (*import_kinds)(void *opaque, uint32_t sub_api, const uint8_t *gpu_uuid);
+    /* Makes `blob_id` usable by commands on this executor. RVK_EXECUTED or
+     * RVK_UNDECODABLE. On success the callee owns an RVK_BLOB_DMA_BUF handle's
+     * fd and closes it; on failure the caller still owns it. A host pointer is
+     * never owned: the device keeps it mapped until release or destroy
+     * returns. Runs on the context's worker. */
+    uint32_t (*import_blob)(void *opaque, RvkExecutor *executor, uint64_t blob_id,
+                            const RvkBlobHandle *handle);
+    /* Drops an import. A no-op for an id that was never imported; destroy
+     * releases whatever is left. Runs on the context's worker. */
+    void (*release_blob)(void *opaque, RvkExecutor *executor, uint64_t blob_id);
 } RvkExecutorOps;
 
 typedef const RvkExecutorOps *(*RvkExecutorOpsFunction)(void);

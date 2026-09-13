@@ -54,6 +54,12 @@ public:
     /* Calls on an executor this table never made or already destroyed, and
      * calls from another thread than the one that created it. */
     std::uint32_t misuses();
+    /* What version 2's import_kinds answers, for every sub-API and GPU. */
+    void          set_import_kinds(std::uint32_t kinds);
+    /* Blobs imported and released, so a test can prove destroy released what
+     * the guest never did. */
+    std::uint32_t imported();
+    std::uint32_t released();
 
 private:
     struct Executor {
@@ -65,6 +71,9 @@ private:
 
     RvkExecutorOps             table_;
     std::uint32_t              sub_apis_;
+    std::uint32_t              import_kinds_;
+    std::uint32_t              imported_;
+    std::uint32_t              released_blobs_;
     pthread_mutex_t            lock_;
     pthread_cond_t             released_;
     bool                       held_;

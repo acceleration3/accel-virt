@@ -27,7 +27,7 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
         return Status::invalid_parameter;
     }
     if (library_.accept(executor) == Status::invalid_parameter) {
-        message.append("virtio-gpu-rvk: the executor library's table is not ABI version 1 or lacks an operation");
+        message.append("virtio-gpu-rvk: the executor library's table is not ABI version 1 or 2, or lacks an operation");
         host_.log(message.text());
         return Status::invalid_parameter;
     }

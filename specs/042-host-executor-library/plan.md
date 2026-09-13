@@ -87,7 +87,10 @@ No violations.
 |---|---|---|---|
 | `HostGpu` | object | one host GPU: its Vulkan device UUID, its DRM render node, which sub-APIs and import kinds it serves | Answer what one host GPU can run |
 | `HostGpuSet` | system | every host GPU this process found | Find the GPU a UUID names |
-| `ExecutorLibrary` (host side, `src/device/executor/`) | system | the `HostGpuSet` and the live sessions | Answer the ABI's table for this process |
+| `ExecutorRoot` | system | the `HostGpuSet` and the live sessions | Answer the ABI's table for this process |
+| | | | *Named a root, not a library: the device already has an `av::ExecutorLibrary` - the table it loaded - and these are opposite ends of one ABI* |
+| `HostApis` | interface | nothing; it is the seam | Say what this host's own loaders can do |
+| `LoaderHostApis` | object | the opened loader, its instance and what it enumerated | Ask this host's loaders |
 | `ContextSession` | object | one context's backend, arena block and imports | Run one context's commands |
 | `DecodeArena` | object | the block one decode unflattens into, and how often it refused | Hand the generated decoder room for one command |
 | `VulkanBackend` | object | one context's Vulkan instance, device and queues | Run Vulkan commands on the host |
@@ -101,9 +104,17 @@ No violations.
 | `BlobHandleSource` (device side) | system | the udmabuf and host-pointer handles the device has built | Build the handle for one blob, on the main loop |
 | `ExecutorConformance` | system | the scripted calls one library must answer | Judge a library against the ABI |
 
-Fourteen, which is what a feature spanning an ABI, a device change, three host
-APIs and a suite costs. Nine of them are the library; two are the device side;
-`ExecutorConformance` is the test that FR-001 says this repository owes.
+Sixteen, which is what a feature spanning an ABI, a device change, three host
+APIs and a suite costs. Eleven of them are the library; two are the device
+side; `ExecutorConformance` is the test that FR-001 says this repository owes.
+
+`HostApis` is virtual for the reason `Platform` is: two real implementations,
+and the mock is what makes a host with no GPU, a host with two, and a host
+whose OpenCL cannot import testable on a machine that is none of those. Its
+loader-facing half lives in `src/device/shim/`, which is the non-portable edge
+constitution II names - one rule in `header_scan.is_shim`, kept by the coverage
+and symbol gates, so that moving a file out of that directory puts both gates
+back.
 
 Three named non-classes: the `extern "C"` ops functions are the ABI boundary
 (constitution III's exception) and each forwards one line into

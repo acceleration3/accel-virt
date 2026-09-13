@@ -121,3 +121,40 @@ class GeneratedDirectories(unittest.TestCase):
         verdict = check_coverage.CoverageVerdict(self.tree.root, {"data": [{"files": []}]}, (), self.profiles)
         self.assertEqual(len(verdict.unlinked()), 1)
         self.assertIn("wire.cpp", verdict.unlinked()[0])
+
+
+class ShimDirectories(unittest.TestCase):
+    """Constitution II: the core is portable, the shim is not. A file that only
+    calls the host's own loaders cannot be driven by a unit test on a machine
+    that may have no GPU at all; it is proven at L3 and L5 instead (feature
+    042)."""
+
+    def setUp(self):
+        self.tree = SourceTree()
+        self.addCleanup(self.tree.remove)
+        self.tree.write("tests/untestable_baseline.txt", "0\n")
+        self.profiles = self.tree.root / "build" / "coverage"
+        self.profiles.mkdir(parents=True)
+
+    def verdict(self):
+        return check_coverage.CoverageVerdict(self.tree.root, {"data": [{"files": []}]}, (),
+                                              self.profiles)
+
+    def test_a_shim_source_is_not_asked_for_coverage(self):
+        self.tree.write("src/device/shim/loader.cpp", "int loader() { return 1; }\n")
+        self.assertEqual(self.verdict().unlinked(), [])
+
+    def test_a_shim_source_s_branches_are_not_counted(self):
+        files = [source_file(self.tree.root, "src/device/shim/loader.cpp", [branch(3, 1, 1, 0)])]
+        verdict = check_coverage.CoverageVerdict(self.tree.root, {"data": [{"files": files}]}, (),
+                                                 self.profiles)
+        self.assertEqual(verdict.violations(), [])
+
+    def test_a_portable_source_still_is(self):
+        """The exclusion is the directory, and moving a file out of it puts the
+        rule back."""
+        files = [source_file(self.tree.root, "src/device/portable/loader.cpp", [branch(3, 1, 1, 0)])]
+        verdict = check_coverage.CoverageVerdict(self.tree.root, {"data": [{"files": files}]}, (),
+                                                 self.profiles)
+        self.assertIn("src/device/portable/loader.cpp:3:1: false branch never taken",
+                      verdict.violations())

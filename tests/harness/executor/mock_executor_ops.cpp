@@ -22,7 +22,7 @@ private:
 }  // namespace
 
 MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
-    : table_{}, sub_apis_(sub_apis), lock_(), released_(), held_(false), waiting_(0u), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u),
+    : table_{}, sub_apis_(sub_apis), import_kinds_(0u), imported_(0u), released_blobs_(0u), lock_(), released_(), held_(false), waiting_(0u), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u),
       executed_(0u), ids_{}, sizes_{}, last_sub_api_(0u), last_uuid_byte_(0u), misuses_(0u)
 {
     pthread_mutex_init(&lock_, nullptr);
@@ -30,6 +30,23 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
     table_.abi_version = RVK_EXECUTOR_ABI_VERSION;
     table_.opaque = this;
     table_.sub_apis = [](void *opaque) { return mock_of(opaque).sub_apis_; };
+    table_.import_kinds = [](void *opaque, std::uint32_t, const std::uint8_t *) {
+        return mock_of(opaque).import_kinds_;
+    };
+    table_.import_blob = [](void *opaque, RvkExecutor *handle, std::uint64_t,
+                            const RvkBlobHandle *blob) -> std::uint32_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        Lock lock(mock.lock_);
+        if (mock.executor_of(handle) == nullptr || blob == nullptr) return RVK_UNDECODABLE;
+        mock.imported_++;
+        return RVK_EXECUTED;
+    };
+    table_.release_blob = [](void *opaque, RvkExecutor *handle, std::uint64_t) {
+        MockExecutorOps &mock = mock_of(opaque);
+        Lock lock(mock.lock_);
+        if (mock.executor_of(handle) == nullptr) return;
+        mock.released_blobs_++;
+    };
     table_.create = [](void *opaque, std::uint32_t sub_api, const std::uint8_t *uuid) -> RvkExecutor * {
         MockExecutorOps &mock = mock_of(opaque);
         Lock lock(mock.lock_);
@@ -127,5 +144,19 @@ std::uint32_t MockExecutorOps::size_at(std::uint32_t index) { Lock lock(lock_); 
 std::uint32_t MockExecutorOps::last_sub_api() { Lock lock(lock_); return last_sub_api_; }
 std::uint8_t  MockExecutorOps::last_uuid_byte() { Lock lock(lock_); return last_uuid_byte_; }
 std::uint32_t MockExecutorOps::misuses() { return misuses_.load(); }
+
+void MockExecutorOps::set_import_kinds(std::uint32_t kinds) { import_kinds_ = kinds; }
+
+std::uint32_t MockExecutorOps::imported()
+{
+    Lock lock(lock_);
+    return imported_;
+}
+
+std::uint32_t MockExecutorOps::released()
+{
+    Lock lock(lock_);
+    return released_blobs_;
+}
 
 }  // namespace av

@@ -28,9 +28,18 @@ public:
     void                 destroy(RvkExecutor *executor) const;
     uint32_t             execute(RvkExecutor *executor, uint32_t command_id, const uint8_t *payload, size_t size,
                                  uint8_t *reply, size_t reply_capacity, size_t &reply_size) const;
+    /* Whether this library carries version 2's memory channel at all. A
+     * version 1 library is a library; it just imports nothing. */
+    bool                 imports() const;
+    /* Which RVK_BLOB_* kinds `api` imports on the GPU `gpu_uuid` names, or 0.
+     * Asked on the main loop while the capset is being described. */
+    uint32_t             import_kinds(SubApi api, const uint8_t *gpu_uuid) const;
 
 private:
     static constexpr uint32_t known_sub_apis = 7u;
+    /* RVK_BLOB_HOST_POINTER | RVK_BLOB_DMA_BUF: a kind this device does not
+     * know is a kind it cannot build a handle for, so it is not offered. */
+    static constexpr uint32_t known_blob_kinds = 3u;
 
     const RvkExecutorOps *ops_;
 };

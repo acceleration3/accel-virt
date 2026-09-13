@@ -85,6 +85,13 @@ else()
                  "run tools/fetch_khronos_registries.py to compile them")
 endif()
 # Whatever the glob picked up from generated/, the list above is what builds.
+# The executor library's C entry points define the symbol QEMU dlopens. They
+# belong to that shared object and to nothing else: linked into av_core or
+# rvk_device they would export rvk_executor_ops from a library nobody loads by
+# that name (feature 042).
+set(AV_EXECUTOR_ENTRY ${CMAKE_SOURCE_DIR}/src/device/executor/executor_ops.cpp)
+list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_EXECUTOR_ENTRY})
+
 file(GLOB_RECURSE AV_GENERATED_ALL CONFIGURE_DEPENDS src/proto/generated/*.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_GENERATED_ALL})
 if(AV_GENERATED)
@@ -92,6 +99,10 @@ if(AV_GENERATED)
 endif()
 add_library(av_core STATIC ${AV_PORTABLE_SOURCES})
 target_include_directories(av_core PUBLIC src)
+# The executor library is a shared object built from these same objects, and it
+# must carry whatever sanitizers the configuration asked for - so av_core is
+# position-independent rather than the .so linking the unsanitized rvk_device.
+set_target_properties(av_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(AV_GENERATED)
   target_include_directories(av_core PUBLIC ${AV_KHRONOS_INCLUDE} ${AV_GENERATED_OPENGL_INCLUDE})
 endif()
@@ -103,6 +114,7 @@ target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 # through the generated rvk_device.pc.
 # TextBuffer is the one core/support class with a body the device core uses.
 file(GLOB_RECURSE AV_DEVICE_SOURCES CONFIGURE_DEPENDS src/device/*.cpp src/proto/*.cpp)
+list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_EXECUTOR_ENTRY})
 list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_GENERATED_ALL})
 if(AV_GENERATED)
@@ -274,6 +286,16 @@ add_test(NAME design_rules
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_design.py ${CMAKE_SOURCE_DIR})
 add_test(NAME symbol_tests
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_symbol_tests.py ${CMAKE_SOURCE_DIR})
+
+# ---- the executor library: the other end of src/device/abi/rvk_executor.h ---
+# Built in every configuration, not only under AV_QEMU: the conformance suite
+# has to run it under ASan and UBSan, and AV_QEMU returns before those flags are
+# set. The qemu configuration additionally points a real device at this same
+# object through its executor= property (feature 042).
+add_library(rvk_executor SHARED ${AV_EXECUTOR_ENTRY})
+target_link_libraries(rvk_executor PRIVATE av_core)
+target_include_directories(rvk_executor PRIVATE src)
+set_target_properties(rvk_executor PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
 # ---- principle IX: a clean clone of this repository is all it takes ----------
 add_test(NAME self_contained
