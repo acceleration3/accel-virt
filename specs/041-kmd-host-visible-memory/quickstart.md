@@ -53,7 +53,10 @@ guest: report ok: N passed
 
 The third line is the one that cannot be faked from inside the guest: it is the
 host's own view of the BAR, read back through QMP after the guest wrote through
-its mapping.
+its mapping. Until something asks VidMm for memory in that segment it is a skip
+with its reason - nothing is placed in the region yet, so the pattern is in
+guest memory (T026). `--require-host-visible` turns the skip back into a
+failure, which is what feature 043 does once it has a client.
 
 `--hostmem 0` runs the same suite against a device with no region, where the
 driver must report one segment and place the same allocation in guest memory -

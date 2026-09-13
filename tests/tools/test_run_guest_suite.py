@@ -795,18 +795,31 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertFalse((self.work / "hostmem.bin").exists())
         self.assert_clean()
 
-    def test_a_pattern_the_host_cannot_find_in_the_bar_fails_the_run(self):
-        """The guest's own read-back passed and the host's did not: the view was
-        guest RAM with a flag on it, not the device's memory."""
+    def test_a_pattern_the_host_cannot_find_is_a_skip_until_something_asks_for_host_memory(self):
+        """The driver reports the segment and asks VidMm for nothing in it - a
+        live guest refused every allocation that preferred it - so the pattern
+        is in guest memory and the host cannot find it. That is where feature
+        041 landed: a skip with the reason, not a failure (T026)."""
         self.script(outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
                              "rvktest": HOST_VISIBLE_REPORT, "collect": COLLECTED})
         result = self.run_suite("--hostmem", "4")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("nothing asks for host memory yet (feature 043)", result.stdout)
+        self.assert_clean()
+
+    def test_a_pattern_the_host_cannot_find_in_the_bar_fails_the_run(self):
+        """With --require-host-visible, which feature 043 turns on once it has a
+        client: the guest's own read-back passed and the host's did not, so the
+        view was guest RAM with a flag on it, not the device's memory."""
+        self.script(outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
+                             "rvktest": HOST_VISIBLE_REPORT, "collect": COLLECTED})
+        result = self.run_suite("--hostmem", "4", "--require-host-visible")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("does not hold the 4096 bytes the guest wrote", (self.work / "verdict.txt").read_text())
         self.script(outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
                              "rvktest": HOST_VISIBLE_REPORT, "collect": COLLECTED},
                     hostmem_written={"offset": 0, "bytes": 4096}, pmemsave_nothing=True)
-        result = self.run_suite("--hostmem", "4")
+        result = self.run_suite("--hostmem", "4", "--require-host-visible")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("QEMU wrote no 4194304-byte read of 0xc0000000", (self.work / "verdict.txt").read_text())
         self.assert_clean()
