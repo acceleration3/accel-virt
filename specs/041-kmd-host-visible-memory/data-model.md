@@ -50,9 +50,10 @@ offered, and segment identifiers are 1..`count()` with no gap.
 
 ## `HostmemPlacement` (system class)
 
-The allocator the protocol puts in the guest's hands: `RESOURCE_MAP_BLOB`
-carries the offset, and the device refuses one that is misaligned, outside the
-region or overlapping another.
+The record of what VidMm placed where. VidMm owns the segment's address space;
+what this owns is the judgement the device will make of an offset -
+`RESOURCE_MAP_BLOB` carries it, and the device refuses one that is misaligned,
+outside the region or overlapping another.
 
 | State | Meaning |
 |---|---|
@@ -61,11 +62,12 @@ region or overlapping another.
 | `size_` | the region's size, so a placement can be judged against it |
 | `mutex_` | PASSIVE only; paging and allocation both reach it |
 
-**Operations.** `place(pages, owner, offset)` - the lowest offset with room,
-first fit, page-aligned; `no_space` when the region is full, which VidMm turns
-into a budget failure rather than a bugcheck. `release(owner)` - forgets that
-allocation's placement. `holder(offset)` - which allocation holds a byte, so a
-stale mapping can never be mistaken for a live one.
+**Operations.** `take(offset, bytes, owner)` - records the offset VidMm placed
+an allocation at, judged the way the device will judge it: page-aligned, wholly
+inside the region, overlapping nothing already held, one range per allocation.
+`release(owner)` - forgets that allocation's placement. `holder(offset)` - which
+allocation holds a byte, so a stale mapping can never be mistaken for a live
+one. VidMm owns the segment's address space; this owns the record of it.
 
 **Invariants**: no two placements share a byte; every placement lies wholly
 inside the region and is page-aligned; `count_` matches the live entries.
@@ -106,7 +108,7 @@ blob with no resource id is neither mapped nor destroyable.
 | Record | Direction | What this feature adds |
 |---|---|---|
 | `RESOURCE_CREATE_BLOB` | guest → device | the host-visible shape: `blob_mem = HOST3D`, `flags = USE_MAPPABLE`, `nr_entries = 0`, `blob_id = 0` |
-| `RESOURCE_MAP_BLOB` | guest → device | resource id and the offset `HostmemPlacement` chose |
+| `RESOURCE_MAP_BLOB` | guest → device | resource id and the offset VidMm placed the allocation at |
 | `OK_MAP_INFO` | device → guest | `map_info`, which must be `MAP_CACHE_CACHED` |
 | `RESOURCE_UNMAP_BLOB` | guest → device | on eviction and on destroy |
 | `AllocationDescriptor` | process → guest | unchanged in shape; `flag_cpu_visible` now decides a segment rather than a flag echoed back |

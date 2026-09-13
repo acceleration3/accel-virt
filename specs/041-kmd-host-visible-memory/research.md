@@ -23,10 +23,19 @@ it at a **guest-chosen, page-aligned offset** inside the region and answers
 *judges* the offset - inside the region, page-aligned, not overlapping another
 mapping (`src/device/memory/blob_table.cpp:51-60`).
 
-**Decision.** The placement allocator is the guest's, because the protocol
-already puts it there. The driver owns which offset each allocation gets; the
-device keeps refusing anything that does not fit. No device change is needed
-for placement.
+**Decision.** The offset on the wire is the guest's to send, but inside the
+guest it is **VidMm's to choose**: the segment is reported to VidMm, so VidMm
+owns its address space and decides where an allocation sits in it. The driver
+learns that offset from the paging operation that makes the allocation resident
+and sends it on. What the driver owns is the judgement the device will make of
+it - page-aligned, wholly inside the region, overlapping nothing already mapped
+- kept first, so a refusal from the device is a bug in this driver. No device
+change is needed for placement.
+
+(This corrects the first shape of this plan, which had the driver allocating
+offsets itself. It cannot: the CPU address a process is handed is the segment's
+`CpuTranslatedAddress` plus the offset **VidMm** placed the allocation at, so a
+blob mapped anywhere else would be memory the process never sees.)
 
 **Decision.** The live runner must give the device a region: it never passes
 `hostmem=` today (`tools/guest/run_guest_suite.py:176`), so on the real guest

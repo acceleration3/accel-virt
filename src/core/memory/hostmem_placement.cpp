@@ -27,34 +27,35 @@ void HostmemPlacement::close()
     region_pages_ = 0u;
 }
 
-Status HostmemPlacement::place(uint64_t bytes, const void *owner, uint64_t &offset)
+Status HostmemPlacement::take(uint64_t offset, uint64_t bytes, const void *owner)
 {
-    platform_.require_irql_at_most(Irql::passive, "HostmemPlacement::place");
-    InvariantScope<HostmemPlacement> guard(platform_, *this, "place");
-    offset = 0u;
-    if (owner == nullptr || bytes == 0u) return Status::invalid_parameter;
+    platform_.require_irql_at_most(Irql::passive, "HostmemPlacement::take");
+    InvariantScope<HostmemPlacement> guard(platform_, *this, "take");
+    if (owner == nullptr || bytes == 0u || (offset & (page_bytes - 1u)) != 0u)
+        return Status::invalid_parameter;
     MutexGuard     held(mutex_);
+    const uint64_t page = offset / page_bytes;
     const uint64_t pages = (bytes + page_bytes - 1u) / page_bytes;
+    if (pages > region_pages_ || page > region_pages_ - pages) return Status::invalid_parameter;
     if (index_of(owner) != max_blobs) return Status::invalid_state;
-    if (count_ == max_blobs || pages > region_pages_) return Status::no_space;
-    for (uint32_t index = 0u; index <= count_; index++) {
-        uint64_t candidate = 0u;
-        if (!fits(index, pages, candidate)) continue;
-        insert(index, candidate, pages, owner);
-        offset = candidate * page_bytes;
-        return Status::ok;
-    }
-    return Status::no_space;
+    if (count_ == max_blobs) return Status::no_space;
+    bool           clear = false;
+    const uint32_t at = place_for(page, pages, clear);
+    if (!clear) return Status::conflict;
+    insert(at, page, pages, owner);
+    return Status::ok;
 }
 
-/* Whether `pages` fit before the placement at `index`, which is the end of the
- * region for the one past the last. */
-bool HostmemPlacement::fits(uint32_t index, uint64_t pages, uint64_t &offset) const
+/* Where a range of `pages` from `page` belongs in offset order, and whether it
+ * overlaps the placements on either side of it. */
+uint32_t HostmemPlacement::place_for(uint64_t page, uint64_t pages, bool &clear) const
 {
-    const uint64_t after = index == 0u ? 0u : offsets_[index - 1u] + pages_[index - 1u];
-    const uint64_t until = index == count_ ? region_pages_ : offsets_[index];
-    offset = after;
-    return until >= after && until - after >= pages;
+    uint32_t at = 0u;
+    while (at < count_ && offsets_[at] < page) at++;
+    const bool after_previous = at == 0u || offsets_[at - 1u] + pages_[at - 1u] <= page;
+    const bool before_next = at == count_ || page + pages <= offsets_[at];
+    clear = after_previous && before_next;
+    return at;
 }
 
 uint32_t HostmemPlacement::index_of(const void *owner) const

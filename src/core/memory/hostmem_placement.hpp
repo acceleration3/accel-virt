@@ -1,10 +1,14 @@
-/* Where each host-visible allocation sits inside the device's hostmem region.
+/* Which host-visible allocation holds which part of the device's hostmem
+ * region.
  *
- * The protocol puts that choice in the guest's hands: RESOURCE_MAP_BLOB carries
- * the offset and the device only judges it - page-aligned, wholly inside the
- * region, overlapping nothing already mapped (docs/protocol.md). This is the
- * driver's side of that judgement, so a refusal from the device is a bug here.
- * PASSIVE only: allocation and paging both reach it. */
+ * VidMm owns the segment's address space: it decides at which offset an
+ * allocation sits, and the driver learns that offset from the paging operation
+ * that makes it resident. What the driver owns is the judgement the device will
+ * make of that offset - page-aligned, wholly inside the region, overlapping
+ * nothing already mapped (docs/protocol.md) - and the record of who holds what,
+ * so an offset that arrives twice, or for a range somebody else holds, is
+ * refused here rather than by the device. PASSIVE only: allocation and paging
+ * both reach it. */
 #ifndef AV_HOSTMEM_PLACEMENT_HPP
 #define AV_HOSTMEM_PLACEMENT_HPP
 
@@ -34,11 +38,12 @@ public:
     /* StopDevice: nothing is placed in a region that is gone. */
     void                 close();
 
-    /* The lowest offset with room for `bytes` rounded up to whole pages.
-     * no_space when the region cannot hold it or this holds as many placements
-     * as it can; invalid_parameter for no owner or no bytes; invalid_state for
-     * an owner that already holds one. `offset` is 0 unless it returns ok. */
-    [[nodiscard]] Status place(uint64_t bytes, const void *owner, uint64_t &offset);
+    /* Records that `owner` holds `bytes` from `offset`, as VidMm placed it.
+     * invalid_parameter for no owner, no bytes, an offset that is not a page
+     * boundary, or a range the region cannot hold; conflict for a range another
+     * allocation already holds; invalid_state for an owner that already holds
+     * one; no_space when this holds as many as it can. */
+    [[nodiscard]] Status take(uint64_t offset, uint64_t bytes, const void *owner);
     /* Forgets `owner`'s placement; one that holds none is left alone. */
     void                 release(const void *owner);
     /* Which allocation holds the byte at `offset`, or null. */
@@ -48,8 +53,9 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* Parallel arrays, kept in offset order so first fit is a walk. */
-    bool     fits(uint32_t index, uint64_t pages, uint64_t &offset) const;
+    /* Parallel arrays, kept in offset order so overlap is a comparison with a
+     * neighbour. */
+    uint32_t place_for(uint64_t page, uint64_t pages, bool &clear) const;
     uint32_t index_of(const void *owner) const;
     void     insert(uint32_t at, uint64_t offset, uint64_t pages, const void *owner);
 
