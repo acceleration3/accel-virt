@@ -123,6 +123,11 @@ Status VirtioGpuDevice::harvest(GpuCommandQueue &queue, uint32_t &completed, con
     return status;
 }
 
+bool VirtioGpuDevice::running() const
+{
+    return running_;
+}
+
 uint32_t VirtioGpuDevice::scanouts() const
 {
     platform_.require_irql_at_most(Irql::dispatch, "VirtioGpuDevice::scanouts");

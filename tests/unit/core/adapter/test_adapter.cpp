@@ -474,6 +474,24 @@ TEST(adapter_set_power_state, d3_resets_the_device_and_d0_brings_it_back)
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
   CHECK(fixture.adapter().invariants_hold()); }
 
+/* dxgkrnl leaves the interrupt connected across a power transition, so one can
+ * arrive while power_up is between constructing the device and starting it.
+ * A device that is being built is not one to read from (feature 040, US1). */
+TEST(adapter_interrupt_routine, an_interrupt_while_the_device_is_down_is_not_ours)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.platform().set_irql(Irql::isr);
+  CHECK_EQ(fixture.adapter().interrupt_routine(0u), 0u);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().dpcs_queued(), 0u);
+  fixture.forget_control();
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  CHECK(fixture.adapter().invariants_hold());
+  CHECK_EQ(fixture.platform().unclaimed_violations(), 0u); }
+
 TEST(adapter_set_power_state, a_child_transition_needs_nothing)
 { Fixture fixture;
   CHECK_EQ(nt(fixture.adapter().set_power_state(0u, power_d3, 0)), success); }

@@ -58,6 +58,9 @@ public:
     /* virtio_gpu_config.num_scanouts as the device reported it at start, which
      * is how many displays it has; zero before a start and after a stop. */
     uint32_t scanouts() const;
+    /* Any thread, including an ISR: whether start() finished. A device that is
+     * being built is not one an interrupt may harvest from. */
+    bool     running() const;
     bool     invariants_hold() const;
 
 private:

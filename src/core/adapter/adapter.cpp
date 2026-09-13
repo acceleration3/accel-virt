@@ -210,7 +210,10 @@ int32_t Adapter::dispatch_io_request(uint32_t, void *)
 uint8_t Adapter::interrupt_routine(uint32_t message)
 {
     platform_.require_irql_at_most(Irql::isr, "Adapter::interrupt_routine");
-    if (!device_.constructed() || !present_) return 0u;
+    /* A device that is being built is not one to read from: power_up
+     * constructs it and then starts it, and dxgkrnl leaves the interrupt
+     * connected across the whole transition. */
+    if (!device_.constructed() || !present_ || !device_.object().running()) return 0u;
     const bool    messages = resources_.message_interrupts() != 0u;
     const uint8_t isr = messages ? 0u : device_.object().read_isr();
     if (!messages && isr == 0u) return 0u;
@@ -224,7 +227,7 @@ void Adapter::dpc_routine()
 {
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::dpc_routine");
     uint32_t completed = 0u;
-    const bool harvest = device_.constructed() && present_;
+    const bool harvest = device_.constructed() && present_ && device_.object().running();
     /* A device that fails every harvest would otherwise log on every DPC, so
      * each of these lines is spent from the budget (feature 037, FR-003). */
     if (harvest && device_.object().harvest_control(completed) != Status::ok && budget_.allows())
