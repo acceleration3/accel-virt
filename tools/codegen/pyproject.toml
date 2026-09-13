@@ -1,0 +1,12 @@
+# Not a package. `rvk_codegen` is run in place — `python3 -m rvk_codegen`,
+# and the same for its .opengl and .opencl siblings — so there is no
+# name, no version, no build backend and no dependency list here. It
+# imports nothing outside the standard library, which is what keeps that
+# true. What is left is the linter's configuration.
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RET"]
+ignore = ["E501"]

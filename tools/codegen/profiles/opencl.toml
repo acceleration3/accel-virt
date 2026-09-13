@@ -1,0 +1,459 @@
+# The OpenCL command set the wire carries, and the annotations cl.xml
+# does not.
+#
+# Two things live here. The first is the list: OpenCL has 252 commands
+# in the registry and this carries the ones an application actually
+# reaches for, which is roughly core 1.2 plus what 2.0 promoted. The
+# second is the array metadata. cl.xml has no `len` attribute — it says
+# `const cl_event*` and stops — so anything the inference in lower.py
+# cannot work out from the name and the type is written down here. A
+# command with an unannotated array is a generation error, not a guess.
+
+commands = [
+    # Platform and device
+    "clGetPlatformIDs",
+    "clGetPlatformInfo",
+    "clGetDeviceIDs",
+    "clGetDeviceInfo",
+
+    # Context
+    "clCreateContext",
+    "clCreateContextFromType",
+    "clRetainContext",
+    "clReleaseContext",
+    "clGetContextInfo",
+
+    # Command queue
+    "clCreateCommandQueue",
+    "clCreateCommandQueueWithProperties",
+    "clRetainCommandQueue",
+    "clReleaseCommandQueue",
+    "clGetCommandQueueInfo",
+    "clFlush",
+    "clFinish",
+
+    # Memory objects
+    "clCreateBuffer",
+    "clCreateSubBuffer",
+    "clCreateImage",
+    "clRetainMemObject",
+    "clReleaseMemObject",
+    "clGetMemObjectInfo",
+    "clGetImageInfo",
+    "clGetSupportedImageFormats",
+
+    # Transfers
+    "clEnqueueReadBuffer",
+    "clEnqueueWriteBuffer",
+    "clEnqueueCopyBuffer",
+    "clEnqueueFillBuffer",
+    "clEnqueueReadImage",
+    "clEnqueueWriteImage",
+    "clEnqueueCopyImage",
+    "clEnqueueCopyImageToBuffer",
+    "clEnqueueCopyBufferToImage",
+
+    # Programs
+    "clCreateProgramWithSource",
+    "clCreateProgramWithBinary",
+    "clRetainProgram",
+    "clReleaseProgram",
+    "clBuildProgram",
+    "clGetProgramInfo",
+    "clGetProgramBuildInfo",
+    "clUnloadPlatformCompiler",
+
+    # Kernels
+    "clCreateKernel",
+    "clCreateKernelsInProgram",
+    "clRetainKernel",
+    "clReleaseKernel",
+    "clSetKernelArg",
+    "clGetKernelInfo",
+    "clGetKernelArgInfo",
+    "clGetKernelWorkGroupInfo",
+
+    # Execution
+    "clEnqueueNDRangeKernel",
+    "clEnqueueMarkerWithWaitList",
+    "clEnqueueBarrierWithWaitList",
+
+    # Events
+    "clWaitForEvents",
+    "clGetEventInfo",
+    "clCreateUserEvent",
+    "clSetUserEventStatus",
+    "clRetainEvent",
+    "clReleaseEvent",
+    "clGetEventProfilingInfo",
+
+    # Sharing with OpenGL.
+    #
+    # These carry GL object names, and a GL name means the same thing on
+    # both sides of this wire: the guest's OpenGL driver hands the host's
+    # own names through unchanged. So a texture the application made
+    # through GL is a texture the host's OpenCL can be given directly,
+    # and the sharing is the host's own rather than anything rebuilt
+    # here. See docs/OPENGL.md.
+    "clCreateFromGLBuffer",
+    "clCreateFromGLTexture",
+    "clCreateFromGLTexture2D",
+    "clCreateFromGLTexture3D",
+    "clCreateFromGLRenderbuffer",
+    "clGetGLObjectInfo",
+    "clGetGLTextureInfo",
+    "clEnqueueAcquireGLObjects",
+    "clEnqueueReleaseGLObjects",
+    "clGetGLContextInfoKHR",
+
+    # Devices that are parts of other devices
+    "clRetainDevice",
+    "clReleaseDevice",
+    "clCreateSubDevices",
+
+    # The rest of the 1.x enqueue surface, including the spellings an
+    # application written against OpenCL 1.1 still uses.
+    "clEnqueueTask",
+    "clEnqueueMarker",
+    "clEnqueueBarrier",
+    "clEnqueueWaitForEvents",
+    "clEnqueueMigrateMemObjects",
+    "clEnqueueReadBufferRect",
+    "clEnqueueWriteBufferRect",
+    "clEnqueueCopyBufferRect",
+    "clEnqueueFillImage",
+    "clCreateImage2D",
+    "clCreateImage3D",
+    "clUnloadCompiler",
+    "clSetCommandQueueProperty",
+
+    # Programs beyond build: separate compilation, linking, and SPIR-V.
+    "clCreateProgramWithIL",
+    "clCompileProgram",
+    "clLinkProgram",
+    "clSetProgramSpecializationConstant",
+
+    # Kernels
+    "clCloneKernel",
+    "clSetKernelExecInfo",
+    "clGetKernelSubGroupInfo",
+
+    # Timers
+    "clGetHostTimer",
+    "clGetDeviceAndHostTimer",
+
+    # The properties spellings from 2.0 and 3.0
+    "clCreateBufferWithProperties",
+    "clCreateImageWithProperties",
+    "clCreateSamplerWithProperties",
+    "clSetDefaultDeviceCommandQueue",
+
+    # Samplers
+    "clCreateSampler",
+    "clRetainSampler",
+    "clReleaseSampler",
+    "clGetSamplerInfo",
+    # The rest of 3.0's core. Pipes are memory objects the host makes;
+    # whether a device has them is its own CL_DEVICE_PIPE_SUPPORT.
+    "clCreatePipe",
+    "clGetPipeInfo",
+    "clCreateProgramWithBuiltInKernels",
+]
+
+# Commands the client does not wait for. Reference counting is the
+# obvious set: nothing reads the result, and a failure to release
+# surfaces at the next call that synchronises.
+async = [
+    "clRetainContext",
+    "clRetainCommandQueue",
+    "clRetainMemObject",
+    "clRetainProgram",
+    "clRetainKernel",
+    "clRetainEvent",
+    "clRetainSampler",
+]
+
+# ---------------------------------------------------------------------
+# Annotations
+#
+# `role` overrides what lower.py inferred; `len` names the parameter
+# that counts an array. A `len` of "@name" is a helper the emitted code
+# calls with the command's own parameters, for the sizes OpenCL leaves
+# implicit — an image transfer's byte count is region and pitches and
+# the format's bytes per pixel, and no single parameter holds it.
+# ---------------------------------------------------------------------
+
+# Host pointers: the registry writes them non-const, but on a create
+# they are read, not written.
+[params."clCreateBuffer.host_ptr"]
+role = "bytes_in"
+len = "size"
+
+[params."clCreateImage.host_ptr"]
+role = "bytes_in"
+len = "@image_host_bytes"
+
+# Buffer transfers name their own byte count.
+[params."clEnqueueReadBuffer.ptr"]
+role = "bytes_out"
+len = "size"
+
+[params."clEnqueueWriteBuffer.ptr"]
+role = "bytes_in"
+len = "size"
+
+[params."clEnqueueFillBuffer.pattern"]
+role = "bytes_in"
+len = "pattern_size"
+
+# Image transfers do not: the count comes from the region, the pitches
+# and the image's own format.
+[params."clEnqueueReadImage.ptr"]
+role = "bytes_out"
+len = "@image_transfer_bytes"
+
+[params."clEnqueueWriteImage.ptr"]
+role = "bytes_in"
+len = "@image_transfer_bytes"
+
+# The work-size triple is counted by work_dim.
+[params."clEnqueueNDRangeKernel.global_work_offset"]
+role = "scalar_array"
+len = "work_dim"
+
+[params."clEnqueueNDRangeKernel.global_work_size"]
+role = "scalar_array"
+len = "work_dim"
+
+[params."clEnqueueNDRangeKernel.local_work_size"]
+role = "scalar_array"
+len = "work_dim"
+
+# Image origins and regions are always three elements.
+[params."clEnqueueReadImage.origin"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueReadImage.region"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueWriteImage.origin"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueWriteImage.region"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueCopyImage.src_origin"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueCopyImage.dst_origin"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueCopyImage.region"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueCopyImageToBuffer.src_origin"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueCopyImageToBuffer.region"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueCopyBufferToImage.dst_origin"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueCopyBufferToImage.region"]
+role = "scalar_array"
+len = "3"
+
+# A kernel argument is bytes by shape; when it is a memory object the
+# ICD swaps the guest object for the server's handle before it gets
+# here, because only the ICD knows which is which.
+[params."clSetKernelArg.arg_value"]
+role = "bytes_in"
+len = "arg_size"
+
+# Program binaries: an array of pointers, each with its own length.
+[params."clCreateProgramWithBinary.binaries"]
+role = "string_array"
+len = "num_devices"
+lengths = "lengths"
+
+[params."clCreateProgramWithBinary.lengths"]
+role = "ignored"
+
+[params."clCreateProgramWithSource.lengths"]
+role = "ignored"
+
+# The kernel array out of clCreateKernelsInProgram: a capacity in, a
+# count out, like the device and platform enumerations.
+[params."clCreateKernelsInProgram.kernels"]
+role = "handle_array_out"
+len = "num_kernels"
+size_ret = "num_kernels_ret"
+
+[params."clGetSupportedImageFormats.image_formats"]
+role = "bytes_out"
+len = "@image_format_bytes"
+
+# A sub-buffer's "create info" is a cl_buffer_region and nothing else
+# in 1.2, so it travels as that struct rather than as loose bytes.
+[params."clCreateSubBuffer.buffer_create_info"]
+role = "struct_in"
+element = "cl_buffer_region"
+
+
+# ---------------------------------------------------------------------
+# The commands added after the first round
+# ---------------------------------------------------------------------
+
+# Rect transfers: three-element origins and regions, and a host buffer
+# whose size is the region and the pitches between them.
+[params."clEnqueueReadBufferRect.buffer_origin"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueReadBufferRect.host_origin"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueReadBufferRect.region"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueReadBufferRect.ptr"]
+role = "bytes_out"
+len = "@rect_bytes"
+
+[params."clEnqueueWriteBufferRect.buffer_origin"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueWriteBufferRect.host_origin"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueWriteBufferRect.region"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueWriteBufferRect.ptr"]
+role = "bytes_in"
+len = "@rect_bytes"
+
+[params."clEnqueueCopyBufferRect.src_origin"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueCopyBufferRect.dst_origin"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueCopyBufferRect.region"]
+role = "scalar_array"
+len = "3"
+
+# A fill colour is four components of whatever the image holds, and the
+# caller knows which.
+[params."clEnqueueFillImage.fill_color"]
+role = "bytes_in"
+len = "@fill_bytes"
+
+[params."clEnqueueFillImage.origin"]
+role = "scalar_array"
+len = "3"
+
+[params."clEnqueueFillImage.region"]
+role = "scalar_array"
+len = "3"
+
+# The 1.1 image creates, which an application of that vintage still
+# calls. Their host pointer is sized by the pitches the caller passed.
+[params."clCreateImage2D.host_ptr"]
+role = "bytes_in"
+len = "@host_bytes"
+
+[params."clCreateImage3D.host_ptr"]
+role = "bytes_in"
+len = "@host_bytes"
+
+[params."clCreateBufferWithProperties.host_ptr"]
+role = "bytes_in"
+len = "size"
+
+[params."clCreateImageWithProperties.host_ptr"]
+role = "bytes_in"
+len = "@host_bytes"
+
+# SPIR-V, as bytes with a length beside it.
+[params."clCreateProgramWithIL.il"]
+role = "bytes_in"
+len = "length"
+
+# Separate compilation: the headers are programs, and their include
+# names are strings, both counted by num_input_headers.
+[params."clCompileProgram.input_headers"]
+role = "handle_array"
+len = "num_input_headers"
+
+[params."clCompileProgram.header_include_names"]
+role = "string_array"
+len = "num_input_headers"
+# The parameter after this one is a callback, not a length array.
+lengths = ""
+
+[params."clLinkProgram.input_programs"]
+role = "handle_array"
+len = "num_input_programs"
+
+[params."clSetProgramSpecializationConstant.spec_value"]
+role = "bytes_in"
+len = "spec_size"
+
+[params."clSetKernelExecInfo.param_value"]
+role = "bytes_in"
+len = "param_value_size"
+
+[params."clGetKernelSubGroupInfo.input_value"]
+role = "bytes_in"
+len = "input_value_size"
+
+# The GL sharing commands: the arrays they take are the ones every
+# enqueue takes, and the objects are handles like any other.
+
+[params."clEnqueueAcquireGLObjects.mem_objects"]
+role = "handle_array"
+len = "num_objects"
+
+[params."clEnqueueReleaseGLObjects.mem_objects"]
+role = "handle_array"
+len = "num_objects"
+
+# The properties this one takes are a context's, and they name a GL
+# context the same way clCreateContext's do — so they are translated
+# the same way, by the server.
+[params."clGetGLContextInfoKHR.properties"]
+role = "properties"
+
+[params."clGetGLObjectInfo.gl_object_type"]
+role = "scalar_out"
+
+[params."clGetGLObjectInfo.gl_object_name"]
+role = "scalar_out"
+
+# ---------------------------------------------------------------------
+# 3.0's remaining core
+# ---------------------------------------------------------------------
+
+[params."clCreateProgramWithBuiltInKernels.device_list"]
+role = "handle_array"
+len = "num_devices"
+
