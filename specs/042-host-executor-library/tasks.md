@@ -120,8 +120,8 @@ description: "Tasks: the host executor"
 
 ## Phase 7: OpenCL
 
-- [ ] T040 `OpenClBackend` (object class) deriving from `av::clproto::RealDispatch`; the one reserved id, `clGetKernelSuggestedLocalWorkSize`, answered unknown deliberately
-- [ ] T041 Import by dma-buf where the device offers it, probed through `CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR` rather than by matching the extension string: Intel NEO advertises dma-buf through the query while listing only `cl_khr_external_memory` at provisional 0.9.1, and NVIDIA's `opaque_fd` is a CUDA handle that cannot take a memfd (research §3). `CL_MEM_USE_HOST_PTR` is not a zero-copy guarantee and is not treated as one
+- [X] T040 `OpenClBackend` (object class) deriving from `av::clproto::RealDispatch`; the one reserved id, `clGetKernelSuggestedLocalWorkSize`, answered unknown deliberately
+- [~] T041 Discovery is done - a GPU reports OpenCL only when a device on this host says by CL_DEVICE_UUID_KHR that it is the same GPU - and importing is not: it is where the answer is used rather than guessed at discovery. Import by dma-buf where the device offers it, probed through `CL_DEVICE_EXTERNAL_MEMORY_IMPORT_HANDLE_TYPES_KHR` rather than by matching the extension string: Intel NEO advertises dma-buf through the query while listing only `cl_khr_external_memory` at provisional 0.9.1, and NVIDIA's `opaque_fd` is a CUDA handle that cannot take a memfd (research §3). `CL_MEM_USE_HOST_PTR` is not a zero-copy guarantee and is not treated as one
 - [ ] T042 A blob larger than `CL_DEVICE_MAX_MEM_ALLOC_SIZE` cannot become one `cl_mem` at all - 1.914 GiB on the NVIDIA here - and is refused rather than truncated
 
 **Checkpoint**: three APIs behind one ABI. Commit.

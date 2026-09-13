@@ -21,12 +21,11 @@ public:
     /* A session, or null: the device turns a null into a context fault and
      * keeps every other context running.
      *
-     * Only Vulkan today. An OpenGL or OpenCL context is refused rather than
-     * given a session that would answer nothing, and the capset already says
-     * so, because the root offers only what a GPU here can actually run. */
+     * A sub-API with no backend is refused by the root rather than given a
+     * session that would answer nothing; the capset already says which those
+     * are, because it offers only what a GPU here reports running. */
     av::ContextSession *create(uint32_t sub_api, const uint8_t *gpu_uuid)
     {
-        if (sub_api != RVK_EXECUTOR_SUB_API_VULKAN) return nullptr;
         return root().open(sub_api, gpu_uuid);
     }
 

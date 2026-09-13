@@ -723,6 +723,25 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
     write(out_dir / "cl_dispatch_server.cpp", "\n".join(c))
 
 
+
+# Vendor and Khronos extension suffixes. A command spelled with one of these is
+# resolved through the loader at first use rather than linked, because which
+# extension symbols a loader exports is a property of the machine.
+_EXTENSION_SUFFIXES = ("KHR", "EXT", "INTEL", "AMD", "APPLE", "ARM", "NV", "QCOM", "IMG")
+
+
+def _is_extension(name: str) -> bool:
+    return name.endswith(_EXTENSION_SUFFIXES)
+
+
+def _absent_result(cmd) -> str:
+    """What a command answers on a loader that does not have it."""
+    base = cmd.return_type.base if hasattr(cmd, "return_type") else "cl_int"
+    if base == "cl_int":
+        return "CL_INVALID_OPERATION"
+    return "nullptr"
+
+
 def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
     """The interface implemented by calling the host's own OpenCL."""
     out = [HEADER, "#pragma once\n"] + CL_PREAMBLE + ["",
@@ -731,7 +750,14 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            "// Every command forwarded to whatever OpenCL this process",
            "// loaded. The handles the guest sent are this process's own",
            "// pointers, so there is nothing to translate.",
+           "//",
+           "// An extension command is resolved rather than linked. The ICD",
+           "// loader on a machine is whichever one is first on the library",
+           "// path, and they do not all export the same extension symbols -",
+           "// linking clGetGLContextInfoKHR made the whole executor library",
+           "// unloadable on a host whose loader had no GL sharing (042).",
            "class RealDispatch : public ServerDispatch {", "public:"]
+    members: list[str] = []
     for cmd in reg.commands.values():
         decls = _server_params(reg, cmd)
         sig = _server_signature2(reg, cmd)
@@ -747,6 +773,29 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
                     args.append("nullptr")
                 continue
             args.append(p.name)
+        if _is_extension(cmd.name):
+            pointer = f"pfn_{cmd.name}_"
+            members.append(f"    {cmd.name}_fn {pointer} = nullptr;")
+            out.append(f"    using {cmd.name}_fn = decltype(&::{cmd.name});")
+            out.append(f"    {sig} override {{")
+            out.append(f"        if ({pointer} == nullptr) {{")
+            out.append(f"            {pointer} = reinterpret_cast<{cmd.name}_fn>(")
+            out.append("                ::clGetExtensionFunctionAddress("
+                       f'"{cmd.name}"));')
+            out.append("        }")
+            out.append(f"        if ({pointer} == nullptr) {{")
+            if cmd.returns_void:
+                out.append("            return;")
+            else:
+                out.append(f"            return {_absent_result(cmd)};")
+            out.append("        }")
+            call = f"{pointer}({', '.join(args)})"
+            if cmd.returns_void:
+                out.append(f"        {call};")
+            else:
+                out.append(f"        return {call};")
+            out.append("    }")
+            continue
         call = f"::{cmd.name}({', '.join(args)})"
         out.append(f"    {sig} override {{")
         if cmd.returns_void:
@@ -754,6 +803,7 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
         else:
             out.append(f"        return {call};")
         out.append("    }")
+    out += ["", "private:"] + members
     out += ["};", "", "}  // namespace av::clproto", ""]
     write(out_dir / "cl_real_dispatch.h", "\n".join(out))
 

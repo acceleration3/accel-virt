@@ -1,5 +1,6 @@
 #include "device/executor/executor_root.hpp"
 
+#include "device/abi/rvk_executor.h"
 #include "device/executor/host_apis.hpp"
 #include "device/executor/host_gpu.hpp"
 
@@ -14,7 +15,7 @@ alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][DecodeArena::arena_byt
 
 }  // namespace
 
-ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, vulkan_{}, asked_(false) {}
+ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, vulkan_{}, opencl_{}, asked_(false) {}
 
 Status ExecutorRoot::initialize(HostApis &apis)
 {
@@ -46,8 +47,15 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid)
 
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         if (sessions_[slot].live()) continue;
-        if (sessions_[slot].initialize(vulkan_[slot], decode_blocks[slot],
-                                       DecodeArena::arena_bytes) != Status::ok)
+        SessionBackend *backend = nullptr;
+        if (sub_api == RVK_EXECUTOR_SUB_API_VULKAN) backend = &vulkan_[slot];
+        if (sub_api == RVK_EXECUTOR_SUB_API_OPENCL) backend = &opencl_[slot];
+        /* A sub-API with no backend yet is refused rather than given a session
+         * that would answer nothing: OpenGL is the one, and it is refused at
+         * the capset too, because no GPU here reports running it. */
+        if (backend == nullptr) return nullptr;
+        if (sessions_[slot].initialize(*backend, decode_blocks[slot], DecodeArena::arena_bytes) !=
+            Status::ok)
             return nullptr;
         return &sessions_[slot];
     }
@@ -62,7 +70,9 @@ void ExecutorRoot::close(ContextSession *session)
      * owning a VkInstance would otherwise leak it for the life of the process,
      * which is a guest's to trigger as often as it likes. */
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
-        if (&sessions_[slot] == session) vulkan_[slot].shut_down();
+        if (&sessions_[slot] != session) continue;
+        vulkan_[slot].shut_down();
+        opencl_[slot].shut_down();
     }
 }
 

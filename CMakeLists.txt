@@ -114,6 +114,13 @@ find_library(AV_VULKAN_LIBRARY NAMES vulkan)
 if(AV_VULKAN_LIBRARY)
   target_link_libraries(av_core PUBLIC ${AV_VULKAN_LIBRARY})
 endif()
+# OpenCL the same way. Its ICD loader exports the whole 3.0 surface, which is
+# what the generated backend forwards into; a host with no OpenCL device still
+# loads it and enumerates no platform.
+find_library(AV_OPENCL_LIBRARY NAMES OpenCL)
+if(AV_OPENCL_LIBRARY)
+  target_link_libraries(av_core PUBLIC ${AV_OPENCL_LIBRARY})
+endif()
 if(AV_GENERATED)
   target_include_directories(av_core PUBLIC ${AV_KHRONOS_INCLUDE} ${AV_GENERATED_OPENGL_INCLUDE})
 endif()

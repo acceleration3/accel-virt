@@ -39,8 +39,17 @@ private:
      * enumeration has no offset to continue from. Mesa and NVIDIA report
      * under two hundred each. */
     static constexpr uint32_t max_extensions = 512u;
+    /* This host has three OpenCL platforms and two GPUs; neither number is
+     * one anybody will meet. */
+    static constexpr uint32_t max_platforms = 16u;
+    static constexpr uint32_t max_gpu_devices = 16u;
 
     void enumerate();
+    /* Whether some OpenCL device on this host is the GPU `uuid` names.
+     * Matched by CL_DEVICE_UUID_KHR, which cl_khr_device_uuid defines to be
+     * the same sixteen bytes Vulkan reports - so the two APIs agree on which
+     * GPU is which without this having to guess from a name. */
+    bool serves_opencl(const uint8_t *uuid) const;
     /* Which RVK_BLOB_* kinds `device` can import, asked of its extensions
      * rather than assumed: a device without the host-pointer extension imports
      * nothing and the guest is told to copy. */
@@ -50,6 +59,7 @@ private:
     uint8_t  uuids_[HostGpuSet::max_gpus][uuid_bytes];
     uint32_t sub_apis_[HostGpuSet::max_gpus];
     uint32_t vulkan_kinds_[HostGpuSet::max_gpus];
+    uint32_t opencl_kinds_[HostGpuSet::max_gpus];
     VkExtensionProperties extensions_[max_extensions];
     uint32_t count_;
     bool     opened_;

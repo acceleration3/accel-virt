@@ -10,6 +10,24 @@
 #include <cstdlib>
 #include <unistd.h>
 
+/* A library under test opens the host's real graphics loaders, and those
+ * allocate things they never give back. Named rather than leak detection being
+ * turned off, so a leak in the library itself is still a finding. */
+extern "C" const char *__lsan_default_suppressions(void);
+extern "C" const char *__lsan_default_suppressions(void)
+{
+    return "leak:libvulkan\n"
+           "leak:libOpenCL\n"
+           "leak:intelocl\n"
+           "leak:libigdrcl\n"
+           "leak:libnvidia\n"
+           "leak:nvidia_icd\n"
+           "leak:libGLX\n"
+           "leak:iris_dri\n"
+           "leak:libdbus-1\n"
+           "leak:libz\n";
+}
+
 namespace {
 
 /* Nothing in the device times out a call into an executor, so a library that

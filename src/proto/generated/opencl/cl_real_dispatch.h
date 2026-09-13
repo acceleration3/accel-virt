@@ -23,6 +23,12 @@ namespace av::clproto {
 // Every command forwarded to whatever OpenCL this process
 // loaded. The handles the guest sent are this process's own
 // pointers, so there is nothing to translate.
+//
+// An extension command is resolved rather than linked. The ICD
+// loader on a machine is whichever one is first on the library
+// path, and they do not all export the same extension symbols -
+// linking clGetGLContextInfoKHR made the whole executor library
+// unloadable on a host whose loader had no GL sharing (042).
 class RealDispatch : public ServerDispatch {
 public:
     cl_int on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id* platforms, cl_uint* num_platforms) override {
@@ -229,8 +235,16 @@ public:
     cl_int on_clEnqueueReleaseGLObjects(cl_command_queue command_queue, cl_uint num_objects, const cl_mem* mem_objects, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) override {
         return ::clEnqueueReleaseGLObjects(command_queue, num_objects, mem_objects, num_events_in_wait_list, event_wait_list, event);
     }
+    using clGetGLContextInfoKHR_fn = decltype(&::clGetGLContextInfoKHR);
     cl_int on_clGetGLContextInfoKHR(const cl_context_properties* properties, cl_gl_context_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) override {
-        return ::clGetGLContextInfoKHR(properties, param_name, param_value_size, param_value, param_value_size_ret);
+        if (pfn_clGetGLContextInfoKHR_ == nullptr) {
+            pfn_clGetGLContextInfoKHR_ = reinterpret_cast<clGetGLContextInfoKHR_fn>(
+                ::clGetExtensionFunctionAddress("clGetGLContextInfoKHR"));
+        }
+        if (pfn_clGetGLContextInfoKHR_ == nullptr) {
+            return CL_INVALID_OPERATION;
+        }
+        return pfn_clGetGLContextInfoKHR_(properties, param_name, param_value_size, param_value, param_value_size_ret);
     }
     cl_int on_clRetainDevice(cl_device_id device) override {
         return ::clRetainDevice(device);
@@ -340,6 +354,9 @@ public:
     cl_program on_clCreateProgramWithBuiltInKernels(cl_context context, cl_uint num_devices, const cl_device_id* device_list, const char* kernel_names, cl_int* errcode_ret) override {
         return ::clCreateProgramWithBuiltInKernels(context, num_devices, device_list, kernel_names, errcode_ret);
     }
+
+private:
+    clGetGLContextInfoKHR_fn pfn_clGetGLContextInfoKHR_ = nullptr;
 };
 
 }  // namespace av::clproto

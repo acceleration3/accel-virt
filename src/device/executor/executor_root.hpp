@@ -13,6 +13,7 @@
 #include "core/support/status.hpp"
 #include "device/executor/context_session.hpp"
 #include "device/executor/host_gpu_set.hpp"
+#include "device/executor/opencl_backend.hpp"
 #include "device/executor/vulkan_backend.hpp"
 
 #include <stddef.h>
@@ -75,6 +76,7 @@ private:
     HostGpuSet     gpus_;
     ContextSession sessions_[max_sessions];
     VulkanBackend  vulkan_[max_sessions];
+    OpenClBackend  opencl_[max_sessions];
     bool           asked_;
 };
 
