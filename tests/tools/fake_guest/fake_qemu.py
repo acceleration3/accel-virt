@@ -15,7 +15,13 @@ The script is JSON at $FAKE_GUEST_SCRIPT:
              until QEMU is started again without virtio-gpu-rvk-pci
   die_during stage: QEMU aborts with an assertion when the stage runs
   refuse     ["guest-suspend-ram", ...]: agent commands answered with an error
-  exit_at_boot, agent_silent, garbage, no_reset, hang: misbehaviours
+  region_status  "0xc0000017" or null: what the driver logs for the hostmem
+             region a device with hostmem= has; null takes the line away, as a
+             capset without the host-visible bit does
+  hostmem_written {"offset": n, "bytes": n}: the guest's pattern, as pmemsave
+             finds it in the hostmem BAR; absent leaves the region all zeros
+  exit_at_boot, agent_silent, garbage, no_reset, hang, pmemsave_nothing:
+             misbehaviours
 Everything the guest was asked is appended to $FAKE_GUEST_JOURNAL.
 """
 import base64
@@ -30,6 +36,11 @@ import time
 REBOOT = 0.3
 ASSERTION = "qemu-system-x86_64: ../source/hw/pci/msix.c:122: msix_fire_vector_notifier: Assertion `ret >= 0' failed."
 LOOP_PERIOD = 0.5
+HOSTMEM_BAR = 4
+"""The BAR virtio-gpu-pci registers the host-visible region in."""
+HOSTMEM_BASE = 0xC0000000
+"""Where this fake's guest programmed that BAR."""
+MODERN_BAR_BASE = 0xB0000000
 
 
 def option(argv, flag, kind=None):
@@ -51,11 +62,17 @@ def field(spec, name):
     return None
 
 
+def size_property(value):
+    """A QEMU size property - "256M" - in bytes; 0 where the device has none."""
+    return int(value[:-1]) << 20 if value else 0
+
+
 class Guest:
-    def __init__(self, script, journal, device):
+    def __init__(self, script, journal, device, hostmem):
         self.script = script
         self.journal = journal
         self.device = device
+        self.hostmem = hostmem
         self.lock = threading.Lock()
         self.send_lock = threading.Lock()
         self.calls = {}
@@ -256,9 +273,43 @@ class Guest:
                 except OSError:
                     return
 
+    def pci_devices(self):
+        """What QEMU says about the bus: the runner reads the hostmem BAR's
+        guest physical address out of it, having no config space of its own."""
+        regions = [{"bar": 2, "address": MODERN_BAR_BASE, "size": 0x4000, "type": "memory",
+                    "prefetch": False, "mem_type_64": True}]
+        if self.hostmem:
+            regions.append({"bar": HOSTMEM_BAR, "address": HOSTMEM_BASE, "size": self.hostmem,
+                            "type": "memory", "prefetch": True, "mem_type_64": True})
+        return [{"bus": 0, "devices": [{"bus": 0, "slot": 1, "function": 0, "qdev_id": "gpu",
+                                        "regions": regions}]}]
+
+    def memory_image(self, address, size):
+        """The host's own view of a guest physical range: zeros, unless the
+        script says the guest wrote its pattern into the hostmem BAR - the byte
+        at offset n of it is 1 + (n * 7) % 251, as the scenario in
+        src/guest/suite/host_visible_scenario.hpp writes it."""
+        image = bytearray(size)
+        written = self.script.get("hostmem_written")
+        if written is not None and address == HOSTMEM_BASE:
+            offset = written.get("offset", 0)
+            pattern = bytes(1 + (index * 7) % 251 for index in range(written.get("bytes", 0)))
+            image[offset:offset + len(pattern)] = pattern
+        return bytes(image[:size])
+
     def qmp_command(self, request):
         """screendump writes a PPM of the scripted size, as QEMU would; input
-        events wake a display the power policy turned off."""
+        events wake a display the power policy turned off; pmemsave hands out
+        the host's own read of guest physical memory."""
+        if request.get("execute") == "query-pci":
+            return self.pci_devices()
+        if request.get("execute") == "pmemsave":
+            arguments = request.get("arguments", {})
+            self.note(f"pmemsave {arguments['val']:#x} {arguments['size']}")
+            if not self.script.get("pmemsave_nothing"):
+                with open(arguments["filename"], "wb") as out:
+                    out.write(self.memory_image(arguments["val"], arguments["size"]))
+            return None
         if request.get("execute") == "system_wakeup":
             self.note("system_wakeup")
             self.suspended = False
@@ -309,9 +360,9 @@ class Guest:
                 line, buffer = buffer.split(b"\n", 1)
                 request = json.loads(line)
                 self.qmp = connection
-                self.qmp_command(request)
+                answer = self.qmp_command(request)
                 with self.send_lock:
-                    connection.sendall(b'{"return": {}}\n')
+                    connection.sendall(json.dumps({"return": {} if answer is None else answer}).encode() + b"\n")
 
 
 def append_later(path, lines, seconds):
@@ -324,7 +375,8 @@ def main():
     argv = sys.argv[1:]
     script = json.load(open(os.environ["FAKE_GUEST_SCRIPT"]))
     device = any(word.startswith("virtio-gpu-rvk-pci") for word in argv)
-    guest = Guest(script, os.environ["FAKE_GUEST_JOURNAL"], device)
+    hostmem = size_property(field(option(argv, "-device", "virtio-gpu-rvk-pci") or "", "hostmem"))
+    guest = Guest(script, os.environ["FAKE_GUEST_JOURNAL"], device, hostmem)
     guest.note("argv " + " ".join(argv))
     # What the device's executor was told to do, as the runner set it: the
     # environment is how a test executor is steered without a rebuild.
@@ -343,6 +395,12 @@ def main():
         lines = script.get("driver_log", ["rvkgpu: DriverEntry",
                                           "rvkgpu: aperture map segment 1 offset 0 pages 1000 status 0",
                                           "rvkgpu: vsync 600 periods in 100000000 ticks, 600 reported, enabled 0 times"])
+        # A device with a region makes the driver say what came of opening it,
+        # whatever else the scenario had it log, because the line belongs to the
+        # device rather than to the run.
+        status = script.get("region_status", "0x00000000")
+        if hostmem and status is not None:
+            lines = lines + [f"rvkgpu: host-visible region status {status}"]
         log.write("".join(line + "\n" for line in lines) if device else "")
     # A driver goes on logging while the run reads: what it says every 120
     # blanks arrives long after the line before it.

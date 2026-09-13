@@ -42,6 +42,8 @@ BLACK_SCREEN = live_dump(0x1A8)
 GUEST_FILES = {"C:\\rvk\\diag\\system.txt": "System events\n",
                "C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp": BLACK_SCREEN,
                "C:\\Windows\\MEMORY.DMP": live_dump(0xD1)}
+HOST_VISIBLE_REPORT = "ok adapter.find\nok hostvisible.pattern 4096\r\nrvktest: 24 passed, 0 failed\n"
+"""What a suite that wrote a pattern through a mapped view reports (feature 041)."""
 TIMEOUT_EVENTS = "timeout: 2026-09-13T10:00:00 Display driver rvkgpu stopped responding and has successfully "\
                  "recovered.\r\ntimeouts: 1\r\n"
 """What the guest says event 4101 looks like (feature 040, US3)."""
@@ -734,6 +736,80 @@ class GuestSuiteRun(unittest.TestCase):
         result = self.run_suite()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("a frame was not carried: rvkgpu: scanout 0", (self.work / "verdict.txt").read_text())
+
+    def test_the_device_is_given_a_host_visible_region_and_the_driver_reports_two_segments(self):
+        """Feature 041: the device only has a region where the run asks for one,
+        and the driver's own log is where a run sees the second segment."""
+        self.script()
+        result = self.run_suite()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("max_outputs=1,hostmem=256M", self.journal_lines()[0])
+        self.assertIn("guest: segments ok: 2 reported, the second 256 MiB of host memory at 0xc0000000",
+                      result.stdout)
+        # A suite that wrote no pattern is said and skipped, not failed: the
+        # scenario is the guest's to run.
+        self.assertIn("guest: hostvisible skipped: the suite reported no host-visible pattern", result.stdout)
+        self.assert_clean()
+
+    def test_hostmem_zero_leaves_the_device_without_a_region(self):
+        """FR-007: the fallback is what a run with no region is for - one
+        segment, and a pattern in guest memory that proves nothing."""
+        self.script(outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
+                             "rvktest": HOST_VISIBLE_REPORT, "collect": COLLECTED})
+        result = self.run_suite("--hostmem", "0")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("hostmem=", self.journal_lines()[0])
+        self.assertIn("guest: segments ok: 1 reported, this device has no region", result.stdout)
+        self.assertIn("guest: hostvisible ok: 4096 bytes written through the guest's view", result.stdout)
+        self.assertIn("guest: hostvisible skipped: with no region on this device", result.stdout)
+        self.assertNotIn("pmemsave", "\n".join(self.journal_lines()))
+        self.assert_clean()
+
+    def test_a_driver_that_opened_no_region_fails_the_segments_step(self):
+        """The device has a region and the driver reported none: the capset's
+        host-visible bit is clear, or opening it failed - either way the feature
+        did not happen and the run says which."""
+        self.script(region_status=None)
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the driver opened no host-visible region", (self.work / "verdict.txt").read_text())
+        self.script(region_status="0xc0000017")
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("could not open the host-visible region: status 0xc0000017",
+                      (self.work / "verdict.txt").read_text())
+        self.assert_clean()
+
+    def test_the_host_reads_back_what_the_guest_wrote_through_its_view(self):
+        """SC-003: the guest wrote its pattern through the view it locked, and
+        the host's own read of the BAR holds the same bytes - at whatever offset
+        VidMm placed the allocation at, which the driver is never told."""
+        self.script(outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
+                             "rvktest": HOST_VISIBLE_REPORT, "collect": COLLECTED},
+                    hostmem_written={"offset": 0x2000, "bytes": 4096})
+        result = self.run_suite("--hostmem", "4")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: hostvisible ok: 4096 bytes written through the guest's view", result.stdout)
+        self.assertIn("guest: hostvisible ok: the host reads the same bytes out of the BAR", result.stdout)
+        self.assertIn("pmemsave 0xc0000000 4194304", self.journal_lines())
+        self.assertFalse((self.work / "hostmem.bin").exists())
+        self.assert_clean()
+
+    def test_a_pattern_the_host_cannot_find_in_the_bar_fails_the_run(self):
+        """The guest's own read-back passed and the host's did not: the view was
+        guest RAM with a flag on it, not the device's memory."""
+        self.script(outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
+                             "rvktest": HOST_VISIBLE_REPORT, "collect": COLLECTED})
+        result = self.run_suite("--hostmem", "4")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not hold the 4096 bytes the guest wrote", (self.work / "verdict.txt").read_text())
+        self.script(outputs={"check": ONE_MONITOR, "sleepstates": SLEEP_STATES,
+                             "rvktest": HOST_VISIBLE_REPORT, "collect": COLLECTED},
+                    hostmem_written={"offset": 0, "bytes": 4096}, pmemsave_nothing=True)
+        result = self.run_suite("--hostmem", "4")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("QEMU wrote no 4194304-byte read of 0xc0000000", (self.work / "verdict.txt").read_text())
+        self.assert_clean()
 
     def test_without_an_image_it_says_how_to_name_one(self):
         environment = {key: value for key, value in self.environment.items() if key != "AV_GUEST_IMAGE"}
