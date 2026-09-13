@@ -70,6 +70,27 @@ public:
     [[nodiscard]] virtual Status place_in_hostmem(void *memory, uint64_t offset) = 0;
     virtual void                 remove_from_hostmem(uint64_t offset, uint64_t size) = 0;
 
+    /* Main loop, once, when the instance's host GPU is resolved: the glue may
+     * now create what it needs on that physical device. not_supported when the
+     * host cannot take it, which leaves the device unbound. */
+    [[nodiscard]] virtual Status bind_gpu(uint32_t index) = 0;
+
+    /* Main loop. `size` bytes allocated on the bound host GPU and mapped into
+     * this process: its handle - which place_in_hostmem accepts - or null, with
+     * `host_error` carrying the host's own number (a VkResult, an errno, or 0
+     * when it had none to give). `pointer` is the device's view of it. */
+    [[nodiscard]] virtual void *export_gpu_memory(uint64_t size, void *&pointer, int32_t &host_error) = 0;
+    virtual void                release_gpu_memory(void *memory) = 0;
+    /* Main loop. The `size` bytes at `pointer`, a direct mapping of guest RAM,
+     * imported by the bound host GPU: its handle, or null with `host_error`,
+     * which is 0 when the host simply cannot import. `pointer` must stay mapped
+     * until the import is released. */
+    [[nodiscard]] virtual void *import_guest_memory(void *pointer, uint64_t size, int32_t &host_error) = 0;
+    virtual void                release_guest_memory(void *memory) = 0;
+    /* Main loop. `size` bytes of what the host GPU sees through the import,
+     * which is what a probe compares against what the device wrote. */
+    [[nodiscard]] virtual Status read_imported_memory(void *memory, uint8_t *buffer, uint64_t size) = 0;
+
     /* Main loop. A 4-byte store at offset 0 of doorbell page `index` signals
      * `event` without the main loop (a KVM ioeventfd) until disconnected; the
      * event must outlive the connection. */

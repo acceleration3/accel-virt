@@ -26,9 +26,7 @@ Status GpuBinding::bind(const char *selection, TextBuffer &message)
         message.append("virtio-gpu-rvk: the host has no Vulkan device");
         return refuse(Status::not_found, message);
     }
-    index_ = 0u;
-    bound_ = true;
-    return Status::ok;
+    return take(0u, message);
 }
 
 Status GpuBinding::bind_uuid(const char *selection, TextBuffer &message)
@@ -43,13 +41,27 @@ Status GpuBinding::bind_uuid(const char *selection, TextBuffer &message)
     const uint32_t count = host_.gpu_count();
     for (uint32_t index = 0u; index < count; index++) {
         if (!wanted.equals(host_.gpu_identity(index).uuid())) continue;
-        index_ = index;
-        bound_ = true;
-        return Status::ok;
+        return take(index, message);
     }
     message.append("virtio-gpu-rvk: no host Vulkan device has UUID ");
     message.append(selection);
     return refuse(Status::not_found, message);
+}
+
+/* The glue creates what it needs on the physical device this names, so a host
+ * that cannot take the GPU leaves the device unbound rather than running on
+ * whichever one the glue would have picked. */
+Status GpuBinding::take(uint32_t index, TextBuffer &message)
+{
+    const Status taken = host_.bind_gpu(index);
+    if (taken != Status::ok) {
+        message.append("virtio-gpu-rvk: the host refused host GPU ");
+        message.append_decimal(index);
+        return refuse(taken, message);
+    }
+    index_ = index;
+    bound_ = true;
+    return Status::ok;
 }
 
 Status GpuBinding::refuse(Status status, TextBuffer &message)

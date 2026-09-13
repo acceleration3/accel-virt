@@ -30,6 +30,8 @@ typedef struct VirtIOGPURvkBlock {
     int fd;
     void *pointer;
     uint64_t size;
+    /* Set for a block that came from the host GPU (feature 039). */
+    VkDeviceMemory gpu_memory;
 } VirtIOGPURvkBlock;
 
 typedef struct VirtIOGPURvkThread {
@@ -237,6 +239,245 @@ static void rvk_remove_from_hostmem(void *opaque, uint64_t offset, uint64_t size
     }
 }
 
+/* A memory type the host can write and the device can read back, preferring one
+ * the GPU also calls local (resizable BAR), which is the mapping 042-044 want. */
+static int rvk_memory_type(VkPhysicalDevice physical, uint32_t allowed, uint32_t *type)
+{
+    VkPhysicalDeviceMemoryProperties memory;
+    const VkMemoryPropertyFlags wanted = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    int found = 0;
+
+    vkGetPhysicalDeviceMemoryProperties(physical, &memory);
+    for (uint32_t i = 0; i < memory.memoryTypeCount; i++) {
+        VkMemoryPropertyFlags flags = memory.memoryTypes[i].propertyFlags;
+
+        if (!(allowed & (1u << i)) || (flags & wanted) != wanted) {
+            continue;
+        }
+        if (!found || (flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+            *type = i;
+            found = 1;
+        }
+        if (flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
+            break;
+        }
+    }
+    return found;
+}
+
+/* The logical device the probes and, from 041 on, the memory paths use. Created
+ * when the core says which host GPU this instance runs on; a driver that cannot
+ * give us external memory still gets a device, and each probe refuses on its
+ * own. */
+static int rvk_bind_gpu(void *opaque, uint32_t index)
+{
+    VirtIOGPURvk *r = opaque;
+    const float priority = 1.0f;
+    const char *extensions[] = { VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME,
+                                 VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME };
+    VkDeviceQueueCreateInfo queue = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueCount = 1,
+        .pQueuePriorities = &priority,
+    };
+    VkDeviceCreateInfo create = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &queue,
+        .enabledExtensionCount = ARRAY_SIZE(extensions),
+        .ppEnabledExtensionNames = extensions,
+    };
+    VkPhysicalDeviceExternalMemoryHostPropertiesEXT host_memory = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT,
+    };
+    VkPhysicalDeviceProperties2 properties = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+        .pNext = &host_memory,
+    };
+
+    if (index >= r->gpu_count || !r->instance) {
+        return 1;
+    }
+    r->bound = r->physical[index];
+    if (r->gpu) {
+        return 0;
+    }
+    if (vkCreateDevice(r->bound, &create, NULL, &r->gpu) != VK_SUCCESS) {
+        /* Without the external-memory extensions there is still a device to
+         * run on; the probes are what refuse, not the binding. */
+        create.enabledExtensionCount = 0;
+        if (vkCreateDevice(r->bound, &create, NULL, &r->gpu) != VK_SUCCESS) {
+            r->gpu = VK_NULL_HANDLE;
+            return 1;
+        }
+        return 0;
+    }
+    vkGetPhysicalDeviceProperties2(r->bound, &properties);
+    r->import_alignment = host_memory.minImportedHostPointerAlignment;
+    return 0;
+}
+
+/* Memory of the host GPU's own, exported as a file descriptor so the hostmem
+ * placement can map it into the guest exactly as a memfd block is mapped. */
+static void *rvk_export_gpu_memory(void *opaque, uint64_t size, void **pointer, int32_t *host_error)
+{
+    VirtIOGPURvk *r = opaque;
+    VkExportMemoryAllocateInfo export_info = {
+        .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
+        .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
+    };
+    VkMemoryAllocateInfo allocate = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = &export_info,
+        .allocationSize = size,
+    };
+    VkMemoryGetFdInfoKHR fd_info = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
+        .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT,
+    };
+    PFN_vkGetMemoryFdKHR get_fd;
+    VirtIOGPURvkBlock *block;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkResult allocated;
+    int fd = -1;
+    void *mapped;
+
+    *pointer = NULL;
+    *host_error = 0;
+    if (!r->gpu) {
+        return NULL;
+    }
+    if (!rvk_memory_type(r->bound, UINT32_MAX, &allocate.memoryTypeIndex)) {
+        return NULL;
+    }
+    get_fd = (PFN_vkGetMemoryFdKHR)vkGetDeviceProcAddr(r->gpu, "vkGetMemoryFdKHR");
+    if (!get_fd) {
+        return NULL;
+    }
+    allocated = vkAllocateMemory(r->gpu, &allocate, NULL, &memory);
+    if (allocated != VK_SUCCESS) {
+        *host_error = allocated;
+        return NULL;
+    }
+    fd_info.memory = memory;
+    allocated = get_fd(r->gpu, &fd_info, &fd);
+    if (allocated != VK_SUCCESS) {
+        *host_error = allocated;
+        vkFreeMemory(r->gpu, memory, NULL);
+        return NULL;
+    }
+    mapped = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mapped == MAP_FAILED) {
+        *host_error = -errno;
+        close(fd);
+        vkFreeMemory(r->gpu, memory, NULL);
+        return NULL;
+    }
+    block = g_new0(VirtIOGPURvkBlock, 1);
+    block->fd = fd;
+    block->pointer = mapped;
+    block->size = size;
+    block->gpu_memory = memory;
+    *pointer = mapped;
+    return block;
+}
+
+static void rvk_release_gpu_memory(void *opaque, void *memory)
+{
+    VirtIOGPURvk *r = opaque;
+    VirtIOGPURvkBlock *block = memory;
+
+    munmap(block->pointer, block->size);
+    close(block->fd);
+    vkFreeMemory(r->gpu, block->gpu_memory, NULL);
+    g_free(block);
+}
+
+/* Guest pages the host GPU addresses directly (VK_EXT_external_memory_host):
+ * no extension, or a window the driver will not take, answers NULL. */
+static void *rvk_import_guest_memory(void *opaque, void *pointer, uint64_t size, int32_t *host_error)
+{
+    VirtIOGPURvk *r = opaque;
+    VkMemoryHostPointerPropertiesEXT properties = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT,
+    };
+    VkImportMemoryHostPointerInfoEXT import = {
+        .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT,
+        .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
+        .pHostPointer = pointer,
+    };
+    VkMemoryAllocateInfo allocate = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .pNext = &import,
+        .allocationSize = size,
+    };
+    PFN_vkGetMemoryHostPointerPropertiesEXT host_properties;
+    VirtIOGPURvkBlock *block;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkResult imported;
+    void *mapped = NULL;
+
+    *host_error = 0;
+    if (!r->gpu || !r->import_alignment) {
+        return NULL;
+    }
+    if (((uintptr_t)pointer % r->import_alignment) || (size % r->import_alignment)) {
+        *host_error = -EINVAL;
+        return NULL;
+    }
+    host_properties = (PFN_vkGetMemoryHostPointerPropertiesEXT)
+        vkGetDeviceProcAddr(r->gpu, "vkGetMemoryHostPointerPropertiesEXT");
+    if (!host_properties) {
+        return NULL;
+    }
+    imported = host_properties(r->gpu, VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT, pointer, &properties);
+    if (imported != VK_SUCCESS) {
+        *host_error = imported;
+        return NULL;
+    }
+    if (!rvk_memory_type(r->bound, properties.memoryTypeBits, &allocate.memoryTypeIndex)) {
+        return NULL;
+    }
+    imported = vkAllocateMemory(r->gpu, &allocate, NULL, &memory);
+    if (imported != VK_SUCCESS) {
+        *host_error = imported;
+        return NULL;
+    }
+    if (vkMapMemory(r->gpu, memory, 0, size, 0, &mapped) != VK_SUCCESS) {
+        vkFreeMemory(r->gpu, memory, NULL);
+        return NULL;
+    }
+    block = g_new0(VirtIOGPURvkBlock, 1);
+    block->fd = -1;
+    block->pointer = mapped;
+    block->size = size;
+    block->gpu_memory = memory;
+    return block;
+}
+
+static void rvk_release_guest_memory(void *opaque, void *memory)
+{
+    VirtIOGPURvk *r = opaque;
+    VirtIOGPURvkBlock *block = memory;
+
+    vkUnmapMemory(r->gpu, block->gpu_memory);
+    vkFreeMemory(r->gpu, block->gpu_memory, NULL);
+    g_free(block);
+}
+
+/* What the GPU's own mapping of the imported memory holds, which is the claim a
+ * probe checks against the bytes the device wrote into the guest window. */
+static int rvk_read_imported_memory(void *opaque, void *memory, uint8_t *buffer, uint64_t size)
+{
+    VirtIOGPURvkBlock *block = memory;
+
+    if (size > block->size) {
+        return 1;
+    }
+    memcpy(buffer, block->pointer, size);
+    return 0;
+}
+
 static void rvk_connect_doorbell(void *opaque, void *event, uint32_t index)
 {
     VirtIOGPURvk *r = opaque;
@@ -332,6 +573,7 @@ static void rvk_read_gpus(VirtIOGPURvk *r)
     if (vkCreateInstance(&create, NULL, &instance) != VK_SUCCESS) {
         return;
     }
+    r->instance = instance;
     if (vkEnumeratePhysicalDevices(instance, &count, devices) < 0) {
         count = 0;
     }
@@ -361,8 +603,22 @@ static void rvk_read_gpus(VirtIOGPURvk *r)
             }
         }
     }
+    for (uint32_t i = 0; i < count; i++) {
+        r->physical[i] = devices[i];
+    }
     r->gpu_count = count;
-    vkDestroyInstance(instance, NULL);
+}
+
+void virtio_gpu_rvk_host_finish(VirtIOGPURvk *r)
+{
+    if (r->gpu) {
+        vkDestroyDevice(r->gpu, NULL);
+        r->gpu = VK_NULL_HANDLE;
+    }
+    if (r->instance) {
+        vkDestroyInstance(r->instance, NULL);
+        r->instance = VK_NULL_HANDLE;
+    }
 }
 
 void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
@@ -393,6 +649,12 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .hostmem_size = rvk_hostmem_size,
         .place_in_hostmem = rvk_place_in_hostmem,
         .remove_from_hostmem = rvk_remove_from_hostmem,
+        .bind_gpu = rvk_bind_gpu,
+        .export_gpu_memory = rvk_export_gpu_memory,
+        .release_gpu_memory = rvk_release_gpu_memory,
+        .import_guest_memory = rvk_import_guest_memory,
+        .release_guest_memory = rvk_release_guest_memory,
+        .read_imported_memory = rvk_read_imported_memory,
         .connect_doorbell = rvk_connect_doorbell,
         .disconnect_doorbell = rvk_disconnect_doorbell,
         .connect_fence_interrupts = rvk_connect_fence_interrupts,

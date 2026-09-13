@@ -149,6 +149,39 @@ void TableHost::remove_from_hostmem(uint64_t offset, uint64_t size)
     ops_.remove_from_hostmem(ops_.opaque, offset, size);
 }
 
+Status TableHost::bind_gpu(uint32_t index)
+{
+    return ops_.bind_gpu(ops_.opaque, index) == 0 ? Status::ok : Status::not_supported;
+}
+
+void *TableHost::export_gpu_memory(uint64_t size, void *&pointer, int32_t &host_error)
+{
+    pointer = nullptr;
+    host_error = 0;
+    return ops_.export_gpu_memory(ops_.opaque, size, &pointer, &host_error);
+}
+
+void TableHost::release_gpu_memory(void *memory)
+{
+    ops_.release_gpu_memory(ops_.opaque, memory);
+}
+
+void *TableHost::import_guest_memory(void *pointer, uint64_t size, int32_t &host_error)
+{
+    host_error = 0;
+    return ops_.import_guest_memory(ops_.opaque, pointer, size, &host_error);
+}
+
+void TableHost::release_guest_memory(void *memory)
+{
+    ops_.release_guest_memory(ops_.opaque, memory);
+}
+
+Status TableHost::read_imported_memory(void *memory, uint8_t *buffer, uint64_t size)
+{
+    return ops_.read_imported_memory(ops_.opaque, memory, buffer, size) == 0 ? Status::ok : Status::not_supported;
+}
+
 void TableHost::connect_doorbell(void *event, uint32_t index)
 {
     ops_.connect_doorbell(ops_.opaque, event, index);

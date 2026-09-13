@@ -13,6 +13,7 @@
 #include <gmodule.h>
 #include "hw/virtio/virtio-gpu.h"
 #include <rvk_device.h>
+#include <vulkan/vulkan.h>
 
 #define TYPE_VIRTIO_GPU_RVK "virtio-gpu-rvk-device"
 OBJECT_DECLARE_SIMPLE_TYPE(VirtIOGPURvk, VIRTIO_GPU_RVK)
@@ -30,6 +31,17 @@ struct VirtIOGPURvk {
     RvkHostOps host;
     uint32_t gpu_count;
     RvkGpuProperties gpus[VIRTIO_GPU_RVK_MAX_GPUS];
+    /* The Vulkan loader, kept from the catalog read at realize: the physical
+     * devices it enumerated, and the logical device on the one this instance
+     * was bound to, which the feasibility probes allocate and import through
+     * (feature 039). A host with no loader leaves every handle null and every
+     * probe refused. */
+    VkInstance instance;
+    VkPhysicalDevice physical[VIRTIO_GPU_RVK_MAX_GPUS];
+    VkPhysicalDevice bound;
+    VkDevice gpu;
+    /* VK_EXT_external_memory_host's alignment, 0 when the device lacks it. */
+    uint64_t import_alignment;
     RvkDevice *core;
     /* The hostmem BAR's backing: private anonymous memory that blobs are
      * placed over with MAP_FIXED, as virtio-gpu-gl does for virgl. */
@@ -45,5 +57,8 @@ struct VirtIOGPURvk {
 /* Fills r->host with QEMU's threads, events, locks, main loop, memory and
  * control queue, and the GPU catalog with the host's Vulkan physical devices. */
 void virtio_gpu_rvk_host_init(VirtIOGPURvk *r);
+/* Releases the logical device and the Vulkan instance the catalog was read
+ * with; safe on a device that never realized. */
+void virtio_gpu_rvk_host_finish(VirtIOGPURvk *r);
 
 #endif

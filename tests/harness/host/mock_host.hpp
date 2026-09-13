@@ -19,6 +19,7 @@ namespace av {
 
 class MockHost final : public Host {
 public:
+    static constexpr std::uint32_t no_gpu = 0xFFFFFFFFu;
     static constexpr std::uint32_t max_threads = 128u;
     static constexpr std::uint32_t max_events = 256u;
     static constexpr std::uint32_t max_mutexes = 256u;
@@ -56,6 +57,12 @@ public:
     std::uint64_t hostmem_size() override;
     Status   place_in_hostmem(void *memory, std::uint64_t offset) override;
     void     remove_from_hostmem(std::uint64_t offset, std::uint64_t size) override;
+    Status   bind_gpu(std::uint32_t index) override;
+    void    *export_gpu_memory(std::uint64_t size, void *&pointer, std::int32_t &host_error) override;
+    void     release_gpu_memory(void *memory) override;
+    void    *import_guest_memory(void *pointer, std::uint64_t size, std::int32_t &host_error) override;
+    void     release_guest_memory(void *memory) override;
+    Status   read_imported_memory(void *memory, std::uint8_t *buffer, std::uint64_t size) override;
     void     connect_doorbell(void *event, std::uint32_t index) override;
     void     disconnect_doorbell(void *event, std::uint32_t index) override;
     Status   connect_fence_interrupts() override;
@@ -75,6 +82,14 @@ public:
     void fail_allocation_at(std::uint32_t nth);
     void fail_host_memory_at(std::uint32_t nth);
     void fail_placement_at(std::uint32_t nth);
+    /* The Nth export or import from now is refused, carrying `host_error` -
+     * a VkResult, an errno, or 0 for a host with no number to give. */
+    void fail_bind_gpu_at(std::uint32_t nth);
+    void refuse_export_at(std::uint32_t nth, std::int32_t host_error);
+    void refuse_import_at(std::uint32_t nth, std::int32_t host_error);
+    /* The Nth read through an import from now answers bytes the device never
+     * wrote: a host that imported something else. */
+    void corrupt_import_read_at(std::uint32_t nth);
     /* The Nth guest mapping from now answers a pointer with nothing mapped, a
      * host that says yes and means no. */
     void empty_mapping_at(std::uint32_t nth);
@@ -122,6 +137,11 @@ public:
     std::uint32_t live_allocations();
     std::uint32_t live_guest_mappings();
     std::uint32_t live_host_memory();
+    /* The host GPU this device was bound to, or no_gpu. */
+    std::uint32_t bound_gpu();
+    /* Blocks exported from the host GPU, and windows imported into it. */
+    std::uint32_t live_gpu_memory();
+    std::uint32_t live_imports();
     std::uint32_t live_placements();
     std::uint32_t live_doorbells();
 
@@ -154,6 +174,7 @@ private:
     static constexpr std::uint32_t max_guest_mappings = 20000u;
     static constexpr std::uint32_t max_regions = 8u;
     static constexpr std::uint32_t max_host_memory = 64u;
+    static constexpr std::uint32_t max_imports = 16u;
     static constexpr std::uint32_t max_resources = 64u;
 
     struct GuestRegion {
@@ -172,6 +193,12 @@ private:
         bool          live;
         bool          placed;
         std::uint64_t offset;
+        bool          exported;   /* from the host GPU, released by release_gpu_memory */
+    };
+    struct Import {
+        std::uint8_t *pointer;
+        std::uint64_t size;
+        bool          live;
     };
 
     void    record(HostViolation kind, const char *function);
@@ -220,6 +247,14 @@ private:
     bool            fence_connected_;
     std::uint32_t   fail_fence_connect_;
     std::uint32_t   raised_[max_doorbells];
+    std::uint32_t   fail_bind_gpu_;
+    std::uint32_t   bound_gpu_;
+    std::uint32_t   refuse_export_;
+    std::int32_t    export_error_;
+    std::uint32_t   refuse_import_;
+    std::int32_t    import_error_;
+    std::uint32_t   corrupt_import_read_;
+    Import          imports_[max_imports];
 };
 
 }  // namespace av

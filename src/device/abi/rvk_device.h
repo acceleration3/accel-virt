@@ -71,6 +71,18 @@ typedef struct RvkHostOps {
     /* Nonzero when the block cannot be placed at `offset` of the hostmem region. */
     int (*place_in_hostmem)(void *opaque, void *memory, uint64_t offset);
     void (*remove_from_hostmem)(void *opaque, uint64_t offset, uint64_t size);
+    /* This device runs on host GPU `index`; nonzero when the host cannot. */
+    int (*bind_gpu)(void *opaque, uint32_t index);
+    /* `size` bytes on the bound host GPU, mapped into this process: its handle,
+     * or NULL with *host_error set (a VkResult, an errno, or 0). */
+    void *(*export_gpu_memory)(void *opaque, uint64_t size, void **pointer, int32_t *host_error);
+    void (*release_gpu_memory)(void *opaque, void *memory);
+    /* The `size` bytes at `pointer` - a direct guest mapping - imported by the
+     * bound host GPU: its handle, or NULL with *host_error. */
+    void *(*import_guest_memory)(void *opaque, void *pointer, uint64_t size, int32_t *host_error);
+    void (*release_guest_memory)(void *opaque, void *memory);
+    /* What the host GPU sees through the import; nonzero when it cannot say. */
+    int (*read_imported_memory)(void *opaque, void *memory, uint8_t *buffer, uint64_t size);
     /* A 4-byte store at offset 0 of doorbell page `index` signals the event
      * (memory_region_add_eventfd); disconnect removes it. */
     void (*connect_doorbell)(void *opaque, void *event, uint32_t index);

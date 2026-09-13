@@ -137,6 +137,7 @@ static void virtio_gpu_rvk_finalize(Object *obj)
     VirtIOGPURvk *r = VIRTIO_GPU_RVK(obj);
 
     (void)rvk_device_destroy(r->core);
+    virtio_gpu_rvk_host_finish(r);
     if (r->executor_library) {
         g_module_close(r->executor_library);
     }

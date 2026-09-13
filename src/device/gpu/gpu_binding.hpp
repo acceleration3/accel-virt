@@ -29,6 +29,7 @@ public:
 
 private:
     [[nodiscard]] Status bind_uuid(const char *selection, TextBuffer &message);
+    [[nodiscard]] Status take(uint32_t index, TextBuffer &message);
     [[nodiscard]] Status refuse(Status status, TextBuffer &message);
     bool                 is_auto(const char *selection) const;
 

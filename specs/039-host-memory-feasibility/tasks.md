@@ -35,12 +35,13 @@ description: "Tasks: host memory and interrupt feasibility on real host GPUs"
 
 **Purpose**: the host operations the probes call, on both sides of the `Host` contract, per `contracts/host_ops.md`. Nothing in this phase decides anything - it only makes the calls available and refusable.
 
-- [ ] T003 Add `export_gpu_memory(uint64_t size, void *&pointer, int32_t &host_error)`, `release_gpu_memory(void *)`, `import_guest_memory(void *pointer, uint64_t size, int32_t &host_error)`, `release_guest_memory(void *)` and `read_imported_memory(void *memory, uint8_t *buffer, uint64_t size)` to `av::Host` in `src/device/host/host.hpp`, each documenting its side (main loop) and failure shape
-- [ ] T004 Extend the C ABI table with the five entries in the same order in `src/device/abi/rvk_device.h`, and forward them in `src/device/abi/table_host.{hpp,cpp}`
-- [ ] T005 [P] Script them in `tests/harness/host/mock_host.{hpp,cpp}`: success, refusal with a `VkResult`, refusal with an `errno`, a readback that differs from what was written, and the balance check that every handle is released before the test ends
-- [ ] T006 [P] Extend `tests/harness/host/mock_host_ops.{hpp,cpp}` so the ABI table test covers the five new entries
-- [ ] T007 Implement them over Vulkan in `src/device/qemu/virtio-gpu-rvk-host.c`: `export_gpu_memory` allocates on the bound physical device with `VK_KHR_external_memory_fd`, maps it, and answers null plus the `VkResult` or `errno` on any failure; `import_guest_memory` uses `vkGetMemoryHostPointerPropertiesEXT` and an imported allocation, answering null with `host_error` 0 when the extension is absent; `read_imported_memory` copies what the GPU sees. No abort, no assert, on any path (FR-004)
-- [ ] T008 Extend `tests/unit/device/abi/test_table_host.cpp` so a missing entry in the table is a failure, keeping the ABI's "every member is required" rule
+- [X] T003a Add `bind_gpu(uint32_t index)` to `av::Host`, the ABI table and `TableHost`, called by `GpuBinding::bind` once the instance's host GPU is resolved: the glue cannot allocate on a physical device nobody named it, and every later feature needs the same logical device
+- [X] T003 Add `export_gpu_memory(uint64_t size, void *&pointer, int32_t &host_error)`, `release_gpu_memory(void *)`, `import_guest_memory(void *pointer, uint64_t size, int32_t &host_error)`, `release_guest_memory(void *)` and `read_imported_memory(void *memory, uint8_t *buffer, uint64_t size)` to `av::Host` in `src/device/host/host.hpp`, each documenting its side (main loop) and failure shape
+- [X] T004 Extend the C ABI table with the five entries in the same order in `src/device/abi/rvk_device.h`, and forward them in `src/device/abi/table_host.{hpp,cpp}`
+- [X] T005 [P] Script them in `tests/harness/host/mock_host.{hpp,cpp}`: success, refusal with a `VkResult`, refusal with an `errno`, a readback that differs from what was written, and the balance check that every handle is released before the test ends
+- [X] T006 [P] Extend `tests/harness/host/mock_host_ops.{hpp,cpp}` so the ABI table test covers the five new entries
+- [X] T007 Implement them over Vulkan in `src/device/qemu/virtio-gpu-rvk-host.c`: `export_gpu_memory` allocates on the bound physical device with `VK_KHR_external_memory_fd`, maps it, and answers null plus the `VkResult` or `errno` on any failure; `import_guest_memory` uses `vkGetMemoryHostPointerPropertiesEXT` and an imported allocation, answering null with `host_error` 0 when the extension is absent; `read_imported_memory` copies what the GPU sees. No abort, no assert, on any path (FR-004)
+- [X] T008 Extend `tests/unit/device/abi/test_table_host.cpp` so a missing entry in the table is a failure, keeping the ABI's "every member is required" rule
 
 **Checkpoint**: the host contract carries the probes' calls and every refusal is scriptable.
 

@@ -37,6 +37,12 @@ public:
     uint64_t hostmem_size() override;
     Status   place_in_hostmem(void *memory, uint64_t offset) override;
     void     remove_from_hostmem(uint64_t offset, uint64_t size) override;
+    Status   bind_gpu(uint32_t index) override;
+    void    *export_gpu_memory(uint64_t size, void *&pointer, int32_t &host_error) override;
+    void     release_gpu_memory(void *memory) override;
+    void    *import_guest_memory(void *pointer, uint64_t size, int32_t &host_error) override;
+    void     release_guest_memory(void *memory) override;
+    Status   read_imported_memory(void *memory, uint8_t *buffer, uint64_t size) override;
     void     connect_doorbell(void *event, uint32_t index) override;
     void     disconnect_doorbell(void *event, uint32_t index) override;
     Status   connect_fence_interrupts() override;

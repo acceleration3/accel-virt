@@ -35,7 +35,8 @@ MockHost::MockHost()
       fail_allocation_(0u), fail_host_memory_(0u), fail_placement_(0u), empty_mapping_(0u), allocations_{}, regions_{}, region_count_(0u),
       splits_{}, split_count_(0u),
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
-      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}
+      host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, fail_bind_gpu_(0u), bound_gpu_(no_gpu), refuse_export_(0u), export_error_(0),
+      refuse_import_(0u), import_error_(0), corrupt_import_read_(0u), imports_{}
 {
     pthread_mutex_init(&state_, nullptr);
     pthread_cond_init(&work_queued_, nullptr);
@@ -61,6 +62,10 @@ MockHost::~MockHost()
         registry.record_failure(__FILE__, __LINE__, "%u host memory block(s) leaked", live_host_memory());
     if (live_placements() != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u hostmem placement(s) left", live_placements());
+    if (live_gpu_memory() != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u exported GPU block(s) leaked", live_gpu_memory());
+    if (live_imports() != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u guest import(s) leaked", live_imports());
     if (fence_connected_) registry.record_failure(__FILE__, __LINE__, "fence interrupts left connected");
     if (live_doorbells() != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u doorbell(s) left connected", live_doorbells());
@@ -233,6 +238,104 @@ std::uint32_t MockHost::doorbell_of(void *event)
     for (std::uint32_t index = 0u; index < max_doorbells; index++)
         if (doorbells_[index] == event) return index;
     return max_doorbells;
+}
+
+Status MockHost::bind_gpu(std::uint32_t index)
+{
+    require_main_loop("MockHost::bind_gpu");
+    StateLock lock(state_);
+    if (fail_now(fail_bind_gpu_)) return Status::not_supported;
+    bound_gpu_ = index;
+    return Status::ok;
+}
+
+void *MockHost::export_gpu_memory(std::uint64_t size, void *&pointer, std::int32_t &host_error)
+{
+    require_main_loop("MockHost::export_gpu_memory");
+    StateLock lock(state_);
+    pointer = nullptr;
+    host_error = 0;
+    if (fail_now(refuse_export_)) {
+        host_error = export_error_;
+        return nullptr;
+    }
+    for (HostBlock &block : host_blocks_) {
+        if (block.live) continue;
+        block = HostBlock{std::calloc(1u, size), size, true, false, 0u, true};
+        pointer = block.pointer;
+        return &block;
+    }
+    return nullptr;
+}
+
+void MockHost::release_gpu_memory(void *memory)
+{
+    require_main_loop("MockHost::release_gpu_memory");
+    HostBlock *const block = block_of(memory);
+    if (block == nullptr || block->placed || !block->exported) {
+        record(HostViolation::unknown_handle, "MockHost::release_gpu_memory");
+        return;
+    }
+    StateLock lock(state_);
+    std::free(block->pointer);
+    *block = HostBlock{};
+}
+
+void *MockHost::import_guest_memory(void *pointer, std::uint64_t size, std::int32_t &host_error)
+{
+    require_main_loop("MockHost::import_guest_memory");
+    StateLock lock(state_);
+    host_error = 0;
+    if (fail_now(refuse_import_)) {
+        host_error = import_error_;
+        return nullptr;
+    }
+    for (Import &import : imports_) {
+        if (import.live) continue;
+        import = Import{static_cast<std::uint8_t *>(pointer), size, true};
+        return &import;
+    }
+    return nullptr;
+}
+
+void MockHost::release_guest_memory(void *memory)
+{
+    require_main_loop("MockHost::release_guest_memory");
+    bool released = false;
+    {
+        StateLock lock(state_);
+        for (Import &import : imports_) {
+            if (!import.live || &import != memory) continue;
+            import = Import{};
+            released = true;
+            break;
+        }
+    }
+    if (!released) record(HostViolation::unknown_handle, "MockHost::release_guest_memory");
+}
+
+Status MockHost::read_imported_memory(void *memory, std::uint8_t *buffer, std::uint64_t size)
+{
+    require_main_loop("MockHost::read_imported_memory");
+    Status status = Status::not_found;
+    {
+        StateLock lock(state_);
+        for (const Import &import : imports_) {
+            if (!import.live || &import != memory) continue;
+            if (size > import.size) return Status::invalid_parameter;
+            for (std::uint64_t index = 0u; index < size; index++) buffer[index] = import.pointer[index];
+            /* A host GPU that imported something else sees something else. */
+            if (fail_now(corrupt_import_read_) && size != 0u)
+                buffer[size - 1u] = static_cast<std::uint8_t>(~buffer[size - 1u]);
+            status = Status::ok;
+            break;
+        }
+    }
+    if (status == Status::not_found) {
+        record(HostViolation::unknown_handle, "MockHost::read_imported_memory");
+        return Status::invalid_parameter;
+    }
+    return status;
 }
 
 void MockHost::connect_doorbell(void *event, std::uint32_t index)
@@ -552,7 +655,7 @@ void *MockHost::create_host_memory(std::uint64_t size, void *&pointer)
     if (fail_now(fail_host_memory_)) return nullptr;
     for (HostBlock &block : host_blocks_) {
         if (block.live) continue;
-        block = HostBlock{std::calloc(1u, size), size, true, false, 0u};
+        block = HostBlock{std::calloc(1u, size), size, true, false, 0u, false};
         pointer = block.pointer;
         return &block;
     }
@@ -563,7 +666,7 @@ void MockHost::destroy_host_memory(void *memory)
 {
     require_main_loop("MockHost::destroy_host_memory");
     HostBlock *const block = block_of(memory);
-    if (block == nullptr || block->placed) {
+    if (block == nullptr || block->placed || block->exported) {
         record(HostViolation::unknown_handle, "MockHost::destroy_host_memory");
         return;
     }
@@ -632,6 +735,12 @@ void MockHost::fail_allocation_at(std::uint32_t nth) { StateLock lock(state_); f
 void MockHost::fail_host_memory_at(std::uint32_t nth) { StateLock lock(state_); fail_host_memory_ = nth; }
 void MockHost::fail_placement_at(std::uint32_t nth) { StateLock lock(state_); fail_placement_ = nth; }
 void MockHost::empty_mapping_at(std::uint32_t nth) { StateLock lock(state_); empty_mapping_ = nth; }
+void MockHost::fail_bind_gpu_at(std::uint32_t nth) { StateLock lock(state_); fail_bind_gpu_ = nth; }
+void MockHost::refuse_export_at(std::uint32_t nth, std::int32_t host_error)
+{ StateLock lock(state_); refuse_export_ = nth; export_error_ = host_error; }
+void MockHost::refuse_import_at(std::uint32_t nth, std::int32_t host_error)
+{ StateLock lock(state_); refuse_import_ = nth; import_error_ = host_error; }
+void MockHost::corrupt_import_read_at(std::uint32_t nth) { StateLock lock(state_); corrupt_import_read_ = nth; }
 
 void MockHost::add_guest_ram(std::uint64_t base, std::size_t size)
 {
@@ -702,7 +811,29 @@ std::uint32_t MockHost::live_host_memory()
 {
     StateLock lock(state_);
     std::uint32_t live = 0u;
-    for (const HostBlock &block : host_blocks_) live += block.live ? 1u : 0u;
+    for (const HostBlock &block : host_blocks_) live += block.live && !block.exported ? 1u : 0u;
+    return live;
+}
+
+std::uint32_t MockHost::bound_gpu()
+{
+    StateLock lock(state_);
+    return bound_gpu_;
+}
+
+std::uint32_t MockHost::live_gpu_memory()
+{
+    StateLock lock(state_);
+    std::uint32_t live = 0u;
+    for (const HostBlock &block : host_blocks_) live += block.live && block.exported ? 1u : 0u;
+    return live;
+}
+
+std::uint32_t MockHost::live_imports()
+{
+    StateLock lock(state_);
+    std::uint32_t live = 0u;
+    for (const Import &import : imports_) live += import.live ? 1u : 0u;
     return live;
 }
 

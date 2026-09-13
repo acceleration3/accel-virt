@@ -129,6 +129,56 @@ TEST(table_host, forwards_memory_hostmem_and_requests)
   CHECK(host.resource_exists(9u));
   CHECK(!host.resource_exists(10u)); }
 
+/* The probes' calls: an export is a block the hostmem placement accepts, an
+ * import is a window the host GPU reads back, and every refusal carries the
+ * host's own number (feature 039). */
+TEST(table_host, forwards_exported_gpu_memory_and_guest_imports)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  mock.set_hostmem_size(0x4000u);
+  CHECK_STATUS(host.bind_gpu(1u), Status::ok);
+  CHECK_EQ(mock.bound_gpu(), 1u);
+  mock.fail_bind_gpu_at(1u);
+  CHECK_STATUS(host.bind_gpu(0u), Status::not_supported);
+  void         *view = &mock;
+  std::int32_t  host_error = 7;
+  void *const exported = host.export_gpu_memory(0x1000u, view, host_error);
+  CHECK(exported != nullptr && view != &mock);
+  CHECK_EQ(host_error, 0);
+  CHECK_EQ(mock.live_gpu_memory(), 1u);
+  CHECK_STATUS(host.place_in_hostmem(exported, 0u), Status::ok);
+  host.remove_from_hostmem(0u, 0x1000u);
+  host.release_gpu_memory(exported);
+  CHECK_EQ(mock.live_gpu_memory(), 0u);
+  mock.refuse_export_at(1u, -12);
+  view = &mock;
+  CHECK(host.export_gpu_memory(0x1000u, view, host_error) == nullptr);
+  CHECK_EQ(host_error, -12);
+  CHECK(view == nullptr);
+
+  mock.add_guest_ram(0x1000u, 0x2000u);
+  std::uint64_t length = 0x1000u;
+  bool          direct = false;
+  void *const   window = host.map_guest(0x1000u, length, direct);
+  CHECK(window != nullptr && direct);
+  std::uint8_t *const bytes = static_cast<std::uint8_t *>(window);
+  bytes[0] = 0xA5u;
+  bytes[0xFFFu] = 0x5Au;
+  void *const imported = host.import_guest_memory(window, length, host_error);
+  CHECK(imported != nullptr);
+  CHECK_EQ(host_error, 0);
+  CHECK_EQ(mock.live_imports(), 1u);
+  std::uint8_t seen[0x1000] = {};
+  CHECK_STATUS(host.read_imported_memory(imported, seen, sizeof seen), Status::ok);
+  CHECK_EQ(seen[0], 0xA5u);
+  CHECK_EQ(seen[0xFFFu], 0x5Au);
+  host.release_guest_memory(imported);
+  CHECK_EQ(mock.live_imports(), 0u);
+  /* A host with no VK_EXT_external_memory_host refuses with no number of its own. */
+  mock.refuse_import_at(1u, 0);
+  CHECK(host.import_guest_memory(window, length, host_error) == nullptr);
+  CHECK_EQ(host_error, 0);
+  host.unmap_guest(window, length); }
+
 TEST(table_host, forwards_doorbell_connections)
 { MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
   void *event = nullptr;

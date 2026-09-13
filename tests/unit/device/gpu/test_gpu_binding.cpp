@@ -76,6 +76,25 @@ TEST(gpu_binding_bind, each_failure_is_named_and_logged)
   CHECK(std::strcmp(bytes, "virtio-gpu-rvk: the host has no Vulkan device") == 0);
   CHECK_STATUS(none.bind("7b7ad2c5-4219-8c80-c4fd-a64b8775aedb", text), Status::not_found); }
 
+/* The glue cannot allocate on a physical device nobody named to it, so binding
+ * tells it which one this instance runs on - and a host that cannot take the
+ * GPU leaves the device unbound rather than silently on another one. */
+TEST(gpu_binding_bind, tells_the_host_which_gpu_this_device_runs_on)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.binding().bind("7b7ad2c5-4219-8c80-c4fd-a64b8775aedb", fixture.text()), Status::ok);
+  CHECK_EQ(fixture.host().bound_gpu(), 1u);
+  Fixture first;
+  CHECK_STATUS(first.binding().bind("auto", first.text()), Status::ok);
+  CHECK_EQ(first.host().bound_gpu(), 0u); }
+
+TEST(gpu_binding_bind, a_host_that_refuses_the_gpu_leaves_the_device_unbound)
+{ Fixture fixture;
+  fixture.host().fail_bind_gpu_at(1u);
+  CHECK_STATUS(fixture.binding().bind("auto", fixture.text()), Status::not_supported);
+  CHECK(!fixture.binding().bound());
+  CHECK(std::strstr(fixture.message(), "host GPU 0") != nullptr);
+  CHECK_EQ(fixture.host().bound_gpu(), MockHost::no_gpu); }
+
 TEST(gpu_binding, binds_on_the_main_loop)
 { Fixture fixture;
   struct Call {
@@ -91,4 +110,6 @@ TEST(gpu_binding, binds_on_the_main_loop)
                    &call, thread),
                Status::ok);
   fixture.host().join_thread(thread);
+  /* Binding names the main loop, and so does telling the host which GPU it took. */
+  CHECK(fixture.host().claim(HostViolation::main_loop_required));
   CHECK(fixture.host().claim(HostViolation::main_loop_required)); }

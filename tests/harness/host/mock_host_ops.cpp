@@ -73,6 +73,20 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
     table_.remove_from_hostmem = [](void *opaque, std::uint64_t offset, std::uint64_t size) {
         host_of(opaque).remove_from_hostmem(offset, size);
     };
+    table_.bind_gpu = [](void *opaque, std::uint32_t index) {
+        return host_of(opaque).bind_gpu(index) == Status::ok ? 0 : 1;
+    };
+    table_.export_gpu_memory = [](void *opaque, std::uint64_t size, void **pointer, std::int32_t *host_error) {
+        return host_of(opaque).export_gpu_memory(size, *pointer, *host_error);
+    };
+    table_.release_gpu_memory = [](void *opaque, void *memory) { host_of(opaque).release_gpu_memory(memory); };
+    table_.import_guest_memory = [](void *opaque, void *pointer, std::uint64_t size, std::int32_t *host_error) {
+        return host_of(opaque).import_guest_memory(pointer, size, *host_error);
+    };
+    table_.release_guest_memory = [](void *opaque, void *memory) { host_of(opaque).release_guest_memory(memory); };
+    table_.read_imported_memory = [](void *opaque, void *memory, std::uint8_t *buffer, std::uint64_t size) {
+        return host_of(opaque).read_imported_memory(memory, buffer, size) == Status::ok ? 0 : 1;
+    };
     table_.connect_doorbell = [](void *opaque, void *event, std::uint32_t index) {
         host_of(opaque).connect_doorbell(event, index);
     };
