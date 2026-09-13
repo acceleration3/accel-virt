@@ -160,7 +160,15 @@ description: "Tasks: KMD host-visible memory a process can map"
   memory and can iterate against a real caller. **SC-003 is not met by this
   feature**, and says so here rather than being quietly dropped.
 - [X] T027 `docs/protocol.md` documents capset feature bits 1 and 2 beside bit 0, and `docs/kb/04-memory.md` gains the segment shape this feature reports and why the aperture variant was refused
-- [ ] T028 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
+- [X] T028 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
+
+  Every configuration green, run one at a time because this machine's memory
+  will not hold the whole gate at once beside a browser: default 180/180 (the
+  runner's own tests among them), coverage 182/182 at 100% branches, fuzz
+  199/199, qemu 2/2, and the live guest - `segments ok: 2 reported, the second
+  256 MiB of host memory at 0x7000000000`, `report ok: 36 passed`, `hostvisible
+  ok: 4096 bytes written through the guest's view`, the host's read skipped with
+  its reason, and `vsync ok: 58.75 blanks a second`.
 
 ---
 
