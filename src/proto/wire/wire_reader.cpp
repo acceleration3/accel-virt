@@ -48,11 +48,14 @@ void WireReader::expect_zero(size_t count)
 
 bool WireReader::read(void *destination, size_t count)
 {
-    if (count == 0u) return status_ == Status::ok;
-    auto *const bytes = static_cast<uint8_t *>(destination);
-    const size_t before = offset_;
-    copy_bytes(bytes, count);
-    return status_ == Status::ok && offset_ == before + count;
+    /* A decoder whose arena refused it has nowhere to put the bytes. Reading
+     * into nothing is a frame this host cannot take, not a write through null. */
+    if (destination == nullptr) {
+        status_ = Status::malformed;
+        return false;
+    }
+    copy_bytes(static_cast<uint8_t *>(destination), count);
+    return status_ == Status::ok;
 }
 
 bool WireReader::read_varint_bits(uint64_t &value, size_t bits)

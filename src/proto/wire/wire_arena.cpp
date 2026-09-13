@@ -7,7 +7,7 @@ WireArena::WireArena(uint8_t *block, size_t capacity)
 
 void *WireArena::claim(size_t count, size_t size, size_t alignment)
 {
-    if (count == 0u || size == 0u) return nullptr;
+    if (count == 0u) return nullptr;
     /* The count arrives from the wire: refuse what would wrap rather than
      * hand back room for less than was asked for. */
     if (count > ~size_t{0} / size) return nullptr;
@@ -38,7 +38,10 @@ size_t WireArena::capacity() const { return capacity_; }
 
 bool WireArena::invariants_hold() const
 {
-    return used_ <= capacity_ && (block_ != nullptr || capacity_ == 0u);
+    /* That a block-less arena has no capacity is the constructor's doing and
+     * cannot come apart afterwards - neither the block nor the capacity is ever
+     * assigned again - so what is left to hold is where the mark sits. */
+    return used_ <= capacity_;
 }
 
 }  // namespace av

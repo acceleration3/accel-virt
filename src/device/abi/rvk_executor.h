@@ -1,7 +1,9 @@
 /* The C ABI of an executor library: what runs a guest API context's commands
  * on the host's own API for virtio-gpu-rvk. The device owns this contract, as
- * it owns RvkHostOps; render-server's librvk_codec is meant to implement it
- * over its API backends. The library exports one symbol,
+ * it owns RvkHostOps. The library that implements it is this project's own,
+ * built on the generated server dispatch over host API backends (feature 042);
+ * the qemu configuration builds rvk_echo_executor for the tests. The library
+ * exports one symbol,
  * RVK_EXECUTOR_OPS_SYMBOL, a function answering its table; the QEMU glue loads
  * the library the device's `executor` property names and hands the table over.
  *

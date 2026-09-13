@@ -10,9 +10,8 @@
 
 **Feature ID**: 032 · **Status**: `implement` · **Depends on**: 031
 
-Bind render-server's generated decoders to a host dispatch table and execute
-on host Vulkan/GL/CL. The decoders are the primary attack surface of the whole
-system.
+Bind the generated decoders to a host dispatch table and execute on host
+Vulkan/GL/CL. The decoders are the primary attack surface of the whole system.
 
 ### Status meaning
 

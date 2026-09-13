@@ -48,8 +48,8 @@ spec under `specs/`.
 | [039](../specs/039-host-memory-feasibility/spec.md) | Host memory and interrupt feasibility on real host GPUs | — | `implement` | — | 028, 031, 036 |
 | [040](../specs/040-guest-power-and-recovery/spec.md) | Real-guest power, restart and recovery | — | `implement` | — | 038, 033 |
 | [041](../specs/041-kmd-host-visible-memory/spec.md) | KMD: host-visible memory a process can map | — | `implement` | — | 037, 039 |
-| [042](../specs/042-host-executor-library/spec.md) | Host executor: render-server's backends behind rvk_executor.h | — | `implement` | — | 032, 039, 063 |
-| [043](../specs/043-guest-kmt-transport/spec.md) | Guest transport: render-server's drivers over D3DKMT and the rvk ring | — | `implement` | — | 041, 024, 034, 063 |
+| [042](../specs/042-host-executor-library/spec.md) | Host executor: this project's backends behind rvk_executor.h | — | `implement` | — | 032, 039, 063 |
+| [043](../specs/043-guest-kmt-transport/spec.md) | Guest transport: the generated encoders over D3DKMT and the rvk ring | — | `implement` | — | 041, 024, 034, 063 |
 | [044](../specs/044-rvk-context-live/spec.md) | End to end: rvk contexts in a real guest | — | `implement` | — | 037, 042, 043 |
 | [045](../specs/045-vulkan-icd/spec.md) | Vulkan: the ICD on rvkgpu | — | `implement` | — | 044 |
 | [046](../specs/046-vulkan-present/spec.md) | Vulkan: presentation through the KMD | — | `implement` | — | 045, 038, 041 |
@@ -69,7 +69,7 @@ spec under `specs/`.
 | [060](../specs/060-multi-gpu-live/spec.md) | One adapter per host GPU in the guest | — | `implement` | — | 048 |
 | [061](../specs/061-driver-package/spec.md) | One installable driver package | — | `implement` | — | 047, 054, 055, 057, 060, 064 |
 | [062](../specs/062-performance-and-soak/spec.md) | Performance, stability and soak | — | `implement` | — | 040, 042, 059, 061 |
-| [063](../specs/063-render-server-integration/spec.md) | render-server as a pinned build input | — | `implement` | — | 001, 032 |
+| [063](../specs/063-render-server-integration/spec.md) | The generators, vendored | — | `implement` | — | 001, 032 |
 | [064](../specs/064-d3d9-umd/spec.md) | Direct3D 9: the user-mode driver | — | `implement` | — | 055 |
 
 64 features. The `DRIVER_INITIALIZATION_DATA` table has 193 fields at WDDM 3.2 (187 DDIs, 5 reserved); see `docs/ref/driver_init_table.md`.

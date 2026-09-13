@@ -12,7 +12,7 @@
 
 An OpenGL ICD the system opengl32.dll loads for the adapter - the Drv*
 interface, pixel formats, contexts and share lists, the WGL_ARB extensions -
-over render-server's OpenGL client and the guest transport, so every OpenGL
+over the generated OpenGL encoders and the guest transport, so every OpenGL
 application uses the host GPU without a DLL placed beside it. OpenGL 4.6 core,
 executed on the host through EGL.
 

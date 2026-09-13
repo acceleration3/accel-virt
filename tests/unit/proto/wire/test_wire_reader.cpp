@@ -197,3 +197,20 @@ TEST(wire_reader_read_varint, refuses_one_that_never_ends_or_does_not_fit)
   std::uint32_t value = 0u;
   CHECK(!truncated.read_varint(value));
   CHECK_STATUS(truncated.status(), Status::malformed); }
+
+/* More groups than the destination has bits at all, rather than a last group
+ * that overflows it: a 32-bit field cannot be reached from the sixth byte. */
+TEST(wire_reader_read_varint, refuses_a_group_past_the_destination_s_last_bit)
+{ const std::uint8_t past[] = {0x80, 0x80, 0x80, 0x80, 0x80, 0x01};
+  WireReader reader(past, sizeof past);
+  std::uint32_t value = 0u;
+  CHECK(!reader.read_varint(value));
+  CHECK_STATUS(reader.status(), Status::malformed); }
+
+/* Nowhere to put the bytes is a refused frame, not a write through null. */
+TEST(wire_reader_read, refuses_a_destination_that_is_not_there)
+{ const std::uint8_t frame[] = {1, 2, 3, 4};
+  WireReader reader(frame, sizeof frame);
+  CHECK(!reader.read(nullptr, 4u));
+  CHECK_STATUS(reader.status(), Status::malformed);
+  CHECK(reader.invariants_hold()); }

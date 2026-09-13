@@ -1,11 +1,12 @@
 # accel-virt Constitution
 
-**Version**: 2.5.0 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-12
+**Version**: 2.5.1 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-13
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
 display miniport (`rvkgpu.sys`), a custom in-process QEMU device
 (`virtio-gpu-rvk-pci`), and the shared wire protocol between them. Command
-serialization comes from `render-server`; this project is everything else.
+serialization is generated here from the Khronos registries, by the generator
+vendored in `tools/codegen/`; this project owns all of it.
 
 ## Core Principles
 

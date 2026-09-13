@@ -10,11 +10,11 @@
 
 **Feature ID**: 052 · **Status**: `implement` · **Depends on**: 044
 
-render-server's OpenCL ICD over the guest transport, registered through the
-adapter's driver registration: OpenCL 3.0 with the host device's optional
-features, coarse-grained shared virtual memory over host-visible memory, non-
-blocking transfers and event callbacks that cannot deadlock, and one platform
-device per rvkgpu adapter.
+This project's generated OpenCL ICD over the guest transport, registered
+through the adapter's driver registration: OpenCL 3.0 with the host device's
+optional features, coarse-grained shared virtual memory over host-visible
+memory, non-blocking transfers and event callbacks that cannot deadlock, and
+one platform device per rvkgpu adapter.
 
 ### Status meaning
 

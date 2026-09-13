@@ -114,3 +114,14 @@ TEST(wire_arena, what_it_hands_out_is_zeroed)
   auto *const again = arena.allocate<std::uint64_t>(2u);
   CHECK_EQ(again[0], 0u);
   CHECK(arena.invariants_hold()); }
+
+/* A block whose end is not a multiple of what is asked for next: the padding
+ * alone runs past the block, and no allocation may start outside it. */
+TEST(wire_arena, padding_that_runs_past_the_block_allocates_nothing)
+{ alignas(8) std::uint8_t block[8];
+  WireArena arena(block, 5u);
+  CHECK(arena.allocate<std::uint8_t>(5u) != nullptr);
+  CHECK_EQ(arena.used(), 5u);
+  CHECK(arena.allocate<std::uint32_t>() == nullptr);
+  CHECK_EQ(arena.used(), 5u);
+  CHECK(arena.invariants_hold()); }

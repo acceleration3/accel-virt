@@ -10,13 +10,12 @@
 
 **Feature ID**: 063 · **Status**: `implement` · **Depends on**: 001, 032
 
-render-server pinned by revision and hash like QEMU and the Windows kit, and
-built from this repository's build: its Vulkan, OpenGL and OpenCL guest
-drivers for Windows x64 and x86, and its host executor library with a pkg-
-config file. The seam changes this project needs of it - a C-ABI executor over
-its server backends, a link built over a transport it is handed, and an OpenGL
-client an ICD front end can drive - are carried as a patch series with tests
-and sent upstream, so the pin can return to a plain revision.
+render-server's Khronos-registry generators, and nothing else of it: vendored
+into tools/codegen/, owned and edited here, pointed at this project's own wire
+types, and run against vk.xml, gl.xml and cl.xml pinned by revision and hash.
+What they emit is committed under src/proto/generated/, compiled and fuzzed
+like any other source, and a gate re-runs the generators to prove the
+committed tree is what they would write.
 
 ### Status meaning
 
@@ -25,7 +24,8 @@ Build it, test it to the constitution's standard, and report the capabilities it
 ### Note
 
 Numbered last because it was identified last; 042 and 043 depend on it, so the
-roadmap schedules it before them.
+roadmap schedules it before them. Nothing fetches, links or pkg-configs
+render-server: it contributes no runtime.
 
 ### Design rules — binding on this feature
 
@@ -196,8 +196,8 @@ hand-written code do not judge machine-written code by rules it cannot keep.
 ## Out of Scope
 
 - Any use of render-server's runtime: its client drivers, its server backends,
-  its transport and its shared-memory link. Features 042 and 043 describe those
-  as render-server's today and will be corrected to say this project writes
-  them, against the generated wire.
+  its transport and its shared-memory link. Features 042 and 043 described those
+  as render-server's and now say this project writes them, against the
+  generated wire (T019).
 - The guest drivers and the host executor themselves (042, 043, 045, 050, 052).
 - Upstreaming anything to render-server.

@@ -10,12 +10,12 @@
 
 **Feature ID**: 045 · **Status**: `implement` · **Depends on**: 044
 
-render-server's Vulkan ICD over the guest transport, found by the Vulkan
-loader through the adapter's driver registration rather than a global key:
-each physical device is one rvkgpu adapter with its LUID, memory types come
-from the adapter's segments and budgets, timeline semaphores and fences wait
-on rvk fences, and a TDR or fault reports VK_ERROR_DEVICE_LOST. Vulkan 1.3, or
-the host's version if lower.
+This project's generated Vulkan ICD over the guest transport, found by the
+Vulkan loader through the adapter's driver registration rather than a global
+key: each physical device is one rvkgpu adapter with its LUID, memory types
+come from the adapter's segments and budgets, timeline semaphores and fences
+wait on rvk fences, and a TDR or fault reports VK_ERROR_DEVICE_LOST. Vulkan
+1.3, or the host's version if lower.
 
 ### Status meaning
 

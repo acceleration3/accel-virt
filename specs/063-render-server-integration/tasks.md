@@ -79,7 +79,7 @@ description: "Tasks: the generators, vendored"
 
 - [X] T017 `docs/protocol.md` and the id files agree, and the gate fails while they do not (FR-007)
 - [X] T018 `docs/kb/11-implementation-plan.md` stops describing `librvk_codec` as something render-server contributes, and says what this project generates instead
-- [ ] T019 The specs for features 042 and 043 are corrected: they describe render-server's runtime as theirs to consume, and this project writes both against the generated wire
+- [X] T019 The specs for features 042 and 043 are corrected: they describe render-server's runtime as theirs to consume, and this project writes both against the generated wire
 - [ ] T020 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
 
 ---
