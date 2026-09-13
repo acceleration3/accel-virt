@@ -1,5 +1,12 @@
 #include "conformance/executor/executor_conformance.hpp"
 
+#include "proto/generated/opencl/cl_protocol_ids.h"
+#include "proto/generated/opengl/gl_protocol_ids.h"
+#include "proto/generated/vulkan/vk_protocol_ids.h"
+#include "proto/generated/vulkan/vk_serialize.h"
+#include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
+
 #include <cstring>
 #include <dlfcn.h>
 
@@ -28,7 +35,9 @@ constexpr std::uint8_t no_such_gpu[16] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x
 }  // namespace
 
 ExecutorConformance::ExecutorConformance()
-    : library_(nullptr), ops_(nullptr), findings_{}, skip_reasons_{}, found_(0u), skips_(0u), checked_(0u)
+    : gpu_{}, real_gpu_(false), library_(nullptr), ops_(nullptr), findings_{}, skip_reasons_{},
+      found_(0u), skips_(0u),
+      checked_(0u), worked_(0u)
 {}
 
 void ExecutorConformance::note(const char *finding)
@@ -70,6 +79,26 @@ std::uint32_t ExecutorConformance::impossible_id(std::uint32_t api) const
     /* Inside the API's range, so the device would deliver it, and past
      * anything a registry could number. */
     return (api << 16u) | 0xFFFFu;
+}
+
+bool ExecutorConformance::use_gpu(const char *hex)
+{
+    if (hex == nullptr) return false;
+    for (std::uint32_t i = 0u; i < sizeof gpu_; i++) {
+        std::uint32_t value = 0u;
+        for (std::uint32_t nibble = 0u; nibble < 2u; nibble++) {
+            const char c = hex[2u * i + nibble];
+            std::uint32_t digit = 0u;
+            if (c >= '0' && c <= '9') digit = static_cast<std::uint32_t>(c - '0');
+            else if (c >= 'a' && c <= 'f') digit = static_cast<std::uint32_t>(c - 'a') + 10u;
+            else if (c >= 'A' && c <= 'F') digit = static_cast<std::uint32_t>(c - 'A') + 10u;
+            else return false;
+            value = (value << 4u) | digit;
+        }
+        gpu_[i] = static_cast<std::uint8_t>(value);
+    }
+    real_gpu_ = true;
+    return true;
 }
 
 bool ExecutorConformance::run(const char *path)
@@ -123,7 +152,8 @@ void ExecutorConformance::check_sub_apis()
 
     if (ops_->abi_version < RVK_EXECUTOR_ABI_VERSION) return;
     for (const ApiBit &api : api_bits) {
-        const std::uint32_t kinds = ops_->import_kinds(ops_->opaque, api.sub_api, no_such_gpu);
+        const std::uint32_t kinds =
+            ops_->import_kinds(ops_->opaque, api.sub_api, real_gpu_ ? gpu_ : no_such_gpu);
         require((kinds & ~3u) == 0u, "import_kinds offers a blob kind the ABI does not define");
         require((offered & api.sub_api) != 0u || kinds == 0u,
                 "import_kinds offers a kind for a sub-API sub_apis does not");
@@ -145,7 +175,8 @@ void ExecutorConformance::check_create_and_destroy()
                     "create answered an executor for a sub-API sub_apis does not offer");
             continue;
         }
-        RvkExecutor *const executor = ops_->create(ops_->opaque, api.sub_api, no_such_gpu);
+        RvkExecutor *const executor =
+            ops_->create(ops_->opaque, api.sub_api, real_gpu_ ? gpu_ : no_such_gpu);
         if (executor == nullptr) {
             /* Refusing a GPU nobody has is correct for a library that binds
              * one, so this is not a finding - but it does mean the statements
@@ -156,6 +187,7 @@ void ExecutorConformance::check_create_and_destroy()
         }
         made_any = true;
         check_execute(executor, api.commands);
+        check_workload(executor, api.sub_api);
         check_reply_capacity(executor, api.commands);
         if (ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION) check_memory_channel(executor);
         ops_->destroy(ops_->opaque, executor);
@@ -204,6 +236,61 @@ void ExecutorConformance::check_reply_capacity(RvkExecutor *executor, std::uint3
     require(result != RVK_EXECUTED || produced >= capacity ||
                 reply[produced] == 0xABu,
             "an answer wrote more than the length it reported");
+}
+
+void ExecutorConformance::check_workload(RvkExecutor *executor, uint32_t sub_api)
+{
+    std::uint8_t frame[1024] = {};
+    std::uint8_t reply[512] = {};
+    std::size_t  produced = 0u;
+    std::uint32_t command = 0u;
+    std::size_t   length = 0u;
+
+    if (sub_api == RVK_EXECUTOR_SUB_API_VULKAN) {
+        /* The first command of every Vulkan program there has ever been. */
+        av::WireWriter writer(frame, sizeof frame);
+        VkApplicationInfo application = {};
+        application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        application.pApplicationName = "executor_conformance";
+        application.apiVersion = (1u << 22) | (1u << 12);
+        VkInstanceCreateInfo create = {};
+        create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        create.pApplicationInfo = &application;
+        av::vkproto::serialize_VkInstanceCreateInfo(writer, create);
+        command = av::vkproto::kCmd_vkCreateInstance;
+        length = writer.offset();
+    } else if (sub_api == RVK_EXECUTOR_SUB_API_OPENCL) {
+        av::WireWriter writer(frame, sizeof frame);
+        writer.write_pod<std::uint32_t>(0u);
+        writer.write_pod<std::uint8_t>(0u);
+        writer.write_pod<std::uint8_t>(1u);
+        command = av::clproto::kCmd_clGetPlatformIDs;
+        length = writer.offset();
+    } else {
+        /* An OpenGL clear, which needs a context that is current and a driver
+         * that answers - and asks for nothing back. */
+        av::WireWriter writer(frame, sizeof frame);
+        writer.write_pod<std::uint32_t>(0x4000u);
+        command = av::glproto::kCmd_glClear;
+        length = writer.offset();
+    }
+
+    const std::uint32_t result =
+        ops_->execute(ops_->opaque, executor, command, frame, length, reply, sizeof reply,
+                      &produced);
+    require(defined_result(result), "a workload answered a result the ABI does not define");
+    if (result == RVK_UNKNOWN) {
+        /* A library that offers a sub-API and carries none of its commands is
+         * a stub rather than a wrong implementation - the echo library is
+         * exactly that, on purpose - and the device treats it as one: every
+         * command skipped, no fault. Worth saying, not worth failing. */
+        skipped_because("a sub-API is offered whose simplest command this library does not "
+                        "carry: a stub rather than an implementation");
+        return;
+    }
+    require(result == RVK_EXECUTED,
+            "a library that offers a sub-API could not run that sub-API's simplest command");
+    if (result == RVK_EXECUTED) worked_++;
 }
 
 void ExecutorConformance::check_memory_channel(RvkExecutor *executor)

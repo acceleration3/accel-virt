@@ -349,15 +349,29 @@ target_include_directories(rvk_null_ops_executor PRIVATE src/device/abi)
 add_executable(executor_conformance
   tests/conformance/executor/executor_conformance.cpp
   tests/conformance/executor/main.cpp)
-target_include_directories(executor_conformance PRIVATE tests src)
+target_include_directories(executor_conformance PRIVATE tests src
+                           ${AV_KHRONOS_INCLUDE} ${AV_GENERATED_OPENGL_INCLUDE})
+target_link_libraries(executor_conformance PRIVATE av_core)
 target_link_libraries(executor_conformance PRIVATE ${CMAKE_DL_LIBS})
 # The same flags the tests carry: the library it loads is built with them, and
 # a sanitized object cannot be opened by a runner that is not.
 target_compile_options(executor_conformance PRIVATE ${AV_TEST_FLAGS})
 target_link_options(executor_conformance PRIVATE ${AV_TEST_FLAGS})
+# AV_CONFORMANCE_GPU is a host GPU's Vulkan device UUID, 32 hex characters, as
+# `tools/host/list_gpus.py` prints it. With one the suite opens real executors
+# and runs each API's simplest command; without one it checks what needs no GPU
+# and says what it skipped, so a machine with no GPU still runs it honestly.
+set(AV_CONFORMANCE_ARGS "")
+if(DEFINED ENV{AV_CONFORMANCE_GPU})
+  set(AV_CONFORMANCE_ARGS --gpu $ENV{AV_CONFORMANCE_GPU})
+  message(STATUS "executor conformance: real executors on GPU $ENV{AV_CONFORMANCE_GPU}")
+else()
+  message(STATUS "executor conformance: no AV_CONFORMANCE_GPU; "
+                 "what needs an executor will be reported as skipped")
+endif()
 add_test(NAME executor_conformance
-         COMMAND executor_conformance $<TARGET_FILE:rvk_executor>
-                 $<TARGET_FILE:rvk_echo_executor>)
+         COMMAND executor_conformance ${AV_CONFORMANCE_ARGS}
+                 $<TARGET_FILE:rvk_executor> $<TARGET_FILE:rvk_echo_executor>)
 
 # ---- principle IX: a clean clone of this repository is all it takes ----------
 add_test(NAME self_contained

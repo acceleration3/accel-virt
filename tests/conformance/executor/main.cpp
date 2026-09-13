@@ -6,6 +6,7 @@
 #include "conformance/executor/executor_conformance.hpp"
 
 #include <csignal>
+#include <cstring>
 #include <cstdio>
 #include <cstdlib>
 #include <unistd.h>
@@ -47,16 +48,30 @@ extern "C" void give_up(int)
 int main(int argc, char **argv)
 {
     if (argc < 2) {
-        std::printf("usage: executor_conformance <library> [library...]\n");
+        std::printf("usage: executor_conformance [--gpu <32 hex>] <library> [library...]\n");
         return 2;
+    }
+    /* A real GPU's UUID, when the machine running this has one. Without it
+     * every create is asked for a GPU nobody has, which is exactly right for
+     * the refusals and useless for everything that needs an executor - and the
+     * run says which of those it managed. */
+    const char *gpu = nullptr;
+    int first = 1;
+    if (argc >= 3 && std::strcmp(argv[1], "--gpu") == 0) {
+        gpu = argv[2];
+        first = 3;
     }
     struct sigaction watchdog = {};
     watchdog.sa_handler = give_up;
     (void)sigaction(SIGALRM, &watchdog, nullptr);
 
     int failed = 0;
-    for (int i = 1; i < argc; i++) {
+    for (int i = first; i < argc; i++) {
         av::ExecutorConformance conformance;
+        if (gpu != nullptr && !conformance.use_gpu(gpu)) {
+            std::fprintf(stderr, "executor_conformance: --gpu wants 32 hex characters\n");
+            return 2;
+        }
         (void)alarm(watchdog_seconds);
         const bool passed = conformance.run(argv[i]);
         (void)alarm(0u);

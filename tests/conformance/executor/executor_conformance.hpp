@@ -26,6 +26,12 @@ public:
     ExecutorConformance(const ExecutorConformance &) = delete;
     ExecutorConformance &operator=(const ExecutorConformance &) = delete;
 
+    /* The GPU to ask for, as the 32 hex characters of its Vulkan device UUID.
+     * Without one the suite uses a UUID nobody has, which is the right input
+     * for "refuse a GPU that is not there" and the wrong one for everything
+     * that needs an executor - so a run with no GPU says what it skipped. */
+    [[nodiscard]] bool use_gpu(const char *hex);
+
     /* Loads `path` and runs every statement. False if anything failed; the
      * findings say what. A library that will not load is itself a finding. */
     bool run(const char *path);
@@ -52,12 +58,20 @@ private:
     void check_execute(RvkExecutor *executor, std::uint32_t api);
     void check_reply_capacity(RvkExecutor *executor, std::uint32_t api);
     void check_memory_channel(RvkExecutor *executor);
+    /* SC-002: something each API can actually be asked to do, rather than only
+     * commands it refuses. A library that answers every malformed frame
+     * correctly and runs nothing is not one the device can use. */
+    void check_workload(RvkExecutor *executor, uint32_t sub_api);
 
     /* Whether `result` is one of the four the ABI defines. */
     bool defined_result(std::uint32_t result) const;
     /* A command id inside `api`'s range that no profile can carry. */
     std::uint32_t impossible_id(std::uint32_t api) const;
 
+
+    /* The GPU asked for, and whether it is a real one. */
+    std::uint8_t          gpu_[16];
+    bool                  real_gpu_;
     void                 *library_;
     const RvkExecutorOps *ops_;
     const char           *findings_[max_findings];
@@ -65,6 +79,9 @@ private:
     std::uint32_t         found_;
     std::uint32_t         skips_;
     std::uint32_t         checked_;
+    /* Commands that ran rather than being refused, which is what says the
+     * library does something. */
+    std::uint32_t         worked_;
 };
 
 }  // namespace av
