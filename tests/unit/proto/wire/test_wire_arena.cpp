@@ -1,0 +1,99 @@
+/* Where a decoded command's arrays and chained structs go. The guest sends a
+ * frame of bytes; what the host hands its backend is C structures pointing at
+ * each other, and every one of those pointers has to point somewhere the
+ * caller owns and can release at once (feature 063). */
+#include "core/support/status.hpp"
+#include "harness/framework/test_registry.hpp"
+#include "proto/wire/wire_arena.hpp"
+
+#include <cstdint>
+#include <cstring>
+
+using av::Status;
+using av::WireArena;
+
+namespace {
+
+struct Pair {
+    std::uint32_t first;
+    std::uint32_t second;
+};
+
+}  // namespace
+
+TEST(wire_arena, hands_out_aligned_room_from_the_block_it_was_given)
+{ alignas(16) std::uint8_t block[256];
+  WireArena arena(block, sizeof block);
+  Pair *pair = arena.allocate<Pair>(1u);
+  CHECK(pair != nullptr);
+  CHECK_EQ(reinterpret_cast<std::uintptr_t>(pair) % alignof(Pair), 0u);
+  pair->first = 7u;
+  std::uint8_t *bytes = arena.allocate<std::uint8_t>(1u);
+  Pair *after = arena.allocate<Pair>(2u);
+  CHECK(bytes != nullptr);
+  CHECK(after != nullptr);
+  /* The one byte does not leave the next allocation misaligned. */
+  CHECK_EQ(reinterpret_cast<std::uintptr_t>(after) % alignof(Pair), 0u);
+  CHECK_EQ(pair->first, 7u);
+  CHECK(arena.invariants_hold()); }
+
+/* A frame that asks for more than the block holds is a frame that gets
+ * nothing: the decoder sees a null pointer and says malformed, rather than the
+ * host writing past what it owns. */
+TEST(wire_arena, refuses_what_the_block_cannot_hold)
+{ std::uint8_t block[64];
+  WireArena arena(block, sizeof block);
+  CHECK(arena.allocate<std::uint8_t>(65u) == nullptr);
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(arena.allocate<std::uint8_t>(64u) != nullptr);
+  CHECK(arena.allocate<std::uint8_t>(1u) == nullptr);
+  CHECK(arena.invariants_hold()); }
+
+/* A count that overflows when multiplied by the element size is the oldest
+ * trick there is, and it arrives from outside. */
+TEST(wire_arena, refuses_a_count_that_overflows)
+{ std::uint8_t block[64];
+  WireArena arena(block, sizeof block);
+  CHECK(arena.allocate<Pair>(~std::size_t{0}) == nullptr);
+  CHECK(arena.allocate<Pair>(~std::size_t{0} / 4u) == nullptr);
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(arena.invariants_hold()); }
+
+TEST(wire_arena, an_empty_block_hands_out_nothing)
+{ WireArena none(nullptr, 128u);
+  CHECK(none.allocate<std::uint8_t>(1u) == nullptr);
+  std::uint8_t block[8];
+  WireArena empty(block, 0u);
+  CHECK(empty.allocate<std::uint8_t>(1u) == nullptr);
+  CHECK(none.invariants_hold());
+  CHECK(empty.invariants_hold()); }
+
+/* Zero of something is not a failure, and must not be a pointer into the next
+ * allocation's room either: a decoder that reads a zero-length array asks for
+ * zero and uses nothing. */
+TEST(wire_arena, zero_of_something_is_nothing)
+{ std::uint8_t block[64];
+  WireArena arena(block, sizeof block);
+  CHECK(arena.allocate<Pair>(0u) == nullptr);
+  CHECK_EQ(arena.used(), 0u); }
+
+/* One frame's decode is one arena's life: the host resets it and the next
+ * frame starts from the top of the same block. */
+TEST(wire_arena_reset, gives_the_whole_block_back)
+{ std::uint8_t block[64];
+  WireArena arena(block, sizeof block);
+  CHECK(arena.allocate<std::uint8_t>(64u) != nullptr);
+  CHECK_EQ(arena.used(), 64u);
+  arena.reset();
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(arena.allocate<std::uint8_t>(64u) != nullptr);
+  CHECK(arena.invariants_hold()); }
+
+TEST(wire_arena, characters_come_from_the_same_block)
+{ std::uint8_t block[64];
+  WireArena arena(block, sizeof block);
+  char *text = arena.allocate_chars(5u);
+  CHECK(text != nullptr);
+  std::memcpy(text, "abcd", 5u);
+  CHECK_EQ(arena.used(), 5u);
+  CHECK(std::strcmp(text, "abcd") == 0); }

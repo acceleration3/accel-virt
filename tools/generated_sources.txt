@@ -1,0 +1,6 @@
+# The generated trees, and what writes each one. The gate
+# (tools/check_generated.py) re-runs every generator here and fails on any
+# difference; `@` in an extra argument stands for the repository root.
+#
+#   <api> <generator> <registry> <out> [extra arguments...]
+vulkan rvk_codegen third_party/khronos/vk.xml src/proto/generated/vulkan --profile @tools/codegen/profiles/vulkan.toml --ids @tools/codegen/profiles/vulkan_ids.toml --header @third_party/khronos/include/vulkan/vulkan_core.h

@@ -83,9 +83,17 @@ No violations.
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| — | — | — | — |
+| `WireArena` | object | a block the caller owns, and how much of it a decode has taken | Hand out room for what a decoded command points at |
 
-**None, deliberately.** This feature is tooling and the sources that tooling
+**One, and it was not foreseen.** The plan said none, because this feature is
+tooling and the sources tooling writes. Then the emitted deserializers turned
+out to need somewhere to put what a flat frame unflattens into - arrays,
+strings, chained structs - and this repository had no such place: the device
+side is freestanding with no heap, and `WireReader` reads into what a caller
+already has. `WireArena` is that place, and it belongs in `src/proto/wire/`
+beside the reader and writer the generated code uses.
+
+Everything else stands: this feature is tooling and the sources that tooling
 writes. The generator is Python, vendored under `tools/codegen/`; the C++ it
 emits declares types the Khronos registries dictate, not types this project
 designs. The classes that *use* the generated wire - the host executor's
