@@ -24,6 +24,7 @@
 #include "core/scheduling/context_table.hpp"
 #include "core/scheduling/device_table.hpp"
 #include "core/adapter/power_transition.hpp"
+#include "core/rvk/device_identity.hpp"
 #include "core/scheduling/context_loss.hpp"
 #include "core/scheduling/engine_progress.hpp"
 #include "core/scheduling/execution_node.hpp"
@@ -251,6 +252,14 @@ private:
     static constexpr uint32_t config_message = 0u;
 
     [[nodiscard]] Status discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface);
+    /* StartDevice: which device this adapter is running on, so the one it wakes
+     * up to can be told apart from it. A device that will not say leaves
+     * nothing to compare, and the adapter runs as it did before. */
+    void                 remember_device();
+    /* D0: a guest restored onto another device cannot finish what it holds, so
+     * the work queued on the one that is gone is reported lost (FR-005). */
+    void                 judge_device();
+    void                 report_losses(const char *what);
     [[nodiscard]] Status power_up();
     /* Which sources have a committed mode: what a power transition puts back. */
     uint32_t             scanning_out() const;
@@ -311,6 +320,7 @@ private:
     EngineProgress                 progress_;
     PowerTransition                transition_;
     ContextLoss                    losses_;
+    DeviceIdentity                 identity_;
     InterruptNotification          notification_;
     SyntheticVsync                 vsync_;
     HardwareCursor                 cursor_;

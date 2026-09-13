@@ -58,6 +58,7 @@
 #include "core/miniport/adapter_info_query.hpp"
 #include "core/pci/pci_base_addresses.hpp"
 #include "core/present/present_request.hpp"
+#include "core/rvk/capset_exchange.hpp"
 #include "core/scheduling/patch_request.hpp"
 #include "core/scheduling/render_request.hpp"
 #include "core/support/invariant_scope.hpp"
@@ -93,7 +94,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       segment_(platform),
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
-      hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), losses_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
+      hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), losses_(platform), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u),
       display_changed_(0u), started_(false), present_(true) {}
 
@@ -118,6 +119,39 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
     if (status == Status::ok)
         status = mappings_.map(PciBaseAddresses(config, config_space_bytes), resources_, layout_);
     return status;
+}
+
+void Adapter::remember_device()
+{
+    CapsetInfo     capset;
+    CapsetExchange exchange(platform_, device_.object());
+    const Status   read = exchange.read(capset);
+    if (read == Status::ok) identity_.remember(capset);
+    log_status("rvkgpu: device capset", NtStatus(read).value());
+}
+
+void Adapter::judge_device()
+{
+    if (!identity_.known()) return;
+    CapsetInfo     capset;
+    CapsetExchange exchange(platform_, device_.object());
+    if (exchange.read(capset) != Status::ok) return;
+    if (identity_.accept(capset)) return;
+    /* Whatever was queued on the device that is gone will never complete: its
+     * owner is told now rather than left waiting for a fence nobody will
+     * signal. The display is not this - it is the scanout the transition
+     * restored - and keeps working. */
+    void          *owner = nullptr;
+    const uint32_t aborted = node_.abort_pending(owner);
+    if (owner == nullptr) return;
+    losses_.lose(owner, aborted, Status::conflict);
+    report_losses("rvkgpu: device change loss");
+}
+
+void Adapter::report_losses(const char *what)
+{
+    const Status told = losses_.report(notification_);
+    if (told != Status::ok) log_status(what, NtStatus(told).value());
 }
 
 Status Adapter::power_up()
@@ -174,6 +208,7 @@ int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_inte
      * start - but it is logged, because the modes offered are then not the
      * host's. */
     log_status("rvkgpu: display info", NtStatus(follow_display_info()).value());
+    remember_device();
     *sources = sources_.count();
     *children = sources_.count();
     started_ = true;
@@ -190,6 +225,7 @@ int32_t Adapter::stop_device()
     scanout_.release();
     cursor_.release();
     mappings_.unmap_all();
+    identity_.forget();
     started_ = false;
     const int32_t stopped = NtStatus(status).value();
     log_status("rvkgpu: StopDevice", stopped);
@@ -312,6 +348,7 @@ int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)
         if (powered == Status::ok && transition_.held()) restore_scanouts();
         if (powered == Status::ok)
             log_status("rvkgpu: SetPowerState D0 vsync", NtStatus(vsync_.resume()).value());
+        if (powered == Status::ok) judge_device();
         transition_.release();
         platform_.log("rvkgpu: SetPowerState D0 done");
         return NtStatus(powered).value();
@@ -514,6 +551,8 @@ int32_t Adapter::create_context(void *device, DxgkargCreateContextRecord *reques
 {
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_context");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
+    /* Nothing new runs on a device this adapter did not start on. */
+    if (identity_.changed()) return NtStatus(Status::not_supported).value();
     return NtStatus(contexts_.create(device, *request)).value();
 }
 
@@ -960,8 +999,7 @@ int32_t Adapter::reset_engine(DxgkargResetEngineRecord *request)
     request->LastAbortedFenceId = node_.abort_pending(owner);
     if (owner != nullptr) {
         losses_.lose(owner, request->LastAbortedFenceId, Status::conflict);
-        const Status told = losses_.report(notification_);
-        if (told != Status::ok) log_status("rvkgpu: ResetEngine loss", NtStatus(told).value());
+        report_losses("rvkgpu: ResetEngine loss");
     }
     return NtStatus(Status::ok).value();
 }
@@ -1076,6 +1114,14 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
     const Context *context = contexts_.find(request->hContext);
     if (context == nullptr || !context->admits(request->DmaBufferVirtualAddress))
         return NtStatus(Status::invalid_parameter).value();
+    /* The device that would have run this is not the one this adapter started
+     * on: the submission is taken and answered with a fault, because a
+     * completion is what will never come (FR-005). */
+    if (identity_.changed()) {
+        losses_.lose(request->hContext, request->SubmissionFenceId, Status::conflict);
+        report_losses("rvkgpu: submission on a changed device");
+        return NtStatus(Status::ok).value();
+    }
     const Status status = node_.submit(request->SubmissionFenceId, request->hContext);
     if (status == Status::ok) static_cast<void>(dxgkrnl_.queue_dpc());
     return NtStatus(status).value();

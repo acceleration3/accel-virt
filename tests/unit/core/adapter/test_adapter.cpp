@@ -74,6 +74,10 @@
 #include "harness/dxgkrnl/fake_handle_table.hpp"
 #include "harness/framework/guarded_buffer.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/context/capset_info.hpp"
+#include "proto/context/gpu_identity.hpp"
+#include "proto/context/protocol_version.hpp"
+#include "proto/virtio_gpu/gpu_response.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
 #include "harness/vidpn/fake_vidpn.hpp"
@@ -177,6 +181,19 @@ private:
 };
 
 /* One adapter as dxgkrnl sees it: AddDevice done, StartDevice not yet. */
+constexpr std::uint32_t get_capset_info = 0x0108u;   /* VIRTIO_GPU_CMD_GET_CAPSET_INFO */
+constexpr std::uint32_t get_capset = 0x0109u;        /* VIRTIO_GPU_CMD_GET_CAPSET */
+constexpr std::uint8_t  first_gpu[av::GpuIdentity::uuid_bytes] = {3};
+constexpr std::uint8_t  other_gpu[av::GpuIdentity::uuid_bytes] = {4};
+
+av::CapsetInfo host_capset(const std::uint8_t *uuid)
+{
+    return av::CapsetInfo(av::ProtocolVersion(av::ProtocolVersion::current_major,
+                                              av::ProtocolVersion::current_minor),
+                          1u, 64u, 12u, 24u, 0u,
+                          av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, 0u, 0u, "the host's"));
+}
+
 class Fixture {
 public:
     Fixture() : dxgkrnl_(platform_, function_), adapter_(platform_, &function_), sources_(9u), children_(9u) {}
@@ -219,6 +236,10 @@ public:
         return *control_;
     }
 
+    /* What the device says it is from the next ask on: another host GPU is
+     * another device (feature 040, FR-005). */
+    void                   answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid); }
+
     MockPlatform          &platform() { return platform_; }
     FakeVirtioGpuFunction &function() { return function_; }
     FakeDxgkrnlAdapter    &dxgkrnl() { return dxgkrnl_; }
@@ -230,6 +251,19 @@ private:
     static void answer_display_info(void *context)
     {
         auto *const fixture = static_cast<Fixture *>(context);
+        /* The adapter asks the device what it is as well as what it shows, and
+         * the answers are told apart by what was asked (feature 040, FR-005). */
+        const std::uint32_t asked = fixture->control().pending_type();
+        if (asked == get_capset_info || asked == get_capset) {
+            av::GpuResponse answer;
+            if (asked == get_capset_info)
+                answer.set_capset_info(av::CapsetInfo::capset_id, 1u, av::CapsetInfo::encoded_size);
+            else
+                answer.set_capset(fixture->capset_);
+            static_cast<void>(fixture->control().respond_all(answer.bytes(),
+                                                             static_cast<std::uint32_t>(answer.length())));
+            return;
+        }
         if (fixture->answer_ == Answer::none) return;
         if (fixture->answer_ == Answer::wrong_type) {
             static_cast<void>(fixture->control().respond_all(0x1100u));   /* OK_NODATA, not display info */
@@ -245,6 +279,7 @@ private:
     FakeDxgkrnlAdapter    dxgkrnl_;
     Adapter               adapter_;
     DisplayInfoAnswer     display_info_;
+    av::CapsetInfo        capset_ = host_capset(first_gpu);
     Answer                answer_ = Answer::display_info;
     std::optional<av::FakeVirtqueueDevice> control_;
     std::uint32_t         sources_;
@@ -787,8 +822,8 @@ TEST(adapter_set_power_state, what_was_scanning_out_before_d3_is_scanning_out_af
   /* The host lost every resource with the device, so the source that was
    * scanning out has its resource created again; the pages follow with the
    * guest's next address, which is what dxgkrnl sends after a resume. */
-  CHECK_EQ(resumed.respond_all(0x1100u), 1u);
-  CHECK_EQ(resumed.request_type(resumed.requests() - 1u), 0x0101u);
+  CHECK_EQ(resumed.respond_all(0x1100u), 2u);   /* the scanout, and the capset the resume asks for */
+  CHECK_EQ(resumed.request_type(0u), 0x0101u);
   CHECK(fixture.adapter().invariants_hold()); }
 
 /* A resume that never had a scanout asks the host for none. */
@@ -800,7 +835,10 @@ TEST(adapter_set_power_state, a_source_that_was_dark_stays_dark_across_power)
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
   fixture.forget_control();
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
-  CHECK_EQ(fixture.control().respond_all(0x1100u), 0u);   /* nothing was scanning out */
+  /* Nothing was scanning out: the only request the resume made is the one that
+   * asks the device what it is. */
+  CHECK_EQ(fixture.control().respond_all(0x1100u), 1u);
+  CHECK_EQ(fixture.control().request_type(0u), 0x0108u);
   CHECK(fixture.adapter().invariants_hold()); }
 
 TEST(adapter_commit_vidpn, the_committed_source_reaches_the_host_scanout)
@@ -822,12 +860,13 @@ TEST(adapter_commit_vidpn, the_committed_source_reaches_the_host_scanout)
   fixture.platform().set_irql(Irql::passive);
   const std::uint32_t after_commit = control.respond_all(0x1100u);
   CHECK_EQ(after_commit, 5u);                         /* create, attach, set_scanout, transfer, flush */
-  /* Request 0 was StartDevice's display info. */
-  CHECK_EQ(control.request_type(1u), 0x0101u);
-  CHECK_EQ(control.request_type(2u), 0x0106u);
-  CHECK_EQ(control.request_type(3u), 0x0103u);
-  CHECK_EQ(control.request_type(4u), 0x0105u);
-  CHECK_EQ(control.request_type(5u), 0x0104u);
+  /* Requests 0 to 2 were StartDevice's: the display info, and the two the
+   * capset query takes (feature 040, FR-005). */
+  CHECK_EQ(control.request_type(3u), 0x0101u);
+  CHECK_EQ(control.request_type(4u), 0x0106u);
+  CHECK_EQ(control.request_type(5u), 0x0103u);
+  CHECK_EQ(control.request_type(6u), 0x0105u);
+  CHECK_EQ(control.request_type(7u), 0x0104u);
   /* Nothing presented since: the host is not asked to read again. */
   fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
@@ -1459,8 +1498,11 @@ TEST(adapter_set_pointer_shape, a_power_cycle_creates_the_cursor_resource_again)
   /* The power cycle built new rings, so the device side is new too. */
   const av::FakeCommonConfig::Queue &queue = fixture.function().common().queue(0u);
   av::FakeVirtqueueDevice device(fixture.platform(), queue.desc, queue.driver, queue.device, queue.size);
-  CHECK_EQ(device.respond_all(0x1100u), 3u);
-  CHECK_EQ(device.request_type(0u), 0x0101u); }
+  /* The resume asks the device what it is as well (feature 040, FR-005), and
+   * nothing answers that here, so it is still published. */
+  CHECK_EQ(device.respond_all(0x1100u), 4u);
+  CHECK_EQ(device.request_type(0u), 0x0108u);   /* what the resume asked the device it is */
+  CHECK_EQ(device.request_type(1u), 0x0101u); }
 
 TEST(adapter, the_legacy_surface_answers_not_supported)
 { Fixture fixture;
@@ -2567,14 +2609,14 @@ TEST(adapter_commit_vidpn, the_second_display_scans_out_on_its_own)
   fixture.adapter().dpc_routine();
   fixture.platform().set_irql(Irql::passive);
   CHECK_EQ(control.respond_all(0x1100u), 5u);
-  /* Request 0 was StartDevice's display info; the resource and the scanout are
-   * the second source's. */
-  CHECK_EQ(control.request_type(1u), 0x0101u);
-  CHECK_EQ(u32(control.request(1u), 24u), av::ScanoutResource::first_resource_id + 1u);
-  CHECK_EQ(u32(control.request(1u), 32u), 1024u);
-  CHECK_EQ(control.request_type(3u), 0x0103u);
-  CHECK_EQ(u32(control.request(3u), 40u), 1u);   /* scanout 1 */
-  CHECK_EQ(u32(control.request(3u), 44u), av::ScanoutResource::first_resource_id + 1u); }
+  /* Requests 0 to 2 were StartDevice's display info and capset query; the
+   * resource and the scanout are the second source's. */
+  CHECK_EQ(control.request_type(3u), 0x0101u);
+  CHECK_EQ(u32(control.request(3u), 24u), av::ScanoutResource::first_resource_id + 1u);
+  CHECK_EQ(u32(control.request(3u), 32u), 1024u);
+  CHECK_EQ(control.request_type(5u), 0x0103u);
+  CHECK_EQ(u32(control.request(5u), 40u), 1u);   /* scanout 1 */
+  CHECK_EQ(u32(control.request(5u), 44u), av::ScanoutResource::first_resource_id + 1u); }
 
 /* One mode list cannot describe displays of different sizes, so the driver says
  * when the device gives it some. */
@@ -2628,3 +2670,79 @@ TEST(adapter_start_device, names_the_display_that_is_not_the_first_s_size)
   CHECK_EQ(fixture.start(), success);
   CHECK(fixture.platform().logged_line("display 2 is 1280x600, not the first display's size"));
   CHECK(!fixture.platform().logged_line("display 1 is")); }
+
+/* FR-005: a hibernated guest is restored onto whatever QEMU is running now. A
+ * device answering for the same host GPU is the one the adapter started on, and
+ * everything carries on. */
+TEST(adapter_set_power_state, the_same_device_across_a_power_cycle_keeps_its_contexts)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.forget_control();
+  fixture.platform().on_stall(&Fixture::answer_display_info_from, &fixture);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  fixture.platform().on_stall(nullptr, nullptr);
+
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  av::DxgkargSubmitCommandVirtualRecord submit = {};
+  submit.hContext = context.hContext;
+  submit.DmaBufferVirtualAddress = 0x8000000000ull;
+  submit.SubmissionFenceId = 1u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* Another host GPU behind the same PCI function is another device: what the
+ * guest still holds cannot be finished on it, so its work is reported lost and
+ * a new context is refused - while the display, which is the scanout and none
+ * of this, keeps working. */
+TEST(adapter_set_power_state, a_device_that_changed_loses_its_contexts_and_keeps_the_display)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::DxgkargSubmitCommandVirtualRecord submit = {};
+  submit.hContext = context.hContext;
+  submit.DmaBufferVirtualAddress = 0x8000000000ull;
+  submit.SubmissionFenceId = 1u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.forget_control();
+  fixture.answer_capset_of(other_gpu);
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  fixture.platform().on_stall(&Fixture::answer_display_info_from, &fixture);
+  /* The transition itself still succeeds: a bugcheck is what FR-005 is about
+   * not doing. */
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  fixture.platform().on_stall(nullptr, nullptr);
+  /* The work that was queued on the device that is gone is reported faulted. */
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before).InterruptType, 4);   /* DMA_FAULTED */
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before).FenceId, 1u);
+
+  /* Nothing new runs on it, and a submission for a context that survived the
+   * refusal is answered with a fault rather than a completion nobody will
+   * send. */
+  av::DxgkargCreateContextRecord refused = {};
+  refused.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &refused)), not_supported);
+  submit.SubmissionFenceId = 2u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(fixture.dxgkrnl().interrupts() - 1u).InterruptType, 4);
+
+  /* The desktop is untouched: the scanout the adapter restored is still the
+   * one it had. */
+  CHECK_EQ(nt(fixture.adapter().set_vidpn_source_visibility(nullptr)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }

@@ -54,6 +54,13 @@ std::uint16_t FakeVirtqueueDevice::head(std::uint16_t available_position) const
     return static_cast<std::uint16_t>(read(driver_area_ + 4u + 2u * (available_position % size_), 2u));
 }
 
+std::uint32_t FakeVirtqueueDevice::pending_type() const
+{
+    if (available_index() == last_available_) return 0u;
+    const std::uint16_t chain = head(last_available_);
+    return static_cast<std::uint32_t>(read(read(descriptors_ + 16u * chain, 8u), 4u));
+}
+
 void FakeVirtqueueDevice::walk(std::uint16_t chain, bool keep_request, std::uint64_t &writable,
                                std::uint32_t &writable_length)
 {

@@ -37,6 +37,10 @@
 #include "core/support/status.hpp"
 #include "harness/device/fake_virtio_gpu_function.hpp"
 #include "core/display/display_info_response.hpp"
+#include "proto/context/capset_info.hpp"
+#include "proto/context/gpu_identity.hpp"
+#include "proto/context/protocol_version.hpp"
+#include "proto/virtio_gpu/gpu_response.hpp"
 #include "core/display/display_mode.hpp"
 #include "harness/device/fake_virtqueue_device.hpp"
 #include "harness/dxgkrnl/capability_rule.hpp"
@@ -132,6 +136,19 @@ private:
 };
 
 /* One PCI function dxgkrnl found, with its FDO. */
+constexpr std::uint32_t get_capset_info = 0x0108u;   /* VIRTIO_GPU_CMD_GET_CAPSET_INFO */
+constexpr std::uint32_t get_capset = 0x0109u;        /* VIRTIO_GPU_CMD_GET_CAPSET */
+constexpr std::uint8_t  first_gpu[av::GpuIdentity::uuid_bytes] = {3};
+constexpr std::uint8_t  other_gpu[av::GpuIdentity::uuid_bytes] = {4};
+
+av::CapsetInfo host_capset(const std::uint8_t *uuid)
+{
+    return av::CapsetInfo(av::ProtocolVersion(av::ProtocolVersion::current_major,
+                                              av::ProtocolVersion::current_minor),
+                          1u, 64u, 12u, 24u, 0u,
+                          av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, 0u, 0u, "the host's"));
+}
+
 class Device {
 public:
     Device(LoadedDriver &driver, std::uint8_t index)
@@ -156,6 +173,20 @@ public:
      * takes a new view of it. */
     void forget_control() { control_.reset(); }
 
+    /* A resume asks the device what it is, and waits for the answer, so the
+     * host answers from the stall as it does at StartDevice. */
+    std::int32_t resume()
+    {
+        platform_.on_stall(&Device::answer_display_info, this);
+        const std::int32_t powered = fdo_.set_power_state(power_d0);
+        platform_.on_stall(nullptr, nullptr);
+        return powered;
+    }
+
+    /* What the device says it is from the next ask on: another host GPU behind
+     * the same function is another device (feature 040, FR-005). */
+    void answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid); }
+
     /* The device side of the control queue, shared with that answer. */
     av::FakeVirtqueueDevice &control()
     {
@@ -170,6 +201,19 @@ private:
     static void answer_display_info(void *context)
     {
         auto *const device = static_cast<Device *>(context);
+        /* The adapter asks what the device is as well as what it shows, and the
+         * answers are told apart by what was asked (feature 040, FR-005). */
+        const std::uint32_t asked = device->control().pending_type();
+        if (asked == get_capset_info || asked == get_capset) {
+            av::GpuResponse answer;
+            if (asked == get_capset_info)
+                answer.set_capset_info(av::CapsetInfo::capset_id, 1u, av::CapsetInfo::encoded_size);
+            else
+                answer.set_capset(device->capset_);
+            static_cast<void>(device->control().respond_all(answer.bytes(),
+                                                            static_cast<std::uint32_t>(answer.length())));
+            return;
+        }
         static_cast<void>(device->control().respond_all(device->display_info_.bytes(),
                                                         device->display_info_.length()));
     }
@@ -179,6 +223,7 @@ private:
     FakeDxgkrnlAdapter    dxgkrnl_;
     FakeDxgkrnlFdo        fdo_;
     DisplayInfoAnswer     display_info_;
+    av::CapsetInfo        capset_ = host_capset(first_gpu);
     std::optional<av::FakeVirtqueueDevice> control_;
 };
 
@@ -602,17 +647,17 @@ TEST(ddi_scenario, a_committed_source_reaches_the_host_scanout)
   driver.platform().set_irql(av::Irql::passive);
   av::FakeVirtqueueDevice &control = device.control();
   CHECK_EQ(control.respond_all(0x1100u), 5u);
-  /* Request 0 was StartDevice's GET_DISPLAY_INFO. */
-  CHECK_EQ(control.request_type(1u), 0x0101u);        /* RESOURCE_CREATE_2D */
-  CHECK_EQ(control.request_type(2u), 0x0106u);        /* RESOURCE_ATTACH_BACKING */
-  CHECK_EQ(control.request_type(3u), 0x0103u);        /* SET_SCANOUT */
-  CHECK_EQ(control.request_type(4u), 0x0105u);        /* TRANSFER_TO_HOST_2D */
-  CHECK_EQ(control.request_type(5u), 0x0104u);        /* RESOURCE_FLUSH */
+  /* Requests 0 to 2 were StartDevice's GET_DISPLAY_INFO and its capset query. */
+  CHECK_EQ(control.request_type(3u), 0x0101u);        /* RESOURCE_CREATE_2D */
+  CHECK_EQ(control.request_type(4u), 0x0106u);        /* RESOURCE_ATTACH_BACKING */
+  CHECK_EQ(control.request_type(5u), 0x0103u);        /* SET_SCANOUT */
+  CHECK_EQ(control.request_type(6u), 0x0105u);        /* TRANSFER_TO_HOST_2D */
+  CHECK_EQ(control.request_type(7u), 0x0104u);        /* RESOURCE_FLUSH */
   /* One memory entry, because the pages VidMm gave are adjacent, and it is the
    * guest physical address of the first one - not the aperture address. */
-  CHECK_EQ(u32(control.request(2u), 28u), 1u);
-  CHECK_EQ(u32(control.request(2u), 32u), 0x40000000u);
-  CHECK_EQ(u32(control.request(2u), 40u), 1280u * 800u * 4u);
+  CHECK_EQ(u32(control.request(4u), 28u), 1u);
+  CHECK_EQ(u32(control.request(4u), 32u), 0x40000000u);
+  CHECK_EQ(u32(control.request(4u), 40u), 1280u * 800u * 4u);
   CHECK_EQ(device.fdo().remove_device(), 0); }
 
 /* Suspend and resume as dxgkrnl drives it (feature 040, US1): the whole table,
@@ -664,9 +709,11 @@ TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
   CHECK_EQ(device.function().common().status(), driver_ok_status);
   device.forget_control();
   av::FakeVirtqueueDevice &resumed = device.control();
-  /* The resume's own work: the resource for the source that was scanning out. */
-  CHECK_EQ(resumed.respond_all(0x1100u), 1u);
+  /* The resume's own work: the resource for the source that was scanning out,
+   * and the question of what device this is, which nothing answers here. */
+  CHECK_EQ(resumed.respond_all(0x1100u), 2u);
   CHECK_EQ(resumed.request_type(0u), 0x0101u);        /* RESOURCE_CREATE_2D */
+  CHECK_EQ(resumed.request_type(1u), 0x0108u);        /* GET_CAPSET_INFO */
 
   /* What dxgkrnl sends after a resume is the address it already had, and that
    * is what puts the pages and the scanout back. */
@@ -745,6 +792,79 @@ TEST(ddi_scenario, an_engine_that_stops_moving_is_reset_and_its_context_lost)
   CHECK_EQ(engine_status(adapter, &status), 0);
   CHECK_EQ(status.EngineStatus, 1u);
   driver.platform().set_irql(av::Irql::passive);
+
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *)>(
+               table.routine(DdiSlot::DxgkDdiDestroyContext))(context.hContext),
+           0);
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *)>(
+               table.routine(DdiSlot::DxgkDdiDestroyDevice))(created.hDevice),
+           0);
+  CHECK_EQ(device.fdo().remove_device(), 0);
+  CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
+
+/* FR-005: a hibernated guest is restored onto whatever QEMU is running now, and
+ * the device behind the same PCI function may be another one - another host
+ * GPU, or an older protocol. What the guest still holds cannot be finished on
+ * it: the work queued on the device that is gone is reported faulted, a new
+ * context is refused, and the desktop - the scanout, which is none of this -
+ * goes on working. */
+TEST(ddi_scenario, a_device_that_changed_across_hibernation_loses_its_contexts)
+{ LoadedDriver driver;
+  Device device(driver, 0u);
+  CHECK_EQ(device.fdo().add_device(), 0);
+  CHECK_EQ(device.start_device(), 0);
+  void           *adapter = device.fdo().context();
+  const DdiTable &table = driver.table();
+  av::DxgkargCreateDeviceRecord created = {};
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, av::DxgkargCreateDeviceRecord *)>(
+               table.routine(DdiSlot::DxgkDdiCreateDevice))(adapter, &created),
+           0);
+  av::DxgkargCreateContextRecord context = {};
+  context.Flags = 0x4u;   /* virtual addressing */
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, av::DxgkargCreateContextRecord *)>(
+               table.routine(DdiSlot::DxgkDdiCreateContext))(created.hDevice, &context),
+           0);
+  av::DxgkargSubmitCommandVirtualRecord submit = {};
+  submit.hContext = context.hContext;
+  submit.DmaBufferVirtualAddress = 0x8000000000ull;
+  submit.SubmissionFenceId = 1u;
+  const auto submit_virtual = reinterpret_cast<std::int32_t (*)(void *,
+                                                                const av::DxgkargSubmitCommandVirtualRecord *)>(
+      table.routine(DdiSlot::DxgkDdiSubmitCommandVirtual));
+  CHECK_EQ(submit_virtual(adapter, &submit), 0);
+
+  CHECK_EQ(device.fdo().set_power_state(power_d3), 0);
+  device.forget_control();
+  device.answer_capset_of(other_gpu);
+  const std::uint32_t before = device.dxgkrnl().interrupts();
+  /* The transition itself succeeds: not bugchecking is what FR-005 asks for. */
+  CHECK_EQ(device.resume(), 0);
+  CHECK_EQ(device.function().common().status(), driver_ok_status);
+  CHECK_EQ(device.dxgkrnl().interrupts(), before + 1u);
+  CHECK_EQ(device.dxgkrnl().interrupt(before).InterruptType, 4);   /* DMA_FAULTED */
+  CHECK_EQ(device.dxgkrnl().interrupt(before).FenceId, 1u);
+
+  /* Nothing new runs on it, and a submission on the context that is left is
+   * answered with a fault rather than a completion nobody will send. */
+  av::DxgkargCreateContextRecord refused = {};
+  refused.Flags = 0x4u;
+  CHECK(reinterpret_cast<std::int32_t (*)(void *, av::DxgkargCreateContextRecord *)>(
+            table.routine(DdiSlot::DxgkDdiCreateContext))(created.hDevice, &refused) < 0);
+  submit.SubmissionFenceId = 2u;
+  CHECK_EQ(submit_virtual(adapter, &submit), 0);
+  CHECK_EQ(device.dxgkrnl().interrupt(device.dxgkrnl().interrupts() - 1u).InterruptType, 4);
+
+  /* The display is still the driver's to run: the guest commits a mode and the
+   * host is asked to scan it out. */
+  av::FakeVidPn vidpn;
+  vidpn.add_path(0u, 0u);
+  av::D3dkmdtVidPnSourceModeRecord pinned = {};
+  av::DisplayMode(1280u, 800u).describe(pinned);
+  vidpn.source_modes(0u).seed(pinned, true);
+  const av::DxgkargCommitVidPnRecord commit = {&vidpn, 0u, 0, nullptr, 0u, 0u};
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargCommitVidPnRecord *)>(
+               table.routine(DdiSlot::DxgkDdiCommitVidPn))(adapter, &commit),
+           0);
 
   CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *)>(
                table.routine(DdiSlot::DxgkDdiDestroyContext))(context.hContext),
@@ -1515,10 +1635,11 @@ TEST(ddi_scenario, two_displays_get_a_source_a_child_and_a_scanout_each)
                    table.routine(DdiSlot::DxgkDdiSetVidPnSourceVisibility))(adapter, &visible),
                0);
   }
-  /* Two creates, one per source, each with its own resource id. */
+  /* Two creates, one per source, each with its own resource id, after the three
+   * StartDevice made. */
   CHECK_EQ(control.respond_all(0x1100u), 2u);
-  CHECK_EQ(control.request_type(1u), 0x0101u);
-  CHECK_EQ(u32(control.request(1u), 24u), av::ScanoutResource::first_resource_id);
-  CHECK_EQ(control.request_type(2u), 0x0101u);
-  CHECK_EQ(u32(control.request(2u), 24u), av::ScanoutResource::first_resource_id + 1u);
+  CHECK_EQ(control.request_type(3u), 0x0101u);
+  CHECK_EQ(u32(control.request(3u), 24u), av::ScanoutResource::first_resource_id);
+  CHECK_EQ(control.request_type(4u), 0x0101u);
+  CHECK_EQ(u32(control.request(4u), 24u), av::ScanoutResource::first_resource_id + 1u);
   CHECK_EQ(device.fdo().remove_device(), 0); }

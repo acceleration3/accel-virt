@@ -38,6 +38,9 @@ public:
     std::uint16_t respond_all(const std::uint8_t *answer, std::uint32_t length);
     static constexpr std::uint32_t max_requests = 64u;
     static constexpr std::uint32_t request_bytes = 64u;
+    /* The type of the first request published and not answered yet, or 0 when
+     * none is: what a host that answers by kind has to see before it does. */
+    std::uint32_t        pending_type() const;
     std::uint32_t        requests() const;
     const std::uint8_t  *request(std::uint32_t index) const;
     std::uint32_t        request_type(std::uint32_t index) const;
