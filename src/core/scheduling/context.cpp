@@ -6,7 +6,8 @@
 namespace av {
 
 Context::Context(Platform &platform, Device &device, const GpuMmuGeometry &geometry, uint32_t node, uint32_t flags)
-    : platform_(platform), device_(device), node_(node), flags_(flags), root_(platform, geometry) {}
+    : platform_(platform), device_(device), node_(node), flags_(flags), root_(platform, geometry),
+      rvk_record_(), is_rvk_(false) {}
 
 Device &Context::device() const
 {
@@ -24,6 +25,25 @@ uint32_t Context::flags() const
 {
     platform_.require_irql_at_most(Irql::dispatch, "Context::flags");
     return flags_;
+}
+
+void Context::become_rvk(const RvkContextRecord &record)
+{
+    platform_.require_irql_at_most(Irql::apc, "Context::become_rvk");
+    rvk_record_ = record;
+    is_rvk_ = true;
+}
+
+bool Context::is_rvk() const
+{
+    platform_.require_irql_at_most(Irql::dispatch, "Context::is_rvk");
+    return is_rvk_;
+}
+
+const RvkContextRecord &Context::rvk_record() const
+{
+    platform_.require_irql_at_most(Irql::dispatch, "Context::rvk_record");
+    return rvk_record_;
 }
 
 void Context::report_to(DxgkargCreateContextRecord &request)

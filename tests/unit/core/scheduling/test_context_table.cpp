@@ -8,6 +8,8 @@
 #include "core/memory/gpu_mmu_geometry.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
 #include "core/scheduling/context.hpp"
+#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/sub_api.hpp"
 #include "core/scheduling/context_table.hpp"
 #include "core/scheduling/device_table.hpp"
 #include "core/support/status.hpp"
@@ -42,7 +44,9 @@ using av::DxgkrnlInterface;
 using av::GpuMmuGeometry;
 using av::Irql;
 using av::MockPlatform;
+using av::RvkContextRecord;
 using av::Status;
+using av::SubApi;
 using av::Violation;
 
 namespace {
@@ -146,3 +150,51 @@ TEST(context_table_invariants, a_broken_pool_is_detected)
 { Fixture fixture;
   av::ContextTableProbe::corrupt_pool(fixture.contexts());
   CHECK(!fixture.contexts().invariants_hold()); }
+
+namespace {
+
+/* The private data a process sends to ask for an rvk context, encoded. */
+std::size_t rvk_private_data(std::uint8_t *bytes, std::size_t capacity)
+{ RvkContextRecord record(SubApi::vulkan, 16u, 2u, 3u, 4u);
+  if (record.encode(bytes, capacity) != Status::ok) return 0u;
+  return RvkContextRecord::encoded_size; }
+
+}  // namespace
+
+/* A CreateContext carrying a valid record builds an rvk context that remembers
+ * what it asked for; one carrying no private data is a plain context as before. */
+TEST(context_table_create, a_valid_record_makes_an_rvk_context)
+{ Fixture fixture;
+  std::uint8_t data[RvkContextRecord::encoded_size] = {};
+  DxgkargCreateContextRecord request = {};
+  request.Flags = 0x4u;   /* VirtualAddressing */
+  request.pPrivateDriverData = data;
+  request.PrivateDriverDataSize = static_cast<std::uint32_t>(rvk_private_data(data, sizeof data));
+  CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
+  Context *context = fixture.contexts().find(request.hContext);
+  CHECK(context != nullptr);
+  CHECK(context->is_rvk());
+  CHECK_EQ(context->rvk_record().sub_api(), SubApi::vulkan);
+  CHECK_EQ(context->rvk_record().ring(), 2u);
+  CHECK(fixture.contexts().invariants_hold()); }
+
+TEST(context_table_create, a_context_with_no_private_data_is_not_rvk)
+{ Fixture fixture;
+  DxgkargCreateContextRecord request = {};
+  CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
+  CHECK(!fixture.contexts().find(request.hContext)->is_rvk()); }
+
+/* Private data the size of a record but not a valid one is refused, and no
+ * context is left behind. */
+TEST(context_table_create, a_record_sized_private_data_that_does_not_decode_is_refused)
+{ Fixture fixture;
+  std::uint8_t data[RvkContextRecord::encoded_size] = {};
+  rvk_private_data(data, sizeof data);
+  data[0] ^= 0xFFu;   /* the magic */
+  DxgkargCreateContextRecord request = {};
+  request.Flags = 0x4u;
+  request.pPrivateDriverData = data;
+  request.PrivateDriverDataSize = RvkContextRecord::encoded_size;
+  CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::invalid_parameter);
+  CHECK_EQ(fixture.contexts().live(), 0u);
+  CHECK(request.hContext == nullptr); }
