@@ -42,6 +42,9 @@ BLACK_SCREEN = live_dump(0x1A8)
 GUEST_FILES = {"C:\\rvk\\diag\\system.txt": "System events\n",
                "C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp": BLACK_SCREEN,
                "C:\\Windows\\MEMORY.DMP": live_dump(0xD1)}
+TIMEOUT_EVENTS = "timeout: 2026-09-13T10:00:00 Display driver rvkgpu stopped responding and has successfully "\
+                 "recovered.\r\ntimeouts: 1\r\n"
+"""What the guest says event 4101 looks like (feature 040, US3)."""
 WITH_MEMORY_DUMP = COLLECTED + "dump C:\\Windows\\MEMORY.DMP\r\n"
 
 
@@ -185,12 +188,15 @@ class GuestSuiteRun(unittest.TestCase):
         """Feature 040 US3: a real TDR needs the host to stall, and the test
         executor is told to from outside - no rebuild, no test-only command in
         the protocol (FR-006)."""
-        self.script()
-        result = self.run_suite("--stall-ms", "5000", "--fault-after", "3")
+        self.script(stages={"sign": [3010], "install": [3010], "check": [0], "timeouts": [0]},
+                    outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED, "timeouts": TIMEOUT_EVENTS})
+        result = self.run_suite("--stall-ms", "5000", "--fault-after", "3", "--stall-context", "2")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         environment = json.loads((self.work / "environment.json").read_text())
         self.assertEqual(environment.get("RVK_ECHO_STALL_MS"), "5000")
         self.assertEqual(environment.get("RVK_ECHO_FAULT_AFTER"), "3")
+        self.assertEqual(environment.get("RVK_ECHO_ONLY_NTH"), "2")
         self.assert_clean()
 
     def test_s3_suspends_through_the_agent_and_wakes_through_qmp(self):
@@ -242,6 +248,56 @@ class GuestSuiteRun(unittest.TestCase):
         # Once after each resume, and once for the run itself.
         self.assertEqual(result.stdout.count("guest: report ok: 23 passed"), 4)
         self.assert_clean()
+
+    def test_a_run_that_injects_a_stall_runs_the_timeout_scenario_alone(self):
+        """US3: with the host holding one context, every other scenario would be
+        measuring the stall, so the run asks the guest for the timeout scenario
+        and wants dxgkrnl's own 4101 beside the guest's verdict."""
+        self.script(stages={"sign": [3010], "install": [3010], "check": [0], "timeouts": [0]},
+                    outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED,
+                             "timeouts": TIMEOUT_EVENTS})
+        result = self.run_suite("--stall-ms", "5000")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: tdr ok: 23 passed, the held context lost", result.stdout)
+        self.assertIn("guest: tdr ok: 1 recovery event(s) 4101 in the System log", result.stdout)
+        # The suite and the rate it measures belong to a run with no injection.
+        self.assertNotIn("guest: report ok", result.stdout)
+        self.assertNotIn("guest: vsync ok", result.stdout)
+        environment = json.loads((self.work / "environment.json").read_text())
+        self.assertEqual(environment.get("RVK_ECHO_ONLY_NTH"), "1")
+
+    def test_a_stall_that_dxgkrnl_never_timed_out_fails_the_run(self):
+        """Without event 4101 nothing was reset, and whatever the guest saw was
+        about something else."""
+        self.script(stages={"sign": [3010], "install": [3010], "check": [0], "timeouts": [0]},
+                    outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED, "timeouts": "timeouts: 0\r\n"})
+        result = self.run_suite("--stall-ms", "5000")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("the System log holds no event 4101", (self.work / "verdict.txt").read_text())
+
+    def test_the_timeouts_live_dump_is_expected_only_where_one_was_injected(self):
+        """A TDR live dump is this driver's failure (SC-005) unless the run is
+        the one that told the host to stop answering."""
+        dumps = dict(GUEST_FILES)
+        dumps["C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp"] = live_dump(0x141)
+        self.script(stages={"sign": [3010], "install": [3010], "check": [0], "timeouts": [0]},
+                    outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                             "rvktest": PASSING_REPORT, "collect": COLLECTED, "timeouts": TIMEOUT_EVENTS},
+                    files=dumps)
+        result = self.run_suite("--stall-ms", "5000")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: dumps ok: 1 live dump(s), every one VIDEO_ENGINE_TIMEOUT_DETECTED - the host was "
+                      "told to stop answering one context", result.stdout)
+
+    def test_a_timeout_live_dump_without_an_injection_fails_the_run(self):
+        dumps = dict(GUEST_FILES)
+        dumps["C:\\Windows\\LiveKernelReports\\WATCHDOG\\WD-1.dmp"] = live_dump(0x141)
+        self.script(screendump=[1280, 800], files=dumps)
+        result = self.run_suite()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("guest: dumps failed: WD-1.dmp 0x141 VIDEO_ENGINE_TIMEOUT_DETECTED", result.stdout)
 
     def test_the_stress_window_is_passed_to_the_guest_and_its_numbers_read_back(self):
         """Feature 039 US3: a long run is asked for in minutes, spent in the

@@ -22,12 +22,15 @@
 #            turns it off. Needs no session: the system's idle timer is what
 #            turns the display off, and that is the path a display driver must
 #            survive
+#   timeouts  the event 4101s in the System log, which is dxgkrnl saying it
+#            reset a display driver that stopped responding, one "timeout:"
+#            line each and a count
 #   collect  diagnostics into C:\rvk\diag, then one "file <path>" or
 #            "dump <path>" line per file for the runner to pull
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet('prepare', 'sign', 'install', 'check', 'modes', 'setmode', 'extend', 'monitortimeout',
-                 'sleepstates', 'hibernate', 'cycle', 'upgrade', 'collect')][string]$Stage,
+                 'sleepstates', 'hibernate', 'cycle', 'upgrade', 'timeouts', 'collect')][string]$Stage,
     [string]$Package = 'C:\rvk\package',
     [int]$Width = 0,
     [int]$Height = 0,
@@ -339,6 +342,18 @@ switch ($Stage) {
         powercfg /change monitor-timeout-dc $Minutes
         Write-Output "timeout: $Minutes"
         exit $LASTEXITCODE
+    }
+    'timeouts' {
+        # 4101: "Display driver rvkgpu stopped responding and has successfully
+        # recovered" - what dxgkrnl logs once it has reset the engine
+        # (feature 040, US3).
+        $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; Id = 4101 } -ErrorAction SilentlyContinue)
+        foreach ($event in $events) {
+            $message = ($event.Message -replace '\s+', ' ')
+            Write-Output "timeout: $($event.TimeCreated.ToString('s')) $message"
+        }
+        Write-Output "timeouts: $($events.Count)"
+        exit 0
     }
     'collect' {
         Remove-Item $Diagnostics -Recurse -Force -ErrorAction SilentlyContinue

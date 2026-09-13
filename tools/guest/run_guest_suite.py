@@ -82,7 +82,19 @@ LIVE_DUMP_CODE = 0x38
 # because the source shows nothing, and our pages are still zeros. Every other
 # code - a TDR above all - is this driver's own failure, and SC-005 says so.
 BLACK_SCREEN_LIVEDUMP = 0x1A8
+# What dxgkrnl takes a live dump for when it resets an engine that stopped
+# answering: expected only in a run that told the host to stop answering.
+TIMEOUT_LIVEDUMPS = (0x117, 0x141)
 MEMORY_DUMP = "MEMORY.DMP"
+
+
+TIMEOUTS = re.compile(r"^timeouts: (\d+)\r?$", re.M)
+"""How many event 4101s the guest found: dxgkrnl saying it reset a driver that
+stopped responding."""
+
+# The guest's tdr run outlives the stall the host was told to keep, and then
+# dxgkrnl's own timeout and reset on top of it.
+TDR_PATIENCE = 4.0
 
 
 class StepFailed(Exception):
@@ -126,6 +138,9 @@ def arguments():
                         help="disable and enable the adapter this many times (feature 040, US2)")
     parser.add_argument("--stall-ms", type=int, default=0,
                         help="make the test executor take this long per command (feature 040, US3)")
+    parser.add_argument("--stall-context", type=int, default=1, metavar="N",
+                        help="aim the stall and the fault at the Nth context the device is asked to make, "
+                             "so the others keep completing (feature 040, US3)")
     parser.add_argument("--fault-after", type=int, default=0,
                         help="make the test executor lose the device on its Nth command")
     parser.add_argument("--s3", action="store_true",
@@ -373,6 +388,8 @@ class GuestRun:
             environment["RVK_ECHO_STALL_MS"] = str(self.args.stall_ms)
         if self.args.fault_after:
             environment["RVK_ECHO_FAULT_AFTER"] = str(self.args.fault_after)
+        if self.args.stall_ms or self.args.fault_after:
+            environment["RVK_ECHO_ONLY_NTH"] = str(self.args.stall_context)
         self.qemu = subprocess.Popen(qemu_command(self.args, self.work, self.disk, rescue), stdout=output,
                                      stderr=subprocess.STDOUT, env=environment)
         output.close()
@@ -788,6 +805,41 @@ class GuestRun:
             self.suite()
             self.say(f"hibernate ok: the adapter came back from S4, {cycle + 1} of {self.args.hibernate}")
 
+    def injecting(self):
+        """Whether this run told the host to stop answering a context, by
+        holding its work or by losing it."""
+        return bool(self.args.stall_ms or self.args.fault_after)
+
+    def tdr(self):
+        """US3 and US4: the host holds one context past dxgkrnl's timeout
+        (--stall-ms) or loses it outright (--fault-after) while the guest
+        submits on two. dxgkrnl times that node out, resets the engine and logs
+        event 4101 - and the claim is that the other context's work still
+        completed. Only this runs in such a run: every other scenario would be
+        measuring the injection."""
+        patience = self.args.step_timeout + self.args.stall_ms / 1000.0 * TDR_PATIENCE
+        code, out, error = self.step("tdr", lambda: self.agent.run(GUEST_DIRECTORY + "\\rvktest.exe",
+                                                                   ["tdr"], patience))
+        (self.work / "tdr.txt").write_bytes(out)
+        summary = SUMMARY.search(out)
+        if summary is None:
+            raise StepFailed("tdr", f"no summary line (exit {code}): {error.decode(errors='replace')[-200:]}")
+        failed = int(summary.group(2))
+        if failed != 0 or code != 0:
+            raise StepFailed("tdr", f"{failed} step(s) failed, exit {code}; see tdr.txt")
+        self.say(f"tdr ok: {int(summary.group(1))} passed, the held context lost and the other one's work done")
+        self.timeout_events()
+
+    def timeout_events(self):
+        """Event 4101 is dxgkrnl saying it reset a driver that stopped
+        responding. Without it nothing timed out, and whatever the guest saw was
+        about something else."""
+        output = self.stage_output("timeouts", saved="timeouts.txt")
+        counted = TIMEOUTS.search(output)
+        if counted is None or int(counted.group(1)) == 0:
+            raise StepFailed("tdr", f"the System log holds no event 4101: {output.strip()[-300:]}")
+        self.say(f"tdr ok: {counted.group(1)} recovery event(s) 4101 in the System log")
+
     def install_and_test(self):
         if self.stage("sign"):
             self.reboot("sign")
@@ -801,8 +853,11 @@ class GuestRun:
         self.upgrade()
         self.suspend()
         self.hibernate()
-        self.suite()
-        self.vsync()
+        if self.injecting():
+            self.tdr()
+        else:
+            self.suite()
+            self.vsync()
 
     def prepare_guest(self):
         if self.stage("prepare"):
@@ -864,11 +919,21 @@ class GuestRun:
         self.say(f"collect: {self.step('collect.pull', pull)} files in {diagnostics}")
         self.judge_dumps(diagnostics / "dumps")
 
+    def expected_dumps(self):
+        """The live dumps this run is allowed to leave behind, and why each one
+        is not this driver's failure."""
+        expected = {BLACK_SCREEN_LIVEDUMP: "nothing renders into the primary yet"}
+        if self.injecting():
+            for code in TIMEOUT_LIVEDUMPS:
+                expected[code] = "the host was told to stop answering one context"
+        return expected
+
     def judge_dumps(self, dumps):
-        """What the guest's live kernel dumps were for: an expected black screen is
+        """What the guest's live kernel dumps were for: one this run expected is
         said out loud, and anything else fails the run (SC-005)."""
+        expected = self.expected_dumps()
         unexpected = []
-        black_screens = 0
+        seen = collections.Counter()
         for dump in sorted(dumps.glob("*.dmp")):
             # The kernel dump belongs to a bugcheck harvest_panics already named.
             if dump.name.upper() == MEMORY_DUMP:
@@ -878,16 +943,16 @@ class GuestRun:
                 unexpected.append(f"{dump.name} is not a kernel dump")
                 continue
             code = struct.unpack_from("<I", head, LIVE_DUMP_CODE)[0]
-            if code == BLACK_SCREEN_LIVEDUMP:
-                black_screens += 1
+            if code in expected:
+                seen[code] += 1
             else:
                 unexpected.append(f"{dump.name} 0x{code:X} {BUGCHECKS.get(code, 'unknown')}")
         if unexpected:
             self.unexpected_dump = ", ".join(unexpected)
             self.say(f"dumps failed: {self.unexpected_dump}")
-        elif black_screens:
-            self.say(f"dumps ok: {black_screens} live dump(s), every one "
-                     f"{BUGCHECKS[BLACK_SCREEN_LIVEDUMP]} - nothing renders into the primary yet")
+            return
+        for code, count in sorted(seen.items()):
+            self.say(f"dumps ok: {count} live dump(s), every one {BUGCHECKS[code]} - {expected[code]}")
 
     def collect_evidence(self, panicked):
         if not self.reach_guest(panicked):
