@@ -9,7 +9,7 @@ GuestSuite::GuestSuite(Kmt &kmt, GuestReport &report, uint32_t stress_seconds)
     : kmt_(kmt), report_(report), search_(kmt), adapter_(kmt, report, search_), allocation_(kmt, report, search_),
       mapping_(kmt, report, search_), submission_(kmt, report, search_),
       host_visible_(kmt, report, search_),
-      vsync_(kmt, report, search_), transport_(kmt, report, search_), stress_(kmt, report, search_, stress_seconds),
+      vsync_(kmt, report, search_), transport_(kmt, report, search_, SubApi::vulkan, "transport"), stress_(kmt, report, search_, stress_seconds),
       timeout_(kmt, report, search_) {}
 
 uint32_t GuestSuite::run_timeout()

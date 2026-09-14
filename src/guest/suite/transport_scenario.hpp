@@ -1,6 +1,7 @@
 /* A command crosses the rvk transport and its answer comes back (features 043
- * and 044): a connection on the adapter the search found, one Vulkan context's
- * transport over it, and a synchronous transport no-op the device answers
+ * and 044): a connection on the adapter the search found, one context's
+ * transport of the sub-API asked for - its setup is the host opening that API's
+ * backend on its GPU - and a synchronous transport no-op the device answers
  * itself with an empty reply - so it passes whichever executor the host loaded,
  * and its round trip is the transport's own latency. The transport and the
  * connection are torn down whatever failed. */
@@ -8,6 +9,7 @@
 #define AV_TRANSPORT_SCENARIO_HPP
 
 #include "guest/suite/scenario_steps.hpp"
+#include "proto/context/sub_api.hpp"
 
 #include <stdint.h>
 
@@ -19,7 +21,9 @@ class Kmt;
 
 class TransportScenario {
 public:
-    TransportScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search);
+    /* `name` is the scenario the report's lines carry. */
+    TransportScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search, SubApi sub_api,
+                      const char *name);
 
     void run();
 
@@ -27,6 +31,7 @@ private:
     Kmt                 &kmt_;
     const AdapterSearch &search_;
     ScenarioSteps        steps_;
+    SubApi               sub_api_;
 };
 
 }  // namespace av

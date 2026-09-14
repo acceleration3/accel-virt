@@ -44,7 +44,6 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 | `ClHandleRegistry` | system (device) | the OpenCL objects this executor made | Say whether a wire value is a live OpenCL handle |
 | `VulkanScenario` | object (guest) | the transport and the handles it made | Build the Vulkan object chain on the host GPU |
 | `OpenClScenario` | object (guest) | the transport, the kernel and its buffers | Run vector add on the host GPU |
-| `OpenGlScenario` | object (guest) | the transport | Set an OpenGL context up on the host |
 | `IsolationScenario` | object (guest) | two transports | Show a faulted context changes no other |
 | `RvkSuite` | system (guest) | the scenarios above and the adapter search | Run the rvk scenarios in order |
 

@@ -11,6 +11,7 @@
 #include "guest/suite/transport_scenario.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
+#include "proto/context/rvk_context_record.hpp"
 
 #include <cstdint>
 #include <cstdio>
@@ -72,7 +73,7 @@ TEST(transport_scenario, a_no_op_the_device_answers_empty_passes_and_reports_its
   rig.kmt().answer_waits(nullptr, 0u);
   rig.kmt().spend_on_wait(2500u);   /* a quarter of a millisecond at 10 000 000 ticks a second */
   GuestReport report;
-  TransportScenario scenario(rig.kmt(), report, rig.search());
+  TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
   scenario.run();
   CHECK(std::strcmp(report.text(),
                     "ok transport.adapter\n"
@@ -98,7 +99,7 @@ TEST(transport_scenario, an_answer_with_bytes_in_it_is_not_a_no_op)
       std::uint8_t answer[64] = {};
       rig.kmt().answer_waits(answer, size);
       GuestReport report;
-      TransportScenario scenario(rig.kmt(), report, rig.search());
+      TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
       scenario.run();
       char line[64];
       static_cast<void>(std::snprintf(line, sizeof line, "FAIL transport.nop status=9 %u\n", size));
@@ -125,7 +126,7 @@ TEST(transport_scenario, a_failure_at_each_step_is_reported_and_later_steps_skip
       rig.kmt().answer_waits(nullptr, 0u);
       rig.kmt().fail_at(refusal.call, 1u, unsuccessful);
       GuestReport report;
-      TransportScenario scenario(rig.kmt(), report, rig.search());
+      TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
       scenario.run();
       CHECK(has_line(report, refusal.line));
       CHECK(!has_line(report, refusal.skipped));
@@ -138,7 +139,7 @@ TEST(transport_scenario, a_failure_at_each_step_is_reported_and_later_steps_skip
 TEST(transport_scenario, a_device_that_never_answers_fails_the_send)
 { Rig rig;
   GuestReport report;
-  TransportScenario scenario(rig.kmt(), report, rig.search());
+  TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
   scenario.run();
   CHECK(has_line(report, "ok transport.initialize\n"));
   CHECK(has_line(report, "FAIL transport.nop status=7"));
@@ -151,10 +152,26 @@ TEST(transport_scenario, without_the_adapter_it_asks_the_driver_for_nothing)
   AdapterSearch search(kmt);
   CHECK_STATUS(search.find(rvk), Status::not_found);
   GuestReport report;
-  TransportScenario scenario(kmt, report, search);
+  TransportScenario scenario(kmt, report, search, av::SubApi::vulkan, "transport");
   scenario.run();
   CHECK(has_line(report, "FAIL transport.adapter status=3"));
   CHECK_EQ(report.passed(), 0u);
   CHECK_EQ(report.failed(), 1u);
   CHECK_EQ(kmt.calls(MockKmt::Call::create_device), 0u);
   CHECK_EQ(kmt.open_objects(), 0u); }
+
+/* The same round trip on an OpenGL context: the record asks for OpenGL, whose
+ * setup is the host opening its EGL context (044 US1, scenario 4 as planned). */
+TEST(transport_scenario, an_opengl_context_is_asked_for_by_its_record_and_named_in_the_report)
+{ Rig rig;
+  rig.kmt().answer_waits(nullptr, 0u);
+  GuestReport report;
+  TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::opengl, "opengl");
+  scenario.run();
+  CHECK(has_line(report, "ok opengl.initialize\n"));
+  CHECK(has_line(report, "ok opengl.nop 0\n"));
+  CHECK_EQ(report.failed(), 0u);
+  av::RvkContextRecord record;
+  CHECK_STATUS(record.decode(rig.kmt().last_private(), rig.kmt().last_private_size()), Status::ok);
+  CHECK(record.sub_api() == av::SubApi::opengl);
+  rig.check_nothing_left_but_the_adapter(); }

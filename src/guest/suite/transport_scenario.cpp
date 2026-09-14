@@ -5,7 +5,6 @@
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "proto/client_transport.hpp"
-#include "proto/context/sub_api.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -20,14 +19,15 @@ constexpr uint64_t microseconds_per_second = 1000000u;
 
 }  // namespace
 
-TransportScenario::TransportScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
-    : kmt_(kmt), search_(search), steps_(kmt, report, "transport") {}
+TransportScenario::TransportScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search, SubApi sub_api,
+                                     const char *name)
+    : kmt_(kmt), search_(search), steps_(kmt, report, name), sub_api_(sub_api) {}
 
 void TransportScenario::run()
 {
     if (steps_.check("adapter", search_.found() ? Status::ok : Status::not_found) != Status::ok) return;
     GuestConnection connection(kmt_);
-    KmtTransport    transport(connection, SubApi::vulkan, ring_order);
+    KmtTransport    transport(connection, sub_api_, ring_order);
     Status          status = steps_.check("connection", connection.open(search_.adapter()));
     if (status == Status::ok) status = steps_.check("initialize", transport.initialize());
     if (status == Status::ok) {
