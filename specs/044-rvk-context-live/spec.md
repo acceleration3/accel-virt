@@ -79,6 +79,11 @@ to work in a real Windows guest, including when it fails. This is milestone M3's
 
 ### User Story 1 - A context per sub-API runs real host work (Priority: P1)
 
+> **Scope as planned (research §3):** scenario 2's host-visible pattern round trip
+> moved to 045, scenario 3's host-visible buffers to 052, and scenario 4 (OpenGL
+> clear and read-back) to 050. 044 proves the Vulkan object chain on the host GPU,
+> OpenCL vector add over copied buffers, and an OpenGL context set up on the host.
+
 **Independent Test**: the in-guest runner with the executor library runs
 `rvktest.exe`'s rvk scenarios; each passes, and the host executor's log shows the
 command streams it ran.
@@ -110,11 +115,15 @@ guest's event log.
    that context faults, its sends fail, and the other context's work completes.
 2. **Given** a faulted context, **When** the program creates a new link, **Then**
    it works, and the adapter never left the started state.
+   *(Scenario 3 is proven by 040's `tdr` scenario with the echo library's stall.)*
 3. **Given** a stream that stalls the host longer than the TDR window, **When**
    dxgkrnl times out, **Then** only the owning device is reset and the program
    observes device loss on that device alone.
 
 ### User Story 3 - The run proves it with numbers (Priority: P2)
+
+> **As planned:** no mapping path exists to report, so the report records the
+> executor library, the host GPU and a transport NOP's latency.
 
 **Independent Test**: the runner's report records per-stream latency from submit
 to fence, and the diagnostics collected show no Driver Verifier violation.

@@ -34,6 +34,14 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 - Fallible construction is two-phase: trivial constructor, `initialize(...)` returning `Status`.
 - Every public method declares its IRQL ceiling via `platform_.require_irql_at_most(...)`.
 
+### Carried from feature 044: clear and read back
+
+044's OpenGL scenario (clear a framebuffer, read the pixels back) needs the
+generated OpenGL client, which first links here. 044 proved only that an OpenGL
+rvk context sets up on the host GPU. This feature demonstrates the clear and
+read-back from a guest process, with the framebuffer object the executor's
+surfaceless EGL context requires.
+
 ### Carried from feature 043: the blob arena
 
 Feature 043's US2 moved here, because this is where its first caller links. The

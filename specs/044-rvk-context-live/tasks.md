@@ -71,7 +71,7 @@ description: "Tasks: rvk contexts in a real guest"
 
 - [ ] T018 [US2] Write `tests/unit/guest/suite/test_isolation_scenario.cpp` first over `MockKmt` scripting a faulted wait on one context: healthy_before, fault, faulted_send, healthy_after, relink; the faulted context's sends fail, the healthy one's pass
 - [ ] T019 [US2] `IsolationScenario` (object class) in `src/guest/suite/isolation_scenario.{hpp,cpp}`: two Vulkan transports; the second sends `vkCreateInstance` with a truncated body (research §6), which the host answers undecodable and the driver reports `DMA_FAULTED`; its next send fails; the first context's NOP and `vkCreateInstance` pass before and after; a third transport made afterwards passes a NOP. Added to `RvkSuite`
-- [ ] T020 [US2] US2.3 (TDR on one device) stays 040's `tdr` scenario with the echo library's stall; `specs/044-rvk-context-live/spec.md` says so beside the scenario
+- [X] T020 [US2] US2.3 (TDR on one device) stays 040's `tdr` scenario with the echo library's stall; `specs/044-rvk-context-live/spec.md` says so beside the scenario
 
 **Checkpoint**: fault isolation is proven over MockKmt. Commit.
 
@@ -86,7 +86,7 @@ description: "Tasks: rvk contexts in a real guest"
 ## Phase 6: The guest proof and the merge
 
 - [ ] T022 `tools/gate.sh`: when `AV_GUEST_IMAGE` is set and `build-qemu/librvk_executor.so` exists, a second guest boot runs `--rvk --executor build-qemu/librvk_executor.so` after the suite
-- [ ] T023 The moved scope is recorded where it lands: `specs/045-vulkan-icd/spec.md` (the host-visible pattern round trip), `specs/050-opengl-icd/spec.md` (clear and read-back), `specs/052-opencl-icd/spec.md` (host-visible buffers); `specs/044-rvk-context-live/spec.md` marks US1.2-US1.4 and US3.1 with what moved
+- [X] T023 The moved scope is recorded where it lands: `specs/045-vulkan-icd/spec.md` (the host-visible pattern round trip), `specs/050-opengl-icd/spec.md` (clear and read-back), `specs/052-opencl-icd/spec.md` (host-visible buffers); `specs/044-rvk-context-live/spec.md` marks US1.2-US1.4 and US3.1 with what moved
 - [ ] T024 `docs/testing.md` "As built" describes the rvk scenarios, the NOP and the second boot; `docs/protocol.md` the NOP
 - [ ] T025 `AV_GUEST_IMAGE=... tools/gate.sh` passes with both boots; merge to `master`; push
 
