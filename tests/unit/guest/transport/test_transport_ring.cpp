@@ -1,6 +1,7 @@
 /* The guest's write side of a context's ring. It writes a fresh header at setup,
  * frames each batch at the tail wrapping the data area exactly as the device's
- * reader does, publishes the tail, and refuses a batch there is no room for
+ * reader does, leaves the header's tail for the miniport to publish, and
+ * refuses a batch there is no room for
  * until the device's head frees it. The device's head, which the test writes to
  * play the device, is what bounds how far ahead the tail may run. */
 #include "core/support/status.hpp"
@@ -78,7 +79,7 @@ TEST(transport_ring, initialize_writes_a_fresh_header)
   /* Binding a second time is refused. */
   CHECK_STATUS(ring.initialize(memory.bytes, order), Status::invalid_state); }
 
-TEST(transport_ring, writes_a_batch_and_publishes_the_tail)
+TEST(transport_ring, writes_a_batch_and_leaves_publishing_the_tail_to_the_miniport)
 { Ring memory;
   TransportRing ring;
   CHECK_STATUS(ring.initialize(memory.bytes, order), Status::ok);
@@ -88,10 +89,12 @@ TEST(transport_ring, writes_a_batch_and_publishes_the_tail)
   CHECK_EQ(begin, 0u);
   CHECK_EQ(end, 24u);          /* span = round8(16 + 8) */
   CHECK_EQ(ring.tail(), 24u);
-  /* The tail is published in the header; the batch decodes with its fence. */
+  /* The header's tail stays where it was: a device woken before the miniport
+   * checked the submission must find nothing to consume. The batch decodes
+   * with its fence. */
   RingHeader header;
   CHECK_STATUS(header.decode(memory.bytes, 32u), Status::ok);
-  CHECK_EQ(header.tail(), 24u);
+  CHECK_EQ(header.tail(), 0u);
   const BatchHeader batch = memory.batch_at(0u);
   CHECK_EQ(batch.length(), 8u);
   CHECK_EQ(batch.fence_id(), 7u);

@@ -2,9 +2,10 @@
  * maps the ring blob - a 32-byte header then 2^order bytes of data addressed by
  * byte counters - and produces batches into it: each is a BatchHeader and its
  * payload, occupying `span` bytes rounded up to 8, wrapping the data area's end
- * as the device's reader does. The guest owns the tail counter and publishes it
- * after writing the bytes; the device owns head, which the ring reads to know
- * how much room is free. This writes the ring bytes only; framing a batch's
+ * as the device's reader does. The process owns the tail counter and the
+ * miniport publishes it in the header once it has checked the submission
+ * (docs/protocol.md, Submission); the device owns head, which the ring reads
+ * to know how much room is free. This writes the ring bytes only; framing a batch's
  * payload into commands is the transport's above it. */
 #ifndef AV_TRANSPORT_RING_HPP
 #define AV_TRANSPORT_RING_HPP
@@ -27,7 +28,7 @@ public:
      * an order the protocol does not allow; invalid_state once bound. */
     [[nodiscard]] Status initialize(uint8_t *ring, uint8_t order);
     /* Writes one batch of `length` payload bytes with fence `fence_id` at the
-     * tail, wrapping the data area, and publishes the new tail; `begin` and
+     * tail, wrapping the data area, and moves the tail it keeps; `begin` and
      * `end` are the tail counters before and after, for the submission that
      * carries them. invalid_state unbound; invalid_parameter for fence 0 or a
      * batch too large for the ring; no_space until the device consumes enough. */
@@ -45,7 +46,6 @@ public:
 
 private:
     static constexpr size_t   header_size = 32u;
-    static constexpr uint64_t tail_offset = 8u;
     static constexpr uint64_t head_offset = 16u;
 
     void     write_wrapped(uint64_t counter, const uint8_t *source, uint32_t count);

@@ -9,6 +9,8 @@
 #include "proto/context/sub_api.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
 #include "proto/virtio_gpu/rvk_request_writer.hpp"
+#include "proto/submission/submission_descriptor.hpp"
+#include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
@@ -169,7 +171,7 @@ Status LoopbackKmt::create_context_virtual(std::uint32_t, const std::uint8_t *pr
                              doorbell, reply_id);
     RvkRequestWriter set(request, sizeof request);
     if (set.setup(handle, setup) != Status::ok || !control(request, set.length())) return Status::not_supported;
-    contexts_[context_count_] = Context{handle, doorbell, {ring_id, fence_id, reply_id}, 0u};
+    contexts_[context_count_] = Context{handle, ring->view, doorbell, {ring_id, fence_id, reply_id}, 0u};
     context_count_++;
     context = handle;
     return Status::ok;
@@ -190,11 +192,16 @@ Status LoopbackKmt::destroy_context(std::uint32_t context)
     return Status::ok;
 }
 
-Status LoopbackKmt::submit(std::uint32_t context, std::uint64_t, std::uint64_t, const std::uint8_t *,
-                           std::uint32_t)
+Status LoopbackKmt::submit(std::uint32_t context, std::uint64_t, std::uint64_t, const std::uint8_t *private_data,
+                           std::uint32_t private_size)
 {
+    constexpr std::size_t tail_offset = 8u;   /* the ring header's tail (docs/protocol.md) */
     Context *const found = find_context(context);
-    if (found == nullptr) return Status::invalid_parameter;
+    SubmissionDescriptor submission;
+    if (found == nullptr || private_data == nullptr || submission.decode(private_data, private_size) != Status::ok)
+        return Status::invalid_parameter;
+    WireWriter tail(found->ring + tail_offset, sizeof(std::uint64_t));
+    tail.write_u64(submission.end());
     found->seen = device_.host().raised(found->doorbell);
     device_.doorbells().write_u32(found->doorbell * page_bytes, 1u);
     return Status::ok;

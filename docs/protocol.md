@@ -284,7 +284,7 @@ holds `2^order` bytes. 32 bytes.
 | 0 | u32 | magic | guest, once | `RVKR` = `0x524B5652` |
 | 4 | u8 | order | guest, once | 12..24 |
 | 5 | u8[3] | reserved | | 0 |
-| 8 | u64 | tail | guest | total bytes produced |
+| 8 | u64 | tail | guest driver, at submission | total bytes produced and submitted |
 | 16 | u64 | head | device | total bytes consumed |
 | 24 | u64 | reserved | | 0 |
 
@@ -292,6 +292,11 @@ A byte's position in the data area is `counter & (2^order - 1)`. At every
 observation `head <= tail <= head + 2^order`, and neither counter is smaller
 than the last value observed. Each side trusts only its own counter and
 validates the other's against its last observation.
+
+The producer writes batch bytes past the tail but never the tail itself: the
+device consumes up to whatever tail it finds on any wake, so a tail stored
+before the driver checked the submission lets the device's head pass the tail
+the driver published, and the driver fails the context for it.
 
 ## Submission descriptor (guest -> device)
 

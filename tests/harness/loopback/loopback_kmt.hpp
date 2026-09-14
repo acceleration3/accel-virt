@@ -2,8 +2,9 @@
  * (feature 043, L4): allocations are guest memory the device reads by physical
  * address, and a virtual context is set up by publishing its ring, fence and
  * reply as guest blobs and sending CTX_CREATE and the setup over the device's
- * control channel - the miniport's job, done in a shim. A submission rings the
- * context's doorbell; a wait blocks on its fence-queue interrupt. It is the
+ * control channel - the miniport's job, done in a shim. A submission stores
+ * the tail its descriptor ends at in the ring header and rings the context's
+ * doorbell, as the miniport does; a wait blocks on its fence-queue interrupt. It is the
  * ClientTransport's `Kmt` so KmtTransport, and the generated client above it,
  * reach the real device core in one process. */
 #ifndef AV_LOOPBACK_KMT_HPP
@@ -65,6 +66,7 @@ private:
     };
     struct Context {
         std::uint32_t handle;
+        std::uint8_t *ring;
         std::uint32_t doorbell;
         std::uint32_t blobs[3];
         std::uint32_t seen;   /* fence-line raises seen before the pending submit */

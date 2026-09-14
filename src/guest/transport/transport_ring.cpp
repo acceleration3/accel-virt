@@ -3,7 +3,6 @@
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/wire/wire_reader.hpp"
-#include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
@@ -39,10 +38,10 @@ Status TransportRing::write_batch(const uint8_t *payload, uint32_t length, uint6
     write_wrapped(tail_ + BatchHeader::encoded_size, payload, length);
     tail_ += span;
     end = tail_;
-    /* Only the tail field: head is the device's, and re-encoding the header
-     * would race its write of it. */
-    WireWriter published(ring_ + tail_offset, sizeof(uint64_t));
-    published.write_u64(tail_);
+    /* The header's tail is the miniport's to store, once it has judged the
+     * submission: a device woken for anything else consumes up to whatever
+     * tail it finds, and one found here before the driver published it puts
+     * the device's head past the driver's tail, which fails the context. */
     return Status::ok;
 }
 
