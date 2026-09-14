@@ -34,6 +34,17 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 - Fallible construction is two-phase: trivial constructor, `initialize(...)` returning `Status`.
 - Every public method declares its IRQL ceiling via `platform_.require_irql_at_most(...)`.
 
+### Carried from feature 043: the blob arena
+
+Feature 043's US2 moved here, because this is where its first caller links. The
+transport's `blobs()` must become a real arena: an allocation the process locks,
+published as a fourth blob in the context's setup, whose leases the OpenGL
+encoder writes large arrays into and whose offsets the host's OpenGL decoder
+reads - with the acceptance scenarios 043 stated: the bytes the executor reads
+are the bytes the client wrote; a 32-bit process's view lies below 4 GiB or the
+allocation fails with a status; a retired lease's room returns when its fence
+completes.
+
 ### Classes this feature introduces
 
 <!-- Fill this in during /speckit-plan, before writing code. One row per class; if a row has no state, it is not a class. -->

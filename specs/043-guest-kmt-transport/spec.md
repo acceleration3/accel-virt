@@ -118,6 +118,10 @@ back replies and sequence numbers.
 
 ### User Story 2 - A blob arena of host-visible memory (Priority: P1)
 
+> **Moved to feature 050.** The lease's only client is the OpenGL encoder, which
+> links in 050, and no host decoder reads an arena offset yet; see tasks.md
+> Phase 4. The scenarios below are 050's to demonstrate.
+
 **Independent Test**: over the loopback rig, the transport allocates blobs, maps
 them, and the device's view of a written byte matches; a 32-bit view is checked
 to lie below 4 GiB.

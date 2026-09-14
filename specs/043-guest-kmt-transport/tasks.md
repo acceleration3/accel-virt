@@ -80,12 +80,23 @@ description: "Tasks: the guest transport"
 
 ## Phase 4: US2 - A blob arena of host-visible memory (Priority: P1)
 
+**Moved to feature 050 (2026-09-14).** Everything US2 needs beyond what exists is
+a caller and a wire this feature does not have: the only client that takes a
+lease is the generated OpenGL client, which does not link until 050's helpers
+exist (research §4), and nothing on the host reads an arena offset - the device
+has no arena blob in a context's setup and no executor decodes a lease. Building
+`KmtBlobArena` here would be the speculative structure principle VIII forbids.
+`ClientBlobArena` (the bump arena the client already names) and the transport's
+refusing `blobs()` stand as the contract; 050's spec carries US2's acceptance
+scenarios as its own requirement, with the arena blob added to the context
+setup there. The tasks below are closed as moved, not as done.
+
 **Goal**: a large array crosses as a blob rather than inline, from memory the process mapped.
 
-- [ ] T023 [US2] Write `tests/unit/guest/transport/test_kmt_blob_arena.cpp` first: a lease is handed out only when the arena is ready; a lease carries a writable `data` and an `offset`; `give_back` and `retire_after_last` return room; a request past the arena is not-ready rather than a lease
-- [ ] T024 [US2] `KmtBlobArena` (object class) in `src/guest/transport/`, the `ClientBlobArena` the OpenGL client names: `Lease{}` with `ok()`, `data`, `offset`; `for_transport` as a member not a static (principle III); `take`, `give_back`, `retire_after_last`, `ready`. Backed by an aperture allocation the process locked, the same kind the ring uses
-- [ ] T025 [US2] *Waiting for 041.* The arena is guest memory the executor imports zero-copy (capset bit 2, proven in 042), not host-visible BAR memory: 041 could not place an allocation in the CPU-visible segment, and that is not this feature's to solve. US2.1's "an allocation from 041 mapped into the process" is the aperture allocation; US2.2's below-4-GiB view is dxgkrnl's to place (041 T023). Record what is unmet and why, in the spec
-- [ ] T026 [US2] A retired lease's room comes back when its fence completes: `TransportFence` releasing a lease keyed to the submission that used it, so a long-running client does not exhaust the arena (US2.3)
+- [X] T023 [US2] *(moved to 050)* Write `tests/unit/guest/transport/test_kmt_blob_arena.cpp` first: a lease is handed out only when the arena is ready; a lease carries a writable `data` and an `offset`; `give_back` and `retire_after_last` return room; a request past the arena is not-ready rather than a lease
+- [X] T024 [US2] *(moved to 050)* `KmtBlobArena` (object class) in `src/guest/transport/`, the `ClientBlobArena` the OpenGL client names: `Lease{}` with `ok()`, `data`, `offset`; `for_transport` as a member not a static (principle III); `take`, `give_back`, `retire_after_last`, `ready`. Backed by an aperture allocation the process locked, the same kind the ring uses
+- [X] T025 [US2] *(moved to 050)* *Waiting for 041.* The arena is guest memory the executor imports zero-copy (capset bit 2, proven in 042), not host-visible BAR memory: 041 could not place an allocation in the CPU-visible segment, and that is not this feature's to solve. US2.1's "an allocation from 041 mapped into the process" is the aperture allocation; US2.2's below-4-GiB view is dxgkrnl's to place (041 T023). Record what is unmet and why, in the spec
+- [X] T026 [US2] *(moved to 050)* A retired lease's room comes back when its fence completes: `TransportFence` releasing a lease keyed to the submission that used it, so a long-running client does not exhaust the arena (US2.3)
 
 **Checkpoint**: a large array crosses as a blob, and retired room returns. Commit.
 
