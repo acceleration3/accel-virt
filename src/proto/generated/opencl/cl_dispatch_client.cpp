@@ -67,6 +67,8 @@ cl_int rvk_clGetPlatformInfo(::av::ClientTransport& t, uint64_t platform, cl_pla
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -131,6 +133,8 @@ cl_int rvk_clGetDeviceInfo(::av::ClientTransport& t, uint64_t device, cl_device_
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -252,6 +256,8 @@ cl_int rvk_clGetContextInfo(::av::ClientTransport& t, uint64_t context, cl_conte
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -360,6 +366,8 @@ cl_int rvk_clGetCommandQueueInfo(::av::ClientTransport& t, uint64_t command_queu
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -529,6 +537,8 @@ cl_int rvk_clGetMemObjectInfo(::av::ClientTransport& t, uint64_t memobj, cl_mem_
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -560,6 +570,8 @@ cl_int rvk_clGetImageInfo(::av::ClientTransport& t, uint64_t image, cl_image_inf
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1149,6 +1161,8 @@ cl_int rvk_clGetProgramInfo(::av::ClientTransport& t, uint64_t program, cl_progr
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1181,6 +1195,8 @@ cl_int rvk_clGetProgramBuildInfo(::av::ClientTransport& t, uint64_t program, uin
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1334,6 +1350,8 @@ cl_int rvk_clGetKernelInfo(::av::ClientTransport& t, uint64_t kernel, cl_kernel_
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1366,6 +1384,8 @@ cl_int rvk_clGetKernelArgInfo(::av::ClientTransport& t, uint64_t kernel, cl_uint
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1398,6 +1418,8 @@ cl_int rvk_clGetKernelWorkGroupInfo(::av::ClientTransport& t, uint64_t kernel, u
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1559,6 +1581,8 @@ cl_int rvk_clGetEventInfo(::av::ClientTransport& t, uint64_t event, cl_event_inf
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1652,6 +1676,8 @@ cl_int rvk_clGetEventProfilingInfo(::av::ClientTransport& t, uint64_t event, cl_
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1827,6 +1853,8 @@ cl_int rvk_clGetGLTextureInfo(::av::ClientTransport& t, uint64_t memobj, cl_gl_t
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1938,6 +1966,8 @@ cl_int rvk_clGetGLContextInfoKHR(::av::ClientTransport& t, const uint64_t* prope
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -2685,6 +2715,8 @@ cl_int rvk_clGetKernelSubGroupInfo(::av::ClientTransport& t, uint64_t kernel, ui
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -2936,6 +2968,8 @@ cl_int rvk_clGetSamplerInfo(::av::ClientTransport& t, uint64_t sampler, cl_sampl
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -2999,6 +3033,8 @@ cl_int rvk_clGetPipeInfo(::av::ClientTransport& t, uint64_t pipe, cl_pipe_info p
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
         if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
+        if (ret == CL_SUCCESS && param_value != nullptr &&
+            wire_value > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;

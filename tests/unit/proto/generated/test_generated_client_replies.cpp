@@ -493,3 +493,91 @@ TEST(generated_client_replies, vulkan_layouts_past_the_callers_room_leave_its_co
   CHECK_EQ(copy.copySrcLayoutCount, 2u);
   CHECK(copy.pCopySrcLayouts == sources.as<VkImageLayout>());
   CHECK(sources.untouched_from(0u)); }
+
+/* What tests/fuzz/fuzz_generated_client_replies.cpp found (T036): a size or a
+ * count the reply carries beside what it wrote, rather than before it. */
+
+/* An info query into a buffer succeeds only when the value fits, so a success
+ * reporting a size past the buffer is refused - an application reads that many
+ * bytes back. Asked with no buffer, the size is how much is needed, and any
+ * size is an answer. */
+TEST(generated_client_replies, opencl_a_successful_info_size_past_its_buffer_is_refused)
+{ MockTransport transport;
+  std::uint8_t reply[64] = {};
+  const auto answer = [&](std::uint64_t written, std::uint64_t reported) {
+      WireWriter writer(reply, sizeof reply);
+      writer.write_varint(static_cast<std::int64_t>(CL_SUCCESS));
+      if (written != 0u) {
+          writer.write_varint(written);
+          writer.write("name", written);
+      }
+      writer.write_varint(reported);
+      transport.set_reply(reply, writer.offset());
+  };
+  { answer(4u, 9u);
+    Destination value(8u);
+    std::size_t reported = never_reported;
+    CHECK_EQ(av::clproto::rvk_clGetDeviceInfo(transport, ScriptedHost::cl_device, CL_DEVICE_NAME, 8u,
+                                              value.as<char>(), &reported),
+             CL_OUT_OF_RESOURCES);
+    CHECK_EQ(reported, static_cast<std::size_t>(never_reported)); }
+  { answer(4u, 8u);
+    Destination value(8u);
+    std::size_t reported = never_reported;
+    CHECK_EQ(av::clproto::rvk_clGetDeviceInfo(transport, ScriptedHost::cl_device, CL_DEVICE_NAME, 8u,
+                                              value.as<char>(), &reported),
+             CL_SUCCESS);
+    CHECK_EQ(reported, 8u);
+    CHECK(value.untouched_from(4u)); }
+  { answer(0u, 64u);
+    std::size_t reported = never_reported;
+    CHECK_EQ(av::clproto::rvk_clGetDeviceInfo(transport, ScriptedHost::cl_device, CL_DEVICE_NAME, 0u, nullptr,
+                                              &reported),
+             CL_SUCCESS);
+    CHECK_EQ(reported, 64u); } }
+
+/* A count beside a fixed array: the structure's own size is the room, and the
+ * void query has no error to return, so the caller's count is what is left. */
+TEST(generated_client_replies, vulkan_memory_types_counted_past_their_array_are_refused_and_the_count_kept)
+{ MockTransport transport;
+  std::uint8_t reply[served_bytes] = {};
+  const std::uint32_t counts[] = {VK_MAX_MEMORY_TYPES + 1u, VK_MAX_MEMORY_TYPES};
+  for (const std::uint32_t types : counts) {
+      VkPhysicalDeviceMemoryProperties host = {};
+      host.memoryTypeCount = types;
+      host.memoryHeapCount = 1u;
+      WireWriter writer(reply, sizeof reply);
+      writer.write_pod<std::int32_t>(0);
+      av::vkproto::serialize_VkPhysicalDeviceMemoryProperties(writer, host);
+      transport.set_reply(reply, writer.offset());
+      VkPhysicalDeviceMemoryProperties properties = {};
+      properties.memoryHeapCount = 2u;
+      av::vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(transport, physical_device(), &properties);
+      const bool fits = types <= VK_MAX_MEMORY_TYPES;
+      CHECK_EQ(properties.memoryTypeCount, fits ? types : 0u);
+      CHECK_EQ(properties.memoryHeapCount, fits ? 1u : 2u);
+  } }
+
+/* A name filling every byte of its array is terminated inside it, and the rest
+ * of the element is still read. */
+TEST(generated_client_replies, vulkan_an_extension_name_filling_its_array_is_terminated_inside_it)
+{ MockTransport transport;
+  VkExtensionProperties host = {};
+  std::memset(host.extensionName, 'a', sizeof host.extensionName);
+  host.specVersion = 7u;
+  std::uint8_t reply[served_bytes] = {};
+  WireWriter   writer(reply, sizeof reply);
+  writer.write_pod<std::int32_t>(0);
+  writer.write_pod<std::uint32_t>(1u);
+  av::vkproto::serialize_VkExtensionProperties(writer, host);
+  transport.set_reply(reply, writer.offset());
+  Destination extensions(sizeof(VkExtensionProperties));
+  std::uint32_t count = 1u;
+  CHECK(av::vkproto::rvk_vkEnumerateDeviceExtensionProperties(transport, physical_device(), nullptr, &count,
+                                                              extensions.as<VkExtensionProperties>()) == VK_SUCCESS);
+  CHECK_EQ(count, 1u);
+  const VkExtensionProperties &read = *extensions.as<VkExtensionProperties>();
+  CHECK_EQ(read.extensionName[VK_MAX_EXTENSION_NAME_SIZE - 2u], 'a');
+  CHECK_EQ(read.extensionName[VK_MAX_EXTENSION_NAME_SIZE - 1u], '\0');
+  CHECK_EQ(read.specVersion, 7u);
+  CHECK(extensions.untouched_from(sizeof(VkExtensionProperties))); }

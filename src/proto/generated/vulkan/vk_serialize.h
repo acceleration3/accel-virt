@@ -6190,6 +6190,7 @@ inline void serialize_VkExtensionProperties(::av::WireWriter& buf, const VkExten
 [[nodiscard]] inline bool deserialize_VkExtensionProperties(::av::WireReader& r, VkExtensionProperties* out, ::av::WireArena& arena) {
     (void)arena;
     if (!r.read(&out->extensionName[0], sizeof(out->extensionName))) { return false; }
+    out->extensionName[sizeof(out->extensionName) - 1u] = '\0';
     if (!r.read_pod(out->specVersion)) { return false; }
     return true;
 }
@@ -8046,9 +8047,11 @@ inline void serialize_VkLayerProperties(::av::WireWriter& buf, const VkLayerProp
 [[nodiscard]] inline bool deserialize_VkLayerProperties(::av::WireReader& r, VkLayerProperties* out, ::av::WireArena& arena) {
     (void)arena;
     if (!r.read(&out->layerName[0], sizeof(out->layerName))) { return false; }
+    out->layerName[sizeof(out->layerName) - 1u] = '\0';
     if (!r.read_pod(out->specVersion)) { return false; }
     if (!r.read_pod(out->implementationVersion)) { return false; }
     if (!r.read(&out->description[0], sizeof(out->description))) { return false; }
+    out->description[sizeof(out->description) - 1u] = '\0';
     return true;
 }
 
@@ -10090,7 +10093,9 @@ inline void serialize_VkPhysicalDeviceDriverProperties(::av::WireWriter& buf, co
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->driverID)) { return false; }
     if (!r.read(&out->driverName[0], sizeof(out->driverName))) { return false; }
+    out->driverName[sizeof(out->driverName) - 1u] = '\0';
     if (!r.read(&out->driverInfo[0], sizeof(out->driverInfo))) { return false; }
+    out->driverInfo[sizeof(out->driverInfo) - 1u] = '\0';
     if (!deserialize_VkConformanceVersion(r, &out->conformanceVersion, arena)) { return false; }
     return true;
 }
@@ -10935,7 +10940,12 @@ inline void serialize_VkPhysicalDeviceGroupProperties(::av::WireWriter& buf, con
     (void)arena;
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
-    if (!r.read_pod(out->physicalDeviceCount)) { return false; }
+    {
+        decltype(out->physicalDeviceCount) physicalDeviceCount_answered{};
+        if (!r.read_pod(physicalDeviceCount_answered)) { return false; }
+        if (physicalDeviceCount_answered > VK_MAX_DEVICE_GROUP_SIZE) { return false; }
+        out->physicalDeviceCount = physicalDeviceCount_answered;
+    }
     if (!r.read(&out->physicalDevices[0], sizeof(out->physicalDevices))) { return false; }
     if (!r.read_pod(out->subsetAllocation)) { return false; }
     return true;
@@ -11768,6 +11778,7 @@ inline void serialize_VkPhysicalDeviceProperties(::av::WireWriter& buf, const Vk
     if (!r.read_pod(out->deviceID)) { return false; }
     if (!r.read_pod(out->deviceType)) { return false; }
     if (!r.read(&out->deviceName[0], sizeof(out->deviceName))) { return false; }
+    out->deviceName[sizeof(out->deviceName) - 1u] = '\0';
     if (!r.read(&out->pipelineCacheUUID[0], sizeof(out->pipelineCacheUUID))) { return false; }
     if (!deserialize_VkPhysicalDeviceLimits(r, &out->limits, arena)) { return false; }
     if (!deserialize_VkPhysicalDeviceSparseProperties(r, &out->sparseProperties, arena)) { return false; }
@@ -12181,9 +12192,19 @@ inline void serialize_VkPhysicalDeviceMemoryProperties(::av::WireWriter& buf, co
 
 [[nodiscard]] inline bool deserialize_VkPhysicalDeviceMemoryProperties(::av::WireReader& r, VkPhysicalDeviceMemoryProperties* out, ::av::WireArena& arena) {
     (void)arena;
-    if (!r.read_pod(out->memoryTypeCount)) { return false; }
+    {
+        decltype(out->memoryTypeCount) memoryTypeCount_answered{};
+        if (!r.read_pod(memoryTypeCount_answered)) { return false; }
+        if (memoryTypeCount_answered > VK_MAX_MEMORY_TYPES) { return false; }
+        out->memoryTypeCount = memoryTypeCount_answered;
+    }
     if (!r.read(&out->memoryTypes[0], sizeof(out->memoryTypes))) { return false; }
-    if (!r.read_pod(out->memoryHeapCount)) { return false; }
+    {
+        decltype(out->memoryHeapCount) memoryHeapCount_answered{};
+        if (!r.read_pod(memoryHeapCount_answered)) { return false; }
+        if (memoryHeapCount_answered > VK_MAX_MEMORY_HEAPS) { return false; }
+        out->memoryHeapCount = memoryHeapCount_answered;
+    }
     if (!r.read(&out->memoryHeaps[0], sizeof(out->memoryHeaps))) { return false; }
     return true;
 }
@@ -14481,10 +14502,14 @@ inline void serialize_VkPhysicalDeviceToolProperties(::av::WireWriter& buf, cons
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read(&out->name[0], sizeof(out->name))) { return false; }
+    out->name[sizeof(out->name) - 1u] = '\0';
     if (!r.read(&out->version[0], sizeof(out->version))) { return false; }
+    out->version[sizeof(out->version) - 1u] = '\0';
     if (!r.read_pod(out->purposes)) { return false; }
     if (!r.read(&out->description[0], sizeof(out->description))) { return false; }
+    out->description[sizeof(out->description) - 1u] = '\0';
     if (!r.read(&out->layer[0], sizeof(out->layer))) { return false; }
+    out->layer[sizeof(out->layer) - 1u] = '\0';
     return true;
 }
 
@@ -14943,7 +14968,9 @@ inline void serialize_VkPhysicalDeviceVulkan12Properties(::av::WireWriter& buf, 
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->driverID)) { return false; }
     if (!r.read(&out->driverName[0], sizeof(out->driverName))) { return false; }
+    out->driverName[sizeof(out->driverName) - 1u] = '\0';
     if (!r.read(&out->driverInfo[0], sizeof(out->driverInfo))) { return false; }
+    out->driverInfo[sizeof(out->driverInfo) - 1u] = '\0';
     if (!deserialize_VkConformanceVersion(r, &out->conformanceVersion, arena)) { return false; }
     if (!r.read_pod(out->denormBehaviorIndependence)) { return false; }
     if (!r.read_pod(out->roundingModeIndependence)) { return false; }
@@ -17073,7 +17100,12 @@ inline void serialize_VkQueueFamilyGlobalPriorityProperties(::av::WireWriter& bu
     (void)arena;
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
-    if (!r.read_pod(out->priorityCount)) { return false; }
+    {
+        decltype(out->priorityCount) priorityCount_answered{};
+        if (!r.read_pod(priorityCount_answered)) { return false; }
+        if (priorityCount_answered > VK_MAX_GLOBAL_PRIORITY_SIZE) { return false; }
+        out->priorityCount = priorityCount_answered;
+    }
     if (!r.read(&out->priorities[0], sizeof(out->priorities))) { return false; }
     return true;
 }
@@ -18012,6 +18044,7 @@ inline void serialize_VkRenderPassSubpassFeedbackInfoEXT(::av::WireWriter& buf, 
     (void)arena;
     if (!r.read_pod(out->subpassMergeStatus)) { return false; }
     if (!r.read(&out->description[0], sizeof(out->description))) { return false; }
+    out->description[sizeof(out->description) - 1u] = '\0';
     if (!r.read_pod(out->postMergeIndex)) { return false; }
     return true;
 }

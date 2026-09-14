@@ -250,6 +250,40 @@ def _output_structs(reg: Registry) -> set[str]:
     return found
 
 
+def _fixed_array_bounds(s: Struct) -> dict[str, str]:
+    """Each count that says how much of a fixed array is used, and the array's size.
+
+    ``VkPhysicalDeviceMemoryProperties::memoryTypeCount`` beside
+    ``memoryTypes[VK_MAX_MEMORY_TYPES]`` is the shape: an application walks
+    the array up to the count, so a count past the array's size is a read past
+    the structure, in the guest for a reply and in the host's driver for a
+    request. Found by tests/fuzz/fuzz_generated_client_replies.cpp (T036).
+    """
+    members = {m.name: m for m in s.members}
+    bounds: dict[str, str] = {}
+    for m in s.members:
+        count = members.get(m.len_expr or "")
+        if not m.type.is_fixed_array or count is None or count.type.base != "uint32_t":
+            continue
+        bounds[count.name] = m.type.api_constant or f"{m.type.fixed_dim}u"
+    return bounds
+
+
+def _deserialize_bounded_count(count: StructMember, bound: str) -> list[str]:
+    """A count past its array's size is refused before it replaces the one the
+    destination held, so an application whose call had no error to return
+    still reads a count its array holds."""
+    answered = f"{count.name}_answered"
+    return [
+        "    {",
+        f"        decltype(out->{count.name}) {answered}{{}};",
+        f"        if (!r.read_pod({answered})) {{ return false; }}",
+        f"        if ({answered} > {bound}) {{ return false; }}",
+        f"        out->{count.name} = {answered};",
+        "    }",
+    ]
+
+
 def _deserialize_caller_array(reg: Registry, m: StructMember, count: StructMember) -> list[str]:
     """An output struct's array member, into the caller's array when it gave one.
 
@@ -943,14 +977,24 @@ def _emit_struct_helpers(reg: Registry, s: Struct, outputs: set[str]) -> list[st
     out.append("    (void)arena;")
     arrays = {m.name: count for m, count in caller_arrays(reg, s)} if s.name in outputs else {}
     counts = {count.name for count in arrays.values()}
+    bounds = _fixed_array_bounds(s)
     for m in s.members:
         if m.name in counts:
             out.append(f"    decltype(out->{m.name}) {m.name}_answered{{}};")
             out.append(f"    if (!r.read_pod({m.name}_answered)) {{ return false; }}")
         elif m.name in arrays:
             out.extend(_deserialize_caller_array(reg, m, arrays[m.name]))
+        elif m.name in bounds:
+            out.extend(_deserialize_bounded_count(m, bounds[m.name]))
         else:
             out.extend(_deserialize_member(reg, m))
+        # A name the API promises is terminated inside its array is one an
+        # application hands to strlen; a sender that filled every byte would
+        # have it read past the structure. Terminating the last byte changes
+        # nothing a sender keeping the promise wrote. Found by
+        # tests/fuzz/fuzz_generated_client_replies.cpp (T036).
+        if m.type.is_fixed_array and m.type.base == "char" and _len_components(m) == ["null-terminated"]:
+            out.append(f"    out->{m.name}[sizeof(out->{m.name}) - 1u] = '\\0';")
     out.append("    return true;")
     out.append("}")
     out.append("")

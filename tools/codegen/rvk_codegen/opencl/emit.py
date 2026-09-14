@@ -705,6 +705,16 @@ def _decode_reply(reg: Registry, cmd: Command, out: list[str]) -> None:
         elif p.role == Role.SCALAR_OUT:
             out.append("        uint64_t wire_value = 0;")
             out.append(f"        if (!r.read_varint(wire_value)) {fail}")
+            # A value that fit is no larger than its buffer: an info query
+            # into a buffer succeeds only when the value fits, so a size past
+            # the room on success is the host's word against the caller's
+            # memory - an application reads that many bytes back. A list's
+            # count is not this: it is how many exist, and may exceed the room.
+            # Found by tests/fuzz/fuzz_generated_client_replies.cpp (T036).
+            reported = _reported_output(cmd, p)
+            if reported is not None and reported.role == Role.INFO_VALUE:
+                out.append(f"        if (ret == CL_SUCCESS && {reported.name} != nullptr &&")
+                out.append(f"            wire_value > static_cast<uint64_t>({_client_room(reported)})) {fail}")
             out.append(f"        *{n} = static_cast<{p.type.base}>(wire_value);")
         elif p.role == Role.STRUCT_OUT:
             out.append(f"        if (!r.read({n}, sizeof(*{n}))) {fail}")
