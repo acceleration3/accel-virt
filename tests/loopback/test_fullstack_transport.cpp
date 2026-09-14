@@ -5,6 +5,9 @@
  * control queue the real device core answers; a submission rings the doorbell
  * page the core's worker waits on, and the fence interrupt it raises reaches
  * the driver's ISR and DPC, whose DMA_COMPLETED is what the wait sees. */
+#include "core/miniport/ddi_slot.hpp"
+#include "core/miniport/ddi_table.hpp"
+#include "core/platform/platform.hpp"
 #include "core/support/status.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -19,6 +22,8 @@
 #include <cstdint>
 
 using av::DdiKmt;
+using av::DdiSlot;
+using av::DdiTable;
 using av::FullStackRig;
 using av::GuestConnection;
 using av::KmtTransport;
@@ -200,6 +205,117 @@ TEST(fullstack_transport, a_power_cycle_loses_the_context_and_a_new_one_echoes)
   CHECK_STATUS(after.initialize(), Status::ok);
   CHECK(echoes(after, echo_payload));
   after.teardown();
+  connection.close();
+  CHECK_EQ(rig.device().device().contexts(), 0u); }
+
+/* A timeout reset is a device reset: dxgkrnl's ResetFromTimeout loses every
+ * context, and RestartFromTimeout brings back a device with the host-visible
+ * region made again and room for a new transport. */
+TEST(fullstack_transport, a_timeout_reset_loses_the_context_and_the_restart_runs_a_new_one)
+{ FullStackRig rig;
+  CHECK_EQ(rig.started(), 0);
+  GuestConnection connection(rig.kmt());
+  CHECK_STATUS(connection.open(DdiKmt::adapter_handle), Status::ok);
+  KmtTransport before(connection, SubApi::vulkan, ring_order);
+  CHECK_STATUS(before.initialize(), Status::ok);
+  CHECK(echoes(before, echo_payload));
+
+  const DdiTable &table = rig.driver().table();
+  rig.platform().set_irql(av::Irql::passive);
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *)>(table.routine(DdiSlot::DxgkDdiResetFromTimeout))(
+               rig.fdo().context()),
+           0);
+  CHECK_EQ(rig.device().device().contexts(), 0u);
+  CHECK_EQ(rig.device().device().blobs(), 0u);
+  CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *)>(table.routine(DdiSlot::DxgkDdiRestartFromTimeout))(
+               rig.fdo().context()),
+           0);
+  CHECK_EQ(rig.device().device().blobs(), 1u);
+  CHECK(!echoes(before, echo_payload));
+  before.teardown();
+
+  KmtTransport after(connection, SubApi::vulkan, ring_order);
+  CHECK_STATUS(after.initialize(), Status::ok);
+  CHECK(echoes(after, echo_payload));
+  after.teardown();
+  connection.close(); }
+
+/* pnputil disabling and enabling the adapter under a process that keeps its
+ * device: StopDevice resets the device and StartDevice builds a new one, on
+ * which a new transport runs. */
+TEST(fullstack_transport, a_stop_and_start_under_a_live_transport_leaves_room_for_a_new_one)
+{ FullStackRig rig;
+  CHECK_EQ(rig.started(), 0);
+  GuestConnection connection(rig.kmt());
+  CHECK_STATUS(connection.open(DdiKmt::adapter_handle), Status::ok);
+  KmtTransport before(connection, SubApi::vulkan, ring_order);
+  CHECK_STATUS(before.initialize(), Status::ok);
+  CHECK(echoes(before, echo_payload));
+
+  CHECK_EQ(rig.fdo().stop_device(), 0);
+  CHECK_EQ(rig.device().device().contexts(), 0u);
+  CHECK_EQ(rig.device().device().blobs(), 0u);
+  CHECK_EQ(rig.dxgkrnl().live_mappings(), 0u);
+  CHECK_EQ(rig.fdo().start_device(), 0);
+  CHECK_EQ(rig.device().device().blobs(), 1u);
+  CHECK(!echoes(before, echo_payload));
+  before.teardown();
+
+  KmtTransport after(connection, SubApi::vulkan, ring_order);
+  CHECK_STATUS(after.initialize(), Status::ok);
+  CHECK(echoes(after, echo_payload));
+  after.teardown();
+  connection.close(); }
+
+/* Thousands of batches on the smallest ring, so its head and tail wrap many
+ * times with the driver publishing and the device core consuming. */
+TEST(fullstack_transport, the_smallest_ring_wraps_many_times_and_every_echo_returns)
+{ FullStackRig rig;
+  CHECK_EQ(rig.started(), 0);
+  constexpr std::uint32_t batches = 3000u;
+  GuestConnection connection(rig.kmt());
+  CHECK_STATUS(connection.open(DdiKmt::adapter_handle), Status::ok);
+  KmtTransport transport(connection, SubApi::vulkan, ring_order);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  std::uint32_t returned = 0u;
+  for (std::uint32_t batch = 0u; batch < batches; batch++)
+      returned += echoes(transport, echo_payload ^ batch) ? 1u : 0u;
+  CHECK_EQ(returned, batches);
+  CHECK_EQ(rig.kmt().fences().completed(), batches);
+  transport.teardown();
+  connection.close(); }
+
+/* Five transports interleaved on one device, each on a doorbell and a message
+ * of its own; one torn down gives its doorbell to the next set up. */
+TEST(fullstack_transport, five_transports_interleave_and_a_freed_doorbell_is_reused)
+{ FullStackRig rig;
+  CHECK_EQ(rig.started(), 0);
+  constexpr std::uint32_t transports = 5u;
+  constexpr std::uint32_t rounds = 50u;
+  GuestConnection connection(rig.kmt());
+  CHECK_STATUS(connection.open(DdiKmt::adapter_handle), Status::ok);
+  KmtTransport first(connection, SubApi::vulkan, ring_order);
+  KmtTransport second(connection, SubApi::vulkan, ring_order);
+  KmtTransport third(connection, SubApi::vulkan, ring_order);
+  KmtTransport fourth(connection, SubApi::vulkan, ring_order);
+  KmtTransport fifth(connection, SubApi::vulkan, ring_order);
+  KmtTransport *const all[transports] = {&first, &second, &third, &fourth, &fifth};
+  for (KmtTransport *transport : all) CHECK_STATUS(transport->initialize(), Status::ok);
+  CHECK(rig.platform().logged_line("rvkgpu: rvk context on doorbell 4 message 7 status 0x00000000"));
+  CHECK_EQ(rig.device().device().contexts(), transports);
+  std::uint32_t returned = 0u;
+  for (std::uint32_t round = 0u; round < rounds; round++)
+      for (KmtTransport *transport : all) returned += echoes(*transport, echo_payload ^ round) ? 1u : 0u;
+  CHECK_EQ(returned, transports * rounds);
+
+  third.teardown();
+  KmtTransport reused(connection, SubApi::vulkan, ring_order);
+  CHECK_STATUS(reused.initialize(), Status::ok);
+  CHECK_EQ(rig.device().host().live_doorbells(), transports);
+  CHECK(echoes(reused, echo_payload));
+  CHECK(echoes(second, echo_payload));
+  for (KmtTransport *transport : all) transport->teardown();
+  reused.teardown();
   connection.close();
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
