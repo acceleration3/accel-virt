@@ -3223,3 +3223,28 @@ TEST(adapter_rvk_context, a_host_fault_is_reported_against_the_waiting_submissio
   CHECK_EQ(fixture.dxgkrnl().interrupt(before).FenceId, 7u);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* A TDR resets the device: the host contexts are gone, a process's submissions
+ * are refused rather than queued for a fence nobody will write, and after the
+ * restart the process creates its context again from scratch. */
+TEST(adapter_rvk_context, a_timeout_reset_loses_the_host_context_and_a_new_one_sets_up_after_restart)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
+  CHECK_EQ(nt(fixture.adapter().reset_from_timeout()), success);
+  fixture.forget_control();
+  CHECK_EQ(process.submit(context.hContext, 2u, av::SubmissionDescriptor(2u, 32u, 64u)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().restart_from_timeout()), success);
+  const std::uint32_t requests = fixture.context_requests();
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(fixture.context_requests(), requests);   /* the reset already destroyed it on the host */
+  av::DxgkargCreateContextRecord again = {};
+  CHECK_EQ(process.create_context(again), success);
+  CHECK_EQ(fixture.context_requests(), requests + 2u);
+  CHECK_EQ(process.submit(again.hContext, 3u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(again.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
