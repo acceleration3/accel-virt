@@ -265,6 +265,8 @@ public:
     void                   refuse_the_blob() { refuse_blob_ = true; }
     bool                   created_blob() const { return created_blob_; }
     bool                   mapped_region() const { return mapped_region_; }
+    /* MAP_BLOBs of the region the device answered, across power cycles. */
+    std::uint32_t          region_maps() const { return region_maps_; }
     /* A device that stops answering what it is. */
     void                   ignore_capset() { ignore_capset_ = true; }
     /* CTX_CREATE, CTX_DESTROY, SUBMIT_3D and RESOURCE_UNREF the device answered. */
@@ -296,6 +298,7 @@ private:
             }
             if (asked == map_blob) {
                 fixture->mapped_region_ = true;
+                fixture->region_maps_++;
                 answer.set_map_info(av::GpuResponse::map_cache_cached);
             } else {
                 fixture->created_blob_ = true;
@@ -341,6 +344,7 @@ private:
     bool                  refuse_blob_ = false;
     bool                  created_blob_ = false;
     bool                  mapped_region_ = false;
+    std::uint32_t         region_maps_ = 0u;
     std::uint32_t         context_requests_ = 0u;
     bool                  ignore_capset_ = false;
     Answer                answer_ = Answer::display_info;
@@ -2950,6 +2954,72 @@ TEST(adapter_start_device, a_region_the_device_refuses_leaves_the_adapter_withou
   /* And the segment is not offered: a segment with no storage behind it is one
    * VidMm places allocations in and then writes into nothing. */
   CHECK_EQ(out.NbSegment, 1u); }
+
+namespace {
+
+/* How many segments the adapter reports to VidMm now. */
+std::uint32_t reported_segments(Fixture &fixture)
+{
+    std::uint32_t                  physical_adapter = 0u;
+    av::DxgkQuerySegmentOut4Record out = {};
+    DxgkargQueryAdapterInfoRecord  query = {};
+    query.Type = 11;   /* DXGKQAITYPE_QUERYSEGMENT4 */
+    query.pInputData = &physical_adapter;
+    query.InputDataSize = sizeof physical_adapter;
+    query.pOutputData = &out;
+    query.OutputDataSize = sizeof out;
+    CHECK_EQ(nt(fixture.adapter().query_adapter_info(&query)), success);
+    return out.NbSegment;
+}
+
+}  // namespace
+
+/* A D3 resets the device, and the reset takes the region's blob with it; VidMm
+ * still has the segment it was told about at start, so D0 on the same device
+ * must make the blob again, or every offset of that segment is a BAR with
+ * nothing placed in it. Found by the full-stack rig (tests/loopback). */
+TEST(adapter_set_power_state, d0_on_the_same_device_makes_the_host_visible_region_again)
+{ Fixture fixture;
+  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(fixture.region_maps(), 1u);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  CHECK_EQ(reported_segments(fixture), 2u);   /* what VidMm holds does not change across D3 */
+  fixture.forget_control();
+  fixture.answer_asks();
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK_EQ(fixture.region_maps(), 2u);
+  CHECK_EQ(reported_segments(fixture), 2u); }
+
+/* Another device behind the function is not the one the segment was reported
+ * for, so the region is closed rather than made on it. */
+TEST(adapter_set_power_state, a_device_that_changed_gets_no_host_visible_region)
+{ Fixture fixture;
+  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.forget_control();
+  fixture.answer_capset_of(other_gpu);
+  fixture.answer_asks();
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK_EQ(fixture.region_maps(), 1u);
+  CHECK_EQ(reported_segments(fixture), 1u); }
+
+/* A device that no longer says what it is cannot be given the region either. */
+TEST(adapter_set_power_state, a_device_that_stopped_saying_what_it_is_gets_no_host_visible_region)
+{ Fixture fixture;
+  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.forget_control();
+  fixture.ignore_capset();
+  fixture.answer_asks();
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK_EQ(fixture.region_maps(), 1u);
+  CHECK_EQ(reported_segments(fixture), 1u); }
 
 /* ---- rvk contexts (feature 043) ------------------------------------------------- */
 

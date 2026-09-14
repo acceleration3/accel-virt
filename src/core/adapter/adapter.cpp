@@ -175,7 +175,10 @@ void Adapter::judge_device()
     if (!identity_.known()) return;
     CapsetInfo     capset;
     CapsetExchange exchange(platform_, device_.object());
-    if (exchange.read(capset) != Status::ok) return;
+    if (exchange.read(capset) != Status::ok) {
+        close_region();
+        return;
+    }
     if (identity_.accept(capset)) {
         /* The same device, built again: its region holds nothing of what it
          * held before, so the blob is made again on the device that is there
@@ -183,6 +186,9 @@ void Adapter::judge_device()
         open_region();
         return;
     }
+    /* Nothing runs on a device that changed, and its region is not the one
+     * VidMm was told about. */
+    close_region();
     /* Whatever was queued on the device that is gone will never complete: its
      * owner is told now rather than left waiting for a fence nobody will
      * signal. The display is not this - it is the scanout the transition
@@ -411,7 +417,10 @@ int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)
     if (power_state > power_d0 && power_state <= power_d3) {
         platform_.log("rvkgpu: SetPowerState D3");
         static_cast<void>(transition_.hold(device_.constructed(), scanning_out()));
-        close_region();
+        /* The reset takes the blob with it, but the region stays where it was
+         * found and offered: D0 makes the blob again on the device that comes
+         * back, or closes the region if that device cannot have it. */
+        region_blob_.abandon();
         /* Before the device goes: a vertical blank reported to an adapter that
          * is not powered - or to one on its way out of S3, before dxgkrnl has
          * powered it up - is what bugchecks the guest. */
