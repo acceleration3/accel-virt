@@ -743,7 +743,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.script()
         result = self.run_suite()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("max_outputs=1,hostmem=256M", self.journal_lines()[0])
+        self.assertIn("max_outputs=1,vectors=11,hostmem=256M", self.journal_lines()[0])
         self.assertIn("guest: segments ok: 2 reported, the second 256 MiB of host memory at 0xc0000000",
                       result.stdout)
         # A suite that wrote no pattern is said and skipped, not failed: the
