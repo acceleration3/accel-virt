@@ -13,6 +13,7 @@
 #include "guest/suite/host_visible_scenario.hpp"
 #include "guest/suite/submission_scenario.hpp"
 #include "guest/suite/timeout_scenario.hpp"
+#include "guest/suite/transport_scenario.hpp"
 #include "guest/suite/fence_stress_scenario.hpp"
 #include "guest/suite/vsync_scenario.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -33,6 +34,7 @@ using av::PciIdentity;
 using av::Status;
 using av::SubmissionScenario;
 using av::TimeoutScenario;
+using av::TransportScenario;
 using av::VsyncScenario;
 
 namespace {
@@ -54,6 +56,11 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
 { MockKmt kmt;
   kmt.add_adapter(PciIdentity(0x1414u, 0x008Cu, 0u, 0u), 3100u);
   kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  /* The host's echo executor, answering the transport's command. */
+  std::uint8_t echo[TransportScenario::payload_bytes] = {};
+  for (std::uint32_t i = 0u; i < TransportScenario::payload_bytes; i++)
+      echo[i] = static_cast<std::uint8_t>(TransportScenario::echo_payload >> (8u * i));
+  kmt.answer_waits(echo, sizeof echo);
   GuestReport report;
   GuestSuite suite(kmt, report, 0u);
   CHECK_EQ(suite.run(), 0u);
@@ -93,8 +100,13 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
                     "ok vsync.rate 6000\n"
                     "ok vsync.caught 6000\n"
                     "ok vsync.teardown\n"
+                    "ok transport.adapter\n"
+                    "ok transport.connection\n"
+                    "ok transport.initialize\n"
+                    "ok transport.send_sync\n"
+                    "ok transport.reply 8\n"
                     "ok suite.close_adapter\n"
-                    "rvktest: 36 passed, 0 failed\n") == 0);
+                    "rvktest: 41 passed, 0 failed\n") == 0);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u);
   CHECK(report.invariants_hold()); }
@@ -104,13 +116,14 @@ TEST(guest_suite, without_the_adapter_every_scenario_fails_without_calling_d3dkm
   kmt.add_adapter(PciIdentity(0x1AF4u, 0x1050u, 0x1AF4u, 0x1100u), 1300u);
   GuestReport report;
   GuestSuite suite(kmt, report, 0u);
-  CHECK_EQ(suite.run(), 6u);
+  CHECK_EQ(suite.run(), 7u);
   CHECK(has_line(report, "FAIL adapter.find status=3"));
   CHECK(has_line(report, "FAIL allocation.adapter status=3"));
   CHECK(has_line(report, "FAIL mapping.adapter status=3"));
   CHECK(has_line(report, "FAIL submission.adapter status=3"));
   CHECK(has_line(report, "FAIL host_visible.adapter status=3"));
   CHECK(has_line(report, "FAIL vsync.adapter status=3"));
+  CHECK(has_line(report, "FAIL transport.adapter status=3"));
   CHECK(has_line(report, "ok suite.close_adapter"));
   CHECK_EQ(kmt.calls(MockKmt::Call::create_device), 0u);
   CHECK_EQ(kmt.open_objects(), 0u); }

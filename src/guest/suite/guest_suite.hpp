@@ -11,6 +11,7 @@
 #include "guest/suite/host_visible_scenario.hpp"
 #include "guest/suite/submission_scenario.hpp"
 #include "guest/suite/timeout_scenario.hpp"
+#include "guest/suite/transport_scenario.hpp"
 #include "guest/suite/vsync_scenario.hpp"
 
 #include <stdint.h>
@@ -45,6 +46,7 @@ private:
     SubmissionScenario submission_;
     HostVisibleScenario host_visible_;
     VsyncScenario       vsync_;
+    TransportScenario   transport_;
     FenceStressScenario stress_;
     TimeoutScenario     timeout_;
 };

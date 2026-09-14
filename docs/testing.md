@@ -365,13 +365,18 @@ can leave the guest with no display.
 
 ### As built
 
-- **The suite** is `src/guest/`: `GuestSuite` runs five scenarios - the adapter
+- **The suite** is `src/guest/`: `GuestSuite` runs its scenarios - the adapter
   (found by PCI identity `1af4:1050` subsystem `1af4:5256`, WDDM 3.2), an
   allocation and a refused hostile descriptor, a GPU mapping through a paging
-  queue, a submission awaited through a CPU notification, and the vertical
+  queue, a submission awaited through a CPU notification, the vertical
   blank (`VsyncScenario` waits for a fixed number of blanks on source 0 and
   judges the rate the performance counter measured against the mode's 60 Hz,
-  within 5%) - over the `Kmt` contract. It is portable and held to the same gates as `src/core`: on Linux,
+  within 5%), and the transport round trip (`TransportScenario` opens a
+  `GuestConnection` on the adapter the search found, sets up one Vulkan
+  context's `KmtTransport`, sends the echo command `0x10001` with an 8-byte
+  payload and requires the reply to be exactly that payload, which the guest
+  run's echo executor, `tests/qemu/echo_executor.cpp`, writes back) - over the
+  `Kmt` contract. It is portable and held to the same gates as `src/core`: on Linux,
   `MockKmt` (`tests/harness/guest/`) scripts every call's failure, zero handles
   and hostile enumerations, at 100% branch coverage.
 - **The program** is `src/um/`: `GdiKmt` translates `Kmt` into gdi32's D3DKMT

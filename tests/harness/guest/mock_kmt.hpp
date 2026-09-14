@@ -4,7 +4,8 @@
  * open and every call made with a handle it never gave. Allocations decode
  * their descriptor as the driver does; submissions must land inside a
  * mapping of the submitting context's device; a lock hands out the one view
- * this mock owns, which keeps what is written through it. */
+ * this mock owns, which keeps what is written through it; and a wait on a
+ * transport's context can find a scripted answer in its reply slot. */
 #ifndef AV_MOCK_KMT_HPP
 #define AV_MOCK_KMT_HPP
 
@@ -53,6 +54,8 @@ public:
     static constexpr std::uint32_t max_locks = 4u;
     /* The largest context private data this records for a test to read back. */
     static constexpr std::uint32_t max_private = 64u;
+    /* The largest answer a test scripts for a transport's context. */
+    static constexpr std::uint32_t max_answer = 64u;
 
     MockKmt();
 
@@ -102,6 +105,11 @@ public:
     void          spend_on_wait(std::uint64_t ticks);
     /* Every `nth` blank takes `ticks` longer, as one the waiter missed does. */
     void          slip_every(std::uint32_t nth, std::uint64_t ticks);
+    /* From now on a wait on a context created with an RvkContextRecord finds
+     * `answer` (up to max_answer bytes) in the record's reply slot, for the
+     * fence the last submission named, while the process holds a view of the
+     * slot: how a test plays the device behind a transport it cannot reach. */
+    void          answer_waits(const std::uint8_t *answer, std::uint32_t size);
 
     std::uint32_t calls(Call call) const;
     /* Adapters, devices, allocations, queues, contexts and mappings still open. */
@@ -127,6 +135,7 @@ public:
 
 private:
     enum class Kind : unsigned { none, adapter, device, allocation, queue, context, mapping };
+    /* A context's `address` is the reply allocation its record named, or 0. */
     struct Object {
         Kind          kind;
         std::uint32_t handle;
@@ -146,6 +155,7 @@ private:
     Object       *find(Kind kind, std::uint32_t handle);
     Object       *find_mapping(std::uint64_t address);
     bool          is_locked(std::uint32_t allocation) const;
+    void          write_answer(const Object &context);
     Status        close(Kind kind, std::uint32_t handle);
     Status        misuse();
 
@@ -176,6 +186,9 @@ private:
     std::uint32_t slip_nth_;
     std::uint64_t slip_ticks_;
     std::uint64_t wait_cost_;
+    std::uint8_t  answer_[max_answer];
+    std::uint32_t answer_size_;
+    bool          answering_;
 };
 
 }  // namespace av

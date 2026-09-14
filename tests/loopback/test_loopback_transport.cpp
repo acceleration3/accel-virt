@@ -20,12 +20,19 @@ using av::LoopbackRig;
 using av::Status;
 using av::SubApi;
 
+namespace {
+
+/* The one adapter LoopbackKmt enumerates. */
+constexpr std::uint32_t loopback_adapter = 1u;
+
+}  // namespace
+
 TEST(loopback_transport, a_vulkan_command_crosses_the_transport_and_comes_back)
 { LoopbackRig  rig;
   CHECK(rig.read_capset());
   LoopbackKmt  kmt(rig.platform(), rig.device());
   GuestConnection connection(kmt);
-  CHECK_STATUS(connection.open(), Status::ok);
+  CHECK_STATUS(connection.open(loopback_adapter), Status::ok);
   KmtTransport transport(connection, SubApi::vulkan, 12u);
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK(transport.established());

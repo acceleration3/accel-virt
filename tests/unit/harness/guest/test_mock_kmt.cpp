@@ -5,10 +5,18 @@
 #include "guest/suite/client_descriptor.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
+#include "proto/context/rvk_context_record.hpp"
+#include "proto/context/sub_api.hpp"
+#include "proto/submission/reply_header.hpp"
+#include "proto/submission/submission_descriptor.hpp"
 
 using av::ClientDescriptor;
 using av::MockKmt;
 using av::PciIdentity;
+using av::ReplyHeader;
+using av::RvkContextRecord;
+using av::SubApi;
+using av::SubmissionDescriptor;
 using av::Status;
 
 namespace {
@@ -277,3 +285,160 @@ TEST(mock_kmt, a_virtual_context_records_its_private_data)
   /* No private data at all is a misuse. */
   std::uint32_t bad = 0u;
   CHECK_STATUS(kmt.create_context_virtual(device, nullptr, 0u, bad), Status::invalid_parameter); }
+
+namespace {
+
+/* A device with a mapped command buffer and a locked reply allocation: what a
+ * transport's context stands on. */
+class AnsweringRig {
+public:
+    explicit AnsweringRig(MockKmt &kmt) : kmt_(kmt), device_(0u), buffer_(0u), fence_(0u), reply_(0u), address_(0u), slot_(nullptr)
+    {
+        kmt.add_adapter(rvk, 3200u);
+        std::uint32_t adapters[1] = {};
+        std::uint32_t count = 0u;
+        CHECK_STATUS(kmt.enumerate_adapters(adapters, 1u, count), Status::ok);
+        CHECK_STATUS(kmt.create_device(adapters[0], device_), Status::ok);
+        const ClientDescriptor descriptor(4096u);
+        CHECK_STATUS(kmt.create_allocation(device_, descriptor.bytes(), descriptor.size(), buffer_), Status::ok);
+        CHECK_STATUS(kmt.create_allocation(device_, descriptor.bytes(), descriptor.size(), fence_), Status::ok);
+        CHECK_STATUS(kmt.create_allocation(device_, descriptor.bytes(), descriptor.size(), reply_), Status::ok);
+        std::uint32_t queue = 0u;
+        std::uint32_t fence_object = 0u;
+        CHECK_STATUS(kmt.create_paging_queue(device_, queue, fence_object), Status::ok);
+        std::uint64_t fence = 0u;
+        CHECK_STATUS(kmt.map_gpu_virtual_address(queue, buffer_, 1u, address_, fence), Status::ok);
+        void *view = nullptr;
+        CHECK_STATUS(kmt.lock(device_, reply_, view), Status::ok);
+        slot_ = static_cast<std::uint8_t *>(view);
+    }
+
+    /* A context whose private data names `reply` as its reply slot. */
+    std::uint32_t context_naming(std::uint32_t reply)
+    {
+        std::uint8_t record[RvkContextRecord::encoded_size] = {};
+        CHECK_STATUS(RvkContextRecord(SubApi::vulkan, 12u, buffer_, fence_, reply).encode(record, sizeof record),
+                     Status::ok);
+        std::uint32_t context = 0u;
+        CHECK_STATUS(kmt_.create_context_virtual(device_, record, sizeof record, context), Status::ok);
+        return context;
+    }
+
+    void submit_fence(std::uint32_t context, std::uint64_t fence)
+    {
+        std::uint8_t descriptor[SubmissionDescriptor::encoded_size] = {};
+        CHECK_STATUS(SubmissionDescriptor(fence, 0u, 32u).encode(descriptor, sizeof descriptor), Status::ok);
+        CHECK_STATUS(kmt_.submit(context, address_, 64u, descriptor, sizeof descriptor), Status::ok);
+    }
+
+    std::uint32_t device() const { return device_; }
+    std::uint32_t reply() const { return reply_; }
+    std::uint64_t address() const { return address_; }
+    std::uint8_t *slot() const { return slot_; }
+
+private:
+    MockKmt      &kmt_;
+    std::uint32_t device_;
+    std::uint32_t buffer_;
+    std::uint32_t fence_;
+    std::uint32_t reply_;
+    std::uint64_t address_;
+    std::uint8_t *slot_;
+};
+
+bool slot_is_empty(const std::uint8_t *slot)
+{
+    for (std::uint32_t i = 0u; i < ReplyHeader::encoded_size + MockKmt::max_answer; i++)
+        if (slot[i] != 0u) return false;
+    return true;
+}
+
+}  // namespace
+
+/* The device behind a transport's context writes the scripted answer for the
+ * fence of the last submission, where the record said its reply slot is. */
+TEST(mock_kmt, a_wait_on_a_transport_context_finds_the_scripted_answer)
+{ MockKmt kmt;
+  AnsweringRig rig(kmt);
+  const std::uint32_t context = rig.context_naming(rig.reply());
+  const std::uint8_t answer[4] = {0xA1u, 0xB2u, 0xC3u, 0xD4u};
+  rig.submit_fence(context, 7u);
+  /* Nothing is written until a test scripts an answer. */
+  CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
+  CHECK(slot_is_empty(rig.slot()));
+  kmt.answer_waits(answer, sizeof answer);
+  CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
+  ReplyHeader header;
+  CHECK_STATUS(header.decode(rig.slot(), ReplyHeader::encoded_size), Status::ok);
+  CHECK_EQ(header.fence_id(), 7u);
+  CHECK_EQ(header.size(), 4u);
+  CHECK_EQ(rig.slot()[ReplyHeader::encoded_size], 0xA1u);
+  CHECK_EQ(rig.slot()[ReplyHeader::encoded_size + 3u], 0xD4u);
+  CHECK_EQ(rig.slot()[ReplyHeader::encoded_size + 4u], 0u);
+  /* Every later wait answers again, for the fence submitted since. */
+  rig.submit_fence(context, 8u);
+  CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
+  CHECK_STATUS(header.decode(rig.slot(), ReplyHeader::encoded_size), Status::ok);
+  CHECK_EQ(header.fence_id(), 8u);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
+/* An answer longer than the mock keeps is cut to what it keeps. */
+TEST(mock_kmt, a_scripted_answer_is_cut_to_max_answer)
+{ MockKmt kmt;
+  AnsweringRig rig(kmt);
+  const std::uint32_t context = rig.context_naming(rig.reply());
+  std::uint8_t answer[MockKmt::max_answer + 8u] = {};
+  for (std::uint32_t i = 0u; i < sizeof answer; i++) answer[i] = static_cast<std::uint8_t>(i + 1u);
+  kmt.answer_waits(answer, sizeof answer);
+  rig.submit_fence(context, 1u);
+  CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
+  ReplyHeader header;
+  CHECK_STATUS(header.decode(rig.slot(), ReplyHeader::encoded_size), Status::ok);
+  CHECK_EQ(header.size(), MockKmt::max_answer);
+  CHECK_EQ(rig.slot()[ReplyHeader::encoded_size + MockKmt::max_answer - 1u], MockKmt::max_answer);
+  CHECK_EQ(rig.slot()[ReplyHeader::encoded_size + MockKmt::max_answer], 0u); }
+
+/* No slot is written that the context did not name, the process does not hold a
+ * view of, or for a submission that named no fence. */
+TEST(mock_kmt, only_a_named_locked_slot_and_a_described_submission_are_answered)
+{ const std::uint8_t answer[4] = {1u, 2u, 3u, 4u};
+  { MockKmt kmt;   /* a plain context names no reply slot */
+    AnsweringRig rig(kmt);
+    kmt.answer_waits(answer, sizeof answer);
+    std::uint32_t context = 0u;
+    CHECK_STATUS(kmt.create_context(rig.device(), context), Status::ok);
+    rig.submit_fence(context, 1u);
+    CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
+    CHECK(slot_is_empty(rig.slot())); }
+  { MockKmt kmt;   /* private data that is no record names no reply slot either */
+    AnsweringRig rig(kmt);
+    kmt.answer_waits(answer, sizeof answer);
+    const std::uint8_t garbage[RvkContextRecord::encoded_size] = {0xFFu};
+    std::uint32_t context = 0u;
+    CHECK_STATUS(kmt.create_context_virtual(rig.device(), garbage, sizeof garbage, context), Status::ok);
+    rig.submit_fence(context, 1u);
+    CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
+    CHECK(slot_is_empty(rig.slot())); }
+  { MockKmt kmt;   /* a reply allocation with no view held */
+    AnsweringRig rig(kmt);
+    kmt.answer_waits(answer, sizeof answer);
+    const std::uint32_t context = rig.context_naming(rig.reply());
+    rig.submit_fence(context, 1u);
+    CHECK_STATUS(kmt.unlock(rig.device(), rig.reply()), Status::ok);
+    CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
+    CHECK(slot_is_empty(rig.slot())); }
+  { MockKmt kmt;   /* a submission without a descriptor names no fence */
+    AnsweringRig rig(kmt);
+    kmt.answer_waits(answer, sizeof answer);
+    const std::uint32_t context = rig.context_naming(rig.reply());
+    CHECK_STATUS(kmt.submit(context, rig.address(), 64u, nullptr, 0u), Status::ok);
+    CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
+    CHECK(slot_is_empty(rig.slot())); }
+  { MockKmt kmt;   /* a refused wait answers nothing */
+    AnsweringRig rig(kmt);
+    kmt.answer_waits(answer, sizeof answer);
+    const std::uint32_t context = rig.context_naming(rig.reply());
+    rig.submit_fence(context, 1u);
+    kmt.fail_at(MockKmt::Call::wait_for_context, 1u, MockKmt::invalid_parameter);
+    CHECK(kmt.wait_for_context(rig.device(), context) != Status::ok);
+    CHECK(slot_is_empty(rig.slot())); } }

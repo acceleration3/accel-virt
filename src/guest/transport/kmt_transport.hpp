@@ -66,8 +66,8 @@ private:
     static constexpr uint32_t reply_index = 2u;
     static constexpr uint32_t dma_index   = 3u;
 
-    [[nodiscard]] Status setup_allocation(AllocationKind kind, uint64_t bytes, bool map_gpu, bool do_lock,
-                                          uint32_t &allocation, uint8_t *&view, uint64_t &address);
+    [[nodiscard]] Status setup_allocation(uint32_t index, AllocationKind kind, uint64_t bytes, bool map_gpu,
+                                          bool do_lock, uint8_t *&view, uint64_t &address);
     [[nodiscard]] TransportResult publish(uint32_t command_id, WireWriter &writer, uint8_t flags,
                                           uint64_t &fence);
 
@@ -75,6 +75,9 @@ private:
     SubApi           sub_api_;
     uint8_t          ring_order_;
     uint32_t         allocations_[allocation_count];   /* ring, fence, reply, dma */
+    /* Which of them this process holds a view of: an unlock of one it never
+     * locked is a call D3DKMT refuses. */
+    bool             locked_[allocation_count];
     uint64_t         dma_address_;
     uint32_t         context_;
     TransportRing    ring_;
