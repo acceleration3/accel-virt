@@ -46,7 +46,8 @@ public:
     Status   create_context_virtual(uint32_t device, const uint8_t *private_data, uint32_t size,
                                     uint32_t &context) override;
     Status   destroy_context(uint32_t context) override;
-    Status   submit(uint32_t context, uint64_t commands, uint64_t length) override;
+    Status   submit(uint32_t context, uint64_t commands, uint64_t length, const uint8_t *private_data,
+                    uint32_t private_size) override;
     Status   wait_for_context(uint32_t device, uint32_t context) override;
     Status   wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32_t source) override;
     uint64_t performance_counter(uint64_t &frequency) const override;

@@ -16,7 +16,7 @@ constexpr std::uint32_t io_timeout = 0xC00000B5u;
 
 MockKmt::MockKmt()
     : identities_{}, versions_{}, adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{},
-      zeroing_{}, calls_{}, objects_{}, views_{}, locked_{}, private_{}, private_size_(0u), next_handle_(first_handle),
+      zeroing_{}, calls_{}, objects_{}, views_{}, locked_{}, private_{}, private_size_(0u), submission_{}, submission_size_(0u), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u) {}
 
@@ -61,7 +61,7 @@ std::uint32_t MockKmt::open(Kind kind, std::uint32_t owner, std::uint64_t addres
 {
     for (Object &object : objects_) {
         if (object.kind != Kind::none) continue;
-        object = Object{kind, next_handle_, owner, address, pages};
+        object = Object{kind, next_handle_, owner, address, pages, 0u};
         next_handle_ += handle_step;
         return object.handle;
     }
@@ -157,6 +157,8 @@ Status MockKmt::create_allocation(std::uint32_t device, const std::uint8_t *desc
         return refuse(invalid_parameter);
     if (!zeroed(Call::create_allocation))
         allocation = open(Kind::allocation, device, 0u, (decoded.size() + page_bytes - 1u) / page_bytes);
+    Object *const created = find(Kind::allocation, allocation);
+    if (created != nullptr) created->allocation_kind = static_cast<std::uint16_t>(decoded.kind());
     return succeed();
 }
 
@@ -303,11 +305,14 @@ Status MockKmt::destroy_context(std::uint32_t context)
     return close(Kind::context, context);
 }
 
-Status MockKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length)
+Status MockKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length,
+                       const std::uint8_t *private_data, std::uint32_t private_size)
 {
     if (!begin(Call::submit)) return refuse(last_code_);
     const Object *const submitting = find(Kind::context, context);
-    if (submitting == nullptr) return misuse();
+    if (submitting == nullptr || (private_data == nullptr) != (private_size == 0u)) return misuse();
+    submission_size_ = private_size < max_private ? private_size : max_private;
+    for (std::uint32_t i = 0u; i < submission_size_; i++) submission_[i] = private_data[i];
     const Object *const mapping = find_mapping(commands);
     const Object *const allocation = mapping != nullptr ? find(Kind::allocation, mapping->owner) : nullptr;
     if (length == 0u || allocation == nullptr || allocation->owner != submitting->owner ||
@@ -409,6 +414,21 @@ std::uint8_t *MockKmt::view_of(std::uint32_t allocation)
     for (std::uint32_t slot = 0u; slot < max_locks; slot++)
         if (locked_[slot] == allocation) return views_[slot];
     return nullptr;
+}
+
+const std::uint8_t *MockKmt::last_submission() const { return submission_; }
+std::uint32_t       MockKmt::last_submission_size() const { return submission_size_; }
+
+std::uint16_t MockKmt::allocation_kind(std::uint32_t allocation)
+{
+    const Object *const object = find(Kind::allocation, allocation);
+    return object != nullptr ? object->allocation_kind : 0u;
+}
+
+std::uint64_t MockKmt::allocation_pages(std::uint32_t allocation)
+{
+    const Object *const object = find(Kind::allocation, allocation);
+    return object != nullptr ? object->pages : 0u;
 }
 
 const std::uint8_t *MockKmt::last_private() const { return private_; }

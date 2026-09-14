@@ -96,7 +96,7 @@ Status GuestSession::open_context()
 Status GuestSession::submit(uint64_t commands, uint64_t length)
 {
     if (context_ == 0u) return Status::invalid_state;
-    return kmt_.submit(context_, commands, length);
+    return kmt_.submit(context_, commands, length, nullptr, 0u);
 }
 
 Status GuestSession::wait()

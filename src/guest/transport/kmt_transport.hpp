@@ -18,6 +18,7 @@
 #include "proto/client_transport.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/resources/allocation_kind.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -65,8 +66,8 @@ private:
     static constexpr uint32_t reply_index = 2u;
     static constexpr uint32_t dma_index   = 3u;
 
-    [[nodiscard]] Status setup_allocation(uint64_t bytes, bool map_gpu, bool do_lock, uint32_t &allocation,
-                                          uint8_t *&view, uint64_t &address);
+    [[nodiscard]] Status setup_allocation(AllocationKind kind, uint64_t bytes, bool map_gpu, bool do_lock,
+                                          uint32_t &allocation, uint8_t *&view, uint64_t &address);
     [[nodiscard]] TransportResult publish(uint32_t command_id, WireWriter &writer, uint8_t flags,
                                           uint64_t &fence);
 
@@ -79,7 +80,6 @@ private:
     TransportRing    ring_;
     ReplyReader      reply_;
     TransportFence   fences_;
-    uint8_t         *dma_view_;
     bool             faulted_;
     WireArena        decode_arena_;
     ClientBlobArena  blobs_;

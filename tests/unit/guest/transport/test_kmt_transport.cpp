@@ -12,6 +12,7 @@
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/submission/reply_header.hpp"
+#include "proto/submission/submission_descriptor.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -36,9 +37,11 @@ namespace av {
 
 struct KmtTransportProbe {
     static std::uint32_t ring_allocation(const KmtTransport &t) { return t.allocations_[0]; }
+    static std::uint32_t fence_allocation(const KmtTransport &t) { return t.allocations_[1]; }
     static std::uint32_t reply_allocation(const KmtTransport &t) { return t.allocations_[2]; }
+    static std::uint32_t dma_allocation(const KmtTransport &t) { return t.allocations_[3]; }
     /* An established context with its DMA buffer gone: what it never builds. */
-    static void orphan(KmtTransport &t) { t.context_ = 1u; t.dma_view_ = nullptr; }
+    static void orphan(KmtTransport &t) { t.context_ = 1u; t.dma_address_ = 0u; }
 };
 
 }  // namespace av
@@ -79,6 +82,18 @@ TEST(kmt_transport, initialize_maps_the_ring_and_creates_the_virtual_context)
   CHECK(transport.established());
   /* The record was carried as private data. */
   CHECK_EQ(fixture.kmt().last_private_size(), RvkContextRecord::encoded_size);
+  /* Each allocation is the kind the driver pins in the aperture and publishes;
+   * a ring of order 12 is two pages, its header and data. */
+  CHECK_EQ(fixture.kmt().allocation_kind(KmtTransportProbe::ring_allocation(transport)), 17u);
+  CHECK_EQ(fixture.kmt().allocation_pages(KmtTransportProbe::ring_allocation(transport)), 2u);
+  CHECK_EQ(fixture.kmt().allocation_kind(KmtTransportProbe::fence_allocation(transport)), 18u);
+  CHECK_EQ(fixture.kmt().allocation_kind(KmtTransportProbe::reply_allocation(transport)), 19u);
+  CHECK_EQ(fixture.kmt().allocation_kind(KmtTransportProbe::dma_allocation(transport)), 16u);
+  RvkContextRecord record;
+  CHECK_STATUS(record.decode(fixture.kmt().last_private(), fixture.kmt().last_private_size()), Status::ok);
+  CHECK_EQ(record.ring(), KmtTransportProbe::ring_allocation(transport));
+  CHECK_EQ(record.fence(), KmtTransportProbe::fence_allocation(transport));
+  CHECK_EQ(record.reply(), KmtTransportProbe::reply_allocation(transport));
   /* A second initialize is refused. */
   CHECK_STATUS(transport.initialize(), Status::invalid_state);
   CHECK(transport.invariants_hold());
@@ -102,7 +117,14 @@ TEST(kmt_transport, an_async_command_lands_a_batch_and_a_submission)
   CHECK_EQ(batch.fence_id(), 1u);
   CommandHeader command;
   CHECK_STATUS(command.decode(ring + 32u + BatchHeader::encoded_size, CommandHeader::encoded_size), Status::ok);
-  CHECK_EQ(command.id(), 0x10001u); }
+  CHECK_EQ(command.id(), 0x10001u);
+  /* The submission carried the descriptor of that batch as its private data. */
+  CHECK_EQ(fixture.kmt().last_submission_size(), av::SubmissionDescriptor::encoded_size);
+  av::SubmissionDescriptor submitted;
+  CHECK_STATUS(submitted.decode(fixture.kmt().last_submission(), av::SubmissionDescriptor::encoded_size), Status::ok);
+  CHECK_EQ(submitted.fence_id(), 1u);
+  CHECK_EQ(submitted.begin(), 0u);
+  CHECK_EQ(submitted.end(), 32u);   /* the batch, its command and 4 bytes, padded to 8 */ }
 
 /* A writer that overflowed its slot is refused, not sent. */
 TEST(kmt_transport, an_overflowed_writer_is_refused)

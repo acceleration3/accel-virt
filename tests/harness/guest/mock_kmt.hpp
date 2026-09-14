@@ -78,7 +78,8 @@ public:
     Status        create_context_virtual(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
                                         std::uint32_t &context) override;
     Status        destroy_context(std::uint32_t context) override;
-    Status        submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length) override;
+    Status        submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length,
+                         const std::uint8_t *private_data, std::uint32_t private_size) override;
     Status        wait_for_context(std::uint32_t device, std::uint32_t context) override;
     Status        wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
     std::uint64_t performance_counter(std::uint64_t &frequency) const override;
@@ -116,6 +117,13 @@ public:
     /* The private data of the last create_context_virtual, and its size. */
     const std::uint8_t *last_private() const;
     std::uint32_t       last_private_size() const;
+    /* The private data of the last submit, and its size. */
+    const std::uint8_t *last_submission() const;
+    std::uint32_t       last_submission_size() const;
+    /* The AllocationKind a live allocation was created with, or 0. */
+    std::uint16_t       allocation_kind(std::uint32_t allocation);
+    /* How many pages it was created with, or 0. */
+    std::uint64_t       allocation_pages(std::uint32_t allocation);
 
 private:
     enum class Kind : unsigned { none, adapter, device, allocation, queue, context, mapping };
@@ -125,6 +133,7 @@ private:
         std::uint32_t owner;
         std::uint64_t address;
         std::uint64_t pages;
+        std::uint16_t allocation_kind;
     };
     static constexpr std::uint32_t max_adapters = 8u;
     static constexpr std::uint64_t first_address = 0x100000000ull;
@@ -154,6 +163,8 @@ private:
     std::uint32_t locked_[max_locks];
     std::uint8_t  private_[max_private];
     std::uint32_t private_size_;
+    std::uint8_t  submission_[max_private];
+    std::uint32_t submission_size_;
     std::uint32_t next_handle_;
     std::uint64_t next_address_;
     std::uint64_t next_fence_;

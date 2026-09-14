@@ -190,7 +190,8 @@ Status LoopbackKmt::destroy_context(std::uint32_t context)
     return Status::ok;
 }
 
-Status LoopbackKmt::submit(std::uint32_t context, std::uint64_t, std::uint64_t)
+Status LoopbackKmt::submit(std::uint32_t context, std::uint64_t, std::uint64_t, const std::uint8_t *,
+                           std::uint32_t)
 {
     Context *const found = find_context(context);
     if (found == nullptr) return Status::invalid_parameter;

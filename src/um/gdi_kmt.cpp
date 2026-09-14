@@ -282,11 +282,14 @@ Status GdiKmt::destroy_context(uint32_t context)
     return answer(D3DKMTDestroyContext(&request));
 }
 
-Status GdiKmt::submit(uint32_t context, uint64_t commands, uint64_t length)
+Status GdiKmt::submit(uint32_t context, uint64_t commands, uint64_t length, const uint8_t *private_data,
+                      uint32_t private_size)
 {
     D3DKMT_SUBMITCOMMAND request = {};
     request.Commands = commands;
     request.CommandLength = static_cast<UINT>(length);
+    request.pPrivateDriverData = const_cast<uint8_t *>(private_data);
+    request.PrivateDriverDataSize = private_size;
     request.BroadcastContextCount = 1u;
     request.BroadcastContext[0] = context;
     return answer(D3DKMTSubmitCommand(&request));

@@ -48,9 +48,13 @@ public:
                                             uint32_t &context) = 0;
     virtual Status   destroy_context(uint32_t context) = 0;
     /* On a context made with create_context_virtual, dxgkrnl routes this to the
-     * DxgkDdiSubmitCommandVirtual DDI; `commands` is the DMA buffer VA that
-     * holds the submission descriptor. */
-    virtual Status   submit(uint32_t context, uint64_t commands, uint64_t length) = 0;
+     * DxgkDdiSubmitCommandVirtual DDI; `commands` is the DMA buffer's GPU
+     * virtual address. `private_data` is copied by dxgkrnl and handed to the
+     * driver beside it - where an rvk transport puts its submission
+     * descriptor, since the driver cannot read a GPU address (feature 043).
+     * Null and 0 for none. */
+    virtual Status   submit(uint32_t context, uint64_t commands, uint64_t length, const uint8_t *private_data,
+                            uint32_t private_size) = 0;
     /* Until everything submitted on the context so far has completed. */
     virtual Status   wait_for_context(uint32_t device, uint32_t context) = 0;
     /* Until the next vertical blank of `source` on that device: what DWM's

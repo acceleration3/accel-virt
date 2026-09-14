@@ -19,19 +19,19 @@ constexpr uint64_t page_bytes = 4096u;
 
 KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t ring_order)
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), allocations_{}, dma_address_(0u),
-      context_(0u), ring_(), reply_(), fences_(), dma_view_(nullptr), faulted_(false),
+      context_(0u), ring_(), reply_(), fences_(), faulted_(false),
       decode_arena_(nullptr, 0u), blobs_(),
       staging_{} {}
 
 KmtTransport::~KmtTransport() { teardown(); }
 
-Status KmtTransport::setup_allocation(uint64_t bytes, bool map_gpu, bool do_lock, uint32_t &allocation,
-                                      uint8_t *&view, uint64_t &address)
+Status KmtTransport::setup_allocation(AllocationKind kind, uint64_t bytes, bool map_gpu, bool do_lock,
+                                      uint32_t &allocation, uint8_t *&view, uint64_t &address)
 {
     Kmt           &kmt = connection_.kmt();
     const uint32_t device = connection_.device();
     uint8_t        descriptor[AllocationDescriptor::encoded_size] = {};
-    static_cast<void>(AllocationDescriptor(AllocationKind::client, true, SurfaceLayout(), bytes, ScanoutTarget())
+    static_cast<void>(AllocationDescriptor(kind, true, SurfaceLayout(), bytes, ScanoutTarget())
                           .encode(descriptor, sizeof descriptor));
     const Status created = kmt.create_allocation(device, descriptor, sizeof descriptor, allocation);
     if (created != Status::ok) return created;
@@ -64,21 +64,25 @@ Status KmtTransport::initialize()
     ScopeExit undo([&] { teardown(); });
     uint8_t      *ring_view = nullptr;
     uint8_t      *reply_view = nullptr;
-    uint8_t      *fence_view = nullptr;
+    uint8_t      *unlocked = nullptr;
     uint64_t      unused = 0u;
-    const Status  ring_ready = setup_allocation(RingHeader::encoded_size + (uint64_t{1} << ring_order_), false,
+    /* A ring allocation is a power of two of pages (the driver's rule), and the
+     * header and 2^order bytes of data fit the next one up. */
+    const Status  ring_ready = setup_allocation(AllocationKind::context_ring, uint64_t{2} << ring_order_, false,
                                                 true, allocations_[ring_index], ring_view, unused);
     if (ring_ready != Status::ok) return ring_ready;
     /* The fence page is the device's to write and the driver's to read; the
      * guest only allocates it, so it is not locked here. */
-    const Status fence_ready = setup_allocation(page_bytes, false, false, allocations_[fence_index], fence_view,
-                                                unused);
+    const Status fence_ready = setup_allocation(AllocationKind::fence_page, page_bytes, false, false,
+                                                allocations_[fence_index], unlocked, unused);
     if (fence_ready != Status::ok) return fence_ready;
-    const Status reply_ready = setup_allocation(reply_bytes, false, true, allocations_[reply_index], reply_view,
-                                                unused);
+    const Status reply_ready = setup_allocation(AllocationKind::reply_slot, reply_bytes, false, true,
+                                                allocations_[reply_index], reply_view, unused);
     if (reply_ready != Status::ok) return reply_ready;
-    const Status dma_ready = setup_allocation(dma_bytes, true, true, allocations_[dma_index], dma_view_,
-                                              dma_address_);
+    /* The DMA buffer is only what dxgkrnl insists a submission names; the
+     * descriptor travels as the submission's private data. */
+    const Status dma_ready = setup_allocation(AllocationKind::client, dma_bytes, true, false,
+                                              allocations_[dma_index], unlocked, dma_address_);
     if (dma_ready != Status::ok) return dma_ready;
     const Status ring_bound = ring_.initialize(ring_view, ring_order_);
     if (ring_bound != Status::ok) return ring_bound;
@@ -106,7 +110,7 @@ void KmtTransport::teardown()
     }
     for (uint32_t index = 0u; index < allocation_count; index++) {
         if (allocations_[index] == 0u) continue;
-        /* The fence page was never locked; unlock ignores one it did not lend. */
+        /* The fence page and DMA buffer were never locked; unlock ignores one it did not lend. */
         static_cast<void>(kmt.unlock(device, allocations_[index]));
         if (index == dma_index && dma_address_ != 0u) {
             static_cast<void>(kmt.free_gpu_virtual_address(connection_.adapter(), dma_address_,
@@ -116,7 +120,6 @@ void KmtTransport::teardown()
         static_cast<void>(kmt.destroy_allocation(device, allocations_[index]));
         allocations_[index] = 0u;
     }
-    dma_view_ = nullptr;
     faulted_ = false;
 }
 
@@ -145,9 +148,8 @@ TransportResult KmtTransport::publish(uint32_t command_id, WireWriter &writer, u
     fence = fences_.open();
     uint8_t      descriptor[SubmissionDescriptor::encoded_size] = {};
     static_cast<void>(SubmissionDescriptor(fence, begin, end).encode(descriptor, sizeof descriptor));
-    for (size_t i = 0u; i < sizeof descriptor; i++) dma_view_[i] = descriptor[i];
-    const Status submitted = connection_.kmt().submit(context_, dma_address_,
-                                                      SubmissionDescriptor::encoded_size);
+    const Status submitted = connection_.kmt().submit(context_, dma_address_, SubmissionDescriptor::encoded_size,
+                                                      descriptor, sizeof descriptor);
     if (submitted != Status::ok) {
         faulted_ = true;
         return TransportResult::failed;
@@ -188,7 +190,7 @@ bool KmtTransport::invariants_hold() const
 {
     /* An established context has its DMA buffer mapped; the ring and fence keep
      * their own invariants, tested with them. */
-    return context_ == 0u || dma_view_ != nullptr;
+    return context_ == 0u || dma_address_ != 0u;
 }
 
 }  // namespace av

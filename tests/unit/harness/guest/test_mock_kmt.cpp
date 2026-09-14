@@ -48,7 +48,20 @@ TEST(mock_kmt, opens_and_closes_every_kind_of_object_in_order)
   CHECK_STATUS(kmt.wait_for_fence(device, fence_object, fence), Status::ok);
   std::uint32_t context = 0u;
   CHECK_STATUS(kmt.create_context(device, context), Status::ok);
-  CHECK_STATUS(kmt.submit(context, address + 16u, 64u), Status::ok);
+  CHECK_EQ(kmt.allocation_kind(allocation), 16u);   /* AllocationKind::client */
+  CHECK_EQ(kmt.allocation_pages(allocation), 2u);
+  CHECK_EQ(kmt.allocation_kind(context), 0u);        /* not an allocation */
+  CHECK_EQ(kmt.allocation_pages(context), 0u);
+  CHECK_STATUS(kmt.submit(context, address + 16u, 64u, nullptr, 0u), Status::ok);
+  CHECK_EQ(kmt.last_submission_size(), 0u);
+  const std::uint8_t descriptor_bytes[4] = {1u, 2u, 3u, 4u};
+  CHECK_STATUS(kmt.submit(context, address + 16u, 64u, descriptor_bytes, 4u), Status::ok);
+  CHECK_EQ(kmt.last_submission_size(), 4u);
+  CHECK_EQ(kmt.last_submission()[3], 4u);
+  const std::uint32_t misused = kmt.misuses();
+  CHECK_STATUS(kmt.submit(context, address + 16u, 64u, nullptr, 4u), Status::invalid_parameter);
+  CHECK_STATUS(kmt.submit(context, address + 16u, 64u, descriptor_bytes, 0u), Status::invalid_parameter);
+  CHECK_EQ(kmt.misuses(), misused + 2u);
   CHECK_STATUS(kmt.wait_for_context(device, context), Status::ok);
   CHECK_EQ(kmt.open_objects(), 6u);
   CHECK_STATUS(kmt.destroy_context(context), Status::ok);
@@ -58,7 +71,7 @@ TEST(mock_kmt, opens_and_closes_every_kind_of_object_in_order)
   CHECK_STATUS(kmt.destroy_device(device), Status::ok);
   CHECK_STATUS(kmt.close_adapter(adapters[0]), Status::ok);
   CHECK_EQ(kmt.open_objects(), 0u);
-  CHECK_EQ(kmt.misuses(), 0u);
+  CHECK_EQ(kmt.misuses(), 2u);   /* the two mismatched private data sizes */
   CHECK_EQ(kmt.calls(MockKmt::Call::wait_for_fence), 2u);
   CHECK_EQ(kmt.last_code(), 0u); }
 
@@ -147,9 +160,9 @@ TEST(mock_kmt, refuses_bad_descriptors_pages_fences_and_submissions)
   CHECK_STATUS(kmt.map_gpu_virtual_address(queue, allocation, 1u, address, fence), Status::ok);
   std::uint32_t context = 0u;
   CHECK_STATUS(kmt.create_context(device, context), Status::ok);
-  CHECK_STATUS(kmt.submit(context, address, 0u), Status::invalid_parameter);
-  CHECK_STATUS(kmt.submit(context, address + 4000u, 200u), Status::invalid_parameter);   /* past the mapping */
-  CHECK_STATUS(kmt.submit(context, 0x10u, 16u), Status::invalid_parameter);              /* nothing mapped */
+  CHECK_STATUS(kmt.submit(context, address, 0u, nullptr, 0u), Status::invalid_parameter);
+  CHECK_STATUS(kmt.submit(context, address + 4000u, 200u, nullptr, 0u), Status::invalid_parameter);   /* past the mapping */
+  CHECK_STATUS(kmt.submit(context, 0x10u, 16u, nullptr, 0u), Status::invalid_parameter);              /* nothing mapped */
   CHECK_EQ(kmt.misuses(), 0u); }
 
 TEST(mock_kmt, counts_every_call_naming_a_handle_it_never_gave_or_out_of_order)
@@ -199,7 +212,7 @@ TEST(mock_kmt, counts_every_call_naming_a_handle_it_never_gave_or_out_of_order)
   CHECK_STATUS(kmt.wait_for_fence(device, bogus, 1u), Status::invalid_parameter);
   CHECK_STATUS(kmt.create_context(bogus, handle), Status::invalid_parameter);
   CHECK_STATUS(kmt.destroy_context(bogus), Status::invalid_parameter);
-  CHECK_STATUS(kmt.submit(bogus, address, 16u), Status::invalid_parameter);
+  CHECK_STATUS(kmt.submit(bogus, address, 16u, nullptr, 0u), Status::invalid_parameter);
   CHECK_STATUS(kmt.wait_for_context(bogus, context), Status::invalid_parameter);
   CHECK_STATUS(kmt.wait_for_context(device, bogus), Status::invalid_parameter);
   CHECK_EQ(kmt.misuses(), 26u);
@@ -214,7 +227,7 @@ TEST(mock_kmt, counts_every_call_naming_a_handle_it_never_gave_or_out_of_order)
   CHECK_STATUS(kmt.wait_for_context(other_device, context), Status::invalid_parameter);
   std::uint32_t other_context = 0u;
   CHECK_STATUS(kmt.create_context(other_device, other_context), Status::ok);
-  CHECK_STATUS(kmt.submit(other_context, address, 16u), Status::invalid_parameter);
+  CHECK_STATUS(kmt.submit(other_context, address, 16u, nullptr, 0u), Status::invalid_parameter);
   CHECK_EQ(kmt.misuses(), 30u); }
 
 /* Several allocations can be locked at once, each with its own view, and the
