@@ -190,6 +190,109 @@ def _classify_member(reg: Registry, m: StructMember) -> str:
     return "unknown_ptr"
 
 
+CALLER_ARRAY_KINDS = ("handle_array", "pod_array", "struct_array")
+
+
+def caller_arrays(reg: Registry, s: Struct) -> list[tuple[StructMember, StructMember]]:
+    """The (array, count) member pairs an output struct's caller fills in.
+
+    ``VkPipelineBinaryHandlesInfoKHR::pPipelineBinaries`` and
+    ``VkPhysicalDeviceHostImageCopyProperties::pCopySrcLayouts`` are the shape:
+    the application points the member at its own array and says in the count
+    how many elements it holds - or leaves the pointer null to be told how
+    many there are - and the implementation writes at most that many and
+    overwrites the count with how many it wrote. Only a plain ``uint32_t``
+    count that sizes nothing else is taken: decoding holds the answered count
+    aside until the elements are read, which is only sound for a count that
+    belongs to one array.
+    """
+    members = {m.name: m for m in s.members}
+    pairs: list[tuple[StructMember, StructMember]] = []
+    for m in s.members:
+        if m.type.is_const or _classify_member(reg, m) not in CALLER_ARRAY_KINDS:
+            continue
+        parts = _len_components(m)
+        count = members.get(parts[0]) if len(parts) == 1 else None
+        if count is None or count.type.base != "uint32_t" or count.type.pointer_depth != 0:
+            continue
+        if sum(1 for other in s.members if _len_components(other)[:1] == [count.name]) != 1:
+            continue
+        pairs.append((m, count))
+    return pairs
+
+
+def _output_structs(reg: Registry) -> set[str]:
+    """Every struct a reply decodes into memory the application owns.
+
+    What a command writes through - an output struct, an element of an output
+    array - and, transitively, what those structs hold by value, point at as
+    an array, or chain on. vk.xml's ``returnedonly`` would be the obvious test
+    and is missing from structs that are exactly this, the
+    ``VkPipelineBinaryHandlesInfoKHR`` a create fills among them.
+    """
+    found: set[str] = set()
+    for cmd in reg.commands.values():
+        for index, p in enumerate(cmd.params):
+            kind = classify.classify(reg, p, cmd.params)
+            paired = index > 0 and classify.is_count_array_pair(cmd.params, index - 1)
+            if kind in ("out_struct", "out_struct_array") or (paired and p.type.base in reg.structs):
+                found.add(p.type.base)
+    chain = _chain_nodes(reg)
+    grew = True
+    while grew:
+        grew = False
+        reached = {m.type.base for name in found for m in reg.structs[name].members
+                   if m.type.base in reg.structs and m.name != "pNext"}
+        reached |= {s.name for s in chain if found.intersection(s.extends)}
+        if not reached <= found:
+            found |= reached
+            grew = True
+    return found
+
+
+def _deserialize_caller_array(reg: Registry, m: StructMember, count: StructMember) -> list[str]:
+    """An output struct's array member, into the caller's array when it gave one.
+
+    The server decodes into zeroed storage whose pointer is null, and allocates
+    as it always did. The client decodes into the application's struct: a
+    non-null pointer there is the application's array with the count's room,
+    so the elements go into it - never into an arena the call's return
+    abandons - and an answered count past that room is refused before one is
+    written, the count and array then left as the caller set them.
+    """
+    kind = _classify_member(reg, m)
+    answered = f"{count.name}_answered"
+    if kind == "struct_array":
+        read = f"deserialize_{m.type.base}(r, &{{0}}[i], arena)"
+    elif kind == "handle_array":
+        read = f"deserialize_{m.type.base}(r, {{0}}[i])"
+    else:
+        read = "r.read_pod({0}[i])"
+    return [
+        "    {",
+        "        uint8_t present = 0;",
+        "        if (!r.read_pod(present)) { return false; }",
+        f"        if (out->{m.name} != nullptr) {{",
+        f"            if ({answered} > out->{count.name}) {{ return false; }}",
+        f"            if (present == 0 && {answered} != 0) {{ return false; }}",
+        f"            for (uint32_t i = 0; i < {answered}; ++i) {{",
+        f"                if (!{read.format('out->' + m.name)}) {{ return false; }}",
+        "            }",
+        f"            out->{count.name} = {answered};",
+        "        } else {",
+        f"            out->{count.name} = {answered};",
+        f"            if (present != 0 && {answered} != 0) {{",
+        f"                auto* arr = arena.allocate<{m.type.base}>(static_cast<size_t>({answered}));",
+        f"                for (uint32_t i = 0; i < {answered}; ++i) {{",
+        f"                    if (!{read.format('arr')}) {{ return false; }}",
+        "                }",
+        f"                out->{m.name} = arr;",
+        "            }",
+        "        }",
+        "    }",
+    ]
+
+
 # ---- Per-member emission --------------------------------------------------
 
 
@@ -770,7 +873,7 @@ def _is_address_union(s: Struct) -> bool:
     return s.is_union and {m.name for m in s.members} == {"deviceAddress", "hostAddress"}
 
 
-def _emit_struct_helpers(reg: Registry, s: Struct) -> list[str]:
+def _emit_struct_helpers(reg: Registry, s: Struct, outputs: set[str]) -> list[str]:
     bespoke = BESPOKE_STRUCT_BODIES.get(s.name)
     if bespoke is not None:
         ser_body, de_body = bespoke
@@ -838,8 +941,16 @@ def _emit_struct_helpers(reg: Registry, s: Struct) -> list[str]:
         "::av::WireArena& arena) {"
     )
     out.append("    (void)arena;")
+    arrays = {m.name: count for m, count in caller_arrays(reg, s)} if s.name in outputs else {}
+    counts = {count.name for count in arrays.values()}
     for m in s.members:
-        out.extend(_deserialize_member(reg, m))
+        if m.name in counts:
+            out.append(f"    decltype(out->{m.name}) {m.name}_answered{{}};")
+            out.append(f"    if (!r.read_pod({m.name}_answered)) {{ return false; }}")
+        elif m.name in arrays:
+            out.extend(_deserialize_caller_array(reg, m, arrays[m.name]))
+        else:
+            out.extend(_deserialize_member(reg, m))
     out.append("    return true;")
     out.append("}")
     out.append("")
@@ -1017,8 +1128,9 @@ def emit(reg: Registry, out_dir: Path) -> None:
             "",
         ])
 
+    outputs = _output_structs(reg)
     for n in reg.struct_order:
-        header.extend(_emit_struct_helpers(reg, reg.structs[n]))
+        header.extend(_emit_struct_helpers(reg, reg.structs[n], outputs))
 
     if reg.struct_order:
         header.extend(_emit_pnext_codec(reg))

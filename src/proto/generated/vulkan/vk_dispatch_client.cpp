@@ -5521,6 +5521,8 @@ VkResult rvk_vkCreatePipelineBinariesKHR(::av::ClientTransport& t, VkDevice devi
     (void)pAllocator;  // VkAllocationCallbacks not crossed over the wire
     payload.write_pod(pBinaries->sType);
     serialize_pnext_chain(payload, pBinaries->pNext);
+    payload.write_pod(pBinaries->pipelineBinaryCount);
+    payload.write_pod<uint8_t>(pBinaries->pPipelineBinaries != nullptr ? 1 : 0);
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(::av::vkproto::kCmd_vkCreatePipelineBinariesKHR, payload, r) != ::av::TransportResult::ok) {
         return VK_ERROR_DEVICE_LOST;

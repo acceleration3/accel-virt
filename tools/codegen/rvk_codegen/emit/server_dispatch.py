@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..ir import Command, Registry
-from . import classify
+from . import classify, serialize
 from .common import GENERATED_BANNER, header_guard, write
 
 
@@ -370,6 +370,24 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                     f"reinterpret_cast<VkBaseOutStructure*>(&{p.name}_out), arena)) "
                     f"return false;"
                 )
+            # The room the guest's array has, and an array of it for the
+            # driver to fill; see client_dispatch for why no elements come.
+            for arr, count in serialize.caller_arrays(reg, reg.structs[p.type.base]):
+                if serialize._classify_member(reg, arr) == "struct_array":
+                    raise ValueError(f"{p.type.base}::{arr.name}: a caller's structure array "
+                                     "would need each element's sType and chain sent")
+                room = f"{p.name}_out.{count.name}"
+                present = f"{p.name}_{arr.name}_present"
+                storage = f"{p.name}_{arr.name}_storage"
+                decode_lines.append(f"    if (!r.read_pod({room})) return false;")
+                decode_lines.append(f"    uint8_t {present} = 0;")
+                decode_lines.append(f"    if (!r.read_pod({present})) return false;")
+                decode_lines.append(f"    if ({present} != 0 && {room} != 0) {{")
+                decode_lines.append(
+                    f"        auto* {storage} = arena.allocate<{arr.type.base}>({room});")
+                decode_lines.append(f"        if ({storage} == nullptr) return false;")
+                decode_lines.append(f"        {p.name}_out.{arr.name} = {storage};")
+                decode_lines.append("    }")
             cleared_on_failure.append(f"        {p.type.base} {p.name}_blank{{}};")
             if reg.structs[p.type.base].has_stype:
                 cleared_on_failure.append(f"        {p.name}_blank.sType = {p.name}_out.sType;")

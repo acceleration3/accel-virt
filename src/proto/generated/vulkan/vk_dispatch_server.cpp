@@ -5641,6 +5641,14 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkPipelineBinaryCreateInfoKHR(r, &pCreateInfo_local, arena)) return false;
         if (!r.read_pod(pBinaries_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pBinaries_out), arena)) return false;
+        if (!r.read_pod(pBinaries_out.pipelineBinaryCount)) return false;
+        uint8_t pBinaries_pPipelineBinaries_present = 0;
+        if (!r.read_pod(pBinaries_pPipelineBinaries_present)) return false;
+        if (pBinaries_pPipelineBinaries_present != 0 && pBinaries_out.pipelineBinaryCount != 0) {
+            auto* pBinaries_pPipelineBinaries_storage = arena.allocate<VkPipelineBinaryKHR>(pBinaries_out.pipelineBinaryCount);
+            if (pBinaries_pPipelineBinaries_storage == nullptr) return false;
+            pBinaries_out.pPipelineBinaries = pBinaries_pPipelineBinaries_storage;
+        }
         VkResult result = s.on_vkCreatePipelineBinariesKHR(device, &pCreateInfo_local, nullptr, &pBinaries_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));

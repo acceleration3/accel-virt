@@ -6039,19 +6039,28 @@ inline void serialize_VkDrmFormatModifierPropertiesList2EXT(::av::WireWriter& bu
     (void)arena;
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
-    if (!r.read_pod(out->drmFormatModifierCount)) { return false; }
+    decltype(out->drmFormatModifierCount) drmFormatModifierCount_answered{};
+    if (!r.read_pod(drmFormatModifierCount_answered)) { return false; }
     {
         uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || as_number(out->drmFormatModifierCount) == 0) {
-            out->pDrmFormatModifierProperties = nullptr;
-        } else {
-            auto* arr = arena.allocate<VkDrmFormatModifierProperties2EXT>(static_cast<size_t>(as_number(out->drmFormatModifierCount)));
-            if (arr == nullptr) { return false; }
-            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->drmFormatModifierCount)); ++i) {
-                if (!deserialize_VkDrmFormatModifierProperties2EXT(r, &arr[i], arena)) { return false; }
+        if (out->pDrmFormatModifierProperties != nullptr) {
+            if (drmFormatModifierCount_answered > out->drmFormatModifierCount) { return false; }
+            if (present == 0 && drmFormatModifierCount_answered != 0) { return false; }
+            for (uint32_t i = 0; i < drmFormatModifierCount_answered; ++i) {
+                if (!deserialize_VkDrmFormatModifierProperties2EXT(r, &out->pDrmFormatModifierProperties[i], arena)) { return false; }
             }
-            out->pDrmFormatModifierProperties = arr;
+            out->drmFormatModifierCount = drmFormatModifierCount_answered;
+        } else {
+            out->drmFormatModifierCount = drmFormatModifierCount_answered;
+            if (present != 0 && drmFormatModifierCount_answered != 0) {
+                auto* arr = arena.allocate<VkDrmFormatModifierProperties2EXT>(static_cast<size_t>(drmFormatModifierCount_answered));
+                if (arr == nullptr) { return false; }
+                for (uint32_t i = 0; i < drmFormatModifierCount_answered; ++i) {
+                    if (!deserialize_VkDrmFormatModifierProperties2EXT(r, &arr[i], arena)) { return false; }
+                }
+                out->pDrmFormatModifierProperties = arr;
+            }
         }
     }
     return true;
@@ -6076,19 +6085,28 @@ inline void serialize_VkDrmFormatModifierPropertiesListEXT(::av::WireWriter& buf
     (void)arena;
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
-    if (!r.read_pod(out->drmFormatModifierCount)) { return false; }
+    decltype(out->drmFormatModifierCount) drmFormatModifierCount_answered{};
+    if (!r.read_pod(drmFormatModifierCount_answered)) { return false; }
     {
         uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || as_number(out->drmFormatModifierCount) == 0) {
-            out->pDrmFormatModifierProperties = nullptr;
-        } else {
-            auto* arr = arena.allocate<VkDrmFormatModifierPropertiesEXT>(static_cast<size_t>(as_number(out->drmFormatModifierCount)));
-            if (arr == nullptr) { return false; }
-            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->drmFormatModifierCount)); ++i) {
-                if (!deserialize_VkDrmFormatModifierPropertiesEXT(r, &arr[i], arena)) { return false; }
+        if (out->pDrmFormatModifierProperties != nullptr) {
+            if (drmFormatModifierCount_answered > out->drmFormatModifierCount) { return false; }
+            if (present == 0 && drmFormatModifierCount_answered != 0) { return false; }
+            for (uint32_t i = 0; i < drmFormatModifierCount_answered; ++i) {
+                if (!deserialize_VkDrmFormatModifierPropertiesEXT(r, &out->pDrmFormatModifierProperties[i], arena)) { return false; }
             }
-            out->pDrmFormatModifierProperties = arr;
+            out->drmFormatModifierCount = drmFormatModifierCount_answered;
+        } else {
+            out->drmFormatModifierCount = drmFormatModifierCount_answered;
+            if (present != 0 && drmFormatModifierCount_answered != 0) {
+                auto* arr = arena.allocate<VkDrmFormatModifierPropertiesEXT>(static_cast<size_t>(drmFormatModifierCount_answered));
+                if (arr == nullptr) { return false; }
+                for (uint32_t i = 0; i < drmFormatModifierCount_answered; ++i) {
+                    if (!deserialize_VkDrmFormatModifierPropertiesEXT(r, &arr[i], arena)) { return false; }
+                }
+                out->pDrmFormatModifierProperties = arr;
+            }
         }
     }
     return true;
@@ -10982,34 +11000,52 @@ inline void serialize_VkPhysicalDeviceHostImageCopyProperties(::av::WireWriter& 
     (void)arena;
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
-    if (!r.read_pod(out->copySrcLayoutCount)) { return false; }
+    decltype(out->copySrcLayoutCount) copySrcLayoutCount_answered{};
+    if (!r.read_pod(copySrcLayoutCount_answered)) { return false; }
     {
         uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || as_number(out->copySrcLayoutCount) == 0) {
-            out->pCopySrcLayouts = nullptr;
-        } else {
-            auto* arr = arena.allocate<VkImageLayout>(static_cast<size_t>(as_number(out->copySrcLayoutCount)));
-            if (arr == nullptr) { return false; }
-            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->copySrcLayoutCount)); ++i) {
-                if (!r.read_pod(arr[i])) { return false; }
+        if (out->pCopySrcLayouts != nullptr) {
+            if (copySrcLayoutCount_answered > out->copySrcLayoutCount) { return false; }
+            if (present == 0 && copySrcLayoutCount_answered != 0) { return false; }
+            for (uint32_t i = 0; i < copySrcLayoutCount_answered; ++i) {
+                if (!r.read_pod(out->pCopySrcLayouts[i])) { return false; }
             }
-            out->pCopySrcLayouts = arr;
+            out->copySrcLayoutCount = copySrcLayoutCount_answered;
+        } else {
+            out->copySrcLayoutCount = copySrcLayoutCount_answered;
+            if (present != 0 && copySrcLayoutCount_answered != 0) {
+                auto* arr = arena.allocate<VkImageLayout>(static_cast<size_t>(copySrcLayoutCount_answered));
+                if (arr == nullptr) { return false; }
+                for (uint32_t i = 0; i < copySrcLayoutCount_answered; ++i) {
+                    if (!r.read_pod(arr[i])) { return false; }
+                }
+                out->pCopySrcLayouts = arr;
+            }
         }
     }
-    if (!r.read_pod(out->copyDstLayoutCount)) { return false; }
+    decltype(out->copyDstLayoutCount) copyDstLayoutCount_answered{};
+    if (!r.read_pod(copyDstLayoutCount_answered)) { return false; }
     {
         uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || as_number(out->copyDstLayoutCount) == 0) {
-            out->pCopyDstLayouts = nullptr;
-        } else {
-            auto* arr = arena.allocate<VkImageLayout>(static_cast<size_t>(as_number(out->copyDstLayoutCount)));
-            if (arr == nullptr) { return false; }
-            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->copyDstLayoutCount)); ++i) {
-                if (!r.read_pod(arr[i])) { return false; }
+        if (out->pCopyDstLayouts != nullptr) {
+            if (copyDstLayoutCount_answered > out->copyDstLayoutCount) { return false; }
+            if (present == 0 && copyDstLayoutCount_answered != 0) { return false; }
+            for (uint32_t i = 0; i < copyDstLayoutCount_answered; ++i) {
+                if (!r.read_pod(out->pCopyDstLayouts[i])) { return false; }
             }
-            out->pCopyDstLayouts = arr;
+            out->copyDstLayoutCount = copyDstLayoutCount_answered;
+        } else {
+            out->copyDstLayoutCount = copyDstLayoutCount_answered;
+            if (present != 0 && copyDstLayoutCount_answered != 0) {
+                auto* arr = arena.allocate<VkImageLayout>(static_cast<size_t>(copyDstLayoutCount_answered));
+                if (arr == nullptr) { return false; }
+                for (uint32_t i = 0; i < copyDstLayoutCount_answered; ++i) {
+                    if (!r.read_pod(arr[i])) { return false; }
+                }
+                out->pCopyDstLayouts = arr;
+            }
         }
     }
     if (!r.read(&out->optimalTilingLayoutUUID[0], sizeof(out->optimalTilingLayoutUUID))) { return false; }
@@ -11443,19 +11479,28 @@ inline void serialize_VkPhysicalDeviceLayeredApiPropertiesListKHR(::av::WireWrit
     (void)arena;
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
-    if (!r.read_pod(out->layeredApiCount)) { return false; }
+    decltype(out->layeredApiCount) layeredApiCount_answered{};
+    if (!r.read_pod(layeredApiCount_answered)) { return false; }
     {
         uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || as_number(out->layeredApiCount) == 0) {
-            out->pLayeredApis = nullptr;
-        } else {
-            auto* arr = arena.allocate<VkPhysicalDeviceLayeredApiPropertiesKHR>(static_cast<size_t>(as_number(out->layeredApiCount)));
-            if (arr == nullptr) { return false; }
-            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->layeredApiCount)); ++i) {
-                if (!deserialize_VkPhysicalDeviceLayeredApiPropertiesKHR(r, &arr[i], arena)) { return false; }
+        if (out->pLayeredApis != nullptr) {
+            if (layeredApiCount_answered > out->layeredApiCount) { return false; }
+            if (present == 0 && layeredApiCount_answered != 0) { return false; }
+            for (uint32_t i = 0; i < layeredApiCount_answered; ++i) {
+                if (!deserialize_VkPhysicalDeviceLayeredApiPropertiesKHR(r, &out->pLayeredApis[i], arena)) { return false; }
             }
-            out->pLayeredApis = arr;
+            out->layeredApiCount = layeredApiCount_answered;
+        } else {
+            out->layeredApiCount = layeredApiCount_answered;
+            if (present != 0 && layeredApiCount_answered != 0) {
+                auto* arr = arena.allocate<VkPhysicalDeviceLayeredApiPropertiesKHR>(static_cast<size_t>(layeredApiCount_answered));
+                if (arr == nullptr) { return false; }
+                for (uint32_t i = 0; i < layeredApiCount_answered; ++i) {
+                    if (!deserialize_VkPhysicalDeviceLayeredApiPropertiesKHR(r, &arr[i], arena)) { return false; }
+                }
+                out->pLayeredApis = arr;
+            }
         }
     }
     return true;
@@ -15311,19 +15356,28 @@ inline void serialize_VkPipelineBinaryHandlesInfoKHR(::av::WireWriter& buf, cons
     (void)arena;
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
-    if (!r.read_pod(out->pipelineBinaryCount)) { return false; }
+    decltype(out->pipelineBinaryCount) pipelineBinaryCount_answered{};
+    if (!r.read_pod(pipelineBinaryCount_answered)) { return false; }
     {
         uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
-        if (!present || as_number(out->pipelineBinaryCount) == 0) {
-            out->pPipelineBinaries = nullptr;
-        } else {
-            auto* arr = arena.allocate<VkPipelineBinaryKHR>(static_cast<size_t>(as_number(out->pipelineBinaryCount)));
-            if (arr == nullptr) { return false; }
-            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->pipelineBinaryCount)); ++i) {
-                if (!deserialize_VkPipelineBinaryKHR(r, arr[i])) { return false; }
+        if (out->pPipelineBinaries != nullptr) {
+            if (pipelineBinaryCount_answered > out->pipelineBinaryCount) { return false; }
+            if (present == 0 && pipelineBinaryCount_answered != 0) { return false; }
+            for (uint32_t i = 0; i < pipelineBinaryCount_answered; ++i) {
+                if (!deserialize_VkPipelineBinaryKHR(r, out->pPipelineBinaries[i])) { return false; }
             }
-            out->pPipelineBinaries = arr;
+            out->pipelineBinaryCount = pipelineBinaryCount_answered;
+        } else {
+            out->pipelineBinaryCount = pipelineBinaryCount_answered;
+            if (present != 0 && pipelineBinaryCount_answered != 0) {
+                auto* arr = arena.allocate<VkPipelineBinaryKHR>(static_cast<size_t>(pipelineBinaryCount_answered));
+                if (arr == nullptr) { return false; }
+                for (uint32_t i = 0; i < pipelineBinaryCount_answered; ++i) {
+                    if (!deserialize_VkPipelineBinaryKHR(r, arr[i])) { return false; }
+                }
+                out->pPipelineBinaries = arr;
+            }
         }
     }
     return true;

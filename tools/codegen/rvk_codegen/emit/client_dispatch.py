@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..ir import Command, Registry
-from . import classify
+from . import classify, serialize
 from .common import GENERATED_BANNER, header_guard, write
 
 
@@ -184,6 +184,14 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             if reg.structs[p.type.base].has_stype:
                 lines.append(f"payload.write_pod({p.name}->sType);")
                 lines.append(f"serialize_pnext_chain(payload, {p.name}->pNext);")
+            # An array the caller hangs off the struct goes out as its room
+            # and whether there is one, not its elements: they are what the
+            # call writes, and uninitialised handles are numbers a host
+            # refuses. Without the room the driver is handed a null array and
+            # answers only how many there are.
+            for arr, count in serialize.caller_arrays(reg, reg.structs[p.type.base]):
+                lines.append(f"payload.write_pod({p.name}->{count.name});")
+                lines.append(f"payload.write_pod<uint8_t>({p.name}->{arr.name} != nullptr ? 1 : 0);")
         i += 1
 
     # ---- Send / receive ----
