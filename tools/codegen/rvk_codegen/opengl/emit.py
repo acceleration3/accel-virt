@@ -19,6 +19,7 @@ later command that does wait sees everything before it.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from ..emit.common import write
@@ -731,6 +732,7 @@ def _decode_param(p: Param, out: list[str]) -> None:
         return
     if p.role is Role.OFFSET_ARRAY:
         out.append(f"    const void** {name} = nullptr;")
+        out.append(f"    uint64_t {name}_count = 0;")
         out.append("    {")
         out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
@@ -745,6 +747,7 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("                rvk_offsets[rvk_i] = reinterpret_cast<const void*>(static_cast<uintptr_t>(rvk_v));")
         out.append("            }")
         out.append(f"            {name} = rvk_offsets;")
+        out.append(f"            {name}_count = rvk_n;")
         out.append("        }")
         out.append("    }")
         return
@@ -764,6 +767,8 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append(f"    uint8_t* {name}_storage = nullptr;")
         out.append(f"    size_t {name}_storage_count = 0;")
         out.append(f"    const void* {name} = nullptr;")
+        out.append(f"    uint64_t {name}_room = 0;")
+        out.append(f"    bool {name}_is_offset = false;")
         out.append("    {")
         out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
@@ -772,6 +777,7 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("            if (!rvk_r.read_varint(rvk_offset)) return false;")
         out.append(f"            {name} = reinterpret_cast<const void*>("
                    "static_cast<uintptr_t>(rvk_offset));")
+        out.append(f"            {name}_is_offset = true;")
         out.append("        } else if (rvk_present == 3) {")
         out.append("            uint64_t rvk_bytes = 0;")
         out.append("            uint64_t rvk_at = 0;")
@@ -780,10 +786,12 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("            if (rvk_gl.rvk_blob == nullptr) return false;")
         out.append(f"            {name} = rvk_gl.rvk_blob(rvk_gl.rvk_blob_user, rvk_at, rvk_bytes);")
         out.append(f"            if ({name} == nullptr) return false;")
+        out.append(f"            {name}_room = rvk_bytes;")
         out.append("        } else if (rvk_present != 0) {")
         out.append("            uint64_t rvk_bytes = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
         out.append("            if (rvk_bytes > rvk_r.remaining()) return false;")
+        out.append(f"            {name}_room = rvk_bytes;")
         out.append(f"            {name}_storage_count = static_cast<size_t>(rvk_bytes);")
         out.append(f"            if ({name}_storage_count != 0) {{")
         out.append(f"                {name}_storage = rvk_arena.allocate<uint8_t>("
@@ -860,6 +868,7 @@ def _decode_param(p: Param, out: list[str]) -> None:
         return
     if p.role is Role.STRING_IN:
         out.append(f"    const {p.type.base}* {name} = nullptr;")
+        out.append(f"    uint64_t {name}_length = 0;")
         out.append("    {")
         out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
@@ -875,12 +884,16 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("                !rvk_r.read(rvk_text, static_cast<size_t>(rvk_n))) return false;")
         out.append("            rvk_text[rvk_n] = 0;")
         out.append(f"            {name} = rvk_text;")
+        out.append(f"            {name}_length = rvk_n;")
         out.append("        }")
         out.append("    }")
         return
     if p.role is Role.STRING_ARRAY_IN:
         base = p.type.base
         out.append(f"    const {base}** {name} = nullptr;")
+        out.append(f"    uint64_t {name}_count = 0;")
+        if p.has_lengths:
+            out.append(f"    uint64_t* {name}_lengths = nullptr;")
         out.append("    {")
         out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
@@ -890,6 +903,11 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("            if (rvk_n > rvk_r.remaining()) return false;")
         out.append(f"            auto** rvk_strings = rvk_arena.allocate<{base}*>(static_cast<size_t>(rvk_n) + 1);")
         out.append("            if (rvk_strings == nullptr) return false;")
+        if p.has_lengths:
+            # What each string holds, for the lengths the call is also
+            # handed: the driver reads as far as a length says.
+            out.append(f"            {name}_lengths = rvk_arena.allocate<uint64_t>(static_cast<size_t>(rvk_n) + 1);")
+            out.append(f"            if ({name}_lengths == nullptr) return false;")
         out.append("            for (uint64_t rvk_i = 0; rvk_i < rvk_n; ++rvk_i) {")
         out.append("                uint64_t rvk_len = 0;")
         out.append("                if (!rvk_r.read_varint(rvk_len)) return false;")
@@ -900,36 +918,58 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("                    !rvk_r.read(rvk_text, static_cast<size_t>(rvk_len))) return false;")
         out.append("                rvk_text[rvk_len] = 0;")
         out.append("                rvk_strings[rvk_i] = rvk_text;")
+        if p.has_lengths:
+            out.append(f"                {name}_lengths[rvk_i] = rvk_len;")
         out.append("            }")
         out.append(f"            {name} = const_cast<const {base}**>(rvk_strings);")
+        out.append(f"            {name}_count = rvk_n;")
         out.append("        }")
         out.append("    }")
         return
     if p.role is Role.ARRAY_IN:
+        storage = _storage_type(p)
+        queries = p.length is not None and p.length.kind is LengthKind.PNAME
         out.append(f"    const {p.type.base}* {name} = nullptr;")
+        out.append(f"    uint64_t {name}_room = 0;")
         out.append("    {")
         out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
         out.append("        if (rvk_present == 3) {")
-        out.append("            uint64_t rvk_bytes = 0;")
-        out.append("            uint64_t rvk_at = 0;")
-        out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
-        out.append("            if (!rvk_r.read_varint(rvk_at)) return false;")
-        out.append("            if (rvk_gl.rvk_blob == nullptr) return false;")
-        out.append("            const void* rvk_from ="
-                   " rvk_gl.rvk_blob(rvk_gl.rvk_blob_user, rvk_at, rvk_bytes);")
-        out.append("            if (rvk_from == nullptr) return false;")
-        out.append(f"            {name} = reinterpret_cast<const {p.type.base}*>(rvk_from);")
+        if queries:
+            # A handful of values, which only ever cross inline: see
+            # below for why they have to be copied.
+            out.append("            return false;")
+        else:
+            out.append("            uint64_t rvk_bytes = 0;")
+            out.append("            uint64_t rvk_at = 0;")
+            out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
+            out.append("            if (!rvk_r.read_varint(rvk_at)) return false;")
+            out.append("            if (rvk_gl.rvk_blob == nullptr) return false;")
+            out.append("            const void* rvk_from ="
+                       " rvk_gl.rvk_blob(rvk_gl.rvk_blob_user, rvk_at, rvk_bytes);")
+            out.append("            if (rvk_from == nullptr) return false;")
+            out.append(f"            {name} = reinterpret_cast<const {p.type.base}*>(rvk_from);")
+            out.append(f"            {name}_room = rvk_bytes;")
         out.append("        } else if (rvk_present != 0) {")
         out.append("            uint64_t rvk_bytes = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
         out.append("            if (rvk_bytes > rvk_r.remaining()) return false;")
+        out.append(f"            {name}_room = rvk_bytes;")
         # Room for the run as the element type, so that it is aligned
         # for the one the call reads it as. A block of bytes is aligned
         # for nothing.
-        out.append(f"            auto* rvk_run = rvk_arena.allocate<{_storage_type(p)}>(")
-        out.append(f"                static_cast<size_t>(rvk_bytes) / sizeof({_storage_type(p)}) + 1);")
+        out.append(f"            size_t rvk_elements = static_cast<size_t>(rvk_bytes) / sizeof({storage}) + 1;")
+        if queries:
+            # How many values a parameter enum takes comes from the same
+            # table a query's answer does, and it can be short the same
+            # way: the driver reads as many as the enum really has. So
+            # the run is never shorter than the largest, and zero past
+            # what the guest sent.
+            out.append("            if (rvk_elements < kQuerySlack + 1) rvk_elements = kQuerySlack + 1;")
+        out.append(f"            auto* rvk_run = rvk_arena.allocate<{storage}>(rvk_elements);")
         out.append("            if (rvk_run == nullptr) return false;")
+        if queries:
+            out.append("            for (size_t rvk_z = 0; rvk_z < rvk_elements; ++rvk_z) { rvk_run[rvk_z] = {}; }")
         out.append("            if (rvk_bytes != 0 &&")
         out.append("                !rvk_r.read(rvk_run, static_cast<size_t>(rvk_bytes))) return false;")
         out.append(f"            {name} = reinterpret_cast<const {p.type.base}*>(rvk_run);")
@@ -937,12 +977,10 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("    }")
         return
     if p.role in (Role.ARRAY_OUT, Role.STRING_OUT):
-        # Out of the caller's block, counted in elements of what the
-        # call writes so that it is aligned for that type: a block of
-        # bytes is aligned for nothing. A query too large for the block
-        # is refused, which is the only honest answer — the reply is
-        # measured against what the guest asked for, so a short block
-        # would answer with uninitialised host memory.
+        # Only what the guest asked for is read here. The room the call
+        # writes into is made once every argument is known - see
+        # _output_room - because how much the driver writes is a
+        # question of those arguments and not of the guest's count.
         storage = _storage_type(p)
         out.append(f"    {storage}* {name}_storage = nullptr;")
         out.append(f"    size_t {name}_storage_count = 0;")
@@ -952,57 +990,11 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("    {")
         out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
-        queries = p.role is Role.ARRAY_OUT and p.length is not None and p.length.kind is LengthKind.PNAME
-        if queries:
-            # GL has no state query that takes a null destination: the
-            # driver writes the answer through it, at address zero. A
-            # guest that sends none gets the answer written into the
-            # block and not sent back.
-            out.append("        if (rvk_present == 0) {")
-            out.append(f"            {name}_storage = rvk_arena.allocate<{storage}>(kQuerySlack + 1);")
-            out.append(f"            if ({name}_storage == nullptr) return false;")
-            out.append(f"            {name} = {name}_storage;")
-            out.append("        }")
         out.append("        if (rvk_present != 0) {")
         out.append(f"            {name}_answered = true;")
         out.append("            uint64_t rvk_bytes = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
         out.append(f"            {name}_bytes = static_cast<size_t>(rvk_bytes);")
-        # One element past what was asked for, so a byte count of
-        # SIZE_MAX wraps the element count to zero, the arena answers
-        # null, and the command is refused rather than handed a block
-        # smaller than it was told.
-        if p.length is not None and p.length.kind is LengthKind.PNAME:
-            # A state query's length comes from a table of how many
-            # values each enum answers with, and a table can be short:
-            # GL_MODELVIEW_MATRIX is sixteen floats and was one, and
-            # the host wrote all sixteen into a buffer sized for one.
-            # That is memory the server owns, written past its end from
-            # a missing line in a profile — so the buffer a query writes
-            # into is always big enough for the largest answer GL has,
-            # and only what was asked for is sent back. See kQuerySlack.
-            out.append(f"            {name}_storage_count = "
-                       f"{name}_bytes / sizeof({storage});")
-            out.append(f"            if ({name}_storage_count < kQuerySlack) "
-                       f"{name}_storage_count = kQuerySlack;")
-            out.append(f"            {name}_storage_count += 1;")
-        else:
-            out.append(f"            {name}_storage_count = "
-                       f"{name}_bytes / sizeof({storage}) + 1;")
-        out.append(f"            {name}_storage = rvk_arena.allocate<{storage}>("
-                   f"{name}_storage_count);")
-        out.append(f"            if ({name}_storage == nullptr) return false;")
-        # Cleared, because the driver answers a query with as many
-        # values as the enum really has and the reply sends back as many
-        # as were asked for: the difference would be whatever the block
-        # last held.
-        out.append(f"            for (size_t rvk_z = 0; "
-                   f"rvk_z < {name}_storage_count; ++rvk_z) {{ "
-                   f"{name}_storage[rvk_z] = {{}}; }}")
-        if storage == p.type.base:
-            out.append(f"            {name} = {name}_storage;")
-        else:
-            out.append(f"            {name} = reinterpret_cast<{p.type.base}*>({name}_storage);")
         out.append("        }")
         out.append("    }")
         return
@@ -1064,35 +1056,195 @@ PACK_HELPERS = [
     "    return true;",
     "}",
     "",
-    "// The bytes a pack writes at its pointer: every image before the last",
+    "// Where a transfer's pixel store lives: alignment, skip pixels, skip rows,",
+    "// skip images, row length and image height, for packing and unpacking.",
+    "static constexpr GLenum kPackStore[6] = {0x0D05, 0x0D04, 0x0D03, 0x806B, 0x0D02, 0x806C};",
+    "static constexpr GLenum kUnpackStore[6] = {0x0CF5, 0x0CF4, 0x0CF3, 0x806D, 0x0CF2, 0x806E};",
+    "",
+    "struct StoreLayout {",
+    "    uint64_t alignment, skip_pixels, skip_rows, skip_images, row_length, image_height;",
+    "};",
+    "",
+    "static bool store_layout(const RealGl& rvk_gl, const GLenum* store, StoreLayout& layout) noexcept {",
+    "    if (rvk_gl.glGetIntegerv == nullptr) return false;",
+    "    if (!pack_state(rvk_gl, store[0], layout.alignment) || !pack_state(rvk_gl, store[1], layout.skip_pixels) ||",
+    "        !pack_state(rvk_gl, store[2], layout.skip_rows) || !pack_state(rvk_gl, store[3], layout.skip_images) ||",
+    "        !pack_state(rvk_gl, store[4], layout.row_length) || !pack_state(rvk_gl, store[5], layout.image_height)) return false;",
+    "    const uint64_t alignment = layout.alignment;",
+    "    return alignment != 0 && alignment <= 8 && (alignment & (alignment - 1)) == 0;",
+    "}",
+    "",
+    "// The bytes a transfer reaches at its pointer: every image before the last",
     "// whole, every row before the last padded to the alignment, the last row",
     "// only as far as the extent reaches, all of it after the skips. Skipped",
     "// images count even for a flat image, which GL ignores: a bound a little",
     "// high refuses nothing a real caller sends.",
-    "static bool pack_bytes(const RealGl& rvk_gl, int64_t width, int64_t height, int64_t depth,",
-    "                       GLenum format, GLenum type, uint64_t& bytes) noexcept {",
+    "static bool store_bytes(const RealGl& rvk_gl, const GLenum* store, int64_t width, int64_t height,",
+    "                        int64_t depth, GLenum format, GLenum type, uint64_t& bytes) noexcept {",
     "    bytes = 0;",
     "    if (width < 0 || height < 0 || depth < 0) return false;",
     "    if (width == 0 || height == 0 || depth == 0) return true;",
     "    const uint64_t pixel = pixel_bytes(format, type);",
-    "    if (pixel == 0 || rvk_gl.glGetIntegerv == nullptr) return false;",
-    "    uint64_t alignment = 0, skip_pixels = 0, skip_rows = 0, skip_images = 0, row_length = 0, image_height = 0;",
-    "    if (!pack_state(rvk_gl, 0x0D05, alignment) || !pack_state(rvk_gl, 0x0D04, skip_pixels) ||",
-    "        !pack_state(rvk_gl, 0x0D03, skip_rows) || !pack_state(rvk_gl, 0x806B, skip_images) ||",
-    "        !pack_state(rvk_gl, 0x0D02, row_length) || !pack_state(rvk_gl, 0x806C, image_height)) return false;",
-    "    if (alignment == 0 || alignment > 8 || (alignment & (alignment - 1)) != 0) return false;",
-    "    const uint64_t columns = row_length != 0 ? row_length : static_cast<uint64_t>(width);",
-    "    const uint64_t rows = image_height != 0 ? image_height : static_cast<uint64_t>(height);",
+    "    StoreLayout layout{};",
+    "    if (pixel == 0 || !store_layout(rvk_gl, store, layout)) return false;",
+    "    const uint64_t alignment = layout.alignment;",
+    "    const uint64_t columns = layout.row_length != 0 ? layout.row_length : static_cast<uint64_t>(width);",
+    "    const uint64_t rows = layout.image_height != 0 ? layout.image_height : static_cast<uint64_t>(height);",
     "    uint64_t stride = 0, image = 0, images = 0, lines = 0, last = 0;",
     "    if (__builtin_mul_overflow(columns, pixel, &stride) ||",
     "        __builtin_add_overflow(stride, alignment - 1, &stride)) return false;",
     "    stride -= stride % alignment;",
     "    return !__builtin_mul_overflow(rows, stride, &image) &&",
-    "           !__builtin_mul_overflow(skip_images + static_cast<uint64_t>(depth - 1), image, &images) &&",
-    "           !__builtin_mul_overflow(skip_rows + static_cast<uint64_t>(height - 1), stride, &lines) &&",
-    "           !__builtin_mul_overflow(skip_pixels + static_cast<uint64_t>(width), pixel, &last) &&",
+    "           !__builtin_mul_overflow(layout.skip_images + static_cast<uint64_t>(depth - 1), image, &images) &&",
+    "           !__builtin_mul_overflow(layout.skip_rows + static_cast<uint64_t>(height - 1), stride, &lines) &&",
+    "           !__builtin_mul_overflow(layout.skip_pixels + static_cast<uint64_t>(width), pixel, &last) &&",
     "           !__builtin_add_overflow(images, lines, &bytes) &&",
     "           !__builtin_add_overflow(bytes, last, &bytes);",
+    "}",
+    "",
+    "static bool pack_bytes(const RealGl& rvk_gl, int64_t width, int64_t height, int64_t depth,",
+    "                       GLenum format, GLenum type, uint64_t& bytes) noexcept {",
+    "    return store_bytes(rvk_gl, kPackStore, width, height, depth, format, type, bytes);",
+    "}",
+    "",
+    "// A bitmap - the stipple, glBitmap's - at a bit a pixel, eight to a byte,",
+    "// rows padded to the alignment, after the skips.",
+    "static bool bitmap_bytes(const RealGl& rvk_gl, const GLenum* store, int64_t width, int64_t height,",
+    "                         uint64_t& bytes) noexcept {",
+    "    bytes = 0;",
+    "    if (width < 0 || height < 0) return false;",
+    "    if (width == 0 || height == 0) return true;",
+    "    StoreLayout layout{};",
+    "    if (!store_layout(rvk_gl, store, layout)) return false;",
+    "    const uint64_t columns = layout.row_length != 0 ? layout.row_length : static_cast<uint64_t>(width);",
+    "    uint64_t stride = columns / 8 + (columns % 8 != 0 ? 1 : 0);",
+    "    stride += layout.alignment - 1;",
+    "    stride -= stride % layout.alignment;",
+    "    uint64_t lines = 0, last = layout.skip_pixels + static_cast<uint64_t>(width);",
+    "    last = last / 8 + (last % 8 != 0 ? 1 : 0);",
+    "    return !__builtin_mul_overflow(layout.skip_rows + static_cast<uint64_t>(height - 1), stride, &lines) &&",
+    "           !__builtin_add_overflow(lines, last, &bytes);",
+    "}",
+    "",
+    "// Whether a buffer is bound where `binding` asks. An offset with none",
+    "// bound is a number GL follows as an address in this process.",
+    "static bool buffer_bound(const RealGl& rvk_gl, GLenum binding) noexcept {",
+    "    if (rvk_gl.glGetIntegerv == nullptr) return false;",
+    "    GLint name = 0;",
+    "    rvk_gl.glGetIntegerv(binding, &name);",
+    "    return name != 0;",
+    "}",
+    "",
+    "// Whether a compressed upload starts at its pointer. With the compressed",
+    "// block parameters set, the unpack skips move it whole blocks in, by a",
+    "// size the driver works out from state this server does not size.",
+    "static bool compressed_starts_at_pointer(const RealGl& rvk_gl) noexcept {",
+    "    uint64_t skip_pixels = 0, skip_rows = 0, skip_images = 0;",
+    "    if (rvk_gl.glGetIntegerv == nullptr || !pack_state(rvk_gl, 0x0CF4, skip_pixels) ||",
+    "        !pack_state(rvk_gl, 0x0CF3, skip_rows) || !pack_state(rvk_gl, 0x806D, skip_images)) return false;",
+    "    if (skip_pixels == 0 && skip_rows == 0 && skip_images == 0) return true;",
+    "    uint64_t width = 0, height = 0, depth = 0, size = 0;",
+    "    return pack_state(rvk_gl, 0x9127, width) && pack_state(rvk_gl, 0x9128, height) &&",
+    "           pack_state(rvk_gl, 0x9129, depth) && pack_state(rvk_gl, 0x912A, size) &&",
+    "           width == 0 && height == 0 && depth == 0 && size == 0;",
+    "}",
+    "",
+    "// Every array a draw reads from is in a buffer. An enabled array with no",
+    "// buffer is a client array, read at its pointer - an address in this",
+    "// process that the guest chose - and a buffer deleted from under an array",
+    "// leaves it one too, so this is asked at the draw rather than when the",
+    "// pointer was set.",
+    "static bool arrays_in_buffers(const RealGl& rvk_gl) noexcept {",
+    "    if (rvk_gl.glGetIntegerv == nullptr || rvk_gl.glIsEnabled == nullptr ||",
+    "        rvk_gl.glGetVertexAttribiv == nullptr) return false;",
+    "    static constexpr GLenum kArrays[][2] = {",
+    "        {0x8074, 0x8896}, {0x8075, 0x8897}, {0x8076, 0x8898}, {0x8077, 0x8899},",
+    "        {0x8079, 0x889B}, {0x8457, 0x889D}, {0x845E, 0x889C}};",
+    "    for (const auto& array : kArrays) {",
+    "        if (rvk_gl.glIsEnabled(array[0]) && !buffer_bound(rvk_gl, array[1])) return false;",
+    "    }",
+    "    GLint units = 0;",
+    "    rvk_gl.glGetIntegerv(0x8871, &units);",
+    "    if (units > 0) {",
+    "        if (rvk_gl.glClientActiveTexture == nullptr) return false;",
+    "        GLint active = 0x84C0;",
+    "        rvk_gl.glGetIntegerv(0x84E1, &active);",
+    "        bool bound = true;",
+    "        for (GLint unit = 0; bound && unit < units && unit < kMaxArrays; ++unit) {",
+    "            rvk_gl.glClientActiveTexture(static_cast<GLenum>(0x84C0 + unit));",
+    "            bound = !rvk_gl.glIsEnabled(0x8078) || buffer_bound(rvk_gl, 0x889A);",
+    "        }",
+    "        rvk_gl.glClientActiveTexture(static_cast<GLenum>(active));",
+    "        if (!bound) return false;",
+    "    }",
+    "    GLint attributes = 0;",
+    "    rvk_gl.glGetIntegerv(0x8869, &attributes);",
+    "    for (GLint index = 0; index < attributes && index < kMaxArrays; ++index) {",
+    "        GLint enabled = 0;",
+    "        GLint buffer = 0;",
+    "        rvk_gl.glGetVertexAttribiv(static_cast<GLuint>(index), 0x8622, &enabled);",
+    "        if (enabled == 0) continue;",
+    "        rvk_gl.glGetVertexAttribiv(static_cast<GLuint>(index), 0x889F, &buffer);",
+    "        if (buffer == 0) return false;",
+    "    }",
+    "    return true;",
+    "}",
+    "",
+    "// How many values an evaluator map's points hold per control point, by",
+    "// target, or 0 for a target that is not a map.",
+    "static uint64_t map_dimensions(GLenum target) noexcept {",
+    "    switch (target) {",
+    "        case 0x0D91: case 0x0DB1: case 0x0D93: case 0x0DB3: return 1;  // INDEX, TEXTURE_COORD_1",
+    "        case 0x0D94: case 0x0DB4: return 2;  // TEXTURE_COORD_2",
+    "        case 0x0D92: case 0x0DB2: case 0x0D95: case 0x0DB5: case 0x0D97: case 0x0DB7: return 3;",
+    "        case 0x0D90: case 0x0DB0: case 0x0D96: case 0x0DB6: case 0x0D98: case 0x0DB8: return 4;",
+    "        default: return 0;",
+    "    }",
+    "}",
+    "",
+    "// The values a one- or two-dimensional map reads: the last control point",
+    "// starts a stride per order past the first. A stride below the point's",
+    "// own size is one GL refuses, and is counted as that size.",
+    "static bool map_points(GLenum target, int64_t uorder, int64_t ustride, int64_t vorder,",
+    "                       int64_t vstride, uint64_t& values) noexcept {",
+    "    const uint64_t dimensions = map_dimensions(target);",
+    "    if (dimensions == 0 || uorder < 1 || vorder < 1 || ustride < 0 || vstride < 0) return false;",
+    "    const uint64_t ustep = static_cast<uint64_t>(ustride) > dimensions ? static_cast<uint64_t>(ustride) : dimensions;",
+    "    const uint64_t vstep = static_cast<uint64_t>(vstride) > dimensions ? static_cast<uint64_t>(vstride) : dimensions;",
+    "    uint64_t across = 0, down = 0;",
+    "    return !__builtin_mul_overflow(static_cast<uint64_t>(uorder - 1), ustep, &across) &&",
+    "           !__builtin_mul_overflow(static_cast<uint64_t>(vorder - 1), vstep, &down) &&",
+    "           !__builtin_add_overflow(across, down, &values) &&",
+    "           !__builtin_add_overflow(values, dimensions, &values);",
+    "}",
+    "",
+    "// What glGetMap answers with: the coefficients are every control point,",
+    "// which the map's order says how many of; the rest fit in the slack.",
+    "static bool map_values(const RealGl& rvk_gl, GLenum target, GLenum query, uint64_t& values) noexcept {",
+    "    values = kQuerySlack;",
+    "    const uint64_t dimensions = map_dimensions(target);",
+    "    if (query != 0x0A00 || dimensions == 0) return true;",
+    "    if (rvk_gl.glGetMapiv == nullptr) return false;",
+    "    GLint order[2] = {0, 0};",
+    "    rvk_gl.glGetMapiv(target, 0x0A01, order);",
+    "    const uint64_t u = order[0] > 0 ? static_cast<uint64_t>(order[0]) : 0;",
+    "    const uint64_t v = target >= 0x0DB0 ? (order[1] > 0 ? static_cast<uint64_t>(order[1]) : 0) : 1;",
+    "    uint64_t points = 0;",
+    "    if (__builtin_mul_overflow(u, v, &points) ||",
+    "        __builtin_mul_overflow(points, dimensions, &points)) return false;",
+    "    if (points > values) values = points;",
+    "    return true;",
+    "}",
+    "",
+    "// A pixel map's size is state: GL_PIXEL_MAP_x_TO_y_SIZE sits 0x40 above",
+    "// the map it counts.",
+    "static bool pixel_map_values(const RealGl& rvk_gl, GLenum map, uint64_t& values) noexcept {",
+    "    values = kQuerySlack;",
+    "    if (map < 0x0C70 || map > 0x0C79) return true;",
+    "    uint64_t size = 0;",
+    "    if (rvk_gl.glGetIntegerv == nullptr || !pack_state(rvk_gl, map + 0x40, size)) return false;",
+    "    if (size > values) values = size;",
+    "    return true;",
     "}",
     "",
 ]
@@ -1142,6 +1294,377 @@ def _pixels_out_checks(cmd: Command, p: Param) -> list[str]:
     return out
 
 
+# ---------------------------------------------------------------------
+# What every other pointer the driver is handed may reach
+#
+# The same rule as the reads above, for the rest of the pointers: the
+# driver reads or writes as far as its own arguments and state say, so
+# the server works that out again and holds what crossed to it - an
+# input no shorter, an output never handed less room, no pointer null
+# where GL would follow it, and no offset followed as an address.
+# ---------------------------------------------------------------------
+
+GL_ARRAY_BUFFER_BINDING = "0x8894"
+GL_ELEMENT_ARRAY_BUFFER_BINDING = "0x8895"
+GL_PIXEL_UNPACK_BUFFER_BINDING = "0x88EF"
+GL_DRAW_INDIRECT_BUFFER_BINDING = "0x8F43"
+GL_PARAMETER_BUFFER_BINDING = "0x80EF"
+
+SIGNED_SCALARS = {"GLint", "GLsizei", "GLsizeiptr", "GLintptr", "GLshort", "GLbyte",
+                  "GLint64", "GLint64EXT", "GLsizeiptrARB", "GLintptrARB"}
+
+# Refused whatever their arguments, and why. The driver keeps the pointer
+# past the call, and what it points at is a block the next command reuses.
+REFUSED_COMMANDS = {
+    "glFeedbackBuffer": "feedback mode writes into the buffer at every later draw",
+    "glSelectBuffer": "selection mode writes its hits into the buffer at every later draw",
+}
+
+# The draws that read every enabled vertex array at its pointer.
+DRAWS_FROM_ARRAYS = ("glDrawArrays", "glDrawElements", "glDrawRangeElements", "glMultiDrawArrays",
+                     "glMultiDrawElements", "glArrayElement", "glDrawTransformFeedback")
+
+# The fixed-function arrays arrays_in_buffers asks about. An array it does
+# not know of - a vendor's weights or palette indices, a program's NV
+# attributes - is one a draw would read without that check, so it may not
+# be enabled at all.
+KNOWN_ARRAYS = "array == 0x8074 || array == 0x8075 || array == 0x8076 || array == 0x8077 || " \
+               "array == 0x8078 || array == 0x8079 || array == 0x8457 || array == 0x845E"
+ENABLED_ARRAYS = {
+    "glEnableClientState": KNOWN_ARRAYS,
+    "glEnableClientStateIndexedEXT": "array == 0x8078",
+    "glEnableClientStateiEXT": "array == 0x8078",
+    # Direct state access also names a unit's texture coordinates by unit.
+    "glEnableVertexArrayEXT": KNOWN_ARRAYS + " || (array >= 0x84C0 && array < 0x84C0 + kMaxArrays)",
+}
+
+# Which buffer a void* offset is an offset into, by the parameter's name.
+OFFSET_BINDINGS = {
+    "indices": (GL_ELEMENT_ARRAY_BUFFER_BINDING,),
+    "indirect": (GL_DRAW_INDIRECT_BUFFER_BINDING,),
+    "pointer": (GL_ARRAY_BUFFER_BINDING,),
+}
+
+# An input GL permits to be null, with the condition under which it does.
+NULLABLE_INPUTS = {
+    "glBufferData.data": "true",
+    "glBufferStorage.data": "true",
+    "glNamedBufferData.data": "true",
+    "glNamedBufferStorage.data": "true",
+    "glNamedBufferDataEXT.data": "true",
+    "glNamedBufferStorageEXT.data": "true",
+    "glBindBuffersBase.buffers": "true",
+    "glBindBuffersRange.buffers": "true",
+    "glBindBuffersRange.offsets": "buffers == nullptr",
+    "glBindBuffersRange.sizes": "buffers == nullptr",
+    "glBindTextures.textures": "true",
+    "glBindSamplers.samplers": "true",
+    "glBindImageTextures.textures": "true",
+    "glBindVertexBuffers.buffers": "true",
+    "glBindVertexBuffers.offsets": "buffers == nullptr",
+    "glBindVertexBuffers.strides": "buffers == nullptr",
+    "glVertexArrayVertexBuffers.buffers": "true",
+    "glVertexArrayVertexBuffers.offsets": "buffers == nullptr",
+    "glVertexArrayVertexBuffers.strides": "buffers == nullptr",
+    "glShaderSource.length": "true",
+    "glObjectLabel.label": "true",
+    "glObjectPtrLabel.label": "true",
+}
+
+# Inputs a bound pixel unpack buffer turns into offsets, where null is the
+# start of that buffer rather than nothing.
+UNPACKED_INPUTS = ("glBitmap.bitmap", "glPolygonStipple.mask", "glPixelMapfv.values",
+                   "glPixelMapuiv.values", "glPixelMapusv.values")
+
+# Outputs GL permits to be null, which stay null: a length a string query
+# reports through, and the debug log's columns, whose being null changes
+# what the call does.
+NULLABLE_OUTPUTS = {
+    "glGetAttachedShaders.count", "glGetAttachedObjectsARB.count",
+    "glGetDebugMessageLog.sources", "glGetDebugMessageLog.types", "glGetDebugMessageLog.ids",
+    "glGetDebugMessageLog.severities", "glGetDebugMessageLog.lengths",
+    "glGetDebugMessageLog.messageLog", "glGetObjectLabel.label", "glGetObjectPtrLabel.label",
+}
+
+# An output the driver writes more of than the length the guest sizes it
+# by: its own count of values, which is the one the room must hold.
+SERVER_BOUNDS = {
+    # Every property's values, up to `count`, where the guest counts one
+    # a property.
+    "glGetProgramResourceiv.params": "count",
+    # One value for every sync pname there is; the slack, in case of one
+    # more.
+    "glGetSynciv.values": "kQuerySlack",
+}
+
+# The state queries whose answer is a list as long as another query says.
+LIST_QUERIES = {
+    **{name: (("0x86A3", "rvk_gl.glGetIntegerv(0x86A2, &rvk_listed)"),
+              ("0x87FF", "rvk_gl.glGetIntegerv(0x87FE, &rvk_listed)"),
+              ("0x8DF8", "rvk_gl.glGetIntegerv(0x8DF9, &rvk_listed)"))
+       for name in ("glGetBooleanv", "glGetIntegerv", "glGetInteger64v", "glGetFloatv",
+                    "glGetDoublev")},
+    "glGetActiveSubroutineUniformiv": (
+        ("0x8E4B", "rvk_gl.glGetActiveSubroutineUniformiv(program, shadertype, index, 0x8E4A, &rvk_listed)"),),
+    "glGetActiveAtomicCounterBufferiv": (
+        ("0x92C6", "rvk_gl.glGetActiveAtomicCounterBufferiv(program, bufferIndex, 0x92C5, &rvk_listed)"),),
+}
+
+
+def _scalar(cmd: Command, name: str) -> Param:
+    for q in cmd.params:
+        if q.name == name and q.role is Role.SCALAR:
+            return q
+    raise ValueError(f"{cmd.name}: {name} sizes a pointer but is not a scalar argument")
+
+
+def _not_negative(cmd: Command, names: list[str]) -> list[str]:
+    """A count GL refuses when negative, refused here before it is one."""
+    return [f"    if ({n} < 0) return false;" for n in names
+            if _scalar(cmd, n).type.base in SIGNED_SCALARS]
+
+
+def _listed_values(cmd: Command, p: Param) -> list[str]:
+    n = p.name
+    lines = [f"    uint64_t {n}_elements = kQuerySlack;"]
+    pname = p.length.reads[0]
+    for listed, query in LIST_QUERIES.get(cmd.name, ()):
+        function = query.split("(")[0]
+        lines += [f"    if ({pname} == {listed}) {{",
+                  f"        if ({function} == nullptr) return false;",
+                  "        GLint rvk_listed = 0;",
+                  f"        {query};",
+                  f"        if (rvk_listed > 0 && static_cast<uint64_t>(rvk_listed) > {n}_elements)",
+                  f"            {n}_elements = static_cast<uint64_t>(rvk_listed);",
+                  "    }"]
+    return lines
+
+
+def _helper_elements(cmd: Command, p: Param, text: str) -> list[str]:
+    """A length only the driver's state can say, asked of the driver."""
+    n = p.name
+    if "pname_count(rvk_t," in text or "uniform_value_count(" in text:
+        return [f"    const uint64_t {n}_elements = kQuerySlack;"]
+    if "uniform_block_value_count(" in text:
+        return [f"    uint64_t {n}_elements = kQuerySlack;",
+                "    if (pname == 0x8A43) {",
+                "        if (rvk_gl.glGetActiveUniformBlockiv == nullptr) return false;",
+                "        GLint rvk_listed = 0;",
+                "        rvk_gl.glGetActiveUniformBlockiv(program, uniformBlockIndex, 0x8A42, &rvk_listed);",
+                f"        if (rvk_listed > 0 && static_cast<uint64_t>(rvk_listed) > {n}_elements)",
+                f"            {n}_elements = static_cast<uint64_t>(rvk_listed);",
+                "    }"]
+    if "map_value_count(" in text:
+        return [f"    uint64_t {n}_elements = 0;",
+                f"    if (!map_values(rvk_gl, target, query, {n}_elements)) return false;"]
+    if "pixel_map_size(" in text:
+        return [f"    uint64_t {n}_elements = 0;",
+                f"    if (!pixel_map_values(rvk_gl, map, {n}_elements)) return false;"]
+    if "stipple_bytes(" in text:
+        store = "kPackStore" if "true" in text else "kUnpackStore"
+        return [f"    uint64_t {n}_elements = 0;",
+                f"    if (!bitmap_bytes(rvk_gl, {store}, 32, 32, {n}_elements)) return false;"]
+    if "bitmap_bytes(" in text:
+        return [f"    uint64_t {n}_elements = 0;",
+                f"    if (!bitmap_bytes(rvk_gl, kUnpackStore, width, height, {n}_elements)) return false;"]
+    if "named_program_string_bytes(" in text:
+        return ["    if (rvk_gl.glGetNamedProgramivEXT == nullptr) return false;",
+                "    GLint rvk_program_length = 0;",
+                "    rvk_gl.glGetNamedProgramivEXT(program, target, 0x8627, &rvk_program_length);",
+                f"    const uint64_t {n}_elements = rvk_program_length > 0 ? static_cast<uint64_t>(rvk_program_length) : 0;"]
+    if "map_point_values(" in text and cmd.name.startswith("glMap1"):
+        return [f"    uint64_t {n}_elements = 0;",
+                f"    if (!map_points(target, order, stride, 1, 0, {n}_elements)) return false;"]
+    if "map_point_values(" in text and cmd.name.startswith("glMap2"):
+        return [f"    uint64_t {n}_elements = 0;",
+                f"    if (!map_points(target, uorder, ustride, vorder, vstride, {n}_elements)) return false;"]
+    raise ValueError(f"{cmd.name}.{n}: no server-side length for {text}")
+
+
+def _server_elements(cmd: Command, p: Param) -> list[str]:
+    """Lines defining `<name>_elements`: how many elements the driver reads
+    or writes through the parameter, worked out from its arguments."""
+    n = p.name
+    length = p.length
+    bound = SERVER_BOUNDS.get(f"{cmd.name}.{n}")
+    if bound == "kQuerySlack":
+        return [f"    const uint64_t {n}_elements = kQuerySlack;"]
+    if bound is not None:
+        return _not_negative(cmd, [bound]) + [f"    const uint64_t {n}_elements = static_cast<uint64_t>({bound});"]
+    if length is None:
+        raise ValueError(f"{cmd.name}.{n}: no length")
+    if length.kind is LengthKind.FIXED:
+        return [f"    const uint64_t {n}_elements = {length.count};"]
+    if length.kind is LengthKind.PARAM:
+        return (_not_negative(cmd, [length.text]) +
+                [f"    const uint64_t {n}_elements = static_cast<uint64_t>({length.text});"])
+    if length.kind is LengthKind.PNAME:
+        if p.role is Role.ARRAY_OUT:
+            return _listed_values(cmd, p)
+        return [f"    const uint64_t {n}_elements = ::av::glproto::pname_count({length.reads[0]});"]
+    if length.kind is LengthKind.TYPED_COUNT:
+        count, type_name = length.reads
+        return (_not_negative(cmd, [count]) +
+                [f"    const uint64_t {n}_elements = static_cast<uint64_t>({count}) * "
+                 f"::av::glproto::type_size({type_name});"])
+    if length.kind is LengthKind.EXPR:
+        text = length.text
+        if "rvk_t" in text or "::av::glproto::" in text:
+            return _helper_elements(cmd, p, text)
+        # C over the call's own arguments, evaluated in 64 bits once none
+        # of them is negative.
+        scalars = [q.name for q in cmd.params if q.role is Role.SCALAR]
+        named = [s for s in scalars if re.search(rf"\b{re.escape(s)}\b", text)]
+        for s in named:
+            text = re.sub(rf"\b{re.escape(s)}\b", f"static_cast<int64_t>({s})", text)
+        return (_not_negative(cmd, named) +
+                [f"    const uint64_t {n}_elements = static_cast<uint64_t>({text});"])
+    raise ValueError(f"{cmd.name}.{n}: no server-side length for {length.kind}")
+
+
+def _element_bytes(p: Param) -> str:
+    if p.length is not None and p.length.kind is LengthKind.TYPED_COUNT:
+        return "1"
+    return f"sizeof({_storage_type(p)})"
+
+
+def _array_in_checks(cmd: Command, p: Param) -> list[str]:
+    n = p.name
+    key = f"{cmd.name}.{n}"
+    nullable = NULLABLE_INPUTS.get(key, "false")
+    if key in UNPACKED_INPUTS or "Compressed" in cmd.name:
+        nullable = f"buffer_bound(rvk_gl, {GL_PIXEL_UNPACK_BUFFER_BINDING})"
+        if "Compressed" in cmd.name and "Sub" not in cmd.name:
+            nullable = "true"
+    out = _server_elements(cmd, p)
+    out += [f"    uint64_t {n}_needed = 0;",
+            f"    if (__builtin_mul_overflow({n}_elements, static_cast<uint64_t>({_element_bytes(p)}), &{n}_needed)) return false;",
+            f"    if ({n} == nullptr ? ({n}_needed != 0 && !({nullable})) : {n}_room < {n}_needed) return false;"]
+    if "Compressed" in cmd.name:
+        out.append("    if (!compressed_starts_at_pointer(rvk_gl)) return false;")
+    return out
+
+
+def _pixels_in_checks(cmd: Command, p: Param) -> list[str]:
+    n = p.name
+    names = {q.name for q in cmd.params}
+    unpack = f"buffer_bound(rvk_gl, {GL_PIXEL_UNPACK_BUFFER_BINDING})"
+    clears = cmd.name.startswith("glClear")
+    specifies = re.match(r"^gl(Compressed)?(Tex|Texture|MultiTex)Image[123]D(EXT)?$", cmd.name)
+    null_ok = "true" if clears or specifies else unpack
+    out = [f"    if ({n}_is_offset) {{",
+           f"        if ({'true' if clears else '!' + unpack}) return false;",
+           f"    }} else if ({n} == nullptr) {{",
+           f"        if (!({null_ok})) return false;",
+           "    } else {",
+           f"        uint64_t {n}_needed = 0;"]
+    if clears:
+        # One element, of the format and type given: the pixel store
+        # does not apply to a clear.
+        out.append(f"        if (({n}_needed = pixel_bytes(format, type)) == 0 || {n}_room < {n}_needed) return false;")
+    elif p.length is not None and p.length.kind is LengthKind.PARAM:
+        size = p.length.text
+        out.append(f"        if ({size} < 0 || !compressed_starts_at_pointer(rvk_gl)) return false;")
+        out.append(f"        {n}_needed = static_cast<uint64_t>({size});")
+        out.append(f"        if ({n}_room < {n}_needed) return false;")
+    elif {"format", "type", "width"} <= names:
+        height = "height" if "height" in names else "1"
+        depth = "depth" if "depth" in names else "1"
+        out.append(f"        if (!store_bytes(rvk_gl, kUnpackStore, width, {height}, {depth}, format, type, {n}_needed) ||")
+        out.append(f"            {n}_room < {n}_needed) return false;")
+    else:
+        raise ValueError(f"{cmd.name}.{n}: pixels in with no size the server can check")
+    out.append("    }")
+    return out
+
+
+def _refusals(cmd: Command) -> list[str]:
+    """Between decoding a command and making room for its answers: every
+    pointer it carries held to what the driver will do with it."""
+    out: list[str] = []
+    names = {q.name for q in cmd.params}
+    late: list[str] = []
+    for p in cmd.params:
+        n = p.name
+        if p.role is Role.ARRAY_IN:
+            out += _array_in_checks(cmd, p)
+        elif p.role is Role.PIXELS_IN:
+            out += _pixels_in_checks(cmd, p)
+        elif p.role is Role.STRING_IN:
+            if NULLABLE_INPUTS.get(f"{cmd.name}.{n}") is None:
+                out.append(f"    if ({n} == nullptr) return false;")
+            if any(q.name == "length" and q.role is Role.SCALAR and q.type.base in SIGNED_SCALARS
+                   for q in cmd.params):
+                # A length that is not negative is how far the driver
+                # reads, terminator or not.
+                out.append(f"    if ({n} != nullptr && length >= 0 && static_cast<uint64_t>(length) > {n}_length) return false;")
+            else:
+                out.append(f"    (void){n}_length;")
+        elif p.role is Role.STRING_ARRAY_IN:
+            count = p.length.text
+            out += _not_negative(cmd, [count])
+            out.append(f"    if ({n} == nullptr ? {count} != 0 : {n}_count < static_cast<uint64_t>({count})) return false;")
+            if p.has_lengths:
+                late += ["    if (length != nullptr) {",
+                         f"        for (uint64_t rvk_i = 0; rvk_i < static_cast<uint64_t>({count}); ++rvk_i) {{",
+                         f"            if (length[rvk_i] >= 0 && static_cast<uint64_t>(length[rvk_i]) > {n}_lengths[rvk_i]) return false;",
+                         "        }",
+                         "    }"]
+        elif p.role is Role.OFFSET_ARRAY:
+            count = p.length.text
+            out += _not_negative(cmd, [count])
+            late += [f"    if ({n} == nullptr ? {count} != 0 : {n}_count < static_cast<uint64_t>({count})) return false;",
+                     f"    if ({count} != 0 && !buffer_bound(rvk_gl, {GL_ELEMENT_ARRAY_BUFFER_BINDING})) return false;"]
+        elif p.role is Role.BUFFER_OFFSET:
+            if n not in OFFSET_BINDINGS:
+                raise ValueError(f"{cmd.name}.{n}: an offset into no buffer this server knows")
+            # A null array pointer with no buffer is an array with nowhere to
+            # read from, which GL takes, and which arrays_in_buffers refuses
+            # to draw from; a null index or indirect pointer is read at once.
+            unbound = "pointer != nullptr && " if n == "pointer" else ""
+            for binding in OFFSET_BINDINGS[n]:
+                out.append(f"    if ({unbound}!buffer_bound(rvk_gl, {binding})) return false;")
+            if cmd.name.endswith("IndirectCount"):
+                out.append(f"    if (!buffer_bound(rvk_gl, {GL_PARAMETER_BUFFER_BINDING})) return false;")
+    if cmd.name.startswith(DRAWS_FROM_ARRAYS):
+        late.append("    if (!arrays_in_buffers(rvk_gl)) return false;")
+    if cmd.name in ENABLED_ARRAYS:
+        _scalar(cmd, "array")
+        late.append(f"    if (!({ENABLED_ARRAYS[cmd.name]})) return false;")
+    return out + late
+
+
+def _output_room(cmd: Command, p: Param) -> list[str]:
+    """The room an output is written into: as much as the guest asked for,
+    and never less than the driver will write. A guest that asked for none
+    of an output GL will not take null for has it written into the block
+    and not sent back."""
+    n = p.name
+    storage = _storage_type(p)
+    nullable = f"{cmd.name}.{n}" in NULLABLE_OUTPUTS or (
+        n == "length" and p.role is Role.ARRAY_OUT and p.length is not None
+        and p.length.kind is LengthKind.FIXED)
+    out = _server_elements(cmd, p)
+    guard = f"{n}_answered" if nullable else "true"
+    out += [f"    if ({guard}) {{",
+            f"        uint64_t rvk_room = static_cast<uint64_t>({n}_bytes / sizeof({storage}));",
+            f"        if (rvk_room < {n}_elements) rvk_room = {n}_elements;",
+            f"        if (rvk_room >= SIZE_MAX / sizeof({storage})) return false;",
+            f"        {n}_storage_count = static_cast<size_t>(rvk_room) + 1;",
+            f"        {n}_storage = rvk_arena.allocate<{storage}>({n}_storage_count);",
+            f"        if ({n}_storage == nullptr) return false;",
+            # Cleared, because the driver may answer with fewer values than
+            # were asked for and the reply sends back as many as were: the
+            # difference would be whatever the block last held.
+            f"        for (size_t rvk_z = 0; rvk_z < {n}_storage_count; ++rvk_z) {{ {n}_storage[rvk_z] = {{}}; }}"]
+    if storage == p.type.base:
+        out.append(f"        {n} = {n}_storage;")
+    else:
+        out.append(f"        {n} = reinterpret_cast<{p.type.base}*>({n}_storage);")
+    out.append("    }")
+    return out
+
+
 def emit_server(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
          "#include <stddef.h>", "#include <stdint.h>\n",
@@ -1171,18 +1694,31 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
          "// buffer is never smaller than this, whatever the guest asked",
          "// for, because the host writes as many values as the enum",
          "// really has and a short buffer is a heap the server owns.",
-         "static constexpr size_t kQuerySlack = 32;\n"] + PACK_HELPERS
+         "static constexpr size_t kQuerySlack = 32;\n",
+         "// More texture units or vertex attributes than any driver has: a",
+         "// bound on the loops that ask about each, whatever a driver answers.",
+         "static constexpr GLint kMaxArrays = 64;\n"] + PACK_HELPERS
     for cmd in reg.commands.values():
         c.append(f"static bool decode_{cmd.name}(const RealGl& rvk_gl, "
                  "::av::WireReader& rvk_r, "
                  "::av::WireWriter& rvk_reply, "
                  "::av::WireArena& rvk_arena) {")
         c.append("    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;")
+        if cmd.name in REFUSED_COMMANDS:
+            c.append(f"    (void)rvk_gl;  // Refused: {REFUSED_COMMANDS[cmd.name]}.")
+            c.append("    return false;")
+            c.append("}")
+            c.append("")
+            continue
         if cmd.mints_handle:
             c.append("    uint64_t rvk_token = 0;")
             c.append("    if (!rvk_r.read_pod(rvk_token)) return false;")
         for p in cmd.params:
             _decode_param(p, c)
+        c.extend(_refusals(cmd))
+        for p in cmd.params:
+            if p.role in (Role.ARRAY_OUT, Role.STRING_OUT):
+                c.extend(_output_room(cmd, p))
         for p in cmd.params:
             if p.role is Role.PIXELS_OUT:
                 c.extend(_pixels_out_checks(cmd, p))

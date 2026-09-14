@@ -3675,50 +3675,20 @@ void rvk_glDrawElementsInstanced(::av::ClientTransport& rvk_t, GLenum mode, GLsi
     (void)rvk_t.send_async(kCmd_glDrawElementsInstanced, rvk_b);
 }
 
-void rvk_glDrawElementsInstancedBaseInstance(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLuint baseinstance) {
+void rvk_glDrawElementsInstancedBaseInstance(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices, GLsizei instancecount, GLuint baseinstance) {
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(count));
     rvk_b.write_varint(static_cast<uint64_t>(type));
-    size_t indices_want = 0;
-    if (indices != nullptr) indices_want = (static_cast<size_t>(count) * sizeof(uint8_t));
-    ::av::ClientBlobArena::Lease indices_lease{};
-    bool indices_via_blob = false;
-    if (indices != nullptr &&
-        indices_want >= ::av::glproto::kPixelBlobFloor) {
-        auto& rvk_blobs = rvk_t.blobs();
-        if (rvk_blobs.ready()) {
-            indices_lease = rvk_blobs.take(indices_want);
-            if (indices_lease.ok()) {
-                __builtin_memcpy(indices_lease.data, indices, indices_want);
-                indices_via_blob = true;
-            }
-        }
-    }
-    rvk_b.write_pod<uint8_t>(indices == nullptr ? 0 : (indices_via_blob ? 3 : 1));
-    if (indices_via_blob) {
-        rvk_b.write_varint(static_cast<uint64_t>(indices_want));
-        rvk_b.write_varint(static_cast<uint64_t>(indices_lease.offset));
-    } else if (indices != nullptr) {
-        rvk_b.write_varint(static_cast<uint64_t>(indices_want));
-        if (indices_want != 0) rvk_b.write(indices, indices_want);
-    }
+    rvk_b.write_pod<uint64_t>(indices);
     rvk_b.write_varint(static_cast<uint64_t>(instancecount));
     rvk_b.write_varint(static_cast<uint64_t>(baseinstance));
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glDrawElementsInstancedBaseInstance",
                                        rvk_b.offset());
-        if (indices_via_blob) {
-            rvk_t.blobs()
-                .give_back(indices_lease);
-        }
         return;
     }
     (void)rvk_t.send_async(kCmd_glDrawElementsInstancedBaseInstance, rvk_b);
-    if (indices_via_blob) {
-        rvk_t.blobs()
-            .retire_after_last(indices_lease);
-    }
 }
 
 void rvk_glDrawElementsInstancedBaseVertex(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices, GLsizei instancecount, GLint basevertex) {
@@ -3737,51 +3707,21 @@ void rvk_glDrawElementsInstancedBaseVertex(::av::ClientTransport& rvk_t, GLenum 
     (void)rvk_t.send_async(kCmd_glDrawElementsInstancedBaseVertex, rvk_b);
 }
 
-void rvk_glDrawElementsInstancedBaseVertexBaseInstance(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex, GLuint baseinstance) {
+void rvk_glDrawElementsInstancedBaseVertexBaseInstance(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices, GLsizei instancecount, GLint basevertex, GLuint baseinstance) {
     ::av::WireWriter rvk_b = rvk_t.request_writer();
     rvk_b.write_varint(static_cast<uint64_t>(mode));
     rvk_b.write_varint(static_cast<uint64_t>(count));
     rvk_b.write_varint(static_cast<uint64_t>(type));
-    size_t indices_want = 0;
-    if (indices != nullptr) indices_want = (static_cast<size_t>(count) * sizeof(uint8_t));
-    ::av::ClientBlobArena::Lease indices_lease{};
-    bool indices_via_blob = false;
-    if (indices != nullptr &&
-        indices_want >= ::av::glproto::kPixelBlobFloor) {
-        auto& rvk_blobs = rvk_t.blobs();
-        if (rvk_blobs.ready()) {
-            indices_lease = rvk_blobs.take(indices_want);
-            if (indices_lease.ok()) {
-                __builtin_memcpy(indices_lease.data, indices, indices_want);
-                indices_via_blob = true;
-            }
-        }
-    }
-    rvk_b.write_pod<uint8_t>(indices == nullptr ? 0 : (indices_via_blob ? 3 : 1));
-    if (indices_via_blob) {
-        rvk_b.write_varint(static_cast<uint64_t>(indices_want));
-        rvk_b.write_varint(static_cast<uint64_t>(indices_lease.offset));
-    } else if (indices != nullptr) {
-        rvk_b.write_varint(static_cast<uint64_t>(indices_want));
-        if (indices_want != 0) rvk_b.write(indices, indices_want);
-    }
+    rvk_b.write_pod<uint64_t>(indices);
     rvk_b.write_varint(static_cast<uint64_t>(instancecount));
     rvk_b.write_varint(static_cast<uint64_t>(basevertex));
     rvk_b.write_varint(static_cast<uint64_t>(baseinstance));
     if (rvk_b.status() != ::av::Status::ok) {
         ::av::icd::payload_dropped("gl", "glDrawElementsInstancedBaseVertexBaseInstance",
                                        rvk_b.offset());
-        if (indices_via_blob) {
-            rvk_t.blobs()
-                .give_back(indices_lease);
-        }
         return;
     }
     (void)rvk_t.send_async(kCmd_glDrawElementsInstancedBaseVertexBaseInstance, rvk_b);
-    if (indices_via_blob) {
-        rvk_t.blobs()
-            .retire_after_last(indices_lease);
-    }
 }
 
 void rvk_glDrawRangeElements(::av::ClientTransport& rvk_t, GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, uint64_t indices) {

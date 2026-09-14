@@ -14,6 +14,7 @@
 #include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>
+#include <cstring>
 
 using av::RecordingClDispatch;
 using av::WireArena;
@@ -466,3 +467,334 @@ TEST(opencl_dispatch, an_image_read_whose_element_size_is_unknown_is_refused)
   /* The one call made was the element-size question itself. */
   CHECK_EQ(session.dispatch().calls(), before + 1u);
   CHECK_EQ(session.dispatch().last_called(), av::clproto::kCmd_clGetImageInfo); }
+
+namespace {
+
+using Declared = RecordingClDispatch::Declared;
+
+/* clCreateProgramWithSource(context, one source), then clBuildProgram(program,
+ * no devices, `options`): the program's number. */
+std::uint64_t make_program(ClSession &session, std::uint64_t context, const char *options)
+{
+    constexpr char source[] = "kernel void add(global float *a) {}";
+    std::uint8_t bytes[frame_bytes];
+    std::uint64_t program = 0u;
+    { WireWriter frame(bytes, sizeof bytes);
+      frame.write_pod<std::uint64_t>(context);
+      frame.write_varint(1u);
+      frame.write_pod<std::uint8_t>(1u);
+      frame.write_varint(1u);
+      frame.write_varint(sizeof source - 1u);
+      frame.write(source, sizeof source - 1u);
+      frame.write_pod<std::uint8_t>(0u);
+      CHECK(session.run(av::clproto::kCmd_clCreateProgramWithSource, frame, bytes));
+      WireReader reply = session.answer();
+      CHECK(reply.read_pod(program)); }
+    WireWriter frame(bytes, sizeof bytes);
+    frame.write_pod<std::uint64_t>(program);
+    frame.write_varint(0u);
+    frame.write_pod<std::uint8_t>(0u);
+    frame.write_pod<std::uint8_t>(options != nullptr ? 1u : 0u);
+    if (options != nullptr) {
+        const std::size_t length = std::strlen(options);
+        frame.write_varint(length);
+        frame.write(options, length);
+    }
+    CHECK(session.run(av::clproto::kCmd_clBuildProgram, frame, bytes));
+    return program;
+}
+
+std::uint64_t make_kernel(ClSession &session, std::uint64_t context)
+{
+    const std::uint64_t program = make_program(session, context, nullptr);
+    constexpr char name[] = "add";
+    std::uint8_t bytes[frame_bytes];
+    WireWriter frame(bytes, sizeof bytes);
+    frame.write_pod<std::uint64_t>(program);
+    frame.write_pod<std::uint8_t>(1u);
+    frame.write_varint(sizeof name - 1u);
+    frame.write(name, sizeof name - 1u);
+    frame.write_pod<std::uint8_t>(0u);
+    CHECK(session.run(av::clproto::kCmd_clCreateKernel, frame, bytes));
+    WireReader reply = session.answer();
+    std::uint64_t kernel = 0u;
+    CHECK(reply.read_pod(kernel));
+    return kernel;
+}
+
+std::uint64_t make_sampler(ClSession &session, std::uint64_t context)
+{
+    std::uint8_t bytes[frame_bytes];
+    WireWriter frame(bytes, sizeof bytes);
+    frame.write_pod<std::uint64_t>(context);
+    frame.write_varint(CL_FALSE);
+    frame.write_varint(CL_ADDRESS_CLAMP);
+    frame.write_varint(CL_FILTER_NEAREST);
+    frame.write_pod<std::uint8_t>(0u);
+    CHECK(session.run(av::clproto::kCmd_clCreateSampler, frame, bytes));
+    WireReader reply = session.answer();
+    std::uint64_t sampler = 0u;
+    CHECK(reply.read_pod(sampler));
+    return sampler;
+}
+
+/* The first index whose argument the fake's kernels declare as `declared`. */
+std::uint32_t index_declared(const RecordingClDispatch &dispatch, Declared declared)
+{
+    std::uint32_t index = 0u;
+    while (dispatch.argument_declared(index) != declared) index++;
+    return index;
+}
+
+/* clSetKernelArg(kernel, index, size, `size` bytes of `value` or none). */
+bool set_argument(ClSession &session, std::uint64_t kernel, std::uint32_t index, std::uint64_t size,
+                  bool present, std::uint64_t value)
+{
+    std::uint8_t bytes[frame_bytes];
+    WireWriter frame(bytes, sizeof bytes);
+    frame.write_pod<std::uint64_t>(kernel);
+    frame.write_varint(index);
+    frame.write_varint(size);
+    frame.write_pod<std::uint8_t>(present ? 1u : 0u);
+    if (present) {
+        frame.write_varint(size);
+        frame.write(&value, static_cast<std::size_t>(size));
+    }
+    return session.run(av::clproto::kCmd_clSetKernelArg, frame, bytes);
+}
+
+}  // namespace
+
+/* Without -cl-kernel-arg-info the ICD cannot later say which arguments are
+ * objects, and every eight-byte argument of the kernel would be refused. */
+TEST(opencl_dispatch, every_build_and_compile_asks_the_icd_to_keep_argument_information)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const std::uint64_t bare = make_program(session, context, nullptr);
+  CHECK_EQ(session.dispatch().last_called(), av::clproto::kCmd_clBuildProgram);
+  (void)make_program(session, context, "-O2 -DWIDTH=4");
+  CHECK_EQ(session.dispatch().last_called(), av::clproto::kCmd_clBuildProgram);
+  constexpr char options[] = "-DX";
+  std::uint8_t bytes[frame_bytes];
+  WireWriter frame(bytes, sizeof bytes);
+  frame.write_pod<std::uint64_t>(bare);
+  frame.write_varint(0u);
+  frame.write_pod<std::uint8_t>(0u);
+  frame.write_pod<std::uint8_t>(1u);
+  frame.write_varint(sizeof options - 1u);
+  frame.write(options, sizeof options - 1u);
+  frame.write_varint(0u);
+  frame.write_pod<std::uint8_t>(0u);
+  frame.write_pod<std::uint8_t>(0u);
+  CHECK(session.run(av::clproto::kCmd_clCompileProgram, frame, bytes));
+  CHECK_EQ(session.dispatch().last_called(), av::clproto::kCmd_clCompileProgram);
+  CHECK_EQ(session.dispatch().builds_without_argument_info(), 0u); }
+
+/* The hole: eight guest bytes where the kernel reads a cl_mem, an image or a
+ * cl_sampler, which the ICD dereferences. Each argument is held to what the
+ * kernel declared - an object this host made, of that kind - and one the ICD
+ * cannot describe may not be an object's width at all. */
+TEST(opencl_dispatch, a_kernel_argument_reaches_the_icd_only_as_what_the_kernel_declared)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const std::uint64_t buffer = session.make_buffer(context, 64u);
+  const std::uint64_t sampler = make_sampler(session, context);
+  const std::uint64_t kernel = make_kernel(session, context);
+  constexpr std::uint64_t invented = 0x7F0000001000u;
+  struct Case { Declared declared; std::uint64_t size; bool present; std::uint64_t value; bool runs; };
+  const Case cases[] = {
+      {Declared::buffer, 8u, true, buffer, true},
+      {Declared::buffer, 8u, true, invented, false},
+      {Declared::buffer, 8u, true, sampler, false},
+      {Declared::buffer, 8u, true, 0u, true},
+      {Declared::buffer, 8u, false, 0u, true},
+      {Declared::buffer, 4u, true, buffer, false},
+      {Declared::image, 8u, true, buffer, true},
+      {Declared::image, 8u, true, sampler, false},
+      {Declared::image, 8u, true, 0u, false},
+      {Declared::image, 8u, false, 0u, false},
+      {Declared::sampler, 8u, true, sampler, true},
+      {Declared::sampler, 8u, true, buffer, false},
+      {Declared::sampler, 8u, true, 0u, false},
+      {Declared::scalar, 8u, true, invented, true},
+      {Declared::local, 64u, false, 0u, true},
+      {Declared::local, 8u, true, buffer, false},
+      {Declared::undeclared, 8u, true, buffer, false},
+      {Declared::undeclared, 8u, false, 0u, true},
+      {Declared::undeclared, 4u, true, invented, true},
+      {Declared::pipe, 8u, true, buffer, true},
+      {Declared::pipe, 8u, true, invented, false},
+      {Declared::constant, 8u, true, invented, false},
+      {Declared::constant, 8u, true, buffer, true},
+  };
+  for (const Case &item : cases) {
+      const std::uint32_t index = index_declared(session.dispatch(), item.declared);
+      CHECK_EQ(set_argument(session, kernel, index, item.size, item.present, item.value), item.runs);
+      CHECK_EQ(session.dispatch().last_called() == av::clproto::kCmd_clSetKernelArg, item.runs);
+      CHECK_EQ(session.dispatch().strangers(), 0u);
+      CHECK_EQ(session.dispatch().strays(), 0u);
+  } }
+
+/* The index the guest names is the one asked about: an object argument past
+ * the first few is refused an invented value as the first would be. */
+TEST(opencl_dispatch, a_kernel_argument_is_described_by_its_own_index)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const std::uint64_t kernel = make_kernel(session, context);
+  constexpr std::uint64_t invented = 0x7F0000001000u;
+  const std::uint32_t scalar = index_declared(session.dispatch(), Declared::scalar);
+  const std::uint32_t indices[] = {scalar, scalar + RecordingClDispatch::declared_arguments,
+                                   RecordingClDispatch::declared_arguments};
+  for (const std::uint32_t index : indices) {
+      CHECK_EQ(set_argument(session, kernel, index, 8u, true, invented),
+               session.dispatch().argument_declared(index) == Declared::scalar);
+  }
+  CHECK_EQ(session.dispatch().strangers(), 0u); }
+
+namespace {
+
+constexpr std::size_t image_frame_bytes = 1024u;
+
+/* clCreateImage(context, COPY_HOST_PTR, format, description, `crossed` bytes of
+ * host pointer): whether it ran. */
+bool create_image(ClSession &session, std::uint64_t context, const cl_image_format &format,
+                  const cl_image_desc *description, std::uint64_t crossed)
+{
+    std::uint8_t bytes[image_frame_bytes];
+    const std::uint8_t filler[512] = {};
+    WireWriter frame(bytes, sizeof bytes);
+    frame.write_pod<std::uint64_t>(context);
+    frame.write_varint(CL_MEM_COPY_HOST_PTR);
+    frame.write_pod<std::uint8_t>(1u);
+    frame.write(&format, sizeof format);
+    frame.write_pod<std::uint8_t>(description != nullptr ? 1u : 0u);
+    if (description != nullptr) frame.write(description, sizeof *description);
+    frame.write_pod<std::uint8_t>(1u);
+    frame.write_varint(crossed);
+    frame.write(filler, static_cast<std::size_t>(crossed));
+    frame.write_pod<std::uint8_t>(0u);
+    return session.run(av::clproto::kCmd_clCreateImage, frame, bytes);
+}
+
+cl_image_desc described(cl_mem_object_type type, std::size_t width, std::size_t height,
+                        std::size_t depth, std::size_t array_size)
+{
+    cl_image_desc description = {};
+    description.image_type = type;
+    description.image_width = width;
+    description.image_height = height;
+    description.image_depth = depth;
+    description.image_array_size = array_size;
+    return description;
+}
+
+}  // namespace
+
+/* The ICD copies the format's elements over the extent out of the host
+ * pointer, at the pitches it was given, and the bytes that crossed are all
+ * the pointer has. */
+TEST(opencl_dispatch, an_image_copied_from_fewer_bytes_than_its_format_and_extent_is_refused)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const cl_image_format rgba8 = {CL_RGBA, CL_UNORM_INT8};
+  const cl_image_format float_r = {CL_R, CL_FLOAT};
+  const cl_image_format rgb565 = {CL_RGB, CL_UNORM_SHORT_565};
+  cl_image_desc padded = described(CL_MEM_OBJECT_IMAGE2D, 4u, 4u, 0u, 0u);
+  padded.image_row_pitch = 20u;
+  cl_image_desc sliced = described(CL_MEM_OBJECT_IMAGE3D, 2u, 2u, 3u, 0u);
+  sliced.image_slice_pitch = 40u;
+  struct Case { cl_image_format format; cl_image_desc description; std::uint64_t crossed; bool runs; };
+  const Case cases[] = {
+      {rgba8, described(CL_MEM_OBJECT_IMAGE2D, 4u, 4u, 0u, 0u), 63u, false},
+      {rgba8, described(CL_MEM_OBJECT_IMAGE2D, 4u, 4u, 0u, 0u), 64u, true},
+      {rgba8, padded, 79u, false},
+      {rgba8, padded, 80u, true},
+      {float_r, described(CL_MEM_OBJECT_IMAGE2D_ARRAY, 4u, 4u, 0u, 3u), 191u, false},
+      {float_r, described(CL_MEM_OBJECT_IMAGE2D_ARRAY, 4u, 4u, 0u, 3u), 192u, true},
+      {rgba8, described(CL_MEM_OBJECT_IMAGE1D_ARRAY, 8u, 0u, 0u, 4u), 127u, false},
+      {rgba8, described(CL_MEM_OBJECT_IMAGE1D_ARRAY, 8u, 0u, 0u, 4u), 128u, true},
+      {rgba8, described(CL_MEM_OBJECT_IMAGE1D, 8u, 5u, 0u, 0u), 31u, false},
+      {rgba8, described(CL_MEM_OBJECT_IMAGE1D, 8u, 5u, 0u, 0u), 32u, true},
+      {rgba8, sliced, 119u, false},
+      {rgba8, sliced, 120u, true},
+      {rgb565, described(CL_MEM_OBJECT_IMAGE2D, 4u, 4u, 0u, 0u), 31u, false},
+      {rgb565, described(CL_MEM_OBJECT_IMAGE2D, 4u, 4u, 0u, 0u), 32u, true},
+      /* A packed type in an order it does not pack, an order and an image
+       * type this host does not know, and a width whose bytes pass 64 bits. */
+      {{CL_RGBA, CL_UNORM_SHORT_565}, described(CL_MEM_OBJECT_IMAGE2D, 1u, 1u, 0u, 0u), 64u, false},
+      {{0x1234u, CL_UNORM_INT8}, described(CL_MEM_OBJECT_IMAGE2D, 1u, 1u, 0u, 0u), 64u, false},
+      {rgba8, described(0x1234u, 1u, 1u, 0u, 0u), 64u, false},
+      {rgba8, described(CL_MEM_OBJECT_IMAGE2D, ~std::size_t{0} / 2u, 1u, 0u, 0u), 64u, false},
+  };
+  const std::uint32_t before = session.dispatch().calls();
+  std::uint32_t ran = 0u;
+  for (const Case &item : cases) {
+      CHECK_EQ(create_image(session, context, item.format, &item.description, item.crossed), item.runs);
+      if (item.runs) ran++;
+  }
+  CHECK(!create_image(session, context, rgba8, nullptr, 64u));
+  CHECK_EQ(session.dispatch().calls(), before + ran);
+  CHECK_EQ(session.dispatch().strays(), 0u); }
+
+/* The 1.1 spellings carry the extent as arguments, and the properties
+ * spelling in the description, and each is held to it the same way. */
+TEST(opencl_dispatch, the_other_image_calls_hold_their_host_bytes_to_their_extent)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const cl_image_format rgba8 = {CL_RGBA, CL_UNORM_INT8};
+  const std::uint8_t filler[64] = {};
+  const std::uint64_t crosseds[] = {47u, 48u};
+  const std::uint32_t before = session.dispatch().calls();
+  for (const std::uint64_t crossed : crosseds) {
+      std::uint8_t bytes[frame_bytes];
+      { WireWriter frame(bytes, sizeof bytes);
+        frame.write_pod<std::uint64_t>(context);
+        frame.write_varint(CL_MEM_COPY_HOST_PTR);
+        frame.write_pod<std::uint8_t>(1u);
+        frame.write(&rgba8, sizeof rgba8);
+        frame.write_varint(4u);
+        frame.write_varint(3u);
+        frame.write_varint(0u);
+        frame.write_pod<std::uint8_t>(1u);
+        frame.write_varint(crossed);
+        frame.write(filler, static_cast<std::size_t>(crossed));
+        frame.write_pod<std::uint8_t>(0u);
+        CHECK_EQ(session.run(av::clproto::kCmd_clCreateImage2D, frame, bytes), crossed == 48u); }
+      { WireWriter frame(bytes, sizeof bytes);
+        frame.write_pod<std::uint64_t>(context);
+        frame.write_varint(CL_MEM_COPY_HOST_PTR);
+        frame.write_pod<std::uint8_t>(1u);
+        frame.write(&rgba8, sizeof rgba8);
+        frame.write_varint(2u);
+        frame.write_varint(2u);
+        frame.write_varint(3u);
+        frame.write_varint(0u);
+        frame.write_varint(0u);
+        frame.write_pod<std::uint8_t>(1u);
+        frame.write_varint(crossed);
+        frame.write(filler, static_cast<std::size_t>(crossed));
+        frame.write_pod<std::uint8_t>(0u);
+        CHECK_EQ(session.run(av::clproto::kCmd_clCreateImage3D, frame, bytes), crossed == 48u); }
+      { const cl_image_desc description = described(CL_MEM_OBJECT_IMAGE2D, 4u, 3u, 0u, 0u);
+        WireWriter frame(bytes, sizeof bytes);
+        frame.write_pod<std::uint64_t>(context);
+        frame.write_pod<std::uint8_t>(0u);
+        frame.write_varint(CL_MEM_COPY_HOST_PTR);
+        frame.write_pod<std::uint8_t>(1u);
+        frame.write(&rgba8, sizeof rgba8);
+        frame.write_pod<std::uint8_t>(1u);
+        frame.write(&description, sizeof description);
+        frame.write_pod<std::uint8_t>(1u);
+        frame.write_varint(crossed);
+        frame.write(filler, static_cast<std::size_t>(crossed));
+        frame.write_pod<std::uint8_t>(0u);
+        CHECK_EQ(session.run(av::clproto::kCmd_clCreateImageWithProperties, frame, bytes),
+                 crossed == 48u); }
+  }
+  CHECK_EQ(session.dispatch().calls(), before + 3u);
+  CHECK_EQ(session.dispatch().strays(), 0u); }

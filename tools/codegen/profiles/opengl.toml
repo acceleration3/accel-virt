@@ -640,6 +640,16 @@ role = "buffer_offset"
 [params."glDrawElementsInstancedBaseVertex.indices"]
 role = "buffer_offset"
 
+# The base-instance draws are the same offset. The registry gives them
+# len="count", which made them `count` bytes copied from the pointer - a
+# read of the guest's own memory at the offset, and on the host a count of
+# indices several bytes wide each read from a run a byte each.
+[params."glDrawElementsInstancedBaseInstance.indices"]
+role = "buffer_offset"
+
+[params."glDrawElementsInstancedBaseVertexBaseInstance.indices"]
+role = "buffer_offset"
+
 # The vertex attribute queries answer with one value for every pname
 # except GL_CURRENT_VERTEX_ATTRIB, which is four.
 #

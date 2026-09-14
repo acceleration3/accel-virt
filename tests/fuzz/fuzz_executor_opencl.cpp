@@ -5,7 +5,9 @@
  * after another over one RecordingClDispatch, which holds handles the way
  * OpenClBackend does and has no OpenCL behind it. What must hold after every
  * command, whatever the bytes: no call was handed an object this host did not
- * make as that kind (feature 044's handle hole), no call was handed a span
+ * make as that kind (feature 044's handle hole) - a kernel argument the
+ * kernel reads as an object included (T030) - no build left the ICD without
+ * the argument information that check needs, no call was handed a span
  * outside what the decode arena gave out, nothing was written past the reply,
  * and the registry is whole.
  *
@@ -81,6 +83,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
         (void)av::clproto::dispatch_command(dispatch, id, reader, writer, arena);
 
         if (dispatch.strangers() != 0u || dispatch.strays() != 0u) __builtin_trap();
+        if (dispatch.builds_without_argument_info() != 0u) __builtin_trap();
         if (arena.used() > arena.capacity()) __builtin_trap();
         if (reply[reply_bytes] != guard) __builtin_trap();
         if (!dispatch.handles().invariants_hold()) __builtin_trap();

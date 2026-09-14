@@ -841,7 +841,7 @@ void APIENTRY glDrawElementsInstancedBaseInstance(GLenum mode, GLsizei count, GL
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glDrawElementsInstancedBaseInstance(*rvk_t, mode, count, type, indices, instancecount, baseinstance);
+    ::av::glproto::rvk_glDrawElementsInstancedBaseInstance(*rvk_t, mode, count, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indices)), instancecount, baseinstance);
 }
 
 void APIENTRY glDrawElementsInstancedBaseVertex(GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex) {
@@ -855,7 +855,7 @@ void APIENTRY glDrawElementsInstancedBaseVertexBaseInstance(GLenum mode, GLsizei
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glDrawElementsInstancedBaseVertexBaseInstance(*rvk_t, mode, count, type, indices, instancecount, basevertex, baseinstance);
+    ::av::glproto::rvk_glDrawElementsInstancedBaseVertexBaseInstance(*rvk_t, mode, count, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indices)), instancecount, basevertex, baseinstance);
 }
 
 void APIENTRY glDrawRangeElementsBaseVertex(GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, const void* indices, GLint basevertex) {

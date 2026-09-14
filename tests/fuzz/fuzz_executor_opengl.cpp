@@ -1,14 +1,16 @@
 /* Hostile batches into the OpenGL server dispatch.
  *
- * Decoded one command after another over RecordingGl, which answers the pixel
- * reads and the state they depend on - the pack store, the pack buffer
- * binding, a texture level's extent - with no OpenGL behind it, and leaves
- * every other entry point null for the decoder to refuse after decoding. A
- * batch, because what a read may write depends on the glPixelStorei and
- * glBindBuffer calls before it. What must hold after every command, whatever
- * the bytes: no read was handed a destination GL would write past (feature
- * 044's glReadPixels hole), no offset was followed as an address with no
- * buffer bound, nothing was written past the reply.
+ * Decoded one command after another over RecordingGl, which answers a
+ * representative of every kind of pointer the decoder hands a driver - reads,
+ * uploads, count-sized outputs and inputs, text, list queries, offsets and the
+ * arrays a draw reads - and the state each depends on, with no OpenGL behind
+ * it, and leaves every other entry point null for the decoder to refuse after
+ * decoding. A batch, because what a call may touch depends on the
+ * glPixelStorei, glBindBuffer and array calls before it. What must hold after
+ * every command, whatever the bytes: no call was handed a pointer GL would
+ * read or write past, or a null it would follow (feature 044's glReadPixels
+ * hole and T030's), no offset or client array was followed as an address with
+ * no buffer bound, nothing was written past the reply.
  *
  * Each record is a two-byte command within OpenGL's range, a two-byte length
  * and that many payload bytes. */

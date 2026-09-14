@@ -67,6 +67,169 @@ static bool image_transfer_bytes(ServerDispatch& s, ::av::WireArena& arena, cl_m
     return pitched_reach(region, *element, row, slice, 0, bytes);
 }
 
+// The bytes one element of a format occupies, from the channel order and
+// data type the way the specification's table does, or 0 for a pairing
+// this server does not size. Where implementations disagree - a padded
+// order, a 24-bit depth - the larger answer is the one taken: the bound
+// is on what an ICD may read, so erring high refuses and erring low reads
+// past the block.
+static uint64_t format_element_bytes(const cl_image_format* format) {
+    if (format == nullptr) return 0;
+    const cl_channel_order order = format->image_channel_order;
+    const cl_channel_type type = format->image_channel_data_type;
+    if (type == CL_UNORM_SHORT_565 || type == CL_UNORM_SHORT_555)
+        return order == CL_RGB || order == CL_RGBx ? 2 : 0;
+    if (type == CL_UNORM_INT_101010)
+        return order == CL_RGB || order == CL_RGBx ? 4 : 0;
+    if (type == CL_UNORM_INT_101010_2) return order == CL_RGBA ? 4 : 0;
+    if (order == CL_DEPTH_STENCIL)
+        return type == CL_UNORM_INT24 ? 4 : type == CL_FLOAT ? 8 : 0;
+    uint64_t channel = 0;
+    switch (type) {
+        case CL_SNORM_INT8: case CL_UNORM_INT8: case CL_SIGNED_INT8: case CL_UNSIGNED_INT8:
+            channel = 1; break;
+        case CL_SNORM_INT16: case CL_UNORM_INT16: case CL_SIGNED_INT16: case CL_UNSIGNED_INT16:
+        case CL_HALF_FLOAT:
+            channel = 2; break;
+        case CL_SIGNED_INT32: case CL_UNSIGNED_INT32: case CL_FLOAT: case CL_UNORM_INT24:
+            channel = 4; break;
+        default: return 0;
+    }
+    switch (order) {
+        case CL_R: case CL_A: case CL_INTENSITY: case CL_LUMINANCE: case CL_DEPTH:
+            return channel;
+        case CL_RG: case CL_RA: case CL_Rx:
+            return 2 * channel;
+        case CL_RGB: case CL_RGx: case CL_sRGB:
+            return 3 * channel;
+        case CL_RGBA: case CL_BGRA: case CL_ARGB: case CL_ABGR: case CL_RGBx: case CL_sRGBx:
+        case CL_sRGBA: case CL_sBGRA:
+            return 4 * channel;
+        default: return 0;
+    }
+}
+
+// The bytes an image made from a host pointer copies out of it: whole
+// rows and slices at the pitches given, or at the tight ones where the
+// pitch given is smaller, for every slice or array element. Whole blocks
+// rather than the last row cut short, because an ICD may copy either way.
+static bool image_host_bytes(const cl_image_format* format, cl_mem_object_type type,
+                             size_t width, size_t height, size_t depth, size_t array_size,
+                             size_t row_pitch, size_t slice_pitch, uint64_t& bytes) {
+    const uint64_t element = format_element_bytes(format);
+    if (element == 0) return false;
+    uint64_t row = 0;
+    if (__builtin_mul_overflow(static_cast<uint64_t>(width), element, &row)) return false;
+    if (row < row_pitch) row = row_pitch;
+    uint64_t rows = height;
+    uint64_t slices = 1;
+    switch (type) {
+        case CL_MEM_OBJECT_IMAGE1D: case CL_MEM_OBJECT_IMAGE1D_BUFFER: rows = 1; break;
+        case CL_MEM_OBJECT_IMAGE1D_ARRAY: rows = 1; slices = array_size; break;
+        case CL_MEM_OBJECT_IMAGE2D: break;
+        case CL_MEM_OBJECT_IMAGE2D_ARRAY: slices = array_size; break;
+        case CL_MEM_OBJECT_IMAGE3D: slices = depth; break;
+        default: return false;
+    }
+    uint64_t slice = 0;
+    if (__builtin_mul_overflow(row, rows, &slice)) return false;
+    if (slice < slice_pitch) slice = slice_pitch;
+    return !__builtin_mul_overflow(slice, slices, &bytes);
+}
+
+// A build with -cl-kernel-arg-info after whatever the guest asked for, in
+// the arena; null when there is no room.
+static const char* with_kernel_arg_info(::av::WireArena& arena, const char* options) {
+    static constexpr char flag[] = " -cl-kernel-arg-info";
+    const size_t length = options != nullptr ? __builtin_strlen(options) : 0;
+    char* joined = arena.allocate_chars(length + sizeof flag);
+    if (joined == nullptr) return nullptr;
+    if (length != 0) __builtin_memcpy(joined, options, length);
+    __builtin_memcpy(joined + length, flag, sizeof flag);
+    return joined;
+}
+
+// What a kernel argument's bytes are to the ICD, as the kernel declared
+// it: a pointer in global or constant space, an image or a pipe is a
+// cl_mem, a sampler_t is a cl_sampler, a pointer in local space carries no
+// value at all, and anything else is data.
+enum class KernelArgument : uint8_t { data, memory, image, sampler, local, unknown };
+
+static bool ends_with(const char* text, size_t length, const char* suffix) {
+    const size_t tail = __builtin_strlen(suffix);
+    return length >= tail && __builtin_memcmp(text + length - tail, suffix, tail) == 0;
+}
+
+// Asked of the ICD, into the arena like every answer it writes. unknown
+// when it cannot say - a program from a binary or IL, or an ICD that keeps
+// no argument information.
+static KernelArgument classified(cl_kernel_arg_address_qualifier address,
+                                 cl_kernel_arg_type_qualifier qualifier, const char* name) {
+    const size_t used = __builtin_strlen(name);
+    if (address == CL_KERNEL_ARG_ADDRESS_LOCAL) return KernelArgument::local;
+    if (address == CL_KERNEL_ARG_ADDRESS_GLOBAL || address == CL_KERNEL_ARG_ADDRESS_CONSTANT ||
+        ends_with(name, used, "*") || (qualifier & CL_KERNEL_ARG_TYPE_PIPE) != 0)
+        return KernelArgument::memory;
+    static constexpr const char* images[] = {"image1d_t", "image1d_array_t", "image1d_buffer_t",
+                                             "image2d_t", "image2d_array_t", "image3d_t"};
+    for (const char* image : images) {
+        if (ends_with(name, used, image)) return KernelArgument::image;
+    }
+    return ends_with(name, used, "sampler_t") ? KernelArgument::sampler : KernelArgument::data;
+}
+
+// Asked of the ICD, into the arena like every answer it writes; false only
+// when the arena has no room to ask. unknown when the ICD cannot say - a
+// program from a binary or IL, or an ICD that keeps no argument information.
+static bool kernel_argument(ServerDispatch& s, ::av::WireArena& arena, cl_kernel kernel,
+                            cl_uint index, KernelArgument& argument) {
+    argument = KernelArgument::unknown;
+    auto* address = arena.allocate<cl_kernel_arg_address_qualifier>(1);
+    if (address == nullptr) { return false; }
+    auto* qualifier = arena.allocate<cl_kernel_arg_type_qualifier>(1);
+    if (qualifier == nullptr) { return false; }
+    auto* length = arena.allocate<size_t>(1);
+    if (length == nullptr) { return false; }
+    if (s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_ADDRESS_QUALIFIER, sizeof *address,
+                                address, nullptr) != CL_SUCCESS ||
+        s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_TYPE_QUALIFIER, sizeof *qualifier,
+                                qualifier, nullptr) != CL_SUCCESS ||
+        s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_TYPE_NAME, 0, nullptr,
+                                length) != CL_SUCCESS) return true;
+    char* name = arena.allocate_chars(*length + 1);
+    if (name == nullptr) { return false; }
+    if (s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_TYPE_NAME, *length, name,
+                                nullptr) != CL_SUCCESS) return true;
+    name[*length] = '\0';
+    argument = classified(*address, *qualifier, name);
+    return true;
+}
+
+// A kernel argument the ICD will read as an object must be one this
+// server made, of that kind, and is handed over as the object resolved;
+// one it cannot classify may not be the width of an object at all. A
+// null buffer is the API's own, and a local argument has no value.
+static bool resolve_kernel_argument(ServerDispatch& s, ::av::WireArena& arena, cl_kernel kernel,
+                                    cl_uint index, size_t size, const void*& value) {
+    KernelArgument argument = KernelArgument::unknown;
+    if (!kernel_argument(s, arena, kernel, index, argument)) return false;
+    if (argument == KernelArgument::data) return true;
+    if (argument == KernelArgument::local) return value == nullptr;
+    if (argument == KernelArgument::unknown) return value == nullptr || size != sizeof(cl_mem);
+    if (value == nullptr) return argument == KernelArgument::memory;
+    if (size != sizeof(void*)) return false;
+    uint64_t wire_handle = 0;
+    __builtin_memcpy(&wire_handle, value, sizeof wire_handle);
+    if (wire_handle == 0) return argument == KernelArgument::memory;
+    void* object = s.handle_for(argument == KernelArgument::sampler ? HandleKind::sampler : HandleKind::mem,
+                                wire_handle);
+    auto* resolved = arena.allocate<void*>(1);
+    if (object == nullptr || resolved == nullptr) return false;
+    *resolved = object;
+    value = resolved;
+    return true;
+}
+
 static bool decode_clGetPlatformIDs(ServerDispatch& s, ::av::WireReader& r,
                                    ::av::WireWriter& reply, ::av::WireArena& arena) {
     (void)r;
@@ -934,7 +1097,12 @@ static bool decode_clCreateImage(ServerDispatch& s, ::av::WireReader& r,
         if (!r.read_pod(wire_wanted)) return false;
         errcode_ret_wanted = wire_wanted != 0;
     }
-    (void)host_ptr_count;
+    if (host_ptr != nullptr) {
+        uint64_t wire_needed = 0;
+        if (image_desc == nullptr || !image_host_bytes(image_format, image_desc->image_type, image_desc->image_width, image_desc->image_height,
+                                 image_desc->image_depth, image_desc->image_array_size, image_desc->image_row_pitch, image_desc->image_slice_pitch, wire_needed) ||
+            host_ptr_count < wire_needed) return false;
+    }
     if ((flags & CL_MEM_USE_HOST_PTR) != 0) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
@@ -2459,6 +2627,8 @@ static bool decode_clBuildProgram(ServerDispatch& s, ::av::WireReader& r,
         }
     }
     if (device_list != nullptr && device_list_count < static_cast<uint64_t>(num_devices)) return false;
+    options = with_kernel_arg_info(arena, options);
+    if (options == nullptr) return false;
     const cl_int ret = s.on_clBuildProgram(program, num_devices, device_list, options);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     return true;
@@ -2784,6 +2954,7 @@ static bool decode_clSetKernelArg(ServerDispatch& s, ::av::WireReader& r,
         }
     }
     if (arg_value != nullptr && arg_value_count < static_cast<uint64_t>(arg_size)) return false;
+    if (!resolve_kernel_argument(s, arena, kernel, arg_index, arg_size, arg_value)) return false;
     const cl_int ret = s.on_clSetKernelArg(kernel, arg_index, arg_size, arg_value);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     return true;
@@ -5103,7 +5274,12 @@ static bool decode_clCreateImage2D(ServerDispatch& s, ::av::WireReader& r,
         if (!r.read_pod(wire_wanted)) return false;
         errcode_ret_wanted = wire_wanted != 0;
     }
-    (void)host_ptr_count;
+    if (host_ptr != nullptr) {
+        uint64_t wire_needed = 0;
+        if (!image_host_bytes(image_format, CL_MEM_OBJECT_IMAGE2D, image_width, image_height,
+                                 1, 1, image_row_pitch, 0, wire_needed) ||
+            host_ptr_count < wire_needed) return false;
+    }
     if ((flags & CL_MEM_USE_HOST_PTR) != 0) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
@@ -5196,7 +5372,12 @@ static bool decode_clCreateImage3D(ServerDispatch& s, ::av::WireReader& r,
         if (!r.read_pod(wire_wanted)) return false;
         errcode_ret_wanted = wire_wanted != 0;
     }
-    (void)host_ptr_count;
+    if (host_ptr != nullptr) {
+        uint64_t wire_needed = 0;
+        if (!image_host_bytes(image_format, CL_MEM_OBJECT_IMAGE3D, image_width, image_height,
+                                 image_depth, 1, image_row_pitch, image_slice_pitch, wire_needed) ||
+            host_ptr_count < wire_needed) return false;
+    }
     if ((flags & CL_MEM_USE_HOST_PTR) != 0) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;
@@ -5414,6 +5595,8 @@ static bool decode_clCompileProgram(ServerDispatch& s, ::av::WireReader& r,
     if (device_list != nullptr && device_list_count < static_cast<uint64_t>(num_devices)) return false;
     if (input_headers != nullptr && input_headers_count < static_cast<uint64_t>(num_input_headers)) return false;
     if (header_include_names != nullptr && header_include_names_count < static_cast<uint64_t>(num_input_headers)) return false;
+    options = with_kernel_arg_info(arena, options);
+    if (options == nullptr) return false;
     const cl_int ret = s.on_clCompileProgram(program, num_devices, device_list, options, num_input_headers, input_headers, header_include_names);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     return true;
@@ -5962,7 +6145,12 @@ static bool decode_clCreateImageWithProperties(ServerDispatch& s, ::av::WireRead
         if (!r.read_pod(wire_wanted)) return false;
         errcode_ret_wanted = wire_wanted != 0;
     }
-    (void)host_ptr_count;
+    if (host_ptr != nullptr) {
+        uint64_t wire_needed = 0;
+        if (image_desc == nullptr || !image_host_bytes(image_format, image_desc->image_type, image_desc->image_width, image_desc->image_height,
+                                 image_desc->image_depth, image_desc->image_array_size, image_desc->image_row_pitch, image_desc->image_slice_pitch, wire_needed) ||
+            host_ptr_count < wire_needed) return false;
+    }
     if ((flags & CL_MEM_USE_HOST_PTR) != 0) return false;
     cl_int errcode_ret_storage{};
     cl_int* errcode_ret = errcode_ret_wanted ? &errcode_ret_storage : nullptr;

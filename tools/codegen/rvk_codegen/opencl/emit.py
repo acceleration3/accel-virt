@@ -129,6 +129,32 @@ TRANSFER_PITCHES = {
 # The four float, int or uint components clEnqueueFillImage reads.
 FILL_COLOR_BYTES = 16
 
+# An image made from a host pointer copies the format's elements over the
+# description's extent out of it. The extent is spelled differently by each
+# command; (image type, width, height, depth, array size, row pitch, slice
+# pitch), as C in the decoder's scope once the refusal runs.
+IMAGE_HOST_EXTENTS = {
+    "clCreateImage": ("image_desc->image_type", "image_desc->image_width",
+                      "image_desc->image_height", "image_desc->image_depth",
+                      "image_desc->image_array_size", "image_desc->image_row_pitch",
+                      "image_desc->image_slice_pitch"),
+    "clCreateImageWithProperties": ("image_desc->image_type", "image_desc->image_width",
+                                    "image_desc->image_height", "image_desc->image_depth",
+                                    "image_desc->image_array_size",
+                                    "image_desc->image_row_pitch",
+                                    "image_desc->image_slice_pitch"),
+    "clCreateImage2D": ("CL_MEM_OBJECT_IMAGE2D", "image_width", "image_height", "1", "1",
+                        "image_row_pitch", "0"),
+    "clCreateImage3D": ("CL_MEM_OBJECT_IMAGE3D", "image_width", "image_height", "image_depth",
+                        "1", "image_row_pitch", "image_slice_pitch"),
+}
+
+# The commands that build a program from source. Each has
+# -cl-kernel-arg-info appended to its options, because that is the only
+# way the ICD can later say which kernel arguments are memory objects and
+# samplers - see kernel_argument.
+KERNEL_ARG_INFO_BUILDS = ("clBuildProgram", "clCompileProgram")
+
 
 def _decode_property_keys(p: Param, out: list[str]) -> None:
     """Looks up the handles a property list holds, refusing the keys whose
@@ -194,11 +220,24 @@ def _refusals(cmd: Command) -> list[str]:
             out.append("    }")
         elif p.role == Role.BYTES_IN and p.len_param == "@fill_bytes":
             out.append(f"    if ({n} != nullptr && {n}_count < {FILL_COLOR_BYTES}u) return false;")
+        elif p.role == Role.BYTES_IN and cmd.name in IMAGE_HOST_EXTENTS:
+            # The ICD reads the format's elements over the extent whatever
+            # the flags say, so any bytes that crossed are held to it.
+            kind, width, height, depth, array, row, slice_ = IMAGE_HOST_EXTENTS[cmd.name]
+            described = "image_desc == nullptr || " if kind.startswith("image_desc") else ""
+            out.append(f"    if ({n} != nullptr) {{")
+            out.append("        uint64_t wire_needed = 0;")
+            out.append(f"        if ({described}!image_host_bytes(image_format, {kind}, {width}, {height},")
+            out.append(f"                                 {depth}, {array}, {row}, {slice_}, wire_needed) ||")
+            out.append(f"            {n}_count < wire_needed) return false;")
+            out.append("    }")
         elif p.role == Role.BYTES_IN:
-            # An image made from a host pointer: its size is the format's
-            # element size over the description's extent, which this server
-            # does not work out yet, so the ICD reads what the guest sized.
-            out.append(f"    (void){n}_count;")
+            raise ValueError(f"{cmd.name}.{n}: bytes in with no size the server can check")
+    if cmd.name == "clSetKernelArg":
+        out.append("    if (!resolve_kernel_argument(s, arena, kernel, arg_index, arg_size, arg_value)) return false;")
+    if cmd.name in KERNEL_ARG_INFO_BUILDS:
+        out.append("    options = with_kernel_arg_info(arena, options);")
+        out.append("    if (options == nullptr) return false;")
     if any(q.role == Role.BYTES_IN for q in cmd.params) and \
             any(q.name == "flags" and q.type.base == "cl_mem_flags" for q in cmd.params):
         # The bytes crossed into a block the next command reuses; an ICD
@@ -268,6 +307,165 @@ SIZE_HELPERS = [
     "    uint64_t slice = slice_pitch;",
     "    if (slice == 0 && __builtin_mul_overflow(row, static_cast<uint64_t>(region[1]), &slice)) return false;",
     "    return pitched_reach(region, *element, row, slice, 0, bytes);",
+    "}",
+    "",
+    "// The bytes one element of a format occupies, from the channel order and",
+    "// data type the way the specification's table does, or 0 for a pairing",
+    "// this server does not size. Where implementations disagree - a padded",
+    "// order, a 24-bit depth - the larger answer is the one taken: the bound",
+    "// is on what an ICD may read, so erring high refuses and erring low reads",
+    "// past the block.",
+    "static uint64_t format_element_bytes(const cl_image_format* format) {",
+    "    if (format == nullptr) return 0;",
+    "    const cl_channel_order order = format->image_channel_order;",
+    "    const cl_channel_type type = format->image_channel_data_type;",
+    "    if (type == CL_UNORM_SHORT_565 || type == CL_UNORM_SHORT_555)",
+    "        return order == CL_RGB || order == CL_RGBx ? 2 : 0;",
+    "    if (type == CL_UNORM_INT_101010)",
+    "        return order == CL_RGB || order == CL_RGBx ? 4 : 0;",
+    "    if (type == CL_UNORM_INT_101010_2) return order == CL_RGBA ? 4 : 0;",
+    "    if (order == CL_DEPTH_STENCIL)",
+    "        return type == CL_UNORM_INT24 ? 4 : type == CL_FLOAT ? 8 : 0;",
+    "    uint64_t channel = 0;",
+    "    switch (type) {",
+    "        case CL_SNORM_INT8: case CL_UNORM_INT8: case CL_SIGNED_INT8: case CL_UNSIGNED_INT8:",
+    "            channel = 1; break;",
+    "        case CL_SNORM_INT16: case CL_UNORM_INT16: case CL_SIGNED_INT16: case CL_UNSIGNED_INT16:",
+    "        case CL_HALF_FLOAT:",
+    "            channel = 2; break;",
+    "        case CL_SIGNED_INT32: case CL_UNSIGNED_INT32: case CL_FLOAT: case CL_UNORM_INT24:",
+    "            channel = 4; break;",
+    "        default: return 0;",
+    "    }",
+    "    switch (order) {",
+    "        case CL_R: case CL_A: case CL_INTENSITY: case CL_LUMINANCE: case CL_DEPTH:",
+    "            return channel;",
+    "        case CL_RG: case CL_RA: case CL_Rx:",
+    "            return 2 * channel;",
+    "        case CL_RGB: case CL_RGx: case CL_sRGB:",
+    "            return 3 * channel;",
+    "        case CL_RGBA: case CL_BGRA: case CL_ARGB: case CL_ABGR: case CL_RGBx: case CL_sRGBx:",
+    "        case CL_sRGBA: case CL_sBGRA:",
+    "            return 4 * channel;",
+    "        default: return 0;",
+    "    }",
+    "}",
+    "",
+    "// The bytes an image made from a host pointer copies out of it: whole",
+    "// rows and slices at the pitches given, or at the tight ones where the",
+    "// pitch given is smaller, for every slice or array element. Whole blocks",
+    "// rather than the last row cut short, because an ICD may copy either way.",
+    "static bool image_host_bytes(const cl_image_format* format, cl_mem_object_type type,",
+    "                             size_t width, size_t height, size_t depth, size_t array_size,",
+    "                             size_t row_pitch, size_t slice_pitch, uint64_t& bytes) {",
+    "    const uint64_t element = format_element_bytes(format);",
+    "    if (element == 0) return false;",
+    "    uint64_t row = 0;",
+    "    if (__builtin_mul_overflow(static_cast<uint64_t>(width), element, &row)) return false;",
+    "    if (row < row_pitch) row = row_pitch;",
+    "    uint64_t rows = height;",
+    "    uint64_t slices = 1;",
+    "    switch (type) {",
+    "        case CL_MEM_OBJECT_IMAGE1D: case CL_MEM_OBJECT_IMAGE1D_BUFFER: rows = 1; break;",
+    "        case CL_MEM_OBJECT_IMAGE1D_ARRAY: rows = 1; slices = array_size; break;",
+    "        case CL_MEM_OBJECT_IMAGE2D: break;",
+    "        case CL_MEM_OBJECT_IMAGE2D_ARRAY: slices = array_size; break;",
+    "        case CL_MEM_OBJECT_IMAGE3D: slices = depth; break;",
+    "        default: return false;",
+    "    }",
+    "    uint64_t slice = 0;",
+    "    if (__builtin_mul_overflow(row, rows, &slice)) return false;",
+    "    if (slice < slice_pitch) slice = slice_pitch;",
+    "    return !__builtin_mul_overflow(slice, slices, &bytes);",
+    "}",
+    "",
+    "// A build with -cl-kernel-arg-info after whatever the guest asked for, in",
+    "// the arena; null when there is no room.",
+    "static const char* with_kernel_arg_info(::av::WireArena& arena, const char* options) {",
+    "    static constexpr char flag[] = \" -cl-kernel-arg-info\";",
+    "    const size_t length = options != nullptr ? __builtin_strlen(options) : 0;",
+    "    char* joined = arena.allocate_chars(length + sizeof flag);",
+    "    if (joined == nullptr) return nullptr;",
+    "    if (length != 0) __builtin_memcpy(joined, options, length);",
+    "    __builtin_memcpy(joined + length, flag, sizeof flag);",
+    "    return joined;",
+    "}",
+    "",
+    "// What a kernel argument's bytes are to the ICD, as the kernel declared",
+    "// it: a pointer in global or constant space, an image or a pipe is a",
+    "// cl_mem, a sampler_t is a cl_sampler, a pointer in local space carries no",
+    "// value at all, and anything else is data.",
+    "enum class KernelArgument : uint8_t { data, memory, image, sampler, local, unknown };",
+    "",
+    "static bool ends_with(const char* text, size_t length, const char* suffix) {",
+    "    const size_t tail = __builtin_strlen(suffix);",
+    "    return length >= tail && __builtin_memcmp(text + length - tail, suffix, tail) == 0;",
+    "}",
+    "",
+    "// Asked of the ICD, into the arena like every answer it writes. unknown",
+    "// when it cannot say - a program from a binary or IL, or an ICD that keeps",
+    "// no argument information.",
+    "static KernelArgument classified(cl_kernel_arg_address_qualifier address,",
+    "                                 cl_kernel_arg_type_qualifier qualifier, const char* name) {",
+    "    const size_t used = __builtin_strlen(name);",
+    "    if (address == CL_KERNEL_ARG_ADDRESS_LOCAL) return KernelArgument::local;",
+    "    if (address == CL_KERNEL_ARG_ADDRESS_GLOBAL || address == CL_KERNEL_ARG_ADDRESS_CONSTANT ||",
+    "        ends_with(name, used, \"*\") || (qualifier & CL_KERNEL_ARG_TYPE_PIPE) != 0)",
+    "        return KernelArgument::memory;",
+    "    static constexpr const char* images[] = {\"image1d_t\", \"image1d_array_t\", \"image1d_buffer_t\",",
+    "                                             \"image2d_t\", \"image2d_array_t\", \"image3d_t\"};",
+    "    for (const char* image : images) {",
+    "        if (ends_with(name, used, image)) return KernelArgument::image;",
+    "    }",
+    "    return ends_with(name, used, \"sampler_t\") ? KernelArgument::sampler : KernelArgument::data;",
+    "}",
+    "",
+    "// Asked of the ICD, into the arena like every answer it writes; false only",
+    "// when the arena has no room to ask. unknown when the ICD cannot say - a",
+    "// program from a binary or IL, or an ICD that keeps no argument information.",
+    "static bool kernel_argument(ServerDispatch& s, ::av::WireArena& arena, cl_kernel kernel,",
+    "                            cl_uint index, KernelArgument& argument) {",
+    "    argument = KernelArgument::unknown;",
+    "    auto* address = arena.allocate<cl_kernel_arg_address_qualifier>(1);",
+    "    auto* qualifier = arena.allocate<cl_kernel_arg_type_qualifier>(1);",
+    "    auto* length = arena.allocate<size_t>(1);",
+    "    if (s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_ADDRESS_QUALIFIER, sizeof *address,",
+    "                                address, nullptr) != CL_SUCCESS ||",
+    "        s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_TYPE_QUALIFIER, sizeof *qualifier,",
+    "                                qualifier, nullptr) != CL_SUCCESS ||",
+    "        s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_TYPE_NAME, 0, nullptr,",
+    "                                length) != CL_SUCCESS) return true;",
+    "    char* name = arena.allocate_chars(*length + 1);",
+    "    if (s.on_clGetKernelArgInfo(kernel, index, CL_KERNEL_ARG_TYPE_NAME, *length, name,",
+    "                                nullptr) != CL_SUCCESS) return true;",
+    "    name[*length] = '\\0';",
+    "    argument = classified(*address, *qualifier, name);",
+    "    return true;",
+    "}",
+    "",
+    "// A kernel argument the ICD will read as an object must be one this",
+    "// server made, of that kind, and is handed over as the object resolved;",
+    "// one it cannot classify may not be the width of an object at all. A",
+    "// null buffer is the API's own, and a local argument has no value.",
+    "static bool resolve_kernel_argument(ServerDispatch& s, ::av::WireArena& arena, cl_kernel kernel,",
+    "                                    cl_uint index, size_t size, const void*& value) {",
+    "    KernelArgument argument = KernelArgument::unknown;",
+    "    if (!kernel_argument(s, arena, kernel, index, argument)) return false;",
+    "    if (argument == KernelArgument::data) return true;",
+    "    if (argument == KernelArgument::local) return value == nullptr;",
+    "    if (argument == KernelArgument::unknown) return value == nullptr || size != sizeof(cl_mem);",
+    "    if (value == nullptr) return argument == KernelArgument::memory;",
+    "    if (size != sizeof(void*)) return false;",
+    "    uint64_t wire_handle = 0;",
+    "    __builtin_memcpy(&wire_handle, value, sizeof wire_handle);",
+    "    if (wire_handle == 0) return argument == KernelArgument::memory;",
+    "    void* object = s.handle_for(argument == KernelArgument::sampler ? HandleKind::sampler : HandleKind::mem,",
+    "                                wire_handle);",
+    "    auto* resolved = arena.allocate<void*>(1);",
+    "    if (object == nullptr || resolved == nullptr) return false;",
+    "    *resolved = object;",
+    "    value = resolved;",
+    "    return true;",
     "}",
     "",
 ]

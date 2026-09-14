@@ -157,9 +157,9 @@ void rvk_glDrawElements(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count
 void rvk_glDrawElementsBaseVertex(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices, GLint basevertex);
 void rvk_glDrawElementsIndirect(::av::ClientTransport& rvk_t, GLenum mode, GLenum type, uint64_t indirect);
 void rvk_glDrawElementsInstanced(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices, GLsizei instancecount);
-void rvk_glDrawElementsInstancedBaseInstance(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLuint baseinstance);
+void rvk_glDrawElementsInstancedBaseInstance(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices, GLsizei instancecount, GLuint baseinstance);
 void rvk_glDrawElementsInstancedBaseVertex(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices, GLsizei instancecount, GLint basevertex);
-void rvk_glDrawElementsInstancedBaseVertexBaseInstance(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex, GLuint baseinstance);
+void rvk_glDrawElementsInstancedBaseVertexBaseInstance(::av::ClientTransport& rvk_t, GLenum mode, GLsizei count, GLenum type, uint64_t indices, GLsizei instancecount, GLint basevertex, GLuint baseinstance);
 void rvk_glDrawRangeElements(::av::ClientTransport& rvk_t, GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, uint64_t indices);
 void rvk_glDrawRangeElementsBaseVertex(::av::ClientTransport& rvk_t, GLenum mode, GLuint start, GLuint end, GLsizei count, GLenum type, uint64_t indices, GLint basevertex);
 void rvk_glDrawTransformFeedback(::av::ClientTransport& rvk_t, GLenum mode, GLuint id);
