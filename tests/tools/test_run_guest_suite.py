@@ -251,6 +251,36 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertEqual(result.stdout.count("guest: report ok: 23 passed"), 4)
         self.assert_clean()
 
+    def test_an_rvk_run_asks_for_the_rvk_scenarios_and_records_its_executor_and_latency(self):
+        """Feature 044: the rvk scenarios run instead of the suite, and the verdict
+        says which executor did the work and what a no-op cost."""
+        report = "ok transport.nop\nok transport.latency 812\nok vulkan.instance\nrvktest: 12 passed, 0 failed\n"
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                             "rvktest": report, "collect": COLLECTED})
+        result = self.run_suite("--rvk")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: rvk: executor /nowhere/librvk_echo_executor.so, host-gpu auto", result.stdout)
+        self.assertIn("guest: rvk ok: 12 passed", result.stdout)
+        self.assertIn("guest: rvk latency: a transport no-op round trip took 812 us", result.stdout)
+        self.assertNotIn("guest: report ok", result.stdout)
+        self.assertIn("rvktest.exe rvk", self.journal.read_text())
+        self.assertIn("rvk latency", (self.work / "verdict.txt").read_text())
+
+    def test_an_rvk_run_with_a_failed_step_fails(self):
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                             "rvktest": "FAIL opencl.sum status=4 63\nrvktest: 11 passed, 1 failed\n",
+                             "collect": COLLECTED}, rvktest=1)
+        result = self.run_suite("--rvk")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("guest: rvk failed: 1 step(s) failed, exit 1; see rvk.txt", result.stdout)
+
+    def test_an_rvk_run_whose_program_prints_no_summary_fails(self):
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                             "rvktest": "", "collect": COLLECTED})
+        result = self.run_suite("--rvk")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("guest: rvk failed: no summary line", result.stdout)
+
     def test_a_run_that_injects_a_stall_runs_the_timeout_scenario_alone(self):
         """US3: with the host holding one context, every other scenario would be
         measuring the stall, so the run asks the guest for the timeout scenario

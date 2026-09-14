@@ -43,6 +43,20 @@ if [ -n "${AV_GUEST_IMAGE:-}" ]; then
         echo "gate: guest failed" >&2
         exit 1
     fi
+    # The rvk scenarios need the real executor on a host GPU, and the suite's
+    # timeout scenario the echo library's stall, so they are a second boot
+    # (feature 044).
+    if [ -f build-qemu/librvk_executor.so ]; then
+        echo "== gate: guest rvk (build-qemu/librvk_executor.so)"
+        if ! python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" --work build-guest-rvk --rvk \
+                --executor build-qemu/librvk_executor.so; then
+            echo "gate: guest rvk failed" >&2
+            exit 1
+        fi
+    else
+        echo "gate: guest rvk skipped: build-qemu/librvk_executor.so was not built" >&2
+        exit 1
+    fi
 else
     echo "gate: guest skipped: AV_GUEST_IMAGE names no prepared image (docs/testing.md, L5)"
     echo "gate: a feature does not merge on a skipped guest (feature 037, FR-006)"

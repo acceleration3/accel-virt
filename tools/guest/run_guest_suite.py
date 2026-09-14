@@ -45,6 +45,8 @@ PACKAGE_DIRECTORY = GUEST_DIRECTORY + "\\package"
 POWERSHELL = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
 REBOOT_REQUIRED = 3010
 SUMMARY = re.compile(rb"^rvktest: (\d+) passed, (\d+) failed$", re.M)
+# The no-op's round trip the transport scenario measures, in microseconds (feature 044).
+RVK_LATENCY = re.compile(rb"^ok transport\.latency (\d+)", re.MULTILINE)
 # The guest ends its lines the Windows way, so nothing anchored at $ may
 # assume the line stops at the newline.
 CYCLES_DONE = re.compile(r"^cycle: (\d+) done\r?$", re.M)
@@ -159,6 +161,9 @@ def arguments():
     parser.add_argument("--hibernate", nargs="?", type=int, const=1, default=0, metavar="N",
                         help="suspend to disk and boot the overlay again this many times, once if the "
                              "option is given no number (feature 040, US1)")
+    parser.add_argument("--rvk", action="store_true",
+                        help="run rvktest.exe's rvk scenarios - real Vulkan, OpenCL and OpenGL work on the host GPU "
+                             "- instead of the suite; needs --executor naming the real library (feature 044)")
     parser.add_argument("--stress-minutes", type=float, default=0.0,
                         help="minutes of fences awaited while the blank's interrupt is masked and unmasked "
                              "(feature 039, US3); 0 leaves the long run out")
@@ -958,6 +963,25 @@ class GuestRun:
         self.say(f"tdr ok: {int(summary.group(1))} passed, the held context lost and the other one's work done")
         self.timeout_events()
 
+    def rvk(self):
+        """Feature 044: the rvk scenarios send real streams to the executor the
+        device loaded, so which library and which GPU they ran on is part of the
+        verdict, and the transport's no-op round trip is its latency."""
+        self.say(f"rvk: executor {self.args.executor}, host-gpu auto")
+        code, out, error = self.step("rvk", lambda: self.agent.run(GUEST_DIRECTORY + "\\rvktest.exe", ["rvk"],
+                                                                   self.args.step_timeout))
+        (self.work / "rvk.txt").write_bytes(out)
+        summary = SUMMARY.search(out)
+        if summary is None:
+            raise StepFailed("rvk", f"no summary line (exit {code}): {error.decode(errors='replace')[-200:]}")
+        failed = int(summary.group(2))
+        if failed != 0 or code != 0:
+            raise StepFailed("rvk", f"{failed} step(s) failed, exit {code}; see rvk.txt")
+        self.say(f"rvk ok: {int(summary.group(1))} passed")
+        latency = RVK_LATENCY.search(out)
+        if latency is not None:
+            self.say(f"rvk latency: a transport no-op round trip took {int(latency.group(1))} us")
+
     def timeout_events(self):
         """Event 4101 is dxgkrnl saying it reset a driver that stopped
         responding. Without it nothing timed out, and whatever the guest saw was
@@ -982,7 +1006,9 @@ class GuestRun:
         self.upgrade()
         self.suspend()
         self.hibernate()
-        if self.injecting():
+        if self.args.rvk:
+            self.rvk()
+        elif self.injecting():
             self.tdr()
         else:
             self.host_visible(self.suite())
