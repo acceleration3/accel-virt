@@ -127,7 +127,7 @@ setup there. The tasks below are closed as moved, not as done.
 
 - [X] T032 A transport round trip runs in a real guest: a new scenario in `src/guest/suite/` sends a batch and reads a reply through the transport, and `tools/guest/run_guest_suite.py` reports it passing. The live-executor version of the same path is feature 044 (SC-004)
 - [X] T033 `docs/protocol.md` and `docs/kb/11-implementation-plan.md` describe the private-data record and the submission path; the spec's Assumptions section is corrected where 024 and 041 did not provide what it named
-- [ ] T034 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
+- [X] T034 `AV_GUEST_IMAGE=... tools/gate.sh` passes; merge to `master`; push
 
 ---
 
