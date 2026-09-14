@@ -29,6 +29,7 @@ using av::ReplyHeader;
 using av::RvkContextRecord;
 using av::Status;
 using av::SubApi;
+using av::SubmissionDescriptor;
 using av::TransportResult;
 using av::WireReader;
 using av::WireWriter;
@@ -230,6 +231,36 @@ TEST(kmt_transport, a_failed_mapping_wait_leaves_it_unestablished)
   CHECK(transport.initialize() != Status::ok);
   CHECK(!transport.established()); }
 
+/* Teardown leaves nothing bound: the same transport sets up a new context,
+ * whose first fence is 1 again and whose ring starts empty, and a transport
+ * whose setup failed after binding its ring can try again. */
+TEST(kmt_transport, a_torn_down_transport_initializes_again)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  std::uint32_t answered = 0u;
+  fixture.kmt().answer_waits(nullptr, 0u);
+  CHECK_STATUS(transport.nop(answered), Status::ok);
+  CHECK_STATUS(transport.nop(answered), Status::ok);
+  transport.teardown();
+  CHECK(transport.invariants_hold());
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK(transport.established());
+  CHECK_STATUS(transport.nop(answered), Status::ok);
+  SubmissionDescriptor submitted;
+  CHECK_STATUS(submitted.decode(fixture.kmt().last_submission(), fixture.kmt().last_submission_size()), Status::ok);
+  CHECK_EQ(submitted.fence_id(), 1u);
+  CHECK_EQ(submitted.begin(), 0u);
+  transport.teardown();
+  fixture.kmt().fail_at(MockKmt::Call::create_context_virtual, 1u, MockKmt::invalid_parameter);
+  CHECK(transport.initialize() != Status::ok);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK_STATUS(transport.nop(answered), Status::ok);
+  transport.teardown();
+  CHECK_EQ(fixture.kmt().open_objects(), 3u);   /* the adapter, device and paging queue */
+  CHECK_EQ(fixture.kmt().misuses(), 0u); }
+
 /* A lock that hands back a null view cannot bind the ring. */
 TEST(kmt_transport, a_null_ring_view_is_refused)
 { MockKmt kmt;
@@ -398,3 +429,30 @@ TEST(kmt_transport, a_faulted_wait_loses_the_context)
   WireWriter w2 = transport.request_writer();
   w2.write_u32(2u);
   CHECK(transport.send_async(0x10001u, w2) == TransportResult::failed); }
+
+/* The transport's own no-op: one header-only command with the reply flag,
+ * judged by the answer being empty. The device answering bytes is some other
+ * command's answer, and a context that cannot send is lost, not malformed. */
+TEST(kmt_transport_nop, passes_only_an_empty_answer_and_says_how_many_bytes_came_back)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  const std::uint8_t three[3] = {1u, 2u, 3u};
+  fixture.kmt().queue_answer(nullptr, 0u);
+  fixture.kmt().queue_answer(three, sizeof three);
+  std::uint32_t answered = 99u;
+  CHECK_STATUS(transport.nop(answered), Status::ok);
+  CHECK_EQ(answered, 0u);
+  CHECK_EQ(fixture.kmt().commands(), 1u);
+  CHECK_EQ(fixture.kmt().command_id(0u), CommandHeader::nop_id);
+  CHECK_EQ(fixture.kmt().command_size(0u), static_cast<std::uint32_t>(CommandHeader::encoded_size));
+  CHECK_STATUS(transport.nop(answered), Status::malformed);
+  CHECK_EQ(answered, 3u);
+  CHECK(!transport.faulted());
+  CHECK_EQ(fixture.kmt().queued_answers(), 0u);
+  fixture.kmt().fail_at(MockKmt::Call::wait_for_context, 1u, MockKmt::invalid_parameter);
+  CHECK_STATUS(transport.nop(answered), Status::invalid_state);
+  CHECK_EQ(answered, 0u);
+  CHECK(transport.faulted());
+  CHECK(transport.invariants_hold()); }

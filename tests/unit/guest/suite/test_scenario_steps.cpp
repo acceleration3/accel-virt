@@ -57,3 +57,20 @@ TEST(scenario_steps_check_measured, puts_the_measurement_on_the_line_passed_or_n
   CHECK(std::strstr(report.text(), "FAIL vsync.rate status=4 3098") != nullptr);
   CHECK_STATUS(steps.check_measured("rate", Status::ok, 6000u), Status::ok);
   CHECK(std::strstr(report.text(), "ok vsync.rate 6000") != nullptr); }
+
+/* A graphics API's result is not an NTSTATUS either: success is a bare line, and
+ * a refusal carries the API's own code - VK_ERROR_OUT_OF_DEVICE_MEMORY (-2) as
+ * its bits, VK_INCOMPLETE (5) as itself - with the status a failed step has. */
+TEST(scenario_steps_check_result, zero_passes_and_anything_else_fails_with_the_code_on_the_line)
+{ MockKmt kmt;
+  GuestReport report;
+  ScenarioSteps steps(kmt, report, "vulkan");
+  CHECK_STATUS(steps.check_result("instance", 0), Status::ok);
+  CHECK_STATUS(steps.check_result("memory", -2), Status::invalid_state);
+  CHECK_STATUS(steps.check_result("incomplete", 5), Status::invalid_state);
+  CHECK(std::strcmp(report.text(),
+                    "ok vulkan.instance\n"
+                    "FAIL vulkan.memory status=7 4294967294\n"
+                    "FAIL vulkan.incomplete status=7 5\n") == 0);
+  CHECK_EQ(report.passed(), 1u);
+  CHECK_EQ(report.failed(), 2u); }

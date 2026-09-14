@@ -5,7 +5,10 @@
  * their descriptor as the driver does; submissions must land inside a
  * mapping of the submitting context's device; a lock hands out the one view
  * this mock owns, which keeps what is written through it; and a wait on a
- * transport's context can find a scripted answer in its reply slot. */
+ * transport's context can find a scripted answer in its reply slot - one for
+ * every wait, or a queue of them, one per wait - with the ring consumed up to
+ * the last submission, as a device that finished it would. Every command a
+ * transport's submission carried is journalled by id and size. */
 #ifndef AV_MOCK_KMT_HPP
 #define AV_MOCK_KMT_HPP
 
@@ -54,8 +57,14 @@ public:
     static constexpr std::uint32_t max_locks = 4u;
     /* The largest context private data this records for a test to read back. */
     static constexpr std::uint32_t max_private = 64u;
-    /* The largest answer a test scripts for a transport's context. */
-    static constexpr std::uint32_t max_answer = 64u;
+    /* The largest answer a test scripts for a transport's context: room for
+     * an OpenCL read of 64 floats and its framing. */
+    static constexpr std::uint32_t max_answer = 512u;
+    /* Answers a test can queue, and commands the journal keeps. */
+    static constexpr std::uint32_t max_queued = 64u;
+    static constexpr std::uint32_t max_journal = 128u;
+    /* The leading bytes of each journalled command a test can read back. */
+    static constexpr std::uint32_t journal_bytes = 128u;
 
     MockKmt();
 
@@ -110,6 +119,20 @@ public:
      * fence the last submission named, while the process holds a view of the
      * slot: how a test plays the device behind a transport it cannot reach. */
     void          answer_waits(const std::uint8_t *answer, std::uint32_t size);
+    /* The next wait on such a context that finds no earlier queued answer finds
+     * this one (up to max_answer bytes), before any answer_waits answers: how a
+     * test plays a device through a sequence of calls. */
+    void          queue_answer(const std::uint8_t *answer, std::uint32_t size);
+    /* Queued answers no wait has taken yet. */
+    std::uint32_t queued_answers() const;
+    /* Commands submitted on transports' rings, in order, and the id and size
+     * (header included) of the one at `index`, 0 past the journal. */
+    std::uint32_t commands() const;
+    std::uint32_t command_id(std::uint32_t index) const;
+    std::uint32_t command_size(std::uint32_t index) const;
+    /* Its first journal_bytes bytes, header first - past a shorter command,
+     * whatever the ring held there; null past the journal. */
+    const std::uint8_t *command_bytes(std::uint32_t index) const;
 
     std::uint32_t calls(Call call) const;
     /* Adapters, devices, allocations, queues, contexts and mappings still open. */
@@ -135,7 +158,8 @@ public:
 
 private:
     enum class Kind : unsigned { none, adapter, device, allocation, queue, context, mapping };
-    /* A context's `address` is the reply allocation its record named, or 0. */
+    /* A context's `address` is the reply allocation its record named, or 0,
+     * and `ring` the ring allocation. */
     struct Object {
         Kind          kind;
         std::uint32_t handle;
@@ -143,6 +167,7 @@ private:
         std::uint64_t address;
         std::uint64_t pages;
         std::uint16_t allocation_kind;
+        std::uint32_t ring;
     };
     static constexpr std::uint32_t max_adapters = 8u;
     static constexpr std::uint64_t first_address = 0x100000000ull;
@@ -156,6 +181,9 @@ private:
     Object       *find_mapping(std::uint64_t address);
     bool          is_locked(std::uint32_t allocation) const;
     void          write_answer(const Object &context);
+    void          write_bytes(const Object &context, const std::uint8_t *answer, std::uint32_t size);
+    void          journal(const Object &context);
+    void          consume(const Object &context);
     Status        close(Kind kind, std::uint32_t handle);
     Status        misuse();
 
@@ -189,6 +217,14 @@ private:
     std::uint8_t  answer_[max_answer];
     std::uint32_t answer_size_;
     bool          answering_;
+    std::uint8_t  queued_[max_queued][max_answer];
+    std::uint32_t queued_sizes_[max_queued];
+    std::uint32_t queued_count_;
+    std::uint32_t queued_taken_;
+    std::uint32_t journal_ids_[max_journal];
+    std::uint32_t journal_sizes_[max_journal];
+    std::uint8_t  journal_bytes_[max_journal][journal_bytes];
+    std::uint32_t journal_count_;
 };
 
 }  // namespace av

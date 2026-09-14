@@ -3,6 +3,9 @@
 #include "core/support/nt_status.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/submission/batch_header.hpp"
+#include "proto/submission/command_header.hpp"
+#include "proto/submission/ring_header.hpp"
 #include "proto/submission/reply_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 
@@ -22,7 +25,9 @@ MockKmt::MockKmt()
       zeroing_{}, calls_{}, objects_{}, views_{}, locked_{}, private_{}, private_size_(0u), submission_{}, submission_size_(0u), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u),
-      answer_{}, answer_size_(0u), answering_(false) {}
+      answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
+      queued_taken_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
+      journal_count_(0u) {}
 
 bool MockKmt::begin(Call call)
 {
@@ -65,7 +70,7 @@ std::uint32_t MockKmt::open(Kind kind, std::uint32_t owner, std::uint64_t addres
 {
     for (Object &object : objects_) {
         if (object.kind != Kind::none) continue;
-        object = Object{kind, next_handle_, owner, address, pages, 0u};
+        object = Object{kind, next_handle_, owner, address, pages, 0u, 0u};
         next_handle_ += handle_step;
         return object.handle;
     }
@@ -300,8 +305,10 @@ Status MockKmt::create_context_virtual(std::uint32_t device, const std::uint8_t 
     private_size_ = size < max_private ? size : max_private;
     for (std::uint32_t i = 0u; i < private_size_; i++) private_[i] = private_data[i];
     RvkContextRecord    record;
-    const std::uint32_t reply = record.decode(private_data, size) == Status::ok ? record.reply() : 0u;
-    if (!zeroed(Call::create_context_virtual)) context = open(Kind::context, device, reply, 0u);
+    const bool          decoded = record.decode(private_data, size) == Status::ok;
+    if (!zeroed(Call::create_context_virtual)) context = open(Kind::context, device, decoded ? record.reply() : 0u, 0u);
+    Object *const created = find(Kind::context, context);
+    if (created != nullptr && decoded) created->ring = record.ring();
     return succeed();
 }
 
@@ -324,6 +331,7 @@ Status MockKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint6
     if (length == 0u || allocation == nullptr || allocation->owner != submitting->owner ||
         commands - mapping->address + length > mapping->pages * page_bytes)
         return refuse(invalid_parameter);
+    journal(*submitting);
     return succeed();
 }
 
@@ -333,18 +341,66 @@ Status MockKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
     const Object *const object = find(Kind::context, context);
     if (find(Kind::device, device) == nullptr || object == nullptr || object->owner != device) return misuse();
     ticks_ += wait_cost_;
-    if (answering_) write_answer(*object);
+    write_answer(*object);
+    consume(*object);
     return succeed();
 }
 
+/* A queued answer is taken by the wait that finds it whether or not the slot
+ * can be written, so a script stays in step with the calls that awaited it. */
 void MockKmt::write_answer(const Object &context)
+{
+    if (queued_taken_ < queued_count_) {
+        const std::uint32_t index = queued_taken_++;
+        write_bytes(context, queued_[index], queued_sizes_[index]);
+        return;
+    }
+    if (answering_) write_bytes(context, answer_, answer_size_);
+}
+
+void MockKmt::write_bytes(const Object &context, const std::uint8_t *answer, std::uint32_t size)
 {
     SubmissionDescriptor submitted;
     std::uint8_t *const  slot =
         context.address != 0u ? view_of(static_cast<std::uint32_t>(context.address)) : nullptr;
     if (slot == nullptr || submitted.decode(submission_, submission_size_) != Status::ok) return;
-    static_cast<void>(ReplyHeader(submitted.fence_id(), answer_size_).encode(slot, ReplyHeader::encoded_size));
-    for (std::uint32_t i = 0u; i < answer_size_; i++) slot[ReplyHeader::encoded_size + i] = answer_[i];
+    static_cast<void>(ReplyHeader(submitted.fence_id(), size).encode(slot, ReplyHeader::encoded_size));
+    for (std::uint32_t i = 0u; i < size; i++) slot[ReplyHeader::encoded_size + i] = answer[i];
+}
+
+/* The command at the front of the batch the last submission named, read from
+ * the ring as the device would; one command per batch is what a transport sends. */
+void MockKmt::journal(const Object &context)
+{
+    SubmissionDescriptor submitted;
+    RingHeader           header;
+    const std::uint8_t *const ring = context.ring != 0u ? view_of(context.ring) : nullptr;
+    if (ring == nullptr || journal_count_ == max_journal ||
+        submitted.decode(submission_, submission_size_) != Status::ok ||
+        header.decode(ring, RingHeader::encoded_size) != Status::ok)
+        return;
+    std::uint8_t *const leading = journal_bytes_[journal_count_];
+    const std::uint64_t mask = header.capacity() - 1u;
+    for (std::uint32_t i = 0u; i < journal_bytes; i++)
+        leading[i] = ring[RingHeader::encoded_size + ((submitted.begin() + BatchHeader::encoded_size + i) & mask)];
+    CommandHeader command;
+    if (command.decode(leading, CommandHeader::encoded_size) != Status::ok) return;
+    journal_ids_[journal_count_] = command.id();
+    journal_sizes_[journal_count_] = command.size();
+    journal_count_++;
+}
+
+/* Everything submitted is finished once the context is: the head moves to the
+ * last submission's end, freeing the ring for the next. */
+void MockKmt::consume(const Object &context)
+{
+    SubmissionDescriptor submitted;
+    RingHeader           header;
+    std::uint8_t *const  ring = context.ring != 0u ? view_of(context.ring) : nullptr;
+    if (ring == nullptr || submitted.decode(submission_, submission_size_) != Status::ok ||
+        header.decode(ring, RingHeader::encoded_size) != Status::ok)
+        return;
+    static_cast<void>(RingHeader(header.order(), header.tail(), submitted.end()).encode(ring, RingHeader::encoded_size));
 }
 
 /* Time passes only at a vertical blank: the clock is what the scenario
@@ -374,6 +430,28 @@ void MockKmt::answer_waits(const std::uint8_t *answer, std::uint32_t size)
     answer_size_ = size < max_answer ? size : max_answer;
     for (std::uint32_t i = 0u; i < answer_size_; i++) answer_[i] = answer[i];
     answering_ = true;
+}
+
+void MockKmt::queue_answer(const std::uint8_t *answer, std::uint32_t size)
+{
+    if (queued_count_ == max_queued) return;
+    const std::uint32_t kept = size < max_answer ? size : max_answer;
+    for (std::uint32_t i = 0u; i < kept; i++) queued_[queued_count_][i] = answer[i];
+    queued_sizes_[queued_count_] = kept;
+    queued_count_++;
+}
+
+std::uint32_t MockKmt::queued_answers() const { return queued_count_ - queued_taken_; }
+std::uint32_t MockKmt::commands() const { return journal_count_; }
+std::uint32_t MockKmt::command_id(std::uint32_t index) const { return index < journal_count_ ? journal_ids_[index] : 0u; }
+const std::uint8_t *MockKmt::command_bytes(std::uint32_t index) const
+{
+    return index < journal_count_ ? journal_bytes_[index] : nullptr;
+}
+
+std::uint32_t MockKmt::command_size(std::uint32_t index) const
+{
+    return index < journal_count_ ? journal_sizes_[index] : 0u;
 }
 
 void MockKmt::spend_on_wait(std::uint64_t ticks) { wait_cost_ = ticks; }

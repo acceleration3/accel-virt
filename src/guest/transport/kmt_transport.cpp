@@ -122,6 +122,12 @@ void KmtTransport::teardown()
         static_cast<void>(kmt.destroy_allocation(device, allocations_[index]));
         allocations_[index] = 0u;
     }
+    /* The ring and reply views are gone with their allocations, and a context
+     * set up again numbers its fences from the start: without this a transport
+     * torn down could never be initialized again. */
+    ring_ = TransportRing();
+    reply_ = ReplyReader();
+    fences_ = TransportFence();
     faulted_ = false;
 }
 
@@ -183,6 +189,16 @@ TransportResult KmtTransport::send_sync(uint32_t command_id, WireWriter &writer,
         return TransportResult::failed;
     }
     return TransportResult::ok;
+}
+
+Status KmtTransport::nop(uint32_t &answered)
+{
+    WireWriter            request = request_writer();
+    WireReader            answer(nullptr, 0u);
+    const TransportResult sent = send_sync(CommandHeader::nop_id, request, answer);
+    answered = static_cast<uint32_t>(answer.remaining());
+    if (sent != TransportResult::ok) return Status::invalid_state;
+    return answered != 0u ? Status::malformed : Status::ok;
 }
 
 WireArena      &KmtTransport::decode_arena() { return decode_arena_; }

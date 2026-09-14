@@ -98,8 +98,14 @@ list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_EXECUTOR_ENTRY})
 
 file(GLOB_RECURSE AV_GENERATED_ALL CONFIGURE_DEPENDS src/proto/generated/*.cpp)
 list(REMOVE_ITEM AV_PORTABLE_SOURCES ${AV_GENERATED_ALL})
+# The guest's encoders join the core too, and nothing of the device's: the rvk
+# scenarios in src/guest send real Vulkan and OpenCL streams (044), and the
+# device core for QEMU below never encodes one.
+set(AV_GENERATED_CLIENT_SOURCES
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_client.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_client.cpp)
 if(AV_GENERATED)
-  list(APPEND AV_PORTABLE_SOURCES ${AV_GENERATED_SOURCES})
+  list(APPEND AV_PORTABLE_SOURCES ${AV_GENERATED_SOURCES} ${AV_GENERATED_CLIENT_SOURCES})
 endif()
 add_library(av_core STATIC ${AV_PORTABLE_SOURCES})
 target_include_directories(av_core PUBLIC src)
@@ -265,22 +271,12 @@ foreach(src ${AV_UNIT_TESTS})
   add_test(NAME ${name} COMMAND ${name})
   set_tests_properties(${name} PROPERTIES
     ENVIRONMENT "LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/coverage/${name}.profraw")
-  # The generated VK/CL clients are not compiled into any runtime target yet
-  # (their home is the ICDs, 045+); this one test compiles and links them to
-  # prove the emitter's output builds against ClientTransport (feature 043).
-  if(name STREQUAL "test_generated_clients")
-    target_sources(${name} PRIVATE
-      ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_client.cpp
-      ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_client.cpp)
+  # Two tests name the generated clients' headers by the names the generator
+  # includes them by; the clients themselves are in av_core.
+  if(name STREQUAL "test_generated_clients" OR name STREQUAL "test_loopback_transport")
     target_include_directories(${name} PRIVATE
       ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan
       ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl)
-  endif()
-  if(name STREQUAL "test_loopback_transport")
-    target_sources(${name} PRIVATE
-      ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_client.cpp)
-    target_include_directories(${name} PRIVATE
-      ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan)
   endif()
   if(AV_COVERAGE)
     set_tests_properties(${name} PROPERTIES

@@ -9,10 +9,13 @@
 #include "guest/suite/fence_stress_scenario.hpp"
 #include "guest/suite/gpu_mapping_scenario.hpp"
 #include "guest/suite/host_visible_scenario.hpp"
+#include "guest/suite/isolation_scenario.hpp"
+#include "guest/suite/opencl_scenario.hpp"
 #include "guest/suite/submission_scenario.hpp"
 #include "guest/suite/timeout_scenario.hpp"
 #include "guest/suite/transport_scenario.hpp"
 #include "guest/suite/vsync_scenario.hpp"
+#include "guest/suite/vulkan_scenario.hpp"
 
 #include <stdint.h>
 
@@ -54,6 +57,9 @@ private:
     FenceStressScenario stress_;
     TimeoutScenario     timeout_;
     TransportScenario   opengl_;
+    VulkanScenario      vulkan_;
+    OpenClScenario      opencl_;
+    IsolationScenario   isolation_;
 };
 
 }  // namespace av

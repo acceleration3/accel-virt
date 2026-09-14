@@ -51,6 +51,12 @@ public:
      * loses the context: every later send fails until it is torn down. */
     bool                 faulted() const;
 
+    /* A round trip of the transport's own no-op (feature 044), which the
+     * device answers itself: ok when answered with nothing; invalid_state when
+     * the call failed, which lost the context; malformed when the answer held
+     * bytes, `answered` saying how many. */
+    [[nodiscard]] Status nop(uint32_t &answered);
+
     WireWriter      request_writer() override;
     TransportResult send_async(uint32_t command_id, WireWriter &writer) override;
     TransportResult send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply) override;

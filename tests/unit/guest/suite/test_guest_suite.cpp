@@ -18,6 +18,7 @@
 #include "guest/suite/vsync_scenario.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
+#include "harness/guest/scripted_host.hpp"
 
 #include <cstring>
 
@@ -720,20 +721,51 @@ TEST(timeout_scenario, a_setup_that_fails_stops_the_run_where_it_failed)
   } }
 
 /* Feature 044: a run whose device loaded the real executor asks only for the
- * scenarios that send it work - the Vulkan transport and an OpenGL context - and
- * none of the WDDM scenarios the echo run already covers. */
-TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_and_closes_the_adapter)
+ * scenarios that send it work - the transport's no-op, the Vulkan chain, vector
+ * add, an OpenGL context and fault isolation, in that order - and none of the
+ * WDDM scenarios the echo run already covers. */
+TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_adapter)
 { MockKmt kmt;
   kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
-  kmt.answer_waits(nullptr, 0u);
+  av::ScriptedHost host(kmt);
+  host.nop();
+  host.vulkan_run();
+  host.opencl_run();
+  host.nop();
+  host.healthy_context();
+  const std::uint32_t before_fault = 1u + av::ScriptedHost::vulkan_waits + av::ScriptedHost::opencl_waits + 1u +
+                                     av::ScriptedHost::isolation_waits_before_fault;
+  kmt.fail_at(MockKmt::Call::wait_for_context, before_fault + 1u, device_removed);
+  host.healthy_context();
+  host.nop();
   GuestReport report;
   GuestSuite suite(kmt, report, 0u);
-  CHECK_EQ(suite.run_rvk(), 0u);
-  CHECK(has_line(report, "ok adapter.find"));
-  CHECK(has_line(report, "ok transport.nop 0"));
-  CHECK(has_line(report, "ok opengl.nop 0"));
-  CHECK(has_line(report, "ok suite.close_adapter"));
+  const std::uint32_t failed = suite.run_rvk();
+  CHECK_EQ(failed, 0u);
+  const char *const order[] = {"ok adapter.find\n", "ok transport.nop 0\n", "ok vulkan.bind\n",
+                               "ok opencl.sum 64\n", "ok opengl.nop 0\n", "ok isolation.relink\n",
+                               "ok suite.close_adapter\n", "rvktest: 45 passed, 0 failed\n"};
+  const char *at = report.text();
+  for (const char *line : order) {
+      const char *const found = std::strstr(at, line);
+      CHECK(found != nullptr);
+      if (found != nullptr) at = found;
+  }
   CHECK(std::strstr(report.text(), "allocation.") == nullptr);
   CHECK(std::strstr(report.text(), "vsync.") == nullptr);
-  CHECK(std::strstr(report.text(), "rvktest: ") != nullptr);
-  CHECK_EQ(kmt.open_objects(), 0u); }
+  CHECK_EQ(kmt.queued_answers(), 0u);
+  CHECK_EQ(kmt.open_objects(), 0u);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
+/* Without the adapter each rvk scenario says so on its first step and asks
+ * D3DKMT for nothing. */
+TEST(guest_suite_run_rvk, without_the_adapter_every_rvk_scenario_fails_at_its_first_step)
+{ MockKmt kmt;
+  GuestReport report;
+  GuestSuite suite(kmt, report, 0u);
+  CHECK_EQ(suite.run_rvk(), 6u);
+  const char *const lines[] = {"FAIL adapter.find", "FAIL transport.adapter status=3",
+                               "FAIL vulkan.adapter status=3", "FAIL opencl.adapter status=3",
+                               "FAIL opengl.adapter status=3", "FAIL isolation.adapter status=3"};
+  for (const char *line : lines) CHECK(std::strstr(report.text(), line) != nullptr);
+  CHECK_EQ(kmt.calls(MockKmt::Call::create_device), 0u); }

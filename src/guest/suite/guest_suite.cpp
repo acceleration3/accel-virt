@@ -10,7 +10,8 @@ GuestSuite::GuestSuite(Kmt &kmt, GuestReport &report, uint32_t stress_seconds)
       mapping_(kmt, report, search_), submission_(kmt, report, search_),
       host_visible_(kmt, report, search_),
       vsync_(kmt, report, search_), transport_(kmt, report, search_, SubApi::vulkan, "transport"), stress_(kmt, report, search_, stress_seconds),
-      timeout_(kmt, report, search_), opengl_(kmt, report, search_, SubApi::opengl, "opengl") {}
+      timeout_(kmt, report, search_), opengl_(kmt, report, search_, SubApi::opengl, "opengl"),
+      vulkan_(kmt, report, search_), opencl_(kmt, report, search_), isolation_(kmt, report, search_) {}
 
 uint32_t GuestSuite::run_timeout()
 {
@@ -25,7 +26,12 @@ uint32_t GuestSuite::run_rvk()
 {
     adapter_.run();
     transport_.run();
+    vulkan_.run();
+    opencl_.run();
     opengl_.run();
+    /* Last: the context it faults is its own, and a scenario after it would
+     * be judging the recovery rather than its own work. */
+    isolation_.run();
     report_.check("suite", "close_adapter", search_.close(), kmt_.last_code());
     report_.finish();
     return report_.failed();

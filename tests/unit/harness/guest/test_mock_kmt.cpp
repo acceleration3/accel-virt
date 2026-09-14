@@ -3,12 +3,18 @@
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/client_descriptor.hpp"
+#include "guest/transport/guest_connection.hpp"
+#include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/client_transport.hpp"
+#include "proto/submission/command_header.hpp"
 #include "proto/submission/reply_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
+#include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
 
 using av::ClientDescriptor;
 using av::MockKmt;
@@ -395,7 +401,8 @@ TEST(mock_kmt, a_scripted_answer_is_cut_to_max_answer)
   ReplyHeader header;
   CHECK_STATUS(header.decode(rig.slot(), ReplyHeader::encoded_size), Status::ok);
   CHECK_EQ(header.size(), MockKmt::max_answer);
-  CHECK_EQ(rig.slot()[ReplyHeader::encoded_size + MockKmt::max_answer - 1u], MockKmt::max_answer);
+  CHECK_EQ(rig.slot()[ReplyHeader::encoded_size + MockKmt::max_answer - 1u],
+           static_cast<std::uint8_t>(MockKmt::max_answer));
   CHECK_EQ(rig.slot()[ReplyHeader::encoded_size + MockKmt::max_answer], 0u); }
 
 /* No slot is written that the context did not name, the process does not hold a
@@ -442,3 +449,72 @@ TEST(mock_kmt, only_a_named_locked_slot_and_a_described_submission_are_answered)
     kmt.fail_at(MockKmt::Call::wait_for_context, 1u, MockKmt::invalid_parameter);
     CHECK(kmt.wait_for_context(rig.device(), context) != Status::ok);
     CHECK(slot_is_empty(rig.slot())); } }
+
+/* Queued answers are taken one per wait, in order, before the answer every wait
+ * finds; a refused wait takes none, and past max_queued nothing more is kept. */
+TEST(mock_kmt_queue_answer, one_queued_answer_per_wait_then_the_standing_one)
+{ MockKmt kmt;
+  AnsweringRig rig(kmt);
+  const std::uint32_t context = rig.context_naming(rig.reply());
+  const std::uint8_t first[2] = {0x11u, 0x12u};
+  const std::uint8_t second[3] = {0x21u, 0x22u, 0x23u};
+  const std::uint8_t standing[1] = {0x31u};
+  kmt.queue_answer(first, sizeof first);
+  kmt.queue_answer(second, sizeof second);
+  kmt.answer_waits(standing, sizeof standing);
+  CHECK_EQ(kmt.queued_answers(), 2u);
+  rig.submit_fence(context, 1u);
+  kmt.fail_at(MockKmt::Call::wait_for_context, 1u, MockKmt::invalid_parameter);
+  CHECK(kmt.wait_for_context(rig.device(), context) != Status::ok);
+  CHECK_EQ(kmt.queued_answers(), 2u);
+  const std::uint32_t sizes[] = {2u, 3u, 1u, 1u};
+  const std::uint8_t  leading[] = {0x11u, 0x21u, 0x31u, 0x31u};
+  for (std::uint32_t wait = 0u; wait < 4u; wait++) {
+      CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
+      ReplyHeader header;
+      CHECK_STATUS(header.decode(rig.slot(), ReplyHeader::encoded_size), Status::ok);
+      CHECK_EQ(header.size(), sizes[wait]);
+      CHECK_EQ(rig.slot()[ReplyHeader::encoded_size], leading[wait]);
+  }
+  CHECK_EQ(kmt.queued_answers(), 0u);
+  MockKmt full;
+  for (std::uint32_t i = 0u; i < MockKmt::max_queued + 3u; i++) full.queue_answer(first, sizeof first);
+  CHECK_EQ(full.queued_answers(), MockKmt::max_queued); }
+
+/* Through a real transport: every command a batch carries is journalled by id
+ * and size, and a wait consumes the ring, so synchronous commands that would
+ * fill an order-12 ring several times over all go through. Past max_journal
+ * the journal stops, and an index past it answers 0. */
+TEST(mock_kmt_journal, records_each_command_and_a_wait_frees_the_ring)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  std::uint32_t adapter = 0u;
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
+  av::GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(adapter), Status::ok);
+  av::KmtTransport transport(connection, SubApi::vulkan, 12u);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  kmt.answer_waits(nullptr, 0u);
+  for (std::uint32_t i = 0u; i < 20u; i++) {
+      av::WireWriter writer = transport.request_writer();
+      writer.write_zeros(900u);
+      av::WireReader reply(nullptr, 0u);
+      CHECK(transport.send_sync(0x10001u + i, writer, reply) == av::TransportResult::ok);
+  }
+  CHECK_EQ(kmt.commands(), 20u);
+  CHECK_EQ(kmt.command_id(0u), 0x10001u);
+  CHECK_EQ(kmt.command_id(19u), 0x10014u);
+  CHECK_EQ(kmt.command_size(19u), 908u);
+  for (std::uint32_t i = 0u; i < MockKmt::max_journal; i++) {
+      std::uint32_t answered = 0u;
+      CHECK_STATUS(transport.nop(answered), Status::ok);
+  }
+  CHECK_EQ(kmt.commands(), MockKmt::max_journal);
+  CHECK_EQ(kmt.command_id(MockKmt::max_journal - 1u), av::CommandHeader::nop_id);
+  CHECK_EQ(kmt.command_id(MockKmt::max_journal), 0u);
+  CHECK_EQ(kmt.command_size(MockKmt::max_journal), 0u);
+  transport.teardown();
+  connection.close();
+  CHECK_STATUS(kmt.close_adapter(adapter), Status::ok);
+  CHECK_EQ(kmt.misuses(), 0u); }
