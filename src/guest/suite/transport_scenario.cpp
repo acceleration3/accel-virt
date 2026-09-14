@@ -42,7 +42,13 @@ void TransportScenario::run()
          * reset leaves it in. */
         status = steps_.check("send_sync", sent == TransportResult::ok ? Status::ok : Status::invalid_state);
     }
-    if (status == Status::ok) static_cast<void>(steps_.check_measured("reply", judge(answer), matched_));
+    if (status == Status::ok) {
+        /* Judged before it is reported: the count is an out parameter of the
+         * judgement, and arguments are evaluated in no fixed order (clang-cl
+         * read it first, feature 037). */
+        const Status judged = judge(answer);
+        static_cast<void>(steps_.check_measured("reply", judged, matched_));
+    }
     transport.teardown();
     connection.close();
 }
