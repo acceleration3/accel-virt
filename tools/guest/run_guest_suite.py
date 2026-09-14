@@ -185,7 +185,7 @@ def qemu_command(args, work, disk, rescue):
     """QEMU for a run; a rescue boot leaves the device out so the driver never loads."""
     suffix = "-rescue" if rescue else ""
     properties = [f"virtio-gpu-rvk-pci,id={DISPLAY_DEVICE}", "host-gpu=auto", f"executor={args.executor}",
-                  f"max_outputs={args.outputs}"]
+                  f"max_outputs={args.outputs}", f"vectors={FENCE_VECTORS}"]
     # The region exists only where it is asked for, and the capset's
     # host-visible bit follows the device's own hostmem size, so a run without
     # it is a run against an adapter that must fall back (feature 041, FR-001).
@@ -257,6 +257,9 @@ DISPLAY_SIZE = (1280, 800)
 PLACEHOLDER_GREY = b"\xaa\xaa\xaa"
 """The grey QEMU draws its "display output is not active" text in."""
 DISPLAY_DEVICE = "gpu"
+# The device's three sources and eight messages its contexts' fence queues
+# share, matching rvkgpu.inf's MessageNumberLimit (feature 043).
+FENCE_VECTORS = 11
 """The device id screendump names when it asks for a head other than the first."""
 HOSTMEM_BAR = 4
 """Where virtio-gpu-pci registers the host-visible region, at offset 0 of the

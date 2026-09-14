@@ -103,7 +103,7 @@ class GuestSuiteRun(unittest.TestCase):
         lines = self.journal_lines()
         argv = lines[0]
         self.assertIn("virtio-gpu-rvk-pci,id=gpu,host-gpu=auto,executor=/nowhere/librvk_echo_executor.so,"
-                      "max_outputs=1", argv)
+                      "max_outputs=1,vectors=11", argv)
         self.assertIn("isa-debugcon,iobase=0x402,chardev=debugcon", argv)
         self.assertIn("name=org.qemu.guest_agent.0", argv)
         self.assertIn(",hv-crash", argv)

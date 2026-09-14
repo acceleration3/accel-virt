@@ -46,8 +46,9 @@ HKR,, UserModeDriverName, 0x00010000, "rvkumd.dll"
 [Rvkgpu_Files]
 rvkgpu.sys
 
-; One message for each of the device's default vectors: control, cursor and
-; configuration changes.
+; One message for each of the device's own sources - control, cursor and
+; configuration changes - and eight the rvk contexts' fence queues share
+; (feature 043); the runner starts the device with as many vectors.
 [Rvkgpu_Install.HW]
 AddReg = Rvkgpu_Interrupts
 
@@ -55,7 +56,7 @@ AddReg = Rvkgpu_Interrupts
 HKR, "Interrupt Management", 0x00000010
 HKR, "Interrupt Management\MessageSignaledInterruptProperties", 0x00000010
 HKR, "Interrupt Management\MessageSignaledInterruptProperties", MSISupported, 0x00010001, 1
-HKR, "Interrupt Management\MessageSignaledInterruptProperties", MessageNumberLimit, 0x00010001, 3
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", MessageNumberLimit, 0x00010001, 11
 
 [Rvkgpu_Install.Services]
 AddService = rvkgpu, 0x00000002, Rvkgpu_Service

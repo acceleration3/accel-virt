@@ -65,7 +65,7 @@ class DriverPackage(unittest.TestCase):
     def test_asks_for_message_signalled_interrupts(self):
         self.assertIn('"Interrupt Management\\MessageSignaledInterruptProperties", MSISupported, 0x00010001, 1',
                       self.text)
-        self.assertIn('MessageNumberLimit, 0x00010001, 3', self.text)
+        self.assertIn('MessageNumberLimit, 0x00010001, 11', self.text)
         self.assertEqual(self.inf["Rvkgpu_Install.HW"]["AddReg"], "Rvkgpu_Interrupts")
 
 
