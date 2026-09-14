@@ -392,12 +392,22 @@ What it runs (`tests/loopback/test_fullstack_*.cpp`):
   binding on doorbell 0, the echo `0x10001` and its reply - with the completion
   proven to arrive only through the fence interrupt
 - a context the executor faults, whose wait fails while its neighbour echoes
-- D3 and D0 with a live transport: the context lost, the region blob made
-  again, a new transport echoing
+- D3 and D0, ResetFromTimeout and RestartFromTimeout, and StopDevice and
+  StartDevice, each under a live transport: the context lost, the region blob
+  made again, a new transport echoing
+- 3000 batches wrapping the smallest ring; five transports interleaved on
+  their own doorbells and messages, and a freed doorbell reused
 - a process that exits holding everything, cleaned up to nothing
 - `GuestSuite` unchanged: all 41 steps the guest run reports pass; the fence
   stress run for one second of mock time; and the timeout run, which fails at
   `timeout.held_lost` alone because the rig has no TDR
+
+What it has found in the driver and the guest: the host-visible region's blob
+was never made again after D3/D0 or a timeout reset, a second D0 closed a
+working region, and `TransportRing` stored the ring tail before the miniport
+checked the submission, so a device worker woken for its ring attach consumed
+an unsubmitted batch and the driver failed the context - one run in thirty
+under parallel load.
 
 What it cannot see, and L5 still must:
 
