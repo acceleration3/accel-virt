@@ -4,14 +4,16 @@
 
 namespace av {
 
-GuestProgram::GuestProgram(uint32_t stress_seconds, bool timeout_only)
-    : kmt_(), report_(), suite_(kmt_, report_, stress_seconds), timeout_only_(timeout_only) {}
+GuestProgram::GuestProgram(uint32_t stress_seconds, Run run)
+    : kmt_(), report_(), suite_(kmt_, report_, stress_seconds), run_(run) {}
 
 uint32_t GuestProgram::run()
 {
     const Status initialized = kmt_.initialize();
     if (initialized == Status::ok) {
-        static_cast<void>(timeout_only_ ? suite_.run_timeout() : suite_.run());
+        if (run_ == Run::timeout) static_cast<void>(suite_.run_timeout());
+        else if (run_ == Run::rvk) static_cast<void>(suite_.run_rvk());
+        else static_cast<void>(suite_.run());
     } else {
         report_.check("program", "initialize", initialized, 0u);
         report_.finish();

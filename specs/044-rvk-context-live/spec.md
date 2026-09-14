@@ -45,7 +45,6 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 | `VulkanScenario` | object (guest) | the transport and the handles it made | Build the Vulkan object chain on the host GPU |
 | `OpenClScenario` | object (guest) | the transport, the kernel and its buffers | Run vector add on the host GPU |
 | `IsolationScenario` | object (guest) | two transports | Show a faulted context changes no other |
-| `RvkSuite` | system (guest) | the scenarios above and the adapter search | Run the rvk scenarios in order |
 
 ### Test requirements
 

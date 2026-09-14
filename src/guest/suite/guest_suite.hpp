@@ -35,6 +35,10 @@ public:
      * one context: every other scenario would be measuring the stall
      * (feature 040, US3). */
     uint32_t run_timeout();
+    /* Only the scenarios that send real work to the host's executor library,
+     * for a run whose device loaded it rather than the echo library
+     * (feature 044). */
+    uint32_t run_rvk();
 
 private:
     Kmt               &kmt_;
@@ -49,6 +53,7 @@ private:
     TransportScenario   transport_;
     FenceStressScenario stress_;
     TimeoutScenario     timeout_;
+    TransportScenario   opengl_;
 };
 
 }  // namespace av

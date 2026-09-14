@@ -718,3 +718,22 @@ TEST(timeout_scenario, a_setup_that_fails_stops_the_run_where_it_failed)
       CHECK_STATUS(search.close(), Status::ok);
       CHECK_EQ(kmt.open_objects(), 0u);
   } }
+
+/* Feature 044: a run whose device loaded the real executor asks only for the
+ * scenarios that send it work - the Vulkan transport and an OpenGL context - and
+ * none of the WDDM scenarios the echo run already covers. */
+TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_and_closes_the_adapter)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
+  kmt.answer_waits(nullptr, 0u);
+  GuestReport report;
+  GuestSuite suite(kmt, report, 0u);
+  CHECK_EQ(suite.run_rvk(), 0u);
+  CHECK(has_line(report, "ok adapter.find"));
+  CHECK(has_line(report, "ok transport.nop 0"));
+  CHECK(has_line(report, "ok opengl.nop 0"));
+  CHECK(has_line(report, "ok suite.close_adapter"));
+  CHECK(std::strstr(report.text(), "allocation.") == nullptr);
+  CHECK(std::strstr(report.text(), "vsync.") == nullptr);
+  CHECK(std::strstr(report.text(), "rvktest: ") != nullptr);
+  CHECK_EQ(kmt.open_objects(), 0u); }
