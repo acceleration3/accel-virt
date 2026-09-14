@@ -21,8 +21,8 @@
 namespace av::clproto {
 
 // Every command forwarded to whatever OpenCL this process
-// loaded. The handles the guest sent are this process's own
-// pointers, so there is nothing to translate.
+// loaded. Which numbers are its objects is not this class's to
+// say: the server that derives from it answers handle_for.
 //
 // An extension command is resolved rather than linked. The ICD
 // loader on a machine is whichever one is first on the library

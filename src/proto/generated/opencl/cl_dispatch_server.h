@@ -25,10 +25,36 @@
 
 namespace av::clproto {
 
+// The objects a guest names by number. Which numbers are objects is
+// the server's to say: see ServerDispatch::handle_for.
+enum class HandleKind : uint8_t {
+    command_queue,
+    context,
+    device,
+    event,
+    kernel,
+    mem,
+    platform,
+    program,
+    sampler,
+};
+
 // Implemented by the server; the table below calls into it.
 class ServerDispatch {
 public:
     virtual ~ServerDispatch() = default;
+
+    // The object of this kind the server made under this number, or
+    // null for a number it did not: the decoder refuses the command
+    // rather than hand the host's OpenCL a pointer a guest invented.
+    virtual void* handle_for(HandleKind kind, uint64_t wire) const = 0;
+    // An object a successful call is about to give the guest a number
+    // for; from here on that number is the object.
+    virtual void made(HandleKind kind, void* object) = 0;
+    // A successful retain or release of one. After its last release
+    // the number names nothing.
+    virtual void retained(HandleKind kind, void* object) = 0;
+    virtual void released(HandleKind kind, void* object) = 0;
 
     virtual cl_int on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id* platforms, cl_uint* num_platforms) = 0;
     virtual cl_int on_clGetPlatformInfo(cl_platform_id platform, cl_platform_info param_name, size_t param_value_size, void* param_value, size_t* param_value_size_ret) = 0;

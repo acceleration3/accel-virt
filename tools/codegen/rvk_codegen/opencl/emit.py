@@ -1,12 +1,13 @@
 """C++ for the OpenCL half of the wire.
 
-Six files, all from the same lowered registry:
+Seven files, all from the same lowered registry:
 
   cl_protocol_ids.h    the id constants
   cl_command_names.*   an id to a name, for the log
   cl_dispatch_client.* one wrapper per command, encoding and sending
   cl_dispatch_server.* the interface the server implements, and the
                        decode-and-call table
+  cl_default_dispatch.h that interface answered with no OpenCL, for tests
   cl_real_dispatch.h   that interface implemented by calling the host's
                        own OpenCL, which is what the render server runs
   cl_icd_stubs.h       a refusal for every ICD slot nothing else fills
@@ -61,6 +62,236 @@ CL_PREAMBLE = [
 
 def _is_handle(reg: Registry, base: str) -> bool:
     return base in reg.handles
+
+
+# ---------------------------------------------------------------------
+# What the server refuses before the host's OpenCL sees it
+#
+# A handle crosses as a number, and on the host the ICD dereferences
+# whatever it is handed. So every number a guest sends where an object
+# belongs is looked up, by kind, in what this server made (feature
+# 044), and a number that is not one is a command the server refuses.
+# The same goes for a count the ICD reads past what crossed, and for the
+# few values that are host pointers by definition.
+# ---------------------------------------------------------------------
+
+def _kind(base: str) -> str:
+    """The HandleKind enumerator for an OpenCL object type."""
+    name = base[len("cl_"):]
+    return name[:-len("_id")] if name.endswith("_id") else name
+
+
+def _kinds(reg: Registry) -> list[str]:
+    """Every object type a carried command names, returns or holds."""
+    used = {p.element or p.type.base for cmd in reg.commands.values() for p in cmd.params
+            if p.role in (Role.HANDLE, Role.HANDLE_ARRAY, Role.HANDLE_OUT,
+                          Role.HANDLE_ARRAY_OUT)}
+    used |= {cmd.return_type.base for cmd in reg.commands.values() if cmd.returns_handle}
+    return sorted(used)
+
+
+# Handles inside a struct the wire carries as bytes. cl.xml puts
+# cl_image_desc's buffer in an anonymous union and names no field, so it
+# is written down here.
+STRUCT_HANDLES = {
+    "cl_image_desc": (("buffer", "mem"),),
+}
+
+# Context properties are an allow-list because most of the rest are a
+# host pointer by definition - a GL context, an EGL or X display, a D3D
+# device - which no guest can know. CL_CONTEXT_PLATFORM names an object
+# and is looked up like any other handle.
+CONTEXT_PROPERTY_SCALARS = ("CL_CONTEXT_INTEROP_USER_SYNC",)
+
+# Memory properties whose value is a list of devices rather than a scalar
+# (cl_khr_external_memory's CL_MEM_DEVICE_HANDLE_LIST_KHR). cl_ext.h is
+# not included here, so it is spelled as its value.
+MEM_PROPERTY_REFUSED = (("0x2051", "CL_MEM_DEVICE_HANDLE_LIST_KHR"),)
+
+# clSetKernelExecInfo names that pass an array of SVM or USM pointers.
+# This wire carries no allocation of either, so any such pointer is one
+# the guest invented.
+EXEC_INFO_POINTERS = (("CL_KERNEL_EXEC_INFO_SVM_PTRS", ""),
+                      ("0x40B8", "CL_KERNEL_EXEC_INFO_SVM_PTRS_ARM"),
+                      ("0x4203", "CL_KERNEL_EXEC_INFO_USM_PTRS_INTEL"))
+
+# The implicit transfer sizes the server works out itself, from the
+# arguments and, for an image, the image's own element size. An image
+# created from a host pointer is not among them: its element size is the
+# format's, before any image exists to ask.
+TRANSFER_PITCHES = {
+    "clEnqueueReadImage": ("image", "region", "row_pitch", "slice_pitch"),
+    "clEnqueueWriteImage": ("image", "region", "input_row_pitch", "input_slice_pitch"),
+    "clEnqueueReadBufferRect": ("host_origin", "region", "host_row_pitch", "host_slice_pitch"),
+    "clEnqueueWriteBufferRect": ("host_origin", "region", "host_row_pitch", "host_slice_pitch"),
+}
+
+# The four float, int or uint components clEnqueueFillImage reads.
+FILL_COLOR_BYTES = 16
+
+
+def _decode_property_keys(p: Param, out: list[str]) -> None:
+    """Looks up the handles a property list holds, refusing the keys whose
+    value is a host pointer."""
+    if p.type.base == "cl_context_properties":
+        allowed = " && ".join(f"wire_items[i] != {key}" for key in CONTEXT_PROPERTY_SCALARS)
+        out.append("            for (uint64_t i = 0; wire_items[i] != 0; i += 2) {")
+        out.append("                if (wire_items[i] == CL_CONTEXT_PLATFORM) {")
+        out.append(f"                    const {HANDLE_T} wire_handle = static_cast<{HANDLE_T}>(wire_items[i + 1]);")
+        out.append("                    void* wire_platform = s.handle_for(HandleKind::platform, wire_handle);")
+        out.append("                    if (wire_platform == nullptr) return false;")
+        out.append("                    wire_items[i + 1] = static_cast<cl_context_properties>("
+                   "reinterpret_cast<intptr_t>(wire_platform));")
+        out.append(f"                }} else if ({allowed}) {{")
+        out.append("                    return false;")
+        out.append("                }")
+        out.append("            }")
+    elif p.type.base == "cl_mem_properties":
+        out.append("            for (uint64_t i = 0; wire_items[i] != 0; i += 2) {")
+        for value, name in MEM_PROPERTY_REFUSED:
+            out.append(f"                if (wire_items[i] == {value}) return false;  // {name}")
+        out.append("            }")
+
+
+def _count_of(cmd: Command, len_param: str | None) -> str | None:
+    """How many the ICD reads, as an expression, or None when the profile
+    leaves it to a helper."""
+    if len_param is None or len_param.startswith("@"):
+        return None
+    if len_param.isdigit():
+        return f"{len_param}u"
+    names = {q.name for q in cmd.params if q.role == Role.SCALAR}
+    if len_param not in names:
+        raise ValueError(f"{cmd.name}: {len_param} counts an array but is not a scalar")
+    return f"static_cast<uint64_t>({len_param})"
+
+
+def _refusals(cmd: Command) -> list[str]:
+    """Checks between decoding a command and calling it: whatever the ICD
+    would read or write past what crossed, and the flags and names that
+    make it keep or follow a pointer."""
+    out: list[str] = []
+    for p in cmd.params:
+        n = p.name
+        count = _count_of(cmd, p.len_param)
+        if p.role in (Role.HANDLE_ARRAY, Role.SCALAR_ARRAY, Role.STRING_ARRAY, Role.BYTES_IN) \
+                and count is not None:
+            out.append(f"    if ({n} != nullptr && {n}_count < {count}) return false;")
+        elif p.role == Role.BYTES_OUT and count is not None:
+            out.append(f"    if ({n}_wanted && {count} > static_cast<uint64_t>({n}_capacity)) return false;")
+        elif p.role == Role.BYTES_OUT and p.len_param == "@image_format_bytes":
+            out.append(f"    if ({n}_wanted && static_cast<uint64_t>(num_entries) * sizeof(cl_image_format) >"
+                       f" static_cast<uint64_t>({n}_capacity)) return false;")
+        elif p.role in (Role.BYTES_IN, Role.BYTES_OUT) and cmd.name in TRANSFER_PITCHES:
+            first, region, row, slice_ = TRANSFER_PITCHES[cmd.name]
+            helper = "image_transfer_bytes(s, arena, " if first == "image" else "rect_bytes("
+            present = f"{n} != nullptr" if p.role == Role.BYTES_IN else f"{n}_wanted"
+            room = f"{n}_count" if p.role == Role.BYTES_IN else f"static_cast<uint64_t>({n}_capacity)"
+            out.append("    {")
+            out.append("        uint64_t wire_needed = 0;")
+            out.append(f"        if ({present} && (!{helper}{first}, {region}, {row}, {slice_}, wire_needed) ||")
+            out.append(f"                         {room} < wire_needed)) return false;")
+            out.append("    }")
+        elif p.role == Role.BYTES_IN and p.len_param == "@fill_bytes":
+            out.append(f"    if ({n} != nullptr && {n}_count < {FILL_COLOR_BYTES}u) return false;")
+        elif p.role == Role.BYTES_IN:
+            # An image made from a host pointer: its size is the format's
+            # element size over the description's extent, which this server
+            # does not work out yet, so the ICD reads what the guest sized.
+            out.append(f"    (void){n}_count;")
+    if any(q.role == Role.BYTES_IN for q in cmd.params) and \
+            any(q.name == "flags" and q.type.base == "cl_mem_flags" for q in cmd.params):
+        # The bytes crossed into a block the next command reuses; an ICD
+        # told to use them in place would go on reading and writing it.
+        out.append("    if ((flags & CL_MEM_USE_HOST_PTR) != 0) return false;")
+    if cmd.name == "clSetKernelExecInfo":
+        for value, name in EXEC_INFO_POINTERS:
+            spelled = f"  // {name}" if name else ""
+            out.append(f"    if (param_name == {value}) return false;{spelled}")
+    return out
+
+
+# Emitted once, above the decoders that call them.
+SIZE_HELPERS = [
+    "// How far into a host pointer a transfer reaches: `offset`, then whole",
+    "// rows and slices at the pitches given, and the last row only as far as",
+    "// the region does. 0 for an empty region, which the ICD refuses without",
+    "// touching anything; false for a size that overflows.",
+    "static bool pitched_reach(const size_t* region, uint64_t element, uint64_t row,",
+    "                          uint64_t slice, uint64_t offset, uint64_t& bytes) {",
+    "    bytes = 0;",
+    "    if (region[0] == 0 || region[1] == 0 || region[2] == 0) return true;",
+    "    uint64_t rows = 0;",
+    "    uint64_t slices = 0;",
+    "    uint64_t last_row = 0;",
+    "    return !__builtin_mul_overflow(row, static_cast<uint64_t>(region[1] - 1), &rows) &&",
+    "           !__builtin_mul_overflow(slice, static_cast<uint64_t>(region[2] - 1), &slices) &&",
+    "           !__builtin_mul_overflow(static_cast<uint64_t>(region[0]), element, &last_row) &&",
+    "           !__builtin_add_overflow(offset, rows, &bytes) &&",
+    "           !__builtin_add_overflow(bytes, slices, &bytes) &&",
+    "           !__builtin_add_overflow(bytes, last_row, &bytes);",
+    "}",
+    "",
+    "// A buffer rectangle: bytes, from the host origin, at the pitches the",
+    "// specification defaults a 0 to.",
+    "static bool rect_bytes(const size_t* origin, const size_t* region, size_t row_pitch,",
+    "                       size_t slice_pitch, uint64_t& bytes) {",
+    "    if (origin == nullptr || region == nullptr) return false;",
+    "    const uint64_t row = row_pitch != 0 ? row_pitch : region[0];",
+    "    uint64_t slice = slice_pitch;",
+    "    if (slice == 0 && __builtin_mul_overflow(static_cast<uint64_t>(region[0]),",
+    "                                             static_cast<uint64_t>(region[1]), &slice)) return false;",
+    "    uint64_t across = 0;",
+    "    uint64_t down = 0;",
+    "    uint64_t offset = 0;",
+    "    if (__builtin_mul_overflow(static_cast<uint64_t>(origin[1]), row, &across) ||",
+    "        __builtin_mul_overflow(static_cast<uint64_t>(origin[2]), slice, &down) ||",
+    "        __builtin_add_overflow(across, down, &offset) ||",
+    "        __builtin_add_overflow(offset, static_cast<uint64_t>(origin[0]), &offset)) return false;",
+    "    return pitched_reach(region, 1, row, slice, offset, bytes);",
+    "}",
+    "",
+    "// An image transfer: elements of the image's own format, which the ICD",
+    "// is asked for rather than the guest - into the arena, like every other",
+    "// answer the ICD writes.",
+    "static bool image_transfer_bytes(ServerDispatch& s, ::av::WireArena& arena, cl_mem image,",
+    "                                 const size_t* region, size_t row_pitch, size_t slice_pitch,",
+    "                                 uint64_t& bytes) {",
+    "    if (region == nullptr) return false;",
+    "    auto* element = arena.allocate<size_t>(1);",
+    "    if (element == nullptr ||",
+    "        s.on_clGetImageInfo(image, CL_IMAGE_ELEMENT_SIZE, sizeof *element, element, nullptr) != CL_SUCCESS ||",
+    "        *element == 0) return false;",
+    "    uint64_t row = row_pitch;",
+    "    if (row == 0 && __builtin_mul_overflow(static_cast<uint64_t>(region[0]),",
+    "                                           static_cast<uint64_t>(*element), &row)) return false;",
+    "    uint64_t slice = slice_pitch;",
+    "    if (slice == 0 && __builtin_mul_overflow(row, static_cast<uint64_t>(region[1]), &slice)) return false;",
+    "    return pitched_reach(region, *element, row, slice, 0, bytes);",
+    "}",
+    "",
+]
+
+
+def _succeeded(cmd: Command) -> str:
+    """Whether the call worked, in the decoder's scope after it."""
+    if cmd.returns_handle:
+        return "ret != nullptr"
+    if cmd.return_type.base == "cl_int" and cmd.return_type.pointer_depth == 0:
+        return "ret == CL_SUCCESS"
+    return "true"
+
+
+def _lifecycle(cmd: Command) -> tuple[str, Param] | None:
+    """("retained" or "released", the object) for a reference-counting call."""
+    handles = [q for q in cmd.params if q.role == Role.HANDLE]
+    if len(handles) != 1 or cmd.return_type.base != "cl_int":
+        return None
+    if cmd.name.startswith("clRetain"):
+        return "retained", handles[0]
+    if cmd.name.startswith("clRelease"):
+        return "released", handles[0]
+    return None
 
 
 def _client_param_decl(reg: Registry, p: Param) -> list[str]:
@@ -343,10 +574,15 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append(f"        {n} = static_cast<{p.type.base}>(wire_value);")
         out.append("    }")
     elif p.role == Role.HANDLE:
+        # Null is the API's own and the ICD answers it with an error code;
+        # anything else must be an object this server made, of this kind.
         out.append(f"    {{ {HANDLE_T} wire_handle = 0;")
         out.append("      if (!r.read_pod(wire_handle)) return false;")
-        out.append(f"      {n} = reinterpret_cast<{p.type.base}>("
-                   "static_cast<uintptr_t>(wire_handle)); }")
+        out.append("      if (wire_handle != 0) {")
+        out.append(f"          {n} = static_cast<{p.type.base}>("
+                   f"s.handle_for(HandleKind::{_kind(p.type.base)}, wire_handle));")
+        out.append(f"          if ({n} == nullptr) return false;")
+        out.append("      } }")
     elif p.role in (Role.HANDLE_ARRAY, Role.SCALAR_ARRAY):
         elem = p.element if p.role == Role.HANDLE_ARRAY else p.type.base
         out.append("    {")
@@ -359,15 +595,19 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append("            if (wire_items == nullptr) return false;")
         out.append("            for (uint64_t i = 0; i < wire_count; ++i) {")
         if p.role == Role.HANDLE_ARRAY:
+            # No null inside a list: the ICD dispatches on every element.
             out.append(f"                {HANDLE_T} wire_handle = 0;")
             out.append("                if (!r.read_pod(wire_handle)) return false;")
-            out.append(f"                wire_items[i] = reinterpret_cast<{elem}>(static_cast<uintptr_t>(wire_handle));")
+            out.append(f"                wire_items[i] = static_cast<{elem}>("
+                       f"s.handle_for(HandleKind::{_kind(elem)}, wire_handle));")
+            out.append("                if (wire_items[i] == nullptr) return false;")
         else:
             out.append("                uint64_t wire_value = 0;")
             out.append("                if (!r.read_varint(wire_value)) return false;")
             out.append(f"                wire_items[i] = static_cast<{elem}>(wire_value);")
         out.append("            }")
         out.append(f"            {n} = wire_items;")
+        out.append(f"            {n}_count = wire_count;")
         out.append("        }")
         out.append("    }")
     elif p.role == Role.STRING:
@@ -411,6 +651,7 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
             out.append("                wire_lengths[i] = static_cast<size_t>(wire_len);")
         out.append("            }")
         out.append(f"            {n} = wire_items;")
+        out.append(f"            {n}_count = wire_count;")
         if keeps_lengths:
             out.append(f"            {n}_lengths = wire_lengths;")
         out.append("        }")
@@ -430,6 +671,7 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append("            if (wire_count != 0 && !r.read(wire_bytes, "
                    "static_cast<size_t>(wire_count))) return false;")
         out.append(f"            {n} = reinterpret_cast<{p.type.cpp()}>(wire_bytes);")
+        out.append(f"            {n}_count = wire_count;")
         out.append("        }")
         out.append("    }")
     elif p.role == Role.STRUCT_IN:
@@ -440,17 +682,29 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append(f"            auto* wire_item = arena.allocate<{p.element}>(1);")
         out.append("            if (wire_item == nullptr) return false;")
         out.append("            if (!r.read(wire_item, sizeof(*wire_item))) return false;")
+        for field, kind in STRUCT_HANDLES.get(p.element, ()):
+            out.append(f"            if (wire_item->{field} != nullptr) {{")
+            out.append(f"                const {HANDLE_T} wire_handle = static_cast<{HANDLE_T}>("
+                       f"reinterpret_cast<uintptr_t>(wire_item->{field}));")
+            out.append(f"                wire_item->{field} = static_cast<decltype(wire_item->{field})>("
+                       f"s.handle_for(HandleKind::{kind}, wire_handle));")
+            out.append(f"                if (wire_item->{field} == nullptr) return false;")
+            out.append("            }")
         out.append(f"            {n} = wire_item;")
         out.append("        }")
         out.append("    }")
-    elif p.role == Role.PROPERTIES:
+    elif p.role in (Role.PROPERTIES, Role.PROPERTY_LIST):
         out.append("    {")
         out.append("        uint8_t wire_present = 0;")
         out.append("        if (!r.read_pod(wire_present)) return false;")
         out.append("        if (wire_present != 0) {")
         out.append("            uint64_t wire_count = 0;")
         out.append("            if (!r.read_varint(wire_count)) return false;")
-        out.append(f"            auto* wire_items = arena.allocate<{p.type.base}>(static_cast<size_t>(wire_count) + 1);")
+        # Two terminators: a list whose last key has no value reads the
+        # first as that value and still stops at the second, here and in
+        # the ICD, which walks it the same way. The arena refuses a count
+        # the addition wraps.
+        out.append(f"            auto* wire_items = arena.allocate<{p.type.base}>(static_cast<size_t>(wire_count) + 2);")
         out.append("            if (wire_items == nullptr) return false;")
         out.append("            for (uint64_t i = 0; i < wire_count; ++i) {")
         out.append(f"                {HANDLE_T} wire_value = 0;")
@@ -458,24 +712,8 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append(f"                wire_items[i] = static_cast<{p.type.base}>(wire_value);")
         out.append("            }")
         out.append("            wire_items[wire_count] = 0;")
-        out.append(f"            {n} = wire_items;")
-        out.append("        }")
-        out.append("    }")
-    elif p.role == Role.PROPERTY_LIST:
-        out.append("    {")
-        out.append("        uint8_t wire_present = 0;")
-        out.append("        if (!r.read_pod(wire_present)) return false;")
-        out.append("        if (wire_present != 0) {")
-        out.append("            uint64_t wire_count = 0;")
-        out.append("            if (!r.read_varint(wire_count)) return false;")
-        out.append(f"            auto* wire_items = arena.allocate<{p.type.base}>(static_cast<size_t>(wire_count) + 1);")
-        out.append("            if (wire_items == nullptr) return false;")
-        out.append("            for (uint64_t i = 0; i < wire_count; ++i) {")
-        out.append(f"                {HANDLE_T} wire_value = 0;")
-        out.append("                if (!r.read_pod(wire_value)) return false;")
-        out.append(f"                wire_items[i] = static_cast<{p.type.base}>(wire_value);")
-        out.append("            }")
-        out.append("            wire_items[wire_count] = 0;")
+        out.append("            wire_items[wire_count + 1] = 0;")
+        _decode_property_keys(p, out)
         out.append(f"            {n} = wire_items;")
         out.append("        }")
         out.append("    }")
@@ -551,13 +789,29 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
          '#include "proto/wire/wire_reader.hpp"',
          '#include "proto/wire/wire_writer.hpp"', "",
          "namespace av::clproto {", "",
-         "// Implemented by the server; the table below calls into it.",
-         "class ServerDispatch {", "public:",
-         "    virtual ~ServerDispatch() = default;", ""]
+         "// The objects a guest names by number. Which numbers are objects is",
+         "// the server's to say: see ServerDispatch::handle_for.",
+         "enum class HandleKind : uint8_t {"]
+    h += [f"    {_kind(base)}," for base in _kinds(reg)]
+    h += ["};", "",
+          "// Implemented by the server; the table below calls into it.",
+          "class ServerDispatch {", "public:",
+          "    virtual ~ServerDispatch() = default;", "",
+          "    // The object of this kind the server made under this number, or",
+          "    // null for a number it did not: the decoder refuses the command",
+          "    // rather than hand the host's OpenCL a pointer a guest invented.",
+          "    virtual void* handle_for(HandleKind kind, uint64_t wire) const = 0;",
+          "    // An object a successful call is about to give the guest a number",
+          "    // for; from here on that number is the object.",
+          "    virtual void made(HandleKind kind, void* object) = 0;",
+          "    // A successful retain or release of one. After its last release",
+          "    // the number names nothing.",
+          "    virtual void retained(HandleKind kind, void* object) = 0;",
+          "    virtual void released(HandleKind kind, void* object) = 0;", ""]
     c = [HEADER, '#include "cl_dispatch_server.h"', "",
          "#include <stddef.h>", "#include <stdint.h>", "",
          '#include "cl_protocol_ids.h"', "",
-         "namespace av::clproto {", ""]
+         "namespace av::clproto {", ""] + SIZE_HELPERS
 
     for cmd in reg.commands.values():
         h.append(f"    virtual {_server_signature2(reg, cmd)} = 0;")
@@ -582,16 +836,20 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 c.append(f"    {p.type.base} {p.name} = nullptr;")
             elif p.role == Role.HANDLE_ARRAY:
                 c.append(f"    const {p.element}* {p.name} = nullptr;")
+                c.append(f"    uint64_t {p.name}_count = 0;")
             elif p.role == Role.SCALAR_ARRAY:
                 c.append(f"    const {p.type.base}* {p.name} = nullptr;")
+                c.append(f"    uint64_t {p.name}_count = 0;")
             elif p.role == Role.STRING:
                 c.append(f"    const char* {p.name} = nullptr;")
             elif p.role == Role.STRING_ARRAY:
                 c.append(f"    const {p.type.base}** {p.name} = nullptr;")
+                c.append(f"    uint64_t {p.name}_count = 0;")
                 if _lengths_consumer(cmd, p) is not None:
                     c.append(f"    const size_t* {p.name}_lengths = nullptr;")
             elif p.role == Role.BYTES_IN:
                 c.append(f"    {p.type.cpp()} {p.name} = nullptr;")
+                c.append(f"    uint64_t {p.name}_count = 0;")
             elif p.role == Role.STRUCT_IN:
                 c.append(f"    const {p.element}* {p.name} = nullptr;")
             elif p.role in (Role.PROPERTIES, Role.PROPERTY_LIST):
@@ -603,6 +861,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
 
         for p in cmd.params:
             _decode_param(reg, cmd, p, c)
+        c.extend(_refusals(cmd))
 
         # Storage for whatever the caller asked for.
         for p in cmd.out_params:
@@ -644,9 +903,15 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             c.append(f"    s.on_{cmd.name}({args});")
         else:
             c.append(f"    const {cmd.return_type.cpp()} ret = s.on_{cmd.name}({args});")
+        succeeded = _succeeded(cmd)
+        lifecycle = _lifecycle(cmd)
+        if lifecycle is not None:
+            hook, obj = lifecycle
+            c.append(f"    if ({succeeded}) s.{hook}(HandleKind::{_kind(obj.type.base)}, {obj.name});")
 
         # Reply: the return value, then what was asked for.
         if cmd.returns_handle:
+            c.append(f"    if ({succeeded}) s.made(HandleKind::{_kind(cmd.return_type.base)}, ret);")
             c.append("    reply.write_pod<" + HANDLE_T +
                      ">(static_cast<" + HANDLE_T + ">(reinterpret_cast<uintptr_t>(ret)));")
         elif not cmd.returns_void:
@@ -657,6 +922,8 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             n = p.name
             c.append(f"    if ({n}_wanted) {{")
             if p.role == Role.HANDLE_OUT:
+                c.append(f"        if (({succeeded}) && {n}_storage != nullptr) "
+                         f"s.made(HandleKind::{_kind(p.element)}, {n}_storage);")
                 c.append(f"        reply.write_pod<{HANDLE_T}>(static_cast<{HANDLE_T}>("
                          f"reinterpret_cast<uintptr_t>({n}_storage)));")
             elif p.role == Role.SCALAR_OUT:
@@ -678,6 +945,8 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 c.append(f"            ? wire_produced : static_cast<uint64_t>({cap});")
                 c.append("        reply.write_varint(wire_sent);")
                 c.append("        for (uint64_t i = 0; i < wire_sent; ++i) {")
+                c.append(f"            if (({succeeded}) && {n}[i] != nullptr) "
+                         f"s.made(HandleKind::{_kind(p.element)}, {n}[i]);")
                 c.append(f"            reply.write_pod<{HANDLE_T}>(static_cast<{HANDLE_T}>("
                          f"reinterpret_cast<uintptr_t>({n}[i])));")
                 c.append("        }")
@@ -748,14 +1017,95 @@ def _absent_result(cmd) -> str:
     return "nullptr"
 
 
+# How many objects a DefaultDispatch enumeration answers with: more than
+# one, so a decoder that only looks at the first is caught.
+DEFAULT_ENUMERATED = 2
+
+
+def _default_body(reg: Registry, cmd: Command) -> list[str]:
+    """One DefaultDispatch entry point: report what it was given, then
+    succeed."""
+    body = [f"        (void){p.name};" for p, _ in _server_params(reg, cmd)]
+    body.append(f"        called(kCmd_{cmd.name});")
+    for p in cmd.params:
+        n = p.name
+        count = _count_of(cmd, p.len_param)
+        span = f"static_cast<size_t>({count})" if count else None
+        if p.role == Role.HANDLE:
+            body.append(f"        handed(HandleKind::{_kind(p.type.base)}, {n});")
+        elif p.role == Role.HANDLE_ARRAY and span:
+            body.append(f"        for (size_t i = 0; {n} != nullptr && i < {span}; ++i) "
+                        f"handed(HandleKind::{_kind(p.element)}, {n}[i]);")
+        elif p.role in (Role.SCALAR_ARRAY, Role.STRING_ARRAY) and span:
+            body.append(f"        if ({n} != nullptr) touched({n}, {span} * sizeof(*{n}));")
+        elif p.role in (Role.BYTES_IN, Role.BYTES_OUT) and span:
+            body.append(f"        if ({n} != nullptr) touched({n}, {span});")
+        elif p.role == Role.INFO_VALUE and p.size_param:
+            body.append(f"        if ({n} != nullptr) touched({n}, static_cast<size_t>({p.size_param}));")
+        elif p.role == Role.STRUCT_IN:
+            for field, kind in STRUCT_HANDLES.get(p.element, ()):
+                body.append(f"        if ({n} != nullptr) handed(HandleKind::{kind}, {n}->{field});")
+        elif p.role == Role.PROPERTIES and p.type.base == "cl_context_properties":
+            body.append(f"        for (size_t i = 0; {n} != nullptr && {n}[i] != 0; i += 2) {{")
+            body.append(f"            if ({n}[i] == CL_CONTEXT_PLATFORM) "
+                        f"handed(HandleKind::platform, reinterpret_cast<void*>({n}[i + 1]));")
+            body.append("        }")
+        elif p.role == Role.HANDLE_OUT:
+            body.append(f"        if ({n} != nullptr) *{n} = static_cast<{p.element}>("
+                        f"produce(HandleKind::{_kind(p.element)}));")
+        elif p.role == Role.HANDLE_ARRAY_OUT:
+            body.append(f"        for (size_t i = 0; {n} != nullptr && i < static_cast<size_t>({p.len_param}) && "
+                        f"i < {DEFAULT_ENUMERATED}u; ++i) {{")
+            body.append(f"            {n}[i] = static_cast<{p.element}>(produce(HandleKind::{_kind(p.element)}));")
+            body.append("        }")
+            if p.size_ret_param:
+                body.append(f"        if ({p.size_ret_param} != nullptr) *{p.size_ret_param} = {DEFAULT_ENUMERATED}u;")
+        elif p.role == Role.SCALAR_OUT and n == "errcode_ret":
+            body.append(f"        if ({n} != nullptr) *{n} = CL_SUCCESS;")
+    if cmd.returns_handle:
+        body.append(f"        return static_cast<{cmd.return_type.base}>("
+                    f"produce(HandleKind::{_kind(cmd.return_type.base)}));")
+    elif cmd.return_type.base == "cl_int":
+        body.append("        return CL_SUCCESS;")
+    elif not cmd.returns_void:
+        body.append("        return {};")
+    return body
+
+
+def emit_default_dispatch(reg: Registry, out_dir: Path) -> None:
+    """The interface answered with no OpenCL at all, for testing the decoder."""
+    out = [HEADER, "#pragma once\n", "#include <stddef.h>", ""] + CL_PREAMBLE + ["",
+           '#include "cl_dispatch_server.h"',
+           '#include "cl_protocol_ids.h"', "",
+           "namespace av::clproto {", "",
+           "// Every command answered with no OpenCL behind it, for judging the",
+           "// decoder rather than a driver. Each call says which it is to",
+           "// `called`, hands every object it was given to `handed` and every",
+           "// span it would read or write to `touched` - that is where a fake",
+           "// holds the decoder to what it resolved and bounded - then",
+           "// succeeds, answering whatever objects it makes with `produce`.",
+           "class DefaultDispatch : public ServerDispatch {", "public:"]
+    for cmd in reg.commands.values():
+        out.append(f"    {_server_signature2(reg, cmd)} override {{")
+        out.extend(_default_body(reg, cmd))
+        out.append("    }")
+    out += ["", "protected:",
+            "    virtual void called(uint32_t command_id) = 0;",
+            "    virtual void handed(HandleKind kind, void* object) = 0;",
+            "    virtual void touched(const void* bytes, size_t length) = 0;",
+            "    virtual void* produce(HandleKind kind) = 0;",
+            "};", "", "}  // namespace av::clproto", ""]
+    write(out_dir / "cl_default_dispatch.h", "\n".join(out))
+
+
 def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
     """The interface implemented by calling the host's own OpenCL."""
     out = [HEADER, "#pragma once\n"] + CL_PREAMBLE + ["",
            '#include "cl_dispatch_server.h"', "",
            "namespace av::clproto {", "",
            "// Every command forwarded to whatever OpenCL this process",
-           "// loaded. The handles the guest sent are this process's own",
-           "// pointers, so there is nothing to translate.",
+           "// loaded. Which numbers are its objects is not this class's to",
+           "// say: the server that derives from it answers handle_for.",
            "//",
            "// An extension command is resolved rather than linked. The ICD",
            "// loader on a machine is whichever one is first on the library",
@@ -851,6 +1201,7 @@ def emit_all(reg: Registry, out_dir: Path, raw=None) -> None:
     emit_client(reg, out_dir)
     emit_server(reg, out_dir)
     emit_real_dispatch(reg, out_dir)
+    emit_default_dispatch(reg, out_dir)
     if raw is not None:
         emit_icd_stubs(raw, reg, out_dir)
 

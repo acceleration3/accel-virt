@@ -45,6 +45,22 @@ bool OpenClBackend::adopt(ImportedBlob &)
 
 void OpenClBackend::abandon(ImportedBlob &) {}
 
+void *OpenClBackend::handle_for(clproto::HandleKind kind, uint64_t wire) const
+{
+    return handles_.resolve(kind, wire);
+}
+
+void OpenClBackend::made(clproto::HandleKind kind, void *object)
+{
+    /* A registry with no room loses the device rather than hand the guest a
+     * number this host would refuse when it came back. */
+    if (!handles_.remember(kind, object)) lost_ = true;
+}
+
+void OpenClBackend::retained(clproto::HandleKind kind, void *object) { handles_.retain(kind, object); }
+
+void OpenClBackend::released(clproto::HandleKind kind, void *object) { handles_.release(kind, object); }
+
 void OpenClBackend::shut_down()
 {
     handles_.forget_all();

@@ -948,10 +948,23 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append(f"    size_t {name}_storage_count = 0;")
         out.append(f"    {p.type.base}* {name} = nullptr;")
         out.append(f"    size_t {name}_bytes = 0;")
+        out.append(f"    bool {name}_answered = false;")
         out.append("    {")
         out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
+        queries = p.role is Role.ARRAY_OUT and p.length is not None and p.length.kind is LengthKind.PNAME
+        if queries:
+            # GL has no state query that takes a null destination: the
+            # driver writes the answer through it, at address zero. A
+            # guest that sends none gets the answer written into the
+            # block and not sent back.
+            out.append("        if (rvk_present == 0) {")
+            out.append(f"            {name}_storage = rvk_arena.allocate<{storage}>(kQuerySlack + 1);")
+            out.append(f"            if ({name}_storage == nullptr) return false;")
+            out.append(f"            {name} = {name}_storage;")
+            out.append("        }")
         out.append("        if (rvk_present != 0) {")
+        out.append(f"            {name}_answered = true;")
         out.append("            uint64_t rvk_bytes = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
         out.append(f"            {name}_bytes = static_cast<size_t>(rvk_bytes);")
@@ -996,6 +1009,139 @@ def _decode_param(p: Param, out: list[str]) -> None:
     raise AssertionError(f"no decoder for {p.role}")
 
 
+# ---------------------------------------------------------------------
+# What a read-back may write
+#
+# A pixel read writes as many bytes as GL works out - the format, the
+# type, the extent and the pack state - at whatever pointer it is given.
+# The guest's own count of them is a number off the wire, so before any
+# read the server works the count out again and refuses a destination
+# smaller than it (feature 044, research section 2). An offset is only
+# an offset while a buffer is bound; without one GL writes at the
+# guest's number as an address, so that is refused too.
+# ---------------------------------------------------------------------
+
+GL_PIXEL_PACK_BUFFER_BINDING = "0x88ED"
+GL_QUERY_BUFFER_BINDING = "0x9193"
+GL_TEXTURE_WIDTH, GL_TEXTURE_HEIGHT, GL_TEXTURE_DEPTH = "0x1000", "0x1001", "0x8071"
+
+PACK_HELPERS = [
+    "// The bytes one pixel of this format and type packs to, or 0 for a",
+    "// pairing this server does not size, which it then does not read into.",
+    "static size_t pixel_bytes(GLenum format, GLenum type) noexcept {",
+    "    switch (type) {",
+    "        case 0x8032: case 0x8362: return 1;  // UNSIGNED_BYTE_3_3_2, _2_3_3_REV",
+    "        case 0x8363: case 0x8364: case 0x8033: case 0x8365:",
+    "        case 0x8034: case 0x8366: return 2;  // the 5_6_5, 4_4_4_4 and 5_5_5_1 packings",
+    "        case 0x8035: case 0x8367: case 0x8036: case 0x8368:",
+    "        case 0x84FA: case 0x8C3B: case 0x8C3E: return 4;  // 8_8_8_8, 10_10_10_2, 24_8, 10F_11F_11F, 5_9_9_9",
+    "        case 0x8DAD: return 8;  // FLOAT_32_UNSIGNED_INT_24_8_REV",
+    "        default: break;",
+    "    }",
+    "    size_t component = 0;",
+    "    switch (type) {",
+    "        case 0x1400: case 0x1401: component = 1; break;  // BYTE, UNSIGNED_BYTE",
+    "        case 0x1402: case 0x1403: case 0x140B: component = 2; break;  // SHORT, UNSIGNED_SHORT, HALF_FLOAT",
+    "        case 0x1404: case 0x1405: case 0x1406: component = 4; break;  // INT, UNSIGNED_INT, FLOAT",
+    "        default: return 0;",
+    "    }",
+    "    switch (format) {",
+    "        case 0x1900: case 0x1901: case 0x1902: case 0x1903: case 0x1904:",
+    "        case 0x1905: case 0x1906: case 0x1909: case 0x8D94: case 0x8D95:",
+    "        case 0x8D96: case 0x8D97: return component;  // one channel, or a depth or stencil index",
+    "        case 0x8227: case 0x8228: case 0x190A: return 2 * component;  // RG, RG_INTEGER, LUMINANCE_ALPHA",
+    "        case 0x1907: case 0x80E0: case 0x8D98: case 0x8D9A: return 3 * component;  // RGB, BGR and integers",
+    "        case 0x1908: case 0x80E1: case 0x8D99: case 0x8D9B: return 4 * component;  // RGBA, BGRA and integers",
+    "        default: return 0;",
+    "    }",
+    "}",
+    "",
+    "static bool pack_state(const RealGl& rvk_gl, GLenum pname, uint64_t& value) noexcept {",
+    "    GLint answer = -1;",
+    "    rvk_gl.glGetIntegerv(pname, &answer);",
+    "    if (answer < 0) return false;",
+    "    value = static_cast<uint64_t>(answer);",
+    "    return true;",
+    "}",
+    "",
+    "// The bytes a pack writes at its pointer: every image before the last",
+    "// whole, every row before the last padded to the alignment, the last row",
+    "// only as far as the extent reaches, all of it after the skips. Skipped",
+    "// images count even for a flat image, which GL ignores: a bound a little",
+    "// high refuses nothing a real caller sends.",
+    "static bool pack_bytes(const RealGl& rvk_gl, int64_t width, int64_t height, int64_t depth,",
+    "                       GLenum format, GLenum type, uint64_t& bytes) noexcept {",
+    "    bytes = 0;",
+    "    if (width < 0 || height < 0 || depth < 0) return false;",
+    "    if (width == 0 || height == 0 || depth == 0) return true;",
+    "    const uint64_t pixel = pixel_bytes(format, type);",
+    "    if (pixel == 0 || rvk_gl.glGetIntegerv == nullptr) return false;",
+    "    uint64_t alignment = 0, skip_pixels = 0, skip_rows = 0, skip_images = 0, row_length = 0, image_height = 0;",
+    "    if (!pack_state(rvk_gl, 0x0D05, alignment) || !pack_state(rvk_gl, 0x0D04, skip_pixels) ||",
+    "        !pack_state(rvk_gl, 0x0D03, skip_rows) || !pack_state(rvk_gl, 0x806B, skip_images) ||",
+    "        !pack_state(rvk_gl, 0x0D02, row_length) || !pack_state(rvk_gl, 0x806C, image_height)) return false;",
+    "    if (alignment == 0 || alignment > 8 || (alignment & (alignment - 1)) != 0) return false;",
+    "    const uint64_t columns = row_length != 0 ? row_length : static_cast<uint64_t>(width);",
+    "    const uint64_t rows = image_height != 0 ? image_height : static_cast<uint64_t>(height);",
+    "    uint64_t stride = 0, image = 0, images = 0, lines = 0, last = 0;",
+    "    if (__builtin_mul_overflow(columns, pixel, &stride) ||",
+    "        __builtin_add_overflow(stride, alignment - 1, &stride)) return false;",
+    "    stride -= stride % alignment;",
+    "    return !__builtin_mul_overflow(rows, stride, &image) &&",
+    "           !__builtin_mul_overflow(skip_images + static_cast<uint64_t>(depth - 1), image, &images) &&",
+    "           !__builtin_mul_overflow(skip_rows + static_cast<uint64_t>(height - 1), stride, &lines) &&",
+    "           !__builtin_mul_overflow(skip_pixels + static_cast<uint64_t>(width), pixel, &last) &&",
+    "           !__builtin_add_overflow(images, lines, &bytes) &&",
+    "           !__builtin_add_overflow(bytes, last, &bytes);",
+    "}",
+    "",
+]
+
+
+def _pixels_out_checks(cmd: Command, p: Param) -> list[str]:
+    """Between decoding a read-back and calling it: a bound buffer behind an
+    offset, and room for what GL will write behind a pointer."""
+    names = {q.name for q in cmd.params}
+    n = p.name
+    binding = GL_PIXEL_PACK_BUFFER_BINDING if p.type.base == "void" else GL_QUERY_BUFFER_BINDING
+    # A null destination is an offset too: with no buffer bound GL writes
+    # at address zero.
+    out = [f"    if ({n}_is_offset || {n} == nullptr) {{",
+           "        GLint rvk_bound = 0;",
+           "        if (rvk_gl.glGetIntegerv == nullptr) return false;",
+           f"        rvk_gl.glGetIntegerv({binding}, &rvk_bound);",
+           "        if (rvk_bound == 0) return false;",
+           "    } else {"]
+    room = f"static_cast<uint64_t>({n}_bytes)"
+    if "bufSize" in names:
+        # GL writes no more than the caller says it has, so the saying is
+        # what has to be true.
+        out.append(f"        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > {room}) return false;")
+    elif {"width", "height", "format", "type"} <= names:
+        out.append("        uint64_t rvk_needed = 0;")
+        out.append("        if (!pack_bytes(rvk_gl, width, height, 1, format, type, rvk_needed) ||")
+        out.append(f"            rvk_needed > {room}) return false;")
+    elif "pname" in names and p.type.base != "void":
+        out.append(f"        if (::av::glproto::pname_count(pname) * sizeof({p.type.base}) > {room}) return false;")
+    elif {"target", "level", "format", "type"} <= names and not names & {"texture", "texunit"}:
+        # The extent is the level's, which only the driver knows.
+        out.append("        GLint rvk_width = 0, rvk_height = 0, rvk_depth = 0;")
+        out.append("        uint64_t rvk_needed = 0;")
+        out.append("        if (rvk_gl.glGetTexLevelParameteriv == nullptr) return false;")
+        out.append(f"        rvk_gl.glGetTexLevelParameteriv(target, level, {GL_TEXTURE_WIDTH}, &rvk_width);")
+        out.append(f"        rvk_gl.glGetTexLevelParameteriv(target, level, {GL_TEXTURE_HEIGHT}, &rvk_height);")
+        out.append(f"        rvk_gl.glGetTexLevelParameteriv(target, level, {GL_TEXTURE_DEPTH}, &rvk_depth);")
+        out.append("        if (!pack_bytes(rvk_gl, rvk_width, rvk_height, rvk_depth, format, type, rvk_needed) ||")
+        out.append(f"            rvk_needed > {room}) return false;")
+    else:
+        # A compressed level, or a texture named rather than bound: sized
+        # by state this server does not ask for yet, so read only into a
+        # bound pack buffer, which GL bounds itself.
+        out.append("        return false;")
+    out.append("    }")
+    return out
+
+
 def emit_server(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
          "#include <stddef.h>", "#include <stdint.h>\n",
@@ -1025,7 +1171,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
          "// buffer is never smaller than this, whatever the guest asked",
          "// for, because the host writes as many values as the enum",
          "// really has and a short buffer is a heap the server owns.",
-         "static constexpr size_t kQuerySlack = 32;\n"]
+         "static constexpr size_t kQuerySlack = 32;\n"] + PACK_HELPERS
     for cmd in reg.commands.values():
         c.append(f"static bool decode_{cmd.name}(const RealGl& rvk_gl, "
                  "::av::WireReader& rvk_r, "
@@ -1037,6 +1183,9 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             c.append("    if (!rvk_r.read_pod(rvk_token)) return false;")
         for p in cmd.params:
             _decode_param(p, c)
+        for p in cmd.params:
+            if p.role is Role.PIXELS_OUT:
+                c.extend(_pixels_out_checks(cmd, p))
         # A pixel parameter is decoded as void*, which is what every
         # pixel transfer's own signature says. A query result is not:
         # glGetQueryObjectuiv wants GLuint*, and it is carried the same
@@ -1075,7 +1224,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             if p.role in (Role.ARRAY_OUT, Role.STRING_OUT, Role.PIXELS_OUT):
                 guard = (f"{p.name} != nullptr && !{p.name}_is_offset"
                          f" && !{p.name}_via_blob"
-                         if p.role is Role.PIXELS_OUT else f"{p.name} != nullptr")
+                         if p.role is Role.PIXELS_OUT else f"{p.name}_answered")
                 c.append(f"    if ({guard}) {{")
                 c.append(f"        rvk_reply.write_varint(static_cast<uint64_t>({p.name}_bytes));")
                 c.append(f"        if ({p.name}_bytes != 0) rvk_reply.write({p.name}, {p.name}_bytes);")

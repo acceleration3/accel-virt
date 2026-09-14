@@ -107,3 +107,46 @@ TEST(opencl_backend, takes_no_blob_yet_and_says_so)
   CHECK(!backend.adopt(blob));
   backend.abandon(blob);
   CHECK_EQ(blob.object(), 0u); }
+
+namespace {
+
+unsigned char host_objects[av::ClHandleRegistry::max_handles + 1u];
+
+std::uint64_t wire_of(const void *object)
+{
+    return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(object));
+}
+
+}  // namespace
+
+/* What the generated decoder asks before handing the ICD a handle: only what
+ * a call made, as the kind it made, until its last release. */
+TEST(opencl_backend, answers_the_decoder_only_for_objects_its_calls_made)
+{ OpenClBackend backend;
+  void *const queue = &host_objects[0];
+  CHECK(backend.handle_for(av::clproto::HandleKind::command_queue, wire_of(queue)) == nullptr);
+  backend.made(av::clproto::HandleKind::command_queue, queue);
+  CHECK(backend.handle_for(av::clproto::HandleKind::command_queue, wire_of(queue)) == queue);
+  CHECK(backend.handle_for(av::clproto::HandleKind::context, wire_of(queue)) == nullptr);
+  backend.retained(av::clproto::HandleKind::command_queue, queue);
+  backend.released(av::clproto::HandleKind::command_queue, queue);
+  CHECK(backend.handle_for(av::clproto::HandleKind::command_queue, wire_of(queue)) == queue);
+  backend.released(av::clproto::HandleKind::command_queue, queue);
+  CHECK(backend.handle_for(av::clproto::HandleKind::command_queue, wire_of(queue)) == nullptr);
+  CHECK(!backend.lost());
+  /* A context that ends forgets everything it made. */
+  backend.made(av::clproto::HandleKind::mem, queue);
+  backend.shut_down();
+  CHECK(backend.handle_for(av::clproto::HandleKind::mem, wire_of(queue)) == nullptr); }
+
+/* A registry with no room left would hand the guest a number the host then
+ * refuses; the backend loses its device instead, which ends the context. */
+TEST(opencl_backend, an_object_it_has_no_room_to_hold_loses_the_device)
+{ OpenClBackend backend;
+  for (std::size_t i = 0u; i < av::ClHandleRegistry::max_handles; i++)
+      backend.made(av::clproto::HandleKind::event, &host_objects[i]);
+  CHECK(!backend.lost());
+  backend.made(av::clproto::HandleKind::event, &host_objects[av::ClHandleRegistry::max_handles]);
+  CHECK(backend.lost());
+  backend.shut_down();
+  CHECK(!backend.lost()); }

@@ -7,7 +7,7 @@
 #ifndef AV_OPENCL_BACKEND_HPP
 #define AV_OPENCL_BACKEND_HPP
 
-#include "device/executor/handle_registry.hpp"
+#include "device/executor/cl_handle_registry.hpp"
 #include "device/executor/session_backend.hpp"
 #include "proto/generated/opencl/cl_real_dispatch.h"
 
@@ -26,6 +26,14 @@ public:
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
 
+    /* What the generated decoder asks before it hands the host's OpenCL a
+     * handle, and tells it after: the object a guest's number names, and what
+     * a call made, retained or released. */
+    void *handle_for(clproto::HandleKind kind, uint64_t wire) const override;
+    void  made(clproto::HandleKind kind, void *object) override;
+    void  retained(clproto::HandleKind kind, void *object) override;
+    void  released(clproto::HandleKind kind, void *object) override;
+
     /* Releases what the guest never did. A context that dies owning a context
      * or a queue must take it with it. */
     void     shut_down();
@@ -35,7 +43,7 @@ private:
     /* Every OpenCL command id carries this in its top 16 bits. */
     static constexpr uint32_t opencl_api = 2u;
 
-    HandleRegistry handles_;
+    ClHandleRegistry handles_;
     uint64_t       ran_;
     bool           lost_;
 };

@@ -18,6 +18,75 @@ namespace av::glproto {
 // really has and a short buffer is a heap the server owns.
 static constexpr size_t kQuerySlack = 32;
 
+// The bytes one pixel of this format and type packs to, or 0 for a
+// pairing this server does not size, which it then does not read into.
+static size_t pixel_bytes(GLenum format, GLenum type) noexcept {
+    switch (type) {
+        case 0x8032: case 0x8362: return 1;  // UNSIGNED_BYTE_3_3_2, _2_3_3_REV
+        case 0x8363: case 0x8364: case 0x8033: case 0x8365:
+        case 0x8034: case 0x8366: return 2;  // the 5_6_5, 4_4_4_4 and 5_5_5_1 packings
+        case 0x8035: case 0x8367: case 0x8036: case 0x8368:
+        case 0x84FA: case 0x8C3B: case 0x8C3E: return 4;  // 8_8_8_8, 10_10_10_2, 24_8, 10F_11F_11F, 5_9_9_9
+        case 0x8DAD: return 8;  // FLOAT_32_UNSIGNED_INT_24_8_REV
+        default: break;
+    }
+    size_t component = 0;
+    switch (type) {
+        case 0x1400: case 0x1401: component = 1; break;  // BYTE, UNSIGNED_BYTE
+        case 0x1402: case 0x1403: case 0x140B: component = 2; break;  // SHORT, UNSIGNED_SHORT, HALF_FLOAT
+        case 0x1404: case 0x1405: case 0x1406: component = 4; break;  // INT, UNSIGNED_INT, FLOAT
+        default: return 0;
+    }
+    switch (format) {
+        case 0x1900: case 0x1901: case 0x1902: case 0x1903: case 0x1904:
+        case 0x1905: case 0x1906: case 0x1909: case 0x8D94: case 0x8D95:
+        case 0x8D96: case 0x8D97: return component;  // one channel, or a depth or stencil index
+        case 0x8227: case 0x8228: case 0x190A: return 2 * component;  // RG, RG_INTEGER, LUMINANCE_ALPHA
+        case 0x1907: case 0x80E0: case 0x8D98: case 0x8D9A: return 3 * component;  // RGB, BGR and integers
+        case 0x1908: case 0x80E1: case 0x8D99: case 0x8D9B: return 4 * component;  // RGBA, BGRA and integers
+        default: return 0;
+    }
+}
+
+static bool pack_state(const RealGl& rvk_gl, GLenum pname, uint64_t& value) noexcept {
+    GLint answer = -1;
+    rvk_gl.glGetIntegerv(pname, &answer);
+    if (answer < 0) return false;
+    value = static_cast<uint64_t>(answer);
+    return true;
+}
+
+// The bytes a pack writes at its pointer: every image before the last
+// whole, every row before the last padded to the alignment, the last row
+// only as far as the extent reaches, all of it after the skips. Skipped
+// images count even for a flat image, which GL ignores: a bound a little
+// high refuses nothing a real caller sends.
+static bool pack_bytes(const RealGl& rvk_gl, int64_t width, int64_t height, int64_t depth,
+                       GLenum format, GLenum type, uint64_t& bytes) noexcept {
+    bytes = 0;
+    if (width < 0 || height < 0 || depth < 0) return false;
+    if (width == 0 || height == 0 || depth == 0) return true;
+    const uint64_t pixel = pixel_bytes(format, type);
+    if (pixel == 0 || rvk_gl.glGetIntegerv == nullptr) return false;
+    uint64_t alignment = 0, skip_pixels = 0, skip_rows = 0, skip_images = 0, row_length = 0, image_height = 0;
+    if (!pack_state(rvk_gl, 0x0D05, alignment) || !pack_state(rvk_gl, 0x0D04, skip_pixels) ||
+        !pack_state(rvk_gl, 0x0D03, skip_rows) || !pack_state(rvk_gl, 0x806B, skip_images) ||
+        !pack_state(rvk_gl, 0x0D02, row_length) || !pack_state(rvk_gl, 0x806C, image_height)) return false;
+    if (alignment == 0 || alignment > 8 || (alignment & (alignment - 1)) != 0) return false;
+    const uint64_t columns = row_length != 0 ? row_length : static_cast<uint64_t>(width);
+    const uint64_t rows = image_height != 0 ? image_height : static_cast<uint64_t>(height);
+    uint64_t stride = 0, image = 0, images = 0, lines = 0, last = 0;
+    if (__builtin_mul_overflow(columns, pixel, &stride) ||
+        __builtin_add_overflow(stride, alignment - 1, &stride)) return false;
+    stride -= stride % alignment;
+    return !__builtin_mul_overflow(rows, stride, &image) &&
+           !__builtin_mul_overflow(skip_images + static_cast<uint64_t>(depth - 1), image, &images) &&
+           !__builtin_mul_overflow(skip_rows + static_cast<uint64_t>(height - 1), stride, &lines) &&
+           !__builtin_mul_overflow(skip_pixels + static_cast<uint64_t>(width), pixel, &last) &&
+           !__builtin_add_overflow(images, lines, &bytes) &&
+           !__builtin_add_overflow(bytes, last, &bytes);
+}
+
 static bool decode_glActiveShaderProgram(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av::WireWriter& rvk_reply, ::av::WireArena& rvk_arena) {
     (void)rvk_arena; (void)rvk_reply; (void)rvk_r;
     GLuint pipeline{};
@@ -2833,10 +2902,12 @@ static bool decode_glCreateBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t buffers_storage_count = 0;
     GLuint* buffers = nullptr;
     size_t buffers_bytes = 0;
+    bool buffers_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            buffers_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             buffers_bytes = static_cast<size_t>(rvk_bytes);
@@ -2849,7 +2920,7 @@ static bool decode_glCreateBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     }
     if (rvk_gl.glCreateBuffers == nullptr) return false;
     rvk_gl.glCreateBuffers(n, buffers);
-    if (buffers != nullptr) {
+    if (buffers_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(buffers_bytes));
         if (buffers_bytes != 0) rvk_reply.write(buffers, buffers_bytes);
     }
@@ -2865,10 +2936,12 @@ static bool decode_glCreateFramebuffers(const RealGl& rvk_gl, ::av::WireReader& 
     size_t framebuffers_storage_count = 0;
     GLuint* framebuffers = nullptr;
     size_t framebuffers_bytes = 0;
+    bool framebuffers_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            framebuffers_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             framebuffers_bytes = static_cast<size_t>(rvk_bytes);
@@ -2881,7 +2954,7 @@ static bool decode_glCreateFramebuffers(const RealGl& rvk_gl, ::av::WireReader& 
     }
     if (rvk_gl.glCreateFramebuffers == nullptr) return false;
     rvk_gl.glCreateFramebuffers(n, framebuffers);
-    if (framebuffers != nullptr) {
+    if (framebuffers_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(framebuffers_bytes));
         if (framebuffers_bytes != 0) rvk_reply.write(framebuffers, framebuffers_bytes);
     }
@@ -2905,10 +2978,12 @@ static bool decode_glCreateProgramPipelines(const RealGl& rvk_gl, ::av::WireRead
     size_t pipelines_storage_count = 0;
     GLuint* pipelines = nullptr;
     size_t pipelines_bytes = 0;
+    bool pipelines_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            pipelines_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             pipelines_bytes = static_cast<size_t>(rvk_bytes);
@@ -2921,7 +2996,7 @@ static bool decode_glCreateProgramPipelines(const RealGl& rvk_gl, ::av::WireRead
     }
     if (rvk_gl.glCreateProgramPipelines == nullptr) return false;
     rvk_gl.glCreateProgramPipelines(n, pipelines);
-    if (pipelines != nullptr) {
+    if (pipelines_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(pipelines_bytes));
         if (pipelines_bytes != 0) rvk_reply.write(pipelines, pipelines_bytes);
     }
@@ -2940,10 +3015,12 @@ static bool decode_glCreateQueries(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t ids_storage_count = 0;
     GLuint* ids = nullptr;
     size_t ids_bytes = 0;
+    bool ids_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            ids_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             ids_bytes = static_cast<size_t>(rvk_bytes);
@@ -2956,7 +3033,7 @@ static bool decode_glCreateQueries(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     }
     if (rvk_gl.glCreateQueries == nullptr) return false;
     rvk_gl.glCreateQueries(target, n, ids);
-    if (ids != nullptr) {
+    if (ids_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(ids_bytes));
         if (ids_bytes != 0) rvk_reply.write(ids, ids_bytes);
     }
@@ -2972,10 +3049,12 @@ static bool decode_glCreateRenderbuffers(const RealGl& rvk_gl, ::av::WireReader&
     size_t renderbuffers_storage_count = 0;
     GLuint* renderbuffers = nullptr;
     size_t renderbuffers_bytes = 0;
+    bool renderbuffers_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            renderbuffers_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             renderbuffers_bytes = static_cast<size_t>(rvk_bytes);
@@ -2988,7 +3067,7 @@ static bool decode_glCreateRenderbuffers(const RealGl& rvk_gl, ::av::WireReader&
     }
     if (rvk_gl.glCreateRenderbuffers == nullptr) return false;
     rvk_gl.glCreateRenderbuffers(n, renderbuffers);
-    if (renderbuffers != nullptr) {
+    if (renderbuffers_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(renderbuffers_bytes));
         if (renderbuffers_bytes != 0) rvk_reply.write(renderbuffers, renderbuffers_bytes);
     }
@@ -3004,10 +3083,12 @@ static bool decode_glCreateSamplers(const RealGl& rvk_gl, ::av::WireReader& rvk_
     size_t samplers_storage_count = 0;
     GLuint* samplers = nullptr;
     size_t samplers_bytes = 0;
+    bool samplers_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            samplers_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             samplers_bytes = static_cast<size_t>(rvk_bytes);
@@ -3020,7 +3101,7 @@ static bool decode_glCreateSamplers(const RealGl& rvk_gl, ::av::WireReader& rvk_
     }
     if (rvk_gl.glCreateSamplers == nullptr) return false;
     rvk_gl.glCreateSamplers(n, samplers);
-    if (samplers != nullptr) {
+    if (samplers_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(samplers_bytes));
         if (samplers_bytes != 0) rvk_reply.write(samplers, samplers_bytes);
     }
@@ -3088,10 +3169,12 @@ static bool decode_glCreateTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_
     size_t textures_storage_count = 0;
     GLuint* textures = nullptr;
     size_t textures_bytes = 0;
+    bool textures_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            textures_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             textures_bytes = static_cast<size_t>(rvk_bytes);
@@ -3104,7 +3187,7 @@ static bool decode_glCreateTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_
     }
     if (rvk_gl.glCreateTextures == nullptr) return false;
     rvk_gl.glCreateTextures(target, n, textures);
-    if (textures != nullptr) {
+    if (textures_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(textures_bytes));
         if (textures_bytes != 0) rvk_reply.write(textures, textures_bytes);
     }
@@ -3120,10 +3203,12 @@ static bool decode_glCreateTransformFeedbacks(const RealGl& rvk_gl, ::av::WireRe
     size_t ids_storage_count = 0;
     GLuint* ids = nullptr;
     size_t ids_bytes = 0;
+    bool ids_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            ids_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             ids_bytes = static_cast<size_t>(rvk_bytes);
@@ -3136,7 +3221,7 @@ static bool decode_glCreateTransformFeedbacks(const RealGl& rvk_gl, ::av::WireRe
     }
     if (rvk_gl.glCreateTransformFeedbacks == nullptr) return false;
     rvk_gl.glCreateTransformFeedbacks(n, ids);
-    if (ids != nullptr) {
+    if (ids_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(ids_bytes));
         if (ids_bytes != 0) rvk_reply.write(ids, ids_bytes);
     }
@@ -3152,10 +3237,12 @@ static bool decode_glCreateVertexArrays(const RealGl& rvk_gl, ::av::WireReader& 
     size_t arrays_storage_count = 0;
     GLuint* arrays = nullptr;
     size_t arrays_bytes = 0;
+    bool arrays_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            arrays_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             arrays_bytes = static_cast<size_t>(rvk_bytes);
@@ -3168,7 +3255,7 @@ static bool decode_glCreateVertexArrays(const RealGl& rvk_gl, ::av::WireReader& 
     }
     if (rvk_gl.glCreateVertexArrays == nullptr) return false;
     rvk_gl.glCreateVertexArrays(n, arrays);
-    if (arrays != nullptr) {
+    if (arrays_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(arrays_bytes));
         if (arrays_bytes != 0) rvk_reply.write(arrays, arrays_bytes);
     }
@@ -4514,10 +4601,12 @@ static bool decode_glGenBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     size_t buffers_storage_count = 0;
     GLuint* buffers = nullptr;
     size_t buffers_bytes = 0;
+    bool buffers_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            buffers_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             buffers_bytes = static_cast<size_t>(rvk_bytes);
@@ -4530,7 +4619,7 @@ static bool decode_glGenBuffers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     }
     if (rvk_gl.glGenBuffers == nullptr) return false;
     rvk_gl.glGenBuffers(n, buffers);
-    if (buffers != nullptr) {
+    if (buffers_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(buffers_bytes));
         if (buffers_bytes != 0) rvk_reply.write(buffers, buffers_bytes);
     }
@@ -4546,10 +4635,12 @@ static bool decode_glGenFramebuffers(const RealGl& rvk_gl, ::av::WireReader& rvk
     size_t framebuffers_storage_count = 0;
     GLuint* framebuffers = nullptr;
     size_t framebuffers_bytes = 0;
+    bool framebuffers_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            framebuffers_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             framebuffers_bytes = static_cast<size_t>(rvk_bytes);
@@ -4562,7 +4653,7 @@ static bool decode_glGenFramebuffers(const RealGl& rvk_gl, ::av::WireReader& rvk
     }
     if (rvk_gl.glGenFramebuffers == nullptr) return false;
     rvk_gl.glGenFramebuffers(n, framebuffers);
-    if (framebuffers != nullptr) {
+    if (framebuffers_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(framebuffers_bytes));
         if (framebuffers_bytes != 0) rvk_reply.write(framebuffers, framebuffers_bytes);
     }
@@ -4578,10 +4669,12 @@ static bool decode_glGenProgramPipelines(const RealGl& rvk_gl, ::av::WireReader&
     size_t pipelines_storage_count = 0;
     GLuint* pipelines = nullptr;
     size_t pipelines_bytes = 0;
+    bool pipelines_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            pipelines_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             pipelines_bytes = static_cast<size_t>(rvk_bytes);
@@ -4594,7 +4687,7 @@ static bool decode_glGenProgramPipelines(const RealGl& rvk_gl, ::av::WireReader&
     }
     if (rvk_gl.glGenProgramPipelines == nullptr) return false;
     rvk_gl.glGenProgramPipelines(n, pipelines);
-    if (pipelines != nullptr) {
+    if (pipelines_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(pipelines_bytes));
         if (pipelines_bytes != 0) rvk_reply.write(pipelines, pipelines_bytes);
     }
@@ -4610,10 +4703,12 @@ static bool decode_glGenQueries(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     size_t ids_storage_count = 0;
     GLuint* ids = nullptr;
     size_t ids_bytes = 0;
+    bool ids_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            ids_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             ids_bytes = static_cast<size_t>(rvk_bytes);
@@ -4626,7 +4721,7 @@ static bool decode_glGenQueries(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     }
     if (rvk_gl.glGenQueries == nullptr) return false;
     rvk_gl.glGenQueries(n, ids);
-    if (ids != nullptr) {
+    if (ids_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(ids_bytes));
         if (ids_bytes != 0) rvk_reply.write(ids, ids_bytes);
     }
@@ -4642,10 +4737,12 @@ static bool decode_glGenRenderbuffers(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t renderbuffers_storage_count = 0;
     GLuint* renderbuffers = nullptr;
     size_t renderbuffers_bytes = 0;
+    bool renderbuffers_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            renderbuffers_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             renderbuffers_bytes = static_cast<size_t>(rvk_bytes);
@@ -4658,7 +4755,7 @@ static bool decode_glGenRenderbuffers(const RealGl& rvk_gl, ::av::WireReader& rv
     }
     if (rvk_gl.glGenRenderbuffers == nullptr) return false;
     rvk_gl.glGenRenderbuffers(n, renderbuffers);
-    if (renderbuffers != nullptr) {
+    if (renderbuffers_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(renderbuffers_bytes));
         if (renderbuffers_bytes != 0) rvk_reply.write(renderbuffers, renderbuffers_bytes);
     }
@@ -4674,10 +4771,12 @@ static bool decode_glGenSamplers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     size_t samplers_storage_count = 0;
     GLuint* samplers = nullptr;
     size_t samplers_bytes = 0;
+    bool samplers_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            samplers_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             samplers_bytes = static_cast<size_t>(rvk_bytes);
@@ -4690,7 +4789,7 @@ static bool decode_glGenSamplers(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     }
     if (rvk_gl.glGenSamplers == nullptr) return false;
     rvk_gl.glGenSamplers(count, samplers);
-    if (samplers != nullptr) {
+    if (samplers_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(samplers_bytes));
         if (samplers_bytes != 0) rvk_reply.write(samplers, samplers_bytes);
     }
@@ -4706,10 +4805,12 @@ static bool decode_glGenTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     size_t textures_storage_count = 0;
     GLuint* textures = nullptr;
     size_t textures_bytes = 0;
+    bool textures_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            textures_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             textures_bytes = static_cast<size_t>(rvk_bytes);
@@ -4722,7 +4823,7 @@ static bool decode_glGenTextures(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     }
     if (rvk_gl.glGenTextures == nullptr) return false;
     rvk_gl.glGenTextures(n, textures);
-    if (textures != nullptr) {
+    if (textures_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(textures_bytes));
         if (textures_bytes != 0) rvk_reply.write(textures, textures_bytes);
     }
@@ -4738,10 +4839,12 @@ static bool decode_glGenTransformFeedbacks(const RealGl& rvk_gl, ::av::WireReade
     size_t ids_storage_count = 0;
     GLuint* ids = nullptr;
     size_t ids_bytes = 0;
+    bool ids_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            ids_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             ids_bytes = static_cast<size_t>(rvk_bytes);
@@ -4754,7 +4857,7 @@ static bool decode_glGenTransformFeedbacks(const RealGl& rvk_gl, ::av::WireReade
     }
     if (rvk_gl.glGenTransformFeedbacks == nullptr) return false;
     rvk_gl.glGenTransformFeedbacks(n, ids);
-    if (ids != nullptr) {
+    if (ids_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(ids_bytes));
         if (ids_bytes != 0) rvk_reply.write(ids, ids_bytes);
     }
@@ -4770,10 +4873,12 @@ static bool decode_glGenVertexArrays(const RealGl& rvk_gl, ::av::WireReader& rvk
     size_t arrays_storage_count = 0;
     GLuint* arrays = nullptr;
     size_t arrays_bytes = 0;
+    bool arrays_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            arrays_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             arrays_bytes = static_cast<size_t>(rvk_bytes);
@@ -4786,7 +4891,7 @@ static bool decode_glGenVertexArrays(const RealGl& rvk_gl, ::av::WireReader& rvk
     }
     if (rvk_gl.glGenVertexArrays == nullptr) return false;
     rvk_gl.glGenVertexArrays(n, arrays);
-    if (arrays != nullptr) {
+    if (arrays_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(arrays_bytes));
         if (arrays_bytes != 0) rvk_reply.write(arrays, arrays_bytes);
     }
@@ -4828,10 +4933,17 @@ static bool decode_glGetActiveAtomicCounterBufferiv(const RealGl& rvk_gl, ::av::
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -4846,7 +4958,7 @@ static bool decode_glGetActiveAtomicCounterBufferiv(const RealGl& rvk_gl, ::av::
     }
     if (rvk_gl.glGetActiveAtomicCounterBufferiv == nullptr) return false;
     rvk_gl.glGetActiveAtomicCounterBufferiv(program, bufferIndex, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -4868,10 +4980,12 @@ static bool decode_glGetActiveAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -4886,10 +5000,12 @@ static bool decode_glGetActiveAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk
     size_t size_storage_count = 0;
     GLint* size = nullptr;
     size_t size_bytes = 0;
+    bool size_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            size_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             size_bytes = static_cast<size_t>(rvk_bytes);
@@ -4904,10 +5020,12 @@ static bool decode_glGetActiveAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk
     size_t type_storage_count = 0;
     GLenum* type = nullptr;
     size_t type_bytes = 0;
+    bool type_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            type_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             type_bytes = static_cast<size_t>(rvk_bytes);
@@ -4922,10 +5040,12 @@ static bool decode_glGetActiveAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk
     size_t name_storage_count = 0;
     GLchar* name = nullptr;
     size_t name_bytes = 0;
+    bool name_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            name_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             name_bytes = static_cast<size_t>(rvk_bytes);
@@ -4938,19 +5058,19 @@ static bool decode_glGetActiveAttrib(const RealGl& rvk_gl, ::av::WireReader& rvk
     }
     if (rvk_gl.glGetActiveAttrib == nullptr) return false;
     rvk_gl.glGetActiveAttrib(program, index, bufSize, length, size, type, name);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (size != nullptr) {
+    if (size_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(size_bytes));
         if (size_bytes != 0) rvk_reply.write(size, size_bytes);
     }
-    if (type != nullptr) {
+    if (type_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(type_bytes));
         if (type_bytes != 0) rvk_reply.write(type, type_bytes);
     }
-    if (name != nullptr) {
+    if (name_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(name_bytes));
         if (name_bytes != 0) rvk_reply.write(name, name_bytes);
     }
@@ -4975,10 +5095,12 @@ static bool decode_glGetActiveSubroutineName(const RealGl& rvk_gl, ::av::WireRea
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -4993,10 +5115,12 @@ static bool decode_glGetActiveSubroutineName(const RealGl& rvk_gl, ::av::WireRea
     size_t name_storage_count = 0;
     GLchar* name = nullptr;
     size_t name_bytes = 0;
+    bool name_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            name_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             name_bytes = static_cast<size_t>(rvk_bytes);
@@ -5009,11 +5133,11 @@ static bool decode_glGetActiveSubroutineName(const RealGl& rvk_gl, ::av::WireRea
     }
     if (rvk_gl.glGetActiveSubroutineName == nullptr) return false;
     rvk_gl.glGetActiveSubroutineName(program, shadertype, index, bufSize, length, name);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (name != nullptr) {
+    if (name_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(name_bytes));
         if (name_bytes != 0) rvk_reply.write(name, name_bytes);
     }
@@ -5038,10 +5162,12 @@ static bool decode_glGetActiveSubroutineUniformName(const RealGl& rvk_gl, ::av::
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -5056,10 +5182,12 @@ static bool decode_glGetActiveSubroutineUniformName(const RealGl& rvk_gl, ::av::
     size_t name_storage_count = 0;
     GLchar* name = nullptr;
     size_t name_bytes = 0;
+    bool name_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            name_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             name_bytes = static_cast<size_t>(rvk_bytes);
@@ -5072,11 +5200,11 @@ static bool decode_glGetActiveSubroutineUniformName(const RealGl& rvk_gl, ::av::
     }
     if (rvk_gl.glGetActiveSubroutineUniformName == nullptr) return false;
     rvk_gl.glGetActiveSubroutineUniformName(program, shadertype, index, bufSize, length, name);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (name != nullptr) {
+    if (name_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(name_bytes));
         if (name_bytes != 0) rvk_reply.write(name, name_bytes);
     }
@@ -5101,10 +5229,17 @@ static bool decode_glGetActiveSubroutineUniformiv(const RealGl& rvk_gl, ::av::Wi
     size_t values_storage_count = 0;
     GLint* values = nullptr;
     size_t values_bytes = 0;
+    bool values_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            values_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (values_storage == nullptr) return false;
+            values = values_storage;
+        }
         if (rvk_present != 0) {
+            values_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             values_bytes = static_cast<size_t>(rvk_bytes);
@@ -5119,7 +5254,7 @@ static bool decode_glGetActiveSubroutineUniformiv(const RealGl& rvk_gl, ::av::Wi
     }
     if (rvk_gl.glGetActiveSubroutineUniformiv == nullptr) return false;
     rvk_gl.glGetActiveSubroutineUniformiv(program, shadertype, index, pname, values);
-    if (values != nullptr) {
+    if (values_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(values_bytes));
         if (values_bytes != 0) rvk_reply.write(values, values_bytes);
     }
@@ -5141,10 +5276,12 @@ static bool decode_glGetActiveUniform(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -5159,10 +5296,12 @@ static bool decode_glGetActiveUniform(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t size_storage_count = 0;
     GLint* size = nullptr;
     size_t size_bytes = 0;
+    bool size_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            size_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             size_bytes = static_cast<size_t>(rvk_bytes);
@@ -5177,10 +5316,12 @@ static bool decode_glGetActiveUniform(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t type_storage_count = 0;
     GLenum* type = nullptr;
     size_t type_bytes = 0;
+    bool type_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            type_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             type_bytes = static_cast<size_t>(rvk_bytes);
@@ -5195,10 +5336,12 @@ static bool decode_glGetActiveUniform(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t name_storage_count = 0;
     GLchar* name = nullptr;
     size_t name_bytes = 0;
+    bool name_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            name_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             name_bytes = static_cast<size_t>(rvk_bytes);
@@ -5211,19 +5354,19 @@ static bool decode_glGetActiveUniform(const RealGl& rvk_gl, ::av::WireReader& rv
     }
     if (rvk_gl.glGetActiveUniform == nullptr) return false;
     rvk_gl.glGetActiveUniform(program, index, bufSize, length, size, type, name);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (size != nullptr) {
+    if (size_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(size_bytes));
         if (size_bytes != 0) rvk_reply.write(size, size_bytes);
     }
-    if (type != nullptr) {
+    if (type_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(type_bytes));
         if (type_bytes != 0) rvk_reply.write(type, type_bytes);
     }
-    if (name != nullptr) {
+    if (name_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(name_bytes));
         if (name_bytes != 0) rvk_reply.write(name, name_bytes);
     }
@@ -5245,10 +5388,12 @@ static bool decode_glGetActiveUniformBlockName(const RealGl& rvk_gl, ::av::WireR
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -5263,10 +5408,12 @@ static bool decode_glGetActiveUniformBlockName(const RealGl& rvk_gl, ::av::WireR
     size_t uniformBlockName_storage_count = 0;
     GLchar* uniformBlockName = nullptr;
     size_t uniformBlockName_bytes = 0;
+    bool uniformBlockName_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            uniformBlockName_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             uniformBlockName_bytes = static_cast<size_t>(rvk_bytes);
@@ -5279,11 +5426,11 @@ static bool decode_glGetActiveUniformBlockName(const RealGl& rvk_gl, ::av::WireR
     }
     if (rvk_gl.glGetActiveUniformBlockName == nullptr) return false;
     rvk_gl.glGetActiveUniformBlockName(program, uniformBlockIndex, bufSize, length, uniformBlockName);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (uniformBlockName != nullptr) {
+    if (uniformBlockName_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(uniformBlockName_bytes));
         if (uniformBlockName_bytes != 0) rvk_reply.write(uniformBlockName, uniformBlockName_bytes);
     }
@@ -5305,10 +5452,12 @@ static bool decode_glGetActiveUniformBlockiv(const RealGl& rvk_gl, ::av::WireRea
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -5321,7 +5470,7 @@ static bool decode_glGetActiveUniformBlockiv(const RealGl& rvk_gl, ::av::WireRea
     }
     if (rvk_gl.glGetActiveUniformBlockiv == nullptr) return false;
     rvk_gl.glGetActiveUniformBlockiv(program, uniformBlockIndex, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -5343,10 +5492,12 @@ static bool decode_glGetActiveUniformName(const RealGl& rvk_gl, ::av::WireReader
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -5361,10 +5512,12 @@ static bool decode_glGetActiveUniformName(const RealGl& rvk_gl, ::av::WireReader
     size_t uniformName_storage_count = 0;
     GLchar* uniformName = nullptr;
     size_t uniformName_bytes = 0;
+    bool uniformName_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            uniformName_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             uniformName_bytes = static_cast<size_t>(rvk_bytes);
@@ -5377,11 +5530,11 @@ static bool decode_glGetActiveUniformName(const RealGl& rvk_gl, ::av::WireReader
     }
     if (rvk_gl.glGetActiveUniformName == nullptr) return false;
     rvk_gl.glGetActiveUniformName(program, uniformIndex, bufSize, length, uniformName);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (uniformName != nullptr) {
+    if (uniformName_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(uniformName_bytes));
         if (uniformName_bytes != 0) rvk_reply.write(uniformName, uniformName_bytes);
     }
@@ -5428,10 +5581,12 @@ static bool decode_glGetActiveUniformsiv(const RealGl& rvk_gl, ::av::WireReader&
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -5444,7 +5599,7 @@ static bool decode_glGetActiveUniformsiv(const RealGl& rvk_gl, ::av::WireReader&
     }
     if (rvk_gl.glGetActiveUniformsiv == nullptr) return false;
     rvk_gl.glGetActiveUniformsiv(program, uniformCount, uniformIndices, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -5463,10 +5618,12 @@ static bool decode_glGetAttachedShaders(const RealGl& rvk_gl, ::av::WireReader& 
     size_t count_storage_count = 0;
     GLsizei* count = nullptr;
     size_t count_bytes = 0;
+    bool count_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            count_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             count_bytes = static_cast<size_t>(rvk_bytes);
@@ -5481,10 +5638,12 @@ static bool decode_glGetAttachedShaders(const RealGl& rvk_gl, ::av::WireReader& 
     size_t shaders_storage_count = 0;
     GLuint* shaders = nullptr;
     size_t shaders_bytes = 0;
+    bool shaders_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            shaders_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             shaders_bytes = static_cast<size_t>(rvk_bytes);
@@ -5497,11 +5656,11 @@ static bool decode_glGetAttachedShaders(const RealGl& rvk_gl, ::av::WireReader& 
     }
     if (rvk_gl.glGetAttachedShaders == nullptr) return false;
     rvk_gl.glGetAttachedShaders(program, maxCount, count, shaders);
-    if (count != nullptr) {
+    if (count_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(count_bytes));
         if (count_bytes != 0) rvk_reply.write(count, count_bytes);
     }
-    if (shaders != nullptr) {
+    if (shaders_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(shaders_bytes));
         if (shaders_bytes != 0) rvk_reply.write(shaders, shaders_bytes);
     }
@@ -5547,10 +5706,12 @@ static bool decode_glGetBooleani_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t data_storage_count = 0;
     GLboolean* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -5563,7 +5724,7 @@ static bool decode_glGetBooleani_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     }
     if (rvk_gl.glGetBooleani_v == nullptr) return false;
     rvk_gl.glGetBooleani_v(target, index, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -5579,10 +5740,17 @@ static bool decode_glGetBooleanv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     size_t data_storage_count = 0;
     GLboolean* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            data_storage = rvk_arena.allocate<GLboolean>(kQuerySlack + 1);
+            if (data_storage == nullptr) return false;
+            data = data_storage;
+        }
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -5597,7 +5765,7 @@ static bool decode_glGetBooleanv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     }
     if (rvk_gl.glGetBooleanv == nullptr) return false;
     rvk_gl.glGetBooleanv(pname, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -5616,10 +5784,17 @@ static bool decode_glGetBufferParameteri64v(const RealGl& rvk_gl, ::av::WireRead
     size_t params_storage_count = 0;
     GLint64* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint64>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -5634,7 +5809,7 @@ static bool decode_glGetBufferParameteri64v(const RealGl& rvk_gl, ::av::WireRead
     }
     if (rvk_gl.glGetBufferParameteri64v == nullptr) return false;
     rvk_gl.glGetBufferParameteri64v(target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -5653,10 +5828,17 @@ static bool decode_glGetBufferParameteriv(const RealGl& rvk_gl, ::av::WireReader
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -5671,7 +5853,7 @@ static bool decode_glGetBufferParameteriv(const RealGl& rvk_gl, ::av::WireReader
     }
     if (rvk_gl.glGetBufferParameteriv == nullptr) return false;
     rvk_gl.glGetBufferParameteriv(target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -5693,10 +5875,12 @@ static bool decode_glGetBufferSubData(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t data_storage_count = 0;
     void* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -5709,7 +5893,7 @@ static bool decode_glGetBufferSubData(const RealGl& rvk_gl, ::av::WireReader& rv
     }
     if (rvk_gl.glGetBufferSubData == nullptr) return false;
     rvk_gl.glGetBufferSubData(target, offset, size, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -5758,6 +5942,14 @@ static bool decode_glGetCompressedTexImage(const RealGl& rvk_gl, ::av::WireReade
             for (size_t rvk_z = 0; rvk_z < img_storage_count; ++rvk_z) { img_storage[rvk_z] = 0; }
             img = img_storage;
         }
+    }
+    if (img_is_offset || img == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        return false;
     }
     if (rvk_gl.glGetCompressedTexImage == nullptr) return false;
     rvk_gl.glGetCompressedTexImage(target, level, img);
@@ -5813,6 +6005,14 @@ static bool decode_glGetCompressedTextureImage(const RealGl& rvk_gl, ::av::WireR
             for (size_t rvk_z = 0; rvk_z < pixels_storage_count; ++rvk_z) { pixels_storage[rvk_z] = 0; }
             pixels = pixels_storage;
         }
+    }
+    if (pixels_is_offset || pixels == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (rvk_gl.glGetCompressedTextureImage == nullptr) return false;
     rvk_gl.glGetCompressedTextureImage(texture, level, bufSize, pixels);
@@ -5887,6 +6087,14 @@ static bool decode_glGetCompressedTextureSubImage(const RealGl& rvk_gl, ::av::Wi
             pixels = pixels_storage;
         }
     }
+    if (pixels_is_offset || pixels == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
+    }
     if (rvk_gl.glGetCompressedTextureSubImage == nullptr) return false;
     rvk_gl.glGetCompressedTextureSubImage(texture, level, xoffset, yoffset, zoffset, width, height, depth, bufSize, pixels);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
@@ -5908,10 +6116,12 @@ static bool decode_glGetDebugMessageLog(const RealGl& rvk_gl, ::av::WireReader& 
     size_t sources_storage_count = 0;
     GLenum* sources = nullptr;
     size_t sources_bytes = 0;
+    bool sources_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            sources_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             sources_bytes = static_cast<size_t>(rvk_bytes);
@@ -5926,10 +6136,12 @@ static bool decode_glGetDebugMessageLog(const RealGl& rvk_gl, ::av::WireReader& 
     size_t types_storage_count = 0;
     GLenum* types = nullptr;
     size_t types_bytes = 0;
+    bool types_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            types_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             types_bytes = static_cast<size_t>(rvk_bytes);
@@ -5944,10 +6156,12 @@ static bool decode_glGetDebugMessageLog(const RealGl& rvk_gl, ::av::WireReader& 
     size_t ids_storage_count = 0;
     GLuint* ids = nullptr;
     size_t ids_bytes = 0;
+    bool ids_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            ids_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             ids_bytes = static_cast<size_t>(rvk_bytes);
@@ -5962,10 +6176,12 @@ static bool decode_glGetDebugMessageLog(const RealGl& rvk_gl, ::av::WireReader& 
     size_t severities_storage_count = 0;
     GLenum* severities = nullptr;
     size_t severities_bytes = 0;
+    bool severities_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            severities_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             severities_bytes = static_cast<size_t>(rvk_bytes);
@@ -5980,10 +6196,12 @@ static bool decode_glGetDebugMessageLog(const RealGl& rvk_gl, ::av::WireReader& 
     size_t lengths_storage_count = 0;
     GLsizei* lengths = nullptr;
     size_t lengths_bytes = 0;
+    bool lengths_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            lengths_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             lengths_bytes = static_cast<size_t>(rvk_bytes);
@@ -5998,10 +6216,12 @@ static bool decode_glGetDebugMessageLog(const RealGl& rvk_gl, ::av::WireReader& 
     size_t messageLog_storage_count = 0;
     GLchar* messageLog = nullptr;
     size_t messageLog_bytes = 0;
+    bool messageLog_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            messageLog_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             messageLog_bytes = static_cast<size_t>(rvk_bytes);
@@ -6015,27 +6235,27 @@ static bool decode_glGetDebugMessageLog(const RealGl& rvk_gl, ::av::WireReader& 
     if (rvk_gl.glGetDebugMessageLog == nullptr) return false;
     const auto rvk_ret = rvk_gl.glGetDebugMessageLog(count, bufSize, sources, types, ids, severities, lengths, messageLog);
     rvk_reply.write_varint(static_cast<uint64_t>(rvk_ret));
-    if (sources != nullptr) {
+    if (sources_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(sources_bytes));
         if (sources_bytes != 0) rvk_reply.write(sources, sources_bytes);
     }
-    if (types != nullptr) {
+    if (types_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(types_bytes));
         if (types_bytes != 0) rvk_reply.write(types, types_bytes);
     }
-    if (ids != nullptr) {
+    if (ids_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(ids_bytes));
         if (ids_bytes != 0) rvk_reply.write(ids, ids_bytes);
     }
-    if (severities != nullptr) {
+    if (severities_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(severities_bytes));
         if (severities_bytes != 0) rvk_reply.write(severities, severities_bytes);
     }
-    if (lengths != nullptr) {
+    if (lengths_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(lengths_bytes));
         if (lengths_bytes != 0) rvk_reply.write(lengths, lengths_bytes);
     }
-    if (messageLog != nullptr) {
+    if (messageLog_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(messageLog_bytes));
         if (messageLog_bytes != 0) rvk_reply.write(messageLog, messageLog_bytes);
     }
@@ -6054,10 +6274,12 @@ static bool decode_glGetDoublei_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     size_t data_storage_count = 0;
     GLdouble* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -6070,7 +6292,7 @@ static bool decode_glGetDoublei_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     }
     if (rvk_gl.glGetDoublei_v == nullptr) return false;
     rvk_gl.glGetDoublei_v(target, index, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -6086,10 +6308,17 @@ static bool decode_glGetDoublev(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     size_t data_storage_count = 0;
     GLdouble* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            data_storage = rvk_arena.allocate<GLdouble>(kQuerySlack + 1);
+            if (data_storage == nullptr) return false;
+            data = data_storage;
+        }
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -6104,7 +6333,7 @@ static bool decode_glGetDoublev(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     }
     if (rvk_gl.glGetDoublev == nullptr) return false;
     rvk_gl.glGetDoublev(pname, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -6131,10 +6360,12 @@ static bool decode_glGetFloati_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     size_t data_storage_count = 0;
     GLfloat* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -6147,7 +6378,7 @@ static bool decode_glGetFloati_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     }
     if (rvk_gl.glGetFloati_v == nullptr) return false;
     rvk_gl.glGetFloati_v(target, index, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -6163,10 +6394,17 @@ static bool decode_glGetFloatv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
     size_t data_storage_count = 0;
     GLfloat* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            data_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (data_storage == nullptr) return false;
+            data = data_storage;
+        }
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -6181,7 +6419,7 @@ static bool decode_glGetFloatv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
     }
     if (rvk_gl.glGetFloatv == nullptr) return false;
     rvk_gl.glGetFloatv(pname, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -6257,10 +6495,17 @@ static bool decode_glGetFramebufferAttachmentParameteriv(const RealGl& rvk_gl, :
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -6275,7 +6520,7 @@ static bool decode_glGetFramebufferAttachmentParameteriv(const RealGl& rvk_gl, :
     }
     if (rvk_gl.glGetFramebufferAttachmentParameteriv == nullptr) return false;
     rvk_gl.glGetFramebufferAttachmentParameteriv(target, attachment, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -6294,10 +6539,17 @@ static bool decode_glGetFramebufferParameteriv(const RealGl& rvk_gl, ::av::WireR
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -6312,7 +6564,7 @@ static bool decode_glGetFramebufferParameteriv(const RealGl& rvk_gl, ::av::WireR
     }
     if (rvk_gl.glGetFramebufferParameteriv == nullptr) return false;
     rvk_gl.glGetFramebufferParameteriv(target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -6339,10 +6591,12 @@ static bool decode_glGetInteger64i_v(const RealGl& rvk_gl, ::av::WireReader& rvk
     size_t data_storage_count = 0;
     GLint64* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -6355,7 +6609,7 @@ static bool decode_glGetInteger64i_v(const RealGl& rvk_gl, ::av::WireReader& rvk
     }
     if (rvk_gl.glGetInteger64i_v == nullptr) return false;
     rvk_gl.glGetInteger64i_v(target, index, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -6371,10 +6625,17 @@ static bool decode_glGetInteger64v(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t data_storage_count = 0;
     GLint64* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            data_storage = rvk_arena.allocate<GLint64>(kQuerySlack + 1);
+            if (data_storage == nullptr) return false;
+            data = data_storage;
+        }
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -6389,7 +6650,7 @@ static bool decode_glGetInteger64v(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     }
     if (rvk_gl.glGetInteger64v == nullptr) return false;
     rvk_gl.glGetInteger64v(pname, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -6408,10 +6669,12 @@ static bool decode_glGetIntegeri_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t data_storage_count = 0;
     GLint* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -6424,7 +6687,7 @@ static bool decode_glGetIntegeri_v(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     }
     if (rvk_gl.glGetIntegeri_v == nullptr) return false;
     rvk_gl.glGetIntegeri_v(target, index, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -6440,10 +6703,17 @@ static bool decode_glGetIntegerv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     size_t data_storage_count = 0;
     GLint* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            data_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (data_storage == nullptr) return false;
+            data = data_storage;
+        }
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -6458,7 +6728,7 @@ static bool decode_glGetIntegerv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     }
     if (rvk_gl.glGetIntegerv == nullptr) return false;
     rvk_gl.glGetIntegerv(pname, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -6483,10 +6753,12 @@ static bool decode_glGetInternalformati64v(const RealGl& rvk_gl, ::av::WireReade
     size_t params_storage_count = 0;
     GLint64* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -6499,7 +6771,7 @@ static bool decode_glGetInternalformati64v(const RealGl& rvk_gl, ::av::WireReade
     }
     if (rvk_gl.glGetInternalformati64v == nullptr) return false;
     rvk_gl.glGetInternalformati64v(target, internalformat, pname, count, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -6524,10 +6796,12 @@ static bool decode_glGetInternalformativ(const RealGl& rvk_gl, ::av::WireReader&
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -6540,7 +6814,7 @@ static bool decode_glGetInternalformativ(const RealGl& rvk_gl, ::av::WireReader&
     }
     if (rvk_gl.glGetInternalformativ == nullptr) return false;
     rvk_gl.glGetInternalformativ(target, internalformat, pname, count, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -6559,10 +6833,17 @@ static bool decode_glGetMultisamplefv(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t val_storage_count = 0;
     GLfloat* val = nullptr;
     size_t val_bytes = 0;
+    bool val_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            val_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (val_storage == nullptr) return false;
+            val = val_storage;
+        }
         if (rvk_present != 0) {
+            val_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             val_bytes = static_cast<size_t>(rvk_bytes);
@@ -6577,7 +6858,7 @@ static bool decode_glGetMultisamplefv(const RealGl& rvk_gl, ::av::WireReader& rv
     }
     if (rvk_gl.glGetMultisamplefv == nullptr) return false;
     rvk_gl.glGetMultisamplefv(pname, index, val);
-    if (val != nullptr) {
+    if (val_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(val_bytes));
         if (val_bytes != 0) rvk_reply.write(val, val_bytes);
     }
@@ -6596,10 +6877,12 @@ static bool decode_glGetNamedBufferParameteri64v(const RealGl& rvk_gl, ::av::Wir
     size_t params_storage_count = 0;
     GLint64* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -6612,7 +6895,7 @@ static bool decode_glGetNamedBufferParameteri64v(const RealGl& rvk_gl, ::av::Wir
     }
     if (rvk_gl.glGetNamedBufferParameteri64v == nullptr) return false;
     rvk_gl.glGetNamedBufferParameteri64v(buffer, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -6631,10 +6914,12 @@ static bool decode_glGetNamedBufferParameteriv(const RealGl& rvk_gl, ::av::WireR
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -6647,7 +6932,7 @@ static bool decode_glGetNamedBufferParameteriv(const RealGl& rvk_gl, ::av::WireR
     }
     if (rvk_gl.glGetNamedBufferParameteriv == nullptr) return false;
     rvk_gl.glGetNamedBufferParameteriv(buffer, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -6669,10 +6954,12 @@ static bool decode_glGetNamedBufferSubData(const RealGl& rvk_gl, ::av::WireReade
     size_t data_storage_count = 0;
     void* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -6685,7 +6972,7 @@ static bool decode_glGetNamedBufferSubData(const RealGl& rvk_gl, ::av::WireReade
     }
     if (rvk_gl.glGetNamedBufferSubData == nullptr) return false;
     rvk_gl.glGetNamedBufferSubData(buffer, offset, size, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -6707,10 +6994,12 @@ static bool decode_glGetNamedFramebufferAttachmentParameteriv(const RealGl& rvk_
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -6723,7 +7012,7 @@ static bool decode_glGetNamedFramebufferAttachmentParameteriv(const RealGl& rvk_
     }
     if (rvk_gl.glGetNamedFramebufferAttachmentParameteriv == nullptr) return false;
     rvk_gl.glGetNamedFramebufferAttachmentParameteriv(framebuffer, attachment, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -6742,10 +7031,12 @@ static bool decode_glGetNamedFramebufferParameteriv(const RealGl& rvk_gl, ::av::
     size_t param_storage_count = 0;
     GLint* param = nullptr;
     size_t param_bytes = 0;
+    bool param_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            param_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             param_bytes = static_cast<size_t>(rvk_bytes);
@@ -6758,7 +7049,7 @@ static bool decode_glGetNamedFramebufferParameteriv(const RealGl& rvk_gl, ::av::
     }
     if (rvk_gl.glGetNamedFramebufferParameteriv == nullptr) return false;
     rvk_gl.glGetNamedFramebufferParameteriv(framebuffer, pname, param);
-    if (param != nullptr) {
+    if (param_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(param_bytes));
         if (param_bytes != 0) rvk_reply.write(param, param_bytes);
     }
@@ -6777,10 +7068,12 @@ static bool decode_glGetNamedRenderbufferParameteriv(const RealGl& rvk_gl, ::av:
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -6793,7 +7086,7 @@ static bool decode_glGetNamedRenderbufferParameteriv(const RealGl& rvk_gl, ::av:
     }
     if (rvk_gl.glGetNamedRenderbufferParameteriv == nullptr) return false;
     rvk_gl.glGetNamedRenderbufferParameteriv(renderbuffer, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -6815,10 +7108,12 @@ static bool decode_glGetObjectLabel(const RealGl& rvk_gl, ::av::WireReader& rvk_
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -6833,10 +7128,12 @@ static bool decode_glGetObjectLabel(const RealGl& rvk_gl, ::av::WireReader& rvk_
     size_t label_storage_count = 0;
     GLchar* label = nullptr;
     size_t label_bytes = 0;
+    bool label_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            label_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             label_bytes = static_cast<size_t>(rvk_bytes);
@@ -6849,11 +7146,11 @@ static bool decode_glGetObjectLabel(const RealGl& rvk_gl, ::av::WireReader& rvk_
     }
     if (rvk_gl.glGetObjectLabel == nullptr) return false;
     rvk_gl.glGetObjectLabel(identifier, name, bufSize, length, label);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (label != nullptr) {
+    if (label_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(label_bytes));
         if (label_bytes != 0) rvk_reply.write(label, label_bytes);
     }
@@ -6872,10 +7169,12 @@ static bool decode_glGetObjectPtrLabel(const RealGl& rvk_gl, ::av::WireReader& r
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -6890,10 +7189,12 @@ static bool decode_glGetObjectPtrLabel(const RealGl& rvk_gl, ::av::WireReader& r
     size_t label_storage_count = 0;
     GLchar* label = nullptr;
     size_t label_bytes = 0;
+    bool label_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            label_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             label_bytes = static_cast<size_t>(rvk_bytes);
@@ -6906,11 +7207,11 @@ static bool decode_glGetObjectPtrLabel(const RealGl& rvk_gl, ::av::WireReader& r
     }
     if (rvk_gl.glGetObjectPtrLabel == nullptr) return false;
     rvk_gl.glGetObjectPtrLabel(ptr, bufSize, length, label);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (label != nullptr) {
+    if (label_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(label_bytes));
         if (label_bytes != 0) rvk_reply.write(label, label_bytes);
     }
@@ -6929,10 +7230,12 @@ static bool decode_glGetProgramBinary(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -6947,10 +7250,12 @@ static bool decode_glGetProgramBinary(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t binaryFormat_storage_count = 0;
     GLenum* binaryFormat = nullptr;
     size_t binaryFormat_bytes = 0;
+    bool binaryFormat_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            binaryFormat_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             binaryFormat_bytes = static_cast<size_t>(rvk_bytes);
@@ -6965,10 +7270,12 @@ static bool decode_glGetProgramBinary(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t binary_storage_count = 0;
     void* binary = nullptr;
     size_t binary_bytes = 0;
+    bool binary_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            binary_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             binary_bytes = static_cast<size_t>(rvk_bytes);
@@ -6981,15 +7288,15 @@ static bool decode_glGetProgramBinary(const RealGl& rvk_gl, ::av::WireReader& rv
     }
     if (rvk_gl.glGetProgramBinary == nullptr) return false;
     rvk_gl.glGetProgramBinary(program, bufSize, length, binaryFormat, binary);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (binaryFormat != nullptr) {
+    if (binaryFormat_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(binaryFormat_bytes));
         if (binaryFormat_bytes != 0) rvk_reply.write(binaryFormat, binaryFormat_bytes);
     }
-    if (binary != nullptr) {
+    if (binary_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(binary_bytes));
         if (binary_bytes != 0) rvk_reply.write(binary, binary_bytes);
     }
@@ -7008,10 +7315,12 @@ static bool decode_glGetProgramInfoLog(const RealGl& rvk_gl, ::av::WireReader& r
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -7026,10 +7335,12 @@ static bool decode_glGetProgramInfoLog(const RealGl& rvk_gl, ::av::WireReader& r
     size_t infoLog_storage_count = 0;
     GLchar* infoLog = nullptr;
     size_t infoLog_bytes = 0;
+    bool infoLog_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            infoLog_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             infoLog_bytes = static_cast<size_t>(rvk_bytes);
@@ -7042,11 +7353,11 @@ static bool decode_glGetProgramInfoLog(const RealGl& rvk_gl, ::av::WireReader& r
     }
     if (rvk_gl.glGetProgramInfoLog == nullptr) return false;
     rvk_gl.glGetProgramInfoLog(program, bufSize, length, infoLog);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (infoLog != nullptr) {
+    if (infoLog_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(infoLog_bytes));
         if (infoLog_bytes != 0) rvk_reply.write(infoLog, infoLog_bytes);
     }
@@ -7068,10 +7379,17 @@ static bool decode_glGetProgramInterfaceiv(const RealGl& rvk_gl, ::av::WireReade
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -7086,7 +7404,7 @@ static bool decode_glGetProgramInterfaceiv(const RealGl& rvk_gl, ::av::WireReade
     }
     if (rvk_gl.glGetProgramInterfaceiv == nullptr) return false;
     rvk_gl.glGetProgramInterfaceiv(program, programInterface, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -7105,10 +7423,12 @@ static bool decode_glGetProgramPipelineInfoLog(const RealGl& rvk_gl, ::av::WireR
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -7123,10 +7443,12 @@ static bool decode_glGetProgramPipelineInfoLog(const RealGl& rvk_gl, ::av::WireR
     size_t infoLog_storage_count = 0;
     GLchar* infoLog = nullptr;
     size_t infoLog_bytes = 0;
+    bool infoLog_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            infoLog_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             infoLog_bytes = static_cast<size_t>(rvk_bytes);
@@ -7139,11 +7461,11 @@ static bool decode_glGetProgramPipelineInfoLog(const RealGl& rvk_gl, ::av::WireR
     }
     if (rvk_gl.glGetProgramPipelineInfoLog == nullptr) return false;
     rvk_gl.glGetProgramPipelineInfoLog(pipeline, bufSize, length, infoLog);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (infoLog != nullptr) {
+    if (infoLog_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(infoLog_bytes));
         if (infoLog_bytes != 0) rvk_reply.write(infoLog, infoLog_bytes);
     }
@@ -7162,10 +7484,17 @@ static bool decode_glGetProgramPipelineiv(const RealGl& rvk_gl, ::av::WireReader
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -7180,7 +7509,7 @@ static bool decode_glGetProgramPipelineiv(const RealGl& rvk_gl, ::av::WireReader
     }
     if (rvk_gl.glGetProgramPipelineiv == nullptr) return false;
     rvk_gl.glGetProgramPipelineiv(pipeline, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -7295,10 +7624,12 @@ static bool decode_glGetProgramResourceName(const RealGl& rvk_gl, ::av::WireRead
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -7313,10 +7644,12 @@ static bool decode_glGetProgramResourceName(const RealGl& rvk_gl, ::av::WireRead
     size_t name_storage_count = 0;
     GLchar* name = nullptr;
     size_t name_bytes = 0;
+    bool name_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            name_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             name_bytes = static_cast<size_t>(rvk_bytes);
@@ -7329,11 +7662,11 @@ static bool decode_glGetProgramResourceName(const RealGl& rvk_gl, ::av::WireRead
     }
     if (rvk_gl.glGetProgramResourceName == nullptr) return false;
     rvk_gl.glGetProgramResourceName(program, programInterface, index, bufSize, length, name);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (name != nullptr) {
+    if (name_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(name_bytes));
         if (name_bytes != 0) rvk_reply.write(name, name_bytes);
     }
@@ -7386,10 +7719,12 @@ static bool decode_glGetProgramResourceiv(const RealGl& rvk_gl, ::av::WireReader
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -7404,10 +7739,12 @@ static bool decode_glGetProgramResourceiv(const RealGl& rvk_gl, ::av::WireReader
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -7420,11 +7757,11 @@ static bool decode_glGetProgramResourceiv(const RealGl& rvk_gl, ::av::WireReader
     }
     if (rvk_gl.glGetProgramResourceiv == nullptr) return false;
     rvk_gl.glGetProgramResourceiv(program, programInterface, index, propCount, props, count, length, params);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -7446,10 +7783,12 @@ static bool decode_glGetProgramStageiv(const RealGl& rvk_gl, ::av::WireReader& r
     size_t values_storage_count = 0;
     GLint* values = nullptr;
     size_t values_bytes = 0;
+    bool values_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            values_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             values_bytes = static_cast<size_t>(rvk_bytes);
@@ -7462,7 +7801,7 @@ static bool decode_glGetProgramStageiv(const RealGl& rvk_gl, ::av::WireReader& r
     }
     if (rvk_gl.glGetProgramStageiv == nullptr) return false;
     rvk_gl.glGetProgramStageiv(program, shadertype, pname, values);
-    if (values != nullptr) {
+    if (values_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(values_bytes));
         if (values_bytes != 0) rvk_reply.write(values, values_bytes);
     }
@@ -7481,10 +7820,17 @@ static bool decode_glGetProgramiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -7499,7 +7845,7 @@ static bool decode_glGetProgramiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     }
     if (rvk_gl.glGetProgramiv == nullptr) return false;
     rvk_gl.glGetProgramiv(program, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -7597,10 +7943,17 @@ static bool decode_glGetQueryIndexediv(const RealGl& rvk_gl, ::av::WireReader& r
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -7615,7 +7968,7 @@ static bool decode_glGetQueryIndexediv(const RealGl& rvk_gl, ::av::WireReader& r
     }
     if (rvk_gl.glGetQueryIndexediv == nullptr) return false;
     rvk_gl.glGetQueryIndexediv(target, index, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -7664,6 +8017,14 @@ static bool decode_glGetQueryObjecti64v(const RealGl& rvk_gl, ::av::WireReader& 
             for (size_t rvk_z = 0; rvk_z < params_storage_count; ++rvk_z) { params_storage[rvk_z] = 0; }
             params = params_storage;
         }
+    }
+    if (params_is_offset || params == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x9193, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        if (::av::glproto::pname_count(pname) * sizeof(GLint64) > static_cast<uint64_t>(params_bytes)) return false;
     }
     if (rvk_gl.glGetQueryObjecti64v == nullptr) return false;
     rvk_gl.glGetQueryObjecti64v(id, pname, static_cast<GLint64*>(params));
@@ -7717,6 +8078,14 @@ static bool decode_glGetQueryObjectiv(const RealGl& rvk_gl, ::av::WireReader& rv
             params = params_storage;
         }
     }
+    if (params_is_offset || params == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x9193, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        if (::av::glproto::pname_count(pname) * sizeof(GLint) > static_cast<uint64_t>(params_bytes)) return false;
+    }
     if (rvk_gl.glGetQueryObjectiv == nullptr) return false;
     rvk_gl.glGetQueryObjectiv(id, pname, static_cast<GLint*>(params));
     if (params != nullptr && !params_is_offset && !params_via_blob) {
@@ -7768,6 +8137,14 @@ static bool decode_glGetQueryObjectui64v(const RealGl& rvk_gl, ::av::WireReader&
             for (size_t rvk_z = 0; rvk_z < params_storage_count; ++rvk_z) { params_storage[rvk_z] = 0; }
             params = params_storage;
         }
+    }
+    if (params_is_offset || params == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x9193, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        if (::av::glproto::pname_count(pname) * sizeof(GLuint64) > static_cast<uint64_t>(params_bytes)) return false;
     }
     if (rvk_gl.glGetQueryObjectui64v == nullptr) return false;
     rvk_gl.glGetQueryObjectui64v(id, pname, static_cast<GLuint64*>(params));
@@ -7821,6 +8198,14 @@ static bool decode_glGetQueryObjectuiv(const RealGl& rvk_gl, ::av::WireReader& r
             params = params_storage;
         }
     }
+    if (params_is_offset || params == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x9193, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        if (::av::glproto::pname_count(pname) * sizeof(GLuint) > static_cast<uint64_t>(params_bytes)) return false;
+    }
     if (rvk_gl.glGetQueryObjectuiv == nullptr) return false;
     rvk_gl.glGetQueryObjectuiv(id, pname, static_cast<GLuint*>(params));
     if (params != nullptr && !params_is_offset && !params_via_blob) {
@@ -7842,10 +8227,17 @@ static bool decode_glGetQueryiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -7860,7 +8252,7 @@ static bool decode_glGetQueryiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     }
     if (rvk_gl.glGetQueryiv == nullptr) return false;
     rvk_gl.glGetQueryiv(target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -7879,10 +8271,17 @@ static bool decode_glGetRenderbufferParameteriv(const RealGl& rvk_gl, ::av::Wire
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -7897,7 +8296,7 @@ static bool decode_glGetRenderbufferParameteriv(const RealGl& rvk_gl, ::av::Wire
     }
     if (rvk_gl.glGetRenderbufferParameteriv == nullptr) return false;
     rvk_gl.glGetRenderbufferParameteriv(target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -7916,10 +8315,17 @@ static bool decode_glGetSamplerParameterIiv(const RealGl& rvk_gl, ::av::WireRead
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -7934,7 +8340,7 @@ static bool decode_glGetSamplerParameterIiv(const RealGl& rvk_gl, ::av::WireRead
     }
     if (rvk_gl.glGetSamplerParameterIiv == nullptr) return false;
     rvk_gl.glGetSamplerParameterIiv(sampler, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -7953,10 +8359,17 @@ static bool decode_glGetSamplerParameterIuiv(const RealGl& rvk_gl, ::av::WireRea
     size_t params_storage_count = 0;
     GLuint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLuint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -7971,7 +8384,7 @@ static bool decode_glGetSamplerParameterIuiv(const RealGl& rvk_gl, ::av::WireRea
     }
     if (rvk_gl.glGetSamplerParameterIuiv == nullptr) return false;
     rvk_gl.glGetSamplerParameterIuiv(sampler, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -7990,10 +8403,17 @@ static bool decode_glGetSamplerParameterfv(const RealGl& rvk_gl, ::av::WireReade
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8008,7 +8428,7 @@ static bool decode_glGetSamplerParameterfv(const RealGl& rvk_gl, ::av::WireReade
     }
     if (rvk_gl.glGetSamplerParameterfv == nullptr) return false;
     rvk_gl.glGetSamplerParameterfv(sampler, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8027,10 +8447,17 @@ static bool decode_glGetSamplerParameteriv(const RealGl& rvk_gl, ::av::WireReade
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8045,7 +8472,7 @@ static bool decode_glGetSamplerParameteriv(const RealGl& rvk_gl, ::av::WireReade
     }
     if (rvk_gl.glGetSamplerParameteriv == nullptr) return false;
     rvk_gl.glGetSamplerParameteriv(sampler, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8064,10 +8491,12 @@ static bool decode_glGetShaderInfoLog(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -8082,10 +8511,12 @@ static bool decode_glGetShaderInfoLog(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t infoLog_storage_count = 0;
     GLchar* infoLog = nullptr;
     size_t infoLog_bytes = 0;
+    bool infoLog_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            infoLog_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             infoLog_bytes = static_cast<size_t>(rvk_bytes);
@@ -8098,11 +8529,11 @@ static bool decode_glGetShaderInfoLog(const RealGl& rvk_gl, ::av::WireReader& rv
     }
     if (rvk_gl.glGetShaderInfoLog == nullptr) return false;
     rvk_gl.glGetShaderInfoLog(shader, bufSize, length, infoLog);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (infoLog != nullptr) {
+    if (infoLog_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(infoLog_bytes));
         if (infoLog_bytes != 0) rvk_reply.write(infoLog, infoLog_bytes);
     }
@@ -8121,10 +8552,12 @@ static bool decode_glGetShaderPrecisionFormat(const RealGl& rvk_gl, ::av::WireRe
     size_t range_storage_count = 0;
     GLint* range = nullptr;
     size_t range_bytes = 0;
+    bool range_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            range_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             range_bytes = static_cast<size_t>(rvk_bytes);
@@ -8139,10 +8572,12 @@ static bool decode_glGetShaderPrecisionFormat(const RealGl& rvk_gl, ::av::WireRe
     size_t precision_storage_count = 0;
     GLint* precision = nullptr;
     size_t precision_bytes = 0;
+    bool precision_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            precision_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             precision_bytes = static_cast<size_t>(rvk_bytes);
@@ -8155,11 +8590,11 @@ static bool decode_glGetShaderPrecisionFormat(const RealGl& rvk_gl, ::av::WireRe
     }
     if (rvk_gl.glGetShaderPrecisionFormat == nullptr) return false;
     rvk_gl.glGetShaderPrecisionFormat(shadertype, precisiontype, range, precision);
-    if (range != nullptr) {
+    if (range_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(range_bytes));
         if (range_bytes != 0) rvk_reply.write(range, range_bytes);
     }
-    if (precision != nullptr) {
+    if (precision_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(precision_bytes));
         if (precision_bytes != 0) rvk_reply.write(precision, precision_bytes);
     }
@@ -8178,10 +8613,12 @@ static bool decode_glGetShaderSource(const RealGl& rvk_gl, ::av::WireReader& rvk
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -8196,10 +8633,12 @@ static bool decode_glGetShaderSource(const RealGl& rvk_gl, ::av::WireReader& rvk
     size_t source_storage_count = 0;
     GLchar* source = nullptr;
     size_t source_bytes = 0;
+    bool source_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            source_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             source_bytes = static_cast<size_t>(rvk_bytes);
@@ -8212,11 +8651,11 @@ static bool decode_glGetShaderSource(const RealGl& rvk_gl, ::av::WireReader& rvk
     }
     if (rvk_gl.glGetShaderSource == nullptr) return false;
     rvk_gl.glGetShaderSource(shader, bufSize, length, source);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (source != nullptr) {
+    if (source_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(source_bytes));
         if (source_bytes != 0) rvk_reply.write(source, source_bytes);
     }
@@ -8235,10 +8674,17 @@ static bool decode_glGetShaderiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8253,7 +8699,7 @@ static bool decode_glGetShaderiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     }
     if (rvk_gl.glGetShaderiv == nullptr) return false;
     rvk_gl.glGetShaderiv(shader, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8368,10 +8814,12 @@ static bool decode_glGetSynciv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -8386,10 +8834,12 @@ static bool decode_glGetSynciv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
     size_t values_storage_count = 0;
     GLint* values = nullptr;
     size_t values_bytes = 0;
+    bool values_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            values_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             values_bytes = static_cast<size_t>(rvk_bytes);
@@ -8402,11 +8852,11 @@ static bool decode_glGetSynciv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::
     }
     if (rvk_gl.glGetSynciv == nullptr) return false;
     rvk_gl.glGetSynciv(sync, pname, count, length, values);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (values != nullptr) {
+    if (values_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(values_bytes));
         if (values_bytes != 0) rvk_reply.write(values, values_bytes);
     }
@@ -8462,6 +8912,21 @@ static bool decode_glGetTexImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
             pixels = pixels_storage;
         }
     }
+    if (pixels_is_offset || pixels == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        GLint rvk_width = 0, rvk_height = 0, rvk_depth = 0;
+        uint64_t rvk_needed = 0;
+        if (rvk_gl.glGetTexLevelParameteriv == nullptr) return false;
+        rvk_gl.glGetTexLevelParameteriv(target, level, 0x1000, &rvk_width);
+        rvk_gl.glGetTexLevelParameteriv(target, level, 0x1001, &rvk_height);
+        rvk_gl.glGetTexLevelParameteriv(target, level, 0x8071, &rvk_depth);
+        if (!pack_bytes(rvk_gl, rvk_width, rvk_height, rvk_depth, format, type, rvk_needed) ||
+            rvk_needed > static_cast<uint64_t>(pixels_bytes)) return false;
+    }
     if (rvk_gl.glGetTexImage == nullptr) return false;
     rvk_gl.glGetTexImage(target, level, format, type, pixels);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
@@ -8486,10 +8951,17 @@ static bool decode_glGetTexLevelParameterfv(const RealGl& rvk_gl, ::av::WireRead
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8504,7 +8976,7 @@ static bool decode_glGetTexLevelParameterfv(const RealGl& rvk_gl, ::av::WireRead
     }
     if (rvk_gl.glGetTexLevelParameterfv == nullptr) return false;
     rvk_gl.glGetTexLevelParameterfv(target, level, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8526,10 +8998,17 @@ static bool decode_glGetTexLevelParameteriv(const RealGl& rvk_gl, ::av::WireRead
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8544,7 +9023,7 @@ static bool decode_glGetTexLevelParameteriv(const RealGl& rvk_gl, ::av::WireRead
     }
     if (rvk_gl.glGetTexLevelParameteriv == nullptr) return false;
     rvk_gl.glGetTexLevelParameteriv(target, level, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8563,10 +9042,17 @@ static bool decode_glGetTexParameterIiv(const RealGl& rvk_gl, ::av::WireReader& 
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8581,7 +9067,7 @@ static bool decode_glGetTexParameterIiv(const RealGl& rvk_gl, ::av::WireReader& 
     }
     if (rvk_gl.glGetTexParameterIiv == nullptr) return false;
     rvk_gl.glGetTexParameterIiv(target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8600,10 +9086,17 @@ static bool decode_glGetTexParameterIuiv(const RealGl& rvk_gl, ::av::WireReader&
     size_t params_storage_count = 0;
     GLuint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLuint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8618,7 +9111,7 @@ static bool decode_glGetTexParameterIuiv(const RealGl& rvk_gl, ::av::WireReader&
     }
     if (rvk_gl.glGetTexParameterIuiv == nullptr) return false;
     rvk_gl.glGetTexParameterIuiv(target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8637,10 +9130,17 @@ static bool decode_glGetTexParameterfv(const RealGl& rvk_gl, ::av::WireReader& r
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8655,7 +9155,7 @@ static bool decode_glGetTexParameterfv(const RealGl& rvk_gl, ::av::WireReader& r
     }
     if (rvk_gl.glGetTexParameterfv == nullptr) return false;
     rvk_gl.glGetTexParameterfv(target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8674,10 +9174,17 @@ static bool decode_glGetTexParameteriv(const RealGl& rvk_gl, ::av::WireReader& r
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8692,7 +9199,7 @@ static bool decode_glGetTexParameteriv(const RealGl& rvk_gl, ::av::WireReader& r
     }
     if (rvk_gl.glGetTexParameteriv == nullptr) return false;
     rvk_gl.glGetTexParameteriv(target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8751,6 +9258,14 @@ static bool decode_glGetTextureImage(const RealGl& rvk_gl, ::av::WireReader& rvk
             pixels = pixels_storage;
         }
     }
+    if (pixels_is_offset || pixels == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
+    }
     if (rvk_gl.glGetTextureImage == nullptr) return false;
     rvk_gl.glGetTextureImage(texture, level, format, type, bufSize, pixels);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
@@ -8775,10 +9290,12 @@ static bool decode_glGetTextureLevelParameterfv(const RealGl& rvk_gl, ::av::Wire
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8791,7 +9308,7 @@ static bool decode_glGetTextureLevelParameterfv(const RealGl& rvk_gl, ::av::Wire
     }
     if (rvk_gl.glGetTextureLevelParameterfv == nullptr) return false;
     rvk_gl.glGetTextureLevelParameterfv(texture, level, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8813,10 +9330,12 @@ static bool decode_glGetTextureLevelParameteriv(const RealGl& rvk_gl, ::av::Wire
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8829,7 +9348,7 @@ static bool decode_glGetTextureLevelParameteriv(const RealGl& rvk_gl, ::av::Wire
     }
     if (rvk_gl.glGetTextureLevelParameteriv == nullptr) return false;
     rvk_gl.glGetTextureLevelParameteriv(texture, level, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8848,10 +9367,12 @@ static bool decode_glGetTextureParameterIiv(const RealGl& rvk_gl, ::av::WireRead
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8864,7 +9385,7 @@ static bool decode_glGetTextureParameterIiv(const RealGl& rvk_gl, ::av::WireRead
     }
     if (rvk_gl.glGetTextureParameterIiv == nullptr) return false;
     rvk_gl.glGetTextureParameterIiv(texture, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8883,10 +9404,12 @@ static bool decode_glGetTextureParameterIuiv(const RealGl& rvk_gl, ::av::WireRea
     size_t params_storage_count = 0;
     GLuint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8899,7 +9422,7 @@ static bool decode_glGetTextureParameterIuiv(const RealGl& rvk_gl, ::av::WireRea
     }
     if (rvk_gl.glGetTextureParameterIuiv == nullptr) return false;
     rvk_gl.glGetTextureParameterIuiv(texture, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8918,10 +9441,12 @@ static bool decode_glGetTextureParameterfv(const RealGl& rvk_gl, ::av::WireReade
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8934,7 +9459,7 @@ static bool decode_glGetTextureParameterfv(const RealGl& rvk_gl, ::av::WireReade
     }
     if (rvk_gl.glGetTextureParameterfv == nullptr) return false;
     rvk_gl.glGetTextureParameterfv(texture, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -8953,10 +9478,12 @@ static bool decode_glGetTextureParameteriv(const RealGl& rvk_gl, ::av::WireReade
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -8969,7 +9496,7 @@ static bool decode_glGetTextureParameteriv(const RealGl& rvk_gl, ::av::WireReade
     }
     if (rvk_gl.glGetTextureParameteriv == nullptr) return false;
     rvk_gl.glGetTextureParameteriv(texture, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -9046,6 +9573,14 @@ static bool decode_glGetTextureSubImage(const RealGl& rvk_gl, ::av::WireReader& 
             pixels = pixels_storage;
         }
     }
+    if (pixels_is_offset || pixels == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
+    }
     if (rvk_gl.glGetTextureSubImage == nullptr) return false;
     rvk_gl.glGetTextureSubImage(texture, level, xoffset, yoffset, zoffset, width, height, depth, format, type, bufSize, pixels);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
@@ -9070,10 +9605,12 @@ static bool decode_glGetTransformFeedbackVarying(const RealGl& rvk_gl, ::av::Wir
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -9088,10 +9625,12 @@ static bool decode_glGetTransformFeedbackVarying(const RealGl& rvk_gl, ::av::Wir
     size_t size_storage_count = 0;
     GLsizei* size = nullptr;
     size_t size_bytes = 0;
+    bool size_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            size_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             size_bytes = static_cast<size_t>(rvk_bytes);
@@ -9106,10 +9645,12 @@ static bool decode_glGetTransformFeedbackVarying(const RealGl& rvk_gl, ::av::Wir
     size_t type_storage_count = 0;
     GLenum* type = nullptr;
     size_t type_bytes = 0;
+    bool type_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            type_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             type_bytes = static_cast<size_t>(rvk_bytes);
@@ -9124,10 +9665,12 @@ static bool decode_glGetTransformFeedbackVarying(const RealGl& rvk_gl, ::av::Wir
     size_t name_storage_count = 0;
     GLchar* name = nullptr;
     size_t name_bytes = 0;
+    bool name_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            name_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             name_bytes = static_cast<size_t>(rvk_bytes);
@@ -9140,19 +9683,19 @@ static bool decode_glGetTransformFeedbackVarying(const RealGl& rvk_gl, ::av::Wir
     }
     if (rvk_gl.glGetTransformFeedbackVarying == nullptr) return false;
     rvk_gl.glGetTransformFeedbackVarying(program, index, bufSize, length, size, type, name);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (size != nullptr) {
+    if (size_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(size_bytes));
         if (size_bytes != 0) rvk_reply.write(size, size_bytes);
     }
-    if (type != nullptr) {
+    if (type_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(type_bytes));
         if (type_bytes != 0) rvk_reply.write(type, type_bytes);
     }
-    if (name != nullptr) {
+    if (name_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(name_bytes));
         if (name_bytes != 0) rvk_reply.write(name, name_bytes);
     }
@@ -9174,10 +9717,12 @@ static bool decode_glGetTransformFeedbacki64_v(const RealGl& rvk_gl, ::av::WireR
     size_t param_storage_count = 0;
     GLint64* param = nullptr;
     size_t param_bytes = 0;
+    bool param_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            param_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             param_bytes = static_cast<size_t>(rvk_bytes);
@@ -9190,7 +9735,7 @@ static bool decode_glGetTransformFeedbacki64_v(const RealGl& rvk_gl, ::av::WireR
     }
     if (rvk_gl.glGetTransformFeedbacki64_v == nullptr) return false;
     rvk_gl.glGetTransformFeedbacki64_v(xfb, pname, index, param);
-    if (param != nullptr) {
+    if (param_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(param_bytes));
         if (param_bytes != 0) rvk_reply.write(param, param_bytes);
     }
@@ -9212,10 +9757,12 @@ static bool decode_glGetTransformFeedbacki_v(const RealGl& rvk_gl, ::av::WireRea
     size_t param_storage_count = 0;
     GLint* param = nullptr;
     size_t param_bytes = 0;
+    bool param_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            param_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             param_bytes = static_cast<size_t>(rvk_bytes);
@@ -9228,7 +9775,7 @@ static bool decode_glGetTransformFeedbacki_v(const RealGl& rvk_gl, ::av::WireRea
     }
     if (rvk_gl.glGetTransformFeedbacki_v == nullptr) return false;
     rvk_gl.glGetTransformFeedbacki_v(xfb, pname, index, param);
-    if (param != nullptr) {
+    if (param_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(param_bytes));
         if (param_bytes != 0) rvk_reply.write(param, param_bytes);
     }
@@ -9247,10 +9794,12 @@ static bool decode_glGetTransformFeedbackiv(const RealGl& rvk_gl, ::av::WireRead
     size_t param_storage_count = 0;
     GLint* param = nullptr;
     size_t param_bytes = 0;
+    bool param_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            param_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             param_bytes = static_cast<size_t>(rvk_bytes);
@@ -9263,7 +9812,7 @@ static bool decode_glGetTransformFeedbackiv(const RealGl& rvk_gl, ::av::WireRead
     }
     if (rvk_gl.glGetTransformFeedbackiv == nullptr) return false;
     rvk_gl.glGetTransformFeedbackiv(xfb, pname, param);
-    if (param != nullptr) {
+    if (param_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(param_bytes));
         if (param_bytes != 0) rvk_reply.write(param, param_bytes);
     }
@@ -9333,10 +9882,12 @@ static bool decode_glGetUniformIndices(const RealGl& rvk_gl, ::av::WireReader& r
     size_t uniformIndices_storage_count = 0;
     GLuint* uniformIndices = nullptr;
     size_t uniformIndices_bytes = 0;
+    bool uniformIndices_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            uniformIndices_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             uniformIndices_bytes = static_cast<size_t>(rvk_bytes);
@@ -9349,7 +9900,7 @@ static bool decode_glGetUniformIndices(const RealGl& rvk_gl, ::av::WireReader& r
     }
     if (rvk_gl.glGetUniformIndices == nullptr) return false;
     rvk_gl.glGetUniformIndices(program, uniformCount, uniformNames, uniformIndices);
-    if (uniformIndices != nullptr) {
+    if (uniformIndices_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(uniformIndices_bytes));
         if (uniformIndices_bytes != 0) rvk_reply.write(uniformIndices, uniformIndices_bytes);
     }
@@ -9395,10 +9946,12 @@ static bool decode_glGetUniformSubroutineuiv(const RealGl& rvk_gl, ::av::WireRea
     size_t params_storage_count = 0;
     GLuint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -9411,7 +9964,7 @@ static bool decode_glGetUniformSubroutineuiv(const RealGl& rvk_gl, ::av::WireRea
     }
     if (rvk_gl.glGetUniformSubroutineuiv == nullptr) return false;
     rvk_gl.glGetUniformSubroutineuiv(shadertype, location, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -9430,10 +9983,12 @@ static bool decode_glGetUniformdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     size_t params_storage_count = 0;
     GLdouble* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -9446,7 +10001,7 @@ static bool decode_glGetUniformdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     }
     if (rvk_gl.glGetUniformdv == nullptr) return false;
     rvk_gl.glGetUniformdv(program, location, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -9465,10 +10020,12 @@ static bool decode_glGetUniformfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -9481,7 +10038,7 @@ static bool decode_glGetUniformfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     }
     if (rvk_gl.glGetUniformfv == nullptr) return false;
     rvk_gl.glGetUniformfv(program, location, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -9500,10 +10057,12 @@ static bool decode_glGetUniformiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -9516,7 +10075,7 @@ static bool decode_glGetUniformiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     }
     if (rvk_gl.glGetUniformiv == nullptr) return false;
     rvk_gl.glGetUniformiv(program, location, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -9535,10 +10094,12 @@ static bool decode_glGetUniformuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t params_storage_count = 0;
     GLuint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -9551,7 +10112,7 @@ static bool decode_glGetUniformuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     }
     if (rvk_gl.glGetUniformuiv == nullptr) return false;
     rvk_gl.glGetUniformuiv(program, location, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -9573,10 +10134,12 @@ static bool decode_glGetVertexArrayIndexed64iv(const RealGl& rvk_gl, ::av::WireR
     size_t param_storage_count = 0;
     GLint64* param = nullptr;
     size_t param_bytes = 0;
+    bool param_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            param_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             param_bytes = static_cast<size_t>(rvk_bytes);
@@ -9589,7 +10152,7 @@ static bool decode_glGetVertexArrayIndexed64iv(const RealGl& rvk_gl, ::av::WireR
     }
     if (rvk_gl.glGetVertexArrayIndexed64iv == nullptr) return false;
     rvk_gl.glGetVertexArrayIndexed64iv(vaobj, index, pname, param);
-    if (param != nullptr) {
+    if (param_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(param_bytes));
         if (param_bytes != 0) rvk_reply.write(param, param_bytes);
     }
@@ -9611,10 +10174,12 @@ static bool decode_glGetVertexArrayIndexediv(const RealGl& rvk_gl, ::av::WireRea
     size_t param_storage_count = 0;
     GLint* param = nullptr;
     size_t param_bytes = 0;
+    bool param_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            param_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             param_bytes = static_cast<size_t>(rvk_bytes);
@@ -9627,7 +10192,7 @@ static bool decode_glGetVertexArrayIndexediv(const RealGl& rvk_gl, ::av::WireRea
     }
     if (rvk_gl.glGetVertexArrayIndexediv == nullptr) return false;
     rvk_gl.glGetVertexArrayIndexediv(vaobj, index, pname, param);
-    if (param != nullptr) {
+    if (param_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(param_bytes));
         if (param_bytes != 0) rvk_reply.write(param, param_bytes);
     }
@@ -9646,10 +10211,12 @@ static bool decode_glGetVertexArrayiv(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t param_storage_count = 0;
     GLint* param = nullptr;
     size_t param_bytes = 0;
+    bool param_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            param_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             param_bytes = static_cast<size_t>(rvk_bytes);
@@ -9662,7 +10229,7 @@ static bool decode_glGetVertexArrayiv(const RealGl& rvk_gl, ::av::WireReader& rv
     }
     if (rvk_gl.glGetVertexArrayiv == nullptr) return false;
     rvk_gl.glGetVertexArrayiv(vaobj, pname, param);
-    if (param != nullptr) {
+    if (param_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(param_bytes));
         if (param_bytes != 0) rvk_reply.write(param, param_bytes);
     }
@@ -9681,10 +10248,12 @@ static bool decode_glGetVertexAttribIiv(const RealGl& rvk_gl, ::av::WireReader& 
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -9697,7 +10266,7 @@ static bool decode_glGetVertexAttribIiv(const RealGl& rvk_gl, ::av::WireReader& 
     }
     if (rvk_gl.glGetVertexAttribIiv == nullptr) return false;
     rvk_gl.glGetVertexAttribIiv(index, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -9716,10 +10285,12 @@ static bool decode_glGetVertexAttribIuiv(const RealGl& rvk_gl, ::av::WireReader&
     size_t params_storage_count = 0;
     GLuint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -9732,7 +10303,7 @@ static bool decode_glGetVertexAttribIuiv(const RealGl& rvk_gl, ::av::WireReader&
     }
     if (rvk_gl.glGetVertexAttribIuiv == nullptr) return false;
     rvk_gl.glGetVertexAttribIuiv(index, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -9751,10 +10322,12 @@ static bool decode_glGetVertexAttribLdv(const RealGl& rvk_gl, ::av::WireReader& 
     size_t params_storage_count = 0;
     GLdouble* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -9767,7 +10340,7 @@ static bool decode_glGetVertexAttribLdv(const RealGl& rvk_gl, ::av::WireReader& 
     }
     if (rvk_gl.glGetVertexAttribLdv == nullptr) return false;
     rvk_gl.glGetVertexAttribLdv(index, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -9786,10 +10359,12 @@ static bool decode_glGetVertexAttribdv(const RealGl& rvk_gl, ::av::WireReader& r
     size_t params_storage_count = 0;
     GLdouble* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -9802,7 +10377,7 @@ static bool decode_glGetVertexAttribdv(const RealGl& rvk_gl, ::av::WireReader& r
     }
     if (rvk_gl.glGetVertexAttribdv == nullptr) return false;
     rvk_gl.glGetVertexAttribdv(index, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -9821,10 +10396,12 @@ static bool decode_glGetVertexAttribfv(const RealGl& rvk_gl, ::av::WireReader& r
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -9837,7 +10414,7 @@ static bool decode_glGetVertexAttribfv(const RealGl& rvk_gl, ::av::WireReader& r
     }
     if (rvk_gl.glGetVertexAttribfv == nullptr) return false;
     rvk_gl.glGetVertexAttribfv(index, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -9856,10 +10433,12 @@ static bool decode_glGetVertexAttribiv(const RealGl& rvk_gl, ::av::WireReader& r
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -9872,7 +10451,7 @@ static bool decode_glGetVertexAttribiv(const RealGl& rvk_gl, ::av::WireReader& r
     }
     if (rvk_gl.glGetVertexAttribiv == nullptr) return false;
     rvk_gl.glGetVertexAttribiv(index, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -9924,6 +10503,14 @@ static bool decode_glGetnCompressedTexImage(const RealGl& rvk_gl, ::av::WireRead
             for (size_t rvk_z = 0; rvk_z < pixels_storage_count; ++rvk_z) { pixels_storage[rvk_z] = 0; }
             pixels = pixels_storage;
         }
+    }
+    if (pixels_is_offset || pixels == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
     }
     if (rvk_gl.glGetnCompressedTexImage == nullptr) return false;
     rvk_gl.glGetnCompressedTexImage(target, lod, bufSize, pixels);
@@ -9986,6 +10573,14 @@ static bool decode_glGetnTexImage(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
             pixels = pixels_storage;
         }
     }
+    if (pixels_is_offset || pixels == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(pixels_bytes)) return false;
+    }
     if (rvk_gl.glGetnTexImage == nullptr) return false;
     rvk_gl.glGetnTexImage(target, level, format, type, bufSize, pixels);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
@@ -10010,10 +10605,12 @@ static bool decode_glGetnUniformdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t params_storage_count = 0;
     GLdouble* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -10026,7 +10623,7 @@ static bool decode_glGetnUniformdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     }
     if (rvk_gl.glGetnUniformdv == nullptr) return false;
     rvk_gl.glGetnUniformdv(program, location, bufSize, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -10048,10 +10645,12 @@ static bool decode_glGetnUniformfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -10064,7 +10663,7 @@ static bool decode_glGetnUniformfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     }
     if (rvk_gl.glGetnUniformfv == nullptr) return false;
     rvk_gl.glGetnUniformfv(program, location, bufSize, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -10086,10 +10685,12 @@ static bool decode_glGetnUniformiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -10102,7 +10703,7 @@ static bool decode_glGetnUniformiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     }
     if (rvk_gl.glGetnUniformiv == nullptr) return false;
     rvk_gl.glGetnUniformiv(program, location, bufSize, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -10124,10 +10725,12 @@ static bool decode_glGetnUniformuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_
     size_t params_storage_count = 0;
     GLuint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -10140,7 +10743,7 @@ static bool decode_glGetnUniformuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_
     }
     if (rvk_gl.glGetnUniformuiv == nullptr) return false;
     rvk_gl.glGetnUniformuiv(program, location, bufSize, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -13713,6 +14316,16 @@ static bool decode_glReadPixels(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
             pixels = pixels_storage;
         }
     }
+    if (pixels_is_offset || pixels == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        uint64_t rvk_needed = 0;
+        if (!pack_bytes(rvk_gl, width, height, 1, format, type, rvk_needed) ||
+            rvk_needed > static_cast<uint64_t>(pixels_bytes)) return false;
+    }
     if (rvk_gl.glReadPixels == nullptr) return false;
     rvk_gl.glReadPixels(x, y, width, height, format, type, pixels);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
@@ -13779,6 +14392,14 @@ static bool decode_glReadnPixels(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
             for (size_t rvk_z = 0; rvk_z < data_storage_count; ++rvk_z) { data_storage[rvk_z] = 0; }
             data = data_storage;
         }
+    }
+    if (data_is_offset || data == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        if (bufSize < 0 || static_cast<uint64_t>(bufSize) > static_cast<uint64_t>(data_bytes)) return false;
     }
     if (rvk_gl.glReadnPixels == nullptr) return false;
     rvk_gl.glReadnPixels(x, y, width, height, format, type, bufSize, data);
@@ -20575,10 +21196,12 @@ static bool decode_glAreTexturesResident(const RealGl& rvk_gl, ::av::WireReader&
     size_t residences_storage_count = 0;
     GLboolean* residences = nullptr;
     size_t residences_bytes = 0;
+    bool residences_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            residences_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             residences_bytes = static_cast<size_t>(rvk_bytes);
@@ -20592,7 +21215,7 @@ static bool decode_glAreTexturesResident(const RealGl& rvk_gl, ::av::WireReader&
     if (rvk_gl.glAreTexturesResident == nullptr) return false;
     const auto rvk_ret = rvk_gl.glAreTexturesResident(n, textures, residences);
     rvk_reply.write_varint(static_cast<uint64_t>(rvk_ret));
-    if (residences != nullptr) {
+    if (residences_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(residences_bytes));
         if (residences_bytes != 0) rvk_reply.write(residences, residences_bytes);
     }
@@ -22007,10 +22630,12 @@ static bool decode_glFeedbackBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_
     size_t buffer_storage_count = 0;
     GLfloat* buffer = nullptr;
     size_t buffer_bytes = 0;
+    bool buffer_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            buffer_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             buffer_bytes = static_cast<size_t>(rvk_bytes);
@@ -22023,7 +22648,7 @@ static bool decode_glFeedbackBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_
     }
     if (rvk_gl.glFeedbackBuffer == nullptr) return false;
     rvk_gl.glFeedbackBuffer(size, type, buffer);
-    if (buffer != nullptr) {
+    if (buffer_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(buffer_bytes));
         if (buffer_bytes != 0) rvk_reply.write(buffer, buffer_bytes);
     }
@@ -22262,10 +22887,12 @@ static bool decode_glGetClipPlane(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     size_t equation_storage_count = 0;
     GLdouble* equation = nullptr;
     size_t equation_bytes = 0;
+    bool equation_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            equation_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             equation_bytes = static_cast<size_t>(rvk_bytes);
@@ -22278,7 +22905,7 @@ static bool decode_glGetClipPlane(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     }
     if (rvk_gl.glGetClipPlane == nullptr) return false;
     rvk_gl.glGetClipPlane(plane, equation);
-    if (equation != nullptr) {
+    if (equation_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(equation_bytes));
         if (equation_bytes != 0) rvk_reply.write(equation, equation_bytes);
     }
@@ -22297,10 +22924,17 @@ static bool decode_glGetLightfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -22315,7 +22949,7 @@ static bool decode_glGetLightfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     }
     if (rvk_gl.glGetLightfv == nullptr) return false;
     rvk_gl.glGetLightfv(light, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -22334,10 +22968,17 @@ static bool decode_glGetLightiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -22352,7 +22993,7 @@ static bool decode_glGetLightiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, :
     }
     if (rvk_gl.glGetLightiv == nullptr) return false;
     rvk_gl.glGetLightiv(light, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -22371,10 +23012,12 @@ static bool decode_glGetMapdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
     size_t v_storage_count = 0;
     GLdouble* v = nullptr;
     size_t v_bytes = 0;
+    bool v_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            v_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             v_bytes = static_cast<size_t>(rvk_bytes);
@@ -22387,7 +23030,7 @@ static bool decode_glGetMapdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
     }
     if (rvk_gl.glGetMapdv == nullptr) return false;
     rvk_gl.glGetMapdv(target, query, v);
-    if (v != nullptr) {
+    if (v_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(v_bytes));
         if (v_bytes != 0) rvk_reply.write(v, v_bytes);
     }
@@ -22406,10 +23049,12 @@ static bool decode_glGetMapfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
     size_t v_storage_count = 0;
     GLfloat* v = nullptr;
     size_t v_bytes = 0;
+    bool v_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            v_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             v_bytes = static_cast<size_t>(rvk_bytes);
@@ -22422,7 +23067,7 @@ static bool decode_glGetMapfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
     }
     if (rvk_gl.glGetMapfv == nullptr) return false;
     rvk_gl.glGetMapfv(target, query, v);
-    if (v != nullptr) {
+    if (v_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(v_bytes));
         if (v_bytes != 0) rvk_reply.write(v, v_bytes);
     }
@@ -22441,10 +23086,12 @@ static bool decode_glGetMapiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
     size_t v_storage_count = 0;
     GLint* v = nullptr;
     size_t v_bytes = 0;
+    bool v_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            v_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             v_bytes = static_cast<size_t>(rvk_bytes);
@@ -22457,7 +23104,7 @@ static bool decode_glGetMapiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
     }
     if (rvk_gl.glGetMapiv == nullptr) return false;
     rvk_gl.glGetMapiv(target, query, v);
-    if (v != nullptr) {
+    if (v_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(v_bytes));
         if (v_bytes != 0) rvk_reply.write(v, v_bytes);
     }
@@ -22476,10 +23123,17 @@ static bool decode_glGetMaterialfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -22494,7 +23148,7 @@ static bool decode_glGetMaterialfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     }
     if (rvk_gl.glGetMaterialfv == nullptr) return false;
     rvk_gl.glGetMaterialfv(face, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -22513,10 +23167,17 @@ static bool decode_glGetMaterialiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -22531,7 +23192,7 @@ static bool decode_glGetMaterialiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     }
     if (rvk_gl.glGetMaterialiv == nullptr) return false;
     rvk_gl.glGetMaterialiv(face, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -22547,10 +23208,12 @@ static bool decode_glGetPixelMapfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t values_storage_count = 0;
     GLfloat* values = nullptr;
     size_t values_bytes = 0;
+    bool values_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            values_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             values_bytes = static_cast<size_t>(rvk_bytes);
@@ -22563,7 +23226,7 @@ static bool decode_glGetPixelMapfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     }
     if (rvk_gl.glGetPixelMapfv == nullptr) return false;
     rvk_gl.glGetPixelMapfv(map, values);
-    if (values != nullptr) {
+    if (values_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(values_bytes));
         if (values_bytes != 0) rvk_reply.write(values, values_bytes);
     }
@@ -22579,10 +23242,12 @@ static bool decode_glGetPixelMapuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_
     size_t values_storage_count = 0;
     GLuint* values = nullptr;
     size_t values_bytes = 0;
+    bool values_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            values_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             values_bytes = static_cast<size_t>(rvk_bytes);
@@ -22595,7 +23260,7 @@ static bool decode_glGetPixelMapuiv(const RealGl& rvk_gl, ::av::WireReader& rvk_
     }
     if (rvk_gl.glGetPixelMapuiv == nullptr) return false;
     rvk_gl.glGetPixelMapuiv(map, values);
-    if (values != nullptr) {
+    if (values_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(values_bytes));
         if (values_bytes != 0) rvk_reply.write(values, values_bytes);
     }
@@ -22611,10 +23276,12 @@ static bool decode_glGetPixelMapusv(const RealGl& rvk_gl, ::av::WireReader& rvk_
     size_t values_storage_count = 0;
     GLushort* values = nullptr;
     size_t values_bytes = 0;
+    bool values_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            values_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             values_bytes = static_cast<size_t>(rvk_bytes);
@@ -22627,7 +23294,7 @@ static bool decode_glGetPixelMapusv(const RealGl& rvk_gl, ::av::WireReader& rvk_
     }
     if (rvk_gl.glGetPixelMapusv == nullptr) return false;
     rvk_gl.glGetPixelMapusv(map, values);
-    if (values != nullptr) {
+    if (values_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(values_bytes));
         if (values_bytes != 0) rvk_reply.write(values, values_bytes);
     }
@@ -22640,10 +23307,12 @@ static bool decode_glGetPolygonStipple(const RealGl& rvk_gl, ::av::WireReader& r
     size_t mask_storage_count = 0;
     GLubyte* mask = nullptr;
     size_t mask_bytes = 0;
+    bool mask_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            mask_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             mask_bytes = static_cast<size_t>(rvk_bytes);
@@ -22656,7 +23325,7 @@ static bool decode_glGetPolygonStipple(const RealGl& rvk_gl, ::av::WireReader& r
     }
     if (rvk_gl.glGetPolygonStipple == nullptr) return false;
     rvk_gl.glGetPolygonStipple(mask);
-    if (mask != nullptr) {
+    if (mask_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(mask_bytes));
         if (mask_bytes != 0) rvk_reply.write(mask, mask_bytes);
     }
@@ -22675,10 +23344,17 @@ static bool decode_glGetTexEnvfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -22693,7 +23369,7 @@ static bool decode_glGetTexEnvfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     }
     if (rvk_gl.glGetTexEnvfv == nullptr) return false;
     rvk_gl.glGetTexEnvfv(target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -22712,10 +23388,17 @@ static bool decode_glGetTexEnviv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -22730,7 +23413,7 @@ static bool decode_glGetTexEnviv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     }
     if (rvk_gl.glGetTexEnviv == nullptr) return false;
     rvk_gl.glGetTexEnviv(target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -22749,10 +23432,17 @@ static bool decode_glGetTexGendv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     size_t params_storage_count = 0;
     GLdouble* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLdouble>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -22767,7 +23457,7 @@ static bool decode_glGetTexGendv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     }
     if (rvk_gl.glGetTexGendv == nullptr) return false;
     rvk_gl.glGetTexGendv(coord, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -22786,10 +23476,17 @@ static bool decode_glGetTexGenfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -22804,7 +23501,7 @@ static bool decode_glGetTexGenfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     }
     if (rvk_gl.glGetTexGenfv == nullptr) return false;
     rvk_gl.glGetTexGenfv(coord, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -22823,10 +23520,17 @@ static bool decode_glGetTexGeniv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -22841,7 +23545,7 @@ static bool decode_glGetTexGeniv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, 
     }
     if (rvk_gl.glGetTexGeniv == nullptr) return false;
     rvk_gl.glGetTexGeniv(coord, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -22889,10 +23593,12 @@ static bool decode_glIndexdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
     size_t c_storage_count = 0;
     GLdouble* c = nullptr;
     size_t c_bytes = 0;
+    bool c_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            c_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             c_bytes = static_cast<size_t>(rvk_bytes);
@@ -22905,7 +23611,7 @@ static bool decode_glIndexdv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
     }
     if (rvk_gl.glIndexdv == nullptr) return false;
     rvk_gl.glIndexdv(c);
-    if (c != nullptr) {
+    if (c_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(c_bytes));
         if (c_bytes != 0) rvk_reply.write(c, c_bytes);
     }
@@ -22927,10 +23633,12 @@ static bool decode_glIndexfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
     size_t c_storage_count = 0;
     GLfloat* c = nullptr;
     size_t c_bytes = 0;
+    bool c_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            c_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             c_bytes = static_cast<size_t>(rvk_bytes);
@@ -22943,7 +23651,7 @@ static bool decode_glIndexfv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
     }
     if (rvk_gl.glIndexfv == nullptr) return false;
     rvk_gl.glIndexfv(c);
-    if (c != nullptr) {
+    if (c_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(c_bytes));
         if (c_bytes != 0) rvk_reply.write(c, c_bytes);
     }
@@ -22966,10 +23674,12 @@ static bool decode_glIndexiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
     size_t c_storage_count = 0;
     GLint* c = nullptr;
     size_t c_bytes = 0;
+    bool c_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            c_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             c_bytes = static_cast<size_t>(rvk_bytes);
@@ -22982,7 +23692,7 @@ static bool decode_glIndexiv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
     }
     if (rvk_gl.glIndexiv == nullptr) return false;
     rvk_gl.glIndexiv(c);
-    if (c != nullptr) {
+    if (c_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(c_bytes));
         if (c_bytes != 0) rvk_reply.write(c, c_bytes);
     }
@@ -23005,10 +23715,12 @@ static bool decode_glIndexsv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
     size_t c_storage_count = 0;
     GLshort* c = nullptr;
     size_t c_bytes = 0;
+    bool c_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            c_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             c_bytes = static_cast<size_t>(rvk_bytes);
@@ -23021,7 +23733,7 @@ static bool decode_glIndexsv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::av
     }
     if (rvk_gl.glIndexsv == nullptr) return false;
     rvk_gl.glIndexsv(c);
-    if (c != nullptr) {
+    if (c_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(c_bytes));
         if (c_bytes != 0) rvk_reply.write(c, c_bytes);
     }
@@ -23044,10 +23756,12 @@ static bool decode_glIndexubv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
     size_t c_storage_count = 0;
     GLubyte* c = nullptr;
     size_t c_bytes = 0;
+    bool c_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            c_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             c_bytes = static_cast<size_t>(rvk_bytes);
@@ -23060,7 +23774,7 @@ static bool decode_glIndexubv(const RealGl& rvk_gl, ::av::WireReader& rvk_r, ::a
     }
     if (rvk_gl.glIndexubv == nullptr) return false;
     rvk_gl.glIndexubv(c);
-    if (c != nullptr) {
+    if (c_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(c_bytes));
         if (c_bytes != 0) rvk_reply.write(c, c_bytes);
     }
@@ -26731,10 +27445,12 @@ static bool decode_glSelectBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     size_t buffer_storage_count = 0;
     GLuint* buffer = nullptr;
     size_t buffer_bytes = 0;
+    bool buffer_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            buffer_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             buffer_bytes = static_cast<size_t>(rvk_bytes);
@@ -26747,7 +27463,7 @@ static bool decode_glSelectBuffer(const RealGl& rvk_gl, ::av::WireReader& rvk_r,
     }
     if (rvk_gl.glSelectBuffer == nullptr) return false;
     rvk_gl.glSelectBuffer(size, buffer);
-    if (buffer != nullptr) {
+    if (buffer_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(buffer_bytes));
         if (buffer_bytes != 0) rvk_reply.write(buffer, buffer_bytes);
     }
@@ -28772,10 +29488,17 @@ static bool decode_glGetObjectParameterfvARB(const RealGl& rvk_gl, ::av::WireRea
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -28790,7 +29513,7 @@ static bool decode_glGetObjectParameterfvARB(const RealGl& rvk_gl, ::av::WireRea
     }
     if (rvk_gl.glGetObjectParameterfvARB == nullptr) return false;
     rvk_gl.glGetObjectParameterfvARB(obj, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -28809,10 +29532,17 @@ static bool decode_glGetObjectParameterivARB(const RealGl& rvk_gl, ::av::WireRea
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -28827,7 +29557,7 @@ static bool decode_glGetObjectParameterivARB(const RealGl& rvk_gl, ::av::WireRea
     }
     if (rvk_gl.glGetObjectParameterivARB == nullptr) return false;
     rvk_gl.glGetObjectParameterivARB(obj, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -28846,10 +29576,12 @@ static bool decode_glGetInfoLogARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t length_storage_count = 0;
     GLsizei* length = nullptr;
     size_t length_bytes = 0;
+    bool length_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            length_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             length_bytes = static_cast<size_t>(rvk_bytes);
@@ -28864,10 +29596,12 @@ static bool decode_glGetInfoLogARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     size_t infoLog_storage_count = 0;
     GLcharARB* infoLog = nullptr;
     size_t infoLog_bytes = 0;
+    bool infoLog_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            infoLog_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             infoLog_bytes = static_cast<size_t>(rvk_bytes);
@@ -28880,11 +29614,11 @@ static bool decode_glGetInfoLogARB(const RealGl& rvk_gl, ::av::WireReader& rvk_r
     }
     if (rvk_gl.glGetInfoLogARB == nullptr) return false;
     rvk_gl.glGetInfoLogARB(obj, maxLength, length, infoLog);
-    if (length != nullptr) {
+    if (length_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(length_bytes));
         if (length_bytes != 0) rvk_reply.write(length, length_bytes);
     }
-    if (infoLog != nullptr) {
+    if (infoLog_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(infoLog_bytes));
         if (infoLog_bytes != 0) rvk_reply.write(infoLog, infoLog_bytes);
     }
@@ -28903,10 +29637,12 @@ static bool decode_glGetAttachedObjectsARB(const RealGl& rvk_gl, ::av::WireReade
     size_t count_storage_count = 0;
     GLsizei* count = nullptr;
     size_t count_bytes = 0;
+    bool count_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            count_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             count_bytes = static_cast<size_t>(rvk_bytes);
@@ -28921,10 +29657,12 @@ static bool decode_glGetAttachedObjectsARB(const RealGl& rvk_gl, ::av::WireReade
     size_t obj_storage_count = 0;
     GLhandleARB* obj = nullptr;
     size_t obj_bytes = 0;
+    bool obj_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            obj_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             obj_bytes = static_cast<size_t>(rvk_bytes);
@@ -28937,11 +29675,11 @@ static bool decode_glGetAttachedObjectsARB(const RealGl& rvk_gl, ::av::WireReade
     }
     if (rvk_gl.glGetAttachedObjectsARB == nullptr) return false;
     rvk_gl.glGetAttachedObjectsARB(containerObj, maxCount, count, obj);
-    if (count != nullptr) {
+    if (count_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(count_bytes));
         if (count_bytes != 0) rvk_reply.write(count, count_bytes);
     }
-    if (obj != nullptr) {
+    if (obj_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(obj_bytes));
         if (obj_bytes != 0) rvk_reply.write(obj, obj_bytes);
     }
@@ -29520,10 +30258,12 @@ static bool decode_glGetVertexAttribLui64vARB(const RealGl& rvk_gl, ::av::WireRe
     size_t params_storage_count = 0;
     GLuint64EXT* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -29536,7 +30276,7 @@ static bool decode_glGetVertexAttribLui64vARB(const RealGl& rvk_gl, ::av::WireRe
     }
     if (rvk_gl.glGetVertexAttribLui64vARB == nullptr) return false;
     rvk_gl.glGetVertexAttribLui64vARB(index, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -29844,10 +30584,17 @@ static bool decode_glGetBufferParameterui64vNV(const RealGl& rvk_gl, ::av::WireR
     size_t params_storage_count = 0;
     GLuint64EXT* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLuint64EXT>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -29862,7 +30609,7 @@ static bool decode_glGetBufferParameterui64vNV(const RealGl& rvk_gl, ::av::WireR
     }
     if (rvk_gl.glGetBufferParameterui64vNV == nullptr) return false;
     rvk_gl.glGetBufferParameterui64vNV(target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -29881,10 +30628,17 @@ static bool decode_glGetNamedBufferParameterui64vNV(const RealGl& rvk_gl, ::av::
     size_t params_storage_count = 0;
     GLuint64EXT* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLuint64EXT>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -29899,7 +30653,7 @@ static bool decode_glGetNamedBufferParameterui64vNV(const RealGl& rvk_gl, ::av::
     }
     if (rvk_gl.glGetNamedBufferParameterui64vNV == nullptr) return false;
     rvk_gl.glGetNamedBufferParameterui64vNV(buffer, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -29915,10 +30669,12 @@ static bool decode_glGetIntegerui64vNV(const RealGl& rvk_gl, ::av::WireReader& r
     size_t result_storage_count = 0;
     GLuint64EXT* result = nullptr;
     size_t result_bytes = 0;
+    bool result_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            result_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             result_bytes = static_cast<size_t>(rvk_bytes);
@@ -29931,7 +30687,7 @@ static bool decode_glGetIntegerui64vNV(const RealGl& rvk_gl, ::av::WireReader& r
     }
     if (rvk_gl.glGetIntegerui64vNV == nullptr) return false;
     rvk_gl.glGetIntegerui64vNV(value, result);
-    if (result != nullptr) {
+    if (result_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(result_bytes));
         if (result_bytes != 0) rvk_reply.write(result, result_bytes);
     }
@@ -30001,10 +30757,12 @@ static bool decode_glGetUniformui64vNV(const RealGl& rvk_gl, ::av::WireReader& r
     size_t params_storage_count = 0;
     GLuint64EXT* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -30017,7 +30775,7 @@ static bool decode_glGetUniformui64vNV(const RealGl& rvk_gl, ::av::WireReader& r
     }
     if (rvk_gl.glGetUniformui64vNV == nullptr) return false;
     rvk_gl.glGetUniformui64vNV(program, location, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -30266,10 +31024,12 @@ static bool decode_glGetIntegerui64i_vNV(const RealGl& rvk_gl, ::av::WireReader&
     size_t result_storage_count = 0;
     GLuint64EXT* result = nullptr;
     size_t result_bytes = 0;
+    bool result_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            result_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             result_bytes = static_cast<size_t>(rvk_bytes);
@@ -30282,7 +31042,7 @@ static bool decode_glGetIntegerui64i_vNV(const RealGl& rvk_gl, ::av::WireReader&
     }
     if (rvk_gl.glGetIntegerui64i_vNV == nullptr) return false;
     rvk_gl.glGetIntegerui64i_vNV(value, index, result);
-    if (result != nullptr) {
+    if (result_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(result_bytes));
         if (result_bytes != 0) rvk_reply.write(result, result_bytes);
     }
@@ -30745,10 +31505,12 @@ static bool decode_glGetUniformi64vNV(const RealGl& rvk_gl, ::av::WireReader& rv
     size_t params_storage_count = 0;
     GLint64EXT* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -30761,7 +31523,7 @@ static bool decode_glGetUniformi64vNV(const RealGl& rvk_gl, ::av::WireReader& rv
     }
     if (rvk_gl.glGetUniformi64vNV == nullptr) return false;
     rvk_gl.glGetUniformi64vNV(program, location, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -32143,6 +32905,14 @@ static bool decode_glGetTextureImageEXT(const RealGl& rvk_gl, ::av::WireReader& 
             pixels = pixels_storage;
         }
     }
+    if (pixels_is_offset || pixels == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        return false;
+    }
     if (rvk_gl.glGetTextureImageEXT == nullptr) return false;
     rvk_gl.glGetTextureImageEXT(texture, target, level, format, type, pixels);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
@@ -32167,10 +32937,17 @@ static bool decode_glGetTextureParameterfvEXT(const RealGl& rvk_gl, ::av::WireRe
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -32185,7 +32962,7 @@ static bool decode_glGetTextureParameterfvEXT(const RealGl& rvk_gl, ::av::WireRe
     }
     if (rvk_gl.glGetTextureParameterfvEXT == nullptr) return false;
     rvk_gl.glGetTextureParameterfvEXT(texture, target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -32207,10 +32984,17 @@ static bool decode_glGetTextureParameterivEXT(const RealGl& rvk_gl, ::av::WireRe
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -32225,7 +33009,7 @@ static bool decode_glGetTextureParameterivEXT(const RealGl& rvk_gl, ::av::WireRe
     }
     if (rvk_gl.glGetTextureParameterivEXT == nullptr) return false;
     rvk_gl.glGetTextureParameterivEXT(texture, target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -32250,10 +33034,17 @@ static bool decode_glGetTextureLevelParameterfvEXT(const RealGl& rvk_gl, ::av::W
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -32268,7 +33059,7 @@ static bool decode_glGetTextureLevelParameterfvEXT(const RealGl& rvk_gl, ::av::W
     }
     if (rvk_gl.glGetTextureLevelParameterfvEXT == nullptr) return false;
     rvk_gl.glGetTextureLevelParameterfvEXT(texture, target, level, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -32293,10 +33084,17 @@ static bool decode_glGetTextureLevelParameterivEXT(const RealGl& rvk_gl, ::av::W
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -32311,7 +33109,7 @@ static bool decode_glGetTextureLevelParameterivEXT(const RealGl& rvk_gl, ::av::W
     }
     if (rvk_gl.glGetTextureLevelParameterivEXT == nullptr) return false;
     rvk_gl.glGetTextureLevelParameterivEXT(texture, target, level, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -32844,10 +33642,17 @@ static bool decode_glGetMultiTexEnvfvEXT(const RealGl& rvk_gl, ::av::WireReader&
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -32862,7 +33667,7 @@ static bool decode_glGetMultiTexEnvfvEXT(const RealGl& rvk_gl, ::av::WireReader&
     }
     if (rvk_gl.glGetMultiTexEnvfvEXT == nullptr) return false;
     rvk_gl.glGetMultiTexEnvfvEXT(texunit, target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -32884,10 +33689,17 @@ static bool decode_glGetMultiTexEnvivEXT(const RealGl& rvk_gl, ::av::WireReader&
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -32902,7 +33714,7 @@ static bool decode_glGetMultiTexEnvivEXT(const RealGl& rvk_gl, ::av::WireReader&
     }
     if (rvk_gl.glGetMultiTexEnvivEXT == nullptr) return false;
     rvk_gl.glGetMultiTexEnvivEXT(texunit, target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -32924,10 +33736,17 @@ static bool decode_glGetMultiTexGendvEXT(const RealGl& rvk_gl, ::av::WireReader&
     size_t params_storage_count = 0;
     GLdouble* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLdouble>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -32942,7 +33761,7 @@ static bool decode_glGetMultiTexGendvEXT(const RealGl& rvk_gl, ::av::WireReader&
     }
     if (rvk_gl.glGetMultiTexGendvEXT == nullptr) return false;
     rvk_gl.glGetMultiTexGendvEXT(texunit, coord, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -32964,10 +33783,17 @@ static bool decode_glGetMultiTexGenfvEXT(const RealGl& rvk_gl, ::av::WireReader&
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -32982,7 +33808,7 @@ static bool decode_glGetMultiTexGenfvEXT(const RealGl& rvk_gl, ::av::WireReader&
     }
     if (rvk_gl.glGetMultiTexGenfvEXT == nullptr) return false;
     rvk_gl.glGetMultiTexGenfvEXT(texunit, coord, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -33004,10 +33830,17 @@ static bool decode_glGetMultiTexGenivEXT(const RealGl& rvk_gl, ::av::WireReader&
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -33022,7 +33855,7 @@ static bool decode_glGetMultiTexGenivEXT(const RealGl& rvk_gl, ::av::WireReader&
     }
     if (rvk_gl.glGetMultiTexGenivEXT == nullptr) return false;
     rvk_gl.glGetMultiTexGenivEXT(texunit, coord, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -33578,6 +34411,14 @@ static bool decode_glGetMultiTexImageEXT(const RealGl& rvk_gl, ::av::WireReader&
             pixels = pixels_storage;
         }
     }
+    if (pixels_is_offset || pixels == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        return false;
+    }
     if (rvk_gl.glGetMultiTexImageEXT == nullptr) return false;
     rvk_gl.glGetMultiTexImageEXT(texunit, target, level, format, type, pixels);
     if (pixels != nullptr && !pixels_is_offset && !pixels_via_blob) {
@@ -33602,10 +34443,17 @@ static bool decode_glGetMultiTexParameterfvEXT(const RealGl& rvk_gl, ::av::WireR
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -33620,7 +34468,7 @@ static bool decode_glGetMultiTexParameterfvEXT(const RealGl& rvk_gl, ::av::WireR
     }
     if (rvk_gl.glGetMultiTexParameterfvEXT == nullptr) return false;
     rvk_gl.glGetMultiTexParameterfvEXT(texunit, target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -33642,10 +34490,17 @@ static bool decode_glGetMultiTexParameterivEXT(const RealGl& rvk_gl, ::av::WireR
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -33660,7 +34515,7 @@ static bool decode_glGetMultiTexParameterivEXT(const RealGl& rvk_gl, ::av::WireR
     }
     if (rvk_gl.glGetMultiTexParameterivEXT == nullptr) return false;
     rvk_gl.glGetMultiTexParameterivEXT(texunit, target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -33685,10 +34540,17 @@ static bool decode_glGetMultiTexLevelParameterfvEXT(const RealGl& rvk_gl, ::av::
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -33703,7 +34565,7 @@ static bool decode_glGetMultiTexLevelParameterfvEXT(const RealGl& rvk_gl, ::av::
     }
     if (rvk_gl.glGetMultiTexLevelParameterfvEXT == nullptr) return false;
     rvk_gl.glGetMultiTexLevelParameterfvEXT(texunit, target, level, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -33728,10 +34590,17 @@ static bool decode_glGetMultiTexLevelParameterivEXT(const RealGl& rvk_gl, ::av::
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -33746,7 +34615,7 @@ static bool decode_glGetMultiTexLevelParameterivEXT(const RealGl& rvk_gl, ::av::
     }
     if (rvk_gl.glGetMultiTexLevelParameterivEXT == nullptr) return false;
     rvk_gl.glGetMultiTexLevelParameterivEXT(texunit, target, level, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -33967,10 +34836,12 @@ static bool decode_glGetFloatIndexedvEXT(const RealGl& rvk_gl, ::av::WireReader&
     size_t data_storage_count = 0;
     GLfloat* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -33983,7 +34854,7 @@ static bool decode_glGetFloatIndexedvEXT(const RealGl& rvk_gl, ::av::WireReader&
     }
     if (rvk_gl.glGetFloatIndexedvEXT == nullptr) return false;
     rvk_gl.glGetFloatIndexedvEXT(target, index, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -34002,10 +34873,12 @@ static bool decode_glGetDoubleIndexedvEXT(const RealGl& rvk_gl, ::av::WireReader
     size_t data_storage_count = 0;
     GLdouble* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -34018,7 +34891,7 @@ static bool decode_glGetDoubleIndexedvEXT(const RealGl& rvk_gl, ::av::WireReader
     }
     if (rvk_gl.glGetDoubleIndexedvEXT == nullptr) return false;
     rvk_gl.glGetDoubleIndexedvEXT(target, index, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -34077,10 +34950,12 @@ static bool decode_glGetIntegerIndexedvEXT(const RealGl& rvk_gl, ::av::WireReade
     size_t data_storage_count = 0;
     GLint* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -34093,7 +34968,7 @@ static bool decode_glGetIntegerIndexedvEXT(const RealGl& rvk_gl, ::av::WireReade
     }
     if (rvk_gl.glGetIntegerIndexedvEXT == nullptr) return false;
     rvk_gl.glGetIntegerIndexedvEXT(target, index, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -34112,10 +34987,12 @@ static bool decode_glGetBooleanIndexedvEXT(const RealGl& rvk_gl, ::av::WireReade
     size_t data_storage_count = 0;
     GLboolean* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -34128,7 +35005,7 @@ static bool decode_glGetBooleanIndexedvEXT(const RealGl& rvk_gl, ::av::WireReade
     }
     if (rvk_gl.glGetBooleanIndexedvEXT == nullptr) return false;
     rvk_gl.glGetBooleanIndexedvEXT(target, index, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -34525,6 +35402,14 @@ static bool decode_glGetCompressedTextureImageEXT(const RealGl& rvk_gl, ::av::Wi
             for (size_t rvk_z = 0; rvk_z < img_storage_count; ++rvk_z) { img_storage[rvk_z] = 0; }
             img = img_storage;
         }
+    }
+    if (img_is_offset || img == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        return false;
     }
     if (rvk_gl.glGetCompressedTextureImageEXT == nullptr) return false;
     rvk_gl.glGetCompressedTextureImageEXT(texture, target, lod, img);
@@ -34926,6 +35811,14 @@ static bool decode_glGetCompressedMultiTexImageEXT(const RealGl& rvk_gl, ::av::W
             img = img_storage;
         }
     }
+    if (img_is_offset || img == nullptr) {
+        GLint rvk_bound = 0;
+        if (rvk_gl.glGetIntegerv == nullptr) return false;
+        rvk_gl.glGetIntegerv(0x88ED, &rvk_bound);
+        if (rvk_bound == 0) return false;
+    } else {
+        return false;
+    }
     if (rvk_gl.glGetCompressedMultiTexImageEXT == nullptr) return false;
     rvk_gl.glGetCompressedMultiTexImageEXT(texunit, target, lod, img);
     if (img != nullptr && !img_is_offset && !img_via_blob) {
@@ -35169,10 +36062,17 @@ static bool decode_glGetNamedBufferParameterivEXT(const RealGl& rvk_gl, ::av::Wi
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -35187,7 +36087,7 @@ static bool decode_glGetNamedBufferParameterivEXT(const RealGl& rvk_gl, ::av::Wi
     }
     if (rvk_gl.glGetNamedBufferParameterivEXT == nullptr) return false;
     rvk_gl.glGetNamedBufferParameterivEXT(buffer, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -35209,10 +36109,12 @@ static bool decode_glGetNamedBufferSubDataEXT(const RealGl& rvk_gl, ::av::WireRe
     size_t data_storage_count = 0;
     void* data = nullptr;
     size_t data_bytes = 0;
+    bool data_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            data_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             data_bytes = static_cast<size_t>(rvk_bytes);
@@ -35225,7 +36127,7 @@ static bool decode_glGetNamedBufferSubDataEXT(const RealGl& rvk_gl, ::av::WireRe
     }
     if (rvk_gl.glGetNamedBufferSubDataEXT == nullptr) return false;
     rvk_gl.glGetNamedBufferSubDataEXT(buffer, offset, size, data);
-    if (data != nullptr) {
+    if (data_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(data_bytes));
         if (data_bytes != 0) rvk_reply.write(data, data_bytes);
     }
@@ -36245,10 +37147,17 @@ static bool decode_glGetTextureParameterIivEXT(const RealGl& rvk_gl, ::av::WireR
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -36263,7 +37172,7 @@ static bool decode_glGetTextureParameterIivEXT(const RealGl& rvk_gl, ::av::WireR
     }
     if (rvk_gl.glGetTextureParameterIivEXT == nullptr) return false;
     rvk_gl.glGetTextureParameterIivEXT(texture, target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -36285,10 +37194,17 @@ static bool decode_glGetTextureParameterIuivEXT(const RealGl& rvk_gl, ::av::Wire
     size_t params_storage_count = 0;
     GLuint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLuint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -36303,7 +37219,7 @@ static bool decode_glGetTextureParameterIuivEXT(const RealGl& rvk_gl, ::av::Wire
     }
     if (rvk_gl.glGetTextureParameterIuivEXT == nullptr) return false;
     rvk_gl.glGetTextureParameterIuivEXT(texture, target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -36407,10 +37323,17 @@ static bool decode_glGetMultiTexParameterIivEXT(const RealGl& rvk_gl, ::av::Wire
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -36425,7 +37348,7 @@ static bool decode_glGetMultiTexParameterIivEXT(const RealGl& rvk_gl, ::av::Wire
     }
     if (rvk_gl.glGetMultiTexParameterIivEXT == nullptr) return false;
     rvk_gl.glGetMultiTexParameterIivEXT(texunit, target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -36447,10 +37370,17 @@ static bool decode_glGetMultiTexParameterIuivEXT(const RealGl& rvk_gl, ::av::Wir
     size_t params_storage_count = 0;
     GLuint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLuint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -36465,7 +37395,7 @@ static bool decode_glGetMultiTexParameterIuivEXT(const RealGl& rvk_gl, ::av::Wir
     }
     if (rvk_gl.glGetMultiTexParameterIuivEXT == nullptr) return false;
     rvk_gl.glGetMultiTexParameterIuivEXT(texunit, target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -37003,10 +37933,12 @@ static bool decode_glGetNamedProgramLocalParameterIivEXT(const RealGl& rvk_gl, :
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -37019,7 +37951,7 @@ static bool decode_glGetNamedProgramLocalParameterIivEXT(const RealGl& rvk_gl, :
     }
     if (rvk_gl.glGetNamedProgramLocalParameterIivEXT == nullptr) return false;
     rvk_gl.glGetNamedProgramLocalParameterIivEXT(program, target, index, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -37041,10 +37973,12 @@ static bool decode_glGetNamedProgramLocalParameterIuivEXT(const RealGl& rvk_gl, 
     size_t params_storage_count = 0;
     GLuint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -37057,7 +37991,7 @@ static bool decode_glGetNamedProgramLocalParameterIuivEXT(const RealGl& rvk_gl, 
     }
     if (rvk_gl.glGetNamedProgramLocalParameterIuivEXT == nullptr) return false;
     rvk_gl.glGetNamedProgramLocalParameterIuivEXT(program, target, index, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -37102,10 +38036,17 @@ static bool decode_glGetFloati_vEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLfloat>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -37120,7 +38061,7 @@ static bool decode_glGetFloati_vEXT(const RealGl& rvk_gl, ::av::WireReader& rvk_
     }
     if (rvk_gl.glGetFloati_vEXT == nullptr) return false;
     rvk_gl.glGetFloati_vEXT(pname, index, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -37139,10 +38080,17 @@ static bool decode_glGetDoublei_vEXT(const RealGl& rvk_gl, ::av::WireReader& rvk
     size_t params_storage_count = 0;
     GLdouble* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLdouble>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -37157,7 +38105,7 @@ static bool decode_glGetDoublei_vEXT(const RealGl& rvk_gl, ::av::WireReader& rvk
     }
     if (rvk_gl.glGetDoublei_vEXT == nullptr) return false;
     rvk_gl.glGetDoublei_vEXT(pname, index, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -37353,10 +38301,12 @@ static bool decode_glGetNamedProgramLocalParameterdvEXT(const RealGl& rvk_gl, ::
     size_t params_storage_count = 0;
     GLdouble* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -37369,7 +38319,7 @@ static bool decode_glGetNamedProgramLocalParameterdvEXT(const RealGl& rvk_gl, ::
     }
     if (rvk_gl.glGetNamedProgramLocalParameterdvEXT == nullptr) return false;
     rvk_gl.glGetNamedProgramLocalParameterdvEXT(program, target, index, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -37391,10 +38341,12 @@ static bool decode_glGetNamedProgramLocalParameterfvEXT(const RealGl& rvk_gl, ::
     size_t params_storage_count = 0;
     GLfloat* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -37407,7 +38359,7 @@ static bool decode_glGetNamedProgramLocalParameterfvEXT(const RealGl& rvk_gl, ::
     }
     if (rvk_gl.glGetNamedProgramLocalParameterfvEXT == nullptr) return false;
     rvk_gl.glGetNamedProgramLocalParameterfvEXT(program, target, index, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -37429,10 +38381,12 @@ static bool decode_glGetNamedProgramivEXT(const RealGl& rvk_gl, ::av::WireReader
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -37445,7 +38399,7 @@ static bool decode_glGetNamedProgramivEXT(const RealGl& rvk_gl, ::av::WireReader
     }
     if (rvk_gl.glGetNamedProgramivEXT == nullptr) return false;
     rvk_gl.glGetNamedProgramivEXT(program, target, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -37467,10 +38421,12 @@ static bool decode_glGetNamedProgramStringEXT(const RealGl& rvk_gl, ::av::WireRe
     size_t string_storage_count = 0;
     void* string = nullptr;
     size_t string_bytes = 0;
+    bool string_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            string_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             string_bytes = static_cast<size_t>(rvk_bytes);
@@ -37483,7 +38439,7 @@ static bool decode_glGetNamedProgramStringEXT(const RealGl& rvk_gl, ::av::WireRe
     }
     if (rvk_gl.glGetNamedProgramStringEXT == nullptr) return false;
     rvk_gl.glGetNamedProgramStringEXT(program, target, pname, string);
-    if (string != nullptr) {
+    if (string_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(string_bytes));
         if (string_bytes != 0) rvk_reply.write(string, string_bytes);
     }
@@ -37521,10 +38477,17 @@ static bool decode_glGetNamedRenderbufferParameterivEXT(const RealGl& rvk_gl, ::
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -37539,7 +38502,7 @@ static bool decode_glGetNamedRenderbufferParameterivEXT(const RealGl& rvk_gl, ::
     }
     if (rvk_gl.glGetNamedRenderbufferParameterivEXT == nullptr) return false;
     rvk_gl.glGetNamedRenderbufferParameterivEXT(renderbuffer, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -37710,10 +38673,17 @@ static bool decode_glGetNamedFramebufferAttachmentParameterivEXT(const RealGl& r
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -37728,7 +38698,7 @@ static bool decode_glGetNamedFramebufferAttachmentParameterivEXT(const RealGl& r
     }
     if (rvk_gl.glGetNamedFramebufferAttachmentParameterivEXT == nullptr) return false;
     rvk_gl.glGetNamedFramebufferAttachmentParameterivEXT(framebuffer, attachment, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -37837,10 +38807,17 @@ static bool decode_glGetFramebufferParameterivEXT(const RealGl& rvk_gl, ::av::Wi
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -37855,7 +38832,7 @@ static bool decode_glGetFramebufferParameterivEXT(const RealGl& rvk_gl, ::av::Wi
     }
     if (rvk_gl.glGetFramebufferParameterivEXT == nullptr) return false;
     rvk_gl.glGetFramebufferParameterivEXT(framebuffer, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
@@ -38315,10 +39292,12 @@ static bool decode_glGetVertexArrayIntegervEXT(const RealGl& rvk_gl, ::av::WireR
     size_t param_storage_count = 0;
     GLint* param = nullptr;
     size_t param_bytes = 0;
+    bool param_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            param_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             param_bytes = static_cast<size_t>(rvk_bytes);
@@ -38331,7 +39310,7 @@ static bool decode_glGetVertexArrayIntegervEXT(const RealGl& rvk_gl, ::av::WireR
     }
     if (rvk_gl.glGetVertexArrayIntegervEXT == nullptr) return false;
     rvk_gl.glGetVertexArrayIntegervEXT(vaobj, pname, param);
-    if (param != nullptr) {
+    if (param_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(param_bytes));
         if (param_bytes != 0) rvk_reply.write(param, param_bytes);
     }
@@ -38353,10 +39332,12 @@ static bool decode_glGetVertexArrayIntegeri_vEXT(const RealGl& rvk_gl, ::av::Wir
     size_t param_storage_count = 0;
     GLint* param = nullptr;
     size_t param_bytes = 0;
+    bool param_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
         if (rvk_present != 0) {
+            param_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             param_bytes = static_cast<size_t>(rvk_bytes);
@@ -38369,7 +39350,7 @@ static bool decode_glGetVertexArrayIntegeri_vEXT(const RealGl& rvk_gl, ::av::Wir
     }
     if (rvk_gl.glGetVertexArrayIntegeri_vEXT == nullptr) return false;
     rvk_gl.glGetVertexArrayIntegeri_vEXT(vaobj, index, pname, param);
-    if (param != nullptr) {
+    if (param_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(param_bytes));
         if (param_bytes != 0) rvk_reply.write(param, param_bytes);
     }
@@ -38551,10 +39532,17 @@ static bool decode_glGetNamedFramebufferParameterivEXT(const RealGl& rvk_gl, ::a
     size_t params_storage_count = 0;
     GLint* params = nullptr;
     size_t params_bytes = 0;
+    bool params_answered = false;
     {
         uint8_t rvk_present = 0;
         if (!rvk_r.read_pod(rvk_present)) return false;
+        if (rvk_present == 0) {
+            params_storage = rvk_arena.allocate<GLint>(kQuerySlack + 1);
+            if (params_storage == nullptr) return false;
+            params = params_storage;
+        }
         if (rvk_present != 0) {
+            params_answered = true;
             uint64_t rvk_bytes = 0;
             if (!rvk_r.read_varint(rvk_bytes)) return false;
             params_bytes = static_cast<size_t>(rvk_bytes);
@@ -38569,7 +39557,7 @@ static bool decode_glGetNamedFramebufferParameterivEXT(const RealGl& rvk_gl, ::a
     }
     if (rvk_gl.glGetNamedFramebufferParameterivEXT == nullptr) return false;
     rvk_gl.glGetNamedFramebufferParameterivEXT(framebuffer, pname, params);
-    if (params != nullptr) {
+    if (params_answered) {
         rvk_reply.write_varint(static_cast<uint64_t>(params_bytes));
         if (params_bytes != 0) rvk_reply.write(params, params_bytes);
     }
