@@ -48,6 +48,10 @@ public:
     std::uint32_t                           interrupts() const;
     const DxgkargcbNotifyInterruptDataRecord &interrupt(std::uint32_t index) const;
     std::uint32_t                           dpc_notifications() const;
+    /* Every DxgkCbNotifyInterrupt from now, past the ones kept: what a caller
+     * waiting on many fences reads. Null stops it. */
+    using InterruptSink = void (*)(void *context, const DxgkargcbNotifyInterruptDataRecord &data);
+    void                                    on_interrupt(InterruptSink sink, void *context);
     void                                    refuse_synchronize(std::uint32_t status);
 
     std::int32_t get_device_information(DxgkDeviceInfoRecord *info);
@@ -90,6 +94,8 @@ private:
     DxgkargcbNotifyInterruptDataRecord interrupts_[max_interrupts];
     std::uint32_t          interrupt_count_;
     std::uint32_t          dpc_notifications_;
+    InterruptSink          sink_;
+    void                  *sink_context_;
     std::uint32_t          synchronize_status_;
     bool                   synchronized_;
 };

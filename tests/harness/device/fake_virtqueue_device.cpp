@@ -64,11 +64,20 @@ std::uint32_t FakeVirtqueueDevice::pending_type() const
 void FakeVirtqueueDevice::walk(std::uint16_t chain, bool keep_request, std::uint64_t &writable,
                                std::uint32_t &writable_length)
 {
+    std::uint32_t joined = 0u;
+    walk_chain(chain, keep_request, nullptr, 0u, joined, writable, writable_length);
+}
+
+void FakeVirtqueueDevice::walk_chain(std::uint16_t chain, bool keep_request, std::uint8_t *joined,
+                                     std::uint32_t capacity, std::uint32_t &joined_length, std::uint64_t &writable,
+                                     std::uint32_t &writable_length)
+{
     constexpr std::uint16_t flag_write = 2u;
     std::uint16_t descriptor = chain;
     bool          request_kept = !keep_request;
     writable = 0u;
     writable_length = 0u;
+    joined_length = 0u;
     for (std::uint16_t hops = 0u; hops <= size_; hops++) {
         const std::uint64_t base = descriptors_ + 16u * descriptor;
         const std::uint16_t flags = static_cast<std::uint16_t>(read(base + 12u, 2u));
@@ -78,6 +87,13 @@ void FakeVirtqueueDevice::walk(std::uint16_t chain, bool keep_request, std::uint
         if ((flags & flag_write) != 0u) {
             writable = address;
             writable_length = length;
+        } else if (joined != nullptr) {
+            const std::uint32_t room = capacity - joined_length;
+            const std::uint32_t kept = length < room ? length : room;
+            const std::uint8_t *bytes = kept != 0u ? at(address, kept) : nullptr;
+            for (std::uint32_t byte = 0u; bytes != nullptr && byte < kept; byte++)
+                joined[joined_length + byte] = bytes[byte];
+            joined_length += bytes != nullptr ? kept : 0u;
         } else if (!request_kept && request_count_ < max_requests) {
             const std::uint32_t kept = length < request_bytes ? length : request_bytes;
             const std::uint8_t *bytes = at(address, kept);
@@ -127,6 +143,32 @@ std::uint16_t FakeVirtqueueDevice::respond_all(const std::uint8_t *answer, std::
         completed++;
     }
     return completed;
+}
+
+std::uint16_t FakeVirtqueueDevice::answer_all(std::uint8_t *request, std::uint32_t capacity, Answerer answerer,
+                                              void *context)
+{
+    std::uint16_t       completed = 0u;
+    const std::uint16_t available = available_index();
+    while (last_available_ != available) {
+        const std::uint16_t chain = head(last_available_);
+        std::uint64_t       writable = 0u;
+        std::uint32_t       writable_length = 0u;
+        std::uint32_t       length = 0u;
+        walk_chain(chain, false, request, capacity, length, writable, writable_length);
+        std::uint8_t *const answer = writable_length != 0u ? at(writable, writable_length) : nullptr;
+        const std::uint32_t written = answerer(context, request, length, answer, answer != nullptr ? writable_length : 0u);
+        complete(chain, written);
+        last_available_++;
+        completed++;
+    }
+    return completed;
+}
+
+void FakeVirtqueueDevice::complete(std::uint16_t chain, std::uint32_t written)
+{
+    write_used(used_index_, chain, written);
+    set_used_index(static_cast<std::uint16_t>(used_index_ + 1u));
 }
 
 std::uint16_t FakeVirtqueueDevice::respond_all(std::uint32_t type)

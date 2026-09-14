@@ -49,6 +49,13 @@ public:
     /* virtio-gpu-rvk-pci's doorbell pages: BAR 0, located by shared memory
      * capability 0x72, with the 66 virtqueues the device has. */
     void add_doorbell_region();
+    /* The subsystem ID in configuration space: virtio-gpu-rvk-pci's is 0x5256,
+     * the captured virtio-gpu-pci's 0x1100. */
+    void set_subsystem_id(std::uint16_t id);
+    /* Stores to the notify region, or to BAR 0's doorbell pages, reach `window`
+     * instead of the recorders: a device that serves what the driver rings. */
+    void serve_notify_with(RegisterWindow &window);
+    void serve_doorbells_with(RegisterWindow &window);
 
     std::uint8_t          *config_space();
     const FakeResourceList &resources() const;
@@ -81,6 +88,8 @@ private:
     FakeRegisterBytes device_config_;
     FakeRegisterBytes notify_;
     FakeDoorbellPages doorbells_;
+    RegisterWindow   *notify_window_;
+    RegisterWindow   *doorbell_window_;
     bool              doorbell_region_;
     std::uint8_t      next_capability_;
 };

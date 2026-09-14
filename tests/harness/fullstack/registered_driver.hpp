@@ -1,0 +1,45 @@
+/* The driver image as the full-stack rig loads it: DriverEntry has run on a
+ * MockPlatform and dxgkrnl's registration checks accepted its table. The
+ * destructor unloads and leaves the image the way the kernel does, which is
+ * when the platform's leak and violation checks run - so everything built on
+ * the platform must be gone first. */
+#ifndef AV_REGISTERED_DRIVER_HPP
+#define AV_REGISTERED_DRIVER_HPP
+
+#include "core/miniport/ddi_table.hpp"
+#include "core/miniport/driver_image.hpp"
+#include "core/support/status.hpp"
+#include "harness/dxgkrnl/fake_dxgkrnl.hpp"
+#include "harness/platform/mock_platform.hpp"
+
+#include <cstdint>
+
+namespace av {
+
+class RegisteredDriver {
+public:
+    RegisteredDriver();
+    ~RegisteredDriver();
+    RegisteredDriver(const RegisteredDriver &) = delete;
+    RegisteredDriver &operator=(const RegisteredDriver &) = delete;
+
+    /* DriverEntry's NTSTATUS. */
+    std::int32_t    entered() const;
+    /* What dxgkrnl's registration answered. */
+    Status          registered() const;
+    MockPlatform   &platform();
+    const DdiTable &table();
+
+private:
+    /* Only their addresses reach DriverEntry, as the kernel's objects would. */
+    int                       driver_object_;
+    int                       registry_path_;
+    DriverImage<MockPlatform> image_;
+    std::int32_t              entered_;
+    FakeDxgkrnl               dxgkrnl_;
+    Status                    registered_;
+};
+
+}  // namespace av
+
+#endif  // AV_REGISTERED_DRIVER_HPP

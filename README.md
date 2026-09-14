@@ -171,11 +171,12 @@ tests/harness/                    the adversarial platform mock, fake dxgkrnl
   device/                           fake virtio-gpu PCI function and virtqueue device
   host/  ring/  executor/           MockHost and request builders; the guest side of a ring; mock executors
   loopback/                         the rig holding guest core and device core together (L4)
+  fullstack/                        the real driver on the real device core, with DdiKmt as D3DKMT (L4)
   guest/                            MockKmt, the scripted D3DKMT the in-guest suite is tested against
 tests/fuzz/ tests/corpus/         L3: libFuzzer targets and seed corpora
 tests/fixtures/                   bytes captured from real devices (tools/host/capture_pci_config.py)
 tests/qemu/                       the device under qtest: a virtio-gpu driver with no guest, the suites run on it
-tests/loopback/                   L4: guest core ↔ device core in one process
+tests/loopback/                   L4: guest core ↔ device core in one process; test_fullstack_*: through the driver
 tests/tools/                      tests for the gate scripts themselves; fake_guest/: a fake QEMU with a scripted guest
 tools/                            gates, kit fetch, spec/roadmap generators
   guest/                            L5: prepare a Windows image, run the in-guest suite over the guest agent, debug a run

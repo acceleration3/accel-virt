@@ -333,8 +333,90 @@ What it covers today (M2's rvk contexts):
   fence it raises afterwards reaches no notifier while the fence page still
   advances, and the next `DRIVER_OK` connects them again
 
-Still to come with the DDI wiring (M3): allocate → map GPU VA → submit through
-dxgkrnl's path, and a shared allocation opened by a second simulated process.
+### The full-stack rig: L2 and L4 joined
+
+`LoopbackRig` stands in for the miniport, and `LoopbackKmt` (043) does the
+miniport's job in a shim - it publishes blobs, sends `CTX_CREATE` and rings
+doorbells itself. `FullStackRig` (`tests/harness/fullstack/`) removes that
+shim: a Windows guest's whole path runs in one Linux process under ASan and
+UBSan, from the in-guest code down to the executor.
+
+```
+src/guest (GuestSuite, GuestConnection, KmtTransport)   unchanged
+  -> DdiKmt : Kmt            dxgkrnl's D3DKMT layer over the registered DDI table
+  -> Adapter (src/core)      DriverEntry, AddDevice, StartDevice by FakeDxgkrnlFdo
+  -> VirtioBridge            virtio-pci's device side: status, notify, split rings
+  -> LoopbackDevice          VirtioGpuRvk over MockHost, MockExecutorOps, doorbells
+  <- InterruptPump           fence raises and queue completions as ISR + DPC
+```
+
+- `RegisteredDriver` runs DriverEntry on the `MockPlatform` and has
+  `FakeDxgkrnl` accept the table; its destructor unloads, which is when the
+  platform's leak and violation checks run.
+- The PCI function is `FakeVirtioGpuFunction` set up the way
+  `tools/guest/run_guest_suite.py` starts QEMU: subsystem `1af4:5256`, the
+  doorbell region on BAR 0, a hostmem region, 66 queues and eleven MSI-X
+  messages. Its notify region is `VirtioBridge` and its doorbell pages are
+  `LoopbackDoorbells`.
+- `VirtioBridge` follows the driver's status into the device core as
+  virtio-pci does (`set_status`, and a reset on 0), and on each notify takes
+  every chain from the driver's ring in guest memory (`FakeVirtqueueDevice::
+  answer_all`): a control request goes to `VirtioGpuRvk::control` first and to
+  `BaseVirtioGpu` - what QEMU's base device answers for the 2D protocol, display
+  info among it - when the core leaves it; a cursor request completes with
+  nothing written. Answers are written at once, and the queue is left pending
+  an interrupt.
+- `InterruptPump` runs on the test thread between the calls a process makes:
+  a DPC a DDI queued, a queue the bridge completed and every fence line a
+  device worker raised, each delivered through `FakeDxgkrnlFdo::interrupt` with
+  the MSI-X message the driver programmed for that queue. `MockPlatform` stays
+  single-threaded: device workers touch only guest memory.
+- `DdiKmt` makes the DDI calls dxgkrnl makes: CreateDevice; CreateAllocation
+  with the descriptor as private data, a `FakeHandleTable` handle, OpenAllocation
+  on the creating device and guest pages behind it; MakeResident as
+  `BuildPagingBuffer` `MAP_APERTURE_SEGMENT` for what the driver placed in the
+  aperture, and `UNMAP` before CloseAllocation and DestroyAllocation;
+  CreateContext with virtual addressing and copied private data, then
+  SetRootPageTable; SubmitCommandVirtual at PASSIVE with node 0's next fence and
+  copied private data, refused past what the context asked for. `NodeFences`
+  keeps what the driver's notifications make of each fence, and a wait pumps
+  interrupts until the context's last fence completed or the context faulted.
+  A vertical blank turns the driver's vsync on and runs the platform's timers
+  to the next one.
+
+What it runs (`tests/loopback/test_fullstack_*.cpp`):
+
+- the adapter starting on the real device core: capset, host-visible region
+  blob, doorbell pages
+- the 043 transport round trip through the real driver - `RvkContextTable`
+  binding on doorbell 0, the echo `0x10001` and its reply - with the completion
+  proven to arrive only through the fence interrupt
+- a context the executor faults, whose wait fails while its neighbour echoes
+- D3 and D0 with a live transport: the context lost, the region blob made
+  again, a new transport echoing
+- a process that exits holding everything, cleaned up to nothing
+- `GuestSuite` unchanged: all 41 steps the guest run reports pass; the fence
+  stress run for one second of mock time; and the timeout run, which fails at
+  `timeout.held_lost` alone because the rig has no TDR
+
+What it cannot see, and L5 still must:
+
+- dxgkrnl's and VidMm's real behaviour - the rig's sequences are the ones
+  `docs/ddi-sequences.md` records, not the kernel's; no TDR, no eviction or
+  paging decisions of VidMm's own, no GPU page tables built, no
+  `D3DKMTLock2` of a CPU-visible segment (the host-visible scenario locks guest
+  pages, as the guest does while 041's segment is parked)
+- time: the platform clock moves only where a wait moves it, so vsync proves
+  the period the driver asks for and the stress run's worst wait is not a
+  measurement
+- Driver Verifier's checks, the kernel's IRQL, pool and DMA rules beyond what
+  `MockPlatform` models, and real interrupt concurrency - an ISR here never
+  preempts a DDI
+- clang-cl's codegen for the driver and `rvktest.exe` (feature 037 found an
+  argument-order bug only that compiler showed), and QEMU's glue itself
+
+Still to come: a shared allocation opened by a second simulated process, and a
+display path - a VidPn committed and a primary scanned out - through the rig.
 
 Loopback tests are the cheapest place to find protocol design errors, and
 protocol design errors are the expensive kind. Write the loopback test for a

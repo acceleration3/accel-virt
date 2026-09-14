@@ -9,7 +9,7 @@ namespace av {
 FakeVirtioGpuFunction::FakeVirtioGpuFunction()
     : config_{}, resources_(), message_interrupts_(3u), virtio_bar_length_(virtio_bar_length),
       virtio_bar_present_(true), common_(), isr_(), device_config_(0x1000u), notify_(0x1000u), doorbells_(),
-      doorbell_region_(false), next_capability_(first_added_capability)
+      notify_window_(&notify_), doorbell_window_(&doorbells_), doorbell_region_(false), next_capability_(first_added_capability)
 {
     const FixtureFile fixture("virtio_gpu_pci_config.bin");
     std::memcpy(config_, fixture.bytes(), config_bytes);
@@ -68,6 +68,15 @@ void FakeVirtioGpuFunction::add_doorbell_region()
     doorbell_region_ = true;
 }
 
+void FakeVirtioGpuFunction::set_subsystem_id(std::uint16_t id)
+{
+    constexpr std::size_t subsystem_offset = 0x2Eu;
+    std::memcpy(config_ + subsystem_offset, &id, sizeof id);
+}
+
+void FakeVirtioGpuFunction::serve_notify_with(RegisterWindow &window) { notify_window_ = &window; }
+void FakeVirtioGpuFunction::serve_doorbells_with(RegisterWindow &window) { doorbell_window_ = &window; }
+
 void FakeVirtioGpuFunction::rebuild_resources()
 {
     resources_ = FakeResourceList();
@@ -102,13 +111,13 @@ const FakeResourceList &FakeVirtioGpuFunction::resources() const { return resour
 
 RegisterWindow *FakeVirtioGpuFunction::region(std::uint8_t bar, std::uint64_t offset)
 {
-    if (bar == 0u && doorbell_region_) return offset == 0u ? &doorbells_ : nullptr;
+    if (bar == 0u && doorbell_region_) return offset == 0u ? doorbell_window_ : nullptr;
     if (bar != virtio_bar) return nullptr;
     switch (offset) {
     case 0x0000u: return &common_;
     case 0x1000u: return &isr_;
     case 0x2000u: return &device_config_;
-    case 0x3000u: return &notify_;
+    case 0x3000u: return notify_window_;
     default:      return nullptr;
     }
 }

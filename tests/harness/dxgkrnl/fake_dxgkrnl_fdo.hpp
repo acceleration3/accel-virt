@@ -31,6 +31,8 @@ public:
     std::int32_t enumerate_children();
     /* The message routine at device IRQL; a claimed interrupt's DPC runs at DISPATCH. */
     std::uint8_t interrupt(std::uint32_t message);
+    /* The DPC a DDI queued with DxgkCbQueueDpc outside the ISR, at DISPATCH. */
+    void         dpc();
     std::int32_t set_power_state(std::int32_t device_power_state);
     void         reset_device();
     std::int32_t stop_device();

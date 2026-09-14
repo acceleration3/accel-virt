@@ -36,6 +36,14 @@ public:
     /* The same, with a payload: copies as much of `answer` as the chain's
      * writable buffer holds and reports that as written. */
     std::uint16_t respond_all(const std::uint8_t *answer, std::uint32_t length);
+    /* A device that answers each request by what it holds: `request` is every
+     * read-only segment of the chain joined, cut at the caller's capacity, and
+     * `answer` the chain's writable buffer. Returns the bytes written there. */
+    using Answerer = std::uint32_t (*)(void *context, const std::uint8_t *request, std::uint32_t length,
+                                       std::uint8_t *answer, std::uint32_t room);
+    /* Completes every published chain through `answerer`, joining its request
+     * into `request`, and reports what it wrote. Returns the number completed. */
+    std::uint16_t answer_all(std::uint8_t *request, std::uint32_t capacity, Answerer answerer, void *context);
     static constexpr std::uint32_t max_requests = 64u;
     static constexpr std::uint32_t request_bytes = 64u;
     /* The type of the first request published and not answered yet, or 0 when
@@ -58,6 +66,12 @@ private:
     /* Walks one chain, recording each segment (and keeping the first bytes the
      * driver sent, if asked); answers its writable buffer's address and length. */
     void          walk(std::uint16_t chain, bool keep_request, std::uint64_t &writable, std::uint32_t &writable_length);
+    /* The same, joining every read-only segment into `joined`, when not null,
+     * up to `capacity`. */
+    void          walk_chain(std::uint16_t chain, bool keep_request, std::uint8_t *joined, std::uint32_t capacity,
+                             std::uint32_t &joined_length, std::uint64_t &writable, std::uint32_t &writable_length);
+    /* Publishes the used element for `chain` with `written` bytes. */
+    void          complete(std::uint16_t chain, std::uint32_t written);
     std::uint8_t *at(std::uint64_t address, std::size_t bytes) const;
     std::uint64_t read(std::uint64_t address, unsigned width) const;
     void          write(std::uint64_t address, std::uint64_t value, unsigned width);

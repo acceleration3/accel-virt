@@ -18,7 +18,8 @@ FakeCommonConfig::FakeCommonConfig()
     : offered_(0u), device_feature_select_(0u), driver_feature_select_(0u), driver_features_(0u),
       config_vector_(no_vector), queue_count_(0u), status_(0u), history_{}, history_count_(0u),
       queue_select_(0u), queues_{}, absent_{}, reset_reads_(0u), refuse_features_ok_(false),
-      refuse_vectors_(false), refuse_queue_enable_(false), needs_reset_(false) {}
+      refuse_vectors_(false), refuse_queue_enable_(false), needs_reset_(false), status_sink_(nullptr),
+      status_context_(nullptr) {}
 
 std::uint64_t FakeCommonConfig::length() const { return 0x1000u; }
 
@@ -79,6 +80,7 @@ void FakeCommonConfig::write_u8(std::uint64_t offset, std::uint8_t value)
     const bool refused = (value & features_ok) != 0u &&
                          (refuse_features_ok_ || (driver_features_ & ~offered_) != 0u);
     status_ = refused ? static_cast<std::uint8_t>(value & ~features_ok) : value;
+    if (status_sink_ != nullptr) status_sink_(status_context_, status_);
 }
 
 void FakeCommonConfig::write_u16(std::uint64_t offset, std::uint16_t value)
@@ -146,6 +148,12 @@ void FakeCommonConfig::delay_reset(std::uint32_t reads) { reset_reads_ = reads; 
 void FakeCommonConfig::refuse_vectors()            { refuse_vectors_ = true; }
 void FakeCommonConfig::refuse_queue_enable()       { refuse_queue_enable_ = true; }
 void FakeCommonConfig::need_reset()                { needs_reset_ = true; }
+
+void FakeCommonConfig::on_status(StatusSink sink, void *context)
+{
+    status_sink_ = sink;
+    status_context_ = context;
+}
 
 std::uint64_t FakeCommonConfig::driver_features() const { return driver_features_; }
 std::uint8_t  FakeCommonConfig::status() const          { return status_; }

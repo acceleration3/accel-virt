@@ -1,0 +1,593 @@
+#include "harness/fullstack/ddi_kmt.hpp"
+
+#include "core/ddi/dxgk_allocation_info_record.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_map_aperture_segment_record.hpp"
+#include "core/ddi/dxgk_build_paging_buffer_unmap_aperture_segment_record.hpp"
+#include "core/ddi/dxgk_open_allocation_info_record.hpp"
+#include "core/ddi/dxgkarg_build_paging_buffer_record.hpp"
+#include "core/ddi/dxgkarg_close_allocation_record.hpp"
+#include "core/ddi/dxgkarg_control_interrupt2_record.hpp"
+#include "core/ddi/dxgkarg_create_allocation_record.hpp"
+#include "core/ddi/dxgkarg_create_context_record.hpp"
+#include "core/ddi/dxgkarg_create_device_record.hpp"
+#include "core/ddi/dxgkarg_destroy_allocation_record.hpp"
+#include "core/ddi/dxgkarg_open_allocation_record.hpp"
+#include "core/ddi/dxgkarg_set_root_page_table_record.hpp"
+#include "core/ddi/dxgkarg_submit_command_virtual_record.hpp"
+#include "core/memory/aperture_segment.hpp"
+#include "core/miniport/ddi_table.hpp"
+#include "core/support/nt_status.hpp"
+#include "guest/kmt/pci_identity.hpp"
+#include "harness/device/fake_virtio_gpu_function.hpp"
+#include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
+#include "harness/dxgkrnl/fake_dxgkrnl_fdo.hpp"
+#include "harness/fullstack/interrupt_pump.hpp"
+#include "harness/platform/mock_platform.hpp"
+
+#include <cstring>
+#include <sched.h>
+#include <time.h>
+
+namespace av {
+
+namespace {
+
+constexpr std::int32_t  map_aperture_segment = 5;     /* DXGK_OPERATION_MAP_APERTURE_SEGMENT */
+constexpr std::int32_t  unmap_aperture_segment = 6;   /* DXGK_OPERATION_UNMAP_APERTURE_SEGMENT */
+constexpr std::uint32_t accessed_physically = 0x8000u; /* DXGK_ALLOCATIONINFOFLAGS */
+constexpr std::uint32_t virtual_addressing = 0x4u;     /* DXGK_CREATECONTEXTFLAGS */
+constexpr std::uint32_t first_engine = 1u;
+/* VidSch's root for a context: the implicit system memory segment, one page
+ * of 512 entries (FakeVidSch::set_root_page_table). */
+constexpr std::uint32_t root_segment = 2u;
+constexpr std::uint64_t root_offset = 0x7000u;
+constexpr std::uint32_t root_entries = 512u;
+constexpr std::int32_t  crtc_vsync = 3;              /* DXGK_INTERRUPT_CRTC_VSYNC */
+constexpr std::int32_t  vsync_enable = 0;            /* DXGK_CRTC_VSYNC_STATE */
+constexpr std::int32_t  vsync_disable_no_phase = 2;
+/* The mock clock's tick is 100 ns; a blank at 60 Hz is 166 666 of them, and a
+ * step of a tenth of a millisecond measures it within a fraction of a percent. */
+constexpr std::uint64_t timer_step = 1000u;
+constexpr std::uint64_t blank_patience = 10000000u;
+constexpr std::uint16_t subsystem_vendor_offset = 0x2Cu;
+constexpr std::uint16_t subsystem_offset = 0x2Eu;
+
+std::uint64_t now_ms()
+{
+    timespec time = {};
+    clock_gettime(CLOCK_MONOTONIC, &time);
+    return static_cast<std::uint64_t>(time.tv_sec) * 1000u + static_cast<std::uint64_t>(time.tv_nsec) / 1000000u;
+}
+
+std::uint16_t config_u16(const std::uint8_t *config, std::uint16_t offset)
+{
+    return static_cast<std::uint16_t>(config[offset] | config[offset + 1u] << 8u);
+}
+
+}  // namespace
+
+DdiKmt::DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fdo, FakeDxgkrnlAdapter &dxgkrnl,
+               FakeVirtioGpuFunction &function, InterruptPump &pump)
+    : platform_(platform), table_(table), fdo_(fdo), dxgkrnl_(dxgkrnl), function_(function), pump_(pump),
+      handles_(), fences_(), devices_{}, allocations_{}, contexts_{}, queues_{}, kernel_copy_{},
+      next_handle_(first_handle), next_aperture_page_(0u), next_gpu_address_(first_gpu_address), paging_fence_(0u),
+      last_code_(0u)
+{
+    dxgkrnl_.on_interrupt(
+        [](void *context, const DxgkargcbNotifyInterruptDataRecord &data) {
+            static_cast<DdiKmt *>(context)->fences_.observe(data);
+        },
+        this);
+}
+
+/* Whatever the process still held after the adapter went away is only memory. */
+DdiKmt::~DdiKmt()
+{
+    dxgkrnl_.on_interrupt(nullptr, nullptr);
+    for (Allocation &slot : allocations_)
+        if (slot.handle != 0u) release(slot);
+}
+
+template <typename Routine>
+Routine DdiKmt::routine(DdiSlot slot) const
+{
+    platform_.set_irql(Irql::passive);
+    return reinterpret_cast<Routine>(table_.routine(slot));
+}
+
+Status DdiKmt::answer(std::int32_t code)
+{
+    last_code_ = static_cast<std::uint32_t>(code);
+    return NtStatus(code).status();
+}
+
+Status DdiKmt::refuse(Status status)
+{
+    last_code_ = static_cast<std::uint32_t>(NtStatus(status).value());
+    return status;
+}
+
+DdiKmt::Device *DdiKmt::find_device(std::uint32_t handle)
+{
+    for (Device &device : devices_)
+        if (handle != 0u && device.handle == handle) return &device;
+    return nullptr;
+}
+
+DdiKmt::Allocation *DdiKmt::find_allocation(std::uint32_t handle)
+{
+    for (Allocation &allocation : allocations_)
+        if (handle != 0u && allocation.handle == handle) return &allocation;
+    return nullptr;
+}
+
+DdiKmt::Context *DdiKmt::find_context(std::uint32_t handle)
+{
+    for (Context &context : contexts_)
+        if (handle != 0u && context.handle == handle) return &context;
+    return nullptr;
+}
+
+DdiKmt::Queue *DdiKmt::find_queue(std::uint32_t handle)
+{
+    for (Queue &queue : queues_)
+        if (handle != 0u && queue.handle == handle) return &queue;
+    return nullptr;
+}
+
+std::uint32_t DdiKmt::slot_of(const Context &context) const
+{
+    return static_cast<std::uint32_t>(&context - contexts_);
+}
+
+Status DdiKmt::enumerate_adapters(std::uint32_t *adapters, std::uint32_t capacity, std::uint32_t &count)
+{
+    count = fdo_.started() ? 1u : 0u;
+    if (count != 0u && capacity != 0u && adapters != nullptr) adapters[0] = adapter_handle;
+    return refuse(Status::ok);
+}
+
+/* KMTQAITYPE_PHYSICALADAPTERDEVICEIDS: dxgkrnl reads the PCI identity from the
+ * function's configuration space. */
+Status DdiKmt::query_identity(std::uint32_t adapter, PciIdentity &identity)
+{
+    if (adapter != adapter_handle) return refuse(Status::invalid_parameter);
+    const std::uint8_t *const config = function_.config_space();
+    identity = PciIdentity(config_u16(config, 0u), config_u16(config, 2u), config_u16(config, subsystem_vendor_offset),
+                           config_u16(config, subsystem_offset));
+    return refuse(Status::ok);
+}
+
+/* KMT_DRIVERVERSION from DRIVERCAPS.WDDMVersion: 0x3200 is 3200. */
+Status DdiKmt::query_driver_version(std::uint32_t adapter, std::uint32_t &version)
+{
+    version = 0u;
+    if (adapter != adapter_handle) return refuse(Status::invalid_parameter);
+    const auto wddm = static_cast<std::uint32_t>(fdo_.dxgadapter().driver_caps().WDDMVersion);
+    version = (wddm >> 12u & 0xFu) * 1000u + (wddm >> 8u & 0xFu) * 100u;
+    return refuse(Status::ok);
+}
+
+Status DdiKmt::close_adapter(std::uint32_t adapter)
+{
+    return refuse(adapter == adapter_handle ? Status::ok : Status::invalid_parameter);
+}
+
+Status DdiKmt::create_device(std::uint32_t adapter, std::uint32_t &device)
+{
+    device = 0u;
+    if (adapter != adapter_handle) return refuse(Status::invalid_parameter);
+    for (Device &free : devices_) {
+        if (free.handle != 0u) continue;
+        const std::uint32_t handle = next_handle_++;
+        DxgkargCreateDeviceRecord request = {};
+        request.hDevice = reinterpret_cast<void *>(static_cast<std::uintptr_t>(handle));
+        const Status created = answer(routine<std::int32_t (*)(void *, DxgkargCreateDeviceRecord *)>(
+            DdiSlot::DxgkDdiCreateDevice)(fdo_.context(), &request));
+        if (created != Status::ok) return created;
+        free = Device{handle, request.hDevice};
+        device = handle;
+        return created;
+    }
+    return refuse(Status::no_space);
+}
+
+Status DdiKmt::destroy_device(std::uint32_t device)
+{
+    Device *const found = find_device(device);
+    if (found == nullptr) return refuse(Status::invalid_parameter);
+    const Status destroyed =
+        answer(routine<std::int32_t (*)(void *)>(DdiSlot::DxgkDdiDestroyDevice)(found->driver));
+    *found = Device{};
+    return destroyed;
+}
+
+Status DdiKmt::create_allocation(std::uint32_t device, const std::uint8_t *descriptor, std::uint32_t size,
+                                 std::uint32_t &allocation)
+{
+    allocation = 0u;
+    Device *const owner = find_device(device);
+    if (owner == nullptr || descriptor == nullptr || size > max_private_data) return refuse(Status::invalid_parameter);
+    for (Allocation &slot : allocations_) {
+        if (slot.handle != 0u || slot.block != nullptr) continue;
+        std::memcpy(slot.private_data, descriptor, size);
+        DxgkAllocationInfoRecord info = {};
+        info.pPrivateDriverData = slot.private_data;
+        info.PrivateDriverDataSize = size;
+        DxgkargCreateAllocationRecord request = {};
+        request.NumAllocations = 1u;
+        request.pAllocationInfo = &info;
+        const Status created = answer(routine<std::int32_t (*)(void *, DxgkargCreateAllocationRecord *)>(
+            DdiSlot::DxgkDdiCreateAllocation)(fdo_.context(), &request));
+        if (created != Status::ok) return created;
+        slot.driver = info.hAllocation;
+        slot.bytes = info.Size;
+        slot.aperture = info.PreferredSegment == ApertureSegment::segment_id && (info.Flags & accessed_physically) != 0u;
+        const Status admitted = admit(slot, device, owner->driver);
+        if (admitted == Status::ok) allocation = slot.handle;
+        return admitted;
+    }
+    return refuse(Status::no_space);
+}
+
+/* VidMm backs the allocation and dxgkrnl opens it on the device that made it;
+ * a failure destroys what the driver made, as dxgkrnl unwinds a create. */
+Status DdiKmt::admit(Allocation &slot, std::uint32_t device, void *driver_device)
+{
+    const std::uint64_t pages = slot.bytes / page_bytes;
+    Status status = slot.bytes == 0u || slot.bytes % page_bytes != 0u || pages > max_pages ? Status::no_memory
+                                                                                           : Status::ok;
+    if (status == Status::ok) {
+        slot.block = static_cast<std::uint8_t *>(platform_.allocate_contiguous(slot.bytes));
+        status = slot.block != nullptr ? Status::ok : Status::no_memory;
+    }
+    if (status == Status::ok) {
+        platform_.zero(slot.block, slot.bytes);
+        const std::uint64_t physical = platform_.physical_address(slot.block);
+        for (std::uint64_t index = 0u; index < pages; index++) slot.frames[index] = physical + index * page_bytes;
+        slot.handle = handles_.insert(slot.driver);
+        status = slot.handle != 0u ? Status::ok : Status::no_space;
+    }
+    slot.device = device;
+    slot.offset_in_pages = next_aperture_page_;
+    next_aperture_page_ += pages;
+    if (status == Status::ok) status = open_on(slot, driver_device);
+    if (status == Status::ok) return refuse(Status::ok);
+    release(slot);
+    return refuse(status);
+}
+
+Status DdiKmt::open_on(Allocation &slot, void *driver_device)
+{
+    DxgkOpenAllocationInfoRecord info = {};
+    info.hAllocation = slot.handle;
+    info.pPrivateDriverData = slot.private_data;
+    info.PrivateDriverDataSize = max_private_data;
+    DxgkargOpenAllocationRecord request = {};
+    request.NumAllocations = 1u;
+    request.pOpenAllocation = &info;
+    const Status opened = answer(routine<std::int32_t (*)(void *, DxgkargOpenAllocationRecord *)>(
+        DdiSlot::DxgkDdiOpenAllocation)(driver_device, &request));
+    slot.opened = opened == Status::ok ? info.hDeviceSpecificAllocation : nullptr;
+    return opened;
+}
+
+/* Everything the harness holds for the slot, and the driver's allocation if
+ * it still has one; what the driver refuses to destroy stays its own. */
+void DdiKmt::release(Allocation &slot)
+{
+    if (slot.driver != nullptr && slot.opened == nullptr && fdo_.started()) {
+        void *const                    list[1] = {slot.driver};
+        DxgkargDestroyAllocationRecord request = {};
+        request.NumAllocations = 1u;
+        request.pAllocationList = list;
+        static_cast<void>(routine<std::int32_t (*)(void *, const DxgkargDestroyAllocationRecord *)>(
+            DdiSlot::DxgkDdiDestroyAllocation)(fdo_.context(), &request));
+    }
+    if (slot.handle != 0u) handles_.remove(slot.handle);
+    if (slot.block != nullptr) platform_.release_contiguous(slot.block, slot.bytes);
+    std::memset(static_cast<void *>(&slot), 0, sizeof slot);
+}
+
+Status DdiKmt::page(Allocation &slot, std::int32_t operation)
+{
+    std::uint8_t                   dma[64] = {};
+    DxgkargBuildPagingBufferRecord request = {};
+    request.pDmaBuffer = dma;
+    request.DmaSize = sizeof dma;
+    request.Operation = operation;
+    const std::uint64_t pages = slot.bytes / page_bytes;
+    if (operation == map_aperture_segment) {
+        DxgkBuildPagingBufferMapApertureSegmentRecord map = {};
+        map.hAllocation = slot.driver;
+        map.SegmentId = ApertureSegment::segment_id;
+        map.OffsetInPages = slot.offset_in_pages;
+        map.NumberOfPages = pages;
+        map.pMdl = platform_.attach_page_frames(slot.frames, static_cast<std::uint32_t>(pages));
+        std::memcpy(request.Reserved, &map, sizeof map);
+    } else {
+        DxgkBuildPagingBufferUnmapApertureSegmentRecord unmap = {};
+        unmap.hAllocation = slot.driver;
+        unmap.SegmentId = ApertureSegment::segment_id;
+        unmap.OffsetInPages = slot.offset_in_pages;
+        unmap.NumberOfPages = pages;
+        std::memcpy(request.Reserved, &unmap, sizeof unmap);
+    }
+    return answer(routine<std::int32_t (*)(void *, DxgkargBuildPagingBufferRecord *)>(
+        DdiSlot::DxgkDdiBuildPagingBuffer)(fdo_.context(), &request));
+}
+
+Status DdiKmt::destroy_allocation(std::uint32_t device, std::uint32_t allocation)
+{
+    Allocation *const found = find_allocation(allocation);
+    Device *const     owner = find_device(device);
+    if (found == nullptr || owner == nullptr || found->device != device) return refuse(Status::invalid_parameter);
+    if (found->resident) {
+        const Status unmapped = page(*found, unmap_aperture_segment);
+        if (unmapped != Status::ok) return unmapped;
+        found->resident = false;
+    }
+    void *const                  opened[1] = {found->opened};
+    DxgkargCloseAllocationRecord close = {};
+    close.NumAllocations = 1u;
+    close.pOpenHandleList = opened;
+    const Status closed = answer(routine<std::int32_t (*)(void *, const DxgkargCloseAllocationRecord *)>(
+        DdiSlot::DxgkDdiCloseAllocation)(owner->driver, &close));
+    if (closed != Status::ok) return closed;
+    found->opened = nullptr;
+    void *const                    list[1] = {found->driver};
+    DxgkargDestroyAllocationRecord request = {};
+    request.NumAllocations = 1u;
+    request.pAllocationList = list;
+    const Status destroyed = answer(routine<std::int32_t (*)(void *, const DxgkargDestroyAllocationRecord *)>(
+        DdiSlot::DxgkDdiDestroyAllocation)(fdo_.context(), &request));
+    if (destroyed != Status::ok) return destroyed;
+    found->driver = nullptr;
+    release(*found);
+    return refuse(Status::ok);
+}
+
+Status DdiKmt::lock(std::uint32_t device, std::uint32_t allocation, void *&view)
+{
+    view = nullptr;
+    Allocation *const found = find_allocation(allocation);
+    if (found == nullptr || found->device != device) return refuse(Status::invalid_parameter);
+    view = found->block;
+    return refuse(Status::ok);
+}
+
+Status DdiKmt::unlock(std::uint32_t device, std::uint32_t allocation)
+{
+    const Allocation *const found = find_allocation(allocation);
+    return refuse(found != nullptr && found->device == device ? Status::ok : Status::invalid_parameter);
+}
+
+Status DdiKmt::create_paging_queue(std::uint32_t device, std::uint32_t &queue, std::uint32_t &fence_object)
+{
+    queue = 0u;
+    fence_object = 0u;
+    if (find_device(device) == nullptr) return refuse(Status::invalid_parameter);
+    for (Queue &slot : queues_) {
+        if (slot.handle != 0u) continue;
+        slot = Queue{next_handle_, device, next_handle_ + 1u};
+        next_handle_ += 2u;
+        queue = slot.handle;
+        fence_object = slot.fence_object;
+        return refuse(Status::ok);
+    }
+    return refuse(Status::no_space);
+}
+
+Status DdiKmt::destroy_paging_queue(std::uint32_t queue)
+{
+    Queue *const found = find_queue(queue);
+    if (found == nullptr) return refuse(Status::invalid_parameter);
+    *found = Queue{};
+    return refuse(Status::ok);
+}
+
+/* Only the aperture segment is the driver's to map: VidMm keeps an allocation
+ * in its own system memory segment without asking. */
+Status DdiKmt::make_resident(std::uint32_t queue, std::uint32_t allocation, std::uint64_t &paging_fence)
+{
+    paging_fence = 0u;
+    const Queue *const found_queue = find_queue(queue);
+    Allocation *const  found = find_allocation(allocation);
+    if (found_queue == nullptr || found == nullptr || found->device != found_queue->device)
+        return refuse(Status::invalid_parameter);
+    if (found->aperture && !found->resident) {
+        const Status mapped = page(*found, map_aperture_segment);
+        if (mapped != Status::ok) return mapped;
+        found->resident = true;
+    }
+    paging_fence = ++paging_fence_;
+    return refuse(Status::ok);
+}
+
+Status DdiKmt::map_gpu_virtual_address(std::uint32_t queue, std::uint32_t allocation, std::uint64_t pages,
+                                       std::uint64_t &address, std::uint64_t &paging_fence)
+{
+    address = 0u;
+    paging_fence = 0u;
+    const Queue *const found_queue = find_queue(queue);
+    Allocation *const  found = find_allocation(allocation);
+    if (found_queue == nullptr || found == nullptr || found->device != found_queue->device || pages == 0u ||
+        pages > found->bytes / page_bytes || found->gpu_address != 0u)
+        return refuse(Status::invalid_parameter);
+    found->gpu_address = next_gpu_address_;
+    /* A guard page between ranges, so an address past one is in none. */
+    next_gpu_address_ += (pages + 1u) * page_bytes;
+    address = found->gpu_address;
+    paging_fence = ++paging_fence_;
+    return refuse(Status::ok);
+}
+
+Status DdiKmt::free_gpu_virtual_address(std::uint32_t adapter, std::uint64_t address, std::uint64_t)
+{
+    if (adapter != adapter_handle || address == 0u) return refuse(Status::invalid_parameter);
+    for (Allocation &slot : allocations_) {
+        if (slot.handle == 0u || slot.gpu_address != address) continue;
+        slot.gpu_address = 0u;
+        return refuse(Status::ok);
+    }
+    return refuse(Status::invalid_parameter);
+}
+
+Status DdiKmt::wait_for_fence(std::uint32_t device, std::uint32_t fence_object, std::uint64_t fence)
+{
+    bool known = false;
+    for (const Queue &queue : queues_) known = known || (fence_object != 0u && queue.fence_object == fence_object &&
+                                                        queue.device == device);
+    return refuse(known && fence <= paging_fence_ ? Status::ok : Status::invalid_parameter);
+}
+
+Status DdiKmt::create_context(std::uint32_t device, std::uint32_t &context)
+{
+    return create_context_on(device, nullptr, 0u, context);
+}
+
+Status DdiKmt::create_context_virtual(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
+                                      std::uint32_t &context)
+{
+    if (private_data == nullptr && size != 0u) return refuse(Status::invalid_parameter);
+    return create_context_on(device, private_data, size, context);
+}
+
+/* dxgkrnl copies the private data into its own memory before the driver sees
+ * it, and VidSch gives the context its root before anything is submitted. */
+Status DdiKmt::create_context_on(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
+                                 std::uint32_t &context)
+{
+    context = 0u;
+    const Device *const owner = find_device(device);
+    if (owner == nullptr || size > max_private_data) return refuse(Status::invalid_parameter);
+    for (Context &slot : contexts_) {
+        if (slot.handle != 0u) continue;
+        if (size != 0u) std::memcpy(kernel_copy_, private_data, size);
+        DxgkargCreateContextRecord request = {};
+        request.EngineAffinity = first_engine;
+        request.Flags = virtual_addressing;
+        request.pPrivateDriverData = size != 0u ? kernel_copy_ : nullptr;
+        request.PrivateDriverDataSize = size;
+        const Status created = answer(routine<std::int32_t (*)(void *, DxgkargCreateContextRecord *)>(
+            DdiSlot::DxgkDdiCreateContext)(owner->driver, &request));
+        if (created != Status::ok) return created;
+        const DxgkargSetRootPageTableRecord root = {request.hContext, root_segment, 0u, root_offset, root_entries, 0u};
+        routine<void (*)(void *, const DxgkargSetRootPageTableRecord *)>(DdiSlot::DxgkDdiSetRootPageTable)(
+            fdo_.context(), &root);
+        slot = Context{next_handle_++, device, request.hContext, request.ContextInfoDmaBufferPrivateDataSize};
+        fences_.forget(slot_of(slot));
+        context = slot.handle;
+        return created;
+    }
+    return refuse(Status::no_space);
+}
+
+Status DdiKmt::destroy_context(std::uint32_t context)
+{
+    Context *const found = find_context(context);
+    if (found == nullptr) return refuse(Status::invalid_parameter);
+    const Status destroyed =
+        answer(routine<std::int32_t (*)(void *)>(DdiSlot::DxgkDdiDestroyContext)(found->driver));
+    fences_.forget(slot_of(*found));
+    *found = Context{};
+    pump_.deliver();
+    return destroyed;
+}
+
+/* DXGCONTEXT::SubmitCommand refuses private data larger than the context asked
+ * for before anything reaches the driver, and a lost context takes nothing. */
+Status DdiKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length,
+                      const std::uint8_t *private_data, std::uint32_t private_size)
+{
+    Context *const found = find_context(context);
+    if (found == nullptr || private_size > found->private_capacity || private_size > max_private_data ||
+        (private_data == nullptr && private_size != 0u))
+        return refuse(Status::invalid_parameter);
+    if (fences_.lost(slot_of(*found))) return refuse(Status::invalid_state);
+    if (private_size != 0u) std::memcpy(kernel_copy_, private_data, private_size);
+    DxgkargSubmitCommandVirtualRecord request = {};
+    request.hContext = found->driver;
+    request.DmaBufferVirtualAddress = commands;
+    request.DmaBufferSize = static_cast<std::uint32_t>(length);
+    request.pDmaBufferPrivateData = private_size != 0u ? kernel_copy_ : nullptr;
+    request.DmaBufferPrivateDataSize = private_size;
+    request.SubmissionFenceId = fences_.next();
+    const Status submitted = answer(routine<std::int32_t (*)(void *, const DxgkargSubmitCommandVirtualRecord *)>(
+        DdiSlot::DxgkDdiSubmitCommandVirtual)(fdo_.context(), &request));
+    if (submitted == Status::ok) fences_.commit(slot_of(*found));
+    pump_.deliver();
+    return submitted;
+}
+
+Status DdiKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
+{
+    const Context *const found = find_context(context);
+    if (found == nullptr || found->device != device) return refuse(Status::invalid_parameter);
+    const std::uint64_t deadline = now_ms() + patience_ms;
+    for (;;) {
+        pump_.deliver();
+        const Status settled = fences_.settled(slot_of(*found));
+        if (settled != Status::not_found) return refuse(settled);
+        if (now_ms() >= deadline) break;
+        sched_yield();
+    }
+    last_code_ = timed_out;
+    return Status::not_found;
+}
+
+/* dxgkrnl turns the blank on for a waiter and off once it is woken; the
+ * driver's timer keeps its phase between, and the mock clock only moves here. */
+Status DdiKmt::wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source)
+{
+    if (adapter != adapter_handle || find_device(device) == nullptr || source != 0u)
+        return refuse(Status::invalid_parameter);
+    const auto control = routine<std::int32_t (*)(void *, DxgkargControlInterrupt2Record)>(
+        DdiSlot::DxgkDdiControlInterrupt2);
+    const Status enabled = answer(control(fdo_.context(), DxgkargControlInterrupt2Record{crtc_vsync, vsync_enable}));
+    if (enabled != Status::ok) return enabled;
+    const std::uint32_t before = fences_.vertical_blanks();
+    for (std::uint64_t waited = 0u; fences_.vertical_blanks() == before && waited < blank_patience;
+         waited += timer_step)
+        platform_.run_timers(timer_step);
+    platform_.set_irql(Irql::passive);
+    const Status disabled =
+        answer(control(fdo_.context(), DxgkargControlInterrupt2Record{crtc_vsync, vsync_disable_no_phase}));
+    if (fences_.vertical_blanks() == before) {
+        last_code_ = timed_out;
+        return Status::not_found;
+    }
+    return disabled;
+}
+
+std::uint64_t DdiKmt::performance_counter(std::uint64_t &frequency) const
+{
+    return platform_.performance_counter(frequency);
+}
+
+std::uint32_t DdiKmt::last_code() const { return last_code_; }
+
+void DdiKmt::end_process()
+{
+    for (Context &context : contexts_)
+        if (context.handle != 0u) static_cast<void>(destroy_context(context.handle));
+    for (Allocation &allocation : allocations_)
+        if (allocation.handle != 0u) static_cast<void>(destroy_allocation(allocation.device, allocation.handle));
+    for (Queue &queue : queues_) queue = Queue{};
+    for (Device &device : devices_)
+        if (device.handle != 0u) static_cast<void>(destroy_device(device.handle));
+}
+
+const NodeFences &DdiKmt::fences() const { return fences_; }
+FakeHandleTable  &DdiKmt::handles() { return handles_; }
+
+std::uint32_t DdiKmt::open_objects() const
+{
+    std::uint32_t open = 0u;
+    for (const Device &device : devices_) open += device.handle != 0u ? 1u : 0u;
+    for (const Allocation &allocation : allocations_) open += allocation.handle != 0u ? 1u : 0u;
+    for (const Context &context : contexts_) open += context.handle != 0u ? 1u : 0u;
+    return open;
+}
+
+}  // namespace av

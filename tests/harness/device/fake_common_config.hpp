@@ -47,6 +47,10 @@ public:
     void refuse_vectors();
     void refuse_queue_enable();
     void need_reset();
+    /* Every status the driver writes from now, after the register holds it: a
+     * device behind the function that follows the driver's status. Null stops it. */
+    using StatusSink = void (*)(void *context, std::uint8_t status);
+    void on_status(StatusSink sink, void *context);
 
     /* Observations. */
     std::uint64_t driver_features() const;
@@ -77,6 +81,8 @@ private:
     bool          refuse_vectors_;
     bool          refuse_queue_enable_;
     bool          needs_reset_;
+    StatusSink    status_sink_;
+    void         *status_context_;
 };
 
 }  // namespace av

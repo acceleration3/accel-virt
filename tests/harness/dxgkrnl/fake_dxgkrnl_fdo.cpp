@@ -120,6 +120,13 @@ std::uint8_t FakeDxgkrnlFdo::interrupt(std::uint32_t message)
     return claimed;
 }
 
+void FakeDxgkrnlFdo::dpc()
+{
+    platform_.set_irql(Irql::dispatch);
+    reinterpret_cast<VoidContext>(table_.routine(DdiSlot::DxgkDdiDpcRoutine))(context_);
+    platform_.set_irql(Irql::passive);
+}
+
 std::int32_t FakeDxgkrnlFdo::set_power_state(std::int32_t device_power_state)
 {
     platform_.set_irql(Irql::passive);

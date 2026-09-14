@@ -19,7 +19,7 @@ FakeDxgkrnlAdapter::FakeDxgkrnlAdapter(MockPlatform &platform, FakeVirtioGpuFunc
     : platform_(platform), function_(function), record_(), device_information_status_(0u),
       config_read_status_(0u), short_config_read_(false), map_refusal_countdown_(0u),
       map_refusal_status_(0u), unmap_status_(0u), mappings_{}, mapping_count_(0u), maps_(0u), dpcs_(0u), index_(index), system_memory_(std::int64_t{8} << 30u), interrupts_{},
-      interrupt_count_(0u), dpc_notifications_(0u), synchronize_status_(0u), synchronized_(false)
+      interrupt_count_(0u), dpc_notifications_(0u), sink_(nullptr), sink_context_(nullptr), synchronize_status_(0u), synchronized_(false)
 {
     record_.Size = sizeof record_;
     record_.Version = 0x11007u;
@@ -184,6 +184,13 @@ void FakeDxgkrnlAdapter::notify_interrupt(const DxgkargcbNotifyInterruptDataReco
         TestRegistry::instance().record_failure(__FILE__, __LINE__, "DxgkCbNotifyInterrupt outside the ISR");
     if (interrupt_count_ < max_interrupts) interrupts_[interrupt_count_] = data;
     interrupt_count_++;
+    if (sink_ != nullptr) sink_(sink_context_, data);
+}
+
+void FakeDxgkrnlAdapter::on_interrupt(InterruptSink sink, void *context)
+{
+    sink_ = sink;
+    sink_context_ = context;
 }
 
 void FakeDxgkrnlAdapter::notify_dpc()
