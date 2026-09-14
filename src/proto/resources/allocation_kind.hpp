@@ -18,6 +18,8 @@ enum class AllocationKind : uint16_t {
      * a context's fences are written to. */
     context_ring = 17u,
     fence_page = 18u,
+    /* The slot a context's answers are written to (feature 043). */
+    reply_slot = 19u,
 };
 
 }  // namespace av

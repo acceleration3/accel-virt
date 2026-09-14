@@ -40,6 +40,10 @@ public:
     std::uint64_t physical_address(void *block) override;
     Status        read_page_frames(void *mdl, std::uint32_t first, std::uint32_t count,
                                    std::uint64_t *frames) override;
+    /* A frame inside a contiguous block maps to that block's own memory; any
+     * other is refused with null. A view left mapped fails the test. */
+    std::uint8_t *map_frame(std::uint64_t frame) override;
+    void          unmap_frame(std::uint8_t *view) override;
     void     zero(void *dst, std::size_t bytes) override;
     void     copy(void *dst, const void *src, std::size_t bytes) override;
     Irql     current_irql() const override;
@@ -111,6 +115,9 @@ public:
 
     std::uint32_t unclaimed_violations() const;
     std::uint32_t live_allocations() const;
+    std::uint32_t mapped_frames() const;
+    /* Makes the Nth map_frame from now (1-based) answer null; 0 disables. */
+    void          fail_frame_map_at(std::uint32_t nth);
     std::uint32_t allocations_made() const;
     std::uint32_t locks_held() const;
     std::uint32_t logged() const;
@@ -126,7 +133,8 @@ public:
 private:
     static constexpr std::uint32_t max_live = 4096u;
     static constexpr std::uint32_t max_contiguous = 256u;
-    static constexpr std::uint32_t max_page_frames = 4u;
+    static constexpr std::uint32_t max_page_frames = 16u;
+    static constexpr std::uint32_t max_frame_views = 64u;
     static constexpr std::uint64_t first_physical_address = 0x100000000ull;
     static constexpr std::uint32_t violation_kinds =
         static_cast<std::uint32_t>(Violation::count);
@@ -176,6 +184,10 @@ private:
     ContiguousBlock contiguous_[max_contiguous];
     std::uint32_t contiguous_count_;
     std::uint64_t next_physical_address_;
+    std::uint8_t *frame_views_[max_frame_views] = {};
+    std::uint32_t frame_view_count_ = 0u;
+    std::uint32_t frame_map_sequence_ = 0u;
+    std::uint32_t frame_fail_at_ = 0u;
     std::uint32_t fail_at_;
     Irql          irql_;
     HeldLock      held_[lock_stack_depth];

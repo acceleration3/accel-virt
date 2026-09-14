@@ -65,6 +65,12 @@ GuestPageList AperturePages::pages(uint64_t first_page, uint32_t count) const
     return list.complete() ? list : GuestPageList();
 }
 
+GuestPageList AperturePages::whole() const
+{
+    platform_.require_irql_at_most(Irql::dispatch, "AperturePages::whole");
+    return pages(base_page_, capacity_);
+}
+
 bool AperturePages::invariants_hold() const
 {
     return capacity_ != 0u && (frames_ != nullptr || base_page_ == 0u);

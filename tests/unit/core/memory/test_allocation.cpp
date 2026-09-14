@@ -337,7 +337,7 @@ TEST(allocation_report_to, nothing_is_asked_for_in_host_memory_yet)
   segments.offer_host_visible(platform, 64u << 20u);
   const AllocationDescriptor client(AllocationKind::client, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
   const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
-  const AllocationDescriptor asked[] = {client, ring};
+  const AllocationDescriptor asked[] = {client};
   for (const AllocationDescriptor &descriptor : asked) {
       Allocation allocation(platform, segments.segments(), descriptor, descriptor.size());
       DxgkAllocationInfoRecord info = {};
@@ -349,3 +349,69 @@ TEST(allocation_report_to, nothing_is_asked_for_in_host_memory_yet)
       CHECK_EQ(info.EvictionSegmentSet, 0u);
       CHECK_EQ(info.Flags, 1u);   /* still CPU-visible, and still guest-backed */
   } }
+
+/* Feature 043: a context's ring, fence page and reply slot are published to the
+ * device as guest blobs, and the only pages the driver ever learns are the ones
+ * VidMm maps into the aperture. So each is pinned there like a primary, and a
+ * client's buffer is not. */
+TEST(allocation_report_to, the_transport_s_memory_is_pinned_in_the_aperture)
+{ MockPlatform platform;
+  Segments segments(platform);
+  segments.offer_host_visible(platform, 64u << 20u);
+  const AllocationDescriptor transport[] = {
+      AllocationDescriptor(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget()),
+      AllocationDescriptor(AllocationKind::fence_page, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
+      AllocationDescriptor(AllocationKind::reply_slot, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
+  };
+  for (const AllocationDescriptor &descriptor : transport) {
+      Allocation allocation(platform, segments.segments(), descriptor, descriptor.size());
+      DxgkAllocationInfoRecord info = {};
+      allocation.report_to(info);
+      CHECK_EQ(info.PreferredSegment, av::ApertureSegment::segment_id);
+      CHECK_EQ(info.SupportedReadSegmentSet, av::ApertureSegment::segment_set);
+      CHECK_EQ(info.SupportedWriteSegmentSet, av::ApertureSegment::segment_set);
+      CHECK_EQ(info.Flags, 0x8001u);   /* CpuVisible | AccessedPhysically */
+  } }
+
+TEST(allocation_open, a_reply_slot_belongs_to_the_device_that_opened_it)
+{ MockPlatform platform;
+  Segments segments(platform);
+  int first_device = 0;
+  int second_device = 0;
+  const AllocationDescriptor slot(AllocationKind::reply_slot, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
+  Allocation allocation(platform, segments.segments(), slot, 0x1000u);
+  CHECK_STATUS(allocation.open(&first_device), Status::ok);
+  CHECK_STATUS(allocation.open(&second_device), Status::invalid_parameter);
+  CHECK(allocation.invariants_hold()); }
+
+/* The binding publishes the whole allocation, wherever VidMm placed it: every
+ * page, in order, or nothing while any page is not mapped. */
+TEST(allocation_pages, answers_every_page_only_once_all_are_mapped)
+{ MockPlatform platform; Segments segments(platform);
+  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
+  Allocation allocation(platform, segments.segments(), ring, 4u * page);
+  CHECK_EQ(allocation.pages().count(), 0u);
+  const std::uint64_t frames[] = {9u * page, 3u * page, 4u * page, 5u * page};
+  av::DxgkBuildPagingBufferMapApertureSegmentRecord head = {};
+  head.SegmentId = av::ApertureSegment::segment_id;
+  head.OffsetInPages = 10u;
+  head.NumberOfPages = 2u;
+  head.pMdl = platform.attach_page_frames(frames, 4u);
+  CHECK_STATUS(allocation.map_aperture(head), Status::ok);
+  CHECK_EQ(allocation.pages().count(), 0u);   /* half of it */
+  av::DxgkBuildPagingBufferMapApertureSegmentRecord rest = head;
+  rest.OffsetInPages = 12u;
+  rest.MdlOffset = 2u;
+  CHECK_STATUS(allocation.map_aperture(rest), Status::ok);
+  const av::GuestPageList whole = allocation.pages();
+  CHECK_EQ(whole.count(), 4u);
+  CHECK_EQ(whole.frame(0u), 9u * page);
+  CHECK_EQ(whole.frame(3u), 5u * page);
+  CHECK_EQ(whole.runs(), 2u);
+  av::DxgkBuildPagingBufferUnmapApertureSegmentRecord unmapping = {};
+  unmapping.SegmentId = av::ApertureSegment::segment_id;
+  unmapping.OffsetInPages = 13u;
+  unmapping.NumberOfPages = 1u;
+  allocation.unmap_aperture(unmapping);
+  CHECK_EQ(allocation.pages().count(), 0u);
+  CHECK(allocation.invariants_hold()); }

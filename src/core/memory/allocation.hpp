@@ -53,6 +53,9 @@ public:
      * address is this allocation's and every page of it was mapped. Dispatch
      * at most: the DPC asks before it attaches a primary. */
     GuestPageList        pages_at(uint64_t segment_address, uint32_t page_count) const;
+    /* All of its pages, for a context publishing it as a blob: empty unless
+     * every page is mapped. Dispatch at most. */
+    GuestPageList        pages() const;
 
     bool invariants_hold() const;
 
@@ -60,6 +63,8 @@ private:
     static constexpr uint32_t flag_cpu_visible = 0x1u;            /* DXGK_ALLOCATIONINFOFLAGS */
     static constexpr uint32_t flag_accessed_physically = 0x8000u;
     static constexpr uint32_t priority_normal = 0x28000000u;      /* D3DDDI_ALLOCATIONPRIORITY_NORMAL */
+
+    bool the_transport_s() const;
 
     Platform            &platform_;
     const MemorySegments &segments_;

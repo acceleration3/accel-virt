@@ -50,6 +50,14 @@ public:
     [[nodiscard]] virtual Status read_page_frames(void *mdl, uint32_t first, uint32_t count,
                                                   uint64_t *frames) = 0;
 
+    /* One page of guest memory at physical address `frame` (page-aligned),
+     * mapped into kernel space: how the driver reads a page a process's
+     * allocation owns - a context's fence page and ring header - where it only
+     * knows the frame (feature 043). Null when the platform cannot map it.
+     * Never at DISPATCH. */
+    virtual uint8_t *map_frame(uint64_t frame) = 0;
+    /* Of a view map_frame returned; never of null. Never at DISPATCH. */
+    virtual void     unmap_frame(uint8_t *view) = 0;
     virtual void zero(void *dst, size_t bytes) = 0;
     virtual void copy(void *dst, const void *src, size_t bytes) = 0;
 

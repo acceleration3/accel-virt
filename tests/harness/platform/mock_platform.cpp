@@ -18,7 +18,7 @@ namespace {
 const char *const violation_names[] = {
     "irql_ceiling", "allocation_at_dispatch", "blocking_at_dispatch", "lock_order",
     "release_order", "lock_stack_overflow", "null_release", "broken_invariant",
-    "time_overflow", "unmapped_register", "timer_misuse",
+    "time_overflow", "unmapped_register", "timer_misuse", "frame_misuse",
 };
 
 }  // namespace
@@ -56,6 +56,8 @@ MockPlatform::~MockPlatform()
                                 live_count_ + contiguous_count_);
     if (held_count_ != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u lock(s) still held", held_count_);
+    if (frame_view_count_ != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u frame view(s) left mapped", frame_view_count_);
     for (const Timer &timer : timers_)
         if (timer.live) registry.record_failure(__FILE__, __LINE__, "a timer was never destroyed");
     for (std::uint32_t i = 0u; i < live_count_; i++) std::free(live_[i]);
@@ -191,6 +193,42 @@ void *MockPlatform::translate_physical(std::uint64_t physical_address, std::size
             return static_cast<std::uint8_t *>(candidate.block) + offset;
     }
     return nullptr;
+}
+
+std::uint8_t *MockPlatform::map_frame(std::uint64_t frame)
+{
+    if (irql_ >= Irql::dispatch)
+        record(Violation::blocking_at_dispatch, "map_frame at IRQL %u", static_cast<unsigned>(irql_));
+    if ((frame & 0xFFFu) != 0u) record(Violation::frame_misuse, "map_frame of 0x%llx, not a page", static_cast<unsigned long long>(frame));
+    frame_map_sequence_++;
+    if (frame_fail_at_ != 0u && frame_map_sequence_ == frame_fail_at_) return nullptr;
+    auto *const view = static_cast<std::uint8_t *>(translate_physical(frame, 0x1000u));
+    if (view == nullptr) return nullptr;
+    if (frame_view_count_ == max_frame_views) {
+        std::fprintf(stderr, "\n    more than %u frame views\n", max_frame_views);
+        std::abort();
+    }
+    frame_views_[frame_view_count_++] = view;
+    return view;
+}
+
+void MockPlatform::unmap_frame(std::uint8_t *view)
+{
+    if (irql_ >= Irql::dispatch)
+        record(Violation::blocking_at_dispatch, "unmap_frame at IRQL %u", static_cast<unsigned>(irql_));
+    for (std::uint32_t i = 0u; i < frame_view_count_; i++) {
+        if (frame_views_[i] != view) continue;
+        frame_views_[i] = frame_views_[--frame_view_count_];
+        return;
+    }
+    record(Violation::frame_misuse, "unmap_frame of a view never mapped");
+}
+
+std::uint32_t MockPlatform::mapped_frames() const { return frame_view_count_; }
+
+void MockPlatform::fail_frame_map_at(std::uint32_t nth)
+{
+    frame_fail_at_ = nth == 0u ? 0u : frame_map_sequence_ + nth;
 }
 
 void MockPlatform::zero(void *dst, std::size_t bytes) { std::memset(dst, 0, bytes); }

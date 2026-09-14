@@ -33,6 +33,10 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * is the one this driver reports, and a primary pinned there arrives as an
      * address with pages behind it. */
     const bool scanned_out = descriptor_.kind() == AllocationKind::shared_primary;
+    /* A context's ring, fence page and reply slot are published as guest blobs
+     * over the pages the aperture mapping hands the driver, so they are pinned
+     * there for the same reason (feature 043). */
+    const bool pinned = scanned_out || the_transport_s();
 
     /* Nothing is asked for in host memory yet, and the segment is reported all
      * the same. Three live experiments say VidMm refuses every allocation whose
@@ -44,7 +48,7 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * wants of an allocation in a CPU-visible segment that has storage is not
      * yet known, and the feature that can find out is the one with a user-mode
      * client asking for such memory (043). */
-    const uint32_t segment = scanned_out ? ApertureSegment::segment_id : segments_.system_memory_segment_id();
+    const uint32_t segment = pinned ? ApertureSegment::segment_id : segments_.system_memory_segment_id();
     info.PreferredSegment = segment;
     info.SupportedReadSegmentSet = 1u << (segment - 1u);
     info.SupportedWriteSegmentSet = 1u << (segment - 1u);
@@ -57,7 +61,7 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * SetVidPnSourceAddress answers segment 0, address 0 - an address with no
      * pages behind it (feature 038). */
     info.Flags = (descriptor_.cpu_visible() ? flag_cpu_visible : 0u) |
-                 (scanned_out ? flag_accessed_physically : 0u);
+                 (pinned ? flag_accessed_physically : 0u);
     info.AllocationPriority = priority_normal;
     info.Flags2 = 0u;
 }
@@ -66,9 +70,7 @@ Status Allocation::open(const void *device)
 {
     platform_.require_irql_at_most(Irql::apc, "Allocation::open");
     InvariantScope<Allocation> guard(platform_, *this, "open");
-    const bool the_transport_s = descriptor_.kind() == AllocationKind::context_ring ||
-                                 descriptor_.kind() == AllocationKind::fence_page;
-    if (the_transport_s && owner_ != nullptr && owner_ != device) return Status::invalid_parameter;
+    if (the_transport_s() && owner_ != nullptr && owner_ != device) return Status::invalid_parameter;
     if (opens_ == 0u) owner_ = device;
     opens_++;
     return Status::ok;
@@ -104,6 +106,19 @@ GuestPageList Allocation::pages_at(uint64_t segment_address, uint32_t page_count
     const uint64_t offset = segment_address - base;
     if ((offset & (page_bytes - 1u)) != 0u) return GuestPageList();
     return aperture_.pages(offset / page_bytes, page_count);
+}
+
+GuestPageList Allocation::pages() const
+{
+    platform_.require_irql_at_most(Irql::dispatch, "Allocation::pages");
+    return aperture_.whole();
+}
+
+bool Allocation::the_transport_s() const
+{
+    const AllocationKind kind = descriptor_.kind();
+    return kind == AllocationKind::context_ring || kind == AllocationKind::fence_page ||
+           kind == AllocationKind::reply_slot;
 }
 
 bool Allocation::invariants_hold() const

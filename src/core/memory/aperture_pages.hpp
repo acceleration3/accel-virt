@@ -41,6 +41,9 @@ public:
      * every one of them was mapped. Dispatch at most: the DPC asks before it
      * attaches a primary. */
     GuestPageList        pages(uint64_t first_page, uint32_t count) const;
+    /* Every page of the allocation, from wherever the window starts; empty
+     * unless each one is mapped. Dispatch at most. */
+    GuestPageList        whole() const;
 
     bool invariants_hold() const;
 

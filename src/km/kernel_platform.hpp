@@ -22,6 +22,8 @@ public:
     void     release_contiguous(void *block, size_t bytes) override;
     uint64_t physical_address(void *block) override;
     Status   read_page_frames(void *mdl, uint32_t first, uint32_t count, uint64_t *frames) override;
+    uint8_t *map_frame(uint64_t frame) override;
+    void     unmap_frame(uint8_t *view) override;
     void     zero(void *dst, size_t bytes) override;
     void     copy(void *dst, const void *src, size_t bytes) override;
     Irql     current_irql() const override;

@@ -516,3 +516,38 @@ TEST(mock_platform_destruction, a_leaked_timer_fails_the_test)
   { MockPlatform platform;
     static_cast<void>(platform.create_timer(&count_tick, &ticks)); }
   CHECK(TestRegistry::instance().take_current_failure()); }
+
+/* A frame is the kernel's to map only if it is guest memory: here, a page of a
+ * contiguous block, whose own bytes the view reaches. */
+TEST(mock_platform_map_frame, maps_a_page_of_a_contiguous_block_onto_its_bytes)
+{ MockPlatform platform;
+  auto *const block = static_cast<std::uint8_t *>(platform.allocate_contiguous(0x2000u));
+  const std::uint64_t second = platform.physical_address(block) + 0x1000u;
+  std::uint8_t *const view = platform.map_frame(second);
+  CHECK(view == block + 0x1000u);
+  CHECK_EQ(platform.mapped_frames(), 1u);
+  CHECK(platform.map_frame(0x7000u) == nullptr);   /* no block holds it */
+  platform.unmap_frame(view);
+  CHECK_EQ(platform.mapped_frames(), 0u);
+  platform.release_contiguous(block, 0x2000u); }
+
+TEST(mock_platform_map_frame, refuses_misuse_and_fails_on_request)
+{ MockPlatform platform;
+  auto *const block = static_cast<std::uint8_t *>(platform.allocate_contiguous(0x1000u));
+  const std::uint64_t frame = platform.physical_address(block);
+  static_cast<void>(platform.map_frame(frame + 1u));
+  CHECK(platform.claim(Violation::frame_misuse));
+  std::uint8_t other = 0u;
+  platform.unmap_frame(&other);
+  CHECK(platform.claim(Violation::frame_misuse));
+  platform.fail_frame_map_at(1u);
+  CHECK(platform.map_frame(frame) == nullptr);
+  std::uint8_t *const view = platform.map_frame(frame);
+  CHECK(view != nullptr);
+  platform.set_irql(av::Irql::dispatch);
+  platform.unmap_frame(view);
+  static_cast<void>(platform.map_frame(0x9000u));
+  platform.set_irql(av::Irql::passive);
+  CHECK(platform.claim(Violation::blocking_at_dispatch));
+  CHECK(platform.claim(Violation::blocking_at_dispatch));
+  platform.release_contiguous(block, 0x1000u); }

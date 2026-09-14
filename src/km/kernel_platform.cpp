@@ -65,6 +65,17 @@ Status KernelPlatform::read_page_frames(void *mdl, uint32_t first, uint32_t coun
     return Status::ok;
 }
 
+/* RAM is mapped cached, as the kernel's own mapping of it is: a view with any
+ * other cache type is a conflict Driver Verifier reports. */
+uint8_t *KernelPlatform::map_frame(uint64_t frame)
+{
+    PHYSICAL_ADDRESS address = {};
+    address.QuadPart = static_cast<LONGLONG>(frame);
+    return static_cast<uint8_t *>(MmMapIoSpaceEx(address, PAGE_SIZE, PAGE_READWRITE));
+}
+
+void KernelPlatform::unmap_frame(uint8_t *view) { MmUnmapIoSpace(view, PAGE_SIZE); }
+
 void KernelPlatform::release_contiguous(void *block, size_t bytes)
 {
     MmFreeContiguousMemorySpecifyCache(block, bytes, MmCached);
