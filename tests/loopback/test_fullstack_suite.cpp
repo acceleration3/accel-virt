@@ -17,9 +17,6 @@ using av::GuestSuite;
 
 namespace {
 
-/* The command TransportScenario sends. */
-constexpr std::uint32_t echo_command = 0x10001u;
-
 /* Whether the report holds `line` as a whole line. */
 bool reported(const GuestReport &report, const char *line)
 {
@@ -63,9 +60,10 @@ TEST(fullstack_suite, the_in_guest_suite_passes_over_the_real_driver)
   CHECK(reported(report, "ok host_visible.pattern 4096"));
   CHECK(std::strstr(report.text(), "\nok vsync.rate 60") != nullptr);
   CHECK(reported(report, "ok vsync.caught 6000"));
-  CHECK(reported(report, "ok transport.reply 8"));
-  /* The reply came from the executor behind the device core. */
-  CHECK_EQ(rig.device().executor().id_at(0u), echo_command);
+  CHECK(reported(report, "ok transport.nop 0"));
+  CHECK(std::strstr(report.text(), "\nok transport.latency ") != nullptr);
+  /* The device core answered the no-op itself: the executor behind it ran nothing. */
+  CHECK_EQ(rig.device().executor().executed(), 0u);
   CHECK_EQ(rig.kmt().open_objects(), 0u);
   CHECK_EQ(rig.device().device().contexts(), 0u); }
 
