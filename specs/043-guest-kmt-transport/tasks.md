@@ -60,9 +60,9 @@ description: "Tasks: the guest transport"
 
 - [X] T011 [US1] Write `tests/unit/core/rvk/test_submission_reader.cpp` first: a DMA buffer holding a valid RVKS is read into begin/end/fence; a short buffer, a bad magic, a fence not greater than the last, and a range outside the ring are each refused rather than acted on
 - [X] T012 [US1] `SubmissionReader` (object class, KMD) in `src/core/rvk/submission_reader.{hpp,cpp}`: copies the guest DMA buffer through its `Platform` once and decodes the `SubmissionDescriptor`, so `Adapter::submit_command_virtual` acts on the batch a process left there instead of ignoring it (`adapter.cpp:1149`, which reads nothing today)
-- [ ] T013 [US1] `Adapter::submit_command_virtual` reads the DMA buffer through `SubmissionReader`, has the binding's `RingSubmitter` store the tail and ring the doorbell, and no longer completes the fence from its own DPC. The adapter maps BAR 0 doorbells (research §5); the guest submits, the driver rings
+- [X] T013 [US1] `Adapter::submit_command_virtual` reads the DMA buffer through `SubmissionReader`, has the binding's `RingSubmitter` store the tail and ring the doorbell, and no longer completes the fence from its own DPC. The adapter maps BAR 0 doorbells (research §5); the guest submits, the driver rings. *As built:* the RVKS travels as the submission's private data, not in the DMA buffer - `DmaBufferVirtualAddress` is a GPU address the driver cannot read, and dxgkrnl copies private data into kernel memory (`DXGCONTEXT::SubmitCommand`, dxgkrnl.sys @1402d7720); `RvkContextTable` binds a context to the process's own aperture allocations at CreateContext and the node holds each packet until the fence page says the host finished it
 - [X] T014 [US1] Write `tests/unit/core/rvk/test_fence_interrupt_route.cpp` first: the vector for context N wakes context N and no other; a vector for a context that has gone is a no-op
-- [X] T015 [US1] `FenceInterruptRoute` (system class, KMD) in `src/core/rvk/fence_interrupt_route.{hpp,cpp}`: gives each context's fence queue (`2+n`, the wire's reserved range, up to `RingSubmitter::doorbell_pages` = 64) an MSI-X vector, and on that interrupt serves the binding whose fence page the device wrote - completing the submission fence dxgkrnl already tracks when the page says the batch finished, so a CPU wait wakes without polling
+- [X] T015 [US1] *Replaced in T013 by `RvkContextTable::serve` and `VirtioGpuDevice::connect_fence_queue`: the fence queues share the granted messages, so the DPC serves every live context.* Originally: `FenceInterruptRoute` (system class, KMD) in `src/core/rvk/fence_interrupt_route.{hpp,cpp}`: gives each context's fence queue (`2+n`, the wire's reserved range, up to `RingSubmitter::doorbell_pages` = 64) an MSI-X vector, and on that interrupt serves the binding whose fence page the device wrote - completing the submission fence dxgkrnl already tracks when the page says the batch finished, so a CPU wait wakes without polling
 
 ### The transport a process holds
 
@@ -95,9 +95,9 @@ description: "Tasks: the guest transport"
 
 **Goal**: a faulted context, a TDR and a lost device each reach the waiting client rather than hanging it.
 
-- [ ] T027 [US3] Write the fault tests first, over `MockKmt` and the loopback rig: a context the device faults makes the next `send_sync` return not-`Ok` and every one after; a fence page marked faulted becomes `DXGK_INTERRUPT_DMA_FAULTED` for that context and no other; a wait on a faulted context wakes rather than sleeping forever
-- [ ] T028 [US3] The binding maps a faulted fence page to `ContextLoss`'s `DMA_FAULTED` for the owning context (`adapter.cpp` already has the path for a changed device), and `KmtTransport` turns a faulted wait into a failed call - the client sees loss, not a hang
-- [ ] T029 [US3] A TDR on the adapter and a device loss reach a waiting client: the wait returns, `send_sync` answers not-`Ok`, and recovery is `CTX_DESTROY` and a fresh setup (research §5). Tested over the loopback rig's reset path
+- [X] T027 [US3] Write the fault tests first, over `MockKmt` and the loopback rig: a context the device faults makes the next `send_sync` return not-`Ok` and every one after; a fence page marked faulted becomes `DXGK_INTERRUPT_DMA_FAULTED` for that context and no other; a wait on a faulted context wakes rather than sleeping forever
+- [X] T028 [US3] The binding maps a faulted fence page to `ContextLoss`'s `DMA_FAULTED` for the owning context (`adapter.cpp` already has the path for a changed device), and `KmtTransport` turns a faulted wait into a failed call - the client sees loss, not a hang
+- [X] T029 [US3] A TDR on the adapter and a device loss reach a waiting client: the wait returns, `send_sync` answers not-`Ok`, and recovery is `CTX_DESTROY` and a fresh setup (research §5). Tested over the loopback rig's reset path
 
 **Checkpoint**: every failure reaches the client. Commit.
 

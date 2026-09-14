@@ -92,7 +92,7 @@ page, carries the same information.
 | `RvkContextBinding` | object (KMD) | the `GuestContext` a dxgkrnl context owns, and its three blobs | Bind one dxgkrnl context to an rvk context |
 | `ContextPages` | object (KMD) | the page lists and kernel views of a context's ring, fence and reply | Describe the memory a context runs on; the sequence publishes the blobs over it, under ids the binding assigns |
 | `SubmissionReader` | object (KMD) | the platform it copies a guest buffer through before trusting it | Turn a submitted DMA buffer into an RVKS the ring submitter can act on |
-| `FenceInterruptRoute` | system (KMD) | which context each fence queue vector serves | Wake the context whose fence page the device just wrote |
+| `RvkContextTable` | system (KMD) | each doorbell slot's binding, the allocations it runs on and the kernel's views of its pages | Hold the adapter's rvk contexts |
 
 Eleven. Five are what a process holds - `GuestConnection`, the shared link
 US1 requires, and the `ClientTransport` (with `KmtTransport`, `TransportRing`,
@@ -117,7 +117,7 @@ src/proto/client_transport.hpp            # the interface the generated client i
 src/guest/transport/                      # GuestConnection, KmtTransport, TransportRing, ReplyReader, TransportFence
 src/guest/kmt/kmt.hpp                      # extended: create-context private data, Lock2-shaped map, CPU fence wait
 src/proto/context/rvk_context_record.*    # the private-data record, both sides
-src/core/rvk/                             # RvkContextBinding, ContextPages, FenceInterruptRoute
+src/core/rvk/                             # RvkContextBinding, ContextPages, RvkContextTable
 src/core/adapter/                         # CreateContext private data, SubmissionReader wired in
 tools/codegen/rvk_codegen/emit/           # the writer-lending change, three APIs
 tests/loopback/                           # the rig gains a Kmt-driven round trip

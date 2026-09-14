@@ -44,8 +44,8 @@ Three words are used throughout with one meaning each:
 | `RvkContextRecord` | object | shared | `src/proto/context/rvk_context_record.hpp` |
 | `RvkContextBinding` | object | miniport | `src/core/rvk/rvk_context_binding.hpp` |
 | `ContextPages` | object | miniport | `src/core/rvk/context_pages.hpp` |
-| `SubmissionReader` | object | miniport | `src/core/adapter/submission_reader.hpp` |
-| `FenceInterruptRoute` | system | miniport | `src/core/rvk/fence_interrupt_route.hpp` |
+| `SubmissionReader` | object | miniport | `src/core/rvk/submission_reader.hpp` |
+| `RvkContextTable` | system | miniport | `src/core/rvk/rvk_context_table.hpp` |
 
 `src/proto/client_transport.hpp` is not a proposal: the committed generated
 client already includes it and names `::av::ClientTransport`
@@ -291,20 +291,34 @@ fence_id, 16 begin, 24 end; `src/proto/submission/submission_descriptor.hpp`)
 and hands the `GuestContext` a validated descriptor; a buffer that does not
 decode faults the context rather than being trusted.
 
-## `FenceInterruptRoute` (system, miniport side)
+## `RvkContextTable` (system, miniport side)
 
-Wakes the context whose fence page the device just wrote. One per adapter.
+The adapter's rvk contexts. One per adapter. It replaced `FenceInterruptRoute`
+when T013 was built: with the fence queues sharing the granted MSI-X messages,
+one vector no longer names one context, and the DPC serving every live context
+- a page unchanged since the last serve is a no-op - is what wakes a waiter.
 
 | State | Type | Meaning |
 |---|---|---|
-| `bindings_` | `RvkContextBinding *[fence_queues]` | which context each fence-queue vector serves, or null |
+| `bindings_` | `ObjectStorage<RvkContextBinding>[64]` | the binding in each doorbell slot |
+| `contexts_` | `void *[64]` | the dxgkrnl context holding each slot, or null |
+| `uses_` | `const Allocation *[64][3]` | the ring, fence page and reply slot each context runs on |
+| `ring_views_`, `fence_views_` | `uint8_t *[64]` | the kernel's own mapping of the ring header page and fence page |
+| `live_` | `bool[64]` | whether submissions and the DPC may reach the slot |
+| `request_` | `uint8_t[0x9000]` | the one request buffer lent to whichever binding is set up or torn down |
 
-Constructed with the adapter, destroyed with it. When the device interrupts on a
-context's fence queue (`docs/protocol.md`, "Fence queues and interrupts"), the
-ISR path looks the vector up in `bindings_` and schedules that context's
-`serve`. An entry is registered when a binding is set up and cleared when it
-tears down. The read runs at the ISR's IRQL and the `serve` it schedules at
-`DISPATCH`; neither allocates or blocks (Principle VII).
+`bind` runs inside the creating process's `CreateContext`: the record's handles
+resolve through `DxgkCbAcquireHandleData` only there. It refuses an allocation
+of the wrong kind, a ring too small for its order, pages VidMm has not all
+mapped into the aperture, or memory another context already runs on; maps the
+two pages the driver reads with `Platform::map_frame`; connects the doorbell's
+fence queue; and sets the host context up. `submit` reads the submission's
+private data as an RVKS (dxgkrnl copies it into kernel memory,
+`DXGCONTEXT::SubmitCommand` @1402d7720) and publishes it; the node holds the
+packet until `serve` reads the fence page. A faulted context's waiting packets
+are dropped and its loss reported as `DMA_FAULTED`. Freeing an allocation a
+context runs on unbinds that context first, so the device never writes pages
+that are no longer the process's.
 
 ---
 
@@ -320,8 +334,8 @@ Process (user mode)
 
 Miniport (kernel)
   Adapter
-  ├── FenceInterruptRoute     vector -> binding, one adapter-wide service
-  └── RvkContextBinding[]      one per dxgkrnl virtual context
+  └── RvkContextTable          the adapter's contexts, one slot per doorbell
+        └── RvkContextBinding  one per dxgkrnl virtual context that asked with a record
         └── GuestContext       (034) runs on ContextPages; owns the sequence,
                                RingSubmitter, FenceObserver, FenceProgress
 ```
@@ -437,7 +451,7 @@ maximum. Two of the four below already exist in the tree.
 | Constant | Value | Where | Reasoning |
 |---|---|---|---|
 | `TransportRing` / `RvkContextRecord` ring order | **12..24** | **found, not proposed** | `RingHeader::lowest_order`/`highest_order` (`ring_header.hpp:13-14`), `ContextSetup` (`context_setup.hpp`), and the capset's `min_ring_order`/`max_ring_order` all agree; the ring data area is 4 KiB..16 MiB |
-| `FenceInterruptRoute` fence-queue vectors | **64** | **found, not proposed** | `RingSubmitter::doorbell_pages` is 64 (`ring_submitter.hpp:26`); the device has 66 virtqueues - control, cursor, and one fence queue per doorbell page, `queue 2 + n` for doorbell `n` (`docs/protocol.md`, Fence queues) - so there are exactly 64 fence queues, one per possible context |
+| `RvkContextTable` slots, one per fence queue | **64** | **found, not proposed** | `RingSubmitter::doorbell_pages` is 64 (`ring_submitter.hpp:26`); the device has 66 virtqueues - control, cursor, and one fence queue per doorbell page, `queue 2 + n` for doorbell `n` (`docs/protocol.md`, Fence queues) - so there are exactly 64 fence queues, one per possible context |
 | `TransportFence` max outstanding submissions | **64** | proposed here, settled in tasks | A full-ring `send` waits on the fence of the oldest unconsumed record (edge case), so the transport must map a ring byte-offset back to a fence id; 64 in-flight batches is past any real client's submission depth, and a `(fence_id, end)` pair is 16 bytes, so the table is 1 KiB |
 | `ReplyReader` reply capacity floor / ceiling | **64 B / 16 MiB** | **found, not proposed** | the wire's own: a reply blob *"must hold at least 64 bytes"* and the slot holds *"at most 16 MiB"* of answer (`docs/protocol.md`, Capset/context and Reply slot; `RingHeader::highest_order` is 24) |
 
