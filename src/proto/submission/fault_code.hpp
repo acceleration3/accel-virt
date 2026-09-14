@@ -13,7 +13,7 @@ enum class FaultCode : uint32_t {
     ring_tail = 2u,         /* backwards, or more than the ring ahead of head */
     batch_header = 3u,      /* malformed, or cannot fit the ring */
     batch_order = 4u,       /* a fence not greater than the last */
-    command_framing = 5u,   /* commands framed wrong, or an answer asked for with no reply slot */
+    command_framing = 5u,   /* commands framed wrong, a NOP with a body, or an answer asked for with no reply slot */
     undecodable = 6u,       /* a payload the executor cannot decode */
     device_lost = 7u,       /* the host API lost its device */
     no_executor = 8u,       /* the context's executor could not be created */

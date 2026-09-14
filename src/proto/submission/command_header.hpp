@@ -18,6 +18,10 @@ public:
     static constexpr uint32_t max_size       = 0x00FFFFFFu;
     /* The producer waits for this command's answer. */
     static constexpr uint8_t  generate_reply = 1u;
+    static constexpr uint16_t transport_api  = 0u;
+    /* API 0's only command: the device answers it itself, so a guest can time
+     * a round trip through the transport alone (feature 044). */
+    static constexpr uint32_t nop_id         = 0x00000001u;
 
     CommandHeader();
     CommandHeader(uint32_t id, uint32_t size, uint8_t flags);

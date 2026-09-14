@@ -1,6 +1,7 @@
 /* Runs one context's batches on its worker (docs/protocol.md): each batch's
  * payload copied once from the ring, walked command by command, the context's
- * API's commands run through its executor in order and the rest skipped, and
+ * API's commands run through its executor in order, the transport's own
+ * answered by the device, and the rest skipped, and
  * the answer of the last command that asked for one written to the reply slot
  * before the batch completes. Every command run moves the context's progress,
  * so a long batch reads as busy rather than hung. */

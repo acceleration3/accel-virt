@@ -3,6 +3,7 @@
 #include "device/execution/batch_staging.hpp"
 #include "device/execution/command_stream.hpp"
 #include "device/execution/context_executor.hpp"
+#include "device/execution/transport_command.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/host/host.hpp"
 #include "device/ring/ring_window.hpp"
@@ -95,21 +96,26 @@ Status BatchExecutor::run_command(const CommandHeader &header, const uint8_t *pa
         fault_ = FaultCode::command_framing;
         return Status::malformed;
     }
-    if (header.api() != executor_.command_api()) {
+    const bool transport = header.api() == CommandHeader::transport_api;
+    if (!transport && header.api() != executor_.command_api()) {
         skipped_++;
         return Status::ok;
     }
     const bool   replying = header.generates_reply();
     size_t       produced = 0u;
-    const Status status = executor_.execute(header.id(), payload, header.size() - CommandHeader::encoded_size,
-                                            replying ? staging_.reply() : nullptr,
-                                            replying ? staging_.reply_capacity() : 0u, produced);
+    const Status status =
+        transport ? TransportCommand(header).run()
+                  : executor_.execute(header.id(), payload, header.size() - CommandHeader::encoded_size,
+                                      replying ? staging_.reply() : nullptr,
+                                      replying ? staging_.reply_capacity() : 0u, produced);
     if (status == Status::not_found) {
         skipped_++;
         return Status::ok;
     }
+    /* A transport command the device refuses was framed wrong; nothing was
+     * handed to a library that could have failed to decode it. */
     if (status != Status::ok) {
-        fault_ = fault_for(status);
+        fault_ = transport ? FaultCode::command_framing : fault_for(status);
         return status;
     }
     fences_.heartbeat();

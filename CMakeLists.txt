@@ -205,7 +205,7 @@ if(AV_QEMU)
   add_test(NAME qemu_virtio_gpu
            COMMAND python3 -B -m unittest discover -s ${CMAKE_SOURCE_DIR}/tests/qemu -p "test_*.py")
   set_tests_properties(qemu_virtio_gpu PROPERTIES
-    ENVIRONMENT "AV_QEMU_BUILD=${CMAKE_BINARY_DIR}/qemu;AV_GPU_REQUEST_BYTES=$<TARGET_FILE:gpu_request_bytes>;AV_EXECUTOR=$<TARGET_FILE:rvk_echo_executor>")
+    ENVIRONMENT "AV_QEMU_BUILD=${CMAKE_BINARY_DIR}/qemu;AV_GPU_REQUEST_BYTES=$<TARGET_FILE:gpu_request_bytes>;AV_EXECUTOR=$<TARGET_FILE:rvk_echo_executor>;AV_REAL_EXECUTOR=$<TARGET_FILE:rvk_executor>")
   return()
 endif()
 

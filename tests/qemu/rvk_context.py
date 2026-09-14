@@ -6,6 +6,8 @@ import time
 
 # The echo executor (tests/qemu/echo_executor.cpp) the qemu_virtio_gpu ctest builds.
 EXECUTOR = os.environ.get("AV_EXECUTOR", "")
+# This project's executor library, the one that answers on the host's GPU.
+REAL_EXECUTOR = os.environ.get("AV_REAL_EXECUTOR", "")
 
 CMD_RESOURCE_UNREF = 0x0102
 CMD_RESOURCE_CREATE_BLOB = 0x010C
@@ -36,9 +38,9 @@ TAIL_OFFSET = 8
 HEAD_OFFSET = 16
 
 
-def rvk_device(options=""):
-    """virtio-gpu-rvk-pci on the first host GPU, executing with the echo executor."""
-    return f"virtio-gpu-rvk-pci,host-gpu=auto,executor={EXECUTOR}{options}"
+def rvk_device(options="", executor=EXECUTOR):
+    """virtio-gpu-rvk-pci on the first host GPU, executing with the echo executor unless told another."""
+    return f"virtio-gpu-rvk-pci,host-gpu=auto,executor={executor}{options}"
 
 
 def header(command, context=0):
@@ -88,6 +90,7 @@ def ring_header(order, tail=0, head=0):
     return struct.pack("<IB3xQQQ", RING_MAGIC, order, tail, head, 0)
 
 
+NOP = 0x00000001
 ECHO = 0x10001
 UNDECODABLE = 0x10002
 LOSE_DEVICE = 0x10003

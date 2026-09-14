@@ -1,6 +1,7 @@
 /* One context's batches run through its executor on its worker: in order,
- * unknown commands skipped, the last answer asked for written to the reply
- * slot, and every stream no producer could frame refused. */
+ * unknown commands skipped, the transport's NOP answered without it, the last
+ * answer asked for written to the reply slot, and every stream no producer
+ * could frame refused. */
 #include "core/support/status.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/execution/batch_executor.hpp"
@@ -216,6 +217,92 @@ TEST(batch_executor_run, the_last_answer_asked_for_lands_in_the_reply_slot)
   CHECK_EQ(fixture.reply()[32], 0x22u);
   CHECK_EQ(fixture.reply()[37], 0x22u);
   CHECK_EQ(fixture.reply()[38], 0xEEu); }
+
+TEST(batch_executor_run, a_nop_asking_for_an_answer_gets_an_empty_one_and_never_reaches_the_executor)
+{ Fixture fixture;
+  Commands commands;
+  commands.add(CommandHeader::nop_id, 0u, CommandHeader::generate_reply);
+  CHECK_STATUS(fixture.run(5u, commands), Status::ok);
+  CHECK_EQ(fixture.ops().created(), 1u);
+  CHECK_EQ(fixture.ops().executed(), 0u);
+  const ReplyHeader header = fixture.reply_header();
+  CHECK_EQ(fixture.reply()[0], 0x52u);   /* "RVKY" */
+  CHECK(!header.too_large());
+  CHECK_EQ(header.fence_id(), 5u);
+  CHECK_EQ(header.size(), 0u);
+  CHECK_EQ(header.required(), 0u);
+  CHECK_EQ(fixture.reply()[32], 0xEEu);
+  CHECK_EQ(fixture.batches().commands(), 1u);
+  CHECK_EQ(fixture.batches().skipped(), 0u);
+  CHECK_EQ(fixture.progress(), 1u);
+  CHECK(fixture.batches().fault() == FaultCode::none); }
+
+TEST(batch_executor_run, a_nop_not_asking_for_an_answer_writes_nothing)
+{ Fixture fixture;
+  Commands commands;
+  commands.add(CommandHeader::nop_id, 0u).add(CommandHeader::nop_id, 0u);
+  CHECK_STATUS(fixture.run(1u, commands), Status::ok);
+  CHECK_EQ(fixture.ops().executed(), 0u);
+  CHECK_EQ(fixture.batches().commands(), 2u);
+  CHECK_EQ(fixture.reply()[0], 0xEEu);
+  Fixture slotless(0u);
+  CHECK_STATUS(slotless.run(1u, commands), Status::ok);
+  CHECK_EQ(slotless.batches().commands(), 2u); }
+
+TEST(batch_executor_run, a_nop_is_the_last_answer_only_when_it_comes_last)
+{ Fixture fixture;
+  Commands nop_last;
+  nop_last.add(0x10001u, 6u, CommandHeader::generate_reply, 0x22u).add(CommandHeader::nop_id, 0u,
+                                                                     CommandHeader::generate_reply);
+  CHECK_STATUS(fixture.run(1u, nop_last), Status::ok);
+  CHECK_EQ(fixture.reply_header().fence_id(), 1u);
+  CHECK_EQ(fixture.reply_header().size(), 0u);
+  Commands nop_first;
+  nop_first.add(CommandHeader::nop_id, 0u, CommandHeader::generate_reply)
+           .add(0x10001u, 6u, CommandHeader::generate_reply, 0x33u);
+  CHECK_STATUS(fixture.run(2u, nop_first), Status::ok);
+  CHECK_EQ(fixture.reply_header().fence_id(), 2u);
+  CHECK_EQ(fixture.reply_header().size(), 6u);
+  CHECK_EQ(fixture.reply()[32], 0x33u);
+  CHECK_EQ(fixture.ops().executed(), 2u); }
+
+/* A body is framing the contract forbids, not a payload an executor failed to
+ * decode, so the guest is told command_framing whichever flag it set. */
+TEST(batch_executor_run, a_nop_with_a_body_faults_the_context_as_misframed)
+{ const std::uint32_t bodies[] = {1u, 7u, 8u, 4000u};
+  const std::uint8_t  flags[] = {0u, CommandHeader::generate_reply};
+  for (const std::uint32_t body : bodies) {
+      for (const std::uint8_t flag : flags) {
+          Fixture fixture;
+          Commands commands;
+          commands.add(0x10001u, 2u).add(CommandHeader::nop_id, body, flag).add(0x10005u, 0u, flag);
+          CHECK_STATUS(fixture.run(1u, commands), Status::malformed);
+          CHECK(fixture.batches().fault() == FaultCode::command_framing);
+          CHECK_EQ(fixture.ops().executed(), 1u);
+          CHECK_EQ(fixture.batches().commands(), 1u);
+          CHECK_EQ(fixture.progress(), 1u);
+          CHECK_EQ(fixture.reply()[0], 0xEEu);
+      }
+  }
+  Fixture slotless(0u);
+  Commands asking;
+  asking.add(CommandHeader::nop_id, 0u, CommandHeader::generate_reply);
+  CHECK_STATUS(slotless.run(1u, asking), Status::malformed);
+  CHECK(slotless.batches().fault() == FaultCode::command_framing); }
+
+TEST(batch_executor_run, another_transport_id_is_skipped_like_one_the_executor_does_not_know)
+{ Fixture fixture;
+  Commands commands;
+  commands.add(0x00000000u, 0u, CommandHeader::generate_reply)
+          .add(0x00000002u, 0u, CommandHeader::generate_reply)
+          .add(0x0000FFFFu, 12u, CommandHeader::generate_reply);
+  CHECK_STATUS(fixture.run(1u, commands), Status::ok);
+  CHECK_EQ(fixture.ops().executed(), 0u);
+  CHECK_EQ(fixture.batches().skipped(), 3u);
+  CHECK_EQ(fixture.batches().commands(), 0u);
+  CHECK_EQ(fixture.progress(), 0u);
+  CHECK_EQ(fixture.reply()[0], 0xEEu);
+  CHECK(fixture.batches().fault() == FaultCode::none); }
 
 TEST(batch_executor_run, an_answer_larger_than_the_slot_says_what_it_needed)
 { Fixture fixture;

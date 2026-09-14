@@ -1,7 +1,8 @@
 """Execution against the real device: a bound context's batches run command by
 command through the executor library the device loaded - here the echo
 executor (echo_executor.cpp) - and the last answer asked for lands in the
-context's reply slot before head passes the batch.
+context's reply slot before head passes the batch. The transport's NOP is
+answered by the device, under the echo executor and this project's own.
 
 Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
 AV_QEMU_BUILD and AV_EXECUTOR.
@@ -13,9 +14,9 @@ import unittest
 
 import virtio_qtest
 from rvk_context import (COUNT, DOORBELL_SHM_ID, ECHO, EXECUTOR, FEATURE_CONTEXT_INIT, GENERATE_REPLY, LOSE_DEVICE,
-                         PAGE, RESP_ERR_INVALID_PARAMETER, RESP_ERR_INVALID_RESOURCE_ID, RESP_OK_NODATA,
-                         UNDECODABLE, GuestRing, command, create_context, guest_blob, host_blob, response_type,
-                         rvk_device, setup, submit)
+                         NOP, PAGE, REAL_EXECUTOR, RESP_ERR_INVALID_PARAMETER, RESP_ERR_INVALID_RESOURCE_ID,
+                         RESP_OK_NODATA, UNDECODABLE, GuestRing, command, create_context, guest_blob, host_blob,
+                         response_type, rvk_device, setup, submit)
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
 WANTED = virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID | FEATURE_CONTEXT_INIT
@@ -101,6 +102,29 @@ class VirtioGpuExecution(unittest.TestCase):
         self.assertTrue(context.run(command(COUNT, b"", GENERATE_REPLY)))
         self.assertEqual(struct.unpack("<QI", context.answer()[1]), (3, 1))
 
+    def test_the_device_answers_a_nop_itself_with_an_empty_reply(self):
+        gpu = self.open()
+        context = Context(self, gpu, 1, 1)
+        self.assertTrue(context.run(command(NOP, b"", GENERATE_REPLY)))
+        self.assertEqual(context.answer(), ((STATUS_OK, 1, 0, 0), b""))
+        self.assertEqual(gpu.qtest.read_bytes(context.reply + 32, 1), b"\xEE")
+        self.assertTrue(context.run(command(NOP), command(NOP), command(COUNT, b"", GENERATE_REPLY)))
+        (status, fence, size, _), answer = context.answer()
+        self.assertEqual((status, fence, size), (STATUS_OK, 2, 12))
+        self.assertEqual(struct.unpack("<QI", answer), (0, 1))   # no NOP ever reached the executor
+        self.assertTrue(context.run(command(NOP)))
+        self.assertEqual(context.answer()[0][1], 2)   # asking for nothing leaves the slot as it was
+
+    @unittest.skipUnless(REAL_EXECUTOR, "needs this project's executor library")
+    def test_a_nop_is_answered_the_same_under_the_real_executor(self):
+        gpu = self.open(rvk_device(executor=REAL_EXECUTOR))
+        context = Context(self, gpu, 1, 1)
+        self.assertTrue(context.run(command(0x0000FFFF, b"skipped"), command(NOP, b"", GENERATE_REPLY)))
+        self.assertEqual(context.answer(), ((STATUS_OK, 1, 0, 0), b""))
+        self.assertTrue(context.run(command(NOP, b"", GENERATE_REPLY)))
+        self.assertEqual(context.answer(), ((STATUS_OK, 2, 0, 0), b""))
+        self.assertNotIn("context faulted", gpu.qtest.printed())
+
     def test_an_answer_larger_than_the_slot_says_what_it_needed(self):
         gpu = self.open()
         context = Context(self, gpu, 1, 3, reply_bytes=64)
@@ -116,6 +140,8 @@ class VirtioGpuExecution(unittest.TestCase):
             "device lost": command(LOSE_DEVICE),
             "framing": command(ECHO) + b"\x01\x00\x01",
             "an answer with no reply slot": command(ECHO, b"", GENERATE_REPLY),
+            "a nop with a body": command(NOP, b"\x00"),
+            "a nop with a whole word of body": command(NOP, bytes(8)),
         }
         for name, commands in batches.items():
             with self.subTest(name):

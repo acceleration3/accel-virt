@@ -147,6 +147,31 @@ TEST(loopback_context, sets_up_runs_batches_with_a_reply_and_tears_down)
   CHECK_EQ(rig.device().device().blobs(), 0u);
   CHECK(rig.context(0u).invariants_hold()); }
 
+TEST(loopback_context, a_nop_round_trips_with_an_empty_answer_the_executor_never_sees)
+{ LoopbackRig rig;
+  CHECK(rig.read_capset());
+  CHECK(rig.establish(0u));
+  GuestRing ring(rig.context(0u).ring(), LoopbackRig::ring_order);
+  std::memset(rig.memory(0u).reply(), 0xEE, ReplyHeader::encoded_size + 1u);
+  std::uint8_t payload[CommandHeader::encoded_size] = {};
+  CHECK_STATUS(CommandHeader(CommandHeader::nop_id, sizeof payload, CommandHeader::generate_reply)
+                   .encode(payload, sizeof payload),
+               Status::ok);
+  ring.write_batch(1u, payload, sizeof payload);
+  CHECK_STATUS(rig.submit(0u, 1u, 0u, ring.tail()), Status::ok);
+  CHECK(rig.driver().serve_until(rig.context(0u), rig.line(0u), 1u));
+  CHECK_EQ(rig.context(0u).completed(), 1u);
+  CHECK(!rig.context(0u).faulted());
+  CHECK_EQ(rig.device().executor().executed(), 0u);
+  ReplyHeader reply;
+  CHECK_STATUS(reply.decode(rig.memory(0u).reply(), ReplyHeader::encoded_size), Status::ok);
+  CHECK_EQ(reply.fence_id(), 1u);
+  CHECK_EQ(reply.size(), 0u);
+  CHECK(!reply.too_large());
+  CHECK_EQ(rig.memory(0u).reply()[ReplyHeader::encoded_size], 0xEEu);
+  CHECK(rig.retire(0u));
+  CHECK(rig.context(0u).invariants_hold()); }
+
 TEST(loopback_backpressure, a_full_ring_refuses_until_the_device_moves_its_head)
 { LoopbackRig rig;
   CHECK(rig.read_capset());

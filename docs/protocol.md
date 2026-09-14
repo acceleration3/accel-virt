@@ -195,14 +195,29 @@ that the ids in those files stay inside the range this table gives their API.
 Vulkan owns `0x1____`, OpenCL `0x2____`, OpenGL `0x3____`.
 
 The device copies the payload once, then walks it: a command of the
-context's sub-API runs through the context's executor; a transport command
-(none is defined yet), another API's, or one the executor does not know is
-skipped. The answer of the last command in the batch whose *generate reply*
-flag is set is written to the reply slot before head passes the batch, so a
-producer waiting for head reads a finished answer. A command framed wrong,
-trailing bytes too short for a header, a reply asked for with no reply slot,
-a payload the executor cannot decode, or a lost host device stops the context
-(see Consumption) and the batch does not complete.
+context's sub-API runs through the context's executor; a transport command the
+table below defines runs in the device itself; another API's command, any other
+transport id, or one the executor does not know is skipped. The answer of the
+last command in the batch whose *generate reply* flag is set is written to the
+reply slot before head passes the batch, so a producer waiting for head reads a
+finished answer. A command framed wrong, trailing bytes too short for a header,
+a reply asked for with no reply slot, a transport command carrying a body it
+does not have, a payload the executor cannot decode, or a lost host device stops
+the context (see Consumption) and the batch does not complete; the first four
+are fault code 5, command framing.
+
+### Transport commands (API 0)
+
+The device answers these itself and never hands one to the executor library,
+whichever library is loaded, so they behave the same under every executor.
+
+| Id | Command | Body | Answer |
+|--:|---|---|---|
+| `0x00000001` | NOP | none | empty: with *generate reply*, a reply of size 0 for the batch's fence |
+
+A NOP does nothing but complete, which makes it the round trip a guest times to
+measure the transport alone rather than a backend (feature 044). It moves the
+context's progress like any command run.
 
 ### Reply slot (device -> guest)
 
@@ -557,7 +572,7 @@ by the next write.
 | 2 | ring tail moved backwards, or more than the ring ahead of head |
 | 3 | batch header malformed, or the batch cannot fit the ring |
 | 4 | batch fence not greater than the last |
-| 5 | commands framed wrong, or an answer asked for with no reply slot |
+| 5 | commands framed wrong, a transport command with a body, or an answer asked for with no reply slot |
 | 6 | a payload the executor cannot decode |
 | 7 | the host device was lost |
 | 8 | the context's executor could not be created |
