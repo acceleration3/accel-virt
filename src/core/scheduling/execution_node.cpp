@@ -163,6 +163,31 @@ uint32_t ExecutionNode::abort_pending(void *&owner)
     return executing;
 }
 
+uint32_t ExecutionNode::abort_owner(const void *owner)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::abort_owner");
+    SpinLockGuard lock(lock_);
+    InvariantScope<ExecutionNode> guard(platform_, *this, "abort_owner");
+    uint32_t first = 0u;
+    uint32_t kept = 0u;
+    for (uint32_t index = 0u; index < count_; index++) {
+        const uint32_t from = (head_ + index) % capacity;
+        const bool     dropped = owner != nullptr && owners_[from] == owner && awaited_[from] != 0u;
+        if (dropped && first == 0u) first = pending_[from];
+        if (dropped) continue;
+        const uint32_t to = (head_ + kept) % capacity;
+        pending_[to] = pending_[from];
+        owners_[to] = owners_[from];
+        awaited_[to] = awaited_[from];
+        kept++;
+    }
+    count_ = kept;
+    /* The queue still ends at the last submission it holds; what dxgkrnl
+     * submits next is above the dropped ones anyway. */
+    if (count_ != 0u) last_submitted_ = pending_[(head_ + count_ - 1u) % capacity];
+    return first;
+}
+
 uint32_t ExecutionNode::pending()
 {
     platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::pending");

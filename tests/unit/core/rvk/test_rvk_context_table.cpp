@@ -15,6 +15,7 @@
 #include "core/memory/memory_segments.hpp"
 #include "core/miniport/interrupt_notification.hpp"
 #include "core/rvk/rvk_context_table.hpp"
+#include "core/scheduling/context_loss.hpp"
 #include "core/scheduling/execution_node.hpp"
 #include "core/support/status.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
@@ -206,7 +207,7 @@ public:
           segments_(mapped_.platform(), aperture_, host_visible_),
           allocations_(mapped_.platform(), aperture_, segments_),
           table_(mapped_.platform(), mapped_.interface(), allocations_),
-          notification_(mapped_.platform(), mapped_.interface()), node_(mapped_.platform())
+          notification_(mapped_.platform(), mapped_.interface()), node_(mapped_.platform()), losses_(mapped_.platform())
     {
         mapped_.function().add_doorbell_region();
         CHECK_STATUS(mapped_.map(), Status::ok);
@@ -247,12 +248,13 @@ public:
     /* What the host writes when it finishes the batches through `completed`. */
     void complete_through(std::uint64_t completed, std::uint32_t fault = 0u)
     {
-        static_cast<void>(FencePage(completed, completed, fault).encode(fence_->bytes(), 32u));
+        const FencePage written = fault == 0u ? FencePage(completed, completed) : FencePage(completed, completed, fault);
+        static_cast<void>(written.encode(fence_->bytes(), 32u));
     }
     void serve()
     {
         mapped_.platform().set_irql(Irql::dispatch);
-        table_.serve(node_);
+        table_.serve(node_, losses_);
         CHECK_STATUS(node_.complete(notification_), Status::ok);
         mapped_.platform().set_irql(Irql::passive);
     }
@@ -264,6 +266,7 @@ public:
     av::AllocationTable      &allocations() { return allocations_; }
     RvkContextTable          &table() { return table_; }
     ExecutionNode            &node() { return node_; }
+    av::ContextLoss          &losses() { return losses_; }
     ProcessAllocation        &ring() { return *ring_; }
     ProcessAllocation        &fence() { return *fence_; }
     ProcessAllocation        &reply() { return *reply_; }
@@ -278,6 +281,7 @@ private:
     RvkContextTable                         table_;
     av::InterruptNotification               notification_;
     ExecutionNode                           node_;
+    av::ContextLoss                         losses_;
     std::optional<av::VirtioGpuDevice>      device_;
     std::optional<ProcessAllocation>        ring_;
     std::optional<ProcessAllocation>        fence_;
@@ -554,7 +558,7 @@ TEST(rvk_context_table, runs_at_the_levels_it_declares)
   fixture.platform().set_irql(Irql::isr);
   std::uint64_t awaited = 0u;
   static_cast<void>(fixture.table().submit(&first_context, nullptr, 0u, awaited));
-  fixture.table().serve(fixture.node());
+  fixture.table().serve(fixture.node(), fixture.losses());
   fixture.platform().set_irql(Irql::passive);
   while (fixture.platform().claim(Violation::irql_ceiling)) {}
   while (fixture.platform().claim(Violation::blocking_at_dispatch)) {}
@@ -656,3 +660,41 @@ TEST(rvk_context_table, destruction_releases_what_is_still_bound)
                  Status::ok);
     CHECK_EQ(fixture.platform().mapped_frames(), 2u); }
   CHECK_EQ(fixture.platform().mapped_frames(), 0u); }
+
+/* FR-006: a batch the host faulted finishes nothing, and the owner is told its
+ * context is lost against the first submission it had waiting - once, and never
+ * about a healthy neighbour. */
+TEST(rvk_context_table_serve, a_fault_the_host_writes_loses_that_context_s_waiting_work)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  std::uint64_t awaited = 0u;
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::ok);
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(2u, 32u, 64u), awaited), Status::ok);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.node().submit(10u, &first_context, 1u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(11u, &first_context, 2u), Status::ok);
+  fixture.platform().set_irql(Irql::passive);
+  fixture.complete_through(1u, 6u);   /* the first completed, then the context faulted with code 6 */
+  fixture.serve();
+  CHECK_EQ(fixture.node().current_fence(), 10u);
+  CHECK_EQ(fixture.node().pending(), 0u);
+  CHECK_EQ(fixture.losses().pending(), 1u);
+  fixture.serve();
+  CHECK_EQ(fixture.losses().pending(), 1u);   /* nothing more was waiting */
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+TEST(rvk_context_table_serve, a_page_no_device_could_write_loses_the_context_too)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  std::uint64_t awaited = 0u;
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::ok);
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.node().submit(3u, &first_context, 1u), Status::ok);
+  fixture.platform().set_irql(Irql::passive);
+  fixture.complete_through(9u);   /* completes a fence never submitted */
+  fixture.serve();
+  CHECK_EQ(fixture.node().pending(), 0u);
+  CHECK_EQ(fixture.losses().pending(), 1u);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }

@@ -323,7 +323,8 @@ void Adapter::dpc_routine()
         platform_.log("rvkgpu: control queue harvest failed in the DPC");
     if (harvest && device_.object().harvest_cursor(completed) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: cursor queue harvest failed in the DPC");
-    rvk_contexts_.serve(node_);
+    rvk_contexts_.serve(node_, losses_);
+    if (losses_.pending() != 0u) report_losses("rvkgpu: rvk context loss");
     if (node_.complete(notification_) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: a completion was refused in the DPC");
     if (hw_submissions_.complete(notification_) != Status::ok && budget_.allows())

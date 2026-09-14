@@ -37,6 +37,11 @@ public:
     [[nodiscard]] Status submit(uint32_t fence, void *owner, uint64_t awaited);
     /* `owner`'s host has completed every fence up to `completed`. */
     void                 finish(const void *owner, uint64_t completed);
+    /* Drops every packet `owner` queued that its host has not finished,
+     * leaving the others in order, and answers the first one dropped; 0 when
+     * there was none. A context that faulted on the host will finish nothing
+     * more it submitted (feature 043). */
+    uint32_t             abort_owner(const void *owner);
     /* The latest request wins; reported at the next completion. */
     [[nodiscard]] Status preempt(uint32_t fence);
     /* Completes and reports every queued fence, then any preemption; stops at

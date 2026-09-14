@@ -6,6 +6,7 @@
 #include "core/platform/register_window.hpp"
 #include "core/platform/spin_lock_guard.hpp"
 #include "core/rvk/context_pages.hpp"
+#include "core/scheduling/context_loss.hpp"
 #include "core/scheduling/execution_node.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/support/nt_status.hpp"
@@ -176,7 +177,7 @@ Status RvkContextTable::submit(void *context, const uint8_t *private_data, size_
 
 /* A page that fails its context leaves it serving nothing more; what it
  * completed before that is still finished. */
-void RvkContextTable::serve(ExecutionNode &node)
+void RvkContextTable::serve(ExecutionNode &node, ContextLoss &losses)
 {
     platform_.require_irql_at_most(Irql::dispatch, "RvkContextTable::serve");
     SpinLockGuard locked(lock_);
@@ -185,6 +186,10 @@ void RvkContextTable::serve(ExecutionNode &node)
         RvkContextBinding &binding = bindings_[slot].object();
         static_cast<void>(binding.serve());
         node.finish(contexts_[slot], binding.completed());
+        const bool lying = binding.state() == GuestContext::State::failed;
+        if (!lying && !binding.faulted()) continue;
+        const uint32_t first = node.abort_owner(contexts_[slot]);
+        if (first != 0u) losses.lose(contexts_[slot], first, lying ? Status::malformed : Status::invalid_state);
     }
 }
 

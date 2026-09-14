@@ -3057,6 +3057,10 @@ public:
     {
         static_cast<void>(av::FencePage(completed, completed).encode(fence_.bytes(), 32u));
     }
+    void host_faults(std::uint64_t completed, std::uint32_t code)
+    {
+        static_cast<void>(av::FencePage(completed, completed, code).encode(fence_.bytes(), 32u));
+    }
     TransportAllocation &ring() { return ring_; }
     void                *device() const { return device_.hDevice; }
     std::uint8_t        *record_bytes() { return record_bytes_; }
@@ -3198,3 +3202,24 @@ TEST(adapter_start_device, doorbell_pages_that_cannot_be_mapped_fail_the_start)
   CHECK_EQ(fixture.start(), no_space);
   CHECK_EQ(fixture.dxgkrnl().live_mappings(), 0u);
   CHECK(fixture.adapter().invariants_hold()); }
+
+/* FR-006: a context the host faulted reaches dxgkrnl as DMA_FAULTED against the
+ * submission it had waiting, so the process waiting on it wakes to a loss. */
+TEST(adapter_rvk_context, a_host_fault_is_reported_against_the_waiting_submission)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  CHECK_EQ(process.submit(context.hContext, 7u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  process.host_faults(0u, 6u);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before).InterruptType, 4);   /* DMA_FAULTED */
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before).FenceId, 7u);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }

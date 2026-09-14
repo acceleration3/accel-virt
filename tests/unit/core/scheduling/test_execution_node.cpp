@@ -148,6 +148,37 @@ TEST(execution_node_finish, only_the_owner_s_packets_are_finished)
   CHECK(aborted_owner == &owner);
   CHECK(fixture.node().invariants_hold()); }
 
+/* A context that faulted on the host finishes nothing: its packets leave the
+ * node, the others keep their order and still complete, and the first dropped
+ * one is what dxgkrnl is told faulted. */
+TEST(execution_node_abort_owner, drops_one_owner_s_packets_and_names_the_first)
+{ Fixture fixture;
+  int faulted = 0;
+  int healthy = 0;
+  CHECK_STATUS(fixture.node().submit(1u, &healthy, 1u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(2u, &faulted, 1u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(3u, &healthy, 2u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(4u, &faulted, 2u), Status::ok);
+  CHECK_EQ(fixture.node().abort_owner(nullptr), 0u);
+  CHECK_EQ(fixture.node().abort_owner(&faulted), 2u);
+  CHECK(fixture.node().invariants_hold());
+  CHECK_EQ(fixture.node().pending(), 2u);
+  CHECK_EQ(fixture.node().last_submitted(), 3u);   /* the tail it still holds */
+  CHECK_EQ(fixture.node().abort_owner(&faulted), 0u);
+  fixture.node().finish(&healthy, 1u);
+  CHECK_EQ(fixture.node().abort_owner(&healthy), 3u);   /* what its host finished stays */
+  CHECK_EQ(fixture.node().pending(), 1u);
+  CHECK_STATUS(fixture.node().submit(5u, &healthy, 3u), Status::ok);
+  fixture.node().finish(&healthy, 3u);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).FenceId, 5u);
+  CHECK_EQ(fixture.node().abort_owner(&healthy), 0u);   /* nothing left of it */
+  CHECK_STATUS(fixture.node().submit(6u, &faulted, 1u), Status::ok);
+  CHECK_EQ(fixture.node().abort_owner(&faulted), 6u);
+  CHECK_EQ(fixture.node().pending(), 0u);
+  CHECK(fixture.node().invariants_hold()); }
+
 TEST(execution_node_complete, a_full_queue_wraps_and_empties)
 { Fixture fixture;
   for (std::uint32_t round = 0u; round < 3u; round++) {

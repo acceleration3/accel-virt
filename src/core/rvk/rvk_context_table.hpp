@@ -26,6 +26,7 @@ namespace av {
 class Allocation;
 class AllocationTable;
 class CapsetInfo;
+class ContextLoss;
 class DxgkrnlInterface;
 class ExecutionNode;
 class GuestPageList;
@@ -66,8 +67,11 @@ public:
      * descriptor of its ring; the binding's refusal otherwise. */
     [[nodiscard]] Status submit(void *context, const uint8_t *private_data, size_t size, uint64_t &awaited);
     /* DISPATCH, from the DPC: reads every live context's fence page and
-     * finishes on `node` what each one's host completed. */
-    void                 serve(ExecutionNode &node);
+     * finishes on `node` what each one's host completed. A context the host
+     * faulted, or whose page no device could write, finishes nothing more:
+     * what it still has queued is dropped and its loss recorded in `losses`
+     * against the first of it, for the DPC to tell dxgkrnl (FR-006). */
+    void                 serve(ExecutionNode &node, ContextLoss &losses);
     /* PASSIVE. The device was reset or destroyed: no context survives on it,
      * so each is let go of and serves nothing until unbound. */
     void                 abandon_all();
