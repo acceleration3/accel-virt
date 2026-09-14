@@ -6,6 +6,7 @@
 #define AV_FAKE_VIRTIO_GPU_FUNCTION_HPP
 
 #include "harness/device/fake_common_config.hpp"
+#include "harness/device/fake_doorbell_pages.hpp"
 #include "harness/device/fake_isr_register.hpp"
 #include "harness/device/fake_register_bytes.hpp"
 #include "harness/device/fake_resource_list.hpp"
@@ -24,6 +25,8 @@ public:
     static constexpr std::uint64_t virtio_bar_address = 0x8000000000ull;
     static constexpr std::uint32_t virtio_bar_length = 0x4000u;
     static constexpr std::uint64_t msix_bar_address  = 0xFEA00000u;
+    static constexpr std::uint64_t doorbell_bar_address = 0xFE000000u;
+    static constexpr std::uint8_t  doorbell_region_id = 0x72u;
     static constexpr std::uint64_t feature_edid         = 1ull << 1u;
     static constexpr std::uint64_t feature_resource_blob = 1ull << 3u;
     static constexpr std::uint64_t feature_context_init = 1ull << 4u;
@@ -43,6 +46,10 @@ public:
     void add_shared_memory_region(std::uint8_t id, std::uint8_t bar, std::uint64_t offset,
                                   std::uint64_t length, std::uint64_t bar_address);
 
+    /* virtio-gpu-rvk-pci's doorbell pages: BAR 0, located by shared memory
+     * capability 0x72, with the 66 virtqueues the device has. */
+    void add_doorbell_region();
+
     std::uint8_t          *config_space();
     const FakeResourceList &resources() const;
 
@@ -55,6 +62,7 @@ public:
     FakeIsrRegister   &isr();
     FakeRegisterBytes &device_config();
     FakeRegisterBytes &notify();
+    FakeDoorbellPages &doorbells();
 
 private:
     void rebuild_resources();
@@ -72,6 +80,8 @@ private:
     FakeIsrRegister   isr_;
     FakeRegisterBytes device_config_;
     FakeRegisterBytes notify_;
+    FakeDoorbellPages doorbells_;
+    bool              doorbell_region_;
     std::uint8_t      next_capability_;
 };
 

@@ -8,8 +8,8 @@ namespace av {
 
 FakeVirtioGpuFunction::FakeVirtioGpuFunction()
     : config_{}, resources_(), message_interrupts_(3u), virtio_bar_length_(virtio_bar_length),
-      virtio_bar_present_(true), common_(), isr_(), device_config_(0x1000u), notify_(0x1000u),
-      next_capability_(first_added_capability)
+      virtio_bar_present_(true), common_(), isr_(), device_config_(0x1000u), notify_(0x1000u), doorbells_(),
+      doorbell_region_(false), next_capability_(first_added_capability)
 {
     const FixtureFile fixture("virtio_gpu_pci_config.bin");
     std::memcpy(config_, fixture.bytes(), config_bytes);
@@ -57,11 +57,24 @@ void FakeVirtioGpuFunction::add_shared_memory_region(std::uint8_t id, std::uint8
     resources_.add_memory(bar_address, static_cast<std::uint32_t>(length));
 }
 
+void FakeVirtioGpuFunction::add_doorbell_region()
+{
+    constexpr std::uint64_t length = FakeDoorbellPages::pages * FakeDoorbellPages::page_bytes;
+    add_shared_memory_region(doorbell_region_id, 0u, 0u, length, doorbell_bar_address);
+    /* A 32-bit BAR, unlike the regions the helper assumes. */
+    const std::uint32_t low = static_cast<std::uint32_t>(doorbell_bar_address);
+    std::memcpy(config_ + 0x10u, &low, 4u);
+    common_.set_queues(66u, 256u);
+    doorbell_region_ = true;
+}
+
 void FakeVirtioGpuFunction::rebuild_resources()
 {
     resources_ = FakeResourceList();
     resources_.add_memory(msix_bar_address, 0x1000u);
     if (virtio_bar_present_) resources_.add_memory(virtio_bar_address, virtio_bar_length_);
+    if (doorbell_region_)
+        resources_.add_memory(doorbell_bar_address, FakeDoorbellPages::pages * FakeDoorbellPages::page_bytes);
     for (std::uint32_t i = 0u; i < message_interrupts_; i++) resources_.add_message_interrupt();
 }
 
@@ -89,6 +102,7 @@ const FakeResourceList &FakeVirtioGpuFunction::resources() const { return resour
 
 RegisterWindow *FakeVirtioGpuFunction::region(std::uint8_t bar, std::uint64_t offset)
 {
+    if (bar == 0u && doorbell_region_) return offset == 0u ? &doorbells_ : nullptr;
     if (bar != virtio_bar) return nullptr;
     switch (offset) {
     case 0x0000u: return &common_;
@@ -103,6 +117,7 @@ int FakeVirtioGpuFunction::bar_at(std::uint64_t address) const
 {
     if (address == virtio_bar_address) return virtio_bar;
     if (address == msix_bar_address) return 1;
+    if (address == doorbell_bar_address && doorbell_region_) return 0;
     return -1;
 }
 
@@ -110,5 +125,6 @@ FakeCommonConfig  &FakeVirtioGpuFunction::common() { return common_; }
 FakeIsrRegister   &FakeVirtioGpuFunction::isr() { return isr_; }
 FakeRegisterBytes &FakeVirtioGpuFunction::device_config() { return device_config_; }
 FakeRegisterBytes &FakeVirtioGpuFunction::notify() { return notify_; }
+FakeDoorbellPages &FakeVirtioGpuFunction::doorbells() { return doorbells_; }
 
 }  // namespace av

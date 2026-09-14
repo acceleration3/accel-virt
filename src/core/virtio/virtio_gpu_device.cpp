@@ -17,7 +17,7 @@ VirtioGpuDevice::VirtioGpuDevice(Platform &platform, const BarMappings &mappings
       transport_(platform, common_, notify_, isr_, device_, layout.notify_multiplier()),
       control_(platform, transport_, control_queue, GpuRequestWriter::max_response_size,
                GpuRequestWriter::max_backing_request_size, LockRank::control_queue),
-      cursor_(platform, transport_, cursor_queue, 0u, 0u, LockRank::cursor_queue), scanouts_(0u),
+      cursor_(platform, transport_, cursor_queue, 0u, 0u, LockRank::cursor_queue), scanouts_(0u), message_interrupts_(0u),
       running_(false) {}
 
 /* The device must stop using the rings before the members release them. */
@@ -50,6 +50,7 @@ Status VirtioGpuDevice::start(uint32_t message_interrupts)
     scanouts_ = 0u;
     static_cast<void>(transport_.read_device_u32(num_scanouts_offset, scanouts_));
     failed.dismiss();
+    message_interrupts_ = message_interrupts;
     running_ = true;
     return Status::ok;
 }
@@ -135,6 +136,19 @@ uint32_t VirtioGpuDevice::scanouts() const
 }
 
 uint64_t VirtioGpuDevice::features() const { return transport_.features(); }
+
+Status VirtioGpuDevice::connect_fence_queue(uint32_t doorbell, uint32_t &message)
+{
+    platform_.require_irql_at_most(Irql::passive, "VirtioGpuDevice::connect_fence_queue");
+    message = 0u;
+    if (!running_) return Status::invalid_state;
+    if (doorbell > uint32_t{0xFFFFu} - first_fence_queue) return Status::not_found;
+    const auto queue = static_cast<uint16_t>(first_fence_queue + doorbell);
+    if (message_interrupts_ == 0u) return queue < transport_.queue_count() ? Status::ok : Status::not_found;
+    if (message_interrupts_ > source_count)
+        message = source_count + doorbell % (message_interrupts_ - source_count);
+    return transport_.assign_queue_vector(queue, static_cast<uint16_t>(message));
+}
 
 bool VirtioGpuDevice::invariants_hold() const { return !running_ || transport_.features() != 0u; }
 

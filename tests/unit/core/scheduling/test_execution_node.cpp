@@ -18,6 +18,8 @@ struct ExecutionNodeProbe {
     void set_count(std::uint32_t count) { node.count_ = count; }
     void set_last_submitted(std::uint32_t fence) { node.last_submitted_ = fence; }
     void set_pending(std::uint32_t index, std::uint32_t fence) { node.pending_[index] = fence; }
+    /* A packet waiting on a host fence with nobody to say it finished. */
+    void orphan_awaited(std::uint32_t index) { node.owners_[index] = nullptr; }
     ExecutionNode &node;
 };
 
@@ -97,6 +99,55 @@ TEST(execution_node_complete, reports_every_pending_fence_in_order_then_the_curr
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.dxgkrnl().interrupts(), 3u); }
 
+/* Feature 043: an rvk submission is finished by the host, not by the DPC. It
+ * waits at the head of the node until its context says the host completed the
+ * wire fence it carried, and everything queued behind it waits too - dxgkrnl
+ * takes a completed fence as the completion of every lower one on the node. */
+TEST(execution_node_complete, a_packet_awaiting_the_host_holds_the_node_until_its_owner_finishes_it)
+{ Fixture fixture;
+  int first = 0;
+  int second = 0;
+  CHECK_STATUS(fixture.node().submit(1u, &first, 7u), Status::ok);
+  CHECK(fixture.node().invariants_hold());
+  CHECK_STATUS(fixture.node().submit(2u, &second, 3u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(3u), Status::ok);   /* a plain packet behind them */
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+  CHECK_EQ(fixture.node().current_fence(), 0u);
+
+  fixture.node().finish(&second, 3u);   /* the second is done; the first still holds the node */
+  CHECK(fixture.node().invariants_hold());
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+
+  fixture.node().finish(&first, 6u);    /* not yet the fence it waits for */
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 0u);
+
+  fixture.node().finish(&first, 7u);
+  CHECK(fixture.node().invariants_hold());
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 3u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(2u).FenceId, 3u);
+  CHECK_EQ(fixture.node().pending(), 0u); }
+
+TEST(execution_node_finish, only_the_owner_s_packets_are_finished)
+{ Fixture fixture;
+  int owner = 0;
+  int stranger = 0;
+  CHECK_STATUS(fixture.node().submit(4u, nullptr, 2u), Status::invalid_parameter);   /* nobody could finish it */
+  CHECK_STATUS(fixture.node().submit(4u, &owner, 0u), Status::invalid_parameter);    /* no host fence is 0 */
+  CHECK_EQ(fixture.node().pending(), 0u);
+  CHECK_STATUS(fixture.node().submit(4u, &owner, 2u), Status::ok);
+  fixture.node().finish(&stranger, 100u);
+  fixture.node().finish(nullptr, 100u);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.node().pending(), 1u);
+  void *aborted_owner = nullptr;
+  CHECK_EQ(fixture.node().abort_pending(aborted_owner), 4u);
+  CHECK(aborted_owner == &owner);
+  CHECK(fixture.node().invariants_hold()); }
+
 TEST(execution_node_complete, a_full_queue_wraps_and_empties)
 { Fixture fixture;
   for (std::uint32_t round = 0u; round < 3u; round++) {
@@ -146,16 +197,18 @@ TEST(execution_node, is_dispatch_at_most_and_allocates_nothing)
   CHECK_EQ(fixture.platform().allocations_made(), allocations); }
 
 TEST(execution_node_invariants, detect_a_regressed_or_unordered_queue)
-{ for (int knob = 0; knob < 5; knob++) {
+{ int owner = 0;
+  for (int knob = 0; knob < 6; knob++) {
       Fixture fixture;
       CHECK_STATUS(fixture.node().submit(2u), Status::ok);
-      CHECK_STATUS(fixture.node().submit(3u), Status::ok);
+      CHECK_STATUS(fixture.node().submit(3u, &owner, 1u), Status::ok);
       ExecutionNodeProbe probe(fixture.node());
       if (knob == 0) probe.set_last_completed(4u);                      /* completed past submitted */
       if (knob == 1) probe.set_count(ExecutionNode::capacity + 1u);
       if (knob == 2) probe.set_pending(1u, 2u);                         /* not increasing */
       if (knob == 3) probe.set_last_completed(2u);                      /* a pending fence already completed */
       if (knob == 4) probe.set_last_submitted(9u);                      /* a submission missing from the queue */
+      if (knob == 5) probe.orphan_awaited(1u);                          /* awaited, and nobody can finish it */
       CHECK(!fixture.node().invariants_hold());
   } }
 

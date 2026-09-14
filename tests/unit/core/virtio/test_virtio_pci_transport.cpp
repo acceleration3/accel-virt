@@ -233,3 +233,22 @@ TEST(virtio_pci_transport_device_config, a_region_shorter_than_a_field_refuses_e
   VirtioPciTransport transport(platform, common, notify, isr, tiny, 4u);
   std::uint32_t value = 0u;
   CHECK_STATUS(transport.read_device_u32(0u, value), Status::invalid_parameter); }
+
+/* Feature 043: a context's fence queue gets its vector when the context is set
+ * up, long after DRIVER_OK, and is never enabled. */
+TEST(virtio_pci_transport_queue_vector, is_assigned_to_a_queue_the_device_has_after_driver_ok)
+{ Device device;
+  device.common().set_queues(66u, 256u);
+  CHECK_STATUS(device.transport().assign_queue_vector(2u, 3u), Status::invalid_state);
+  CHECK_STATUS(device.transport().negotiate(version_1, version_1), Status::ok);
+  CHECK_STATUS(device.transport().assign_queue_vector(65u, 4u), Status::ok);
+  CHECK_STATUS(device.transport().start(), Status::ok);
+  CHECK_STATUS(device.transport().assign_queue_vector(2u, 3u), Status::ok);
+  CHECK_EQ(device.common().queue(2u).vector, 3u);
+  CHECK_EQ(device.common().queue(65u).vector, 4u);
+  CHECK_EQ(device.common().queue(2u).enable, 0u);
+  CHECK_STATUS(device.transport().assign_queue_vector(66u, 3u), Status::not_found);
+  device.common().refuse_vectors();
+  CHECK_STATUS(device.transport().assign_queue_vector(3u, 3u), Status::no_space);
+  device.transport().fail();
+  CHECK_STATUS(device.transport().assign_queue_vector(3u, 3u), Status::invalid_state); }

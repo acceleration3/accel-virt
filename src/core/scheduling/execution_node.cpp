@@ -9,32 +9,52 @@ namespace av {
 ExecutionNode::ExecutionNode(Platform &platform)
     : platform_(platform), lock_(platform, LockRank::execution_node), pending_{}, head_(0u), count_(0u),
       last_submitted_(0u), last_completed_(0u), preemption_fence_(0u), preemption_requested_(false),
-      stopped_(false), progress_time_(0u), owners_{}, pending_owner_(nullptr) {}
+      stopped_(false), progress_time_(0u), owners_{}, awaited_{} {}
 
 Status ExecutionNode::submit(uint32_t fence)
 {
     platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::submit");
+    return queue(fence, nullptr, 0u);
+}
+
+Status ExecutionNode::submit(uint32_t fence, void *owner)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::submit");
+    return queue(fence, owner, 0u);
+}
+
+Status ExecutionNode::submit(uint32_t fence, void *owner, uint64_t awaited)
+{
+    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::submit");
+    return owner == nullptr || awaited == 0u ? Status::invalid_parameter : queue(fence, owner, awaited);
+}
+
+Status ExecutionNode::queue(uint32_t fence, void *owner, uint64_t awaited)
+{
     SpinLockGuard lock(lock_);
     InvariantScope<ExecutionNode> guard(platform_, *this, "submit");
     if (stopped_) return Status::invalid_state;
     if (fence <= last_submitted_ || count_ == capacity) return Status::invalid_parameter;
     if (count_ == 0u) progress_time_ = platform_.interrupt_time();
-    pending_[(head_ + count_) % capacity] = fence;
-    owners_[(head_ + count_) % capacity] = pending_owner_;
+    const uint32_t tail = (head_ + count_) % capacity;
+    pending_[tail] = fence;
+    owners_[tail] = owner;
+    awaited_[tail] = awaited;
     count_++;
     last_submitted_ = fence;
     return Status::ok;
 }
 
-/* The owner travels through the member rather than the queue's own call, so the
- * two submission DDIs share one path into it. */
-Status ExecutionNode::submit(uint32_t fence, void *owner)
+void ExecutionNode::finish(const void *owner, uint64_t completed)
 {
-    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::submit");
-    pending_owner_ = owner;
-    const Status queued = submit(fence);
-    pending_owner_ = nullptr;
-    return queued;
+    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::finish");
+    SpinLockGuard lock(lock_);
+    InvariantScope<ExecutionNode> guard(platform_, *this, "finish");
+    if (owner == nullptr) return;
+    for (uint32_t index = 0u; index < count_; index++) {
+        const uint32_t slot = (head_ + index) % capacity;
+        if (owners_[slot] == owner && awaited_[slot] <= completed) awaited_[slot] = 0u;
+    }
 }
 
 Status ExecutionNode::preempt(uint32_t fence)
@@ -50,7 +70,7 @@ bool ExecutionNode::take(uint32_t &fence)
 {
     SpinLockGuard lock(lock_);
     InvariantScope<ExecutionNode> guard(platform_, *this, "take");
-    if (count_ == 0u) return false;
+    if (count_ == 0u || awaited_[head_] != 0u) return false;
     fence = pending_[head_];
     head_ = (head_ + 1u) % capacity;
     count_--;
@@ -151,14 +171,16 @@ uint32_t ExecutionNode::pending()
 }
 
 /* Queued fences strictly increase, lie above the last completed fence, and
- * end at the last submitted one. */
+ * end at the last submitted one; a packet awaiting its host has an owner to
+ * finish it. */
 bool ExecutionNode::invariants_hold() const
 {
     if (count_ > capacity || last_completed_ > last_submitted_ || (stopped_ && count_ != 0u)) return false;
     uint32_t previous = last_completed_;
     for (uint32_t index = 0u; index < count_; index++) {
-        const uint32_t fence = pending_[(head_ + index) % capacity];
-        if (fence <= previous) return false;
+        const uint32_t slot = (head_ + index) % capacity;
+        const uint32_t fence = pending_[slot];
+        if (fence <= previous || (awaited_[slot] != 0u && owners_[slot] == nullptr)) return false;
         previous = fence;
     }
     return count_ == 0u || previous == last_submitted_;

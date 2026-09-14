@@ -30,6 +30,13 @@ public:
      * nothing mapped. */
     [[nodiscard]] Status map(const PciBaseAddresses &bars, const ResourceList &resources,
                              const VirtioPciLayout &layout);
+    /* Maps the BAR holding one more region the driver writes through - the
+     * doorbell pages of virtio-gpu-rvk-pci (feature 043) - once the structures
+     * are mapped; ok when that BAR already is and the region fits it.
+     * invalid_state before map; the refusals of map otherwise, leaving the
+     * structures mapped. */
+    [[nodiscard]] Status map_region(const PciBaseAddresses &bars, const ResourceList &resources,
+                                    const VirtioRegion &region);
     void                 unmap_all();
 
     /* The kernel address of `region`, or null unless it lies inside a mapping. */
@@ -39,7 +46,7 @@ public:
     bool invariants_hold() const;
 
 private:
-    Status map_region(const PciBaseAddresses &bars, const ResourceList &resources, const VirtioRegion &region);
+    Status map_bar_of(const PciBaseAddresses &bars, const ResourceList &resources, const VirtioRegion &region);
 
     Platform         &platform_;
     DxgkrnlInterface &dxgkrnl_;

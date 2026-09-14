@@ -321,3 +321,49 @@ TEST(virtio_gpu_device_scanouts, are_what_the_device_configuration_says)
   CHECK_EQ(device.scanouts(), 2u);
   CHECK_STATUS(device.stop(), Status::ok);
   CHECK_EQ(device.scanouts(), 0u); }
+
+/* Feature 043: each context's fence queue gets a message of its own while the
+ * grant lasts, and shares the granted ones round the doorbells past it. */
+TEST(virtio_gpu_device_connect_fence_queue, gives_each_doorbell_a_message_past_the_sources)
+{ MappedFunction mapped;
+  mapped.function().add_doorbell_region();
+  CHECK_STATUS(mapped.map(), Status::ok);
+  VirtioGpuDevice device(mapped.platform(), mapped.mappings(), mapped.layout());
+  std::uint32_t message = 99u;
+  CHECK_STATUS(device.connect_fence_queue(0u, message), Status::invalid_state);   /* not running */
+  CHECK_EQ(message, 0u);
+  CHECK_STATUS(device.start(6u), Status::ok);
+  const std::uint32_t expected[] = {3u, 4u, 5u, 3u};   /* three granted past the sources */
+  for (std::uint32_t doorbell = 0u; doorbell < 4u; doorbell++) {
+      CHECK_STATUS(device.connect_fence_queue(doorbell, message), Status::ok);
+      CHECK_EQ(message, expected[doorbell]);
+      CHECK_EQ(mapped.common().queue(static_cast<std::uint16_t>(2u + doorbell)).vector, expected[doorbell]);
+  }
+  CHECK_STATUS(device.connect_fence_queue(64u, message), Status::not_found);   /* queue 66 */
+  CHECK_STATUS(device.connect_fence_queue(0xFFFFu, message), Status::not_found);
+  CHECK(device.invariants_hold()); }
+
+TEST(virtio_gpu_device_connect_fence_queue, shares_vector_zero_or_assigns_nothing_when_little_was_granted)
+{ const std::uint32_t grants[] = {3u, 1u, 0u};
+  for (const std::uint32_t messages : grants) {
+      MappedFunction mapped;
+      mapped.function().add_doorbell_region();
+      CHECK_STATUS(mapped.map(), Status::ok);
+      VirtioGpuDevice device(mapped.platform(), mapped.mappings(), mapped.layout());
+      CHECK_STATUS(device.start(messages), Status::ok);
+      std::uint32_t message = 99u;
+      CHECK_STATUS(device.connect_fence_queue(5u, message), Status::ok);
+      CHECK_EQ(message, 0u);
+      if (messages != 0u) CHECK_EQ(mapped.common().queue(7u).vector, 0u);
+      CHECK_STATUS(device.connect_fence_queue(64u, message), Status::not_found);
+  } }
+
+TEST(virtio_gpu_device_connect_fence_queue, a_refused_vector_is_no_space)
+{ MappedFunction mapped;
+  mapped.function().add_doorbell_region();
+  CHECK_STATUS(mapped.map(), Status::ok);
+  VirtioGpuDevice device(mapped.platform(), mapped.mappings(), mapped.layout());
+  CHECK_STATUS(device.start(8u), Status::ok);
+  mapped.common().refuse_vectors();
+  std::uint32_t message = 0u;
+  CHECK_STATUS(device.connect_fence_queue(1u, message), Status::no_space); }

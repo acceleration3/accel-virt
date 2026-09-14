@@ -218,3 +218,38 @@ TEST(bar_mappings_invariants, a_length_without_a_mapping_is_detected)
   BarMappingsProbe(mappings).set_length(3u, 0x1000u);
   CHECK(!mappings.invariants_hold());
   BarMappingsProbe(mappings).set_length(3u, 0u); }
+
+/* Feature 043: the doorbell pages are a region of their own on BAR 0, mapped
+ * once the virtio structures are, and released with them. */
+TEST(bar_mappings_map_region, maps_the_doorbell_bar_after_the_structures)
+{ Discovery discovery;
+  discovery.function().add_doorbell_region();
+  CHECK_STATUS(discovery.discover(), Status::ok);
+  const VirtioRegion doorbells = discovery.layout().shared_memory(FakeVirtioGpuFunction::doorbell_region_id);
+  CHECK(doorbells.present());
+  BarMappings mappings(discovery.platform(), discovery.interface());
+  CHECK_STATUS(mappings.map_region(discovery.bars(), discovery.resources(), doorbells), Status::invalid_state);
+  CHECK_EQ(discovery.dxgkrnl().live_mappings(), 0u);
+  CHECK_STATUS(mappings.map(discovery.bars(), discovery.resources(), discovery.layout()), Status::ok);
+  CHECK(mappings.address_of(doorbells) == nullptr);
+  CHECK_STATUS(mappings.map_region(discovery.bars(), discovery.resources(), doorbells), Status::ok);
+  CHECK(mappings.invariants_hold());
+  CHECK_EQ(mappings.mapped_bars(), 2u);
+  auto *const page_one = static_cast<std::uint8_t *>(mappings.address_of(doorbells)) + 0x1000u;
+  discovery.platform().write_register_u32(page_one, 1u);
+  CHECK_EQ(discovery.function().doorbells().rings(1u), 1u);
+  CHECK_STATUS(mappings.map_region(discovery.bars(), discovery.resources(), doorbells), Status::ok);   /* already */
+  CHECK_EQ(discovery.dxgkrnl().live_mappings(), 2u);
+  mappings.unmap_all();
+  CHECK_EQ(discovery.dxgkrnl().live_mappings(), 0u); }
+
+TEST(bar_mappings_map_region, a_region_past_its_resource_is_refused_and_the_structures_stay)
+{ Discovery discovery;
+  discovery.function().add_doorbell_region();
+  CHECK_STATUS(discovery.discover(), Status::ok);
+  BarMappings mappings(discovery.platform(), discovery.interface());
+  CHECK_STATUS(mappings.map(discovery.bars(), discovery.resources(), discovery.layout()), Status::ok);
+  const VirtioRegion oversized(0u, 0u, 0x100000u);
+  CHECK(mappings.map_region(discovery.bars(), discovery.resources(), oversized) != Status::ok);
+  CHECK_EQ(mappings.mapped_bars(), 1u);
+  CHECK(mappings.invariants_hold()); }

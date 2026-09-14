@@ -31,6 +31,12 @@ public:
     /* The same, remembering whose submission it is: SubmitCommandVirtual names
      * a context, and a reset has to say whose work it threw away. */
     [[nodiscard]] Status submit(uint32_t fence, void *owner);
+    /* The same, for a packet the host runs: it completes only once `owner`
+     * has been finished through the host fence `awaited`, and holds every
+     * packet queued behind it until then (feature 043). */
+    [[nodiscard]] Status submit(uint32_t fence, void *owner, uint64_t awaited);
+    /* `owner`'s host has completed every fence up to `completed`. */
+    void                 finish(const void *owner, uint64_t completed);
     /* The latest request wins; reported at the next completion. */
     [[nodiscard]] Status preempt(uint32_t fence);
     /* Completes and reports every queued fence, then any preemption; stops at
@@ -56,7 +62,9 @@ public:
     bool invariants_hold() const;
 
 private:
-    /* Takes the next queued fence into `fence`, marking it completed. */
+    [[nodiscard]] Status queue(uint32_t fence, void *owner, uint64_t awaited);
+    /* Takes the next queued fence into `fence`, marking it completed; nothing
+     * while the head still awaits its host. */
     bool take(uint32_t &fence);
     bool take_preemption(uint32_t &fence, uint32_t &last_completed);
 
@@ -72,8 +80,8 @@ private:
     bool      stopped_;
     uint64_t  progress_time_;
     void     *owners_[capacity];
-    /* The owner of the submission being queued, between the two submits. */
-    void     *pending_owner_;
+    /* The host fence each packet waits for; 0 once nothing is awaited. */
+    uint64_t  awaited_[capacity];
 
     friend struct ExecutionNodeProbe;
 };

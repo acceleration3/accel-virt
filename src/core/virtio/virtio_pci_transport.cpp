@@ -159,6 +159,16 @@ Status VirtioPciTransport::activate_queue(VirtQueue &queue, uint16_t vector)
     return common_.read_u16(queue_enable) == 1u ? Status::ok : Status::invalid_state;
 }
 
+Status VirtioPciTransport::assign_queue_vector(uint16_t index, uint16_t vector)
+{
+    platform_.require_irql_at_most(Irql::passive, "VirtioPciTransport::assign_queue_vector");
+    if (stage_ != Stage::negotiated && stage_ != Stage::running) return Status::invalid_state;
+    if (index >= common_.read_u16(num_queues)) return Status::not_found;
+    common_.write_u16(queue_select, index);
+    common_.write_u16(queue_msix_vector, vector);
+    return common_.read_u16(queue_msix_vector) == vector ? Status::ok : Status::no_space;
+}
+
 void VirtioPciTransport::notify(const VirtQueue &queue)
 {
     platform_.require_irql_at_most(Irql::dispatch, "VirtioPciTransport::notify");

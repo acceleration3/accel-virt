@@ -21,7 +21,7 @@ BarMappings::BarMappings(Platform &platform, DxgkrnlInterface &dxgkrnl)
 
 BarMappings::~BarMappings() { unmap_all(); }
 
-Status BarMappings::map_region(const PciBaseAddresses &bars, const ResourceList &resources,
+Status BarMappings::map_bar_of(const PciBaseAddresses &bars, const ResourceList &resources,
                                const VirtioRegion &region)
 {
     const uint8_t bar = region.bar();
@@ -53,11 +53,20 @@ Status BarMappings::map(const PciBaseAddresses &bars, const ResourceList &resour
     ScopeExit unwind([this] { unmap_all(); });
     const VirtioRegion *const regions[] = {&layout.common(), &layout.notify(), &layout.isr(), &layout.device()};
     for (const VirtioRegion *region : regions) {
-        const Status status = map_region(bars, resources, *region);
+        const Status status = map_bar_of(bars, resources, *region);
         if (status != Status::ok) return status;
     }
     unwind.dismiss();
     return Status::ok;
+}
+
+Status BarMappings::map_region(const PciBaseAddresses &bars, const ResourceList &resources,
+                               const VirtioRegion &region)
+{
+    platform_.require_irql_at_most(Irql::passive, "BarMappings::map_region");
+    InvariantScope<BarMappings> guard(platform_, *this, "map_region");
+    if (mapped_bars() == 0u) return Status::invalid_state;
+    return map_bar_of(bars, resources, region);
 }
 
 void BarMappings::unmap_all()

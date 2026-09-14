@@ -36,6 +36,11 @@ public:
     [[nodiscard]] Status assign_config_vector(uint16_t vector);
     /* Sizes, allocates and enables `queue` on the device, bound to MSI-X `vector`. */
     [[nodiscard]] Status activate_queue(VirtQueue &queue, uint16_t vector);
+    /* Binds queue `index` to MSI-X `vector` without enabling it, before or
+     * after DRIVER_OK: a fence queue carries no requests and exists so its
+     * interrupts have a vector (docs/protocol.md). not_found for a queue the
+     * device does not have; no_space for a vector it refuses. */
+    [[nodiscard]] Status assign_queue_vector(uint16_t index, uint16_t vector);
     void                 notify(const VirtQueue &queue);
     void                 fail();
 

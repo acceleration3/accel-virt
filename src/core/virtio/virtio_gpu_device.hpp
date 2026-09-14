@@ -41,6 +41,13 @@ public:
     /* DxgkDdiResetDevice: reset without waiting, at any IRQL. */
     void                 reset_immediately();
 
+    /* PASSIVE, while running: gives doorbell `doorbell`'s fence queue
+     * (queue 2 + doorbell) the message its interrupts arrive on, answered in
+     * `message`. Past the three sources' own vectors the fence queues share
+     * what was granted, round the doorbells; with fewer, every one shares
+     * vector 0, as the sources do; with a line interrupt nothing is assigned
+     * and the ISR's queue bit is the only signal (docs/protocol.md). */
+    [[nodiscard]] Status connect_fence_queue(uint32_t doorbell, uint32_t &message);
     uint8_t              read_isr();
     /* A virtio-gpu request, not waited on: invalid_state unless running. */
     [[nodiscard]] Status send_control(const uint8_t *request, size_t length);
@@ -65,7 +72,7 @@ public:
 
 private:
     enum : uint16_t { config_source = 0u, control_source = 1u, cursor_source = 2u, source_count = 3u };
-    enum : uint16_t { control_queue = 0u, cursor_queue = 1u };
+    enum : uint16_t { control_queue = 0u, cursor_queue = 1u, first_fence_queue = 2u };
     static constexpr uint16_t no_vector = 0xFFFFu;
     static constexpr uint64_t num_scanouts_offset = 8u;   /* struct virtio_gpu_config */
 
@@ -81,6 +88,7 @@ private:
     GpuCommandQueue      control_;
     GpuCommandQueue      cursor_;
     uint32_t             scanouts_;
+    uint32_t             message_interrupts_;
     bool                 running_;
 
     friend struct VirtioGpuDeviceProbe;
