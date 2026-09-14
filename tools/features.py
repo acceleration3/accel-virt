@@ -491,4 +491,20 @@ FEATURES = [
   "Windows runs on top of it, use the host GPU through the Microsoft runtime "
   "without DXVK placed beside them.",
   {"deps":["055"],"kb":["07-usermode.md"]}),
+
+ # ---- debugging the wire ------------------------------------------------------
+ ("065","wire-recording",None,"implement",
+  "Wire recordings: capture, inspect and replay",
+  "The device records what crosses the wire - each context's setup, every "
+  "batch as the executor received it, replies, fences, faults and blob "
+  "lifetimes - to a file on the host, flushed so a crash keeps what led to it, "
+  "switched on per run and bounded in size. A host tool prints a recording "
+  "with command names and decoded arguments, and replays it into an executor "
+  "library, with the Khronos validation layers or another GPU, so a rendering "
+  "mistake, a crash or a validation error is reproduced without a guest.",
+  {"deps":["042","063"],"kb":["11-implementation-plan.md"],
+   "note":"Requested 2026-09-14 for debug analysis of rendering mistakes, crashes "
+          "and validation. Numbered last because it was identified last; it depends "
+          "only on the executor and the generated wire, so the roadmap can schedule "
+          "it right after 044."}),
 ]

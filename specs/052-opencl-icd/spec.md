@@ -34,13 +34,6 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 - Fallible construction is two-phase: trivial constructor, `initialize(...)` returning `Status`.
 - Every public method declares its IRQL ceiling via `platform_.require_irql_at_most(...)`.
 
-### Carried from feature 044: host-visible buffers
-
-044's vector add ran over `CL_MEM_COPY_HOST_PTR` buffers read back inline; OpenCL
-import of host-visible or guest memory is not adopted by the executor (042
-T041/T042). Buffers in host-visible memory - a `CL_MEM_USE_HOST_PTR` or mapped
-buffer whose bytes the guest reads without a copy - are this feature's to prove.
-
 ### Classes this feature introduces
 
 <!-- Fill this in during /speckit-plan, before writing code. One row per class; if a row has no state, it is not a class. -->

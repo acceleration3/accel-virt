@@ -71,5 +71,6 @@ spec under `specs/`.
 | [062](../specs/062-performance-and-soak/spec.md) | Performance, stability and soak | — | `implement` | — | 040, 042, 059, 061 |
 | [063](../specs/063-render-server-integration/spec.md) | The generators, vendored | — | `implement` | — | 001, 032 |
 | [064](../specs/064-d3d9-umd/spec.md) | Direct3D 9: the user-mode driver | — | `implement` | — | 055 |
+| [065](../specs/065-wire-recording/spec.md) | Wire recordings: capture, inspect and replay | — | `implement` | — | 042, 063 |
 
-64 features. The `DRIVER_INITIALIZATION_DATA` table has 193 fields at WDDM 3.2 (187 DDIs, 5 reserved); see `docs/ref/driver_init_table.md`.
+65 features. The `DRIVER_INITIALIZATION_DATA` table has 193 fields at WDDM 3.2 (187 DDIs, 5 reserved); see `docs/ref/driver_init_table.md`.

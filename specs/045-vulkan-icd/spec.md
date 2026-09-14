@@ -35,16 +35,6 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 - Fallible construction is two-phase: trivial constructor, `initialize(...)` returning `Status`.
 - Every public method declares its IRQL ceiling via `platform_.require_irql_at_most(...)`.
 
-### Carried from feature 044: the memory round trip
-
-Feature 044 proved the Vulkan object chain from a guest process on the host GPU
-but could not prove its US1.2 - a buffer in host-visible memory, a pattern written
-and read back in the guest - because `vkMapMemory` is off the wire and nothing
-ties a guest-mapped allocation to the executor's `VkDeviceMemory` (044
-research §3). Mapping is this feature's memory model (FR-003), so the scenario is
-this feature's to demonstrate: a pattern the application writes through a mapped
-`VkDeviceMemory` is the pattern the host GPU reads, and the reverse.
-
 ### Classes this feature introduces
 
 <!-- Fill this in during /speckit-plan, before writing code. One row per class; if a row has no state, it is not a class. -->
