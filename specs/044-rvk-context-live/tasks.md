@@ -53,7 +53,7 @@ description: "Tasks: rvk contexts in a real guest"
 - [ ] T026 The full-stack rig in `tests/harness/fullstack/`: the PCI function's virtqueues and doorbells served by the real device core (`LoopbackDevice`), interrupts delivered through `FakeDxgkrnlFdo`, and `DdiKmt` - an `av::Kmt` that calls the registered DDI table the way dxgkrnl's D3DKMT layer does (handles, aperture paging, GPU VAs, submission fences and private data, waits on DMA_COMPLETED)
 - [ ] T027 `tests/loopback/test_fullstack_*.cpp`: the adapter starts on the device core; 043's transport round trip through the real driver; `GuestSuite` over `DdiKmt`, every step that can pass passing and each that cannot named with its reason; a faulted context beside a healthy one; nothing leaked
 - [ ] T028 Every guest scenario in Phases 3-4 runs over the rig with `MockExecutorOps`, and with `build/librvk_executor.so` on this machine's GPU when `AV_REAL_EXECUTOR` names it
-- [ ] T029 A quick guest mode: `run_guest_suite.py` boots a saved snapshot with test signing on and swaps only the driver package and `rvktest.exe`, so a guest iteration skips the install reboots
+- [X] T029 A quick guest mode. *As built:* the long part of a run is not the reboots but the display, mode, power, cycle, sleep and hibernate scenarios (the monitor timeout alone waits minutes), so `run_guest_suite.py --quick` runs install, check and the suite without them, and `--rvk` skips them too; the gate still runs everything. A cached installed-driver disk layer is not built: the prepared image already has test signing, so it would save one install reboot
 
 ## Phase 3: US1 - A context per sub-API runs real host work (Priority: P1) 🎯 MVP
 

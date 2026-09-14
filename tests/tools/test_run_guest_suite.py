@@ -263,8 +263,21 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("guest: rvk ok: 12 passed", result.stdout)
         self.assertIn("guest: rvk latency: a transport no-op round trip took 812 us", result.stdout)
         self.assertNotIn("guest: report ok", result.stdout)
+        self.assertNotIn("guest: display ok", result.stdout)
         self.assertIn("rvktest.exe rvk", self.journal.read_text())
         self.assertIn("rvk latency", (self.work / "verdict.txt").read_text())
+
+    def test_a_quick_run_installs_checks_and_runs_the_suite_without_the_slow_scenarios(self):
+        """Feature 044: an iteration run leaves the display, power and sleep
+        scenarios - minutes of waiting - to the gate."""
+        self.script()
+        result = self.run_suite("--quick")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: quick: the display, power, cycle, upgrade, sleep and hibernate scenarios", result.stdout)
+        self.assertIn("guest: report ok: 23 passed", result.stdout)
+        self.assertNotIn("guest: display ok", result.stdout)
+        self.assertNotIn("guest: monitortimeout", result.stdout)
+        self.assertNotIn("guest: sleepstates", result.stdout)
 
     def test_an_rvk_run_with_a_failed_step_fails(self):
         self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",

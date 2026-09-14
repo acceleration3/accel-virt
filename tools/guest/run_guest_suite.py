@@ -161,6 +161,9 @@ def arguments():
     parser.add_argument("--hibernate", nargs="?", type=int, const=1, default=0, metavar="N",
                         help="suspend to disk and boot the overlay again this many times, once if the "
                              "option is given no number (feature 040, US1)")
+    parser.add_argument("--quick", action="store_true",
+                        help="an iteration run: install, check and the suite, without the display, mode, power, "
+                             "cycle, upgrade, sleep and hibernate scenarios the gate runs (feature 044)")
     parser.add_argument("--rvk", action="store_true",
                         help="run rvktest.exe's rvk scenarios - real Vulkan, OpenCL and OpenGL work on the host GPU "
                              "- instead of the suite; needs --executor naming the real library (feature 044)")
@@ -999,6 +1002,25 @@ class GuestRun:
             self.reboot("install")
         self.check_monitors(self.stage_output("check", saved="device.txt"))
         self.segments()
+        if self.args.rvk:
+            # The display and power scenarios are the echo run's; this boot is
+            # for the work the real executor does (feature 044).
+            self.rvk()
+            return
+        if self.args.quick:
+            self.say("quick: the display, power, cycle, upgrade, sleep and hibernate scenarios are left to the gate")
+        else:
+            self.whole_machine()
+        if self.injecting():
+            self.tdr()
+        else:
+            self.host_visible(self.suite())
+            self.vsync()
+
+    def whole_machine(self):
+        """What only a whole guest session answers, and what makes a run long:
+        the display, its modes and power, the adapter cycled and upgraded, and
+        the machine slept and hibernated."""
         self.display()
         self.mode_switch()
         self.display_power()
@@ -1006,13 +1028,6 @@ class GuestRun:
         self.upgrade()
         self.suspend()
         self.hibernate()
-        if self.args.rvk:
-            self.rvk()
-        elif self.injecting():
-            self.tdr()
-        else:
-            self.host_visible(self.suite())
-            self.vsync()
 
     def prepare_guest(self):
         if self.stage("prepare"):
