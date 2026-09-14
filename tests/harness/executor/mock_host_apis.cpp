@@ -50,4 +50,16 @@ uint32_t MockHostApis::import_kinds(uint32_t index, uint32_t sub_api)
     return 0u;
 }
 
+const GlDisplay *MockHostApis::gl_display(uint32_t)
+{
+    questions_++;
+    return nullptr;
+}
+
+const OpenClDevice *MockHostApis::opencl_device(uint32_t)
+{
+    questions_++;
+    return nullptr;
+}
+
 }  // namespace av

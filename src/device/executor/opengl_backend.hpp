@@ -18,14 +18,17 @@
 
 namespace av {
 
+class GlDisplay;
+
 class OpenGlBackend final : public SessionBackend {
 public:
     OpenGlBackend();
 
-    /* Opens a context on the GPU `uuid` names and fills the table from it.
-     * False for a host that does not serve OpenGL on that GPU, which the
-     * capset already said and this confirms. */
-    [[nodiscard]] bool initialize(const uint8_t *uuid);
+    /* Opens a context on the display the host keeps for this context's GPU,
+     * which must outlive it, and fills the table from it. False for a null
+     * display - a GPU the host serves no OpenGL on - or one that will not make
+     * a context. */
+    [[nodiscard]] bool initialize(const GlDisplay *display);
     void               shut_down();
 
     bool knows(uint32_t command_id) const override;

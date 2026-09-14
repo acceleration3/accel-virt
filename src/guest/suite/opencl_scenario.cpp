@@ -41,8 +41,9 @@ void OpenClScenario::run()
     if (built == Status::ok) static_cast<void>(steps_.check_result("release", release_error_));
 }
 
-/* The platforms are every OpenCL the host has, a CPU runtime among them, so
- * the device is the first GPU any of them offers. */
+/* The host shows a context its GPU's platform alone, but the search is the one
+ * an application makes - the first GPU any platform offers - so it holds
+ * wherever a CPU runtime or another GPU is listed too. */
 Status OpenClScenario::find_device()
 {
     KmtTransport &transport = link_.transport();

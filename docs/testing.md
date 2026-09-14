@@ -438,8 +438,9 @@ What it cannot see, and L5 still must:
   generated clients encode in the guest code, the generated server decodes on
   a device worker, and the host's Vulkan, OpenCL and EGL run it: the Vulkan
   chain, vector add read back exact, fault isolation and the whole
-  `rvktest.exe rvk` run pass. A host without a scenario's sub-API returns
-  without judging it
+  `rvktest.exe rvk` run pass, and the guest is shown one physical device and one
+  OpenCL platform - the bound GPU's - on a host that has two GPUs and three
+  platforms. A host without a scenario's sub-API returns without judging it
 
 Still to come: a shared allocation opened by a second simulated process, and a
 display path - a VidPn committed and a primary scanned out - through the rig.
@@ -485,8 +486,9 @@ can leave the guest with no display.
   with an empty reply whichever executor is loaded, and reports the round trip
   as `transport.latency`) - over the `Kmt` contract.
 - **The rvk scenarios** (feature 044) are `rvktest.exe rvk`, `GuestSuite::run_rvk`:
-  the transport no-op on Vulkan and on OpenGL (whose setup is the host opening
-  its EGL context), `VulkanScenario` (instance, physical device, device, buffer,
+  the transport no-op on Vulkan and on OpenGL (whose setup is the host making
+  an EGL context on the display it found for the GPU at realize and kept, so the
+  no-op waits for a context and never for a driver start-up), `VulkanScenario` (instance, physical device, device, buffer,
   memory, bind, destroy through the generated client), `OpenClScenario` (vector
   add of 64 floats read back and compared exactly) and `IsolationScenario` (a
   context whose malformed `vkCreateInstance` the host faults fails its sends

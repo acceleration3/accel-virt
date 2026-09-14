@@ -10,6 +10,7 @@
 #include "harness/executor/host_gpu_probe.hpp"
 #include "harness/executor/host_gpu_set_probe.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/generated/opengl/gl_protocol_ids.h"
 
 #include <cstdint>
 
@@ -161,8 +162,19 @@ TEST(executor_root_open, a_context_on_a_gpu_that_runs_it_gets_a_session)
 TEST(executor_root_open, an_api_this_gpu_does_not_run_gets_no_session)
 { Opened opened;
   CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_OPENCL, nvidia) == nullptr);
-  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_OPENCL, intel) != nullptr);
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, nvidia) != nullptr);
   CHECK_EQ(opened.root().live(), 1u); }
+
+/* A GPU the capset says runs OpenCL, on a host that kept no OpenCL device for
+ * it - which is every mock GPU - runs nothing, so its context is refused at
+ * setup and the slot given back, rather than shown an empty platform list. */
+TEST(executor_root_open, an_opencl_context_with_no_device_behind_it_gives_the_slot_back)
+{ Opened opened;
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_OPENCL, intel) == nullptr);
+  CHECK_EQ(opened.root().live(), 0u);
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel) != nullptr);
+  CHECK_EQ(opened.root().live(), 1u);
+  CHECK(opened.root().invariants_hold()); }
 
 TEST(executor_root_open, a_gpu_nobody_has_gets_no_session)
 { Opened opened;
@@ -221,7 +233,7 @@ TEST(executor_root_invariants, a_gpu_that_breaks_its_own_breaks_them)
 TEST(executor_root_invariants, gpus_it_never_asked_about_break_them)
 { Opened opened;
   CHECK_STATUS(opened.status(), Status::ok);
-  ExecutorRootProbe(opened.root()).set_asked(false);
+  ExecutorRootProbe(opened.root()).forget_host();
   CHECK(!opened.root().invariants_hold()); }
 
 /* Two sub-API bits at once pass a GPU that runs both and still name no single
@@ -246,25 +258,41 @@ TEST(executor_root_open, an_opengl_context_that_will_not_open_gives_the_slot_bac
   CHECK_EQ(root.live(), 0u);
   CHECK(root.invariants_hold()); }
 
-/* And one on a GPU this host really has, found from its own enumeration. A
- * host with no GPU that runs OpenGL has nothing here to judge. */
-TEST(executor_root_open, an_opengl_context_on_a_real_gpu_is_a_session)
+/* And contexts of every API on the GPUs this host really has, found from its
+ * own enumeration: each API a GPU runs opens there, on what the host kept for
+ * it, and closing one leaves the others running - two OpenGL contexts on one
+ * GPU share its display, and closing the first used to terminate it under the
+ * second. A host with no GPU has nothing here to judge. */
+TEST(executor_root_open, contexts_on_a_real_gpu_are_sessions_that_close_alone)
 { av::LoaderHostApis host;
   host.open();
   ExecutorRoot root;
   CHECK_STATUS(root.initialize(host), Status::ok);
-  std::uint8_t uuid[16] = {};
-  bool found = false;
-  for (std::uint32_t i = 0u; i < host.gpu_count() && !found; i++) {
-      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_OPENGL) == 0u) continue;
+  constexpr std::uint32_t apis[] = {RVK_EXECUTOR_SUB_API_VULKAN, RVK_EXECUTOR_SUB_API_OPENCL,
+                                    RVK_EXECUTOR_SUB_API_OPENGL};
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      std::uint8_t uuid[16] = {};
       host.gpu_uuid(i, uuid);
-      found = true;
-  }
-  if (found) {
-      ContextSession *const session = root.open(RVK_EXECUTOR_SUB_API_OPENGL, uuid);
-      CHECK(session != nullptr);
-      CHECK_EQ(root.live(), 1u);
-      root.close(session);
-      CHECK_EQ(root.live(), 0u);
+      for (const std::uint32_t api : apis) {
+          ContextSession *const first = root.open(api, uuid);
+          ContextSession *const second = root.open(api, uuid);
+          const bool runs = (host.sub_apis(i) & api) != 0u;
+          CHECK_EQ(first != nullptr, runs);
+          CHECK_EQ(second != nullptr, runs);
+          if (!runs) continue;
+          root.close(first);
+          CHECK_EQ(root.live(), 1u);
+          CHECK(second->live());
+          if (api == RVK_EXECUTOR_SUB_API_OPENGL) {
+              /* glFinish, which a context whose display was terminated
+               * cannot run. */
+              std::uint8_t reply[8] = {};
+              std::size_t  answer = 0u;
+              CHECK_EQ(second->execute(av::glproto::kCmd_glFinish, nullptr, 0u, reply, sizeof reply, answer),
+                       std::uint32_t{RVK_EXECUTED});
+          }
+          root.close(second);
+          CHECK_EQ(root.live(), 0u);
+      }
   }
   host.close(); }

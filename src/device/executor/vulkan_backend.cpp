@@ -1,6 +1,7 @@
 #include "device/executor/vulkan_backend.hpp"
 
 #include "device/abi/rvk_executor.h"
+#include "device/executor/host_gpu.hpp"
 #include "device/executor/imported_blob.hpp"
 #include "proto/generated/vulkan/vk_command_names.h"
 #include "proto/generated/vulkan/vk_dispatch_server.h"
@@ -39,9 +40,60 @@ bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
 }  // namespace
 
 VulkanBackend::VulkanBackend()
-    : instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), handles_(), import_(), parent_(0u),
+    : gpu_(nullptr), listed_(), extensions_{}, instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), handles_(), import_(), parent_(0u),
       ran_(0u), lost_(false)
 {}
+
+void VulkanBackend::initialize(const HostGpu &gpu) { gpu_ = &gpu; }
+
+VkPhysicalDevice VulkanBackend::bound_device(VkInstance instance)
+{
+    return gpu_ != nullptr ? listed_.find(instance, *gpu_) : VK_NULL_HANDLE;
+}
+
+/* Both lists answer the same way: the count alone when there is no array, and
+ * otherwise as much of the one device as the room holds, VK_INCOMPLETE when
+ * that was none of it. */
+VkResult VulkanBackend::on_vkEnumeratePhysicalDevices(VkInstance instance, uint32_t *pPhysicalDeviceCount,
+                                                      VkPhysicalDevice *pPhysicalDevices)
+{
+    const VkPhysicalDevice bound = bound_device(instance);
+    const uint32_t         available = bound != VK_NULL_HANDLE ? 1u : 0u;
+    if (pPhysicalDevices == nullptr) {
+        *pPhysicalDeviceCount = available;
+        return VK_SUCCESS;
+    }
+    if (*pPhysicalDeviceCount < available) return VK_INCOMPLETE;
+    *pPhysicalDeviceCount = available;
+    if (available != 0u) pPhysicalDevices[0] = bound;
+    return VK_SUCCESS;
+}
+
+VkResult VulkanBackend::on_vkEnumeratePhysicalDeviceGroups(VkInstance instance, uint32_t *pPhysicalDeviceGroupCount,
+                                                           VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties)
+{
+    const VkPhysicalDevice bound = bound_device(instance);
+    const uint32_t         available = bound != VK_NULL_HANDLE ? 1u : 0u;
+    if (pPhysicalDeviceGroupProperties == nullptr) {
+        *pPhysicalDeviceGroupCount = available;
+        return VK_SUCCESS;
+    }
+    if (*pPhysicalDeviceGroupCount < available) return VK_INCOMPLETE;
+    *pPhysicalDeviceGroupCount = available;
+    if (available == 0u) return VK_SUCCESS;
+    /* A group of one is a group every physical device is. The caller's sType
+     * and pNext stay as it set them. */
+    pPhysicalDeviceGroupProperties[0].physicalDeviceCount = 1u;
+    pPhysicalDeviceGroupProperties[0].physicalDevices[0] = bound;
+    pPhysicalDeviceGroupProperties[0].subsetAllocation = VK_FALSE;
+    return VK_SUCCESS;
+}
+
+VkResult VulkanBackend::on_vkEnumeratePhysicalDeviceGroupsKHR(VkInstance instance, uint32_t *pPhysicalDeviceGroupCount,
+                                                              VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties)
+{
+    return on_vkEnumeratePhysicalDeviceGroups(instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
+}
 
 void VulkanBackend::made(uint64_t raw)
 {
@@ -58,10 +110,27 @@ bool VulkanBackend::knows_handle(uint64_t raw) const { return handles_.knows(raw
 
 VulkanBackend *VulkanBackend::deciding() { return inside; }
 
+void VulkanBackend::enable_identity(VkInstanceCreateInfo &create)
+{
+    /* A list the loader will refuse anyway is left for it to refuse. */
+    if (create.enabledExtensionCount != 0u && create.ppEnabledExtensionNames == nullptr) return;
+    if (create.enabledExtensionCount >= max_instance_extensions) return;
+    for (uint32_t i = 0u; i < create.enabledExtensionCount; i++) {
+        if (strcmp(create.ppEnabledExtensionNames[i], VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) == 0)
+            return;
+        extensions_[i] = create.ppEnabledExtensionNames[i];
+    }
+    extensions_[create.enabledExtensionCount] = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
+    create.ppEnabledExtensionNames = extensions_;
+    create.enabledExtensionCount++;
+}
+
 VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                             const VkAllocationCallbacks *, VkInstance *pInstance)
 {
-    const VkResult result = RealVulkanDispatch::on_vkCreateInstance(pCreateInfo, nullptr, pInstance);
+    VkInstanceCreateInfo create = *pCreateInfo;
+    enable_identity(create);
+    const VkResult result = RealVulkanDispatch::on_vkCreateInstance(&create, nullptr, pInstance);
     /* Kept so shut_down can destroy what a dying context never did. Which
      * handles the guest may name back is not decided here: every handle leaves
      * through handle_to_wire, and that is where it is remembered. */
@@ -160,6 +229,7 @@ void VulkanBackend::shut_down()
         instance_ = VK_NULL_HANDLE;
     }
     handles_.forget_all();
+    gpu_ = nullptr;
     ran_ = 0u;
     lost_ = false;
 }

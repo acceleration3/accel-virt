@@ -2,14 +2,19 @@
  * own answer is not asserted - these pass on a machine with no OpenCL at all,
  * where every command still decodes and the platform count is zero. */
 #include "device/executor/imported_blob.hpp"
+#include "device/abi/rvk_executor.h"
 #include "device/executor/opencl_backend.hpp"
+#include "device/shim/loader_host_apis.hpp"
+#include "device/shim/opencl_device.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/opencl/cl_protocol_ids.h"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
+#include <CL/cl_ext.h>
 #include <cstdint>
+#include <cstring>
 
 using av::OpenClBackend;
 using av::WireArena;
@@ -23,6 +28,13 @@ extern "C" const char *__lsan_default_suppressions(void);
 extern "C" const char *__lsan_default_suppressions(void)
 {
     return "leak:libOpenCL\n"
+           "leak:libvulkan\n"
+           "leak:libEGL\n"
+           "leak:libGLX\n"
+           "leak:iris_dri\n"
+           "leak:libglapi\n"
+           "leak:libz\n"
+           "leak:nvidia_icd\n"
            "leak:intelocl\n"
            "leak:libigdrcl\n"
            "leak:libnvidia\n"
@@ -184,3 +196,181 @@ TEST(opencl_backend, shutting_down_releases_the_references_the_guest_still_held)
   CHECK_EQ(references, 1u);
   CHECK(backend.handle_for(av::clproto::HandleKind::context, wire_of(context)) == nullptr);
   CHECK_EQ(::clReleaseContext(context), CL_SUCCESS); }
+
+namespace {
+
+/* The OpenCL device the host kept for the first GPU it says runs OpenCL, and
+ * that GPU's UUID. Null on a host with none, where the tests using it judge
+ * nothing and say so by returning. */
+class HostOpenCl {
+public:
+    HostOpenCl() : device_(nullptr), uuid_{}
+    { host_.open();
+      for (std::uint32_t i = 0u; i < host_.gpu_count() && device_ == nullptr; i++) {
+          device_ = host_.opencl_device(i);
+          CHECK_EQ(device_ != nullptr, (host_.sub_apis(i) & RVK_EXECUTOR_SUB_API_OPENCL) != 0u);
+          host_.gpu_uuid(i, uuid_);
+      } }
+    ~HostOpenCl() { host_.close(); }
+
+    const av::OpenClDevice *device() const { return device_; }
+    const std::uint8_t     *uuid() const { return uuid_; }
+    av::LoaderHostApis     &host() { return host_; }
+
+private:
+    av::LoaderHostApis      host_;
+    const av::OpenClDevice *device_;
+    std::uint8_t            uuid_[16];
+};
+
+cl_platform_id other_platform() { return reinterpret_cast<cl_platform_id>(&host_objects[1]); }
+
+}  // namespace
+
+/* A context the host found no device for is not one: it is refused at setup,
+ * and until it is bound it is shown no platform and no device, and makes no
+ * context from any type. */
+TEST(opencl_backend, unbound_it_offers_no_platform_device_or_context)
+{ OpenClBackend backend;
+  CHECK(!backend.initialize(nullptr));
+  cl_platform_id platforms[2] = {other_platform(), other_platform()};
+  cl_uint count = 7u;
+  CHECK_EQ(backend.on_clGetPlatformIDs(2u, platforms, &count), CL_PLATFORM_NOT_FOUND_KHR);
+  CHECK_EQ(count, 0u);
+  CHECK(platforms[0] == other_platform());
+  count = 7u;
+  CHECK_EQ(backend.on_clGetPlatformIDs(0u, nullptr, &count), CL_PLATFORM_NOT_FOUND_KHR);
+  CHECK_EQ(count, 0u);
+  cl_device_id devices[2] = {};
+  CHECK_EQ(backend.on_clGetDeviceIDs(nullptr, CL_DEVICE_TYPE_ALL, 2u, devices, &count), CL_INVALID_PLATFORM);
+  cl_int error = CL_SUCCESS;
+  CHECK(backend.on_clCreateContextFromType(nullptr, CL_DEVICE_TYPE_GPU, &error) == nullptr);
+  CHECK_EQ(error, CL_INVALID_PLATFORM);
+  CHECK(backend.on_clCreateContextFromType(nullptr, CL_DEVICE_TYPE_GPU, nullptr) == nullptr); }
+
+/* The argument combinations OpenCL itself forbids are CL_INVALID_VALUE before
+ * anything is looked at: an array with no room, and nowhere at all to answer. */
+TEST(opencl_backend, lists_asked_for_nowhere_are_invalid_values)
+{ OpenClBackend backend;
+  cl_platform_id platforms[1] = {};
+  cl_uint count = 0u;
+  CHECK_EQ(backend.on_clGetPlatformIDs(0u, platforms, &count), CL_INVALID_VALUE);
+  CHECK_EQ(backend.on_clGetPlatformIDs(1u, nullptr, nullptr), CL_INVALID_VALUE);
+  cl_device_id devices[1] = {};
+  CHECK_EQ(backend.on_clGetDeviceIDs(nullptr, CL_DEVICE_TYPE_ALL, 0u, devices, &count), CL_INVALID_VALUE);
+  CHECK_EQ(backend.on_clGetDeviceIDs(nullptr, CL_DEVICE_TYPE_ALL, 1u, nullptr, nullptr), CL_INVALID_VALUE); }
+
+/* Bound, a context is shown its GPU's platform and device and nothing else,
+ * whatever else the host has - this host has three platforms and a CPU runtime
+ * beside two GPUs. The device it is shown is the GPU, by its own UUID. */
+TEST(opencl_backend, bound_it_offers_its_gpu_s_platform_and_device_alone)
+{ HostOpenCl host;
+  if (host.device() == nullptr) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(host.device()));
+  const cl_platform_id platform = static_cast<cl_platform_id>(host.device()->platform());
+  const cl_device_id   device = static_cast<cl_device_id>(host.device()->device());
+
+  cl_uint count = 0u;
+  CHECK_EQ(backend.on_clGetPlatformIDs(0u, nullptr, &count), CL_SUCCESS);
+  CHECK_EQ(count, 1u);
+  cl_platform_id platforms[3] = {other_platform(), other_platform(), other_platform()};
+  CHECK_EQ(backend.on_clGetPlatformIDs(3u, platforms, nullptr), CL_SUCCESS);
+  CHECK(platforms[0] == platform);
+  CHECK(platforms[1] == other_platform());
+
+  const cl_device_type offered[] = {CL_DEVICE_TYPE_GPU, CL_DEVICE_TYPE_ALL, CL_DEVICE_TYPE_DEFAULT,
+                                    CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_CPU};
+  for (const cl_device_type type : offered) {
+      cl_device_id devices[3] = {};
+      count = 7u;
+      CHECK_EQ(backend.on_clGetDeviceIDs(platform, type, 3u, devices, &count), CL_SUCCESS);
+      CHECK_EQ(count, 1u);
+      CHECK(devices[0] == device);
+      CHECK(devices[1] == nullptr);
+  }
+  count = 7u;
+  CHECK_EQ(backend.on_clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 0u, nullptr, &count), CL_SUCCESS);
+  CHECK_EQ(count, 1u);
+  cl_device_id devices[1] = {};
+  CHECK_EQ(backend.on_clGetDeviceIDs(nullptr, CL_DEVICE_TYPE_GPU, 1u, devices, nullptr), CL_SUCCESS);
+  CHECK(devices[0] == device);
+  std::uint8_t uuid[16] = {};
+  CHECK_EQ(::clGetDeviceInfo(devices[0], CL_DEVICE_UUID_KHR, sizeof uuid, uuid, nullptr), CL_SUCCESS);
+  CHECK(std::memcmp(uuid, host.uuid(), sizeof uuid) == 0);
+
+  const cl_device_type absent[] = {CL_DEVICE_TYPE_CPU, CL_DEVICE_TYPE_ACCELERATOR, CL_DEVICE_TYPE_CUSTOM};
+  for (const cl_device_type type : absent) {
+      devices[0] = nullptr;
+      count = 7u;
+      CHECK_EQ(backend.on_clGetDeviceIDs(platform, type, 1u, devices, &count), CL_DEVICE_NOT_FOUND);
+      CHECK_EQ(count, 0u);
+      CHECK(devices[0] == nullptr);
+  }
+  CHECK_EQ(backend.on_clGetDeviceIDs(platform, 0u, 1u, devices, &count), CL_INVALID_DEVICE_TYPE);
+  CHECK_EQ(backend.on_clGetDeviceIDs(platform, cl_device_type{1} << 40u, 1u, devices, &count),
+           CL_INVALID_DEVICE_TYPE);
+  CHECK_EQ(backend.on_clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1u, devices, nullptr), CL_SUCCESS);
+  CHECK_EQ(backend.on_clGetDeviceIDs(other_platform(), CL_DEVICE_TYPE_GPU, 1u, devices, &count),
+           CL_INVALID_PLATFORM);
+
+  backend.shut_down();
+  CHECK_EQ(backend.on_clGetPlatformIDs(0u, nullptr, &count), CL_PLATFORM_NOT_FOUND_KHR); }
+
+/* A context from a type is made on the bound device alone, even where the
+ * platform has other devices of that type, and a type the device is not finds
+ * nothing. */
+TEST(opencl_backend, a_context_from_a_type_holds_the_bound_device_alone)
+{ HostOpenCl host;
+  if (host.device() == nullptr) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(host.device()));
+  cl_int error = CL_INVALID_VALUE;
+  const cl_context context = backend.on_clCreateContextFromType(nullptr, CL_DEVICE_TYPE_ALL, &error);
+  CHECK_EQ(error, CL_SUCCESS);
+  CHECK(context != nullptr);
+  if (context != nullptr) {
+      cl_uint devices = 0u;
+      CHECK_EQ(::clGetContextInfo(context, CL_CONTEXT_NUM_DEVICES, sizeof devices, &devices, nullptr), CL_SUCCESS);
+      CHECK_EQ(devices, 1u);
+      cl_device_id device = nullptr;
+      CHECK_EQ(::clGetContextInfo(context, CL_CONTEXT_DEVICES, sizeof device, &device, nullptr), CL_SUCCESS);
+      CHECK(device == static_cast<cl_device_id>(host.device()->device()));
+      CHECK_EQ(::clReleaseContext(context), CL_SUCCESS);
+  }
+  error = CL_SUCCESS;
+  CHECK(backend.on_clCreateContextFromType(nullptr, CL_DEVICE_TYPE_CPU, &error) == nullptr);
+  CHECK_EQ(error, CL_DEVICE_NOT_FOUND);
+  backend.shut_down(); }
+
+/* Through the wire, the platform a guest is answered is the one the backend
+ * then accepts back; a platform the host has and the guest was never shown is
+ * refused when named. */
+TEST(opencl_backend, the_guest_can_name_only_the_platform_it_was_shown)
+{ HostOpenCl host;
+  if (host.device() == nullptr) return;
+  OpenClBackend backend;
+  CHECK(backend.initialize(host.device()));
+  std::uint8_t frame[16];
+  WireWriter writer(frame, sizeof frame);
+  writer.write_varint<std::uint32_t>(4u);
+  writer.write_pod<std::uint8_t>(1u);
+  writer.write_pod<std::uint8_t>(1u);
+  std::uint8_t block[block_bytes];
+  WireArena arena(block, sizeof block);
+  std::uint8_t reply[64] = {};
+  WireReader payload(frame, writer.offset());
+  WireWriter answer(reply, sizeof reply);
+  CHECK(backend.run(av::clproto::kCmd_clGetPlatformIDs, payload, answer, arena));
+  const void *const platform = host.device()->platform();
+  CHECK(backend.handle_for(av::clproto::HandleKind::platform, wire_of(platform)) == platform);
+
+  cl_platform_id every[16] = {};
+  cl_uint listed = 0u;
+  if (::clGetPlatformIDs(16u, every, &listed) == CL_SUCCESS) {
+      for (cl_uint i = 0u; i < listed && i < 16u; i++) {
+          if (every[i] == platform) continue;
+          CHECK(backend.handle_for(av::clproto::HandleKind::platform, wire_of(every[i])) == nullptr);
+      }
+  }
+  backend.shut_down(); }

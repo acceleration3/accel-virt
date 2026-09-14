@@ -15,9 +15,17 @@
 
 namespace av {
 
+class OpenClDevice;
+
 class OpenClBackend final : public clproto::RealDispatch, public SessionBackend {
 public:
     OpenClBackend();
+
+    /* Binds this context to the platform and device the host found for its
+     * GPU, which must outlive it. False for a null device: a GPU the host
+     * found no OpenCL for runs nothing, so the context is refused at setup
+     * rather than shown an empty platform list. */
+    [[nodiscard]] bool initialize(const OpenClDevice *device);
 
     bool knows(uint32_t command_id) const override;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
@@ -34,6 +42,20 @@ public:
     void  retained(clproto::HandleKind kind, void *object) override;
     void  released(clproto::HandleKind kind, void *object) override;
 
+    /* The three calls that could name another GPU, answered from the bound
+     * device rather than forwarded: the host's list has every platform and
+     * device it has, and a context from a type could span every GPU of that
+     * type on the platform (feature 044, T034). The API's own errors for the
+     * arguments are kept - a null platform means the bound one, since the
+     * guest is shown no other - and a context unbound, or bound to a device
+     * that is not the type asked for, finds nothing. */
+    cl_int     on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms,
+                                   cl_uint *num_platforms) override;
+    cl_int     on_clGetDeviceIDs(cl_platform_id platform, cl_device_type device_type, cl_uint num_entries,
+                                 cl_device_id *devices, cl_uint *num_devices) override;
+    cl_context on_clCreateContextFromType(const cl_context_properties *properties, cl_device_type device_type,
+                                          cl_int *errcode_ret) override;
+
     /* Releases what the guest never did. A context that dies owning a context
      * or a queue must take it with it. */
     void     shut_down();
@@ -43,6 +65,12 @@ private:
     /* Every OpenCL command id carries this in its top 16 bits. */
     static constexpr uint32_t opencl_api = 2u;
 
+    /* CL_SUCCESS for a type the bound device is, which is always a GPU;
+     * CL_INVALID_DEVICE_TYPE for no type or a bit OpenCL does not define;
+     * CL_DEVICE_NOT_FOUND for any other. */
+    cl_int answers_type(cl_device_type device_type) const;
+
+    const OpenClDevice *bound_;
     ClHandleRegistry handles_;
     uint64_t       ran_;
     bool           lost_;

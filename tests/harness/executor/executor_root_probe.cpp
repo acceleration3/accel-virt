@@ -6,6 +6,6 @@ ExecutorRootProbe::ExecutorRootProbe(ExecutorRoot &target) : root(target) {}
 
 HostGpuSet &ExecutorRootProbe::gpus() { return root.gpus_; }
 
-void ExecutorRootProbe::set_asked(bool asked) { root.asked_ = asked; }
+void ExecutorRootProbe::forget_host() { root.apis_ = nullptr; }
 
 }  // namespace av

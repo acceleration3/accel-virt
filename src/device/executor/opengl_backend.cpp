@@ -46,9 +46,9 @@ OpenGlBackend::OpenGlBackend()
     : context_(), gl_(), fences_(), region_(), resolved_(0u), ran_(0u), lost_(false)
 {}
 
-bool OpenGlBackend::initialize(const uint8_t *uuid)
+bool OpenGlBackend::initialize(const GlDisplay *display)
 {
-    if (!context_.open(uuid)) return false;
+    if (display == nullptr || !context_.open(*display)) return false;
     resolved_ = static_cast<uint32_t>(load_real_gl(gl_, resolve_through, &context_));
     gl_.rvk_bind_sync = bind_sync;
     gl_.rvk_sync_for = sync_for;

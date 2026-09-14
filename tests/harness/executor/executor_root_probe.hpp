@@ -14,7 +14,7 @@ struct ExecutorRootProbe {
     explicit ExecutorRootProbe(ExecutorRoot &target);
 
     HostGpuSet &gpus();
-    void        set_asked(bool asked);
+    void        forget_host();
 
     ExecutorRoot &root;
 };

@@ -109,7 +109,9 @@ TEST(fullstack_rvk, the_vulkan_chain_runs_on_the_host_gpu)
   GuestReport report;
   run_alone<av::VulkanScenario>(rig, report);
   CHECK_EQ(report.failed(), 0u);
-  CHECK(std::strstr(report.text(), "\nok vulkan.physical_device ") != nullptr);
+  /* One, whatever this host has: the guest is shown the GPU the device is
+   * bound to and no other (T034). */
+  CHECK(reported(report, "ok vulkan.physical_device 1"));
   CHECK(reported(report, "ok vulkan.bind"));
   CHECK(reported(report, "ok vulkan.destroy")); }
 
@@ -122,6 +124,8 @@ TEST(fullstack_rvk, vector_add_runs_on_the_host_gpu)
   GuestReport report;
   run_alone<av::OpenClScenario>(rig, report);
   CHECK_EQ(report.failed(), 0u);
+  /* The bound GPU's platform alone, where this host has three (T034). */
+  CHECK(reported(report, "ok opencl.platform 1"));
   CHECK(reported(report, "ok opencl.sum 64"));
   CHECK(reported(report, "ok opencl.release")); }
 

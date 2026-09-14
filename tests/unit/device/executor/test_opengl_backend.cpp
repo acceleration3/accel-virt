@@ -8,6 +8,7 @@
 #include "device/executor/imported_blob.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/opengl_backend.hpp"
+#include "device/shim/gl_display.hpp"
 #include "device/shim/loader_host_apis.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/opengl/gl_protocol_ids.h"
@@ -83,12 +84,17 @@ TEST(opengl_backend, guest_bytes_answers_inside_the_region_and_nowhere_else)
   CHECK(backend.guest_bytes(0u, sizeof region + 1u) == nullptr);
   CHECK(backend.guest_bytes(~std::uint64_t{0}, 1u) == nullptr); }
 
-/* A GPU nobody has serves no OpenGL, which is the answer the capset already
- * gave and this confirms rather than guesses at. */
-TEST(opengl_backend, a_gpu_nobody_has_opens_no_context)
+/* A GPU the host kept no display for serves no OpenGL, which is the answer the
+ * capset already gave and this confirms rather than guesses at; nor does a
+ * display nobody opened, and no GPU nobody has gets a display. */
+TEST(opengl_backend, a_gpu_with_no_display_opens_no_context)
 { OpenGlBackend backend;
-  CHECK(!backend.initialize(no_such_gpu));
   CHECK(!backend.initialize(nullptr));
+  av::GlDisplay display;
+  CHECK(!display.open(no_such_gpu));
+  CHECK(!display.open());
+  CHECK(!display.open(nullptr));
+  CHECK(!backend.initialize(&display));
   CHECK_EQ(backend.resolved(), 0u); }
 
 /* Without a context every command is refused rather than run against a table
@@ -122,19 +128,21 @@ TEST(opengl_backend, takes_no_blob_and_says_so)
 TEST(opengl_backend, a_context_on_a_real_gpu_runs_a_command_and_refuses_a_broken_one)
 { av::LoaderHostApis host;
   host.open();
-  std::uint8_t uuid[16] = {};
-  bool found = false;
-  for (std::uint32_t i = 0u; i < host.gpu_count() && !found; i++) {
-      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_OPENGL) == 0u) continue;
-      host.gpu_uuid(i, uuid);
-      found = true;
+  const av::GlDisplay *display = nullptr;
+  for (std::uint32_t i = 0u; i < host.gpu_count() && display == nullptr; i++) {
+      display = host.gl_display(i);
+      /* The host keeps a display exactly where it says OpenGL runs. */
+      CHECK_EQ(display != nullptr, (host.sub_apis(i) & RVK_EXECUTOR_SUB_API_OPENGL) != 0u);
   }
-  host.close();
-  if (!found) return;
+  CHECK(host.gl_display(host.gpu_count()) == nullptr);
+  if (display == nullptr) return;
 
   OpenGlBackend backend;
-  CHECK(backend.initialize(uuid));
+  CHECK(backend.initialize(display));
   CHECK(backend.resolved() > 0u);
+  /* A second context on the same display, which outlives the first. */
+  OpenGlBackend other;
+  CHECK(other.initialize(display));
 
   std::uint8_t block[4096];
   WireArena arena(block, sizeof block);
@@ -165,4 +173,13 @@ TEST(opengl_backend, a_context_on_a_real_gpu_runs_a_command_and_refuses_a_broken
   arena.reset();
   WireReader again(frame, clear.offset());
   WireWriter again_answer(reply, sizeof reply);
-  CHECK(!backend.run(av::glproto::kCmd_glClear, again, again_answer, arena)); }
+  CHECK(!backend.run(av::glproto::kCmd_glClear, again, again_answer, arena));
+  /* The other context's display is still open, and so it still runs. */
+  arena.reset();
+  WireReader still(frame, clear.offset());
+  WireWriter still_answer(reply, sizeof reply);
+  CHECK(other.run(av::glproto::kCmd_glClear, still, still_answer, arena));
+  CHECK(display->open());
+  other.shut_down();
+  host.close();
+  CHECK(!display->open()); }

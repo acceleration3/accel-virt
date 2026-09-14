@@ -29,6 +29,10 @@ public:
     void     gpu_uuid(uint32_t index, uint8_t *out) override;
     uint32_t sub_apis(uint32_t index) override;
     uint32_t import_kinds(uint32_t index, uint32_t sub_api) override;
+    /* Null for every GPU: a mock GPU has no display or OpenCL device behind
+     * it, so a context of either API on one is refused when it opens. */
+    const GlDisplay    *gl_display(uint32_t index) override;
+    const OpenClDevice *opencl_device(uint32_t index) override;
 
 private:
     struct Gpu {

@@ -15,29 +15,29 @@ alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][DecodeArena::arena_byt
 
 }  // namespace
 
-ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, asked_(false) {}
+ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, apis_(nullptr) {}
 
 Status ExecutorRoot::initialize(HostApis &apis)
 {
-    if (asked_) return Status::invalid_state;
+    if (apis_ != nullptr) return Status::invalid_state;
     /* A host with more GPUs than the set holds is still one this serves, with
      * the ones it kept. */
     gpus_.initialize(apis);
-    asked_ = true;
+    apis_ = &apis;
     return Status::ok;
 }
 
-uint32_t ExecutorRoot::sub_apis() const { return asked_ ? gpus_.sub_apis() : 0u; }
+uint32_t ExecutorRoot::sub_apis() const { return apis_ != nullptr ? gpus_.sub_apis() : 0u; }
 
 uint32_t ExecutorRoot::import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) const
 {
-    const HostGpu *const gpu = asked_ ? gpus_.find(gpu_uuid) : nullptr;
+    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
     return gpu != nullptr ? gpu->import_kinds(sub_api) : 0u;
 }
 
 ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid)
 {
-    const HostGpu *const gpu = asked_ ? gpus_.find(gpu_uuid) : nullptr;
+    const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
     if (gpu == nullptr) return nullptr;
     /* A sub-API this GPU does not run is a context the guest should never have
      * been allowed to ask for, but the capset is the union across GPUs, so it
@@ -55,11 +55,12 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid)
         if (sessions_[slot].initialize(*backend_in(slot, sub_api), decode_blocks[slot],
                                        DecodeArena::arena_bytes) != Status::ok)
             continue;
-        /* The only backend that has to open something before it can run
-         * anything: a GL context belongs to a GPU and is made for one. A GPU
-         * the capset said runs OpenGL can still refuse a context, and then the
-         * slot goes back. */
-        if (sub_api == RVK_EXECUTOR_SUB_API_OPENGL && !opengl_[slot].initialize(gpu_uuid)) {
+        /* Opened here, at the context's setup, on what the host found when it
+         * was asked: the guest's first batch waits behind this, inside
+         * dxgkrnl's timeout, so it may cost a context and never a driver
+         * start-up (feature 044, T035). A GPU the capset said runs the API can
+         * still refuse a context, and then the slot goes back. */
+        if (!bind(slot, sub_api, *gpu)) {
             sessions_[slot].release();
             return nullptr;
         }
@@ -75,6 +76,15 @@ SessionBackend *ExecutorRoot::backend_in(uint32_t slot, uint32_t sub_api)
     case RVK_EXECUTOR_SUB_API_OPENCL: return &opencl_[slot];
     case RVK_EXECUTOR_SUB_API_OPENGL: return &opengl_[slot];
     default: return nullptr;
+    }
+}
+
+bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu)
+{
+    switch (sub_api) {
+    case RVK_EXECUTOR_SUB_API_OPENCL: return opencl_[slot].initialize(apis_->opencl_device(gpu.index()));
+    case RVK_EXECUTOR_SUB_API_OPENGL: return opengl_[slot].initialize(apis_->gl_display(gpu.index()));
+    default: vulkan_[slot].initialize(gpu); return true;
     }
 }
 
@@ -112,7 +122,7 @@ bool ExecutorRoot::owns(const ContextSession *session) const
 
 bool ExecutorRoot::invariants_hold() const
 {
-    return gpus_.invariants_hold() && (asked_ || gpus_.count() == 0u);
+    return gpus_.invariants_hold() && (apis_ != nullptr || gpus_.count() == 0u);
 }
 
 }  // namespace av

@@ -7,6 +7,9 @@
 #include "device/abi/rvk_executor.h"
 #include "device/executor/imported_blob.hpp"
 #include "device/executor/handle_registry.hpp"
+#include "device/executor/host_gpu.hpp"
+#include "device/shim/loader_host_apis.hpp"
+#include "harness/executor/mock_host_apis.hpp"
 #include "device/executor/vulkan_backend.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
@@ -31,6 +34,11 @@ extern "C" const char *__lsan_default_suppressions(void);
 extern "C" const char *__lsan_default_suppressions(void)
 {
     return "leak:libdbus-1\n"
+           "leak:libOpenCL\n"
+           "leak:intelocl\n"
+           "leak:libigdrcl\n"
+           "leak:libEGL\n"
+           "leak:libglapi\n"
            "leak:libvulkan\n"
            "leak:libnvidia\n"
            "leak:nvidia_icd\n"
@@ -354,3 +362,205 @@ TEST(vulkan_backend, an_instance_the_driver_refuses_is_not_kept)
   CHECK(read.read_pod(returned));
   CHECK(returned != 0);
   backend.shut_down(); }
+
+namespace {
+
+/* An instance made through the wire, so the backend made and remembers it,
+ * with the API version the guest's own clients ask for or 1.0, which has no
+ * vkGetPhysicalDeviceProperties2 of its own. Null when the loader refuses. */
+VkInstance instance_through(VulkanBackend &backend, bool vulkan_1_1, std::uint32_t extension_count = 0u,
+                            const char *const *extensions = nullptr)
+{ std::uint8_t frame[8192];
+  WireWriter writer(frame, sizeof frame);
+  VkApplicationInfo application = {};
+  application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+  application.apiVersion = vulkan_1_1 ? (1u << 22) | (1u << 12) : (1u << 22);
+  VkInstanceCreateInfo create = {};
+  create.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  create.pApplicationInfo = &application;
+  create.enabledExtensionCount = extension_count;
+  create.ppEnabledExtensionNames = extensions;
+  av::vkproto::serialize_VkInstanceCreateInfo(writer, create);
+  std::uint8_t block[block_bytes];
+  WireArena arena(block, sizeof block);
+  std::uint8_t reply[64] = {};
+  WireReader payload(frame, writer.offset());
+  WireWriter answer(reply, sizeof reply);
+  if (!backend.run(av::vkproto::kCmd_vkCreateInstance, payload, answer, arena)) return VK_NULL_HANDLE;
+  WireReader read(reply, answer.offset());
+  std::int32_t returned = -1;
+  std::uint64_t raw = 0u;
+  (void)read.read_pod(returned);
+  (void)read.read_pod(raw);
+  VkInstance instance = VK_NULL_HANDLE;
+  if (returned == 0) std::memcpy(&instance, &raw, sizeof instance);
+  return instance; }
+
+std::uint64_t raw_of(VkPhysicalDevice device)
+{ std::uint64_t raw = 0u;
+  std::memcpy(&raw, &device, sizeof device);
+  return raw; }
+
+constexpr std::uint8_t nobody_s_gpu[16] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                           0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+const VkPhysicalDevice sentinel = reinterpret_cast<VkPhysicalDevice>(static_cast<std::uintptr_t>(0x5E5Eu));
+
+}  // namespace
+
+/* A context bound to one of this host's GPUs is shown that GPU's physical
+ * device and no other, by its own UUID, as a list and as a group; the host's
+ * other GPUs are handles it was never given and cannot name. Both API versions
+ * a guest might create its instance with. A host with no GPU has nothing to
+ * judge. */
+TEST(vulkan_backend, a_bound_context_lists_its_gpu_alone)
+{ av::LoaderHostApis host;
+  host.open();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      av::HostGpu gpu;
+      gpu.describe(host, i);
+      constexpr bool versions[] = {true, false};
+      for (const bool vulkan_1_1 : versions) {
+          VulkanBackend backend;
+          backend.initialize(gpu);
+          const VkInstance instance = instance_through(backend, vulkan_1_1);
+          CHECK(instance != VK_NULL_HANDLE);
+          if (instance == VK_NULL_HANDLE) continue;
+
+          std::uint32_t count = 7u;
+          CHECK_EQ(backend.on_vkEnumeratePhysicalDevices(instance, &count, nullptr), VK_SUCCESS);
+          CHECK_EQ(count, 1u);
+          VkPhysicalDevice listed[3] = {sentinel, sentinel, sentinel};
+          count = 3u;
+          CHECK_EQ(backend.on_vkEnumeratePhysicalDevices(instance, &count, listed), VK_SUCCESS);
+          CHECK_EQ(count, 1u);
+          CHECK(listed[1] == sentinel);
+          VkPhysicalDeviceIDProperties identity = {};
+          identity.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+          VkPhysicalDeviceProperties2 properties = {};
+          properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+          properties.pNext = &identity;
+          ::vkGetPhysicalDeviceProperties2(listed[0], &properties);
+          CHECK(gpu.matches(identity.deviceUUID));
+
+          VkPhysicalDevice none[1] = {sentinel};
+          count = 0u;
+          CHECK_EQ(backend.on_vkEnumeratePhysicalDevices(instance, &count, none), VK_INCOMPLETE);
+          CHECK_EQ(count, 0u);
+          CHECK(none[0] == sentinel);
+
+          count = 7u;
+          CHECK_EQ(backend.on_vkEnumeratePhysicalDeviceGroups(instance, &count, nullptr), VK_SUCCESS);
+          CHECK_EQ(count, 1u);
+          VkPhysicalDeviceGroupProperties groups[2] = {};
+          groups[0].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES;
+          groups[0].physicalDeviceCount = 5u;
+          groups[0].subsetAllocation = VK_TRUE;
+          groups[1].physicalDeviceCount = 5u;
+          count = 2u;
+          CHECK_EQ(backend.on_vkEnumeratePhysicalDeviceGroupsKHR(instance, &count, groups), VK_SUCCESS);
+          CHECK_EQ(count, 1u);
+          CHECK_EQ(groups[0].sType, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES);
+          CHECK_EQ(groups[0].physicalDeviceCount, 1u);
+          CHECK(groups[0].physicalDevices[0] == listed[0]);
+          CHECK_EQ(groups[0].subsetAllocation, VkBool32{VK_FALSE});
+          CHECK_EQ(groups[1].physicalDeviceCount, 5u);
+          count = 0u;
+          CHECK_EQ(backend.on_vkEnumeratePhysicalDeviceGroups(instance, &count, groups), VK_INCOMPLETE);
+          CHECK_EQ(count, 0u);
+
+          /* Through the wire: what the guest was shown it can name, and the
+           * host's other GPUs it cannot. */
+          std::uint8_t frame[32];
+          WireWriter writer(frame, sizeof frame);
+          std::uint64_t instance_raw = 0u;
+          std::memcpy(&instance_raw, &instance, sizeof instance);
+          writer.write_pod(instance_raw);
+          writer.write_pod<std::uint8_t>(1u);
+          writer.write_pod<std::uint32_t>(4u);
+          std::uint8_t block[block_bytes];
+          WireArena arena(block, sizeof block);
+          std::uint8_t reply[64] = {};
+          WireReader payload(frame, writer.offset());
+          WireWriter answer(reply, sizeof reply);
+          CHECK(backend.run(av::vkproto::kCmd_vkEnumeratePhysicalDevices, payload, answer, arena));
+          CHECK(backend.knows_handle(raw_of(listed[0])));
+          VkPhysicalDevice every[16] = {};
+          std::uint32_t all = 16u;
+          CHECK(::vkEnumeratePhysicalDevices(instance, &all, every) >= 0);
+          CHECK_EQ(all, host.gpu_count());
+          for (std::uint32_t d = 0u; d < all; d++) {
+              if (every[d] != listed[0]) CHECK(!backend.knows_handle(raw_of(every[d])));
+          }
+          backend.shut_down();
+      }
+  }
+  host.close(); }
+
+/* A context bound to a GPU its instance does not list, and one never bound,
+ * are shown nothing - an empty list and no group - rather than some other GPU. */
+TEST(vulkan_backend, a_context_whose_gpu_is_not_listed_lists_nothing)
+{ av::MockHostApis apis;
+  apis.add_gpu(nobody_s_gpu, RVK_EXECUTOR_SUB_API_VULKAN, 0u, 0u, 0u);
+  av::HostGpu gpu;
+  gpu.describe(apis, 0u);
+  VulkanBackend bound;
+  bound.initialize(gpu);
+  VulkanBackend unbound;
+  VulkanBackend *const backends[] = {&bound, &unbound};
+  for (VulkanBackend *const backend : backends) {
+      const VkInstance instance = instance_through(*backend, true);
+      if (instance == VK_NULL_HANDLE) continue;
+      std::uint32_t count = 7u;
+      CHECK_EQ(backend->on_vkEnumeratePhysicalDevices(instance, &count, nullptr), VK_SUCCESS);
+      CHECK_EQ(count, 0u);
+      VkPhysicalDevice listed[2] = {sentinel, sentinel};
+      count = 2u;
+      CHECK_EQ(backend->on_vkEnumeratePhysicalDevices(instance, &count, listed), VK_SUCCESS);
+      CHECK_EQ(count, 0u);
+      CHECK(listed[0] == sentinel);
+      count = 7u;
+      CHECK_EQ(backend->on_vkEnumeratePhysicalDeviceGroups(instance, &count, nullptr), VK_SUCCESS);
+      CHECK_EQ(count, 0u);
+      VkPhysicalDeviceGroupProperties groups[1] = {};
+      groups[0].physicalDeviceCount = 5u;
+      count = 1u;
+      CHECK_EQ(backend->on_vkEnumeratePhysicalDeviceGroups(instance, &count, groups), VK_SUCCESS);
+      CHECK_EQ(count, 0u);
+      CHECK_EQ(groups[0].physicalDeviceCount, 5u);
+      backend->shut_down();
+  } }
+
+/* A guest's Vulkan 1.0 instance is made with the extension that lets its
+ * physical devices say which GPU they are, so it is shown its GPU too; up to a
+ * list with no room left for it, which is shown none rather than written past.
+ * A list the loader refuses - names counted and not sent - is refused as it
+ * would have been. The loader accepts a name twice, which is what fills a list. */
+TEST(vulkan_backend, a_vulkan_1_0_instance_is_made_able_to_name_its_gpu)
+{ av::LoaderHostApis host;
+  host.open();
+  if (host.gpu_count() == 0u) { host.close(); return; }
+  av::HostGpu gpu;
+  gpu.describe(host, 0u);
+  static const char *surfaces[256];
+  for (const char *&name : surfaces) name = "VK_KHR_surface";
+  const char *const identity[] = {"VK_KHR_get_physical_device_properties2", "VK_KHR_surface"};
+
+  struct Case { std::uint32_t count; const char *const *names; bool made; std::uint32_t listed; };
+  const Case cases[] = {{255u, surfaces, true, 1u},
+                        {256u, surfaces, true, 0u},
+                        {2u, identity, true, 1u},
+                        {3u, nullptr, false, 0u}};
+  for (const Case &c : cases) {
+      VulkanBackend backend;
+      backend.initialize(gpu);
+      const VkInstance instance = instance_through(backend, false, c.count, c.names);
+      CHECK_EQ(instance != VK_NULL_HANDLE, c.made);
+      if (instance != VK_NULL_HANDLE) {
+          std::uint32_t count = 7u;
+          CHECK_EQ(backend.on_vkEnumeratePhysicalDevices(instance, &count, nullptr), VK_SUCCESS);
+          CHECK_EQ(count, c.listed);
+      }
+      backend.shut_down();
+  }
+  host.close(); }

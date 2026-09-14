@@ -12,6 +12,8 @@
 
 #include "device/executor/host_apis.hpp"
 #include "device/executor/host_gpu_set.hpp"
+#include "device/shim/gl_display.hpp"
+#include "device/shim/opencl_device.hpp"
 
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
@@ -32,6 +34,8 @@ public:
     void     gpu_uuid(uint32_t index, uint8_t *out) override;
     uint32_t sub_apis(uint32_t index) override;
     uint32_t import_kinds(uint32_t index, uint32_t sub_api) override;
+    const GlDisplay    *gl_display(uint32_t index) override;
+    const OpenClDevice *opencl_device(uint32_t index) override;
 
 private:
     static constexpr uint32_t uuid_bytes = 16u;
@@ -39,22 +43,8 @@ private:
      * enumeration has no offset to continue from. Mesa and NVIDIA report
      * under two hundred each. */
     static constexpr uint32_t max_extensions = 512u;
-    /* This host has three OpenCL platforms and two GPUs; neither number is
-     * one anybody will meet. */
-    static constexpr uint32_t max_platforms = 16u;
-    static constexpr uint32_t max_gpu_devices = 16u;
 
     void enumerate();
-    /* Whether some OpenCL device on this host is the GPU `uuid` names.
-     * Matched by CL_DEVICE_UUID_KHR, which cl_khr_device_uuid defines to be
-     * the same sixteen bytes Vulkan reports - so the two APIs agree on which
-     * GPU is which without this having to guess from a name. */
-    bool serves_opencl(const uint8_t *uuid) const;
-    /* Whether a context can be made on the GPU `uuid` names. Asked by making
-     * one and closing it, because every cheaper answer - an EGL device count,
-     * a vendor string - has been wrong on this host at least once. Once, at
-     * realize, on the main loop. */
-    bool serves_opengl(const uint8_t *uuid) const;
     /* Which RVK_BLOB_* kinds `device` can import, asked of its extensions
      * rather than assumed: a device without the host-pointer extension imports
      * nothing and the guest is told to copy. */
@@ -65,6 +55,12 @@ private:
     uint32_t sub_apis_[HostGpuSet::max_gpus];
     uint32_t vulkan_kinds_[HostGpuSet::max_gpus];
     uint32_t opencl_kinds_[HostGpuSet::max_gpus];
+    /* OpenCL is served where a device on this host says it is the same GPU,
+     * and OpenGL where a context made on a display answers that GPU's UUID -
+     * because every cheaper answer, an EGL device count or a vendor string,
+     * has been wrong on this host at least once. Both are kept once found. */
+    OpenClDevice opencl_devices_[HostGpuSet::max_gpus];
+    GlDisplay    gl_displays_[HostGpuSet::max_gpus];
     VkExtensionProperties extensions_[max_extensions];
     uint32_t count_;
     bool     opened_;

@@ -12,6 +12,7 @@
 
 #include "device/executor/handle_registry.hpp"
 #include "device/executor/session_backend.hpp"
+#include "device/shim/physical_device_list.hpp"
 #include "device/shim/vulkan_host_import.hpp"
 #include "proto/generated/vulkan/vk_real_dispatch.h"
 
@@ -19,11 +20,16 @@
 
 namespace av {
 
+class HostGpu;
 class ImportedBlob;
 
 class VulkanBackend final : public vkproto::RealVulkanDispatch, public SessionBackend {
 public:
     VulkanBackend();
+
+    /* Binds this context to the GPU the device is bound to, which must outlive
+     * it: the one physical device an enumeration answers. */
+    void initialize(const HostGpu &gpu);
 
     bool knows(uint32_t command_id) const override;
     [[nodiscard]] bool run(uint32_t command_id, WireReader &payload, WireWriter &reply,
@@ -45,6 +51,18 @@ public:
                                const VkDeviceCreateInfo *pCreateInfo,
                                const VkAllocationCallbacks *pAllocator, VkDevice *pDevice) override;
     void     on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator) override;
+
+    /* The physical device of the bound GPU and no other, as a list of one and
+     * as a group of one: the host's own lists name every GPU it has, and a
+     * handle the guest was never shown is one it can never name (feature 044,
+     * T034). A context not bound, or whose instance does not list its GPU,
+     * is shown none. */
+    VkResult on_vkEnumeratePhysicalDevices(VkInstance instance, uint32_t *pPhysicalDeviceCount,
+                                           VkPhysicalDevice *pPhysicalDevices) override;
+    VkResult on_vkEnumeratePhysicalDeviceGroups(VkInstance instance, uint32_t *pPhysicalDeviceGroupCount,
+                                                VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties) override;
+    VkResult on_vkEnumeratePhysicalDeviceGroupsKHR(VkInstance instance, uint32_t *pPhysicalDeviceGroupCount,
+                                                   VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties) override;
 
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
@@ -89,14 +107,31 @@ private:
     [[nodiscard]] bool run_through(vkproto::ServerDispatch &driver, uint32_t command_id,
                                    WireReader &payload, WireWriter &reply, WireArena &arena);
 
+    /* Adds VK_KHR_get_physical_device_properties2 to the extensions an
+     * instance is made with, unless the guest enabled it or its list has no
+     * room. On an instance made for Vulkan 1.0 without it, the loader answers
+     * vkGetPhysicalDeviceProperties2 from the 1.0 call and never fills
+     * VkPhysicalDeviceIDProperties, so no physical device would be the bound
+     * GPU. Enabling a promoted extension is valid at any version, and the
+     * guest's own instance - in the guest - never sees it. */
+    void enable_identity(VkInstanceCreateInfo &create);
+    /* The bound GPU's physical device on `instance`, or VK_NULL_HANDLE. */
+    VkPhysicalDevice bound_device(VkInstance instance);
+
     /* Every Vulkan command id has this in its top 16 bits; the device filters
      * by API before calling, so anything else is the device disagreeing with
      * itself rather than a guest doing something. */
     static constexpr uint32_t vulkan_api = 1u;
+    /* Extensions a guest's instance can be made with and still have one added.
+     * Every instance extension the Vulkan registry defines is under a hundred. */
+    static constexpr uint32_t max_instance_extensions = 256u;
 
     /* The device the imports belong to. A VkDeviceMemory is a device's, and
      * the guest makes exactly one per context through vkCreateDevice, so this
      * is taken from the command that made it rather than guessed. */
+    const HostGpu     *gpu_;
+    PhysicalDeviceList listed_;
+    const char        *extensions_[max_instance_extensions];
     VkInstance     instance_;
     VkDevice         device_;
     HandleRegistry   handles_;

@@ -10,13 +10,17 @@
  *
  * Sub-API and import-kind values are the ABI's own: RVK_EXECUTOR_SUB_API_* and
  * RVK_BLOB_*. This header names no Vulkan, EGL or OpenCL type, so the classes
- * above it compile on a machine with no loader at all. */
+ * above it compile on a machine with no loader at all; the display and device a
+ * context runs on are the shim's classes, declared and never opened here. */
 #ifndef AV_HOST_APIS_HPP
 #define AV_HOST_APIS_HPP
 
 #include <stdint.h>
 
 namespace av {
+
+class GlDisplay;
+class OpenClDevice;
 
 class HostApis {
 public:
@@ -36,6 +40,14 @@ public:
      * differ: a host pointer into Vulkan works where a dma-buf into OpenCL
      * does not (feature 042, research). */
     virtual uint32_t import_kinds(uint32_t index, uint32_t sub_api) = 0;
+
+    /* What a context on `index` runs on, found when the host was asked and
+     * kept for as long as this is: the EGL display an OpenGL context is made
+     * on, and the OpenCL platform and device a context is shown. Null for a GPU
+     * with none. Read from a worker when a context opens, and never changed
+     * after the host was asked, so they need no lock (feature 044, T034/T035). */
+    virtual const GlDisplay    *gl_display(uint32_t index) = 0;
+    virtual const OpenClDevice *opencl_device(uint32_t index) = 0;
 
 protected:
     HostApis() = default;

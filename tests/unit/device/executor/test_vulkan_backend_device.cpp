@@ -12,7 +12,9 @@
  * tests say so rather than pass by omission. */
 #include "core/support/status.hpp"
 #include "device/abi/rvk_executor.h"
+#include "device/executor/host_gpu.hpp"
 #include "device/executor/imported_blob.hpp"
+#include "device/shim/loader_host_apis.hpp"
 #include "device/executor/vulkan_backend.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
@@ -154,13 +156,34 @@ private:
     std::uint8_t   block_[block_bytes];
 };
 
+/* A backend bound, as the root binds one, to the first GPU this host's own
+ * loaders list: the only physical device an enumeration then answers. */
+class BoundBackend {
+public:
+    BoundBackend() : host_(), gpu_(), backend_()
+    { host_.open();
+      if (host_.gpu_count() != 0u) gpu_.describe(host_, 0u);
+      backend_.initialize(gpu_); }
+    ~BoundBackend()
+    { backend_.shut_down();
+      host_.close(); }
+
+    VulkanBackend &backend() { return backend_; }
+
+private:
+    av::LoaderHostApis host_;
+    av::HostGpu        gpu_;
+    VulkanBackend      backend_;
+};
+
 }  // namespace
 
 /* The whole of what a guest's context does with a device, on this host's own
  * Vulkan: make an instance and a device, import a page the host owns, give it
  * back, and destroy both. */
 TEST(vulkan_backend_device, a_guest_s_device_imports_a_host_page_and_tears_down)
-{ VulkanBackend backend;
+{ BoundBackend bound;
+  VulkanBackend &backend = bound.backend();
   GuestSequence guest(backend);
   const std::uint64_t instance = guest.create_instance();
   if (instance == 0u) return;
@@ -206,7 +229,8 @@ TEST(vulkan_backend_device, a_guest_s_device_imports_a_host_page_and_tears_down)
 /* A context that dies owning a device as well as an instance gives both back,
  * device first, in the order the API requires. */
 TEST(vulkan_backend_device, shutting_down_destroys_a_device_the_guest_never_did)
-{ VulkanBackend backend;
+{ BoundBackend bound;
+  VulkanBackend &backend = bound.backend();
   GuestSequence guest(backend);
   const std::uint64_t instance = guest.create_instance();
   if (instance == 0u) return;
@@ -221,7 +245,8 @@ TEST(vulkan_backend_device, shutting_down_destroys_a_device_the_guest_never_did)
  * same dispatch - one the backend never made is refused, the null one is the
  * API's own and is not. */
 TEST(vulkan_backend_device, a_second_instance_and_device_are_the_ones_kept)
-{ VulkanBackend backend;
+{ BoundBackend bound;
+  VulkanBackend &backend = bound.backend();
   GuestSequence guest(backend);
   const std::uint64_t first = guest.create_instance();
   if (first == 0u) return;
@@ -256,7 +281,8 @@ TEST(vulkan_backend_device, a_second_instance_and_device_are_the_ones_kept)
 /* A blob holding memory whose device has since gone is not freed through a
  * device that no longer exists. */
 TEST(vulkan_backend_device, memory_of_a_device_that_is_gone_is_not_freed_through_it)
-{ VulkanBackend backend;
+{ BoundBackend bound;
+  VulkanBackend &backend = bound.backend();
   GuestSequence guest(backend);
   const std::uint64_t instance = guest.create_instance();
   if (instance == 0u) return;
@@ -285,7 +311,8 @@ TEST(vulkan_backend_device, memory_of_a_device_that_is_gone_is_not_freed_through
  * how to ask for one - and a device made without the host-pointer extension
  * has nothing to import through. */
 TEST(vulkan_backend_device, a_refused_device_is_not_kept_and_one_without_the_extension_imports_nothing)
-{ VulkanBackend backend;
+{ BoundBackend bound;
+  VulkanBackend &backend = bound.backend();
   GuestSequence guest(backend);
   const std::uint64_t instance = guest.create_instance();
   if (instance == 0u) return;
@@ -311,7 +338,8 @@ TEST(vulkan_backend_device, a_refused_device_is_not_kept_and_one_without_the_ext
 /* A non-dispatchable handle this context really made comes back through the
  * dispatch and is accepted, which is the half of the check that says yes. */
 TEST(vulkan_backend_device, a_buffer_this_context_made_is_accepted_back)
-{ VulkanBackend backend;
+{ BoundBackend bound;
+  VulkanBackend &backend = bound.backend();
   GuestSequence guest(backend);
   const std::uint64_t instance = guest.create_instance();
   if (instance == 0u) return;
@@ -355,7 +383,8 @@ TEST(vulkan_backend_device, a_buffer_this_context_made_is_accepted_back)
 /* A driver destroying a device frees the buffers made on it, so after the
  * guest destroys the device a buffer it never destroyed is refused too. */
 TEST(vulkan_backend_device, a_buffer_of_a_destroyed_device_is_refused)
-{ VulkanBackend backend;
+{ BoundBackend bound;
+  VulkanBackend &backend = bound.backend();
   GuestSequence guest(backend);
   const std::uint64_t instance = guest.create_instance();
   if (instance == 0u) return;

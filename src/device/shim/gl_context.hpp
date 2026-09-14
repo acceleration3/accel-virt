@@ -1,32 +1,27 @@
-/* An OpenGL context on a named host GPU, with no window.
+/* An OpenGL context on a host GPU's display, with no window.
  *
- * The shim's other half. EGL is reached through EGL_EXT_platform_device and
- * eglQueryDevicesEXT rather than EGL_MESA_platform_surfaceless, because
- * surfaceless gives no choice of GPU at all - it lands on whichever the vendor
- * ordering picks, which in the probe was not the one asked for. A context here
- * is asked for by the same UUID the device binds by, and a device that will not
- * initialise is stepped over rather than indexed into (feature 042). */
+ * The shim's other half. The display is found once and kept by GlDisplay; what
+ * a guest context costs here is one eglCreateContext on it, a millisecond or
+ * so, rather than a driver start-up per EGL device (feature 044, T035). */
 #ifndef AV_GL_CONTEXT_HPP
 #define AV_GL_CONTEXT_HPP
 
-#include <stdint.h>
-
 namespace av {
+
+class GlDisplay;
 
 class GlContext {
 public:
-    static constexpr uint32_t uuid_bytes = 16u;
-
     GlContext();
     ~GlContext();
     GlContext(const GlContext &) = delete;
     GlContext &operator=(const GlContext &) = delete;
 
-    /* Opens a context on the GPU `uuid` names. False for a host with no EGL,
-     * no device that matches, or no device that will make a context - all of
-     * which mean this host does not serve OpenGL for that GPU, which is an
-     * answer rather than a failure. */
-    [[nodiscard]] bool open(const uint8_t *uuid);
+    /* Opens a context on `display`, which must outlive it. False for a display
+     * that is not open, a driver that refuses a context, or a context already
+     * open. */
+    [[nodiscard]] bool open(const GlDisplay &display);
+    /* Destroys the context; the display stays open for every other one. */
     void               close();
     bool               open() const;
 
@@ -37,8 +32,8 @@ public:
     void              *resolve(const char *name) const;
 
 private:
-    void *display_;
-    void *context_;
+    const GlDisplay *display_;
+    void            *context_;
 };
 
 }  // namespace av

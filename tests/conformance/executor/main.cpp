@@ -13,7 +13,9 @@
 
 /* A library under test opens the host's real graphics loaders, and those
  * allocate things they never give back. Named rather than leak detection being
- * turned off, so a leak in the library itself is still a finding. */
+ * turned off, so a leak in the library itself is still a finding. The EGL
+ * display of each GPU is one on purpose: the library keeps it initialised for
+ * the process's life, so a context never waits for a driver start-up (044). */
 extern "C" const char *__lsan_default_suppressions(void);
 extern "C" const char *__lsan_default_suppressions(void)
 {
@@ -24,6 +26,8 @@ extern "C" const char *__lsan_default_suppressions(void)
            "leak:libnvidia\n"
            "leak:nvidia_icd\n"
            "leak:libGLX\n"
+           "leak:libEGL\n"
+           "leak:libgallium\n"
            "leak:iris_dri\n"
            "leak:libdbus-1\n"
            "leak:libz\n";

@@ -23,6 +23,7 @@
 namespace av {
 
 class HostApis;
+class HostGpu;
 class SessionBackend;
 
 class ExecutorRoot {
@@ -36,7 +37,8 @@ public:
 
     /* Asks the host's loaders once, on QEMU's main loop, before any context:
      * the answer to sub_apis() is frozen into the capset for the device's
-     * lifetime, so it has to be answerable with no GPU context in hand. */
+     * lifetime, so it has to be answerable with no GPU context in hand. `apis`
+     * must outlive this root: contexts open on what it found. */
     [[nodiscard]] Status initialize(HostApis &apis);
 
     /* Every sub-API some GPU here can run. Zero is an answer: the device then
@@ -75,6 +77,9 @@ private:
     /* The backend of `sub_api` in `slot`, or null for a value that is not one
      * of the three sub-APIs. */
     SessionBackend *backend_in(uint32_t slot, uint32_t sub_api);
+    /* Binds the backend of `sub_api` in `slot` to `gpu`, with what the host
+     * found for it: false when the host found nothing for this API there. */
+    [[nodiscard]] bool bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu);
     /* Whether `session` is one of ours rather than a pointer the device
      * invented or already gave back. */
     bool owns(const ContextSession *session) const;
@@ -84,7 +89,9 @@ private:
     VulkanBackend  vulkan_[max_sessions];
     OpenClBackend  opencl_[max_sessions];
     OpenGlBackend  opengl_[max_sessions];
-    bool           asked_;
+    /* The host that was asked, which keeps what a context runs on - its
+     * display, its OpenCL device - for as long as this root. Null until then. */
+    HostApis      *apis_;
 };
 
 }  // namespace av
