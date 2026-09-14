@@ -5,7 +5,9 @@
  * DdiKmt as the D3DKMT a guest process calls. The function is set up the way
  * tools/guest/run_guest_suite.py starts QEMU: rvk's subsystem, the doorbell
  * region, a hostmem region as large as the device core's, and eleven MSI-X
- * messages. The destructor ends the process, removes
+ * messages. Its device core runs MockExecutorOps, or - built with an executor
+ * table and a host GPU - that executor, the real library's root in process
+ * among them (feature 044, T028). The destructor ends the process, removes
  * the adapter while the device core can still answer its teardown, then lets
  * the device core go before the driver unloads and the platform's checks run. */
 #ifndef AV_FULL_STACK_RIG_HPP
@@ -38,6 +40,7 @@ public:
     static constexpr std::uint64_t hostmem_address = 0x4000000000ull;
 
     FullStackRig();
+    FullStackRig(const RvkExecutorOps &executor, const std::uint8_t *gpu);
     ~FullStackRig();
     FullStackRig(const FullStackRig &) = delete;
     FullStackRig &operator=(const FullStackRig &) = delete;
@@ -56,6 +59,8 @@ public:
     DdiKmt                &kmt();
 
 private:
+    void start();
+
     RegisteredDriver      driver_;
     FakeVirtioGpuFunction function_;
     FakeDxgkrnlAdapter    dxgkrnl_;

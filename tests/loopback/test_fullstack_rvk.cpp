@@ -1,0 +1,165 @@
+/* The rvk scenarios on this machine's GPU (feature 044, T028): the in-guest
+ * suite over DdiKmt, the real driver and the real device core, whose executor
+ * is the library's own root behind rvk_executor_ops() - linked into this
+ * binary, the table QEMU loads from librvk_executor.so - bound to the host GPU
+ * that runs the most sub-APIs. The generated clients encode in the guest, the
+ * generated server decodes on a device worker and the host's Vulkan, OpenCL
+ * and EGL run it. A host with no GPU running a scenario's sub-API has nothing
+ * here to judge, and those tests return without checking, as the executor's
+ * own GPU tests do. */
+#include "core/support/status.hpp"
+#include "device/abi/rvk_executor.h"
+#include "guest/kmt/pci_identity.hpp"
+#include "guest/suite/adapter_scenario.hpp"
+#include "guest/suite/adapter_search.hpp"
+#include "guest/suite/guest_report.hpp"
+#include "guest/suite/guest_suite.hpp"
+#include "guest/suite/isolation_scenario.hpp"
+#include "guest/suite/opencl_scenario.hpp"
+#include "guest/suite/vulkan_scenario.hpp"
+#include "harness/executor/widest_host_gpu.hpp"
+#include "harness/framework/test_registry.hpp"
+#include "harness/fullstack/full_stack_rig.hpp"
+
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+
+extern "C" const RvkExecutorOps *rvk_executor_ops(void);
+
+/* A real VkDevice, OpenCL context and EGL context allocate from driver modules
+ * that never give everything back; named, as the executor's GPU tests name
+ * them, rather than leak detection turned off. */
+extern "C" const char *__lsan_default_suppressions(void);
+extern "C" const char *__lsan_default_suppressions(void)
+{
+    return "leak:libOpenCL\n"
+           "leak:intelocl\n"
+           "leak:libigdrcl\n"
+           "leak:libvulkan\n"
+           "leak:libEGL\n"
+           "leak:libGLX\n"
+           "leak:libnvidia\n"
+           "leak:nvidia_icd\n"
+           "leak:iris_dri\n"
+           "leak:libdbus-1\n"
+           "leak:libglapi\n"
+           "leak:libz\n"
+           "leak:libvulkan_intel\n"
+           "leak:libLLVM\n"
+           "leak:libgallium\n";
+}
+
+using av::AdapterScenario;
+using av::AdapterSearch;
+using av::FullStackRig;
+using av::GuestReport;
+using av::GuestSuite;
+using av::PciIdentity;
+using av::Status;
+using av::WidestHostGpu;
+
+namespace {
+
+const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
+                      AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
+constexpr std::uint32_t every_sub_api =
+    RVK_EXECUTOR_SUB_API_VULKAN | RVK_EXECUTOR_SUB_API_OPENGL | RVK_EXECUTOR_SUB_API_OPENCL;
+
+/* Whether the report holds `line` as a whole line. */
+bool reported(const GuestReport &report, const char *line)
+{
+    const std::size_t length = std::strlen(line);
+    for (const char *at = std::strstr(report.text(), line); at != nullptr; at = std::strstr(at + 1, line)) {
+        const bool starts = at == report.text() || at[-1] == '\n';
+        if (starts && (at[length] == '\n' || at[length] == '\0')) return true;
+    }
+    return false;
+}
+
+void print(const GuestReport &report)
+{
+    std::fwrite(report.text(), 1u, report.length(), stderr);
+}
+
+/* One scenario on the rig, with the adapter found first and closed after, and
+ * the rig left with nothing open. */
+template <typename Scenario>
+void run_alone(FullStackRig &rig, GuestReport &report)
+{
+    AdapterSearch search(rig.kmt());
+    CHECK_STATUS(search.find(rvk), Status::ok);
+    { Scenario scenario(rig.kmt(), report, search);
+      scenario.run(); }
+    CHECK_STATUS(search.close(), Status::ok);
+    if (report.failed() != 0u) print(report);
+    CHECK_EQ(rig.kmt().open_objects(), 0u);
+    CHECK_EQ(rig.device().device().contexts(), 0u);
+}
+
+}  // namespace
+
+/* The Vulkan object chain made on the host GPU and destroyed: every call the
+ * guest encoded was decoded and run by the host's Vulkan. */
+TEST(fullstack_rvk, the_vulkan_chain_runs_on_the_host_gpu)
+{ const WidestHostGpu gpu;
+  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) return;
+  FullStackRig rig(*rvk_executor_ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  GuestReport report;
+  run_alone<av::VulkanScenario>(rig, report);
+  CHECK_EQ(report.failed(), 0u);
+  CHECK(std::strstr(report.text(), "\nok vulkan.physical_device ") != nullptr);
+  CHECK(reported(report, "ok vulkan.bind"));
+  CHECK(reported(report, "ok vulkan.destroy"));
+  CHECK_EQ(rig.kmt().fences().faults(), 0u); }
+
+/* Vector add on the host GPU, the output read back exact. */
+TEST(fullstack_rvk, vector_add_runs_on_the_host_gpu)
+{ const WidestHostGpu gpu;
+  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_OPENCL) == 0u) return;
+  FullStackRig rig(*rvk_executor_ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  GuestReport report;
+  run_alone<av::OpenClScenario>(rig, report);
+  CHECK_EQ(report.failed(), 0u);
+  CHECK(reported(report, "ok opencl.sum 64"));
+  CHECK(reported(report, "ok opencl.release"));
+  CHECK_EQ(rig.kmt().fences().faults(), 0u); }
+
+/* The host refuses the truncated create-info before any ICD sees it, the
+ * driver faults that context alone, and the host's Vulkan keeps serving the
+ * other context and a new one. */
+TEST(fullstack_rvk, a_malformed_stream_faults_only_its_own_context)
+{ const WidestHostGpu gpu;
+  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) return;
+  FullStackRig rig(*rvk_executor_ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  GuestReport report;
+  run_alone<av::IsolationScenario>(rig, report);
+  CHECK_EQ(report.failed(), 0u);
+  CHECK(reported(report, "ok isolation.fault"));
+  CHECK(reported(report, "ok isolation.relink"));
+  CHECK_EQ(rig.kmt().fences().faults(), 1u);
+  CHECK(rig.fdo().started()); }
+
+/* What `rvktest.exe rvk` runs in the guest, whole: every step passes. */
+TEST(fullstack_rvk, the_rvk_run_passes_every_step_on_the_host_gpu)
+{ const WidestHostGpu gpu;
+  if (gpu.sub_apis() != every_sub_api) return;
+  FullStackRig rig(*rvk_executor_ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  GuestReport report;
+  std::uint32_t failed = 0u;
+  { GuestSuite suite(rig.kmt(), report, 0u);
+    failed = suite.run_rvk(); }
+  if (failed != 0u) print(report);
+  CHECK_EQ(failed, 0u);
+  CHECK(reported(report, "rvktest: 45 passed, 0 failed"));
+  CHECK(reported(report, "ok transport.nop 0"));
+  CHECK(reported(report, "ok vulkan.destroy"));
+  CHECK(reported(report, "ok opencl.sum 64"));
+  CHECK(reported(report, "ok opengl.nop 0"));
+  CHECK(reported(report, "ok isolation.relink"));
+  CHECK_EQ(rig.kmt().open_objects(), 0u);
+  CHECK_EQ(rig.device().device().contexts(), 0u); }

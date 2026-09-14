@@ -273,6 +273,12 @@ foreach(src ${AV_UNIT_TESTS})
     ENVIRONMENT "LLVM_PROFILE_FILE=${CMAKE_BINARY_DIR}/coverage/${name}.profraw")
   # Two tests name the generated clients' headers by the names the generator
   # includes them by; the clients themselves are in av_core.
+  # The full-stack rig's rvk run links the executor library's own entry point:
+  # its device core runs the table rvk_executor_ops() answers, in process, on
+  # this machine's GPU (feature 044, T028).
+  if(name STREQUAL "test_fullstack_rvk")
+    target_sources(${name} PRIVATE ${AV_EXECUTOR_ENTRY})
+  endif()
   if(name STREQUAL "test_generated_clients" OR name STREQUAL "test_loopback_transport")
     target_include_directories(${name} PRIVATE
       ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan

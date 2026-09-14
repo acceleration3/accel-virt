@@ -25,6 +25,17 @@ std::uint64_t now_ms()
 LoopbackDevice::LoopbackDevice(MockPlatform &guest, const std::uint8_t *gpu)
     : guest_(guest), host_(), executor_(RVK_EXECUTOR_SUB_API_VULKAN), device_(host_), doorbells_(host_)
 {
+    realize(executor_.table(), gpu);
+}
+
+LoopbackDevice::LoopbackDevice(MockPlatform &guest, const RvkExecutorOps &executor, const std::uint8_t *gpu)
+    : guest_(guest), host_(), executor_(RVK_EXECUTOR_SUB_API_VULKAN), device_(host_), doorbells_(host_)
+{
+    realize(executor, gpu);
+}
+
+void LoopbackDevice::realize(const RvkExecutorOps &executor, const std::uint8_t *gpu)
+{
     host_.add_gpu(gpu);
     host_.set_hostmem_size(64u << 20u);
     host_.translate_guest_with([](void *context, std::uint64_t address, std::uint64_t length) {
@@ -32,7 +43,7 @@ LoopbackDevice::LoopbackDevice(MockPlatform &guest, const std::uint8_t *gpu)
     }, &guest_);
     char       bytes[128];
     TextBuffer message(bytes, sizeof bytes);
-    static_cast<void>(device_.realize("auto", false, &executor_.table(), message));
+    static_cast<void>(device_.realize("auto", false, &executor, message));
     device_.status(DriverStatus::driver_ok);
 }
 

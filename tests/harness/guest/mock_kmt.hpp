@@ -112,6 +112,9 @@ public:
     /* A wait for a context costs this many ticks, as waiting for real work
      * does; 0 (the default) leaves the clock where it was. */
     void          spend_on_wait(std::uint64_t ticks);
+    /* The frequency the performance counter answers; ticks_per_second until
+     * set, and 0 is a clock that cannot say how long a tick is. */
+    void          set_frequency(std::uint64_t frequency);
     /* Every `nth` blank takes `ticks` longer, as one the waiter missed does. */
     void          slip_every(std::uint32_t nth, std::uint64_t ticks);
     /* From now on a wait on a context created with an RvkContextRecord finds
@@ -214,6 +217,7 @@ private:
     std::uint32_t slip_nth_;
     std::uint64_t slip_ticks_;
     std::uint64_t wait_cost_;
+    std::uint64_t frequency_;
     std::uint8_t  answer_[max_answer];
     std::uint32_t answer_size_;
     bool          answering_;

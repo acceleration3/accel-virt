@@ -425,6 +425,17 @@ What it cannot see, and L5 still must:
 - clang-cl's codegen for the driver and `rvktest.exe` (feature 037 found an
   argument-order bug only that compiler showed), and QEMU's glue itself
 
+- the rvk scenarios on this machine's GPU (`test_fullstack_rvk.cpp`, 044):
+  `FullStackRig(executor table, host GPU)` realizes the device core on the
+  executor library's own root - `src/device/shim/executor_ops.cpp` linked into
+  the test and `rvk_executor_ops()` handed over, not a dlopen - bound to the
+  GPU the host's loaders say runs the most sub-APIs (`WidestHostGpu`). The
+  generated clients encode in the guest code, the generated server decodes on
+  a device worker, and the host's Vulkan, OpenCL and EGL run it: the Vulkan
+  chain, vector add read back exact, fault isolation and the whole
+  `rvktest.exe rvk` run pass. A host without a scenario's sub-API returns
+  without judging it
+
 Still to come: a shared allocation opened by a second simulated process, and a
 display path - a VidPn committed and a primary scanned out - through the rig.
 

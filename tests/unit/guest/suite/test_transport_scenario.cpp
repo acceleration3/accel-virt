@@ -135,6 +135,21 @@ TEST(transport_scenario, a_failure_at_each_step_is_reported_and_later_steps_skip
       rig.check_nothing_left_but_the_adapter();
   } }
 
+/* A clock that cannot say how long its ticks are gives a latency of 0 rather
+ * than a division by nothing; the no-op is still judged. */
+TEST(transport_scenario, a_clock_without_a_frequency_reports_no_latency)
+{ Rig rig;
+  rig.kmt().answer_waits(nullptr, 0u);
+  rig.kmt().spend_on_wait(2500u);
+  rig.kmt().set_frequency(0u);
+  GuestReport report;
+  TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
+  scenario.run();
+  CHECK(has_line(report, "ok transport.nop 0\n"));
+  CHECK(has_line(report, "ok transport.latency 0\n"));
+  CHECK_EQ(report.failed(), 0u);
+  rig.check_nothing_left_but_the_adapter(); }
+
 /* A device that never writes the answer loses the call, not the guest. */
 TEST(transport_scenario, a_device_that_never_answers_fails_the_send)
 { Rig rig;

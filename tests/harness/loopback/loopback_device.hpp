@@ -1,6 +1,7 @@
 /* The device core as a guest core reaches it in one process (docs/testing.md,
  * L4): a realized virtio-gpu-rvk over a MockHost whose guest memory is the
- * guest's MockPlatform, running commands through a MockExecutorOps. Control
+ * guest's MockPlatform, running commands through a MockExecutorOps - or through
+ * an executor table it is given, the real library's among them (feature 044). Control
  * requests pass as bytes, doorbell stores ring the host, and interrupts are
  * waited for and then served by the test on its own thread, as a DPC would.
  * The thread that builds it is both the guest's thread and the device's main
@@ -30,6 +31,9 @@ public:
     static constexpr std::uint8_t default_gpu[16] = {0x10, 0x0B};
 
     explicit LoopbackDevice(MockPlatform &guest, const std::uint8_t *gpu = default_gpu);
+    /* Realized on `executor` instead, bound to the host GPU whose UUID is
+     * `gpu`; executor() is then a mock nothing calls. */
+    LoopbackDevice(MockPlatform &guest, const RvkExecutorOps &executor, const std::uint8_t *gpu);
     ~LoopbackDevice();
     LoopbackDevice(const LoopbackDevice &) = delete;
     LoopbackDevice &operator=(const LoopbackDevice &) = delete;
@@ -47,6 +51,8 @@ public:
     bool        holding(std::uint32_t count);
 
 private:
+    void realize(const RvkExecutorOps &executor, const std::uint8_t *gpu);
+
     MockPlatform     &guest_;
     MockHost          host_;
     MockExecutorOps   executor_;

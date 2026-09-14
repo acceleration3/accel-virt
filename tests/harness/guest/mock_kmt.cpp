@@ -24,7 +24,7 @@ MockKmt::MockKmt()
     : identities_{}, versions_{}, adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{},
       zeroing_{}, calls_{}, objects_{}, views_{}, locked_{}, private_{}, private_size_(0u), submission_{}, submission_size_(0u), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
-      blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u),
+      blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
       queued_taken_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
       journal_count_(0u) {}
@@ -419,7 +419,7 @@ Status MockKmt::wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t dev
 
 std::uint64_t MockKmt::performance_counter(std::uint64_t &frequency) const
 {
-    frequency = ticks_per_second;
+    frequency = frequency_;
     return ticks_;
 }
 
@@ -455,6 +455,7 @@ std::uint32_t MockKmt::command_size(std::uint32_t index) const
 }
 
 void MockKmt::spend_on_wait(std::uint64_t ticks) { wait_cost_ = ticks; }
+void MockKmt::set_frequency(std::uint64_t frequency) { frequency_ = frequency; }
 
 void MockKmt::slip_every(std::uint32_t nth, std::uint64_t ticks)
 {

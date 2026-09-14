@@ -15,6 +15,21 @@ FullStackRig::FullStackRig()
       kmt_(driver_.platform(), driver_.table(), fdo_, dxgkrnl_, function_, pump_), added_(not_added),
       started_(not_added)
 {
+    start();
+}
+
+FullStackRig::FullStackRig(const RvkExecutorOps &executor, const std::uint8_t *gpu)
+    : driver_(), function_(), dxgkrnl_(driver_.platform(), function_), fdo_(driver_.platform(), driver_.table(), dxgkrnl_),
+      device_(driver_.platform(), executor, gpu), bridge_(driver_.platform(), function_.common(), device_),
+      pump_(fdo_, dxgkrnl_, function_.common(), device_.host(), bridge_),
+      kmt_(driver_.platform(), driver_.table(), fdo_, dxgkrnl_, function_, pump_), added_(not_added),
+      started_(not_added)
+{
+    start();
+}
+
+void FullStackRig::start()
+{
     /* First: the knob rebuilds the resource list, and the regions append theirs. */
     function_.set_message_interrupts(message_interrupts);
     function_.add_shared_memory_region(hostmem_region, hostmem_bar, 0u, hostmem_bytes, hostmem_address);

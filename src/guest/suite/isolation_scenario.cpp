@@ -20,10 +20,10 @@ void IsolationScenario::run()
     {
         KmtTransport doomed(link_.connection(), SubApi::vulkan, ScenarioTransport::ring_order);
         if (steps_.check("fault", fault(doomed)) != Status::ok) return;
-        uint32_t     answered = 0u;
-        const Status resent = doomed.nop(answered);
-        steps_.check_refused("faulted_send", resent);
-        if (resent == Status::ok) return;
+        uint32_t answered = 0u;
+        /* The transport refuses every send once a wait has failed, so this
+         * proves the fault stuck to the context rather than asking the host. */
+        steps_.check_refused("faulted_send", doomed.nop(answered));
     }
     if (steps_.check("healthy_after", exercise_healthy()) != Status::ok) return;
     KmtTransport relinked(link_.connection(), SubApi::vulkan, ScenarioTransport::ring_order);
