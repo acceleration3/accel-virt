@@ -77,7 +77,7 @@ description: "Tasks: rvk contexts in a real guest"
 - [X] T014 [US1] `OpenClScenario` (object class) in `src/guest/suite/opencl_scenario.{hpp,cpp}`: vector add of 64 `float`s over `CL_MEM_COPY_HOST_PTR` input buffers and a write-only output, the kernel source a named constant under the 1024-byte command limit, the result read back inline with `clEnqueueReadBuffer` (blocking) and compared exactly
 - [X] T015 [P] [US1] *As built: `TransportScenario` takes the sub-API and the report's name, so the OpenGL check is `TransportScenario(..., SubApi::opengl, "opengl")` rather than a near-copy class.* Originally `OpenGlScenario` in `src/guest/suite/opengl_scenario.{hpp,cpp}` with its test first: a `KmtTransport` of `SubApi::opengl` initializes (the host opened its EGL context), sends a NOP, tears down
 - [X] T016 [US1] *As built so far: `GuestSuite::run_rvk` (adapter, transport, OpenGL) and `rvktest.exe rvk`; Vulkan, OpenCL and isolation join it as they land.* Originally `RvkSuite` (system class) in `src/guest/suite/rvk_suite.{hpp,cpp}` with its test first: finds the adapter, runs transport, Vulkan, OpenCL, OpenGL and (after US2) isolation; a sub-API the capset refuses - the context's setup refused - is reported `skipped` by name rather than failed (spec edge case); `src/um/guest_program.cpp` runs it for `rvktest.exe rvk` *Done: `run_rvk` runs adapter, transport, vulkan, opencl, opengl, isolation; every rvk scenario opens its context through `ScenarioTransport` (adapter, connection, initialize).*
-- [ ] T017 [US1] `tools/guest/run_guest_suite.py`: `--rvk` runs `rvktest.exe rvk` instead of the suite; `verdict.txt` records the executor library loaded and the device's `host-gpu`; tests in `tests/tools/test_run_guest_suite.py` against the fake guest
+- [X] T017 [US1] `tools/guest/run_guest_suite.py`: `--rvk` runs `rvktest.exe rvk` instead of the suite; `verdict.txt` records the executor library loaded and the device's `host-gpu`; tests in `tests/tools/test_run_guest_suite.py` against the fake guest
 
 **Checkpoint**: the rvk scenarios pass over MockKmt and the runner can ask for them. Commit.
 
@@ -97,15 +97,15 @@ description: "Tasks: rvk contexts in a real guest"
 
 ## Phase 5: US3 - The run proves it with numbers (Priority: P2)
 
-- [ ] T021 [US3] The report carries `transport.latency` (T010) and the runner copies it into `verdict.txt` with the executor and GPU; the regression threshold is set from the first passing live run and recorded in `docs/testing.md` (SC-002)
+- [X] T021 [US3] The report carries `transport.latency` (T010) and the runner copies it into `verdict.txt` with the executor and GPU; the regression threshold is set from the first passing live run and recorded in `docs/testing.md` (SC-002)
 
 ---
 
 ## Phase 6: The guest proof and the merge
 
-- [ ] T022 `tools/gate.sh`: when `AV_GUEST_IMAGE` is set and `build-qemu/librvk_executor.so` exists, a second guest boot runs `--rvk --executor build-qemu/librvk_executor.so` after the suite
+- [X] T022 `tools/gate.sh`: when `AV_GUEST_IMAGE` is set and `build-qemu/librvk_executor.so` exists, a second guest boot runs `--rvk --executor build-qemu/librvk_executor.so` after the suite
 - [X] T023 The moved scope is recorded where it lands: `specs/045-vulkan-icd/spec.md` (the host-visible pattern round trip), `specs/050-opengl-icd/spec.md` (clear and read-back), `specs/052-opencl-icd/spec.md` (host-visible buffers); `specs/044-rvk-context-live/spec.md` marks US1.2-US1.4 and US3.1 with what moved
-- [ ] T024 `docs/testing.md` "As built" describes the rvk scenarios, the NOP and the second boot; `docs/protocol.md` the NOP
+- [X] T024 `docs/testing.md` "As built" describes the rvk scenarios, the NOP and the second boot; `docs/protocol.md` the NOP
 - [ ] T025 `AV_GUEST_IMAGE=... tools/gate.sh` passes with both boots; merge to `master`; push
 
 ---

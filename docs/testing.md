@@ -480,11 +480,22 @@ can leave the guest with no display.
   blank (`VsyncScenario` waits for a fixed number of blanks on source 0 and
   judges the rate the performance counter measured against the mode's 60 Hz,
   within 5%), and the transport round trip (`TransportScenario` opens a
-  `GuestConnection` on the adapter the search found, sets up one Vulkan
-  context's `KmtTransport`, sends the echo command `0x10001` with an 8-byte
-  payload and requires the reply to be exactly that payload, which the guest
-  run's echo executor, `tests/qemu/echo_executor.cpp`, writes back) - over the
-  `Kmt` contract. It is portable and held to the same gates as `src/core`: on Linux,
+  `GuestConnection` on the adapter the search found, sets up one context's
+  `KmtTransport` and sends the transport `NOP`, which the device answers itself
+  with an empty reply whichever executor is loaded, and reports the round trip
+  as `transport.latency`) - over the `Kmt` contract.
+- **The rvk scenarios** (feature 044) are `rvktest.exe rvk`, `GuestSuite::run_rvk`:
+  the transport no-op on Vulkan and on OpenGL (whose setup is the host opening
+  its EGL context), `VulkanScenario` (instance, physical device, device, buffer,
+  memory, bind, destroy through the generated client), `OpenClScenario` (vector
+  add of 64 floats read back and compared exactly) and `IsolationScenario` (a
+  context whose malformed `vkCreateInstance` the host faults fails its sends
+  while a healthy one keeps working and a new one sets up). They need the real
+  executor library and a host GPU, so the runner asks for them with `--rvk
+  --executor build-qemu/librvk_executor.so`, records the executor and the
+  no-op's latency in the verdict and fails a no-op past 50 ms (SC-002; the first
+  live runs measured 0.87 ms idle and 4.4 ms under load). The generated Vulkan
+  and OpenCL clients build freestanding into the program for them. It is portable and held to the same gates as `src/core`: on Linux,
   `MockKmt` (`tests/harness/guest/`) scripts every call's failure, zero handles
   and hostile enumerations, at 100% branch coverage.
 - **The program** is `src/um/`: `GdiKmt` translates `Kmt` into gdi32's D3DKMT
@@ -585,7 +596,9 @@ can leave the guest with no display.
   worst wait. It is not part of an ordinary run: a gate run asks for no stress
   and gets none.
 - **The gate**: `tools/gate.sh` runs it when `AV_GUEST_IMAGE` names a prepared
-  image, and says it skipped the guest otherwise. From feature 037 on a skipped
+  image, then boots the guest a second time with `--rvk` and the real executor
+  (the suite's timeout scenario needs the echo library's stall, the rvk
+  scenarios a host GPU), and says it skipped the guest otherwise. From feature 037 on a skipped
   guest is not a pass: no feature merges until the suite has run live, because
   every defect in that feature - a VidPn dxgkrnl would not commit, a segment set
   VidMm could not place, a handle callback WDDM 2.0 had replaced - was invisible
@@ -650,6 +663,7 @@ and `symbols/` on any Windows machine: `!analyze -v`.
 **Options for a debugging run:**
 
 ```bash
+tools/guest/run_guest_suite.py --quick            # install, check and the suite: ~4 minutes, no display/power/sleep scenarios
 tools/guest/run_guest_suite.py --hold             # on failure, keep the guest running until Enter
 tools/guest/run_guest_suite.py --vnc 1            # the guest's display on 127.0.0.1:5901
 tools/guest/run_guest_suite.py --gdb 1234         # QEMU's gdbstub: gdb -ex 'target remote :1234'
@@ -677,7 +691,7 @@ pause the guest and read them:
 
 ```bash
 tools/guest/run_guest_suite.py --on-panic pause --gdb 1234 --hold
-gdb -q -batch -ex 'target remote 127.0.0.1:1234' -x read_bugcheck.py
+gdb -q -batch -ex 'target remote 127.0.0.1:1234' -x tools/guest/read_bugcheck.py
 ```
 
 Find `ntoskrnl`'s base by walking pages down from any kernel `$rip` to the

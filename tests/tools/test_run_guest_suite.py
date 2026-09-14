@@ -279,6 +279,16 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertNotIn("guest: monitortimeout", result.stdout)
         self.assertNotIn("guest: sleepstates", result.stdout)
 
+    def test_an_rvk_run_whose_no_op_is_past_the_threshold_fails(self):
+        """SC-002: a transport that has stopped being interrupt-driven passes every
+        step and is still a regression."""
+        report = "ok transport.nop\nok transport.latency 60000\nrvktest: 2 passed, 0 failed\n"
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                             "rvktest": report, "collect": COLLECTED})
+        result = self.run_suite("--rvk")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("guest: rvk failed: a no-op took 60000 us, past the 50000 us threshold", result.stdout)
+
     def test_an_rvk_run_with_a_failed_step_fails(self):
         self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
                              "rvktest": "FAIL opencl.sum status=4 63\nrvktest: 11 passed, 1 failed\n",

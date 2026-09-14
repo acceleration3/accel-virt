@@ -47,6 +47,11 @@ REBOOT_REQUIRED = 3010
 SUMMARY = re.compile(rb"^rvktest: (\d+) passed, (\d+) failed$", re.M)
 # The no-op's round trip the transport scenario measures, in microseconds (feature 044).
 RVK_LATENCY = re.compile(rb"^ok transport\.latency (\d+)", re.MULTILINE)
+# SC-002's regression threshold. The first passing live runs measured 0.87 ms (an
+# idle host) and 4.4 ms (a host building beside it); a no-op past 50 ms is a
+# transport that has stopped being interrupt-driven, and one near dxgkrnl's 2 s
+# TdrDelay is a reset waiting to happen.
+RVK_LATENCY_LIMIT_US = 50000
 # The guest ends its lines the Windows way, so nothing anchored at $ may
 # assume the line stops at the newline.
 CYCLES_DONE = re.compile(r"^cycle: (\d+) done\r?$", re.M)
@@ -982,8 +987,12 @@ class GuestRun:
             raise StepFailed("rvk", f"{failed} step(s) failed, exit {code}; see rvk.txt")
         self.say(f"rvk ok: {int(summary.group(1))} passed")
         latency = RVK_LATENCY.search(out)
-        if latency is not None:
-            self.say(f"rvk latency: a transport no-op round trip took {int(latency.group(1))} us")
+        if latency is None:
+            return
+        microseconds = int(latency.group(1))
+        self.say(f"rvk latency: a transport no-op round trip took {microseconds} us")
+        if microseconds > RVK_LATENCY_LIMIT_US:
+            raise StepFailed("rvk", f"a no-op took {microseconds} us, past the {RVK_LATENCY_LIMIT_US} us threshold")
 
     def timeout_events(self):
         """Event 4101 is dxgkrnl saying it reset a driver that stopped
