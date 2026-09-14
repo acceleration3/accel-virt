@@ -2992,6 +2992,31 @@ TEST(adapter_set_power_state, d0_on_the_same_device_makes_the_host_visible_regio
   CHECK_EQ(fixture.region_maps(), 2u);
   CHECK_EQ(reported_segments(fixture), 2u); }
 
+/* dxgkrnl may ask for D0 on an adapter already in D0: the device was never
+ * reset, so the blob it holds is the region working and is kept. */
+TEST(adapter_set_power_state, a_second_d0_keeps_the_host_visible_region)
+{ Fixture fixture;
+  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  CHECK_EQ(fixture.start(), success);
+  fixture.answer_asks();
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK_EQ(fixture.region_maps(), 1u);
+  CHECK_EQ(reported_segments(fixture), 2u); }
+
+/* A timeout reset is a device reset too, and the restart makes the blob again. */
+TEST(adapter_restart_from_timeout, makes_the_host_visible_region_again)
+{ Fixture fixture;
+  fixture.function().add_shared_memory_region(1u, 2u, 0u, host_region_bytes, host_region_address);
+  CHECK_EQ(fixture.start(), success);
+  CHECK_EQ(nt(fixture.adapter().reset_from_timeout()), success);
+  fixture.forget_control();
+  fixture.answer_asks();
+  CHECK_EQ(nt(fixture.adapter().restart_from_timeout()), success);
+  fixture.platform().on_stall(nullptr, nullptr);
+  CHECK_EQ(fixture.region_maps(), 2u);
+  CHECK_EQ(reported_segments(fixture), 2u); }
+
 /* Another device behind the function is not the one the segment was reported
  * for, so the region is closed rather than made on it. */
 TEST(adapter_set_power_state, a_device_that_changed_gets_no_host_visible_region)

@@ -150,9 +150,11 @@ void Adapter::remember_device()
     log_status("rvkgpu: device capset", NtStatus(read).value());
 }
 
+/* A blob already made is the region working: a D0 that finds the device
+ * still powered has nothing to make again. */
 void Adapter::open_region()
 {
-    if (!host_visible_.offered()) return;
+    if (!host_visible_.offered() || region_blob_.created()) return;
     const Status created = region_blob_.create(device_.object(), HostVisibleBlob::first_resource_id,
                                                host_visible_.size());
     const Status mapped = created == Status::ok ? region_blob_.map(device_.object(), 0u) : created;
@@ -222,8 +224,11 @@ Status Adapter::power_up()
 Status Adapter::power_down()
 {
     if (!device_.constructed()) return Status::ok;
-    /* A reset destroys every host context, and the device object goes with it. */
+    /* A reset destroys every host context and blob, and the device object goes
+     * with it. The region stays found and offered - VidMm keeps the segment -
+     * for whatever brings the device back to make its blob again. */
     rvk_contexts_.abandon_all();
+    region_blob_.abandon();
     const Status status = present_ ? device_.object().stop() : Status::ok;
     device_.destroy();
     return status;
@@ -417,10 +422,6 @@ int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)
     if (power_state > power_d0 && power_state <= power_d3) {
         platform_.log("rvkgpu: SetPowerState D3");
         static_cast<void>(transition_.hold(device_.constructed(), scanning_out()));
-        /* The reset takes the blob with it, but the region stays where it was
-         * found and offered: D0 makes the blob again on the device that comes
-         * back, or closes the region if that device cannot have it. */
-        region_blob_.abandon();
         /* Before the device goes: a vertical blank reported to an adapter that
          * is not powered - or to one on its way out of S3, before dxgkrnl has
          * powered it up - is what bugchecks the guest. */
@@ -723,7 +724,9 @@ int32_t Adapter::restart_from_timeout()
     platform_.require_irql_at_most(Irql::passive, "Adapter::restart_from_timeout");
     InvariantScope<Adapter> guard(platform_, *this, "restart_from_timeout");
     const Status status = started_ ? power_up() : Status::ok;
-    if (status == Status::ok) node_.restart();
+    if (status != Status::ok) return NtStatus(status).value();
+    node_.restart();
+    open_region();
     return NtStatus(status).value();
 }
 
