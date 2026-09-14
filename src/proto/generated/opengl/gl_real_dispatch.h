@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "gl_types.h"
 
@@ -22,7 +22,7 @@ struct RealGl {
     // bounds-checked against the mapping. Set by the server;
     // null when there is no region, in which case a command
     // that names one is refused rather than guessed at.
-    std::uint8_t* (*rvk_blob)(void*, std::uint64_t, std::uint64_t) = nullptr;
+    uint8_t* (*rvk_blob)(void*, uint64_t, uint64_t) = nullptr;
     void* rvk_blob_user = nullptr;
 
     // A guest mints a sync token; the host binds it to whatever
@@ -30,9 +30,9 @@ struct RealGl {
     // rather than free functions for the reason rvk_blob is one:
     // a parameterless hook cannot reach one context's state, and
     // this project has no file-scope place to put it (042).
-    void (*rvk_bind_sync)(void*, std::uint64_t, void*) = nullptr;
-    void* (*rvk_sync_for)(void*, std::uint64_t) = nullptr;
-    void (*rvk_forget_sync)(void*, std::uint64_t) = nullptr;
+    void (*rvk_bind_sync)(void*, uint64_t, void*) = nullptr;
+    void* (*rvk_sync_for)(void*, uint64_t) = nullptr;
+    void (*rvk_forget_sync)(void*, uint64_t) = nullptr;
     void* rvk_sync_user = nullptr;
     void (*glActiveShaderProgram)(GLuint, GLuint) = nullptr;
     void (*glActiveTexture)(GLenum) = nullptr;
@@ -1416,8 +1416,8 @@ struct RealGl {
 // Returns how many entry points were found.
 using GlLoader = void* (*)(const char* name, void* user);
 
-inline std::size_t load_real_gl(RealGl& gl, GlLoader load, void* user) {
-    std::size_t found = 0;
+inline size_t load_real_gl(RealGl& gl, GlLoader load, void* user) {
+    size_t found = 0;
     gl.glActiveShaderProgram = reinterpret_cast<void (*)(GLuint, GLuint)>(load("glActiveShaderProgram", user));
     if (gl.glActiveShaderProgram != nullptr) ++found;
     gl.glActiveTexture = reinterpret_cast<void (*)(GLenum)>(load("glActiveTexture", user));

@@ -13,11 +13,18 @@ file(GLOB_RECURSE RVKTEST_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
-# This program has no C runtime, and the generated wire includes <cstdint>: the
-# Vulkan wire belongs to the ICD feature 045 builds, not to the D3DKMT suite.
+# Of the generated tree, only the guest's encoders: the rvk scenarios send real
+# Vulkan and OpenCL streams (044). The server dispatch is the host's, and the
+# OpenGL client does not link before its ICD helpers exist (050).
 file(GLOB_RECURSE RVKTEST_GENERATED CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated/*.cpp)
 list(REMOVE_ITEM RVKTEST_SOURCES ${RVKTEST_GENERATED})
+set(RVKTEST_GENERATED_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../proto/generated)
+list(APPEND RVKTEST_SOURCES
+  ${RVKTEST_GENERATED_DIR}/vulkan/vk_dispatch_client.cpp
+  ${RVKTEST_GENERATED_DIR}/vulkan/vk_handle_default.cpp
+  ${RVKTEST_GENERATED_DIR}/vulkan/vk_host_image_default.cpp
+  ${RVKTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp)
 
 # Import libraries naming exactly what the program calls; the SDK's own are
 # not in the kit.
@@ -33,5 +40,8 @@ add_custom_target(rvktest_imports DEPENDS ${RVKTEST_IMPORTS})
 
 add_executable(rvktest ${RVKTEST_SOURCES})
 add_dependencies(rvktest rvktest_imports)
-target_include_directories(rvktest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_include_directories(rvktest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/khronos/include
+  ${RVKTEST_GENERATED_DIR}/vulkan
+  ${RVKTEST_GENERATED_DIR}/opencl)
 target_link_libraries(rvktest PRIVATE ${RVKTEST_IMPORTS})

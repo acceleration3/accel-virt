@@ -83,7 +83,7 @@ def _pixel_bytes_expr(cmd: Command, p: Param) -> str:
     """The byte count of a pixel parameter, in the client's scope."""
     stated = _stated_size(cmd)
     if stated is not None:
-        return f"static_cast<std::size_t>({stated})"
+        return f"static_cast<size_t>({stated})"
     return f"{p.name}_bytes"
 
 
@@ -99,16 +99,16 @@ def _client_params(cmd: Command, defaults: bool = False) -> list[str]:
         if p.role is Role.IGNORED:
             continue
         if p.role is Role.SYNC:
-            out.append(f"std::uint64_t {p.name}")
+            out.append(f"uint64_t {p.name}")
         elif p.role is Role.BUFFER_OFFSET:
-            out.append(f"std::uint64_t {p.name}")
+            out.append(f"uint64_t {p.name}")
         elif p.role is Role.OFFSET_ARRAY:
-            out.append(f"const std::uint64_t* {p.name}")
+            out.append(f"const uint64_t* {p.name}")
         elif p.role in (Role.PIXELS_IN, Role.PIXELS_OUT):
             const = "const " if p.role is Role.PIXELS_IN else ""
             out.append(f"{const}void* {p.name}")
             if _stated_size(cmd) is None:
-                out.append(f"std::size_t {p.name}_bytes")
+                out.append(f"size_t {p.name}_bytes")
             # With a pixel buffer bound the pointer is an offset into
             # it, not an address in the caller — the same argument
             # meaning two different things is what the specification
@@ -127,7 +127,7 @@ def _client_return(cmd: Command) -> str:
     if kind == "void":
         return "void"
     if kind == "sync":
-        return "std::uint64_t"
+        return "uint64_t"
     if kind == "string":
         return "bool"
     return cmd.return_type.cpp()
@@ -144,8 +144,8 @@ def _client_signature(cmd: Command, defaults: bool = False) -> str:
         # buffer and is told how long the answer really was: a driver that
         # was handed too little sees the truncation and asks again with
         # room, rather than the wire deciding for it.
-        params += ["char* out", "std::size_t out_capacity",
-                   "std::size_t* out_length"]
+        params += ["char* out", "size_t out_capacity",
+                   "size_t* out_length"]
     return f"{_client_return(cmd)} rvk_{cmd.name}({', '.join(params)})"
 
 
@@ -161,9 +161,9 @@ def _count_expr(p: Param) -> str:
     if length.kind is LengthKind.FIXED:
         return str(length.count)
     if length.kind in (LengthKind.PARAM, LengthKind.EXPR):
-        return f"static_cast<std::size_t>({length.text})"
+        return f"static_cast<size_t>({length.text})"
     if length.kind is LengthKind.STRING:
-        return f"({p.name} != nullptr ? std::strlen(reinterpret_cast<const char*>({p.name})) : 0)"
+        return f"({p.name} != nullptr ? __builtin_strlen(reinterpret_cast<const char*>({p.name})) : 0)"
     if length.kind is LengthKind.PNAME:
         # The transport-taking overload: a few of these are lists whose
         # length only the driver knows, and a table that guessed too
@@ -171,7 +171,7 @@ def _count_expr(p: Param) -> str:
         return f"::av::glproto::pname_count(rvk_t, {length.reads[0]})"
     if length.kind is LengthKind.TYPED_COUNT:
         count, type_name = length.reads
-        return (f"(static_cast<std::size_t>({count}) * "
+        return (f"(static_cast<size_t>({count}) * "
                 f"::av::glproto::type_size({type_name}))")
     raise AssertionError(f"no count for {p.name}: {length.kind}")
 
@@ -182,7 +182,7 @@ def _storage_type(p: Param) -> str:
     ``void`` is neither: a void* run is a count of bytes, which is what
     ``sizeof(void)`` means where a compiler allows it at all.
     """
-    return "std::uint8_t" if p.type.base == "void" else p.type.base
+    return "uint8_t" if p.type.base == "void" else p.type.base
 
 
 def _bytes_expr(p: Param) -> str:
@@ -198,10 +198,10 @@ def _bytes_expr(p: Param) -> str:
 # ---------------------------------------------------------------------
 
 def emit_ids(reg: Registry, out_dir: Path) -> None:
-    out = [HEADER, "#pragma once\n", "#include <cstdint>\n",
+    out = [HEADER, "#pragma once\n", "#include <stdint.h>\n",
            "namespace av::glproto {\n"]
     for cmd in reg.commands.values():
-        out.append(f"inline constexpr std::uint32_t kCmd_{cmd.name} = "
+        out.append(f"inline constexpr uint32_t kCmd_{cmd.name} = "
                    f"0x{cmd.command_id:08x};")
     out += ["", "}  // namespace av::glproto", ""]
     write(out_dir / "gl_protocol_ids.h", "\n".join(out))
@@ -212,19 +212,19 @@ def emit_ids(reg: Registry, out_dir: Path) -> None:
 # nothing else. Each name means one width, and a width is what the wire
 # needs it for.
 KHRONOS_WIDTHS = {
-    "khronos_int8_t": "std::int8_t",
-    "khronos_uint8_t": "std::uint8_t",
-    "khronos_int16_t": "std::int16_t",
-    "khronos_uint16_t": "std::uint16_t",
-    "khronos_int32_t": "std::int32_t",
-    "khronos_uint32_t": "std::uint32_t",
-    "khronos_int64_t": "std::int64_t",
-    "khronos_uint64_t": "std::uint64_t",
+    "khronos_int8_t": "int8_t",
+    "khronos_uint8_t": "uint8_t",
+    "khronos_int16_t": "int16_t",
+    "khronos_uint16_t": "uint16_t",
+    "khronos_int32_t": "int32_t",
+    "khronos_uint32_t": "uint32_t",
+    "khronos_int64_t": "int64_t",
+    "khronos_uint64_t": "uint64_t",
     "khronos_float_t": "float",
-    "khronos_intptr_t": "std::intptr_t",
-    "khronos_uintptr_t": "std::uintptr_t",
-    "khronos_ssize_t": "std::ptrdiff_t",
-    "khronos_usize_t": "std::size_t",
+    "khronos_intptr_t": "intptr_t",
+    "khronos_uintptr_t": "uintptr_t",
+    "khronos_ssize_t": "ptrdiff_t",
+    "khronos_usize_t": "size_t",
 }
 
 
@@ -238,8 +238,8 @@ def emit_types(reg: Registry, out_dir: Path) -> None:
     are what is written out.
     """
     out = [HEADER, "#pragma once\n",
-           "#include <cstddef>",
-           "#include <cstdint>\n",
+           "#include <stddef.h>",
+           "#include <stdint.h>\n",
            "// The calling convention every GL entry point is declared",
            "// with, taken the way the Khronos headers take it: from the",
            "// platform where the platform has one, and nothing at all",
@@ -263,14 +263,14 @@ def emit_types(reg: Registry, out_dir: Path) -> None:
 
 
 def emit_names(reg: Registry, out_dir: Path) -> None:
-    h = [HEADER, "#pragma once\n", "#include <cstdint>\n",
+    h = [HEADER, "#pragma once\n", "#include <stdint.h>\n",
          "namespace av::glproto {\n",
-         "const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept;\n",
+         "const char* cmd_id_to_string(uint32_t cmd_id) noexcept;\n",
          "}  // namespace av::glproto", ""]
     c = [HEADER, '#include "gl_command_names.h"\n',
          '#include "gl_protocol_ids.h"\n',
          "namespace av::glproto {\n",
-         "const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept {",
+         "const char* cmd_id_to_string(uint32_t cmd_id) noexcept {",
          "    switch (cmd_id) {"]
     for cmd in reg.commands.values():
         c.append(f'        case kCmd_{cmd.name}: return "{cmd.name}";')
@@ -286,8 +286,8 @@ def emit_names(reg: Registry, out_dir: Path) -> None:
 
 def emit_sizes(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n",
-           "#include <cstddef>",
-           "#include <cstdint>\n",
+           "#include <stddef.h>",
+           "#include <stdint.h>\n",
            "namespace av::glproto {\n",
            "// How many values a query with this enum answers with.",
            "//",
@@ -295,7 +295,7 @@ def emit_sizes(reg: Registry, out_dir: Path) -> None:
            "// enum answers with one value; the ones that do not are",
            "// listed in the profile, and both sides read this table, so",
            "// they agree about how much came back.",
-           "[[nodiscard]] inline std::size_t pname_count(std::uint32_t pname) noexcept {",
+           "[[nodiscard]] inline size_t pname_count(uint32_t pname) noexcept {",
            "    switch (pname) {"]
     written: dict[int, tuple[str, int]] = {}
     for name, count in sorted(reg.pname_counts.items()):
@@ -317,7 +317,7 @@ def emit_sizes(reg: Registry, out_dir: Path) -> None:
             "}",
             "",
             "// How wide one element of an index or vertex array is.",
-            "[[nodiscard]] inline std::size_t type_size(std::uint32_t type) noexcept {",
+            "[[nodiscard]] inline size_t type_size(uint32_t type) noexcept {",
             "    switch (type) {",
             "        case 0x1400: return 1;  // GL_BYTE",
             "        case 0x1401: return 1;  // GL_UNSIGNED_BYTE",
@@ -356,7 +356,7 @@ def _lease_for_write(name: str, out: list[str], guard: str) -> None:
     out.append("        if (rvk_blobs.ready()) {")
     out.append(f"            {name}_lease = rvk_blobs.take({name}_want);")
     out.append(f"            if ({name}_lease.ok()) {{")
-    out.append(f"                std::memcpy({name}_lease.data, {name}, {name}_want);")
+    out.append(f"                __builtin_memcpy({name}_lease.data, {name}, {name}_want);")
     out.append(f"                {name}_via_blob = true;")
     out.append("            }")
     out.append("        }")
@@ -394,36 +394,36 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
         if _is_pod_scalar(p.type.base):
             out.append(f"    rvk_b.write_pod<{p.type.base}>({name});")
         else:
-            out.append(f"    rvk_b.write_varint(static_cast<std::uint64_t>({name}));")
+            out.append(f"    rvk_b.write_varint(static_cast<uint64_t>({name}));")
         return
     if p.role in (Role.SYNC, Role.BUFFER_OFFSET):
-        out.append(f"    rvk_b.write_pod<std::uint64_t>({name});")
+        out.append(f"    rvk_b.write_pod<uint64_t>({name});")
         return
     if p.role is Role.OFFSET_ARRAY:
-        out.append(f"    rvk_b.write_pod<std::uint8_t>({name} != nullptr ? 1 : 0);")
+        out.append(f"    rvk_b.write_pod<uint8_t>({name} != nullptr ? 1 : 0);")
         out.append(f"    if ({name} != nullptr) {{")
-        out.append(f"        const std::size_t rvk_n = {_count_expr(p)};")
-        out.append("        rvk_b.write_varint(static_cast<std::uint64_t>(rvk_n));")
-        out.append("        for (std::size_t rvk_i = 0; rvk_i < rvk_n; ++rvk_i) {")
-        out.append(f"            rvk_b.write_pod<std::uint64_t>({name}[rvk_i]);")
+        out.append(f"        const size_t rvk_n = {_count_expr(p)};")
+        out.append("        rvk_b.write_varint(static_cast<uint64_t>(rvk_n));")
+        out.append("        for (size_t rvk_i = 0; rvk_i < rvk_n; ++rvk_i) {")
+        out.append(f"            rvk_b.write_pod<uint64_t>({name}[rvk_i]);")
         out.append("        }")
         out.append("    }")
         return
     if p.role is Role.PIXELS_IN:
         size = _pixel_bytes_expr(cmd, p)
-        out.append(f"    const std::size_t {name}_want = static_cast<std::size_t>({size});")
+        out.append(f"    const size_t {name}_want = static_cast<size_t>({size});")
         _lease_for_write(name, out, guard=f"!{name}_is_offset && {name} != nullptr")
-        out.append(f"    rvk_b.write_pod<std::uint8_t>("
+        out.append(f"    rvk_b.write_pod<uint8_t>("
                    f"{name}_is_offset ? 2 : ({name}_via_blob ? 3 : "
                    f"({name} != nullptr ? 1 : 0)));")
         out.append(f"    if ({name}_is_offset) {{")
-        out.append(f"        rvk_b.write_varint(static_cast<std::uint64_t>("
-                   f"reinterpret_cast<std::uintptr_t>({name})));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>("
+                   f"reinterpret_cast<uintptr_t>({name})));")
         out.append(f"    }} else if ({name}_via_blob) {{")
-        out.append(f"        rvk_b.write_varint(static_cast<std::uint64_t>({name}_want));")
-        out.append(f"        rvk_b.write_varint(static_cast<std::uint64_t>({name}_lease.offset));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_want));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_lease.offset));")
         out.append(f"    }} else if ({name} != nullptr) {{")
-        out.append(f"        rvk_b.write_varint(static_cast<std::uint64_t>({name}_want));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_want));")
         out.append(f"        if ({name}_want != 0) rvk_b.write({name}, {name}_want);")
         out.append("    }")
         return
@@ -441,7 +441,7 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
         # Below a page it is not worth it — the allocator rounds to
         # one, so a four-byte read would take 4096 and a round trip to
         # give it back, which is worse than the reply slot it replaced.
-        out.append(f"    const std::size_t {name}_want = static_cast<std::size_t>({size});")
+        out.append(f"    const size_t {name}_want = static_cast<size_t>({size});")
         out.append(f"    ::av::ClientBlobArena::Lease {name}_lease{{}};")
         out.append(f"    bool {name}_via_blob = false;")
         if not cmd.is_async:
@@ -463,64 +463,64 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
             # before it. The host writes zeros there, and this is how
             # it looks like the host.
             out.append(f"            if ({name}_via_blob) "
-                       f"std::memset({name}_lease.data, 0, {name}_want);")
+                       f"__builtin_memset({name}_lease.data, 0, {name}_want);")
             out.append("        }")
             out.append("    }")
-        out.append(f"    rvk_b.write_pod<std::uint8_t>(")
+        out.append(f"    rvk_b.write_pod<uint8_t>(")
         out.append(f"        {name}_is_offset ? 2 : ({name}_via_blob ? 3 : "
                    f"({name} != nullptr ? 1 : 0)));")
         out.append(f"    if ({name}_is_offset) {{")
-        out.append(f"        rvk_b.write_varint(static_cast<std::uint64_t>("
-                   f"reinterpret_cast<std::uintptr_t>({name})));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>("
+                   f"reinterpret_cast<uintptr_t>({name})));")
         out.append(f"    }} else if ({name}_via_blob) {{")
-        out.append(f"        rvk_b.write_varint(static_cast<std::uint64_t>({name}_want));")
-        out.append(f"        rvk_b.write_varint(static_cast<std::uint64_t>({name}_lease.offset));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_want));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_lease.offset));")
         out.append(f"    }} else if ({name} != nullptr) {{")
-        out.append(f"        rvk_b.write_varint(static_cast<std::uint64_t>({name}_want));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_want));")
         out.append("    }")
         return
     if p.role is Role.STRING_IN:
-        out.append(f"    rvk_b.write_pod<std::uint8_t>({name} != nullptr ? 1 : 0);")
+        out.append(f"    rvk_b.write_pod<uint8_t>({name} != nullptr ? 1 : 0);")
         out.append(f"    if ({name} != nullptr) {{")
-        out.append(f"        const std::size_t rvk_n = {_count_expr(p)};")
-        out.append("        rvk_b.write_varint(static_cast<std::uint64_t>(rvk_n));")
+        out.append(f"        const size_t rvk_n = {_count_expr(p)};")
+        out.append("        rvk_b.write_varint(static_cast<uint64_t>(rvk_n));")
         out.append(f"        if (rvk_n != 0) rvk_b.write({name}, rvk_n);")
         out.append("    }")
         return
     if p.role is Role.STRING_ARRAY_IN:
         count = _count_expr(p)
-        out.append(f"    rvk_b.write_pod<std::uint8_t>({name} != nullptr ? 1 : 0);")
+        out.append(f"    rvk_b.write_pod<uint8_t>({name} != nullptr ? 1 : 0);")
         out.append(f"    if ({name} != nullptr) {{")
-        out.append(f"        const std::size_t rvk_n = {count};")
-        out.append("        rvk_b.write_varint(static_cast<std::uint64_t>(rvk_n));")
-        out.append("        for (std::size_t rvk_i = 0; rvk_i < rvk_n; ++rvk_i) {")
+        out.append(f"        const size_t rvk_n = {count};")
+        out.append("        rvk_b.write_varint(static_cast<uint64_t>(rvk_n));")
+        out.append("        for (size_t rvk_i = 0; rvk_i < rvk_n; ++rvk_i) {")
         out.append(f"            const auto* rvk_s = {name}[rvk_i];")
         if p.has_lengths:
             # glShaderSource: a negative length, or none at all, means
             # the string is terminated rather than counted.
-            out.append("            const std::size_t rvk_len = rvk_s == nullptr ? 0")
+            out.append("            const size_t rvk_len = rvk_s == nullptr ? 0")
             out.append("                : (length != nullptr && length[rvk_i] >= 0)")
-            out.append("                    ? static_cast<std::size_t>(length[rvk_i])")
-            out.append("                    : std::strlen(reinterpret_cast<const char*>(rvk_s));")
+            out.append("                    ? static_cast<size_t>(length[rvk_i])")
+            out.append("                    : __builtin_strlen(reinterpret_cast<const char*>(rvk_s));")
         else:
-            out.append("            const std::size_t rvk_len = rvk_s == nullptr ? 0")
-            out.append("                : std::strlen(reinterpret_cast<const char*>(rvk_s));")
-        out.append("            rvk_b.write_varint(static_cast<std::uint64_t>(rvk_len));")
+            out.append("            const size_t rvk_len = rvk_s == nullptr ? 0")
+            out.append("                : __builtin_strlen(reinterpret_cast<const char*>(rvk_s));")
+        out.append("            rvk_b.write_varint(static_cast<uint64_t>(rvk_len));")
         out.append("            if (rvk_len != 0) rvk_b.write(rvk_s, rvk_len);")
         out.append("        }")
         out.append("    }")
         return
     if p.role is Role.ARRAY_IN:
-        out.append(f"    std::size_t {name}_want = 0;")
+        out.append(f"    size_t {name}_want = 0;")
         out.append(f"    if ({name} != nullptr) {name}_want = {_bytes_expr(p)};")
         _lease_for_write(name, out, guard=f"{name} != nullptr")
-        out.append(f"    rvk_b.write_pod<std::uint8_t>("
+        out.append(f"    rvk_b.write_pod<uint8_t>("
                    f"{name} == nullptr ? 0 : ({name}_via_blob ? 3 : 1));")
         out.append(f"    if ({name}_via_blob) {{")
-        out.append(f"        rvk_b.write_varint(static_cast<std::uint64_t>({name}_want));")
-        out.append(f"        rvk_b.write_varint(static_cast<std::uint64_t>({name}_lease.offset));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_want));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_lease.offset));")
         out.append(f"    }} else if ({name} != nullptr) {{")
-        out.append(f"        rvk_b.write_varint(static_cast<std::uint64_t>({name}_want));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_want));")
         out.append(f"        if ({name}_want != 0) rvk_b.write({name}, {name}_want);")
         out.append("    }")
         return
@@ -530,11 +530,11 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
         # own state - how many values this enum answers with - would
         # be a second question over the wire to bound the first one's
         # answer.
-        out.append(f"    const std::size_t {name}_want = "
+        out.append(f"    const size_t {name}_want = "
                    f"{name} != nullptr ? {_bytes_expr(p)} : 0u;")
-        out.append(f"    rvk_b.write_pod<std::uint8_t>({name} != nullptr ? 1 : 0);")
+        out.append(f"    rvk_b.write_pod<uint8_t>({name} != nullptr ? 1 : 0);")
         out.append(f"    if ({name} != nullptr) {{")
-        out.append(f"        rvk_b.write_varint(static_cast<std::uint64_t>({name}_want));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_want));")
         out.append("    }")
         return
     raise AssertionError(f"no encoder for {p.role}")
@@ -545,15 +545,15 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
     fail = {"void": "return;", "scalar": "return 0;", "sync": "return 0;",
             "string": "return false;", "pointer": "return nullptr;"}[kind]
     if kind == "scalar":
-        out.append("    std::uint64_t rvk_ret = 0;")
+        out.append("    uint64_t rvk_ret = 0;")
         out.append(f"    if (!rvk_r.read_varint(rvk_ret)) {fail}")
     elif kind == "sync":
-        out.append("    std::uint64_t rvk_ret = 0;")
+        out.append("    uint64_t rvk_ret = 0;")
         out.append(f"    if (!rvk_r.read_pod(rvk_ret)) {fail}")
     elif kind == "string":
-        out.append("    std::uint64_t rvk_present = 0;")
+        out.append("    uint64_t rvk_present = 0;")
         out.append(f"    if (!rvk_r.read_varint(rvk_present)) {fail}")
-        out.append("    std::uint64_t length = 0;")
+        out.append("    uint64_t length = 0;")
         out.append(f"    if (!rvk_r.read_varint(length)) {fail}")
         # The length is the host's word for it, and the reply is the
         # only thing that bounds it.
@@ -562,11 +562,11 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
         # caller holding nothing can ask with a null buffer and then ask
         # again with the right one.
         out.append("    if (out_length != nullptr) "
-                   "*out_length = static_cast<std::size_t>(length);")
-        out.append("    std::size_t rvk_kept = 0;")
+                   "*out_length = static_cast<size_t>(length);")
+        out.append("    size_t rvk_kept = 0;")
         out.append("    if (out != nullptr && out_capacity != 0) {")
-        out.append("        rvk_kept = static_cast<std::size_t>(length) < out_capacity")
-        out.append("            ? static_cast<std::size_t>(length) : out_capacity - 1;")
+        out.append("        rvk_kept = static_cast<size_t>(length) < out_capacity")
+        out.append("            ? static_cast<size_t>(length) : out_capacity - 1;")
         out.append(f"        if (rvk_kept != 0 && !rvk_r.read(out, rvk_kept)) {fail}")
         # Terminated, because what the caller hands its own caller back is
         # a const GLubyte* and nothing carries the length with it.
@@ -574,8 +574,8 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
         out.append("    }")
         # Whatever did not fit is still on the reply, and anything the
         # command answers with follows it.
-        out.append("    for (std::uint64_t rvk_i = rvk_kept; rvk_i < length; ++rvk_i) {")
-        out.append("        std::uint8_t rvk_byte = 0;")
+        out.append("    for (uint64_t rvk_i = rvk_kept; rvk_i < length; ++rvk_i) {")
+        out.append("        uint8_t rvk_byte = 0;")
         out.append(f"        if (!rvk_r.read_pod(rvk_byte)) {fail}")
         out.append("    }")
     for p in cmd.params:
@@ -584,11 +584,11 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
             # count: a host that answers with more than was asked for
             # is answering past the end of somebody's buffer.
             out.append(f"    if ({p.name} != nullptr) {{")
-            out.append("        std::uint64_t rvk_bytes = 0;")
+            out.append("        uint64_t rvk_bytes = 0;")
             out.append(f"        if (!rvk_r.read_varint(rvk_bytes)) {fail}")
-            out.append(f"        if (rvk_bytes > static_cast<std::uint64_t>({p.name}_want)) {fail}")
+            out.append(f"        if (rvk_bytes > static_cast<uint64_t>({p.name}_want)) {fail}")
             out.append("        if (rvk_bytes != 0 &&")
-            out.append(f"            !rvk_r.read({p.name}, static_cast<std::size_t>(rvk_bytes))) {fail}")
+            out.append(f"            !rvk_r.read({p.name}, static_cast<size_t>(rvk_bytes))) {fail}")
             out.append("    }")
         elif p.role is Role.PIXELS_OUT:
             # Through the blob the pixels are already here: the host
@@ -596,7 +596,7 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
             # left is to hand them to the caller and give the lease
             # back.
             out.append(f"    if ({p.name}_via_blob) {{")
-            out.append(f"        std::memcpy({p.name}, {p.name}_lease.data, {p.name}_want);")
+            out.append(f"        __builtin_memcpy({p.name}, {p.name}_lease.data, {p.name}_want);")
             out.append("        rvk_t.blobs()")
             out.append(f"            .give_back({p.name}_lease);")
             out.append("    }")
@@ -604,11 +604,11 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
             # there; nothing comes back for the caller to be given.
             out.append(f"    if ({p.name} != nullptr && !{p.name}_is_offset && "
                        f"!{p.name}_via_blob) {{")
-            out.append("        std::uint64_t rvk_bytes = 0;")
+            out.append("        uint64_t rvk_bytes = 0;")
             out.append(f"        if (!rvk_r.read_varint(rvk_bytes)) {fail}")
-            out.append(f"        if (rvk_bytes > static_cast<std::uint64_t>({p.name}_want)) {fail}")
+            out.append(f"        if (rvk_bytes > static_cast<uint64_t>({p.name}_want)) {fail}")
             out.append("        if (rvk_bytes != 0 &&")
-            out.append(f"            !rvk_r.read({p.name}, static_cast<std::size_t>(rvk_bytes))) {fail}")
+            out.append(f"            !rvk_r.read({p.name}, static_cast<size_t>(rvk_bytes))) {fail}")
             out.append("    }")
     if kind == "scalar":
         out.append(f"    return static_cast<{cmd.return_type.cpp()}>(rvk_ret);")
@@ -620,12 +620,11 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
 
 def emit_client(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
-         "#include <cstddef>", "#include <cstdint>\n",
+         "#include <stddef.h>", "#include <stdint.h>\n",
          '#include "proto/client_transport.hpp"',
          '#include "gl_types.h"\n',
          "namespace av::glproto {\n"]
     c = [HEADER, '#include "gl_dispatch_client.h"\n',
-         "#include <cstring>\n",
          '#include "core/support/status.hpp"',
          '#include "proto/wire/wire_writer.hpp"',
          '#include "proto/wire/wire_reader.hpp"',
@@ -638,7 +637,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
          "namespace av::glproto {\n",
          "// Below one page a blob lease costs more than the reply slot",
          "// it would replace: the allocator rounds to a page either way.",
-         "inline constexpr std::size_t kPixelBlobFloor = 4096;\n"]
+         "inline constexpr size_t kPixelBlobFloor = 4096;\n"]
     for cmd in reg.commands.values():
         h.append(f"{_client_signature(cmd, defaults=True)};")
         if cmd.name in reg.answered_by_guest:
@@ -654,9 +653,9 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
             # first so the server binds it before it decodes anything
             # that could fail. See the rvk_sync_* fields on RealGl for
             # why the guest gets to choose it at all.
-            c.append("    const std::uint64_t rvk_token = "
+            c.append("    const uint64_t rvk_token = "
                      "::av::glproto::mint_sync_token();")
-            c.append("    rvk_b.write_pod<std::uint64_t>(rvk_token);")
+            c.append("    rvk_b.write_pod<uint64_t>(rvk_token);")
         for p in cmd.params:
             _encode_param(cmd, p, c)
         # A buffer that dropped a write must not be sent.
@@ -717,7 +716,7 @@ def _decode_param(p: Param, out: list[str]) -> None:
             out.append(f"    if (!rvk_r.read_pod({name})) return false;")
         else:
             out.append(f"    {p.type.cpp()} {name}{{}};")
-            out.append("    { std::uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;")
+            out.append("    { uint64_t rvk_v = 0; if (!rvk_r.read_varint(rvk_v)) return false;")
             out.append(f"      {name} = static_cast<{p.type.cpp()}>(rvk_v); }}")
         return
     if p.role is Role.SYNC:
@@ -725,7 +724,7 @@ def _decode_param(p: Param, out: list[str]) -> None:
         # which of the host's fences it stands for; an unknown token
         # resolves to null, which is what GL does with a handle that was
         # never a handle. See the rvk_sync_* fields on RealGl.
-        out.append(f"    std::uint64_t {name}_token = 0;")
+        out.append(f"    uint64_t {name}_token = 0;")
         out.append(f"    if (!rvk_r.read_pod({name}_token)) return false;")
         out.append(f"    GLsync {name} = static_cast<GLsync>("
                    f"(rvk_gl.rvk_sync_for == nullptr ? nullptr : rvk_gl.rvk_sync_for(rvk_gl.rvk_sync_user, {name}_token)));")
@@ -733,17 +732,17 @@ def _decode_param(p: Param, out: list[str]) -> None:
     if p.role is Role.OFFSET_ARRAY:
         out.append(f"    const void** {name} = nullptr;")
         out.append("    {")
-        out.append("        std::uint8_t rvk_present = 0;")
+        out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
         out.append("        if (rvk_present != 0) {")
-        out.append("            std::uint64_t rvk_n = 0;")
+        out.append("            uint64_t rvk_n = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_n)) return false;")
-        out.append("            auto** rvk_offsets = rvk_arena.allocate<const void*>(static_cast<std::size_t>(rvk_n) + 1);")
+        out.append("            auto** rvk_offsets = rvk_arena.allocate<const void*>(static_cast<size_t>(rvk_n) + 1);")
         out.append("            if (rvk_offsets == nullptr) return false;")
-        out.append("            for (std::uint64_t rvk_i = 0; rvk_i < rvk_n; ++rvk_i) {")
-        out.append("                std::uint64_t rvk_v = 0;")
+        out.append("            for (uint64_t rvk_i = 0; rvk_i < rvk_n; ++rvk_i) {")
+        out.append("                uint64_t rvk_v = 0;")
         out.append("                if (!rvk_r.read_pod(rvk_v)) return false;")
-        out.append("                rvk_offsets[rvk_i] = reinterpret_cast<const void*>(static_cast<std::uintptr_t>(rvk_v));")
+        out.append("                rvk_offsets[rvk_i] = reinterpret_cast<const void*>(static_cast<uintptr_t>(rvk_v));")
         out.append("            }")
         out.append(f"            {name} = rvk_offsets;")
         out.append("        }")
@@ -751,8 +750,8 @@ def _decode_param(p: Param, out: list[str]) -> None:
         return
     if p.role is Role.BUFFER_OFFSET:
         out.append(f"    const void* {name} = nullptr;")
-        out.append("    { std::uint64_t rvk_v = 0; if (!rvk_r.read_pod(rvk_v)) return false;")
-        out.append(f"      {name} = reinterpret_cast<const void*>(static_cast<std::uintptr_t>(rvk_v)); }}")
+        out.append("    { uint64_t rvk_v = 0; if (!rvk_r.read_pod(rvk_v)) return false;")
+        out.append(f"      {name} = reinterpret_cast<const void*>(static_cast<uintptr_t>(rvk_v)); }}")
         return
     if p.role is Role.PIXELS_IN:
         # Out of the caller's block, like everything else a decoded
@@ -762,32 +761,32 @@ def _decode_param(p: Param, out: list[str]) -> None:
         # wrong for the rest of the run. A guest with a level that
         # large sends it through the blob, which is what the 3 case
         # above is.
-        out.append(f"    std::uint8_t* {name}_storage = nullptr;")
-        out.append(f"    std::size_t {name}_storage_count = 0;")
+        out.append(f"    uint8_t* {name}_storage = nullptr;")
+        out.append(f"    size_t {name}_storage_count = 0;")
         out.append(f"    const void* {name} = nullptr;")
         out.append("    {")
-        out.append("        std::uint8_t rvk_present = 0;")
+        out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
         out.append("        if (rvk_present == 2) {")
-        out.append("            std::uint64_t rvk_offset = 0;")
+        out.append("            uint64_t rvk_offset = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_offset)) return false;")
         out.append(f"            {name} = reinterpret_cast<const void*>("
-                   "static_cast<std::uintptr_t>(rvk_offset));")
+                   "static_cast<uintptr_t>(rvk_offset));")
         out.append("        } else if (rvk_present == 3) {")
-        out.append("            std::uint64_t rvk_bytes = 0;")
-        out.append("            std::uint64_t rvk_at = 0;")
+        out.append("            uint64_t rvk_bytes = 0;")
+        out.append("            uint64_t rvk_at = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
         out.append("            if (!rvk_r.read_varint(rvk_at)) return false;")
         out.append("            if (rvk_gl.rvk_blob == nullptr) return false;")
         out.append(f"            {name} = rvk_gl.rvk_blob(rvk_gl.rvk_blob_user, rvk_at, rvk_bytes);")
         out.append(f"            if ({name} == nullptr) return false;")
         out.append("        } else if (rvk_present != 0) {")
-        out.append("            std::uint64_t rvk_bytes = 0;")
+        out.append("            uint64_t rvk_bytes = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
         out.append("            if (rvk_bytes > rvk_r.remaining()) return false;")
-        out.append(f"            {name}_storage_count = static_cast<std::size_t>(rvk_bytes);")
+        out.append(f"            {name}_storage_count = static_cast<size_t>(rvk_bytes);")
         out.append(f"            if ({name}_storage_count != 0) {{")
-        out.append(f"                {name}_storage = rvk_arena.allocate<std::uint8_t>("
+        out.append(f"                {name}_storage = rvk_arena.allocate<uint8_t>("
                    f"{name}_storage_count);")
         out.append(f"                if ({name}_storage == nullptr) return false;")
         # Every byte of it is about to be overwritten by the read, so it
@@ -806,26 +805,26 @@ def _decode_param(p: Param, out: list[str]) -> None:
         # back as pixels. A frame-sized read goes through the blob and
         # never lands here at all — that is the 3 case below, and the
         # guest takes it for anything above a page.
-        out.append(f"    std::uint8_t* {name}_storage = nullptr;")
-        out.append(f"    std::size_t {name}_storage_count = 0;")
+        out.append(f"    uint8_t* {name}_storage = nullptr;")
+        out.append(f"    size_t {name}_storage_count = 0;")
         out.append(f"    void* {name} = nullptr;")
-        out.append(f"    std::size_t {name}_bytes = 0;")
+        out.append(f"    size_t {name}_bytes = 0;")
         out.append(f"    bool {name}_is_offset = false;")
         out.append(f"    bool {name}_via_blob = false;")
         out.append("    {")
-        out.append("        std::uint8_t rvk_present = 0;")
+        out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
         out.append("        if (rvk_present == 2) {")
-        out.append("            std::uint64_t rvk_offset = 0;")
+        out.append("            uint64_t rvk_offset = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_offset)) return false;")
         out.append(f"            {name} = reinterpret_cast<void*>("
-                   "static_cast<std::uintptr_t>(rvk_offset));")
+                   "static_cast<uintptr_t>(rvk_offset));")
         out.append(f"            {name}_is_offset = true;")
         out.append("        } else if (rvk_present == 3) {")
         # The guest lent a range of the region; GL writes into it
         # directly and nothing goes back through the reply.
-        out.append("            std::uint64_t rvk_bytes = 0;")
-        out.append("            std::uint64_t rvk_at = 0;")
+        out.append("            uint64_t rvk_bytes = 0;")
+        out.append("            uint64_t rvk_at = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
         out.append("            if (!rvk_r.read_varint(rvk_at)) return false;")
         out.append("            if (rvk_gl.rvk_blob == nullptr) return false;")
@@ -835,24 +834,24 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append(f"            {name} = rvk_gl.rvk_blob("
                    "rvk_gl.rvk_blob_user, rvk_at, rvk_bytes);")
         out.append(f"            if ({name} == nullptr) return false;")
-        out.append(f"            {name}_bytes = static_cast<std::size_t>(rvk_bytes);")
+        out.append(f"            {name}_bytes = static_cast<size_t>(rvk_bytes);")
         out.append(f"            {name}_via_blob = true;")
         out.append("        } else if (rvk_present != 0) {")
-        out.append("            std::uint64_t rvk_bytes = 0;")
+        out.append("            uint64_t rvk_bytes = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
-        out.append(f"            {name}_bytes = static_cast<std::size_t>(rvk_bytes);")
+        out.append(f"            {name}_bytes = static_cast<size_t>(rvk_bytes);")
         # One past what was asked for, which also makes the overflow
         # harmless: a length of SIZE_MAX wraps the count to zero, the
         # arena answers null for that, and the command is refused
         # rather than handed a block smaller than it was told.
         out.append(f"            {name}_storage_count = {name}_bytes + 1;")
-        out.append(f"            {name}_storage = rvk_arena.allocate<std::uint8_t>("
+        out.append(f"            {name}_storage = rvk_arena.allocate<uint8_t>("
                    f"{name}_storage_count);")
         out.append(f"            if ({name}_storage == nullptr) return false;")
         # Cleared, because the driver may write fewer bytes than were
         # asked for and the reply sends back what is there: whatever
         # the block last held is another guest's picture.
-        out.append(f"            for (std::size_t rvk_z = 0; "
+        out.append(f"            for (size_t rvk_z = 0; "
                    f"rvk_z < {name}_storage_count; ++rvk_z) {{ "
                    f"{name}_storage[rvk_z] = 0; }}")
         out.append(f"            {name} = {name}_storage;")
@@ -862,18 +861,18 @@ def _decode_param(p: Param, out: list[str]) -> None:
     if p.role is Role.STRING_IN:
         out.append(f"    const {p.type.base}* {name} = nullptr;")
         out.append("    {")
-        out.append("        std::uint8_t rvk_present = 0;")
+        out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
         out.append("        if (rvk_present != 0) {")
-        out.append("            std::uint64_t rvk_n = 0;")
+        out.append("            uint64_t rvk_n = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_n)) return false;")
         # A length out of the frame buys room in the arena, so what is
         # left of the frame bounds it before it is spent.
         out.append("            if (rvk_n > rvk_r.remaining()) return false;")
-        out.append(f"            auto* rvk_text = rvk_arena.allocate<{p.type.base}>(static_cast<std::size_t>(rvk_n) + 1);")
+        out.append(f"            auto* rvk_text = rvk_arena.allocate<{p.type.base}>(static_cast<size_t>(rvk_n) + 1);")
         out.append("            if (rvk_text == nullptr) return false;")
         out.append("            if (rvk_n != 0 &&")
-        out.append("                !rvk_r.read(rvk_text, static_cast<std::size_t>(rvk_n))) return false;")
+        out.append("                !rvk_r.read(rvk_text, static_cast<size_t>(rvk_n))) return false;")
         out.append("            rvk_text[rvk_n] = 0;")
         out.append(f"            {name} = rvk_text;")
         out.append("        }")
@@ -883,22 +882,22 @@ def _decode_param(p: Param, out: list[str]) -> None:
         base = p.type.base
         out.append(f"    const {base}** {name} = nullptr;")
         out.append("    {")
-        out.append("        std::uint8_t rvk_present = 0;")
+        out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
         out.append("        if (rvk_present != 0) {")
-        out.append("            std::uint64_t rvk_n = 0;")
+        out.append("            uint64_t rvk_n = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_n)) return false;")
         out.append("            if (rvk_n > rvk_r.remaining()) return false;")
-        out.append(f"            auto** rvk_strings = rvk_arena.allocate<{base}*>(static_cast<std::size_t>(rvk_n) + 1);")
+        out.append(f"            auto** rvk_strings = rvk_arena.allocate<{base}*>(static_cast<size_t>(rvk_n) + 1);")
         out.append("            if (rvk_strings == nullptr) return false;")
-        out.append("            for (std::uint64_t rvk_i = 0; rvk_i < rvk_n; ++rvk_i) {")
-        out.append("                std::uint64_t rvk_len = 0;")
+        out.append("            for (uint64_t rvk_i = 0; rvk_i < rvk_n; ++rvk_i) {")
+        out.append("                uint64_t rvk_len = 0;")
         out.append("                if (!rvk_r.read_varint(rvk_len)) return false;")
         out.append("                if (rvk_len > rvk_r.remaining()) return false;")
-        out.append(f"                auto* rvk_text = rvk_arena.allocate<{base}>(static_cast<std::size_t>(rvk_len) + 1);")
+        out.append(f"                auto* rvk_text = rvk_arena.allocate<{base}>(static_cast<size_t>(rvk_len) + 1);")
         out.append("                if (rvk_text == nullptr) return false;")
         out.append("                if (rvk_len != 0 &&")
-        out.append("                    !rvk_r.read(rvk_text, static_cast<std::size_t>(rvk_len))) return false;")
+        out.append("                    !rvk_r.read(rvk_text, static_cast<size_t>(rvk_len))) return false;")
         out.append("                rvk_text[rvk_len] = 0;")
         out.append("                rvk_strings[rvk_i] = rvk_text;")
         out.append("            }")
@@ -909,11 +908,11 @@ def _decode_param(p: Param, out: list[str]) -> None:
     if p.role is Role.ARRAY_IN:
         out.append(f"    const {p.type.base}* {name} = nullptr;")
         out.append("    {")
-        out.append("        std::uint8_t rvk_present = 0;")
+        out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
         out.append("        if (rvk_present == 3) {")
-        out.append("            std::uint64_t rvk_bytes = 0;")
-        out.append("            std::uint64_t rvk_at = 0;")
+        out.append("            uint64_t rvk_bytes = 0;")
+        out.append("            uint64_t rvk_at = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
         out.append("            if (!rvk_r.read_varint(rvk_at)) return false;")
         out.append("            if (rvk_gl.rvk_blob == nullptr) return false;")
@@ -922,17 +921,17 @@ def _decode_param(p: Param, out: list[str]) -> None:
         out.append("            if (rvk_from == nullptr) return false;")
         out.append(f"            {name} = reinterpret_cast<const {p.type.base}*>(rvk_from);")
         out.append("        } else if (rvk_present != 0) {")
-        out.append("            std::uint64_t rvk_bytes = 0;")
+        out.append("            uint64_t rvk_bytes = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
         out.append("            if (rvk_bytes > rvk_r.remaining()) return false;")
         # Room for the run as the element type, so that it is aligned
         # for the one the call reads it as. A block of bytes is aligned
         # for nothing.
         out.append(f"            auto* rvk_run = rvk_arena.allocate<{_storage_type(p)}>(")
-        out.append(f"                static_cast<std::size_t>(rvk_bytes) / sizeof({_storage_type(p)}) + 1);")
+        out.append(f"                static_cast<size_t>(rvk_bytes) / sizeof({_storage_type(p)}) + 1);")
         out.append("            if (rvk_run == nullptr) return false;")
         out.append("            if (rvk_bytes != 0 &&")
-        out.append("                !rvk_r.read(rvk_run, static_cast<std::size_t>(rvk_bytes))) return false;")
+        out.append("                !rvk_r.read(rvk_run, static_cast<size_t>(rvk_bytes))) return false;")
         out.append(f"            {name} = reinterpret_cast<const {p.type.base}*>(rvk_run);")
         out.append("        }")
         out.append("    }")
@@ -946,16 +945,16 @@ def _decode_param(p: Param, out: list[str]) -> None:
         # would answer with uninitialised host memory.
         storage = _storage_type(p)
         out.append(f"    {storage}* {name}_storage = nullptr;")
-        out.append(f"    std::size_t {name}_storage_count = 0;")
+        out.append(f"    size_t {name}_storage_count = 0;")
         out.append(f"    {p.type.base}* {name} = nullptr;")
-        out.append(f"    std::size_t {name}_bytes = 0;")
+        out.append(f"    size_t {name}_bytes = 0;")
         out.append("    {")
-        out.append("        std::uint8_t rvk_present = 0;")
+        out.append("        uint8_t rvk_present = 0;")
         out.append("        if (!rvk_r.read_pod(rvk_present)) return false;")
         out.append("        if (rvk_present != 0) {")
-        out.append("            std::uint64_t rvk_bytes = 0;")
+        out.append("            uint64_t rvk_bytes = 0;")
         out.append("            if (!rvk_r.read_varint(rvk_bytes)) return false;")
-        out.append(f"            {name}_bytes = static_cast<std::size_t>(rvk_bytes);")
+        out.append(f"            {name}_bytes = static_cast<size_t>(rvk_bytes);")
         # One element past what was asked for, so a byte count of
         # SIZE_MAX wraps the element count to zero, the arena answers
         # null, and the command is refused rather than handed a block
@@ -984,7 +983,7 @@ def _decode_param(p: Param, out: list[str]) -> None:
         # values as the enum really has and the reply sends back as many
         # as were asked for: the difference would be whatever the block
         # last held.
-        out.append(f"            for (std::size_t rvk_z = 0; "
+        out.append(f"            for (size_t rvk_z = 0; "
                    f"rvk_z < {name}_storage_count; ++rvk_z) {{ "
                    f"{name}_storage[rvk_z] = {{}}; }}")
         if storage == p.type.base:
@@ -999,7 +998,7 @@ def _decode_param(p: Param, out: list[str]) -> None:
 
 def emit_server(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
-         "#include <cstddef>", "#include <cstdint>\n",
+         "#include <stddef.h>", "#include <stdint.h>\n",
          '#include "proto/wire/wire_arena.hpp"',
          '#include "proto/wire/wire_writer.hpp"',
          '#include "proto/wire/wire_reader.hpp"',
@@ -1010,13 +1009,13 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
          "// `arena` is where everything a decoded command points at lives,",
          "// for the length of the call; it is the caller's block, because",
          "// it has to outlive the decode that filled it.",
-         "[[nodiscard]] bool dispatch_command(const RealGl& gl, std::uint32_t cmd_id,",
+         "[[nodiscard]] bool dispatch_command(const RealGl& gl, uint32_t cmd_id,",
          "                                    ::av::WireReader& reader,",
          "                                    ::av::WireWriter& reply,",
          "                                    ::av::WireArena& arena) noexcept;\n",
          "}  // namespace av::glproto", ""]
     c = [HEADER, '#include "gl_dispatch_server.h"\n',
-         "#include <cstddef>", "#include <cstring>\n",
+         "#include <stddef.h>\n",
          '#include "gl_protocol_ids.h"',
          '#include "gl_sizes.h"',
          '',
@@ -1026,7 +1025,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
          "// buffer is never smaller than this, whatever the guest asked",
          "// for, because the host writes as many values as the enum",
          "// really has and a short buffer is a heap the server owns.",
-         "static constexpr std::size_t kQuerySlack = 32;\n"]
+         "static constexpr size_t kQuerySlack = 32;\n"]
     for cmd in reg.commands.values():
         c.append(f"static bool decode_{cmd.name}(const RealGl& rvk_gl, "
                  "::av::WireReader& rvk_r, "
@@ -1034,7 +1033,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                  "::av::WireArena& rvk_arena) {")
         c.append("    (void)rvk_arena; (void)rvk_reply; (void)rvk_r;")
         if cmd.mints_handle:
-            c.append("    std::uint64_t rvk_token = 0;")
+            c.append("    uint64_t rvk_token = 0;")
             c.append("    if (!rvk_r.read_pod(rvk_token)) return false;")
         for p in cmd.params:
             _decode_param(p, c)
@@ -1059,26 +1058,26 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             # owed here is the note of which fence it meant.
             c.append("    if (rvk_gl.rvk_bind_sync != nullptr) { rvk_gl.rvk_bind_sync(rvk_gl.rvk_sync_user, rvk_token, rvk_ret); }")
         if kind == "scalar":
-            c.append("    rvk_reply.write_varint(static_cast<std::uint64_t>(rvk_ret));")
+            c.append("    rvk_reply.write_varint(static_cast<uint64_t>(rvk_ret));")
         elif kind == "sync" and not cmd.mints_handle:
-            c.append("    rvk_reply.write_pod<std::uint64_t>(")
-            c.append("        static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(rvk_ret)));")
+            c.append("    rvk_reply.write_pod<uint64_t>(")
+            c.append("        static_cast<uint64_t>(reinterpret_cast<uintptr_t>(rvk_ret)));")
         elif kind == "string":
             c.append("    const auto* rvk_text = reinterpret_cast<const char*>(rvk_ret);")
             c.append("    rvk_reply.write_varint(rvk_text != nullptr ? 1 : 0);")
-            c.append("    const std::size_t rvk_length = rvk_text != nullptr ? std::strlen(rvk_text) : 0;")
-            c.append("    rvk_reply.write_varint(static_cast<std::uint64_t>(rvk_length));")
+            c.append("    const size_t rvk_length = rvk_text != nullptr ? __builtin_strlen(rvk_text) : 0;")
+            c.append("    rvk_reply.write_varint(static_cast<uint64_t>(rvk_length));")
             c.append("    if (rvk_length != 0) rvk_reply.write(rvk_text, rvk_length);")
         elif kind == "pointer":
-            c.append("    rvk_reply.write_pod<std::uint64_t>(")
-            c.append("        static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(rvk_ret)));")
+            c.append("    rvk_reply.write_pod<uint64_t>(")
+            c.append("        static_cast<uint64_t>(reinterpret_cast<uintptr_t>(rvk_ret)));")
         for p in cmd.params:
             if p.role in (Role.ARRAY_OUT, Role.STRING_OUT, Role.PIXELS_OUT):
                 guard = (f"{p.name} != nullptr && !{p.name}_is_offset"
                          f" && !{p.name}_via_blob"
                          if p.role is Role.PIXELS_OUT else f"{p.name} != nullptr")
                 c.append(f"    if ({guard}) {{")
-                c.append(f"        rvk_reply.write_varint(static_cast<std::uint64_t>({p.name}_bytes));")
+                c.append(f"        rvk_reply.write_varint(static_cast<uint64_t>({p.name}_bytes));")
                 c.append(f"        if ({p.name}_bytes != 0) rvk_reply.write({p.name}, {p.name}_bytes);")
                 c.append("    }")
         if cmd.name == "glDeleteSync":
@@ -1088,7 +1087,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         c.append("    return true;")
         c.append("}")
         c.append("")
-    c.append("bool dispatch_command(const RealGl& rvk_gl, std::uint32_t cmd_id,")
+    c.append("bool dispatch_command(const RealGl& rvk_gl, uint32_t cmd_id,")
     c.append("                      ::av::WireReader& rvk_r,")
     c.append("                      ::av::WireWriter& rvk_reply,")
     c.append("                      ::av::WireArena& rvk_arena) noexcept {")
@@ -1108,7 +1107,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
 
 def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n",
-           "#include <cstddef>", "#include <cstdint>\n",
+           "#include <stddef.h>", "#include <stdint.h>\n",
            '#include "gl_types.h"\n',
            "namespace av::glproto {\n",
            "// The host's OpenGL, by name.",
@@ -1122,7 +1121,7 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            "    // bounds-checked against the mapping. Set by the server;",
            "    // null when there is no region, in which case a command",
            "    // that names one is refused rather than guessed at.",
-           "    std::uint8_t* (*rvk_blob)(void*, std::uint64_t, std::uint64_t)"
+           "    uint8_t* (*rvk_blob)(void*, uint64_t, uint64_t)"
            " = nullptr;",
            "    void* rvk_blob_user = nullptr;",
            "",
@@ -1131,9 +1130,9 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
            "    // rather than free functions for the reason rvk_blob is one:",
            "    // a parameterless hook cannot reach one context's state, and",
            "    // this project has no file-scope place to put it (042).",
-           "    void (*rvk_bind_sync)(void*, std::uint64_t, void*) = nullptr;",
-           "    void* (*rvk_sync_for)(void*, std::uint64_t) = nullptr;",
-           "    void (*rvk_forget_sync)(void*, std::uint64_t) = nullptr;",
+           "    void (*rvk_bind_sync)(void*, uint64_t, void*) = nullptr;",
+           "    void* (*rvk_sync_for)(void*, uint64_t) = nullptr;",
+           "    void (*rvk_forget_sync)(void*, uint64_t) = nullptr;",
            "    void* rvk_sync_user = nullptr;"]
     for cmd in reg.commands.values():
         params = ", ".join(p.type.cpp() for p in cmd.params) or "void"
@@ -1144,8 +1143,8 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
             "// Returns how many entry points were found.",
             "using GlLoader = void* (*)(const char* name, void* user);",
             "",
-            "inline std::size_t load_real_gl(RealGl& gl, GlLoader load, void* user) {",
-            "    std::size_t found = 0;"]
+            "inline size_t load_real_gl(RealGl& gl, GlLoader load, void* user) {",
+            "    size_t found = 0;"]
     for cmd in reg.commands.values():
         params = ", ".join(p.type.cpp() for p in cmd.params) or "void"
         out.append(f'    gl.{cmd.name} = reinterpret_cast<{cmd.return_type.cpp()} (*)({params})>('
@@ -1162,8 +1161,7 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
 
 def emit_tier(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, "#pragma once\n",
-           "#include <cstdint>",
-           "#include <cstring>\n",
+           "#include <stdint.h>\n",
            "namespace av::glproto {\n",
            "// The version this driver carries, and may therefore claim.",
            "//",
@@ -1172,8 +1170,8 @@ def emit_tier(reg: Registry, out_dir: Path) -> None:
            "// promise entry points the wire does not carry. So the",
            "// version is capped to this and the extension list is",
            "// filtered to the table below.",
-           f"inline constexpr std::uint32_t kTierMajor = {reg.tier_major};",
-           f"inline constexpr std::uint32_t kTierMinor = {reg.tier_minor};",
+           f"inline constexpr uint32_t kTierMajor = {reg.tier_major};",
+           f"inline constexpr uint32_t kTierMinor = {reg.tier_minor};",
            "",
            "// Every extension whose commands are all generated. An",
            "// extension needing an entry point that does not cross is",
@@ -1182,13 +1180,13 @@ def emit_tier(reg: Registry, out_dir: Path) -> None:
     for name in reg.carried_extensions:
         out.append(f'    "{name}",')
     out += ["};", "",
-            "inline constexpr std::size_t kCarriedExtensionCount =",
+            "inline constexpr size_t kCarriedExtensionCount =",
             "    sizeof(kCarriedExtensions) / sizeof(kCarriedExtensions[0]);",
             "",
             "[[nodiscard]] inline bool extension_is_carried(const char* name) noexcept {",
             "    if (name == nullptr) return false;",
-            "    for (std::size_t i = 0; i < kCarriedExtensionCount; ++i) {",
-            "        if (std::strcmp(name, kCarriedExtensions[i]) == 0) return true;",
+            "    for (size_t i = 0; i < kCarriedExtensionCount; ++i) {",
+            "        if (__builtin_strcmp(name, kCarriedExtensions[i]) == 0) return true;",
             "    }",
             "    return false;",
             "}",
@@ -1372,13 +1370,13 @@ def _icd_forward_args(cmd: Command) -> list[str]:
         if p.role is Role.IGNORED:
             continue
         if p.role is Role.SYNC:
-            args.append(f"reinterpret_cast<std::uint64_t>({p.name})")
+            args.append(f"reinterpret_cast<uint64_t>({p.name})")
         elif p.role is Role.BUFFER_OFFSET:
-            args.append(f"static_cast<std::uint64_t>("
-                        f"reinterpret_cast<std::uintptr_t>({p.name}))")
+            args.append(f"static_cast<uint64_t>("
+                        f"reinterpret_cast<uintptr_t>({p.name}))")
         elif p.role is Role.OFFSET_ARRAY:
             args.append(f"::av::glicd::offsets_of({p.name}, "
-                        f"static_cast<std::size_t>({p.length.text}))")
+                        f"static_cast<size_t>({p.length.text}))")
         elif p.role is Role.PIXELS_IN or p.role is Role.PIXELS_OUT:
             # An offset needs no length, and working one out would ask
             # the host how big a texture level is for an answer that
@@ -1400,7 +1398,7 @@ def _icd_pixel_bytes(cmd: Command, p: Param) -> str:
     # and working it out anyway would be a second answer to a question
     # already answered.
     if "bufSize" in names:
-        return "static_cast<std::size_t>(bufSize)"
+        return "static_cast<size_t>(bufSize)"
     reads = p.length.reads if p.length is not None else ()
     width = "width" if "width" in names else "1"
     height = "height" if "height" in names else "1"
@@ -1474,7 +1472,7 @@ def _reads_buffers(cmd) -> bool:
 
 def emit_icd(reg: Registry, out_dir: Path) -> None:
     out = [HEADER, '#include "gl_icd_entries.h"\n',
-           "#include <cstdint>\n",
+           "#include <stdint.h>\n",
            '#include "proto/gl_icd_support.hpp"',
            '#include "gl_dispatch_client.h"',
            '#include "gl_helpers.h"\n',
@@ -1518,7 +1516,7 @@ def emit_icd(reg: Registry, out_dir: Path) -> None:
             out.append("    if (rvk_t == nullptr) return nullptr;")
             out += prologue
             out.append(f"    return reinterpret_cast<GLsync>("
-                       f"static_cast<std::uintptr_t>("
+                       f"static_cast<uintptr_t>("
                        f"::av::glproto::rvk_{cmd.name}({args})));")
         else:
             out.append(f"    if (rvk_t == nullptr) return 0;")
@@ -1543,7 +1541,6 @@ def emit_icd(reg: Registry, out_dir: Path) -> None:
 
     # The table wglGetProcAddress answers from, and the export list.
     table = [HEADER, "#pragma once\n",
-             "#include <cstring>\n",
              '#include "gl_icd_entries.h"\n',
              "namespace av::glicd {\n",
              "struct NamedEntry {",
@@ -1563,13 +1560,13 @@ def emit_icd(reg: Registry, out_dir: Path) -> None:
     for name, target in sorted(reg.aliases.items()):
         table.append(f'    {{"{name}", reinterpret_cast<void*>(&{target})}},')
     table += ["};", "",
-              "inline constexpr std::size_t kEntryCount =",
+              "inline constexpr size_t kEntryCount =",
               "    sizeof(kEntries) / sizeof(kEntries[0]);",
               "",
               "[[nodiscard]] inline void* entry_by_name(const char* name) noexcept {",
               "    if (name == nullptr) return nullptr;",
-              "    for (std::size_t i = 0; i < kEntryCount; ++i) {",
-              "        if (std::strcmp(name, kEntries[i].name) == 0) {",
+              "    for (size_t i = 0; i < kEntryCount; ++i) {",
+              "        if (__builtin_strcmp(name, kEntries[i].name) == 0) {",
               "            return kEntries[i].address;",
               "        }",
               "    }",

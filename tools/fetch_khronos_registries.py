@@ -35,7 +35,16 @@ WANTED = {
                ("include/vulkan/vulkan_core.h", "include/vulkan/vulkan_core.h"),
                # vulkan_core.h includes it; a header that cannot be compiled is
                # not a header the generated output can be checked against.
-               ("include/vulkan/vk_platform.h", "include/vulkan/vk_platform.h")),
+               ("include/vulkan/vk_platform.h", "include/vulkan/vk_platform.h"))
+              # vulkan_core.h includes these too. Unfetched, a Linux build finds
+              # a different version under /usr/include and the freestanding guest
+              # build finds nothing.
+              + tuple((f"include/vk_video/{name}", f"include/vk_video/{name}") for name in (
+                  "vulkan_video_codec_av1std.h", "vulkan_video_codec_av1std_decode.h",
+                  "vulkan_video_codec_av1std_encode.h", "vulkan_video_codec_h264std.h",
+                  "vulkan_video_codec_h264std_decode.h", "vulkan_video_codec_h264std_encode.h",
+                  "vulkan_video_codec_h265std.h", "vulkan_video_codec_h265std_decode.h",
+                  "vulkan_video_codec_h265std_encode.h", "vulkan_video_codecs_common.h")),
     "opengl": (("xml/gl.xml", "gl.xml"),
                ("xml/wgl.xml", "wgl.xml")),
     "opencl": (("xml/cl.xml", "cl.xml"),),
@@ -123,7 +132,11 @@ def fetched_already(into, pins):
 
 
 def marker_text(pins):
-    return "".join(f"{name} {digest}\n" for name, _url, digest in sorted(pins))
+    """The pins and every file each yields: a tree fetched before a file was
+    wanted does not hold it, so it is not the tree these pins describe."""
+    return "".join(f"{name} {digest}\n" + "".join(f"  {destination}\n"
+                                                  for _inside, destination in WANTED[name])
+                   for name, _url, digest in sorted(pins))
 
 
 def main(argv=None):

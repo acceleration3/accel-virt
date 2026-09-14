@@ -1,8 +1,8 @@
 #pragma once
 
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <vulkan/vulkan_core.h>
 
@@ -409,6 +409,6 @@ public:
 // `arena` is where everything a decoded command points at lives, for the
 // length of the call; it is the caller's block, because it has to outlive
 // the decode that filled it.
-[[nodiscard]] bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena);
+[[nodiscard]] bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena);
 
 }  // namespace av::vkproto

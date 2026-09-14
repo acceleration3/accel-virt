@@ -4,8 +4,6 @@
 
 #pragma once
 
-#include <cstring>
-
 #include "gl_icd_entries.h"
 
 namespace av::glicd {
@@ -1919,13 +1917,13 @@ inline const NamedEntry kEntries[] = {
     {"glWindowPos3svMESA", reinterpret_cast<void*>(&glWindowPos3sv)},
 };
 
-inline constexpr std::size_t kEntryCount =
+inline constexpr size_t kEntryCount =
     sizeof(kEntries) / sizeof(kEntries[0]);
 
 [[nodiscard]] inline void* entry_by_name(const char* name) noexcept {
     if (name == nullptr) return nullptr;
-    for (std::size_t i = 0; i < kEntryCount; ++i) {
-        if (std::strcmp(name, kEntries[i].name) == 0) {
+    for (size_t i = 0; i < kEntryCount; ++i) {
+        if (__builtin_strcmp(name, kEntries[i].name) == 0) {
             return kEntries[i].address;
         }
     }

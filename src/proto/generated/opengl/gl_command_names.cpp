@@ -8,7 +8,7 @@
 
 namespace av::glproto {
 
-const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept {
+const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
     switch (cmd_id) {
         case kCmd_glActiveShaderProgram: return "glActiveShaderProgram";
         case kCmd_glActiveTexture: return "glActiveTexture";

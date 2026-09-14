@@ -10,7 +10,7 @@
 
 namespace av::vkproto {
 
-bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
+bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {
     switch (cmd_id) {
     case ::av::vkproto::kCmd_vkDestroyInstance: {
         VkInstance instance = VK_NULL_HANDLE;
@@ -33,32 +33,32 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(queueFamilyIndex)) return false;
         if (!r.read_pod(queueIndex)) return false;
         s.on_vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &pQueue_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkQueue(reply, pQueue_out);
         return true;
     }
     case ::av::vkproto::kCmd_vkEnumeratePhysicalDevices: {
         VkInstance instance = VK_NULL_HANDLE;
-        std::uint8_t array_present = 0;
-        std::uint32_t pPhysicalDeviceCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pPhysicalDeviceCount_local = 0;
         VkPhysicalDevice* pPhysicalDevices_storage = nullptr;
-        std::size_t pPhysicalDevices_storage_count = 0;
+        size_t pPhysicalDevices_storage_count = 0;
         if (!deserialize_VkInstance(r, instance)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pPhysicalDeviceCount_local)) return false;
-            pPhysicalDevices_storage_count = static_cast<std::size_t>(pPhysicalDeviceCount_local);
+            pPhysicalDevices_storage_count = static_cast<size_t>(pPhysicalDeviceCount_local);
             if (pPhysicalDevices_storage_count != 0) {
                 pPhysicalDevices_storage = arena.allocate<VkPhysicalDevice>(pPhysicalDevices_storage_count);
                 if (pPhysicalDevices_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pPhysicalDevices_storage_count; ++rvk_z) { pPhysicalDevices_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pPhysicalDevices_storage_count; ++rvk_z) { pPhysicalDevices_storage[rvk_z] = {}; }
             }
         }
         VkResult result = s.on_vkEnumeratePhysicalDevices(instance, &pPhysicalDeviceCount_local, array_present ? pPhysicalDevices_storage : nullptr);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pPhysicalDeviceCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pPhysicalDeviceCount_local; ++k) {
+            for (uint32_t k = 0; k < pPhysicalDeviceCount_local; ++k) {
                 serialize_VkPhysicalDevice(reply, pPhysicalDevices_storage[k]);
             }
         }
@@ -71,7 +71,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pProperties_out), arena)) return false;
         s.on_vkGetPhysicalDeviceProperties2(physicalDevice, &pProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkPhysicalDeviceProperties2(reply, pProperties_out);
         return true;
     }
@@ -80,7 +80,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkInstance pInstance_out = VK_NULL_HANDLE;
         if (!deserialize_VkInstanceCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateInstance(&pCreateInfo_local, nullptr, &pInstance_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkInstance(reply, pInstance_out);
         return true;
     }
@@ -91,7 +91,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!deserialize_VkDeviceCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateDevice(physicalDevice, &pCreateInfo_local, nullptr, &pDevice_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDevice(reply, pDevice_out);
         return true;
     }
@@ -100,7 +100,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkPhysicalDeviceProperties pProperties_out{};
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         s.on_vkGetPhysicalDeviceProperties(physicalDevice, &pProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkPhysicalDeviceProperties(reply, pProperties_out);
         return true;
     }
@@ -109,7 +109,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkPhysicalDeviceFeatures pFeatures_out{};
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         s.on_vkGetPhysicalDeviceFeatures(physicalDevice, &pFeatures_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkPhysicalDeviceFeatures(reply, pFeatures_out);
         return true;
     }
@@ -120,7 +120,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!r.read_pod(format)) return false;
         s.on_vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &pFormatProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkFormatProperties(reply, pFormatProperties_out);
         return true;
     }
@@ -139,7 +139,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(usage)) return false;
         if (!r.read_pod(flags)) return false;
         VkResult result = s.on_vkGetPhysicalDeviceImageFormatProperties(physicalDevice, format, type, tiling, usage, flags, &pImageFormatProperties_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkImageFormatProperties(reply, pImageFormatProperties_out);
         return true;
     }
@@ -148,32 +148,32 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkPhysicalDeviceMemoryProperties pMemoryProperties_out{};
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         s.on_vkGetPhysicalDeviceMemoryProperties(physicalDevice, &pMemoryProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkPhysicalDeviceMemoryProperties(reply, pMemoryProperties_out);
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceQueueFamilyProperties: {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-        std::uint8_t array_present = 0;
-        std::uint32_t pQueueFamilyPropertyCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pQueueFamilyPropertyCount_local = 0;
         VkQueueFamilyProperties* pQueueFamilyProperties_storage = nullptr;
-        std::size_t pQueueFamilyProperties_storage_count = 0;
+        size_t pQueueFamilyProperties_storage_count = 0;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pQueueFamilyPropertyCount_local)) return false;
-            pQueueFamilyProperties_storage_count = static_cast<std::size_t>(pQueueFamilyPropertyCount_local);
+            pQueueFamilyProperties_storage_count = static_cast<size_t>(pQueueFamilyPropertyCount_local);
             if (pQueueFamilyProperties_storage_count != 0) {
                 pQueueFamilyProperties_storage = arena.allocate<VkQueueFamilyProperties>(pQueueFamilyProperties_storage_count);
                 if (pQueueFamilyProperties_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pQueueFamilyProperties_storage_count; ++rvk_z) { pQueueFamilyProperties_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pQueueFamilyProperties_storage_count; ++rvk_z) { pQueueFamilyProperties_storage[rvk_z] = {}; }
             }
         }
         s.on_vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &pQueueFamilyPropertyCount_local, array_present ? pQueueFamilyProperties_storage : nullptr);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pQueueFamilyPropertyCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pQueueFamilyPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pQueueFamilyPropertyCount_local; ++k) {
                 serialize_VkQueueFamilyProperties(reply, pQueueFamilyProperties_storage[k]);
             }
         }
@@ -186,10 +186,10 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkSampleCountFlagBits samples{};
         VkImageUsageFlags usage{};
         VkImageTiling tiling{};
-        std::uint8_t array_present = 0;
-        std::uint32_t pPropertyCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pPropertyCount_local = 0;
         VkSparseImageFormatProperties* pProperties_storage = nullptr;
-        std::size_t pProperties_storage_count = 0;
+        size_t pProperties_storage_count = 0;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!r.read_pod(format)) return false;
         if (!r.read_pod(type)) return false;
@@ -199,18 +199,18 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pPropertyCount_local)) return false;
-            pProperties_storage_count = static_cast<std::size_t>(pPropertyCount_local);
+            pProperties_storage_count = static_cast<size_t>(pPropertyCount_local);
             if (pProperties_storage_count != 0) {
                 pProperties_storage = arena.allocate<VkSparseImageFormatProperties>(pProperties_storage_count);
                 if (pProperties_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
             }
         }
         s.on_vkGetPhysicalDeviceSparseImageFormatProperties(physicalDevice, format, type, samples, usage, tiling, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pPropertyCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pPropertyCount_local; ++k) {
                 serialize_VkSparseImageFormatProperties(reply, pProperties_storage[k]);
             }
         }
@@ -219,36 +219,36 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
     case ::av::vkproto::kCmd_vkEnumerateDeviceExtensionProperties: {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         const char* pLayerName = nullptr;
-        std::uint8_t array_present = 0;
-        std::uint32_t pPropertyCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pPropertyCount_local = 0;
         VkExtensionProperties* pProperties_storage = nullptr;
-        std::size_t pProperties_storage_count = 0;
+        size_t pProperties_storage_count = 0;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         {
-            std::uint64_t n = 0;
+            uint64_t n = 0;
             if (!r.read_varint(n)) return false;
             if (n > 0) {
-                char* tmp_str = arena.allocate_chars(static_cast<std::size_t>(n));
+                char* tmp_str = arena.allocate_chars(static_cast<size_t>(n));
                 if (tmp_str == nullptr) { return false; }
-                if (!r.read(tmp_str, static_cast<std::size_t>(n))) return false;
+                if (!r.read(tmp_str, static_cast<size_t>(n))) return false;
                 pLayerName = tmp_str;
             }
         }
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pPropertyCount_local)) return false;
-            pProperties_storage_count = static_cast<std::size_t>(pPropertyCount_local);
+            pProperties_storage_count = static_cast<size_t>(pPropertyCount_local);
             if (pProperties_storage_count != 0) {
                 pProperties_storage = arena.allocate<VkExtensionProperties>(pProperties_storage_count);
                 if (pProperties_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
             }
         }
         VkResult result = s.on_vkEnumerateDeviceExtensionProperties(physicalDevice, pLayerName, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pPropertyCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pPropertyCount_local; ++k) {
                 serialize_VkExtensionProperties(reply, pProperties_storage[k]);
             }
         }
@@ -256,26 +256,26 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
     }
     case ::av::vkproto::kCmd_vkEnumerateDeviceLayerProperties: {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-        std::uint8_t array_present = 0;
-        std::uint32_t pPropertyCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pPropertyCount_local = 0;
         VkLayerProperties* pProperties_storage = nullptr;
-        std::size_t pProperties_storage_count = 0;
+        size_t pProperties_storage_count = 0;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pPropertyCount_local)) return false;
-            pProperties_storage_count = static_cast<std::size_t>(pPropertyCount_local);
+            pProperties_storage_count = static_cast<size_t>(pPropertyCount_local);
             if (pProperties_storage_count != 0) {
                 pProperties_storage = arena.allocate<VkLayerProperties>(pProperties_storage_count);
                 if (pProperties_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
             }
         }
         VkResult result = s.on_vkEnumerateDeviceLayerProperties(physicalDevice, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pPropertyCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pPropertyCount_local; ++k) {
                 serialize_VkLayerProperties(reply, pProperties_storage[k]);
             }
         }
@@ -288,7 +288,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pFeatures_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pFeatures_out), arena)) return false;
         s.on_vkGetPhysicalDeviceFeatures2(physicalDevice, &pFeatures_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkPhysicalDeviceFeatures2(reply, pFeatures_out);
         return true;
     }
@@ -301,7 +301,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pFormatProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pFormatProperties_out), arena)) return false;
         s.on_vkGetPhysicalDeviceFormatProperties2(physicalDevice, format, &pFormatProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkFormatProperties2(reply, pFormatProperties_out);
         return true;
     }
@@ -314,7 +314,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pImageFormatProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pImageFormatProperties_out), arena)) return false;
         VkResult result = s.on_vkGetPhysicalDeviceImageFormatProperties2(physicalDevice, &pImageFormatInfo_local, &pImageFormatProperties_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkImageFormatProperties2(reply, pImageFormatProperties_out);
         return true;
     }
@@ -325,33 +325,33 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pMemoryProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pMemoryProperties_out), arena)) return false;
         s.on_vkGetPhysicalDeviceMemoryProperties2(physicalDevice, &pMemoryProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkPhysicalDeviceMemoryProperties2(reply, pMemoryProperties_out);
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceQueueFamilyProperties2: {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-        std::uint8_t array_present = 0;
-        std::uint32_t pQueueFamilyPropertyCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pQueueFamilyPropertyCount_local = 0;
         VkQueueFamilyProperties2* pQueueFamilyProperties_storage = nullptr;
-        std::size_t pQueueFamilyProperties_storage_count = 0;
+        size_t pQueueFamilyProperties_storage_count = 0;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pQueueFamilyPropertyCount_local)) return false;
-            pQueueFamilyProperties_storage_count = static_cast<std::size_t>(pQueueFamilyPropertyCount_local);
+            pQueueFamilyProperties_storage_count = static_cast<size_t>(pQueueFamilyPropertyCount_local);
             if (pQueueFamilyProperties_storage_count != 0) {
                 pQueueFamilyProperties_storage = arena.allocate<VkQueueFamilyProperties2>(pQueueFamilyProperties_storage_count);
                 if (pQueueFamilyProperties_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pQueueFamilyProperties_storage_count; ++rvk_z) { pQueueFamilyProperties_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pQueueFamilyProperties_storage_count; ++rvk_z) { pQueueFamilyProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_e = 0; rvk_e < pQueueFamilyProperties_storage_count; ++rvk_e) { pQueueFamilyProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2; pQueueFamilyProperties_storage[rvk_e].pNext = nullptr; }
+            for (size_t rvk_e = 0; rvk_e < pQueueFamilyProperties_storage_count; ++rvk_e) { pQueueFamilyProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2; pQueueFamilyProperties_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetPhysicalDeviceQueueFamilyProperties2(physicalDevice, &pQueueFamilyPropertyCount_local, array_present ? pQueueFamilyProperties_storage : nullptr);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pQueueFamilyPropertyCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pQueueFamilyPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pQueueFamilyPropertyCount_local; ++k) {
                 serialize_VkQueueFamilyProperties2(reply, pQueueFamilyProperties_storage[k]);
             }
         }
@@ -360,28 +360,28 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceSparseImageFormatProperties2: {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceSparseImageFormatInfo2 pFormatInfo_local{};
-        std::uint8_t array_present = 0;
-        std::uint32_t pPropertyCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pPropertyCount_local = 0;
         VkSparseImageFormatProperties2* pProperties_storage = nullptr;
-        std::size_t pProperties_storage_count = 0;
+        size_t pProperties_storage_count = 0;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!deserialize_VkPhysicalDeviceSparseImageFormatInfo2(r, &pFormatInfo_local, arena)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pPropertyCount_local)) return false;
-            pProperties_storage_count = static_cast<std::size_t>(pPropertyCount_local);
+            pProperties_storage_count = static_cast<size_t>(pPropertyCount_local);
             if (pProperties_storage_count != 0) {
                 pProperties_storage = arena.allocate<VkSparseImageFormatProperties2>(pProperties_storage_count);
                 if (pProperties_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_e = 0; rvk_e < pProperties_storage_count; ++rvk_e) { pProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2; pProperties_storage[rvk_e].pNext = nullptr; }
+            for (size_t rvk_e = 0; rvk_e < pProperties_storage_count; ++rvk_e) { pProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2; pProperties_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetPhysicalDeviceSparseImageFormatProperties2(physicalDevice, &pFormatInfo_local, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pPropertyCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pPropertyCount_local; ++k) {
                 serialize_VkSparseImageFormatProperties2(reply, pProperties_storage[k]);
             }
         }
@@ -391,14 +391,14 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDevice device = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         VkResult result = s.on_vkDeviceWaitIdle(device);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkQueueWaitIdle: {
         VkQueue queue = VK_NULL_HANDLE;
         if (!deserialize_VkQueue(r, queue)) return false;
         VkResult result = s.on_vkQueueWaitIdle(queue);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkAllocateMemory: {
@@ -408,7 +408,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkMemoryAllocateInfo(r, &pAllocateInfo_local, arena)) return false;
         VkResult result = s.on_vkAllocateMemory(device, &pAllocateInfo_local, nullptr, &pMemory_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDeviceMemory(reply, pMemory_out);
         return true;
     }
@@ -430,7 +430,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDeviceMemory(r, memory)) return false;
         if (!r.read_pod(memoryOffset)) return false;
         VkResult result = s.on_vkBindBufferMemory(device, buffer, memory, memoryOffset);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkBindImageMemory: {
@@ -443,7 +443,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDeviceMemory(r, memory)) return false;
         if (!r.read_pod(memoryOffset)) return false;
         VkResult result = s.on_vkBindImageMemory(device, image, memory, memoryOffset);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetBufferMemoryRequirements: {
@@ -453,7 +453,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBuffer(r, buffer)) return false;
         s.on_vkGetBufferMemoryRequirements(device, buffer, &pMemoryRequirements_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkMemoryRequirements(reply, pMemoryRequirements_out);
         return true;
     }
@@ -464,7 +464,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImage(r, image)) return false;
         s.on_vkGetImageMemoryRequirements(device, image, &pMemoryRequirements_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkMemoryRequirements(reply, pMemoryRequirements_out);
         return true;
     }
@@ -475,7 +475,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBufferCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateBuffer(device, &pCreateInfo_local, nullptr, &pBuffer_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkBuffer(reply, pBuffer_out);
         return true;
     }
@@ -494,7 +494,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImageCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateImage(device, &pCreateInfo_local, nullptr, &pImage_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkImage(reply, pImage_out);
         return true;
     }
@@ -513,7 +513,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImageViewCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateImageView(device, &pCreateInfo_local, nullptr, &pView_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkImageView(reply, pView_out);
         return true;
     }
@@ -532,7 +532,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSamplerCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateSampler(device, &pCreateInfo_local, nullptr, &pSampler_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkSampler(reply, pSampler_out);
         return true;
     }
@@ -551,7 +551,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSemaphoreCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateSemaphore(device, &pCreateInfo_local, nullptr, &pSemaphore_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkSemaphore(reply, pSemaphore_out);
         return true;
     }
@@ -570,7 +570,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkFenceCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateFence(device, &pCreateInfo_local, nullptr, &pFence_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkFence(reply, pFence_out);
         return true;
     }
@@ -586,44 +586,44 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDevice device = VK_NULL_HANDLE;
         uint32_t fenceCount{};
         VkFence* pFences_storage = nullptr;
-        std::size_t pFences_storage_count = 0;
+        size_t pFences_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(fenceCount)) return false;
-        pFences_storage_count = static_cast<std::size_t>(fenceCount);
+        pFences_storage_count = static_cast<size_t>(fenceCount);
         if (pFences_storage_count != 0) {
             pFences_storage = arena.allocate<VkFence>(pFences_storage_count);
             if (pFences_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pFences_storage_count; ++rvk_z) { pFences_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pFences_storage_count; ++rvk_z) { pFences_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pFences_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pFences_storage_count; ++rvk_i) {
             if (!deserialize_VkFence(r, pFences_storage[rvk_i])) return false;
         }
         VkResult result = s.on_vkResetFences(device, fenceCount, pFences_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkWaitForFences: {
         VkDevice device = VK_NULL_HANDLE;
         uint32_t fenceCount{};
         VkFence* pFences_storage = nullptr;
-        std::size_t pFences_storage_count = 0;
+        size_t pFences_storage_count = 0;
         VkBool32 waitAll{};
         uint64_t timeout{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(fenceCount)) return false;
-        pFences_storage_count = static_cast<std::size_t>(fenceCount);
+        pFences_storage_count = static_cast<size_t>(fenceCount);
         if (pFences_storage_count != 0) {
             pFences_storage = arena.allocate<VkFence>(pFences_storage_count);
             if (pFences_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pFences_storage_count; ++rvk_z) { pFences_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pFences_storage_count; ++rvk_z) { pFences_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pFences_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pFences_storage_count; ++rvk_i) {
             if (!deserialize_VkFence(r, pFences_storage[rvk_i])) return false;
         }
         if (!r.read_pod(waitAll)) return false;
         if (!r.read_pod(timeout)) return false;
         VkResult result = s.on_vkWaitForFences(device, fenceCount, pFences_storage, waitAll, timeout);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetFenceStatus: {
@@ -632,7 +632,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkFence(r, fence)) return false;
         VkResult result = s.on_vkGetFenceStatus(device, fence);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateCommandPool: {
@@ -642,7 +642,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkCommandPoolCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateCommandPool(device, &pCreateInfo_local, nullptr, &pCommandPool_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkCommandPool(reply, pCommandPool_out);
         return true;
     }
@@ -662,7 +662,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkCommandPool(r, commandPool)) return false;
         if (!r.read_pod(flags)) return false;
         VkResult result = s.on_vkResetCommandPool(device, commandPool, flags);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkBeginCommandBuffer: {
@@ -671,14 +671,14 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkCommandBufferBeginInfo(r, &pBeginInfo_local, arena)) return false;
         VkResult result = s.on_vkBeginCommandBuffer(commandBuffer, &pBeginInfo_local);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkEndCommandBuffer: {
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         VkResult result = s.on_vkEndCommandBuffer(commandBuffer);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkResetCommandBuffer: {
@@ -687,7 +687,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(flags)) return false;
         VkResult result = s.on_vkResetCommandBuffer(commandBuffer, flags);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyShaderModule: {
@@ -705,7 +705,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkShaderModuleCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateShaderModule(device, &pCreateInfo_local, nullptr, &pShaderModule_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkShaderModule(reply, pShaderModule_out);
         return true;
     }
@@ -716,7 +716,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipelineLayoutCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreatePipelineLayout(device, &pCreateInfo_local, nullptr, &pPipelineLayout_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkPipelineLayout(reply, pPipelineLayout_out);
         return true;
     }
@@ -743,7 +743,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipelineCacheCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreatePipelineCache(device, &pCreateInfo_local, nullptr, &pPipelineCache_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkPipelineCache(reply, pPipelineCache_out);
         return true;
     }
@@ -762,7 +762,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkRenderPassCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateRenderPass(device, &pCreateInfo_local, nullptr, &pRenderPass_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkRenderPass(reply, pRenderPass_out);
         return true;
     }
@@ -781,7 +781,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkFramebufferCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateFramebuffer(device, &pCreateInfo_local, nullptr, &pFramebuffer_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkFramebuffer(reply, pFramebuffer_out);
         return true;
     }
@@ -800,7 +800,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorSetLayoutCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateDescriptorSetLayout(device, &pCreateInfo_local, nullptr, &pSetLayout_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDescriptorSetLayout(reply, pSetLayout_out);
         return true;
     }
@@ -819,7 +819,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorPoolCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateDescriptorPool(device, &pCreateInfo_local, nullptr, &pDescriptorPool_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDescriptorPool(reply, pDescriptorPool_out);
         return true;
     }
@@ -836,17 +836,17 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandPool commandPool = VK_NULL_HANDLE;
         uint32_t commandBufferCount{};
         VkCommandBuffer* pCommandBuffers_storage = nullptr;
-        std::size_t pCommandBuffers_storage_count = 0;
+        size_t pCommandBuffers_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkCommandPool(r, commandPool)) return false;
         if (!r.read_pod(commandBufferCount)) return false;
-        pCommandBuffers_storage_count = static_cast<std::size_t>(commandBufferCount);
+        pCommandBuffers_storage_count = static_cast<size_t>(commandBufferCount);
         if (pCommandBuffers_storage_count != 0) {
             pCommandBuffers_storage = arena.allocate<VkCommandBuffer>(pCommandBuffers_storage_count);
             if (pCommandBuffers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pCommandBuffers_storage_count; ++rvk_z) { pCommandBuffers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pCommandBuffers_storage_count; ++rvk_z) { pCommandBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pCommandBuffers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pCommandBuffers_storage_count; ++rvk_i) {
             if (!deserialize_VkCommandBuffer(r, pCommandBuffers_storage[rvk_i])) return false;
         }
         s.on_vkFreeCommandBuffers(device, commandPool, commandBufferCount, pCommandBuffers_storage);
@@ -856,22 +856,22 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkQueue queue = VK_NULL_HANDLE;
         uint32_t submitCount{};
         VkSubmitInfo* pSubmits_storage = nullptr;
-        std::size_t pSubmits_storage_count = 0;
+        size_t pSubmits_storage_count = 0;
         VkFence fence = VK_NULL_HANDLE;
         if (!deserialize_VkQueue(r, queue)) return false;
         if (!r.read_pod(submitCount)) return false;
-        pSubmits_storage_count = static_cast<std::size_t>(submitCount);
+        pSubmits_storage_count = static_cast<size_t>(submitCount);
         if (pSubmits_storage_count != 0) {
             pSubmits_storage = arena.allocate<VkSubmitInfo>(pSubmits_storage_count);
             if (pSubmits_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pSubmits_storage_count; ++rvk_z) { pSubmits_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pSubmits_storage_count; ++rvk_z) { pSubmits_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pSubmits_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pSubmits_storage_count; ++rvk_i) {
             if (!deserialize_VkSubmitInfo(r, &pSubmits_storage[rvk_i], arena)) return false;
         }
         if (!deserialize_VkFence(r, fence)) return false;
         VkResult result = s.on_vkQueueSubmit(queue, submitCount, pSubmits_storage, fence);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBindPipeline: {
@@ -889,17 +889,17 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstViewport{};
         uint32_t viewportCount{};
         VkViewport* pViewports_storage = nullptr;
-        std::size_t pViewports_storage_count = 0;
+        size_t pViewports_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(firstViewport)) return false;
         if (!r.read_pod(viewportCount)) return false;
-        pViewports_storage_count = static_cast<std::size_t>(viewportCount);
+        pViewports_storage_count = static_cast<size_t>(viewportCount);
         if (pViewports_storage_count != 0) {
             pViewports_storage = arena.allocate<VkViewport>(pViewports_storage_count);
             if (pViewports_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pViewports_storage_count; ++rvk_z) { pViewports_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pViewports_storage_count; ++rvk_z) { pViewports_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pViewports_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pViewports_storage_count; ++rvk_i) {
             if (!deserialize_VkViewport(r, &pViewports_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetViewport(commandBuffer, firstViewport, viewportCount, pViewports_storage);
@@ -910,17 +910,17 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstScissor{};
         uint32_t scissorCount{};
         VkRect2D* pScissors_storage = nullptr;
-        std::size_t pScissors_storage_count = 0;
+        size_t pScissors_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(firstScissor)) return false;
         if (!r.read_pod(scissorCount)) return false;
-        pScissors_storage_count = static_cast<std::size_t>(scissorCount);
+        pScissors_storage_count = static_cast<size_t>(scissorCount);
         if (pScissors_storage_count != 0) {
             pScissors_storage = arena.allocate<VkRect2D>(pScissors_storage_count);
             if (pScissors_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pScissors_storage_count; ++rvk_z) { pScissors_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pScissors_storage_count; ++rvk_z) { pScissors_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pScissors_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pScissors_storage_count; ++rvk_i) {
             if (!deserialize_VkRect2D(r, &pScissors_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetScissor(commandBuffer, firstScissor, scissorCount, pScissors_storage);
@@ -931,28 +931,28 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstBinding{};
         uint32_t bindingCount{};
         VkBuffer* pBuffers_storage = nullptr;
-        std::size_t pBuffers_storage_count = 0;
+        size_t pBuffers_storage_count = 0;
         VkDeviceSize* pOffsets_storage = nullptr;
-        std::size_t pOffsets_storage_count = 0;
+        size_t pOffsets_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(firstBinding)) return false;
         if (!r.read_pod(bindingCount)) return false;
-        pBuffers_storage_count = static_cast<std::size_t>(bindingCount);
+        pBuffers_storage_count = static_cast<size_t>(bindingCount);
         if (pBuffers_storage_count != 0) {
             pBuffers_storage = arena.allocate<VkBuffer>(pBuffers_storage_count);
             if (pBuffers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pBuffers_storage_count; ++rvk_z) { pBuffers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pBuffers_storage_count; ++rvk_z) { pBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pBuffers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pBuffers_storage_count; ++rvk_i) {
             if (!deserialize_VkBuffer(r, pBuffers_storage[rvk_i])) return false;
         }
-        pOffsets_storage_count = static_cast<std::size_t>(bindingCount);
+        pOffsets_storage_count = static_cast<size_t>(bindingCount);
         if (pOffsets_storage_count != 0) {
             pOffsets_storage = arena.allocate<VkDeviceSize>(pOffsets_storage_count);
             if (pOffsets_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pOffsets_storage_count; ++rvk_z) { pOffsets_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pOffsets_storage_count; ++rvk_z) { pOffsets_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pOffsets_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pOffsets_storage_count; ++rvk_i) {
             if (!r.read_pod(pOffsets_storage[rvk_i])) return false;
         }
         s.on_vkCmdBindVertexBuffers(commandBuffer, firstBinding, bindingCount, pBuffers_storage, pOffsets_storage);
@@ -977,32 +977,32 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstSet{};
         uint32_t descriptorSetCount{};
         VkDescriptorSet* pDescriptorSets_storage = nullptr;
-        std::size_t pDescriptorSets_storage_count = 0;
+        size_t pDescriptorSets_storage_count = 0;
         uint32_t dynamicOffsetCount{};
         uint32_t* pDynamicOffsets_storage = nullptr;
-        std::size_t pDynamicOffsets_storage_count = 0;
+        size_t pDynamicOffsets_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(pipelineBindPoint)) return false;
         if (!deserialize_VkPipelineLayout(r, layout)) return false;
         if (!r.read_pod(firstSet)) return false;
         if (!r.read_pod(descriptorSetCount)) return false;
-        pDescriptorSets_storage_count = static_cast<std::size_t>(descriptorSetCount);
+        pDescriptorSets_storage_count = static_cast<size_t>(descriptorSetCount);
         if (pDescriptorSets_storage_count != 0) {
             pDescriptorSets_storage = arena.allocate<VkDescriptorSet>(pDescriptorSets_storage_count);
             if (pDescriptorSets_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pDescriptorSets_storage_count; ++rvk_z) { pDescriptorSets_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pDescriptorSets_storage_count; ++rvk_z) { pDescriptorSets_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pDescriptorSets_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pDescriptorSets_storage_count; ++rvk_i) {
             if (!deserialize_VkDescriptorSet(r, pDescriptorSets_storage[rvk_i])) return false;
         }
         if (!r.read_pod(dynamicOffsetCount)) return false;
-        pDynamicOffsets_storage_count = static_cast<std::size_t>(dynamicOffsetCount);
+        pDynamicOffsets_storage_count = static_cast<size_t>(dynamicOffsetCount);
         if (pDynamicOffsets_storage_count != 0) {
             pDynamicOffsets_storage = arena.allocate<uint32_t>(pDynamicOffsets_storage_count);
             if (pDynamicOffsets_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pDynamicOffsets_storage_count; ++rvk_z) { pDynamicOffsets_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pDynamicOffsets_storage_count; ++rvk_z) { pDynamicOffsets_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pDynamicOffsets_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pDynamicOffsets_storage_count; ++rvk_i) {
             if (!r.read_pod(pDynamicOffsets_storage[rvk_i])) return false;
         }
         s.on_vkCmdBindDescriptorSets(commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSetCount, pDescriptorSets_storage, dynamicOffsetCount, pDynamicOffsets_storage);
@@ -1045,45 +1045,45 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDependencyFlags dependencyFlags{};
         uint32_t memoryBarrierCount{};
         VkMemoryBarrier* pMemoryBarriers_storage = nullptr;
-        std::size_t pMemoryBarriers_storage_count = 0;
+        size_t pMemoryBarriers_storage_count = 0;
         uint32_t bufferMemoryBarrierCount{};
         VkBufferMemoryBarrier* pBufferMemoryBarriers_storage = nullptr;
-        std::size_t pBufferMemoryBarriers_storage_count = 0;
+        size_t pBufferMemoryBarriers_storage_count = 0;
         uint32_t imageMemoryBarrierCount{};
         VkImageMemoryBarrier* pImageMemoryBarriers_storage = nullptr;
-        std::size_t pImageMemoryBarriers_storage_count = 0;
+        size_t pImageMemoryBarriers_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(srcStageMask)) return false;
         if (!r.read_pod(dstStageMask)) return false;
         if (!r.read_pod(dependencyFlags)) return false;
         if (!r.read_pod(memoryBarrierCount)) return false;
-        pMemoryBarriers_storage_count = static_cast<std::size_t>(memoryBarrierCount);
+        pMemoryBarriers_storage_count = static_cast<size_t>(memoryBarrierCount);
         if (pMemoryBarriers_storage_count != 0) {
             pMemoryBarriers_storage = arena.allocate<VkMemoryBarrier>(pMemoryBarriers_storage_count);
             if (pMemoryBarriers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pMemoryBarriers_storage_count; ++rvk_z) { pMemoryBarriers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pMemoryBarriers_storage_count; ++rvk_z) { pMemoryBarriers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pMemoryBarriers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pMemoryBarriers_storage_count; ++rvk_i) {
             if (!deserialize_VkMemoryBarrier(r, &pMemoryBarriers_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(bufferMemoryBarrierCount)) return false;
-        pBufferMemoryBarriers_storage_count = static_cast<std::size_t>(bufferMemoryBarrierCount);
+        pBufferMemoryBarriers_storage_count = static_cast<size_t>(bufferMemoryBarrierCount);
         if (pBufferMemoryBarriers_storage_count != 0) {
             pBufferMemoryBarriers_storage = arena.allocate<VkBufferMemoryBarrier>(pBufferMemoryBarriers_storage_count);
             if (pBufferMemoryBarriers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pBufferMemoryBarriers_storage_count; ++rvk_z) { pBufferMemoryBarriers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pBufferMemoryBarriers_storage_count; ++rvk_z) { pBufferMemoryBarriers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pBufferMemoryBarriers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pBufferMemoryBarriers_storage_count; ++rvk_i) {
             if (!deserialize_VkBufferMemoryBarrier(r, &pBufferMemoryBarriers_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(imageMemoryBarrierCount)) return false;
-        pImageMemoryBarriers_storage_count = static_cast<std::size_t>(imageMemoryBarrierCount);
+        pImageMemoryBarriers_storage_count = static_cast<size_t>(imageMemoryBarrierCount);
         if (pImageMemoryBarriers_storage_count != 0) {
             pImageMemoryBarriers_storage = arena.allocate<VkImageMemoryBarrier>(pImageMemoryBarriers_storage_count);
             if (pImageMemoryBarriers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pImageMemoryBarriers_storage_count; ++rvk_z) { pImageMemoryBarriers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pImageMemoryBarriers_storage_count; ++rvk_z) { pImageMemoryBarriers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pImageMemoryBarriers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pImageMemoryBarriers_storage_count; ++rvk_i) {
             if (!deserialize_VkImageMemoryBarrier(r, &pImageMemoryBarriers_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdPipelineBarrier(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount, pMemoryBarriers_storage, bufferMemoryBarrierCount, pBufferMemoryBarriers_storage, imageMemoryBarrierCount, pImageMemoryBarriers_storage);
@@ -1095,18 +1095,18 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkBuffer dstBuffer = VK_NULL_HANDLE;
         uint32_t regionCount{};
         VkBufferCopy* pRegions_storage = nullptr;
-        std::size_t pRegions_storage_count = 0;
+        size_t pRegions_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, srcBuffer)) return false;
         if (!deserialize_VkBuffer(r, dstBuffer)) return false;
         if (!r.read_pod(regionCount)) return false;
-        pRegions_storage_count = static_cast<std::size_t>(regionCount);
+        pRegions_storage_count = static_cast<size_t>(regionCount);
         if (pRegions_storage_count != 0) {
             pRegions_storage = arena.allocate<VkBufferCopy>(pRegions_storage_count);
             if (pRegions_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
             if (!deserialize_VkBufferCopy(r, &pRegions_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, regionCount, pRegions_storage);
@@ -1142,16 +1142,16 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkShaderStageFlags stageFlags{};
         uint32_t offset{};
         uint32_t size{};
-        std::uint8_t* pValues_storage = nullptr;
-        std::size_t pValues_storage_count = 0;
+        uint8_t* pValues_storage = nullptr;
+        size_t pValues_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkPipelineLayout(r, layout)) return false;
         if (!r.read_pod(stageFlags)) return false;
         if (!r.read_pod(offset)) return false;
         if (!r.read_pod(size)) return false;
-        pValues_storage_count = static_cast<std::size_t>(size);
+        pValues_storage_count = static_cast<size_t>(size);
         if (pValues_storage_count != 0) {
-            pValues_storage = arena.allocate<std::uint8_t>(pValues_storage_count);
+            pValues_storage = arena.allocate<uint8_t>(pValues_storage_count);
             if (pValues_storage == nullptr) return false;
             if (!r.read(pValues_storage, pValues_storage_count)) return false;
         }
@@ -1163,30 +1163,30 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkPipelineCache pipelineCache = VK_NULL_HANDLE;
         uint32_t createInfoCount{};
         VkGraphicsPipelineCreateInfo* pCreateInfos_storage = nullptr;
-        std::size_t pCreateInfos_storage_count = 0;
+        size_t pCreateInfos_storage_count = 0;
         VkPipeline* pPipelines_storage = nullptr;
-        std::size_t pPipelines_storage_count = 0;
+        size_t pPipelines_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipelineCache(r, pipelineCache)) return false;
         if (!r.read_pod(createInfoCount)) return false;
-        pCreateInfos_storage_count = static_cast<std::size_t>(createInfoCount);
+        pCreateInfos_storage_count = static_cast<size_t>(createInfoCount);
         if (pCreateInfos_storage_count != 0) {
             pCreateInfos_storage = arena.allocate<VkGraphicsPipelineCreateInfo>(pCreateInfos_storage_count);
             if (pCreateInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pCreateInfos_storage_count; ++rvk_z) { pCreateInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pCreateInfos_storage_count; ++rvk_z) { pCreateInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pCreateInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pCreateInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkGraphicsPipelineCreateInfo(r, &pCreateInfos_storage[rvk_i], arena)) return false;
         }
-        pPipelines_storage_count = static_cast<std::size_t>(createInfoCount);
+        pPipelines_storage_count = static_cast<size_t>(createInfoCount);
         if (pPipelines_storage_count != 0) {
             pPipelines_storage = arena.allocate<VkPipeline>(pPipelines_storage_count);
             if (pPipelines_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        for (size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
             serialize_VkPipeline(reply, pPipelines_storage[rvk_k]);
         }
         return true;
@@ -1195,29 +1195,29 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDevice device = VK_NULL_HANDLE;
         uint32_t descriptorWriteCount{};
         VkWriteDescriptorSet* pDescriptorWrites_storage = nullptr;
-        std::size_t pDescriptorWrites_storage_count = 0;
+        size_t pDescriptorWrites_storage_count = 0;
         uint32_t descriptorCopyCount{};
         VkCopyDescriptorSet* pDescriptorCopies_storage = nullptr;
-        std::size_t pDescriptorCopies_storage_count = 0;
+        size_t pDescriptorCopies_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(descriptorWriteCount)) return false;
-        pDescriptorWrites_storage_count = static_cast<std::size_t>(descriptorWriteCount);
+        pDescriptorWrites_storage_count = static_cast<size_t>(descriptorWriteCount);
         if (pDescriptorWrites_storage_count != 0) {
             pDescriptorWrites_storage = arena.allocate<VkWriteDescriptorSet>(pDescriptorWrites_storage_count);
             if (pDescriptorWrites_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pDescriptorWrites_storage_count; ++rvk_z) { pDescriptorWrites_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pDescriptorWrites_storage_count; ++rvk_z) { pDescriptorWrites_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pDescriptorWrites_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pDescriptorWrites_storage_count; ++rvk_i) {
             if (!deserialize_VkWriteDescriptorSet(r, &pDescriptorWrites_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(descriptorCopyCount)) return false;
-        pDescriptorCopies_storage_count = static_cast<std::size_t>(descriptorCopyCount);
+        pDescriptorCopies_storage_count = static_cast<size_t>(descriptorCopyCount);
         if (pDescriptorCopies_storage_count != 0) {
             pDescriptorCopies_storage = arena.allocate<VkCopyDescriptorSet>(pDescriptorCopies_storage_count);
             if (pDescriptorCopies_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pDescriptorCopies_storage_count; ++rvk_z) { pDescriptorCopies_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pDescriptorCopies_storage_count; ++rvk_z) { pDescriptorCopies_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pDescriptorCopies_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pDescriptorCopies_storage_count; ++rvk_i) {
             if (!deserialize_VkCopyDescriptorSet(r, &pDescriptorCopies_storage[rvk_i], arena)) return false;
         }
         s.on_vkUpdateDescriptorSets(device, descriptorWriteCount, pDescriptorWrites_storage, descriptorCopyCount, pDescriptorCopies_storage);
@@ -1227,18 +1227,18 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDevice device = VK_NULL_HANDLE;
         VkCommandBufferAllocateInfo pAllocateInfo_local{};
         VkCommandBuffer* pCommandBuffers_storage = nullptr;
-        std::size_t pCommandBuffers_storage_count = 0;
+        size_t pCommandBuffers_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkCommandBufferAllocateInfo(r, &pAllocateInfo_local, arena)) return false;
-        pCommandBuffers_storage_count = static_cast<std::size_t>(pAllocateInfo_local.commandBufferCount);
+        pCommandBuffers_storage_count = static_cast<size_t>(pAllocateInfo_local.commandBufferCount);
         if (pCommandBuffers_storage_count != 0) {
             pCommandBuffers_storage = arena.allocate<VkCommandBuffer>(pCommandBuffers_storage_count);
             if (pCommandBuffers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pCommandBuffers_storage_count; ++rvk_z) { pCommandBuffers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pCommandBuffers_storage_count; ++rvk_z) { pCommandBuffers_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkAllocateCommandBuffers(device, &pAllocateInfo_local, pCommandBuffers_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t rvk_k = 0; rvk_k < pCommandBuffers_storage_count; ++rvk_k) {
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        for (size_t rvk_k = 0; rvk_k < pCommandBuffers_storage_count; ++rvk_k) {
             serialize_VkCommandBuffer(reply, pCommandBuffers_storage[rvk_k]);
         }
         return true;
@@ -1247,18 +1247,18 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDevice device = VK_NULL_HANDLE;
         VkDescriptorSetAllocateInfo pAllocateInfo_local{};
         VkDescriptorSet* pDescriptorSets_storage = nullptr;
-        std::size_t pDescriptorSets_storage_count = 0;
+        size_t pDescriptorSets_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorSetAllocateInfo(r, &pAllocateInfo_local, arena)) return false;
-        pDescriptorSets_storage_count = static_cast<std::size_t>(pAllocateInfo_local.descriptorSetCount);
+        pDescriptorSets_storage_count = static_cast<size_t>(pAllocateInfo_local.descriptorSetCount);
         if (pDescriptorSets_storage_count != 0) {
             pDescriptorSets_storage = arena.allocate<VkDescriptorSet>(pDescriptorSets_storage_count);
             if (pDescriptorSets_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pDescriptorSets_storage_count; ++rvk_z) { pDescriptorSets_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pDescriptorSets_storage_count; ++rvk_z) { pDescriptorSets_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkAllocateDescriptorSets(device, &pAllocateInfo_local, pDescriptorSets_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t rvk_k = 0; rvk_k < pDescriptorSets_storage_count; ++rvk_k) {
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        for (size_t rvk_k = 0; rvk_k < pDescriptorSets_storage_count; ++rvk_k) {
             serialize_VkDescriptorSet(reply, pDescriptorSets_storage[rvk_k]);
         }
         return true;
@@ -1268,21 +1268,21 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
         uint32_t descriptorSetCount{};
         VkDescriptorSet* pDescriptorSets_storage = nullptr;
-        std::size_t pDescriptorSets_storage_count = 0;
+        size_t pDescriptorSets_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorPool(r, descriptorPool)) return false;
         if (!r.read_pod(descriptorSetCount)) return false;
-        pDescriptorSets_storage_count = static_cast<std::size_t>(descriptorSetCount);
+        pDescriptorSets_storage_count = static_cast<size_t>(descriptorSetCount);
         if (pDescriptorSets_storage_count != 0) {
             pDescriptorSets_storage = arena.allocate<VkDescriptorSet>(pDescriptorSets_storage_count);
             if (pDescriptorSets_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pDescriptorSets_storage_count; ++rvk_z) { pDescriptorSets_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pDescriptorSets_storage_count; ++rvk_z) { pDescriptorSets_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pDescriptorSets_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pDescriptorSets_storage_count; ++rvk_i) {
             if (!deserialize_VkDescriptorSet(r, pDescriptorSets_storage[rvk_i])) return false;
         }
         VkResult result = s.on_vkFreeDescriptorSets(device, descriptorPool, descriptorSetCount, pDescriptorSets_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateComputePipelines: {
@@ -1290,30 +1290,30 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkPipelineCache pipelineCache = VK_NULL_HANDLE;
         uint32_t createInfoCount{};
         VkComputePipelineCreateInfo* pCreateInfos_storage = nullptr;
-        std::size_t pCreateInfos_storage_count = 0;
+        size_t pCreateInfos_storage_count = 0;
         VkPipeline* pPipelines_storage = nullptr;
-        std::size_t pPipelines_storage_count = 0;
+        size_t pPipelines_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipelineCache(r, pipelineCache)) return false;
         if (!r.read_pod(createInfoCount)) return false;
-        pCreateInfos_storage_count = static_cast<std::size_t>(createInfoCount);
+        pCreateInfos_storage_count = static_cast<size_t>(createInfoCount);
         if (pCreateInfos_storage_count != 0) {
             pCreateInfos_storage = arena.allocate<VkComputePipelineCreateInfo>(pCreateInfos_storage_count);
             if (pCreateInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pCreateInfos_storage_count; ++rvk_z) { pCreateInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pCreateInfos_storage_count; ++rvk_z) { pCreateInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pCreateInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pCreateInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkComputePipelineCreateInfo(r, &pCreateInfos_storage[rvk_i], arena)) return false;
         }
-        pPipelines_storage_count = static_cast<std::size_t>(createInfoCount);
+        pPipelines_storage_count = static_cast<size_t>(createInfoCount);
         if (pPipelines_storage_count != 0) {
             pPipelines_storage = arena.allocate<VkPipeline>(pPipelines_storage_count);
             if (pPipelines_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkCreateComputePipelines(device, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        for (size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
             serialize_VkPipeline(reply, pPipelines_storage[rvk_k]);
         }
         return true;
@@ -1326,7 +1326,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDescriptorPool(r, descriptorPool)) return false;
         if (!r.read_pod(flags)) return false;
         VkResult result = s.on_vkResetDescriptorPool(device, descriptorPool, flags);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateEvent: {
@@ -1336,7 +1336,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkEventCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateEvent(device, &pCreateInfo_local, nullptr, &pEvent_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkEvent(reply, pEvent_out);
         return true;
     }
@@ -1354,7 +1354,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkEvent(r, event)) return false;
         VkResult result = s.on_vkGetEventStatus(device, event);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkSetEvent: {
@@ -1363,7 +1363,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkEvent(r, event)) return false;
         VkResult result = s.on_vkSetEvent(device, event);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkResetEvent: {
@@ -1372,7 +1372,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkEvent(r, event)) return false;
         VkResult result = s.on_vkResetEvent(device, event);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdSetEvent: {
@@ -1399,59 +1399,59 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t eventCount{};
         VkEvent* pEvents_storage = nullptr;
-        std::size_t pEvents_storage_count = 0;
+        size_t pEvents_storage_count = 0;
         VkPipelineStageFlags srcStageMask{};
         VkPipelineStageFlags dstStageMask{};
         uint32_t memoryBarrierCount{};
         VkMemoryBarrier* pMemoryBarriers_storage = nullptr;
-        std::size_t pMemoryBarriers_storage_count = 0;
+        size_t pMemoryBarriers_storage_count = 0;
         uint32_t bufferMemoryBarrierCount{};
         VkBufferMemoryBarrier* pBufferMemoryBarriers_storage = nullptr;
-        std::size_t pBufferMemoryBarriers_storage_count = 0;
+        size_t pBufferMemoryBarriers_storage_count = 0;
         uint32_t imageMemoryBarrierCount{};
         VkImageMemoryBarrier* pImageMemoryBarriers_storage = nullptr;
-        std::size_t pImageMemoryBarriers_storage_count = 0;
+        size_t pImageMemoryBarriers_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(eventCount)) return false;
-        pEvents_storage_count = static_cast<std::size_t>(eventCount);
+        pEvents_storage_count = static_cast<size_t>(eventCount);
         if (pEvents_storage_count != 0) {
             pEvents_storage = arena.allocate<VkEvent>(pEvents_storage_count);
             if (pEvents_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pEvents_storage_count; ++rvk_z) { pEvents_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pEvents_storage_count; ++rvk_z) { pEvents_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pEvents_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pEvents_storage_count; ++rvk_i) {
             if (!deserialize_VkEvent(r, pEvents_storage[rvk_i])) return false;
         }
         if (!r.read_pod(srcStageMask)) return false;
         if (!r.read_pod(dstStageMask)) return false;
         if (!r.read_pod(memoryBarrierCount)) return false;
-        pMemoryBarriers_storage_count = static_cast<std::size_t>(memoryBarrierCount);
+        pMemoryBarriers_storage_count = static_cast<size_t>(memoryBarrierCount);
         if (pMemoryBarriers_storage_count != 0) {
             pMemoryBarriers_storage = arena.allocate<VkMemoryBarrier>(pMemoryBarriers_storage_count);
             if (pMemoryBarriers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pMemoryBarriers_storage_count; ++rvk_z) { pMemoryBarriers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pMemoryBarriers_storage_count; ++rvk_z) { pMemoryBarriers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pMemoryBarriers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pMemoryBarriers_storage_count; ++rvk_i) {
             if (!deserialize_VkMemoryBarrier(r, &pMemoryBarriers_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(bufferMemoryBarrierCount)) return false;
-        pBufferMemoryBarriers_storage_count = static_cast<std::size_t>(bufferMemoryBarrierCount);
+        pBufferMemoryBarriers_storage_count = static_cast<size_t>(bufferMemoryBarrierCount);
         if (pBufferMemoryBarriers_storage_count != 0) {
             pBufferMemoryBarriers_storage = arena.allocate<VkBufferMemoryBarrier>(pBufferMemoryBarriers_storage_count);
             if (pBufferMemoryBarriers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pBufferMemoryBarriers_storage_count; ++rvk_z) { pBufferMemoryBarriers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pBufferMemoryBarriers_storage_count; ++rvk_z) { pBufferMemoryBarriers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pBufferMemoryBarriers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pBufferMemoryBarriers_storage_count; ++rvk_i) {
             if (!deserialize_VkBufferMemoryBarrier(r, &pBufferMemoryBarriers_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(imageMemoryBarrierCount)) return false;
-        pImageMemoryBarriers_storage_count = static_cast<std::size_t>(imageMemoryBarrierCount);
+        pImageMemoryBarriers_storage_count = static_cast<size_t>(imageMemoryBarrierCount);
         if (pImageMemoryBarriers_storage_count != 0) {
             pImageMemoryBarriers_storage = arena.allocate<VkImageMemoryBarrier>(pImageMemoryBarriers_storage_count);
             if (pImageMemoryBarriers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pImageMemoryBarriers_storage_count; ++rvk_z) { pImageMemoryBarriers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pImageMemoryBarriers_storage_count; ++rvk_z) { pImageMemoryBarriers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pImageMemoryBarriers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pImageMemoryBarriers_storage_count; ++rvk_i) {
             if (!deserialize_VkImageMemoryBarrier(r, &pImageMemoryBarriers_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdWaitEvents(commandBuffer, eventCount, pEvents_storage, srcStageMask, dstStageMask, memoryBarrierCount, pMemoryBarriers_storage, bufferMemoryBarrierCount, pBufferMemoryBarriers_storage, imageMemoryBarrierCount, pImageMemoryBarriers_storage);
@@ -1465,20 +1465,20 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkImageLayout dstImageLayout{};
         uint32_t regionCount{};
         VkImageCopy* pRegions_storage = nullptr;
-        std::size_t pRegions_storage_count = 0;
+        size_t pRegions_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkImage(r, srcImage)) return false;
         if (!r.read_pod(srcImageLayout)) return false;
         if (!deserialize_VkImage(r, dstImage)) return false;
         if (!r.read_pod(dstImageLayout)) return false;
         if (!r.read_pod(regionCount)) return false;
-        pRegions_storage_count = static_cast<std::size_t>(regionCount);
+        pRegions_storage_count = static_cast<size_t>(regionCount);
         if (pRegions_storage_count != 0) {
             pRegions_storage = arena.allocate<VkImageCopy>(pRegions_storage_count);
             if (pRegions_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
             if (!deserialize_VkImageCopy(r, &pRegions_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdCopyImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions_storage);
@@ -1491,19 +1491,19 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkImageLayout dstImageLayout{};
         uint32_t regionCount{};
         VkBufferImageCopy* pRegions_storage = nullptr;
-        std::size_t pRegions_storage_count = 0;
+        size_t pRegions_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, srcBuffer)) return false;
         if (!deserialize_VkImage(r, dstImage)) return false;
         if (!r.read_pod(dstImageLayout)) return false;
         if (!r.read_pod(regionCount)) return false;
-        pRegions_storage_count = static_cast<std::size_t>(regionCount);
+        pRegions_storage_count = static_cast<size_t>(regionCount);
         if (pRegions_storage_count != 0) {
             pRegions_storage = arena.allocate<VkBufferImageCopy>(pRegions_storage_count);
             if (pRegions_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
             if (!deserialize_VkBufferImageCopy(r, &pRegions_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdCopyBufferToImage(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions_storage);
@@ -1516,19 +1516,19 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkBuffer dstBuffer = VK_NULL_HANDLE;
         uint32_t regionCount{};
         VkBufferImageCopy* pRegions_storage = nullptr;
-        std::size_t pRegions_storage_count = 0;
+        size_t pRegions_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkImage(r, srcImage)) return false;
         if (!r.read_pod(srcImageLayout)) return false;
         if (!deserialize_VkBuffer(r, dstBuffer)) return false;
         if (!r.read_pod(regionCount)) return false;
-        pRegions_storage_count = static_cast<std::size_t>(regionCount);
+        pRegions_storage_count = static_cast<size_t>(regionCount);
         if (pRegions_storage_count != 0) {
             pRegions_storage = arena.allocate<VkBufferImageCopy>(pRegions_storage_count);
             if (pRegions_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
             if (!deserialize_VkBufferImageCopy(r, &pRegions_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdCopyImageToBuffer(commandBuffer, srcImage, srcImageLayout, dstBuffer, regionCount, pRegions_storage);
@@ -1542,7 +1542,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkImageLayout dstImageLayout{};
         uint32_t regionCount{};
         VkImageBlit* pRegions_storage = nullptr;
-        std::size_t pRegions_storage_count = 0;
+        size_t pRegions_storage_count = 0;
         VkFilter filter{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkImage(r, srcImage)) return false;
@@ -1550,13 +1550,13 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkImage(r, dstImage)) return false;
         if (!r.read_pod(dstImageLayout)) return false;
         if (!r.read_pod(regionCount)) return false;
-        pRegions_storage_count = static_cast<std::size_t>(regionCount);
+        pRegions_storage_count = static_cast<size_t>(regionCount);
         if (pRegions_storage_count != 0) {
             pRegions_storage = arena.allocate<VkImageBlit>(pRegions_storage_count);
             if (pRegions_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
             if (!deserialize_VkImageBlit(r, &pRegions_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(filter)) return false;
@@ -1570,19 +1570,19 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkClearColorValue pColor_local{};
         uint32_t rangeCount{};
         VkImageSubresourceRange* pRanges_storage = nullptr;
-        std::size_t pRanges_storage_count = 0;
+        size_t pRanges_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkImage(r, image)) return false;
         if (!r.read_pod(imageLayout)) return false;
         if (!deserialize_VkClearColorValue(r, &pColor_local, arena)) return false;
         if (!r.read_pod(rangeCount)) return false;
-        pRanges_storage_count = static_cast<std::size_t>(rangeCount);
+        pRanges_storage_count = static_cast<size_t>(rangeCount);
         if (pRanges_storage_count != 0) {
             pRanges_storage = arena.allocate<VkImageSubresourceRange>(pRanges_storage_count);
             if (pRanges_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pRanges_storage_count; ++rvk_z) { pRanges_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pRanges_storage_count; ++rvk_z) { pRanges_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pRanges_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pRanges_storage_count; ++rvk_i) {
             if (!deserialize_VkImageSubresourceRange(r, &pRanges_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdClearColorImage(commandBuffer, image, imageLayout, &pColor_local, rangeCount, pRanges_storage);
@@ -1595,19 +1595,19 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkClearDepthStencilValue pDepthStencil_local{};
         uint32_t rangeCount{};
         VkImageSubresourceRange* pRanges_storage = nullptr;
-        std::size_t pRanges_storage_count = 0;
+        size_t pRanges_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkImage(r, image)) return false;
         if (!r.read_pod(imageLayout)) return false;
         if (!deserialize_VkClearDepthStencilValue(r, &pDepthStencil_local, arena)) return false;
         if (!r.read_pod(rangeCount)) return false;
-        pRanges_storage_count = static_cast<std::size_t>(rangeCount);
+        pRanges_storage_count = static_cast<size_t>(rangeCount);
         if (pRanges_storage_count != 0) {
             pRanges_storage = arena.allocate<VkImageSubresourceRange>(pRanges_storage_count);
             if (pRanges_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pRanges_storage_count; ++rvk_z) { pRanges_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pRanges_storage_count; ++rvk_z) { pRanges_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pRanges_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pRanges_storage_count; ++rvk_i) {
             if (!deserialize_VkImageSubresourceRange(r, &pRanges_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdClearDepthStencilImage(commandBuffer, image, imageLayout, &pDepthStencil_local, rangeCount, pRanges_storage);
@@ -1617,29 +1617,29 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t attachmentCount{};
         VkClearAttachment* pAttachments_storage = nullptr;
-        std::size_t pAttachments_storage_count = 0;
+        size_t pAttachments_storage_count = 0;
         uint32_t rectCount{};
         VkClearRect* pRects_storage = nullptr;
-        std::size_t pRects_storage_count = 0;
+        size_t pRects_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(attachmentCount)) return false;
-        pAttachments_storage_count = static_cast<std::size_t>(attachmentCount);
+        pAttachments_storage_count = static_cast<size_t>(attachmentCount);
         if (pAttachments_storage_count != 0) {
             pAttachments_storage = arena.allocate<VkClearAttachment>(pAttachments_storage_count);
             if (pAttachments_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pAttachments_storage_count; ++rvk_z) { pAttachments_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pAttachments_storage_count; ++rvk_z) { pAttachments_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pAttachments_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pAttachments_storage_count; ++rvk_i) {
             if (!deserialize_VkClearAttachment(r, &pAttachments_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(rectCount)) return false;
-        pRects_storage_count = static_cast<std::size_t>(rectCount);
+        pRects_storage_count = static_cast<size_t>(rectCount);
         if (pRects_storage_count != 0) {
             pRects_storage = arena.allocate<VkClearRect>(pRects_storage_count);
             if (pRects_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pRects_storage_count; ++rvk_z) { pRects_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pRects_storage_count; ++rvk_z) { pRects_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pRects_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pRects_storage_count; ++rvk_i) {
             if (!deserialize_VkClearRect(r, &pRects_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdClearAttachments(commandBuffer, attachmentCount, pAttachments_storage, rectCount, pRects_storage);
@@ -1664,15 +1664,15 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkBuffer dstBuffer = VK_NULL_HANDLE;
         VkDeviceSize dstOffset{};
         VkDeviceSize dataSize{};
-        std::uint8_t* pData_storage = nullptr;
-        std::size_t pData_storage_count = 0;
+        uint8_t* pData_storage = nullptr;
+        size_t pData_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkBuffer(r, dstBuffer)) return false;
         if (!r.read_pod(dstOffset)) return false;
         if (!r.read_pod(dataSize)) return false;
-        pData_storage_count = static_cast<std::size_t>(dataSize);
+        pData_storage_count = static_cast<size_t>(dataSize);
         if (pData_storage_count != 0) {
-            pData_storage = arena.allocate<std::uint8_t>(pData_storage_count);
+            pData_storage = arena.allocate<uint8_t>(pData_storage_count);
             if (pData_storage == nullptr) return false;
             if (!r.read(pData_storage, pData_storage_count)) return false;
         }
@@ -1703,7 +1703,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         float blendConstants_local[4]{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
-        for (std::uint32_t rvk_i = 0; rvk_i < 4u; ++rvk_i) {
+        for (uint32_t rvk_i = 0; rvk_i < 4u; ++rvk_i) {
             if (!r.read_pod(blendConstants_local[rvk_i])) return false;
         }
         s.on_vkCmdSetBlendConstants(commandBuffer, blendConstants_local);
@@ -1803,16 +1803,16 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t commandBufferCount{};
         VkCommandBuffer* pCommandBuffers_storage = nullptr;
-        std::size_t pCommandBuffers_storage_count = 0;
+        size_t pCommandBuffers_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(commandBufferCount)) return false;
-        pCommandBuffers_storage_count = static_cast<std::size_t>(commandBufferCount);
+        pCommandBuffers_storage_count = static_cast<size_t>(commandBufferCount);
         if (pCommandBuffers_storage_count != 0) {
             pCommandBuffers_storage = arena.allocate<VkCommandBuffer>(pCommandBuffers_storage_count);
             if (pCommandBuffers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pCommandBuffers_storage_count; ++rvk_z) { pCommandBuffers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pCommandBuffers_storage_count; ++rvk_z) { pCommandBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pCommandBuffers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pCommandBuffers_storage_count; ++rvk_i) {
             if (!deserialize_VkCommandBuffer(r, pCommandBuffers_storage[rvk_i])) return false;
         }
         s.on_vkCmdExecuteCommands(commandBuffer, commandBufferCount, pCommandBuffers_storage);
@@ -1825,7 +1825,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkAcquireNextImageInfoKHR(r, &pAcquireInfo_local, arena)) return false;
         VkResult result = s.on_vkAcquireNextImage2KHR(device, &pAcquireInfo_local, &pImageIndex_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pImageIndex_out);
         return true;
     }
@@ -1833,40 +1833,40 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDevice device = VK_NULL_HANDLE;
         uint32_t bindInfoCount{};
         VkBindBufferMemoryInfo* pBindInfos_storage = nullptr;
-        std::size_t pBindInfos_storage_count = 0;
+        size_t pBindInfos_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(bindInfoCount)) return false;
-        pBindInfos_storage_count = static_cast<std::size_t>(bindInfoCount);
+        pBindInfos_storage_count = static_cast<size_t>(bindInfoCount);
         if (pBindInfos_storage_count != 0) {
             pBindInfos_storage = arena.allocate<VkBindBufferMemoryInfo>(pBindInfos_storage_count);
             if (pBindInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pBindInfos_storage_count; ++rvk_z) { pBindInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pBindInfos_storage_count; ++rvk_z) { pBindInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pBindInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pBindInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkBindBufferMemoryInfo(r, &pBindInfos_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkBindBufferMemory2(device, bindInfoCount, pBindInfos_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkBindImageMemory2: {
         VkDevice device = VK_NULL_HANDLE;
         uint32_t bindInfoCount{};
         VkBindImageMemoryInfo* pBindInfos_storage = nullptr;
-        std::size_t pBindInfos_storage_count = 0;
+        size_t pBindInfos_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(bindInfoCount)) return false;
-        pBindInfos_storage_count = static_cast<std::size_t>(bindInfoCount);
+        pBindInfos_storage_count = static_cast<size_t>(bindInfoCount);
         if (pBindInfos_storage_count != 0) {
             pBindInfos_storage = arena.allocate<VkBindImageMemoryInfo>(pBindInfos_storage_count);
             if (pBindInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pBindInfos_storage_count; ++rvk_z) { pBindInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pBindInfos_storage_count; ++rvk_z) { pBindInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pBindInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pBindInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkBindImageMemoryInfo(r, &pBindInfos_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkBindImageMemory2(device, bindInfoCount, pBindInfos_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBeginQuery: {
@@ -1904,57 +1904,57 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstBinding{};
         uint32_t bindingCount{};
         VkBuffer* pBuffers_storage = nullptr;
-        std::size_t pBuffers_storage_count = 0;
+        size_t pBuffers_storage_count = 0;
         VkDeviceSize* pOffsets_storage = nullptr;
-        std::size_t pOffsets_storage_count = 0;
+        size_t pOffsets_storage_count = 0;
         VkDeviceSize* pSizes_storage = nullptr;
-        std::size_t pSizes_storage_count = 0;
-        std::uint8_t pSizes_present = 0;
+        size_t pSizes_storage_count = 0;
+        uint8_t pSizes_present = 0;
         VkDeviceSize* pStrides_storage = nullptr;
-        std::size_t pStrides_storage_count = 0;
-        std::uint8_t pStrides_present = 0;
+        size_t pStrides_storage_count = 0;
+        uint8_t pStrides_present = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(firstBinding)) return false;
         if (!r.read_pod(bindingCount)) return false;
-        pBuffers_storage_count = static_cast<std::size_t>(bindingCount);
+        pBuffers_storage_count = static_cast<size_t>(bindingCount);
         if (pBuffers_storage_count != 0) {
             pBuffers_storage = arena.allocate<VkBuffer>(pBuffers_storage_count);
             if (pBuffers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pBuffers_storage_count; ++rvk_z) { pBuffers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pBuffers_storage_count; ++rvk_z) { pBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pBuffers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pBuffers_storage_count; ++rvk_i) {
             if (!deserialize_VkBuffer(r, pBuffers_storage[rvk_i])) return false;
         }
-        pOffsets_storage_count = static_cast<std::size_t>(bindingCount);
+        pOffsets_storage_count = static_cast<size_t>(bindingCount);
         if (pOffsets_storage_count != 0) {
             pOffsets_storage = arena.allocate<VkDeviceSize>(pOffsets_storage_count);
             if (pOffsets_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pOffsets_storage_count; ++rvk_z) { pOffsets_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pOffsets_storage_count; ++rvk_z) { pOffsets_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pOffsets_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pOffsets_storage_count; ++rvk_i) {
             if (!r.read_pod(pOffsets_storage[rvk_i])) return false;
         }
         if (!r.read_pod(pSizes_present)) return false;
         if (pSizes_present) {
-            pSizes_storage_count = static_cast<std::size_t>(bindingCount);
+            pSizes_storage_count = static_cast<size_t>(bindingCount);
             if (pSizes_storage_count != 0) {
                 pSizes_storage = arena.allocate<VkDeviceSize>(pSizes_storage_count);
                 if (pSizes_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pSizes_storage_count; ++rvk_z) { pSizes_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pSizes_storage_count; ++rvk_z) { pSizes_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_i = 0; rvk_i < pSizes_storage_count; ++rvk_i) {
+            for (size_t rvk_i = 0; rvk_i < pSizes_storage_count; ++rvk_i) {
                 if (!r.read_pod(pSizes_storage[rvk_i])) return false;
             }
         }
         if (!r.read_pod(pStrides_present)) return false;
         if (pStrides_present) {
-            pStrides_storage_count = static_cast<std::size_t>(bindingCount);
+            pStrides_storage_count = static_cast<size_t>(bindingCount);
             if (pStrides_storage_count != 0) {
                 pStrides_storage = arena.allocate<VkDeviceSize>(pStrides_storage_count);
                 if (pStrides_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pStrides_storage_count; ++rvk_z) { pStrides_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pStrides_storage_count; ++rvk_z) { pStrides_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_i = 0; rvk_i < pStrides_storage_count; ++rvk_i) {
+            for (size_t rvk_i = 0; rvk_i < pStrides_storage_count; ++rvk_i) {
                 if (!r.read_pod(pStrides_storage[rvk_i])) return false;
             }
         }
@@ -2147,20 +2147,20 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkImageLayout dstImageLayout{};
         uint32_t regionCount{};
         VkImageResolve* pRegions_storage = nullptr;
-        std::size_t pRegions_storage_count = 0;
+        size_t pRegions_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkImage(r, srcImage)) return false;
         if (!r.read_pod(srcImageLayout)) return false;
         if (!deserialize_VkImage(r, dstImage)) return false;
         if (!r.read_pod(dstImageLayout)) return false;
         if (!r.read_pod(regionCount)) return false;
-        pRegions_storage_count = static_cast<std::size_t>(regionCount);
+        pRegions_storage_count = static_cast<size_t>(regionCount);
         if (pRegions_storage_count != 0) {
             pRegions_storage = arena.allocate<VkImageResolve>(pRegions_storage_count);
             if (pRegions_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pRegions_storage_count; ++rvk_z) { pRegions_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pRegions_storage_count; ++rvk_i) {
             if (!deserialize_VkImageResolve(r, &pRegions_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdResolveImage(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions_storage);
@@ -2276,16 +2276,16 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t scissorCount{};
         VkRect2D* pScissors_storage = nullptr;
-        std::size_t pScissors_storage_count = 0;
+        size_t pScissors_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(scissorCount)) return false;
-        pScissors_storage_count = static_cast<std::size_t>(scissorCount);
+        pScissors_storage_count = static_cast<size_t>(scissorCount);
         if (pScissors_storage_count != 0) {
             pScissors_storage = arena.allocate<VkRect2D>(pScissors_storage_count);
             if (pScissors_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pScissors_storage_count; ++rvk_z) { pScissors_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pScissors_storage_count; ++rvk_z) { pScissors_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pScissors_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pScissors_storage_count; ++rvk_i) {
             if (!deserialize_VkRect2D(r, &pScissors_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetScissorWithCount(commandBuffer, scissorCount, pScissors_storage);
@@ -2319,16 +2319,16 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t viewportCount{};
         VkViewport* pViewports_storage = nullptr;
-        std::size_t pViewports_storage_count = 0;
+        size_t pViewports_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(viewportCount)) return false;
-        pViewports_storage_count = static_cast<std::size_t>(viewportCount);
+        pViewports_storage_count = static_cast<size_t>(viewportCount);
         if (pViewports_storage_count != 0) {
             pViewports_storage = arena.allocate<VkViewport>(pViewports_storage_count);
             if (pViewports_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pViewports_storage_count; ++rvk_z) { pViewports_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pViewports_storage_count; ++rvk_z) { pViewports_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pViewports_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pViewports_storage_count; ++rvk_i) {
             if (!deserialize_VkViewport(r, &pViewports_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetViewportWithCount(commandBuffer, viewportCount, pViewports_storage);
@@ -2338,27 +2338,27 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t eventCount{};
         VkEvent* pEvents_storage = nullptr;
-        std::size_t pEvents_storage_count = 0;
+        size_t pEvents_storage_count = 0;
         VkDependencyInfo* pDependencyInfos_storage = nullptr;
-        std::size_t pDependencyInfos_storage_count = 0;
+        size_t pDependencyInfos_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(eventCount)) return false;
-        pEvents_storage_count = static_cast<std::size_t>(eventCount);
+        pEvents_storage_count = static_cast<size_t>(eventCount);
         if (pEvents_storage_count != 0) {
             pEvents_storage = arena.allocate<VkEvent>(pEvents_storage_count);
             if (pEvents_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pEvents_storage_count; ++rvk_z) { pEvents_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pEvents_storage_count; ++rvk_z) { pEvents_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pEvents_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pEvents_storage_count; ++rvk_i) {
             if (!deserialize_VkEvent(r, pEvents_storage[rvk_i])) return false;
         }
-        pDependencyInfos_storage_count = static_cast<std::size_t>(eventCount);
+        pDependencyInfos_storage_count = static_cast<size_t>(eventCount);
         if (pDependencyInfos_storage_count != 0) {
             pDependencyInfos_storage = arena.allocate<VkDependencyInfo>(pDependencyInfos_storage_count);
             if (pDependencyInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pDependencyInfos_storage_count; ++rvk_z) { pDependencyInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pDependencyInfos_storage_count; ++rvk_z) { pDependencyInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pDependencyInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pDependencyInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkDependencyInfo(r, &pDependencyInfos_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdWaitEvents2(commandBuffer, eventCount, pEvents_storage, pDependencyInfos_storage);
@@ -2395,7 +2395,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBufferViewCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateBufferView(device, &pCreateInfo_local, nullptr, &pView_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkBufferView(reply, pView_out);
         return true;
     }
@@ -2406,7 +2406,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorUpdateTemplateCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateDescriptorUpdateTemplate(device, &pCreateInfo_local, nullptr, &pDescriptorUpdateTemplate_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDescriptorUpdateTemplate(reply, pDescriptorUpdateTemplate_out);
         return true;
     }
@@ -2417,7 +2417,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPrivateDataSlotCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreatePrivateDataSlot(device, &pCreateInfo_local, nullptr, &pPrivateDataSlot_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkPrivateDataSlot(reply, pPrivateDataSlot_out);
         return true;
     }
@@ -2428,7 +2428,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkQueryPoolCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateQueryPool(device, &pCreateInfo_local, nullptr, &pQueryPool_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkQueryPool(reply, pQueryPool_out);
         return true;
     }
@@ -2439,7 +2439,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkRenderPassCreateInfo2(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateRenderPass2(device, &pCreateInfo_local, nullptr, &pRenderPass_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkRenderPass(reply, pRenderPass_out);
         return true;
     }
@@ -2450,7 +2450,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSamplerYcbcrConversionCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateSamplerYcbcrConversion(device, &pCreateInfo_local, nullptr, &pYcbcrConversion_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkSamplerYcbcrConversion(reply, pYcbcrConversion_out);
         return true;
     }
@@ -2496,27 +2496,27 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
     }
     case ::av::vkproto::kCmd_vkEnumeratePhysicalDeviceGroups: {
         VkInstance instance = VK_NULL_HANDLE;
-        std::uint8_t array_present = 0;
-        std::uint32_t pPhysicalDeviceGroupCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pPhysicalDeviceGroupCount_local = 0;
         VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties_storage = nullptr;
-        std::size_t pPhysicalDeviceGroupProperties_storage_count = 0;
+        size_t pPhysicalDeviceGroupProperties_storage_count = 0;
         if (!deserialize_VkInstance(r, instance)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pPhysicalDeviceGroupCount_local)) return false;
-            pPhysicalDeviceGroupProperties_storage_count = static_cast<std::size_t>(pPhysicalDeviceGroupCount_local);
+            pPhysicalDeviceGroupProperties_storage_count = static_cast<size_t>(pPhysicalDeviceGroupCount_local);
             if (pPhysicalDeviceGroupProperties_storage_count != 0) {
                 pPhysicalDeviceGroupProperties_storage = arena.allocate<VkPhysicalDeviceGroupProperties>(pPhysicalDeviceGroupProperties_storage_count);
                 if (pPhysicalDeviceGroupProperties_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pPhysicalDeviceGroupProperties_storage_count; ++rvk_z) { pPhysicalDeviceGroupProperties_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pPhysicalDeviceGroupProperties_storage_count; ++rvk_z) { pPhysicalDeviceGroupProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_e = 0; rvk_e < pPhysicalDeviceGroupProperties_storage_count; ++rvk_e) { pPhysicalDeviceGroupProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES; pPhysicalDeviceGroupProperties_storage[rvk_e].pNext = nullptr; }
+            for (size_t rvk_e = 0; rvk_e < pPhysicalDeviceGroupProperties_storage_count; ++rvk_e) { pPhysicalDeviceGroupProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES; pPhysicalDeviceGroupProperties_storage[rvk_e].pNext = nullptr; }
         }
         VkResult result = s.on_vkEnumeratePhysicalDeviceGroups(instance, &pPhysicalDeviceGroupCount_local, array_present ? pPhysicalDeviceGroupProperties_storage : nullptr);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pPhysicalDeviceGroupCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pPhysicalDeviceGroupCount_local; ++k) {
+            for (uint32_t k = 0; k < pPhysicalDeviceGroupCount_local; ++k) {
                 serialize_VkPhysicalDeviceGroupProperties(reply, pPhysicalDeviceGroupProperties_storage[k]);
             }
         }
@@ -2526,20 +2526,20 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDevice device = VK_NULL_HANDLE;
         uint32_t memoryRangeCount{};
         VkMappedMemoryRange* pMemoryRanges_storage = nullptr;
-        std::size_t pMemoryRanges_storage_count = 0;
+        size_t pMemoryRanges_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(memoryRangeCount)) return false;
-        pMemoryRanges_storage_count = static_cast<std::size_t>(memoryRangeCount);
+        pMemoryRanges_storage_count = static_cast<size_t>(memoryRangeCount);
         if (pMemoryRanges_storage_count != 0) {
             pMemoryRanges_storage = arena.allocate<VkMappedMemoryRange>(pMemoryRanges_storage_count);
             if (pMemoryRanges_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pMemoryRanges_storage_count; ++rvk_z) { pMemoryRanges_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pMemoryRanges_storage_count; ++rvk_z) { pMemoryRanges_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pMemoryRanges_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pMemoryRanges_storage_count; ++rvk_i) {
             if (!deserialize_VkMappedMemoryRange(r, &pMemoryRanges_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkFlushMappedMemoryRanges(device, memoryRangeCount, pMemoryRanges_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetBufferDeviceAddress: {
@@ -2548,7 +2548,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBufferDeviceAddressInfo(r, &pInfo_local, arena)) return false;
         VkDeviceAddress result = s.on_vkGetBufferDeviceAddress(device, &pInfo_local);
-        reply.write_pod<std::uint64_t>(static_cast<std::uint64_t>(result));
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetBufferMemoryRequirements2: {
@@ -2560,7 +2560,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pMemoryRequirements_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pMemoryRequirements_out), arena)) return false;
         s.on_vkGetBufferMemoryRequirements2(device, &pInfo_local, &pMemoryRequirements_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkMemoryRequirements2(reply, pMemoryRequirements_out);
         return true;
     }
@@ -2570,7 +2570,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBufferDeviceAddressInfo(r, &pInfo_local, arena)) return false;
         uint64_t result = s.on_vkGetBufferOpaqueCaptureAddress(device, &pInfo_local);
-        reply.write_pod<std::uint64_t>(static_cast<std::uint64_t>(result));
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDescriptorSetLayoutSupport: {
@@ -2582,7 +2582,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pSupport_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pSupport_out), arena)) return false;
         s.on_vkGetDescriptorSetLayoutSupport(device, &pCreateInfo_local, &pSupport_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkDescriptorSetLayoutSupport(reply, pSupport_out);
         return true;
     }
@@ -2595,7 +2595,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pMemoryRequirements_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pMemoryRequirements_out), arena)) return false;
         s.on_vkGetDeviceBufferMemoryRequirements(device, &pInfo_local, &pMemoryRequirements_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkMemoryRequirements2(reply, pMemoryRequirements_out);
         return true;
     }
@@ -2610,7 +2610,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(localDeviceIndex)) return false;
         if (!r.read_pod(remoteDeviceIndex)) return false;
         s.on_vkGetDeviceGroupPeerMemoryFeatures(device, heapIndex, localDeviceIndex, remoteDeviceIndex, &pPeerMemoryFeatures_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pPeerMemoryFeatures_out);
         return true;
     }
@@ -2621,7 +2621,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pDeviceGroupPresentCapabilities_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pDeviceGroupPresentCapabilities_out), arena)) return false;
         VkResult result = s.on_vkGetDeviceGroupPresentCapabilitiesKHR(device, &pDeviceGroupPresentCapabilities_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDeviceGroupPresentCapabilitiesKHR(reply, pDeviceGroupPresentCapabilities_out);
         return true;
     }
@@ -2632,7 +2632,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSurfaceKHR(r, surface)) return false;
         VkResult result = s.on_vkGetDeviceGroupSurfacePresentModesKHR(device, surface, &pModes_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pModes_out);
         return true;
     }
@@ -2645,35 +2645,35 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pMemoryRequirements_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pMemoryRequirements_out), arena)) return false;
         s.on_vkGetDeviceImageMemoryRequirements(device, &pInfo_local, &pMemoryRequirements_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkMemoryRequirements2(reply, pMemoryRequirements_out);
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceImageSparseMemoryRequirements: {
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceImageMemoryRequirements pInfo_local{};
-        std::uint8_t array_present = 0;
-        std::uint32_t pSparseMemoryRequirementCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pSparseMemoryRequirementCount_local = 0;
         VkSparseImageMemoryRequirements2* pSparseMemoryRequirements_storage = nullptr;
-        std::size_t pSparseMemoryRequirements_storage_count = 0;
+        size_t pSparseMemoryRequirements_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeviceImageMemoryRequirements(r, &pInfo_local, arena)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pSparseMemoryRequirementCount_local)) return false;
-            pSparseMemoryRequirements_storage_count = static_cast<std::size_t>(pSparseMemoryRequirementCount_local);
+            pSparseMemoryRequirements_storage_count = static_cast<size_t>(pSparseMemoryRequirementCount_local);
             if (pSparseMemoryRequirements_storage_count != 0) {
                 pSparseMemoryRequirements_storage = arena.allocate<VkSparseImageMemoryRequirements2>(pSparseMemoryRequirements_storage_count);
                 if (pSparseMemoryRequirements_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_e = 0; rvk_e < pSparseMemoryRequirements_storage_count; ++rvk_e) { pSparseMemoryRequirements_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[rvk_e].pNext = nullptr; }
+            for (size_t rvk_e = 0; rvk_e < pSparseMemoryRequirements_storage_count; ++rvk_e) { pSparseMemoryRequirements_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetDeviceImageSparseMemoryRequirements(device, &pInfo_local, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pSparseMemoryRequirementCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
+            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
                 serialize_VkSparseImageMemoryRequirements2(reply, pSparseMemoryRequirements_storage[k]);
             }
         }
@@ -2686,7 +2686,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeviceMemory(r, memory)) return false;
         s.on_vkGetDeviceMemoryCommitment(device, memory, &pCommittedMemoryInBytes_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pCommittedMemoryInBytes_out);
         return true;
     }
@@ -2696,7 +2696,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeviceMemoryOpaqueCaptureAddressInfo(r, &pInfo_local, arena)) return false;
         uint64_t result = s.on_vkGetDeviceMemoryOpaqueCaptureAddress(device, &pInfo_local);
-        reply.write_pod<std::uint64_t>(static_cast<std::uint64_t>(result));
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceQueue2: {
@@ -2706,7 +2706,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeviceQueueInfo2(r, &pQueueInfo_local, arena)) return false;
         s.on_vkGetDeviceQueue2(device, &pQueueInfo_local, &pQueue_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkQueue(reply, pQueue_out);
         return true;
     }
@@ -2719,34 +2719,34 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pMemoryRequirements_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pMemoryRequirements_out), arena)) return false;
         s.on_vkGetImageMemoryRequirements2(device, &pInfo_local, &pMemoryRequirements_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkMemoryRequirements2(reply, pMemoryRequirements_out);
         return true;
     }
     case ::av::vkproto::kCmd_vkGetImageSparseMemoryRequirements: {
         VkDevice device = VK_NULL_HANDLE;
         VkImage image = VK_NULL_HANDLE;
-        std::uint8_t array_present = 0;
-        std::uint32_t pSparseMemoryRequirementCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pSparseMemoryRequirementCount_local = 0;
         VkSparseImageMemoryRequirements* pSparseMemoryRequirements_storage = nullptr;
-        std::size_t pSparseMemoryRequirements_storage_count = 0;
+        size_t pSparseMemoryRequirements_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImage(r, image)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pSparseMemoryRequirementCount_local)) return false;
-            pSparseMemoryRequirements_storage_count = static_cast<std::size_t>(pSparseMemoryRequirementCount_local);
+            pSparseMemoryRequirements_storage_count = static_cast<size_t>(pSparseMemoryRequirementCount_local);
             if (pSparseMemoryRequirements_storage_count != 0) {
                 pSparseMemoryRequirements_storage = arena.allocate<VkSparseImageMemoryRequirements>(pSparseMemoryRequirements_storage_count);
                 if (pSparseMemoryRequirements_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
             }
         }
         s.on_vkGetImageSparseMemoryRequirements(device, image, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pSparseMemoryRequirementCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
+            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
                 serialize_VkSparseImageMemoryRequirements(reply, pSparseMemoryRequirements_storage[k]);
             }
         }
@@ -2755,28 +2755,28 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
     case ::av::vkproto::kCmd_vkGetImageSparseMemoryRequirements2: {
         VkDevice device = VK_NULL_HANDLE;
         VkImageSparseMemoryRequirementsInfo2 pInfo_local{};
-        std::uint8_t array_present = 0;
-        std::uint32_t pSparseMemoryRequirementCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pSparseMemoryRequirementCount_local = 0;
         VkSparseImageMemoryRequirements2* pSparseMemoryRequirements_storage = nullptr;
-        std::size_t pSparseMemoryRequirements_storage_count = 0;
+        size_t pSparseMemoryRequirements_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImageSparseMemoryRequirementsInfo2(r, &pInfo_local, arena)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pSparseMemoryRequirementCount_local)) return false;
-            pSparseMemoryRequirements_storage_count = static_cast<std::size_t>(pSparseMemoryRequirementCount_local);
+            pSparseMemoryRequirements_storage_count = static_cast<size_t>(pSparseMemoryRequirementCount_local);
             if (pSparseMemoryRequirements_storage_count != 0) {
                 pSparseMemoryRequirements_storage = arena.allocate<VkSparseImageMemoryRequirements2>(pSparseMemoryRequirements_storage_count);
                 if (pSparseMemoryRequirements_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_e = 0; rvk_e < pSparseMemoryRequirements_storage_count; ++rvk_e) { pSparseMemoryRequirements_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[rvk_e].pNext = nullptr; }
+            for (size_t rvk_e = 0; rvk_e < pSparseMemoryRequirements_storage_count; ++rvk_e) { pSparseMemoryRequirements_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetImageSparseMemoryRequirements2(device, &pInfo_local, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pSparseMemoryRequirementCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
+            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
                 serialize_VkSparseImageMemoryRequirements2(reply, pSparseMemoryRequirements_storage[k]);
             }
         }
@@ -2791,7 +2791,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkImage(r, image)) return false;
         if (!deserialize_VkImageSubresource(r, &pSubresource_local, arena)) return false;
         s.on_vkGetImageSubresourceLayout(device, image, &pSubresource_local, &pLayout_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkSubresourceLayout(reply, pLayout_out);
         return true;
     }
@@ -2804,7 +2804,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pExternalBufferProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pExternalBufferProperties_out), arena)) return false;
         s.on_vkGetPhysicalDeviceExternalBufferProperties(physicalDevice, &pExternalBufferInfo_local, &pExternalBufferProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkExternalBufferProperties(reply, pExternalBufferProperties_out);
         return true;
     }
@@ -2817,7 +2817,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pExternalFenceProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pExternalFenceProperties_out), arena)) return false;
         s.on_vkGetPhysicalDeviceExternalFenceProperties(physicalDevice, &pExternalFenceInfo_local, &pExternalFenceProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkExternalFenceProperties(reply, pExternalFenceProperties_out);
         return true;
     }
@@ -2830,34 +2830,34 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pExternalSemaphoreProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pExternalSemaphoreProperties_out), arena)) return false;
         s.on_vkGetPhysicalDeviceExternalSemaphoreProperties(physicalDevice, &pExternalSemaphoreInfo_local, &pExternalSemaphoreProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkExternalSemaphoreProperties(reply, pExternalSemaphoreProperties_out);
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDevicePresentRectanglesKHR: {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkSurfaceKHR surface = VK_NULL_HANDLE;
-        std::uint8_t array_present = 0;
-        std::uint32_t pRectCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pRectCount_local = 0;
         VkRect2D* pRects_storage = nullptr;
-        std::size_t pRects_storage_count = 0;
+        size_t pRects_storage_count = 0;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!deserialize_VkSurfaceKHR(r, surface)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pRectCount_local)) return false;
-            pRects_storage_count = static_cast<std::size_t>(pRectCount_local);
+            pRects_storage_count = static_cast<size_t>(pRectCount_local);
             if (pRects_storage_count != 0) {
                 pRects_storage = arena.allocate<VkRect2D>(pRects_storage_count);
                 if (pRects_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pRects_storage_count; ++rvk_z) { pRects_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pRects_storage_count; ++rvk_z) { pRects_storage[rvk_z] = {}; }
             }
         }
         VkResult result = s.on_vkGetPhysicalDevicePresentRectanglesKHR(physicalDevice, surface, &pRectCount_local, array_present ? pRects_storage : nullptr);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pRectCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pRectCount_local; ++k) {
+            for (uint32_t k = 0; k < pRectCount_local; ++k) {
                 serialize_VkRect2D(reply, pRects_storage[k]);
             }
         }
@@ -2865,27 +2865,27 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceToolProperties: {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-        std::uint8_t array_present = 0;
-        std::uint32_t pToolCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pToolCount_local = 0;
         VkPhysicalDeviceToolProperties* pToolProperties_storage = nullptr;
-        std::size_t pToolProperties_storage_count = 0;
+        size_t pToolProperties_storage_count = 0;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pToolCount_local)) return false;
-            pToolProperties_storage_count = static_cast<std::size_t>(pToolCount_local);
+            pToolProperties_storage_count = static_cast<size_t>(pToolCount_local);
             if (pToolProperties_storage_count != 0) {
                 pToolProperties_storage = arena.allocate<VkPhysicalDeviceToolProperties>(pToolProperties_storage_count);
                 if (pToolProperties_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pToolProperties_storage_count; ++rvk_z) { pToolProperties_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pToolProperties_storage_count; ++rvk_z) { pToolProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_e = 0; rvk_e < pToolProperties_storage_count; ++rvk_e) { pToolProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES; pToolProperties_storage[rvk_e].pNext = nullptr; }
+            for (size_t rvk_e = 0; rvk_e < pToolProperties_storage_count; ++rvk_e) { pToolProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TOOL_PROPERTIES; pToolProperties_storage[rvk_e].pNext = nullptr; }
         }
         VkResult result = s.on_vkGetPhysicalDeviceToolProperties(physicalDevice, &pToolCount_local, array_present ? pToolProperties_storage : nullptr);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pToolCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pToolCount_local; ++k) {
+            for (uint32_t k = 0; k < pToolCount_local; ++k) {
                 serialize_VkPhysicalDeviceToolProperties(reply, pToolProperties_storage[k]);
             }
         }
@@ -2902,7 +2902,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(objectHandle)) return false;
         if (!deserialize_VkPrivateDataSlot(r, privateDataSlot)) return false;
         s.on_vkGetPrivateData(device, objectType, objectHandle, privateDataSlot, &pData_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pData_out);
         return true;
     }
@@ -2912,8 +2912,8 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstQuery{};
         uint32_t queryCount{};
         size_t dataSize{};
-        std::uint8_t* pData_storage = nullptr;
-        std::size_t pData_storage_count = 0;
+        uint8_t* pData_storage = nullptr;
+        size_t pData_storage_count = 0;
         VkDeviceSize stride{};
         VkQueryResultFlags flags{};
         if (!deserialize_VkDevice(r, device)) return false;
@@ -2921,20 +2921,20 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(firstQuery)) return false;
         if (!r.read_pod(queryCount)) return false;
         {
-            std::uint64_t rvk_wide = 0;
+            uint64_t rvk_wide = 0;
             if (!r.read_pod(rvk_wide)) return false;
             dataSize = static_cast<size_t>(rvk_wide);
         }
-        pData_storage_count = static_cast<std::size_t>(dataSize);
+        pData_storage_count = static_cast<size_t>(dataSize);
         if (pData_storage_count != 0) {
-            pData_storage = arena.allocate<std::uint8_t>(pData_storage_count);
+            pData_storage = arena.allocate<uint8_t>(pData_storage_count);
             if (pData_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
         }
         if (!r.read_pod(stride)) return false;
         if (!r.read_pod(flags)) return false;
         VkResult result = s.on_vkGetQueryPoolResults(device, queryPool, firstQuery, queryCount, dataSize, pData_storage, stride, flags);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (pData_storage_count != 0) {
             reply.write(pData_storage, pData_storage_count);
         }
@@ -2947,7 +2947,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkRenderPass(r, renderPass)) return false;
         s.on_vkGetRenderAreaGranularity(device, renderPass, &pGranularity_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkExtent2D(reply, pGranularity_out);
         return true;
     }
@@ -2958,7 +2958,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSemaphore(r, semaphore)) return false;
         VkResult result = s.on_vkGetSemaphoreCounterValue(device, semaphore, &pValue_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pValue_out);
         return true;
     }
@@ -2966,20 +2966,20 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDevice device = VK_NULL_HANDLE;
         uint32_t memoryRangeCount{};
         VkMappedMemoryRange* pMemoryRanges_storage = nullptr;
-        std::size_t pMemoryRanges_storage_count = 0;
+        size_t pMemoryRanges_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(memoryRangeCount)) return false;
-        pMemoryRanges_storage_count = static_cast<std::size_t>(memoryRangeCount);
+        pMemoryRanges_storage_count = static_cast<size_t>(memoryRangeCount);
         if (pMemoryRanges_storage_count != 0) {
             pMemoryRanges_storage = arena.allocate<VkMappedMemoryRange>(pMemoryRanges_storage_count);
             if (pMemoryRanges_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pMemoryRanges_storage_count; ++rvk_z) { pMemoryRanges_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pMemoryRanges_storage_count; ++rvk_z) { pMemoryRanges_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pMemoryRanges_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pMemoryRanges_storage_count; ++rvk_i) {
             if (!deserialize_VkMappedMemoryRange(r, &pMemoryRanges_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkInvalidateMappedMemoryRanges(device, memoryRangeCount, pMemoryRanges_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkMergePipelineCaches: {
@@ -2987,65 +2987,65 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkPipelineCache dstCache = VK_NULL_HANDLE;
         uint32_t srcCacheCount{};
         VkPipelineCache* pSrcCaches_storage = nullptr;
-        std::size_t pSrcCaches_storage_count = 0;
+        size_t pSrcCaches_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipelineCache(r, dstCache)) return false;
         if (!r.read_pod(srcCacheCount)) return false;
-        pSrcCaches_storage_count = static_cast<std::size_t>(srcCacheCount);
+        pSrcCaches_storage_count = static_cast<size_t>(srcCacheCount);
         if (pSrcCaches_storage_count != 0) {
             pSrcCaches_storage = arena.allocate<VkPipelineCache>(pSrcCaches_storage_count);
             if (pSrcCaches_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pSrcCaches_storage_count; ++rvk_z) { pSrcCaches_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pSrcCaches_storage_count; ++rvk_z) { pSrcCaches_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pSrcCaches_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pSrcCaches_storage_count; ++rvk_i) {
             if (!deserialize_VkPipelineCache(r, pSrcCaches_storage[rvk_i])) return false;
         }
         VkResult result = s.on_vkMergePipelineCaches(device, dstCache, srcCacheCount, pSrcCaches_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkQueueBindSparse: {
         VkQueue queue = VK_NULL_HANDLE;
         uint32_t bindInfoCount{};
         VkBindSparseInfo* pBindInfo_storage = nullptr;
-        std::size_t pBindInfo_storage_count = 0;
+        size_t pBindInfo_storage_count = 0;
         VkFence fence = VK_NULL_HANDLE;
         if (!deserialize_VkQueue(r, queue)) return false;
         if (!r.read_pod(bindInfoCount)) return false;
-        pBindInfo_storage_count = static_cast<std::size_t>(bindInfoCount);
+        pBindInfo_storage_count = static_cast<size_t>(bindInfoCount);
         if (pBindInfo_storage_count != 0) {
             pBindInfo_storage = arena.allocate<VkBindSparseInfo>(pBindInfo_storage_count);
             if (pBindInfo_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pBindInfo_storage_count; ++rvk_z) { pBindInfo_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pBindInfo_storage_count; ++rvk_z) { pBindInfo_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pBindInfo_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pBindInfo_storage_count; ++rvk_i) {
             if (!deserialize_VkBindSparseInfo(r, &pBindInfo_storage[rvk_i], arena)) return false;
         }
         if (!deserialize_VkFence(r, fence)) return false;
         VkResult result = s.on_vkQueueBindSparse(queue, bindInfoCount, pBindInfo_storage, fence);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkQueueSubmit2: {
         VkQueue queue = VK_NULL_HANDLE;
         uint32_t submitCount{};
         VkSubmitInfo2* pSubmits_storage = nullptr;
-        std::size_t pSubmits_storage_count = 0;
+        size_t pSubmits_storage_count = 0;
         VkFence fence = VK_NULL_HANDLE;
         if (!deserialize_VkQueue(r, queue)) return false;
         if (!r.read_pod(submitCount)) return false;
-        pSubmits_storage_count = static_cast<std::size_t>(submitCount);
+        pSubmits_storage_count = static_cast<size_t>(submitCount);
         if (pSubmits_storage_count != 0) {
             pSubmits_storage = arena.allocate<VkSubmitInfo2>(pSubmits_storage_count);
             if (pSubmits_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pSubmits_storage_count; ++rvk_z) { pSubmits_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pSubmits_storage_count; ++rvk_z) { pSubmits_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pSubmits_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pSubmits_storage_count; ++rvk_i) {
             if (!deserialize_VkSubmitInfo2(r, &pSubmits_storage[rvk_i], arena)) return false;
         }
         if (!deserialize_VkFence(r, fence)) return false;
         VkResult result = s.on_vkQueueSubmit2(queue, submitCount, pSubmits_storage, fence);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkResetQueryPool: {
@@ -3072,7 +3072,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkPrivateDataSlot(r, privateDataSlot)) return false;
         if (!r.read_pod(data)) return false;
         VkResult result = s.on_vkSetPrivateData(device, objectType, objectHandle, privateDataSlot, data);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkSignalSemaphore: {
@@ -3081,7 +3081,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSemaphoreSignalInfo(r, &pSignalInfo_local, arena)) return false;
         VkResult result = s.on_vkSignalSemaphore(device, &pSignalInfo_local);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkTrimCommandPool: {
@@ -3102,7 +3102,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkSemaphoreWaitInfo(r, &pWaitInfo_local, arena)) return false;
         if (!r.read_pod(timeout)) return false;
         VkResult result = s.on_vkWaitSemaphores(device, &pWaitInfo_local, timeout);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceFeatures2KHR: {
@@ -3112,7 +3112,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pFeatures_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pFeatures_out), arena)) return false;
         s.on_vkGetPhysicalDeviceFeatures2KHR(physicalDevice, &pFeatures_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkPhysicalDeviceFeatures2(reply, pFeatures_out);
         return true;
     }
@@ -3125,7 +3125,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pFormatProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pFormatProperties_out), arena)) return false;
         s.on_vkGetPhysicalDeviceFormatProperties2KHR(physicalDevice, format, &pFormatProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkFormatProperties2(reply, pFormatProperties_out);
         return true;
     }
@@ -3138,7 +3138,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pImageFormatProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pImageFormatProperties_out), arena)) return false;
         VkResult result = s.on_vkGetPhysicalDeviceImageFormatProperties2KHR(physicalDevice, &pImageFormatInfo_local, &pImageFormatProperties_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkImageFormatProperties2(reply, pImageFormatProperties_out);
         return true;
     }
@@ -3149,7 +3149,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pMemoryProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pMemoryProperties_out), arena)) return false;
         s.on_vkGetPhysicalDeviceMemoryProperties2KHR(physicalDevice, &pMemoryProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkPhysicalDeviceMemoryProperties2(reply, pMemoryProperties_out);
         return true;
     }
@@ -3160,33 +3160,33 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pProperties_out), arena)) return false;
         s.on_vkGetPhysicalDeviceProperties2KHR(physicalDevice, &pProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkPhysicalDeviceProperties2(reply, pProperties_out);
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceQueueFamilyProperties2KHR: {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-        std::uint8_t array_present = 0;
-        std::uint32_t pQueueFamilyPropertyCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pQueueFamilyPropertyCount_local = 0;
         VkQueueFamilyProperties2* pQueueFamilyProperties_storage = nullptr;
-        std::size_t pQueueFamilyProperties_storage_count = 0;
+        size_t pQueueFamilyProperties_storage_count = 0;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pQueueFamilyPropertyCount_local)) return false;
-            pQueueFamilyProperties_storage_count = static_cast<std::size_t>(pQueueFamilyPropertyCount_local);
+            pQueueFamilyProperties_storage_count = static_cast<size_t>(pQueueFamilyPropertyCount_local);
             if (pQueueFamilyProperties_storage_count != 0) {
                 pQueueFamilyProperties_storage = arena.allocate<VkQueueFamilyProperties2>(pQueueFamilyProperties_storage_count);
                 if (pQueueFamilyProperties_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pQueueFamilyProperties_storage_count; ++rvk_z) { pQueueFamilyProperties_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pQueueFamilyProperties_storage_count; ++rvk_z) { pQueueFamilyProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_e = 0; rvk_e < pQueueFamilyProperties_storage_count; ++rvk_e) { pQueueFamilyProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2; pQueueFamilyProperties_storage[rvk_e].pNext = nullptr; }
+            for (size_t rvk_e = 0; rvk_e < pQueueFamilyProperties_storage_count; ++rvk_e) { pQueueFamilyProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2; pQueueFamilyProperties_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetPhysicalDeviceQueueFamilyProperties2KHR(physicalDevice, &pQueueFamilyPropertyCount_local, array_present ? pQueueFamilyProperties_storage : nullptr);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pQueueFamilyPropertyCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pQueueFamilyPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pQueueFamilyPropertyCount_local; ++k) {
                 serialize_VkQueueFamilyProperties2(reply, pQueueFamilyProperties_storage[k]);
             }
         }
@@ -3195,28 +3195,28 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceSparseImageFormatProperties2KHR: {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceSparseImageFormatInfo2 pFormatInfo_local{};
-        std::uint8_t array_present = 0;
-        std::uint32_t pPropertyCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pPropertyCount_local = 0;
         VkSparseImageFormatProperties2* pProperties_storage = nullptr;
-        std::size_t pProperties_storage_count = 0;
+        size_t pProperties_storage_count = 0;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!deserialize_VkPhysicalDeviceSparseImageFormatInfo2(r, &pFormatInfo_local, arena)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pPropertyCount_local)) return false;
-            pProperties_storage_count = static_cast<std::size_t>(pPropertyCount_local);
+            pProperties_storage_count = static_cast<size_t>(pPropertyCount_local);
             if (pProperties_storage_count != 0) {
                 pProperties_storage = arena.allocate<VkSparseImageFormatProperties2>(pProperties_storage_count);
                 if (pProperties_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pProperties_storage_count; ++rvk_z) { pProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_e = 0; rvk_e < pProperties_storage_count; ++rvk_e) { pProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2; pProperties_storage[rvk_e].pNext = nullptr; }
+            for (size_t rvk_e = 0; rvk_e < pProperties_storage_count; ++rvk_e) { pProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_FORMAT_PROPERTIES_2; pProperties_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetPhysicalDeviceSparseImageFormatProperties2KHR(physicalDevice, &pFormatInfo_local, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pPropertyCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pPropertyCount_local; ++k) {
                 serialize_VkSparseImageFormatProperties2(reply, pProperties_storage[k]);
             }
         }
@@ -3226,40 +3226,40 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDevice device = VK_NULL_HANDLE;
         uint32_t bindInfoCount{};
         VkBindBufferMemoryInfo* pBindInfos_storage = nullptr;
-        std::size_t pBindInfos_storage_count = 0;
+        size_t pBindInfos_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(bindInfoCount)) return false;
-        pBindInfos_storage_count = static_cast<std::size_t>(bindInfoCount);
+        pBindInfos_storage_count = static_cast<size_t>(bindInfoCount);
         if (pBindInfos_storage_count != 0) {
             pBindInfos_storage = arena.allocate<VkBindBufferMemoryInfo>(pBindInfos_storage_count);
             if (pBindInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pBindInfos_storage_count; ++rvk_z) { pBindInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pBindInfos_storage_count; ++rvk_z) { pBindInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pBindInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pBindInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkBindBufferMemoryInfo(r, &pBindInfos_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkBindBufferMemory2KHR(device, bindInfoCount, pBindInfos_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkBindImageMemory2KHR: {
         VkDevice device = VK_NULL_HANDLE;
         uint32_t bindInfoCount{};
         VkBindImageMemoryInfo* pBindInfos_storage = nullptr;
-        std::size_t pBindInfos_storage_count = 0;
+        size_t pBindInfos_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(bindInfoCount)) return false;
-        pBindInfos_storage_count = static_cast<std::size_t>(bindInfoCount);
+        pBindInfos_storage_count = static_cast<size_t>(bindInfoCount);
         if (pBindInfos_storage_count != 0) {
             pBindInfos_storage = arena.allocate<VkBindImageMemoryInfo>(pBindInfos_storage_count);
             if (pBindInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pBindInfos_storage_count; ++rvk_z) { pBindInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pBindInfos_storage_count; ++rvk_z) { pBindInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pBindInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pBindInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkBindImageMemoryInfo(r, &pBindInfos_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkBindImageMemory2KHR(device, bindInfoCount, pBindInfos_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetBufferMemoryRequirements2KHR: {
@@ -3271,7 +3271,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pMemoryRequirements_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pMemoryRequirements_out), arena)) return false;
         s.on_vkGetBufferMemoryRequirements2KHR(device, &pInfo_local, &pMemoryRequirements_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkMemoryRequirements2(reply, pMemoryRequirements_out);
         return true;
     }
@@ -3284,35 +3284,35 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pMemoryRequirements_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pMemoryRequirements_out), arena)) return false;
         s.on_vkGetImageMemoryRequirements2KHR(device, &pInfo_local, &pMemoryRequirements_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkMemoryRequirements2(reply, pMemoryRequirements_out);
         return true;
     }
     case ::av::vkproto::kCmd_vkGetImageSparseMemoryRequirements2KHR: {
         VkDevice device = VK_NULL_HANDLE;
         VkImageSparseMemoryRequirementsInfo2 pInfo_local{};
-        std::uint8_t array_present = 0;
-        std::uint32_t pSparseMemoryRequirementCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pSparseMemoryRequirementCount_local = 0;
         VkSparseImageMemoryRequirements2* pSparseMemoryRequirements_storage = nullptr;
-        std::size_t pSparseMemoryRequirements_storage_count = 0;
+        size_t pSparseMemoryRequirements_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImageSparseMemoryRequirementsInfo2(r, &pInfo_local, arena)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pSparseMemoryRequirementCount_local)) return false;
-            pSparseMemoryRequirements_storage_count = static_cast<std::size_t>(pSparseMemoryRequirementCount_local);
+            pSparseMemoryRequirements_storage_count = static_cast<size_t>(pSparseMemoryRequirementCount_local);
             if (pSparseMemoryRequirements_storage_count != 0) {
                 pSparseMemoryRequirements_storage = arena.allocate<VkSparseImageMemoryRequirements2>(pSparseMemoryRequirements_storage_count);
                 if (pSparseMemoryRequirements_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_e = 0; rvk_e < pSparseMemoryRequirements_storage_count; ++rvk_e) { pSparseMemoryRequirements_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[rvk_e].pNext = nullptr; }
+            for (size_t rvk_e = 0; rvk_e < pSparseMemoryRequirements_storage_count; ++rvk_e) { pSparseMemoryRequirements_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetImageSparseMemoryRequirements2KHR(device, &pInfo_local, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pSparseMemoryRequirementCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
+            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
                 serialize_VkSparseImageMemoryRequirements2(reply, pSparseMemoryRequirements_storage[k]);
             }
         }
@@ -3502,27 +3502,27 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t eventCount{};
         VkEvent* pEvents_storage = nullptr;
-        std::size_t pEvents_storage_count = 0;
+        size_t pEvents_storage_count = 0;
         VkDependencyInfo* pDependencyInfos_storage = nullptr;
-        std::size_t pDependencyInfos_storage_count = 0;
+        size_t pDependencyInfos_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(eventCount)) return false;
-        pEvents_storage_count = static_cast<std::size_t>(eventCount);
+        pEvents_storage_count = static_cast<size_t>(eventCount);
         if (pEvents_storage_count != 0) {
             pEvents_storage = arena.allocate<VkEvent>(pEvents_storage_count);
             if (pEvents_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pEvents_storage_count; ++rvk_z) { pEvents_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pEvents_storage_count; ++rvk_z) { pEvents_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pEvents_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pEvents_storage_count; ++rvk_i) {
             if (!deserialize_VkEvent(r, pEvents_storage[rvk_i])) return false;
         }
-        pDependencyInfos_storage_count = static_cast<std::size_t>(eventCount);
+        pDependencyInfos_storage_count = static_cast<size_t>(eventCount);
         if (pDependencyInfos_storage_count != 0) {
             pDependencyInfos_storage = arena.allocate<VkDependencyInfo>(pDependencyInfos_storage_count);
             if (pDependencyInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pDependencyInfos_storage_count; ++rvk_z) { pDependencyInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pDependencyInfos_storage_count; ++rvk_z) { pDependencyInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pDependencyInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pDependencyInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkDependencyInfo(r, &pDependencyInfos_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdWaitEvents2KHR(commandBuffer, eventCount, pEvents_storage, pDependencyInfos_storage);
@@ -3547,7 +3547,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorUpdateTemplateCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateDescriptorUpdateTemplateKHR(device, &pCreateInfo_local, nullptr, &pDescriptorUpdateTemplate_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDescriptorUpdateTemplate(reply, pDescriptorUpdateTemplate_out);
         return true;
     }
@@ -3558,7 +3558,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkRenderPassCreateInfo2(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateRenderPass2KHR(device, &pCreateInfo_local, nullptr, &pRenderPass_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkRenderPass(reply, pRenderPass_out);
         return true;
     }
@@ -3569,7 +3569,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSamplerYcbcrConversionCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateSamplerYcbcrConversionKHR(device, &pCreateInfo_local, nullptr, &pYcbcrConversion_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkSamplerYcbcrConversion(reply, pYcbcrConversion_out);
         return true;
     }
@@ -3591,27 +3591,27 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
     }
     case ::av::vkproto::kCmd_vkEnumeratePhysicalDeviceGroupsKHR: {
         VkInstance instance = VK_NULL_HANDLE;
-        std::uint8_t array_present = 0;
-        std::uint32_t pPhysicalDeviceGroupCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pPhysicalDeviceGroupCount_local = 0;
         VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties_storage = nullptr;
-        std::size_t pPhysicalDeviceGroupProperties_storage_count = 0;
+        size_t pPhysicalDeviceGroupProperties_storage_count = 0;
         if (!deserialize_VkInstance(r, instance)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pPhysicalDeviceGroupCount_local)) return false;
-            pPhysicalDeviceGroupProperties_storage_count = static_cast<std::size_t>(pPhysicalDeviceGroupCount_local);
+            pPhysicalDeviceGroupProperties_storage_count = static_cast<size_t>(pPhysicalDeviceGroupCount_local);
             if (pPhysicalDeviceGroupProperties_storage_count != 0) {
                 pPhysicalDeviceGroupProperties_storage = arena.allocate<VkPhysicalDeviceGroupProperties>(pPhysicalDeviceGroupProperties_storage_count);
                 if (pPhysicalDeviceGroupProperties_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pPhysicalDeviceGroupProperties_storage_count; ++rvk_z) { pPhysicalDeviceGroupProperties_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pPhysicalDeviceGroupProperties_storage_count; ++rvk_z) { pPhysicalDeviceGroupProperties_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_e = 0; rvk_e < pPhysicalDeviceGroupProperties_storage_count; ++rvk_e) { pPhysicalDeviceGroupProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES; pPhysicalDeviceGroupProperties_storage[rvk_e].pNext = nullptr; }
+            for (size_t rvk_e = 0; rvk_e < pPhysicalDeviceGroupProperties_storage_count; ++rvk_e) { pPhysicalDeviceGroupProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES; pPhysicalDeviceGroupProperties_storage[rvk_e].pNext = nullptr; }
         }
         VkResult result = s.on_vkEnumeratePhysicalDeviceGroupsKHR(instance, &pPhysicalDeviceGroupCount_local, array_present ? pPhysicalDeviceGroupProperties_storage : nullptr);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pPhysicalDeviceGroupCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pPhysicalDeviceGroupCount_local; ++k) {
+            for (uint32_t k = 0; k < pPhysicalDeviceGroupCount_local; ++k) {
                 serialize_VkPhysicalDeviceGroupProperties(reply, pPhysicalDeviceGroupProperties_storage[k]);
             }
         }
@@ -3623,7 +3623,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBufferDeviceAddressInfo(r, &pInfo_local, arena)) return false;
         VkDeviceAddress result = s.on_vkGetBufferDeviceAddressKHR(device, &pInfo_local);
-        reply.write_pod<std::uint64_t>(static_cast<std::uint64_t>(result));
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetBufferOpaqueCaptureAddressKHR: {
@@ -3632,7 +3632,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBufferDeviceAddressInfo(r, &pInfo_local, arena)) return false;
         uint64_t result = s.on_vkGetBufferOpaqueCaptureAddressKHR(device, &pInfo_local);
-        reply.write_pod<std::uint64_t>(static_cast<std::uint64_t>(result));
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDescriptorSetLayoutSupportKHR: {
@@ -3644,7 +3644,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pSupport_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pSupport_out), arena)) return false;
         s.on_vkGetDescriptorSetLayoutSupportKHR(device, &pCreateInfo_local, &pSupport_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkDescriptorSetLayoutSupport(reply, pSupport_out);
         return true;
     }
@@ -3657,7 +3657,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pMemoryRequirements_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pMemoryRequirements_out), arena)) return false;
         s.on_vkGetDeviceBufferMemoryRequirementsKHR(device, &pInfo_local, &pMemoryRequirements_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkMemoryRequirements2(reply, pMemoryRequirements_out);
         return true;
     }
@@ -3672,7 +3672,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(localDeviceIndex)) return false;
         if (!r.read_pod(remoteDeviceIndex)) return false;
         s.on_vkGetDeviceGroupPeerMemoryFeaturesKHR(device, heapIndex, localDeviceIndex, remoteDeviceIndex, &pPeerMemoryFeatures_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pPeerMemoryFeatures_out);
         return true;
     }
@@ -3685,35 +3685,35 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pMemoryRequirements_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pMemoryRequirements_out), arena)) return false;
         s.on_vkGetDeviceImageMemoryRequirementsKHR(device, &pInfo_local, &pMemoryRequirements_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkMemoryRequirements2(reply, pMemoryRequirements_out);
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceImageSparseMemoryRequirementsKHR: {
         VkDevice device = VK_NULL_HANDLE;
         VkDeviceImageMemoryRequirements pInfo_local{};
-        std::uint8_t array_present = 0;
-        std::uint32_t pSparseMemoryRequirementCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pSparseMemoryRequirementCount_local = 0;
         VkSparseImageMemoryRequirements2* pSparseMemoryRequirements_storage = nullptr;
-        std::size_t pSparseMemoryRequirements_storage_count = 0;
+        size_t pSparseMemoryRequirements_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeviceImageMemoryRequirements(r, &pInfo_local, arena)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pSparseMemoryRequirementCount_local)) return false;
-            pSparseMemoryRequirements_storage_count = static_cast<std::size_t>(pSparseMemoryRequirementCount_local);
+            pSparseMemoryRequirements_storage_count = static_cast<size_t>(pSparseMemoryRequirementCount_local);
             if (pSparseMemoryRequirements_storage_count != 0) {
                 pSparseMemoryRequirements_storage = arena.allocate<VkSparseImageMemoryRequirements2>(pSparseMemoryRequirements_storage_count);
                 if (pSparseMemoryRequirements_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pSparseMemoryRequirements_storage_count; ++rvk_z) { pSparseMemoryRequirements_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_e = 0; rvk_e < pSparseMemoryRequirements_storage_count; ++rvk_e) { pSparseMemoryRequirements_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[rvk_e].pNext = nullptr; }
+            for (size_t rvk_e = 0; rvk_e < pSparseMemoryRequirements_storage_count; ++rvk_e) { pSparseMemoryRequirements_storage[rvk_e].sType = VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2; pSparseMemoryRequirements_storage[rvk_e].pNext = nullptr; }
         }
         s.on_vkGetDeviceImageSparseMemoryRequirementsKHR(device, &pInfo_local, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pSparseMemoryRequirementCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
+            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
                 serialize_VkSparseImageMemoryRequirements2(reply, pSparseMemoryRequirements_storage[k]);
             }
         }
@@ -3725,7 +3725,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeviceMemoryOpaqueCaptureAddressInfo(r, &pInfo_local, arena)) return false;
         uint64_t result = s.on_vkGetDeviceMemoryOpaqueCaptureAddressKHR(device, &pInfo_local);
-        reply.write_pod<std::uint64_t>(static_cast<std::uint64_t>(result));
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceExternalBufferPropertiesKHR: {
@@ -3737,7 +3737,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pExternalBufferProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pExternalBufferProperties_out), arena)) return false;
         s.on_vkGetPhysicalDeviceExternalBufferPropertiesKHR(physicalDevice, &pExternalBufferInfo_local, &pExternalBufferProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkExternalBufferProperties(reply, pExternalBufferProperties_out);
         return true;
     }
@@ -3750,7 +3750,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pExternalFenceProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pExternalFenceProperties_out), arena)) return false;
         s.on_vkGetPhysicalDeviceExternalFencePropertiesKHR(physicalDevice, &pExternalFenceInfo_local, &pExternalFenceProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkExternalFenceProperties(reply, pExternalFenceProperties_out);
         return true;
     }
@@ -3763,7 +3763,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pExternalSemaphoreProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pExternalSemaphoreProperties_out), arena)) return false;
         s.on_vkGetPhysicalDeviceExternalSemaphorePropertiesKHR(physicalDevice, &pExternalSemaphoreInfo_local, &pExternalSemaphoreProperties_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkExternalSemaphoreProperties(reply, pExternalSemaphoreProperties_out);
         return true;
     }
@@ -3774,7 +3774,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSemaphore(r, semaphore)) return false;
         VkResult result = s.on_vkGetSemaphoreCounterValueKHR(device, semaphore, &pValue_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pValue_out);
         return true;
     }
@@ -3782,22 +3782,22 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkQueue queue = VK_NULL_HANDLE;
         uint32_t submitCount{};
         VkSubmitInfo2* pSubmits_storage = nullptr;
-        std::size_t pSubmits_storage_count = 0;
+        size_t pSubmits_storage_count = 0;
         VkFence fence = VK_NULL_HANDLE;
         if (!deserialize_VkQueue(r, queue)) return false;
         if (!r.read_pod(submitCount)) return false;
-        pSubmits_storage_count = static_cast<std::size_t>(submitCount);
+        pSubmits_storage_count = static_cast<size_t>(submitCount);
         if (pSubmits_storage_count != 0) {
             pSubmits_storage = arena.allocate<VkSubmitInfo2>(pSubmits_storage_count);
             if (pSubmits_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pSubmits_storage_count; ++rvk_z) { pSubmits_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pSubmits_storage_count; ++rvk_z) { pSubmits_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pSubmits_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pSubmits_storage_count; ++rvk_i) {
             if (!deserialize_VkSubmitInfo2(r, &pSubmits_storage[rvk_i], arena)) return false;
         }
         if (!deserialize_VkFence(r, fence)) return false;
         VkResult result = s.on_vkQueueSubmit2KHR(queue, submitCount, pSubmits_storage, fence);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkSignalSemaphoreKHR: {
@@ -3806,7 +3806,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSemaphoreSignalInfo(r, &pSignalInfo_local, arena)) return false;
         VkResult result = s.on_vkSignalSemaphoreKHR(device, &pSignalInfo_local);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkTrimCommandPoolKHR: {
@@ -3827,7 +3827,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkSemaphoreWaitInfo(r, &pWaitInfo_local, arena)) return false;
         if (!r.read_pod(timeout)) return false;
         VkResult result = s.on_vkWaitSemaphoresKHR(device, &pWaitInfo_local, timeout);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBeginConditionalRenderingEXT: {
@@ -3848,16 +3848,16 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t attachmentCount{};
         VkBool32* pColorWriteEnables_storage = nullptr;
-        std::size_t pColorWriteEnables_storage_count = 0;
+        size_t pColorWriteEnables_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(attachmentCount)) return false;
-        pColorWriteEnables_storage_count = static_cast<std::size_t>(attachmentCount);
+        pColorWriteEnables_storage_count = static_cast<size_t>(attachmentCount);
         if (pColorWriteEnables_storage_count != 0) {
             pColorWriteEnables_storage = arena.allocate<VkBool32>(pColorWriteEnables_storage_count);
             if (pColorWriteEnables_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pColorWriteEnables_storage_count; ++rvk_z) { pColorWriteEnables_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pColorWriteEnables_storage_count; ++rvk_z) { pColorWriteEnables_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pColorWriteEnables_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pColorWriteEnables_storage_count; ++rvk_i) {
             if (!r.read_pod(pColorWriteEnables_storage[rvk_i])) return false;
         }
         s.on_vkCmdSetColorWriteEnableEXT(commandBuffer, attachmentCount, pColorWriteEnables_storage);
@@ -3907,29 +3907,29 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t vertexBindingDescriptionCount{};
         VkVertexInputBindingDescription2EXT* pVertexBindingDescriptions_storage = nullptr;
-        std::size_t pVertexBindingDescriptions_storage_count = 0;
+        size_t pVertexBindingDescriptions_storage_count = 0;
         uint32_t vertexAttributeDescriptionCount{};
         VkVertexInputAttributeDescription2EXT* pVertexAttributeDescriptions_storage = nullptr;
-        std::size_t pVertexAttributeDescriptions_storage_count = 0;
+        size_t pVertexAttributeDescriptions_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(vertexBindingDescriptionCount)) return false;
-        pVertexBindingDescriptions_storage_count = static_cast<std::size_t>(vertexBindingDescriptionCount);
+        pVertexBindingDescriptions_storage_count = static_cast<size_t>(vertexBindingDescriptionCount);
         if (pVertexBindingDescriptions_storage_count != 0) {
             pVertexBindingDescriptions_storage = arena.allocate<VkVertexInputBindingDescription2EXT>(pVertexBindingDescriptions_storage_count);
             if (pVertexBindingDescriptions_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pVertexBindingDescriptions_storage_count; ++rvk_z) { pVertexBindingDescriptions_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pVertexBindingDescriptions_storage_count; ++rvk_z) { pVertexBindingDescriptions_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pVertexBindingDescriptions_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pVertexBindingDescriptions_storage_count; ++rvk_i) {
             if (!deserialize_VkVertexInputBindingDescription2EXT(r, &pVertexBindingDescriptions_storage[rvk_i], arena)) return false;
         }
         if (!r.read_pod(vertexAttributeDescriptionCount)) return false;
-        pVertexAttributeDescriptions_storage_count = static_cast<std::size_t>(vertexAttributeDescriptionCount);
+        pVertexAttributeDescriptions_storage_count = static_cast<size_t>(vertexAttributeDescriptionCount);
         if (pVertexAttributeDescriptions_storage_count != 0) {
             pVertexAttributeDescriptions_storage = arena.allocate<VkVertexInputAttributeDescription2EXT>(pVertexAttributeDescriptions_storage_count);
             if (pVertexAttributeDescriptions_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pVertexAttributeDescriptions_storage_count; ++rvk_z) { pVertexAttributeDescriptions_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pVertexAttributeDescriptions_storage_count; ++rvk_z) { pVertexAttributeDescriptions_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pVertexAttributeDescriptions_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pVertexAttributeDescriptions_storage_count; ++rvk_i) {
             if (!deserialize_VkVertexInputAttributeDescription2EXT(r, &pVertexAttributeDescriptions_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetVertexInputEXT(commandBuffer, vertexBindingDescriptionCount, pVertexBindingDescriptions_storage, vertexAttributeDescriptionCount, pVertexAttributeDescriptions_storage);
@@ -3940,29 +3940,29 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDeferredOperationKHR deferredOperation = VK_NULL_HANDLE;
         uint32_t infoCount{};
         VkAccelerationStructureBuildGeometryInfoKHR* pInfos_storage = nullptr;
-        std::size_t pInfos_storage_count = 0;
+        size_t pInfos_storage_count = 0;
         const VkAccelerationStructureBuildRangeInfoKHR** ppBuildRangeInfos_outer = nullptr;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeferredOperationKHR(r, deferredOperation)) return false;
         if (!r.read_pod(infoCount)) return false;
-        pInfos_storage_count = static_cast<std::size_t>(infoCount);
+        pInfos_storage_count = static_cast<size_t>(infoCount);
         if (pInfos_storage_count != 0) {
             pInfos_storage = arena.allocate<VkAccelerationStructureBuildGeometryInfoKHR>(pInfos_storage_count);
             if (pInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pInfos_storage_count; ++rvk_z) { pInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pInfos_storage_count; ++rvk_z) { pInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkAccelerationStructureBuildGeometryInfoKHR(r, &pInfos_storage[rvk_i], arena)) return false;
         }
         {
-            const std::uint32_t rvk_n_outer = static_cast<std::uint32_t>(infoCount);
+            const uint32_t rvk_n_outer = static_cast<uint32_t>(infoCount);
             auto** rvk_ptrs = arena.allocate<const VkAccelerationStructureBuildRangeInfoKHR*>(rvk_n_outer);
             if (rvk_ptrs == nullptr) { return false; }
-            for (std::uint32_t rvk_i = 0; rvk_i < rvk_n_outer; ++rvk_i) {
-                const std::uint32_t rvk_n = static_cast<std::uint32_t>(pInfos_storage[rvk_i].geometryCount);
+            for (uint32_t rvk_i = 0; rvk_i < rvk_n_outer; ++rvk_i) {
+                const uint32_t rvk_n = static_cast<uint32_t>(pInfos_storage[rvk_i].geometryCount);
                 auto* rvk_inner = arena.allocate<VkAccelerationStructureBuildRangeInfoKHR>(rvk_n);
                 if (rvk_inner == nullptr) { return false; }
-                for (std::uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {
+                for (uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {
                     if (!deserialize_VkAccelerationStructureBuildRangeInfoKHR(r, &rvk_inner[rvk_j], arena)) return false;
                 }
                 rvk_ptrs[rvk_i] = rvk_inner;
@@ -3970,37 +3970,37 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
             ppBuildRangeInfos_outer = rvk_ptrs;
         }
         VkResult result = s.on_vkBuildAccelerationStructuresKHR(device, deferredOperation, infoCount, pInfos_storage, ppBuildRangeInfos_outer);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBindShadersEXT: {
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t stageCount{};
         VkShaderStageFlagBits* pStages_storage = nullptr;
-        std::size_t pStages_storage_count = 0;
+        size_t pStages_storage_count = 0;
         VkShaderEXT* pShaders_storage = nullptr;
-        std::size_t pShaders_storage_count = 0;
-        std::uint8_t pShaders_present = 0;
+        size_t pShaders_storage_count = 0;
+        uint8_t pShaders_present = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(stageCount)) return false;
-        pStages_storage_count = static_cast<std::size_t>(stageCount);
+        pStages_storage_count = static_cast<size_t>(stageCount);
         if (pStages_storage_count != 0) {
             pStages_storage = arena.allocate<VkShaderStageFlagBits>(pStages_storage_count);
             if (pStages_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pStages_storage_count; ++rvk_z) { pStages_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pStages_storage_count; ++rvk_z) { pStages_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pStages_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pStages_storage_count; ++rvk_i) {
             if (!r.read_pod(pStages_storage[rvk_i])) return false;
         }
         if (!r.read_pod(pShaders_present)) return false;
         if (pShaders_present) {
-            pShaders_storage_count = static_cast<std::size_t>(stageCount);
+            pShaders_storage_count = static_cast<size_t>(stageCount);
             if (pShaders_storage_count != 0) {
                 pShaders_storage = arena.allocate<VkShaderEXT>(pShaders_storage_count);
                 if (pShaders_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pShaders_storage_count; ++rvk_z) { pShaders_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pShaders_storage_count; ++rvk_z) { pShaders_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_i = 0; rvk_i < pShaders_storage_count; ++rvk_i) {
+            for (size_t rvk_i = 0; rvk_i < pShaders_storage_count; ++rvk_i) {
                 if (!deserialize_VkShaderEXT(r, pShaders_storage[rvk_i])) return false;
             }
         }
@@ -4012,57 +4012,57 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstBinding{};
         uint32_t bindingCount{};
         VkBuffer* pBuffers_storage = nullptr;
-        std::size_t pBuffers_storage_count = 0;
+        size_t pBuffers_storage_count = 0;
         VkDeviceSize* pOffsets_storage = nullptr;
-        std::size_t pOffsets_storage_count = 0;
+        size_t pOffsets_storage_count = 0;
         VkDeviceSize* pSizes_storage = nullptr;
-        std::size_t pSizes_storage_count = 0;
-        std::uint8_t pSizes_present = 0;
+        size_t pSizes_storage_count = 0;
+        uint8_t pSizes_present = 0;
         VkDeviceSize* pStrides_storage = nullptr;
-        std::size_t pStrides_storage_count = 0;
-        std::uint8_t pStrides_present = 0;
+        size_t pStrides_storage_count = 0;
+        uint8_t pStrides_present = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(firstBinding)) return false;
         if (!r.read_pod(bindingCount)) return false;
-        pBuffers_storage_count = static_cast<std::size_t>(bindingCount);
+        pBuffers_storage_count = static_cast<size_t>(bindingCount);
         if (pBuffers_storage_count != 0) {
             pBuffers_storage = arena.allocate<VkBuffer>(pBuffers_storage_count);
             if (pBuffers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pBuffers_storage_count; ++rvk_z) { pBuffers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pBuffers_storage_count; ++rvk_z) { pBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pBuffers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pBuffers_storage_count; ++rvk_i) {
             if (!deserialize_VkBuffer(r, pBuffers_storage[rvk_i])) return false;
         }
-        pOffsets_storage_count = static_cast<std::size_t>(bindingCount);
+        pOffsets_storage_count = static_cast<size_t>(bindingCount);
         if (pOffsets_storage_count != 0) {
             pOffsets_storage = arena.allocate<VkDeviceSize>(pOffsets_storage_count);
             if (pOffsets_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pOffsets_storage_count; ++rvk_z) { pOffsets_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pOffsets_storage_count; ++rvk_z) { pOffsets_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pOffsets_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pOffsets_storage_count; ++rvk_i) {
             if (!r.read_pod(pOffsets_storage[rvk_i])) return false;
         }
         if (!r.read_pod(pSizes_present)) return false;
         if (pSizes_present) {
-            pSizes_storage_count = static_cast<std::size_t>(bindingCount);
+            pSizes_storage_count = static_cast<size_t>(bindingCount);
             if (pSizes_storage_count != 0) {
                 pSizes_storage = arena.allocate<VkDeviceSize>(pSizes_storage_count);
                 if (pSizes_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pSizes_storage_count; ++rvk_z) { pSizes_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pSizes_storage_count; ++rvk_z) { pSizes_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_i = 0; rvk_i < pSizes_storage_count; ++rvk_i) {
+            for (size_t rvk_i = 0; rvk_i < pSizes_storage_count; ++rvk_i) {
                 if (!r.read_pod(pSizes_storage[rvk_i])) return false;
             }
         }
         if (!r.read_pod(pStrides_present)) return false;
         if (pStrides_present) {
-            pStrides_storage_count = static_cast<std::size_t>(bindingCount);
+            pStrides_storage_count = static_cast<size_t>(bindingCount);
             if (pStrides_storage_count != 0) {
                 pStrides_storage = arena.allocate<VkDeviceSize>(pStrides_storage_count);
                 if (pStrides_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pStrides_storage_count; ++rvk_z) { pStrides_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pStrides_storage_count; ++rvk_z) { pStrides_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_i = 0; rvk_i < pStrides_storage_count; ++rvk_i) {
+            for (size_t rvk_i = 0; rvk_i < pStrides_storage_count; ++rvk_i) {
                 if (!r.read_pod(pStrides_storage[rvk_i])) return false;
             }
         }
@@ -4073,50 +4073,50 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t infoCount{};
         VkAccelerationStructureBuildGeometryInfoKHR* pInfos_storage = nullptr;
-        std::size_t pInfos_storage_count = 0;
+        size_t pInfos_storage_count = 0;
         VkDeviceAddress* pIndirectDeviceAddresses_storage = nullptr;
-        std::size_t pIndirectDeviceAddresses_storage_count = 0;
+        size_t pIndirectDeviceAddresses_storage_count = 0;
         uint32_t* pIndirectStrides_storage = nullptr;
-        std::size_t pIndirectStrides_storage_count = 0;
+        size_t pIndirectStrides_storage_count = 0;
         const uint32_t** ppMaxPrimitiveCounts_outer = nullptr;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(infoCount)) return false;
-        pInfos_storage_count = static_cast<std::size_t>(infoCount);
+        pInfos_storage_count = static_cast<size_t>(infoCount);
         if (pInfos_storage_count != 0) {
             pInfos_storage = arena.allocate<VkAccelerationStructureBuildGeometryInfoKHR>(pInfos_storage_count);
             if (pInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pInfos_storage_count; ++rvk_z) { pInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pInfos_storage_count; ++rvk_z) { pInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkAccelerationStructureBuildGeometryInfoKHR(r, &pInfos_storage[rvk_i], arena)) return false;
         }
-        pIndirectDeviceAddresses_storage_count = static_cast<std::size_t>(infoCount);
+        pIndirectDeviceAddresses_storage_count = static_cast<size_t>(infoCount);
         if (pIndirectDeviceAddresses_storage_count != 0) {
             pIndirectDeviceAddresses_storage = arena.allocate<VkDeviceAddress>(pIndirectDeviceAddresses_storage_count);
             if (pIndirectDeviceAddresses_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pIndirectDeviceAddresses_storage_count; ++rvk_z) { pIndirectDeviceAddresses_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pIndirectDeviceAddresses_storage_count; ++rvk_z) { pIndirectDeviceAddresses_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pIndirectDeviceAddresses_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pIndirectDeviceAddresses_storage_count; ++rvk_i) {
             if (!r.read_pod(pIndirectDeviceAddresses_storage[rvk_i])) return false;
         }
-        pIndirectStrides_storage_count = static_cast<std::size_t>(infoCount);
+        pIndirectStrides_storage_count = static_cast<size_t>(infoCount);
         if (pIndirectStrides_storage_count != 0) {
             pIndirectStrides_storage = arena.allocate<uint32_t>(pIndirectStrides_storage_count);
             if (pIndirectStrides_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pIndirectStrides_storage_count; ++rvk_z) { pIndirectStrides_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pIndirectStrides_storage_count; ++rvk_z) { pIndirectStrides_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pIndirectStrides_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pIndirectStrides_storage_count; ++rvk_i) {
             if (!r.read_pod(pIndirectStrides_storage[rvk_i])) return false;
         }
         {
-            const std::uint32_t rvk_n_outer = static_cast<std::uint32_t>(infoCount);
+            const uint32_t rvk_n_outer = static_cast<uint32_t>(infoCount);
             auto** rvk_ptrs = arena.allocate<const uint32_t*>(rvk_n_outer);
             if (rvk_ptrs == nullptr) { return false; }
-            for (std::uint32_t rvk_i = 0; rvk_i < rvk_n_outer; ++rvk_i) {
-                const std::uint32_t rvk_n = static_cast<std::uint32_t>(pInfos_storage[rvk_i].geometryCount);
+            for (uint32_t rvk_i = 0; rvk_i < rvk_n_outer; ++rvk_i) {
+                const uint32_t rvk_n = static_cast<uint32_t>(pInfos_storage[rvk_i].geometryCount);
                 auto* rvk_inner = arena.allocate<uint32_t>(rvk_n);
                 if (rvk_inner == nullptr) { return false; }
-                for (std::uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {
+                for (uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {
                     if (!r.read_pod(rvk_inner[rvk_j])) return false;
                 }
                 rvk_ptrs[rvk_i] = rvk_inner;
@@ -4130,28 +4130,28 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t infoCount{};
         VkAccelerationStructureBuildGeometryInfoKHR* pInfos_storage = nullptr;
-        std::size_t pInfos_storage_count = 0;
+        size_t pInfos_storage_count = 0;
         const VkAccelerationStructureBuildRangeInfoKHR** ppBuildRangeInfos_outer = nullptr;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(infoCount)) return false;
-        pInfos_storage_count = static_cast<std::size_t>(infoCount);
+        pInfos_storage_count = static_cast<size_t>(infoCount);
         if (pInfos_storage_count != 0) {
             pInfos_storage = arena.allocate<VkAccelerationStructureBuildGeometryInfoKHR>(pInfos_storage_count);
             if (pInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pInfos_storage_count; ++rvk_z) { pInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pInfos_storage_count; ++rvk_z) { pInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkAccelerationStructureBuildGeometryInfoKHR(r, &pInfos_storage[rvk_i], arena)) return false;
         }
         {
-            const std::uint32_t rvk_n_outer = static_cast<std::uint32_t>(infoCount);
+            const uint32_t rvk_n_outer = static_cast<uint32_t>(infoCount);
             auto** rvk_ptrs = arena.allocate<const VkAccelerationStructureBuildRangeInfoKHR*>(rvk_n_outer);
             if (rvk_ptrs == nullptr) { return false; }
-            for (std::uint32_t rvk_i = 0; rvk_i < rvk_n_outer; ++rvk_i) {
-                const std::uint32_t rvk_n = static_cast<std::uint32_t>(pInfos_storage[rvk_i].geometryCount);
+            for (uint32_t rvk_i = 0; rvk_i < rvk_n_outer; ++rvk_i) {
+                const uint32_t rvk_n = static_cast<uint32_t>(pInfos_storage[rvk_i].geometryCount);
                 auto* rvk_inner = arena.allocate<VkAccelerationStructureBuildRangeInfoKHR>(rvk_n);
                 if (rvk_inner == nullptr) { return false; }
-                for (std::uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {
+                for (uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {
                     if (!deserialize_VkAccelerationStructureBuildRangeInfoKHR(r, &rvk_inner[rvk_j], arena)) return false;
                 }
                 rvk_ptrs[rvk_i] = rvk_inner;
@@ -4236,19 +4236,19 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t set{};
         uint32_t descriptorWriteCount{};
         VkWriteDescriptorSet* pDescriptorWrites_storage = nullptr;
-        std::size_t pDescriptorWrites_storage_count = 0;
+        size_t pDescriptorWrites_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(pipelineBindPoint)) return false;
         if (!deserialize_VkPipelineLayout(r, layout)) return false;
         if (!r.read_pod(set)) return false;
         if (!r.read_pod(descriptorWriteCount)) return false;
-        pDescriptorWrites_storage_count = static_cast<std::size_t>(descriptorWriteCount);
+        pDescriptorWrites_storage_count = static_cast<size_t>(descriptorWriteCount);
         if (pDescriptorWrites_storage_count != 0) {
             pDescriptorWrites_storage = arena.allocate<VkWriteDescriptorSet>(pDescriptorWrites_storage_count);
             if (pDescriptorWrites_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pDescriptorWrites_storage_count; ++rvk_z) { pDescriptorWrites_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pDescriptorWrites_storage_count; ++rvk_z) { pDescriptorWrites_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pDescriptorWrites_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pDescriptorWrites_storage_count; ++rvk_i) {
             if (!deserialize_VkWriteDescriptorSet(r, &pDescriptorWrites_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdPushDescriptorSetKHR(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites_storage);
@@ -4275,17 +4275,17 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstAttachment{};
         uint32_t attachmentCount{};
         VkColorBlendAdvancedEXT* pColorBlendAdvanced_storage = nullptr;
-        std::size_t pColorBlendAdvanced_storage_count = 0;
+        size_t pColorBlendAdvanced_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(firstAttachment)) return false;
         if (!r.read_pod(attachmentCount)) return false;
-        pColorBlendAdvanced_storage_count = static_cast<std::size_t>(attachmentCount);
+        pColorBlendAdvanced_storage_count = static_cast<size_t>(attachmentCount);
         if (pColorBlendAdvanced_storage_count != 0) {
             pColorBlendAdvanced_storage = arena.allocate<VkColorBlendAdvancedEXT>(pColorBlendAdvanced_storage_count);
             if (pColorBlendAdvanced_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pColorBlendAdvanced_storage_count; ++rvk_z) { pColorBlendAdvanced_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pColorBlendAdvanced_storage_count; ++rvk_z) { pColorBlendAdvanced_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pColorBlendAdvanced_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pColorBlendAdvanced_storage_count; ++rvk_i) {
             if (!deserialize_VkColorBlendAdvancedEXT(r, &pColorBlendAdvanced_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetColorBlendAdvancedEXT(commandBuffer, firstAttachment, attachmentCount, pColorBlendAdvanced_storage);
@@ -4296,17 +4296,17 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstAttachment{};
         uint32_t attachmentCount{};
         VkBool32* pColorBlendEnables_storage = nullptr;
-        std::size_t pColorBlendEnables_storage_count = 0;
+        size_t pColorBlendEnables_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(firstAttachment)) return false;
         if (!r.read_pod(attachmentCount)) return false;
-        pColorBlendEnables_storage_count = static_cast<std::size_t>(attachmentCount);
+        pColorBlendEnables_storage_count = static_cast<size_t>(attachmentCount);
         if (pColorBlendEnables_storage_count != 0) {
             pColorBlendEnables_storage = arena.allocate<VkBool32>(pColorBlendEnables_storage_count);
             if (pColorBlendEnables_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pColorBlendEnables_storage_count; ++rvk_z) { pColorBlendEnables_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pColorBlendEnables_storage_count; ++rvk_z) { pColorBlendEnables_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pColorBlendEnables_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pColorBlendEnables_storage_count; ++rvk_i) {
             if (!r.read_pod(pColorBlendEnables_storage[rvk_i])) return false;
         }
         s.on_vkCmdSetColorBlendEnableEXT(commandBuffer, firstAttachment, attachmentCount, pColorBlendEnables_storage);
@@ -4317,17 +4317,17 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstAttachment{};
         uint32_t attachmentCount{};
         VkColorBlendEquationEXT* pColorBlendEquations_storage = nullptr;
-        std::size_t pColorBlendEquations_storage_count = 0;
+        size_t pColorBlendEquations_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(firstAttachment)) return false;
         if (!r.read_pod(attachmentCount)) return false;
-        pColorBlendEquations_storage_count = static_cast<std::size_t>(attachmentCount);
+        pColorBlendEquations_storage_count = static_cast<size_t>(attachmentCount);
         if (pColorBlendEquations_storage_count != 0) {
             pColorBlendEquations_storage = arena.allocate<VkColorBlendEquationEXT>(pColorBlendEquations_storage_count);
             if (pColorBlendEquations_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pColorBlendEquations_storage_count; ++rvk_z) { pColorBlendEquations_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pColorBlendEquations_storage_count; ++rvk_z) { pColorBlendEquations_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pColorBlendEquations_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pColorBlendEquations_storage_count; ++rvk_i) {
             if (!deserialize_VkColorBlendEquationEXT(r, &pColorBlendEquations_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetColorBlendEquationEXT(commandBuffer, firstAttachment, attachmentCount, pColorBlendEquations_storage);
@@ -4338,17 +4338,17 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstAttachment{};
         uint32_t attachmentCount{};
         VkColorComponentFlags* pColorWriteMasks_storage = nullptr;
-        std::size_t pColorWriteMasks_storage_count = 0;
+        size_t pColorWriteMasks_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(firstAttachment)) return false;
         if (!r.read_pod(attachmentCount)) return false;
-        pColorWriteMasks_storage_count = static_cast<std::size_t>(attachmentCount);
+        pColorWriteMasks_storage_count = static_cast<size_t>(attachmentCount);
         if (pColorWriteMasks_storage_count != 0) {
             pColorWriteMasks_storage = arena.allocate<VkColorComponentFlags>(pColorWriteMasks_storage_count);
             if (pColorWriteMasks_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pColorWriteMasks_storage_count; ++rvk_z) { pColorWriteMasks_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pColorWriteMasks_storage_count; ++rvk_z) { pColorWriteMasks_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pColorWriteMasks_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pColorWriteMasks_storage_count; ++rvk_i) {
             if (!r.read_pod(pColorWriteMasks_storage[rvk_i])) return false;
         }
         s.on_vkCmdSetColorWriteMaskEXT(commandBuffer, firstAttachment, attachmentCount, pColorWriteMasks_storage);
@@ -4382,16 +4382,16 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t coverageModulationTableCount{};
         float* pCoverageModulationTable_storage = nullptr;
-        std::size_t pCoverageModulationTable_storage_count = 0;
+        size_t pCoverageModulationTable_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(coverageModulationTableCount)) return false;
-        pCoverageModulationTable_storage_count = static_cast<std::size_t>(coverageModulationTableCount);
+        pCoverageModulationTable_storage_count = static_cast<size_t>(coverageModulationTableCount);
         if (pCoverageModulationTable_storage_count != 0) {
             pCoverageModulationTable_storage = arena.allocate<float>(pCoverageModulationTable_storage_count);
             if (pCoverageModulationTable_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pCoverageModulationTable_storage_count; ++rvk_z) { pCoverageModulationTable_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pCoverageModulationTable_storage_count; ++rvk_z) { pCoverageModulationTable_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pCoverageModulationTable_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pCoverageModulationTable_storage_count; ++rvk_i) {
             if (!r.read_pod(pCoverageModulationTable_storage[rvk_i])) return false;
         }
         s.on_vkCmdSetCoverageModulationTableNV(commandBuffer, coverageModulationTableCount, pCoverageModulationTable_storage);
@@ -4509,7 +4509,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkFragmentShadingRateCombinerOpKHR combinerOps_local[2]{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!deserialize_VkExtent2D(r, &pFragmentSize_local, arena)) return false;
-        for (std::uint32_t rvk_i = 0; rvk_i < 2u; ++rvk_i) {
+        for (uint32_t rvk_i = 0; rvk_i < 2u; ++rvk_i) {
             if (!r.read_pod(combinerOps_local[rvk_i])) return false;
         }
         s.on_vkCmdSetFragmentShadingRateKHR(commandBuffer, &pFragmentSize_local, combinerOps_local);
@@ -4625,16 +4625,16 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkSampleCountFlagBits samples{};
         VkSampleMask* pSampleMask_storage = nullptr;
-        std::size_t pSampleMask_storage_count = 0;
+        size_t pSampleMask_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(samples)) return false;
-        pSampleMask_storage_count = static_cast<std::size_t>((samples + 31) / 32);
+        pSampleMask_storage_count = static_cast<size_t>((samples + 31) / 32);
         if (pSampleMask_storage_count != 0) {
             pSampleMask_storage = arena.allocate<VkSampleMask>(pSampleMask_storage_count);
             if (pSampleMask_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pSampleMask_storage_count; ++rvk_z) { pSampleMask_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pSampleMask_storage_count; ++rvk_z) { pSampleMask_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pSampleMask_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pSampleMask_storage_count; ++rvk_i) {
             if (!r.read_pod(pSampleMask_storage[rvk_i])) return false;
         }
         s.on_vkCmdSetSampleMaskEXT(commandBuffer, samples, pSampleMask_storage);
@@ -4644,16 +4644,16 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t scissorCount{};
         VkRect2D* pScissors_storage = nullptr;
-        std::size_t pScissors_storage_count = 0;
+        size_t pScissors_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(scissorCount)) return false;
-        pScissors_storage_count = static_cast<std::size_t>(scissorCount);
+        pScissors_storage_count = static_cast<size_t>(scissorCount);
         if (pScissors_storage_count != 0) {
             pScissors_storage = arena.allocate<VkRect2D>(pScissors_storage_count);
             if (pScissors_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pScissors_storage_count; ++rvk_z) { pScissors_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pScissors_storage_count; ++rvk_z) { pScissors_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pScissors_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pScissors_storage_count; ++rvk_i) {
             if (!deserialize_VkRect2D(r, &pScissors_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetScissorWithCountEXT(commandBuffer, scissorCount, pScissors_storage);
@@ -4704,17 +4704,17 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstViewport{};
         uint32_t viewportCount{};
         VkViewportSwizzleNV* pViewportSwizzles_storage = nullptr;
-        std::size_t pViewportSwizzles_storage_count = 0;
+        size_t pViewportSwizzles_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(firstViewport)) return false;
         if (!r.read_pod(viewportCount)) return false;
-        pViewportSwizzles_storage_count = static_cast<std::size_t>(viewportCount);
+        pViewportSwizzles_storage_count = static_cast<size_t>(viewportCount);
         if (pViewportSwizzles_storage_count != 0) {
             pViewportSwizzles_storage = arena.allocate<VkViewportSwizzleNV>(pViewportSwizzles_storage_count);
             if (pViewportSwizzles_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pViewportSwizzles_storage_count; ++rvk_z) { pViewportSwizzles_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pViewportSwizzles_storage_count; ++rvk_z) { pViewportSwizzles_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pViewportSwizzles_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pViewportSwizzles_storage_count; ++rvk_i) {
             if (!deserialize_VkViewportSwizzleNV(r, &pViewportSwizzles_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetViewportSwizzleNV(commandBuffer, firstViewport, viewportCount, pViewportSwizzles_storage);
@@ -4732,16 +4732,16 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t viewportCount{};
         VkViewport* pViewports_storage = nullptr;
-        std::size_t pViewports_storage_count = 0;
+        size_t pViewports_storage_count = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(viewportCount)) return false;
-        pViewports_storage_count = static_cast<std::size_t>(viewportCount);
+        pViewports_storage_count = static_cast<size_t>(viewportCount);
         if (pViewports_storage_count != 0) {
             pViewports_storage = arena.allocate<VkViewport>(pViewports_storage_count);
             if (pViewports_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pViewports_storage_count; ++rvk_z) { pViewports_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pViewports_storage_count; ++rvk_z) { pViewports_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pViewports_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pViewports_storage_count; ++rvk_i) {
             if (!deserialize_VkViewport(r, &pViewports_storage[rvk_i], arena)) return false;
         }
         s.on_vkCmdSetViewportWithCountEXT(commandBuffer, viewportCount, pViewports_storage);
@@ -4787,19 +4787,19 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         uint32_t accelerationStructureCount{};
         VkAccelerationStructureKHR* pAccelerationStructures_storage = nullptr;
-        std::size_t pAccelerationStructures_storage_count = 0;
+        size_t pAccelerationStructures_storage_count = 0;
         VkQueryType queryType{};
         VkQueryPool queryPool = VK_NULL_HANDLE;
         uint32_t firstQuery{};
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(accelerationStructureCount)) return false;
-        pAccelerationStructures_storage_count = static_cast<std::size_t>(accelerationStructureCount);
+        pAccelerationStructures_storage_count = static_cast<size_t>(accelerationStructureCount);
         if (pAccelerationStructures_storage_count != 0) {
             pAccelerationStructures_storage = arena.allocate<VkAccelerationStructureKHR>(pAccelerationStructures_storage_count);
             if (pAccelerationStructures_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pAccelerationStructures_storage_count; ++rvk_z) { pAccelerationStructures_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pAccelerationStructures_storage_count; ++rvk_z) { pAccelerationStructures_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pAccelerationStructures_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pAccelerationStructures_storage_count; ++rvk_i) {
             if (!deserialize_VkAccelerationStructureKHR(r, pAccelerationStructures_storage[rvk_i])) return false;
         }
         if (!r.read_pod(queryType)) return false;
@@ -4816,7 +4816,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDeferredOperationKHR(r, deferredOperation)) return false;
         if (!deserialize_VkCopyAccelerationStructureInfoKHR(r, &pInfo_local, arena)) return false;
         VkResult result = s.on_vkCopyAccelerationStructureKHR(device, deferredOperation, &pInfo_local);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCopyAccelerationStructureToMemoryKHR: {
@@ -4827,7 +4827,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDeferredOperationKHR(r, deferredOperation)) return false;
         if (!deserialize_VkCopyAccelerationStructureToMemoryInfoKHR(r, &pInfo_local, arena)) return false;
         VkResult result = s.on_vkCopyAccelerationStructureToMemoryKHR(device, deferredOperation, &pInfo_local);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCopyImageToImageEXT: {
@@ -4836,7 +4836,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkCopyImageToImageInfo(r, &pCopyImageToImageInfo_local, arena)) return false;
         VkResult result = s.on_vkCopyImageToImageEXT(device, &pCopyImageToImageInfo_local);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCopyImageToMemoryEXT: {
@@ -4845,7 +4845,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkCopyImageToMemoryInfo(r, &pCopyImageToMemoryInfo_local, arena)) return false;
         VkResult result = s.on_vkCopyImageToMemoryEXT(device, &pCopyImageToMemoryInfo_local);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCopyMemoryToAccelerationStructureKHR: {
@@ -4856,7 +4856,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDeferredOperationKHR(r, deferredOperation)) return false;
         if (!deserialize_VkCopyMemoryToAccelerationStructureInfoKHR(r, &pInfo_local, arena)) return false;
         VkResult result = s.on_vkCopyMemoryToAccelerationStructureKHR(device, deferredOperation, &pInfo_local);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCopyMemoryToImageEXT: {
@@ -4865,7 +4865,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkCopyMemoryToImageInfo(r, &pCopyMemoryToImageInfo_local, arena)) return false;
         VkResult result = s.on_vkCopyMemoryToImageEXT(device, &pCopyMemoryToImageInfo_local);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateAccelerationStructureKHR: {
@@ -4875,7 +4875,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkAccelerationStructureCreateInfoKHR(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateAccelerationStructureKHR(device, &pCreateInfo_local, nullptr, &pAccelerationStructure_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkAccelerationStructureKHR(reply, pAccelerationStructure_out);
         return true;
     }
@@ -4884,7 +4884,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDeferredOperationKHR pDeferredOperation_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         VkResult result = s.on_vkCreateDeferredOperationKHR(device, nullptr, &pDeferredOperation_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDeferredOperationKHR(reply, pDeferredOperation_out);
         return true;
     }
@@ -4894,31 +4894,31 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkPipelineCache pipelineCache = VK_NULL_HANDLE;
         uint32_t createInfoCount{};
         VkRayTracingPipelineCreateInfoKHR* pCreateInfos_storage = nullptr;
-        std::size_t pCreateInfos_storage_count = 0;
+        size_t pCreateInfos_storage_count = 0;
         VkPipeline* pPipelines_storage = nullptr;
-        std::size_t pPipelines_storage_count = 0;
+        size_t pPipelines_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeferredOperationKHR(r, deferredOperation)) return false;
         if (!deserialize_VkPipelineCache(r, pipelineCache)) return false;
         if (!r.read_pod(createInfoCount)) return false;
-        pCreateInfos_storage_count = static_cast<std::size_t>(createInfoCount);
+        pCreateInfos_storage_count = static_cast<size_t>(createInfoCount);
         if (pCreateInfos_storage_count != 0) {
             pCreateInfos_storage = arena.allocate<VkRayTracingPipelineCreateInfoKHR>(pCreateInfos_storage_count);
             if (pCreateInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pCreateInfos_storage_count; ++rvk_z) { pCreateInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pCreateInfos_storage_count; ++rvk_z) { pCreateInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pCreateInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pCreateInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkRayTracingPipelineCreateInfoKHR(r, &pCreateInfos_storage[rvk_i], arena)) return false;
         }
-        pPipelines_storage_count = static_cast<std::size_t>(createInfoCount);
+        pPipelines_storage_count = static_cast<size_t>(createInfoCount);
         if (pPipelines_storage_count != 0) {
             pPipelines_storage = arena.allocate<VkPipeline>(pPipelines_storage_count);
             if (pPipelines_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkCreateRayTracingPipelinesKHR(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        for (size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
             serialize_VkPipeline(reply, pPipelines_storage[rvk_k]);
         }
         return true;
@@ -4927,29 +4927,29 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDevice device = VK_NULL_HANDLE;
         uint32_t createInfoCount{};
         VkShaderCreateInfoEXT* pCreateInfos_storage = nullptr;
-        std::size_t pCreateInfos_storage_count = 0;
+        size_t pCreateInfos_storage_count = 0;
         VkShaderEXT* pShaders_storage = nullptr;
-        std::size_t pShaders_storage_count = 0;
+        size_t pShaders_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(createInfoCount)) return false;
-        pCreateInfos_storage_count = static_cast<std::size_t>(createInfoCount);
+        pCreateInfos_storage_count = static_cast<size_t>(createInfoCount);
         if (pCreateInfos_storage_count != 0) {
             pCreateInfos_storage = arena.allocate<VkShaderCreateInfoEXT>(pCreateInfos_storage_count);
             if (pCreateInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pCreateInfos_storage_count; ++rvk_z) { pCreateInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pCreateInfos_storage_count; ++rvk_z) { pCreateInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pCreateInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pCreateInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkShaderCreateInfoEXT(r, &pCreateInfos_storage[rvk_i], arena)) return false;
         }
-        pShaders_storage_count = static_cast<std::size_t>(createInfoCount);
+        pShaders_storage_count = static_cast<size_t>(createInfoCount);
         if (pShaders_storage_count != 0) {
             pShaders_storage = arena.allocate<VkShaderEXT>(pShaders_storage_count);
             if (pShaders_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pShaders_storage_count; ++rvk_z) { pShaders_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pShaders_storage_count; ++rvk_z) { pShaders_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkCreateShadersEXT(device, createInfoCount, pCreateInfos_storage, nullptr, pShaders_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t rvk_k = 0; rvk_k < pShaders_storage_count; ++rvk_k) {
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        for (size_t rvk_k = 0; rvk_k < pShaders_storage_count; ++rvk_k) {
             serialize_VkShaderEXT(reply, pShaders_storage[rvk_k]);
         }
         return true;
@@ -4960,7 +4960,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeferredOperationKHR(r, operation)) return false;
         VkResult result = s.on_vkDeferredOperationJoinKHR(device, operation);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyAccelerationStructureKHR: {
@@ -4992,28 +4992,28 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkAccelerationStructureBuildTypeKHR buildType{};
         VkAccelerationStructureBuildGeometryInfoKHR pBuildInfo_local{};
         uint32_t* pMaxPrimitiveCounts_storage = nullptr;
-        std::size_t pMaxPrimitiveCounts_storage_count = 0;
-        std::uint8_t pMaxPrimitiveCounts_present = 0;
+        size_t pMaxPrimitiveCounts_storage_count = 0;
+        uint8_t pMaxPrimitiveCounts_present = 0;
         VkAccelerationStructureBuildSizesInfoKHR pSizeInfo_out{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(buildType)) return false;
         if (!deserialize_VkAccelerationStructureBuildGeometryInfoKHR(r, &pBuildInfo_local, arena)) return false;
         if (!r.read_pod(pMaxPrimitiveCounts_present)) return false;
         if (pMaxPrimitiveCounts_present) {
-            pMaxPrimitiveCounts_storage_count = static_cast<std::size_t>(pBuildInfo_local.geometryCount);
+            pMaxPrimitiveCounts_storage_count = static_cast<size_t>(pBuildInfo_local.geometryCount);
             if (pMaxPrimitiveCounts_storage_count != 0) {
                 pMaxPrimitiveCounts_storage = arena.allocate<uint32_t>(pMaxPrimitiveCounts_storage_count);
                 if (pMaxPrimitiveCounts_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pMaxPrimitiveCounts_storage_count; ++rvk_z) { pMaxPrimitiveCounts_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pMaxPrimitiveCounts_storage_count; ++rvk_z) { pMaxPrimitiveCounts_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_i = 0; rvk_i < pMaxPrimitiveCounts_storage_count; ++rvk_i) {
+            for (size_t rvk_i = 0; rvk_i < pMaxPrimitiveCounts_storage_count; ++rvk_i) {
                 if (!r.read_pod(pMaxPrimitiveCounts_storage[rvk_i])) return false;
             }
         }
         if (!r.read_pod(pSizeInfo_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pSizeInfo_out), arena)) return false;
         s.on_vkGetAccelerationStructureBuildSizesKHR(device, buildType, &pBuildInfo_local, pMaxPrimitiveCounts_present ? pMaxPrimitiveCounts_storage : nullptr, &pSizeInfo_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkAccelerationStructureBuildSizesInfoKHR(reply, pSizeInfo_out);
         return true;
     }
@@ -5023,7 +5023,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkAccelerationStructureDeviceAddressInfoKHR(r, &pInfo_local, arena)) return false;
         VkDeviceAddress result = s.on_vkGetAccelerationStructureDeviceAddressKHR(device, &pInfo_local);
-        reply.write_pod<std::uint64_t>(static_cast<std::uint64_t>(result));
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeferredOperationMaxConcurrencyKHR: {
@@ -5032,7 +5032,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeferredOperationKHR(r, operation)) return false;
         uint32_t result = s.on_vkGetDeferredOperationMaxConcurrencyKHR(device, operation);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeferredOperationResultKHR: {
@@ -5041,7 +5041,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeferredOperationKHR(r, operation)) return false;
         VkResult result = s.on_vkGetDeferredOperationResultKHR(device, operation);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceAccelerationStructureCompatibilityKHR: {
@@ -5051,7 +5051,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkAccelerationStructureVersionInfoKHR(r, &pVersionInfo_local, arena)) return false;
         s.on_vkGetDeviceAccelerationStructureCompatibilityKHR(device, &pVersionInfo_local, &pCompatibility_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         reply.write_pod(pCompatibility_out);
         return true;
     }
@@ -5066,33 +5066,33 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pLayout_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pLayout_out), arena)) return false;
         s.on_vkGetImageSubresourceLayout2EXT(device, image, &pSubresource_local, &pLayout_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkSubresourceLayout2(reply, pLayout_out);
         return true;
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceFragmentShadingRatesKHR: {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-        std::uint8_t array_present = 0;
-        std::uint32_t pFragmentShadingRateCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pFragmentShadingRateCount_local = 0;
         VkPhysicalDeviceFragmentShadingRateKHR* pFragmentShadingRates_storage = nullptr;
-        std::size_t pFragmentShadingRates_storage_count = 0;
+        size_t pFragmentShadingRates_storage_count = 0;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pFragmentShadingRateCount_local)) return false;
-            pFragmentShadingRates_storage_count = static_cast<std::size_t>(pFragmentShadingRateCount_local);
+            pFragmentShadingRates_storage_count = static_cast<size_t>(pFragmentShadingRateCount_local);
             if (pFragmentShadingRates_storage_count != 0) {
                 pFragmentShadingRates_storage = arena.allocate<VkPhysicalDeviceFragmentShadingRateKHR>(pFragmentShadingRates_storage_count);
                 if (pFragmentShadingRates_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pFragmentShadingRates_storage_count; ++rvk_z) { pFragmentShadingRates_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pFragmentShadingRates_storage_count; ++rvk_z) { pFragmentShadingRates_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_e = 0; rvk_e < pFragmentShadingRates_storage_count; ++rvk_e) { pFragmentShadingRates_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR; pFragmentShadingRates_storage[rvk_e].pNext = nullptr; }
+            for (size_t rvk_e = 0; rvk_e < pFragmentShadingRates_storage_count; ++rvk_e) { pFragmentShadingRates_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR; pFragmentShadingRates_storage[rvk_e].pNext = nullptr; }
         }
         VkResult result = s.on_vkGetPhysicalDeviceFragmentShadingRatesKHR(physicalDevice, &pFragmentShadingRateCount_local, array_present ? pFragmentShadingRates_storage : nullptr);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pFragmentShadingRateCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pFragmentShadingRateCount_local; ++k) {
+            for (uint32_t k = 0; k < pFragmentShadingRateCount_local; ++k) {
                 serialize_VkPhysicalDeviceFragmentShadingRateKHR(reply, pFragmentShadingRates_storage[k]);
             }
         }
@@ -5104,25 +5104,25 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstGroup{};
         uint32_t groupCount{};
         size_t dataSize{};
-        std::uint8_t* pData_storage = nullptr;
-        std::size_t pData_storage_count = 0;
+        uint8_t* pData_storage = nullptr;
+        size_t pData_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipeline(r, pipeline)) return false;
         if (!r.read_pod(firstGroup)) return false;
         if (!r.read_pod(groupCount)) return false;
         {
-            std::uint64_t rvk_wide = 0;
+            uint64_t rvk_wide = 0;
             if (!r.read_pod(rvk_wide)) return false;
             dataSize = static_cast<size_t>(rvk_wide);
         }
-        pData_storage_count = static_cast<std::size_t>(dataSize);
+        pData_storage_count = static_cast<size_t>(dataSize);
         if (pData_storage_count != 0) {
-            pData_storage = arena.allocate<std::uint8_t>(pData_storage_count);
+            pData_storage = arena.allocate<uint8_t>(pData_storage_count);
             if (pData_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR(device, pipeline, firstGroup, groupCount, dataSize, pData_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (pData_storage_count != 0) {
             reply.write(pData_storage, pData_storage_count);
         }
@@ -5134,25 +5134,25 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstGroup{};
         uint32_t groupCount{};
         size_t dataSize{};
-        std::uint8_t* pData_storage = nullptr;
-        std::size_t pData_storage_count = 0;
+        uint8_t* pData_storage = nullptr;
+        size_t pData_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipeline(r, pipeline)) return false;
         if (!r.read_pod(firstGroup)) return false;
         if (!r.read_pod(groupCount)) return false;
         {
-            std::uint64_t rvk_wide = 0;
+            uint64_t rvk_wide = 0;
             if (!r.read_pod(rvk_wide)) return false;
             dataSize = static_cast<size_t>(rvk_wide);
         }
-        pData_storage_count = static_cast<std::size_t>(dataSize);
+        pData_storage_count = static_cast<size_t>(dataSize);
         if (pData_storage_count != 0) {
-            pData_storage = arena.allocate<std::uint8_t>(pData_storage_count);
+            pData_storage = arena.allocate<uint8_t>(pData_storage_count);
             if (pData_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkGetRayTracingShaderGroupHandlesKHR(device, pipeline, firstGroup, groupCount, dataSize, pData_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (pData_storage_count != 0) {
             reply.write(pData_storage, pData_storage_count);
         }
@@ -5168,69 +5168,69 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(group)) return false;
         if (!r.read_pod(groupShader)) return false;
         VkDeviceSize result = s.on_vkGetRayTracingShaderGroupStackSizeKHR(device, pipeline, group, groupShader);
-        reply.write_pod<std::uint64_t>(static_cast<std::uint64_t>(result));
+        reply.write_pod<uint64_t>(static_cast<uint64_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkTransitionImageLayoutEXT: {
         VkDevice device = VK_NULL_HANDLE;
         uint32_t transitionCount{};
         VkHostImageLayoutTransitionInfo* pTransitions_storage = nullptr;
-        std::size_t pTransitions_storage_count = 0;
+        size_t pTransitions_storage_count = 0;
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(transitionCount)) return false;
-        pTransitions_storage_count = static_cast<std::size_t>(transitionCount);
+        pTransitions_storage_count = static_cast<size_t>(transitionCount);
         if (pTransitions_storage_count != 0) {
             pTransitions_storage = arena.allocate<VkHostImageLayoutTransitionInfo>(pTransitions_storage_count);
             if (pTransitions_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pTransitions_storage_count; ++rvk_z) { pTransitions_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pTransitions_storage_count; ++rvk_z) { pTransitions_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pTransitions_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pTransitions_storage_count; ++rvk_i) {
             if (!deserialize_VkHostImageLayoutTransitionInfo(r, &pTransitions_storage[rvk_i], arena)) return false;
         }
         VkResult result = s.on_vkTransitionImageLayoutEXT(device, transitionCount, pTransitions_storage);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkWriteAccelerationStructuresPropertiesKHR: {
         VkDevice device = VK_NULL_HANDLE;
         uint32_t accelerationStructureCount{};
         VkAccelerationStructureKHR* pAccelerationStructures_storage = nullptr;
-        std::size_t pAccelerationStructures_storage_count = 0;
+        size_t pAccelerationStructures_storage_count = 0;
         VkQueryType queryType{};
         size_t dataSize{};
-        std::uint8_t* pData_storage = nullptr;
-        std::size_t pData_storage_count = 0;
+        uint8_t* pData_storage = nullptr;
+        size_t pData_storage_count = 0;
         size_t stride{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(accelerationStructureCount)) return false;
-        pAccelerationStructures_storage_count = static_cast<std::size_t>(accelerationStructureCount);
+        pAccelerationStructures_storage_count = static_cast<size_t>(accelerationStructureCount);
         if (pAccelerationStructures_storage_count != 0) {
             pAccelerationStructures_storage = arena.allocate<VkAccelerationStructureKHR>(pAccelerationStructures_storage_count);
             if (pAccelerationStructures_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pAccelerationStructures_storage_count; ++rvk_z) { pAccelerationStructures_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pAccelerationStructures_storage_count; ++rvk_z) { pAccelerationStructures_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pAccelerationStructures_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pAccelerationStructures_storage_count; ++rvk_i) {
             if (!deserialize_VkAccelerationStructureKHR(r, pAccelerationStructures_storage[rvk_i])) return false;
         }
         if (!r.read_pod(queryType)) return false;
         {
-            std::uint64_t rvk_wide = 0;
+            uint64_t rvk_wide = 0;
             if (!r.read_pod(rvk_wide)) return false;
             dataSize = static_cast<size_t>(rvk_wide);
         }
-        pData_storage_count = static_cast<std::size_t>(dataSize);
+        pData_storage_count = static_cast<size_t>(dataSize);
         if (pData_storage_count != 0) {
-            pData_storage = arena.allocate<std::uint8_t>(pData_storage_count);
+            pData_storage = arena.allocate<uint8_t>(pData_storage_count);
             if (pData_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
         }
         {
-            std::uint64_t rvk_wide = 0;
+            uint64_t rvk_wide = 0;
             if (!r.read_pod(rvk_wide)) return false;
             stride = static_cast<size_t>(rvk_wide);
         }
         VkResult result = s.on_vkWriteAccelerationStructuresPropertiesKHR(device, accelerationStructureCount, pAccelerationStructures_storage, queryType, dataSize, pData_storage, stride);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         if (pData_storage_count != 0) {
             reply.write(pData_storage, pData_storage_count);
         }
@@ -5240,30 +5240,30 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         VkDevice device = VK_NULL_HANDLE;
         uint32_t timestampCount{};
         VkCalibratedTimestampInfoKHR* pTimestampInfos_storage = nullptr;
-        std::size_t pTimestampInfos_storage_count = 0;
+        size_t pTimestampInfos_storage_count = 0;
         uint64_t* pTimestamps_storage = nullptr;
-        std::size_t pTimestamps_storage_count = 0;
+        size_t pTimestamps_storage_count = 0;
         uint64_t pMaxDeviation_out{};
         if (!deserialize_VkDevice(r, device)) return false;
         if (!r.read_pod(timestampCount)) return false;
-        pTimestampInfos_storage_count = static_cast<std::size_t>(timestampCount);
+        pTimestampInfos_storage_count = static_cast<size_t>(timestampCount);
         if (pTimestampInfos_storage_count != 0) {
             pTimestampInfos_storage = arena.allocate<VkCalibratedTimestampInfoKHR>(pTimestampInfos_storage_count);
             if (pTimestampInfos_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pTimestampInfos_storage_count; ++rvk_z) { pTimestampInfos_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pTimestampInfos_storage_count; ++rvk_z) { pTimestampInfos_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pTimestampInfos_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pTimestampInfos_storage_count; ++rvk_i) {
             if (!deserialize_VkCalibratedTimestampInfoKHR(r, &pTimestampInfos_storage[rvk_i], arena)) return false;
         }
-        pTimestamps_storage_count = static_cast<std::size_t>(timestampCount);
+        pTimestamps_storage_count = static_cast<size_t>(timestampCount);
         if (pTimestamps_storage_count != 0) {
             pTimestamps_storage = arena.allocate<uint64_t>(pTimestamps_storage_count);
             if (pTimestamps_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pTimestamps_storage_count; ++rvk_z) { pTimestamps_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pTimestamps_storage_count; ++rvk_z) { pTimestamps_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkGetCalibratedTimestampsEXT(device, timestampCount, pTimestampInfos_storage, pTimestamps_storage, &pMaxDeviation_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
-        for (std::size_t rvk_k = 0; rvk_k < pTimestamps_storage_count; ++rvk_k) {
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        for (size_t rvk_k = 0; rvk_k < pTimestamps_storage_count; ++rvk_k) {
             reply.write_pod(pTimestamps_storage[rvk_k]);
         }
         reply.write_pod(pMaxDeviation_out);
@@ -5271,26 +5271,26 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
     }
     case ::av::vkproto::kCmd_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT: {
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-        std::uint8_t array_present = 0;
-        std::uint32_t pTimeDomainCount_local = 0;
+        uint8_t array_present = 0;
+        uint32_t pTimeDomainCount_local = 0;
         VkTimeDomainKHR* pTimeDomains_storage = nullptr;
-        std::size_t pTimeDomains_storage_count = 0;
+        size_t pTimeDomains_storage_count = 0;
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!r.read_pod(array_present)) return false;
         if (array_present) {
             if (!r.read_pod(pTimeDomainCount_local)) return false;
-            pTimeDomains_storage_count = static_cast<std::size_t>(pTimeDomainCount_local);
+            pTimeDomains_storage_count = static_cast<size_t>(pTimeDomainCount_local);
             if (pTimeDomains_storage_count != 0) {
                 pTimeDomains_storage = arena.allocate<VkTimeDomainKHR>(pTimeDomains_storage_count);
                 if (pTimeDomains_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pTimeDomains_storage_count; ++rvk_z) { pTimeDomains_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pTimeDomains_storage_count; ++rvk_z) { pTimeDomains_storage[rvk_z] = {}; }
             }
         }
         VkResult result = s.on_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(physicalDevice, &pTimeDomainCount_local, array_present ? pTimeDomains_storage : nullptr);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pTimeDomainCount_local);
         if (array_present) {
-            for (std::uint32_t k = 0; k < pTimeDomainCount_local; ++k) {
+            for (uint32_t k = 0; k < pTimeDomainCount_local; ++k) {
                 reply.write_pod(pTimeDomains_storage[k]);
             }
         }
@@ -5335,7 +5335,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pBinaries_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pBinaries_out), arena)) return false;
         VkResult result = s.on_vkCreatePipelineBinariesKHR(device, &pCreateInfo_local, nullptr, &pBinaries_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkPipelineBinaryHandlesInfoKHR(reply, pBinaries_out);
         return true;
     }
@@ -5356,7 +5356,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pLayout_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pLayout_out), arena)) return false;
         s.on_vkGetDeviceImageSubresourceLayoutKHR(device, &pInfo_local, &pLayout_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkSubresourceLayout2(reply, pLayout_out);
         return true;
     }
@@ -5371,7 +5371,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pLayout_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pLayout_out), arena)) return false;
         s.on_vkGetImageSubresourceLayout2KHR(device, image, &pSubresource_local, &pLayout_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkSubresourceLayout2(reply, pLayout_out);
         return true;
     }
@@ -5384,7 +5384,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pPipelineKey_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pPipelineKey_out), arena)) return false;
         VkResult result = s.on_vkGetPipelineKeyKHR(device, &pPipelineCreateInfo_local, &pPipelineKey_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkPipelineBinaryKeyKHR(reply, pPipelineKey_out);
         return true;
     }
@@ -5395,7 +5395,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkRenderingAreaInfo(r, &pRenderingAreaInfo_local, arena)) return false;
         s.on_vkGetRenderingAreaGranularityKHR(device, &pRenderingAreaInfo_local, &pGranularity_out);
-        reply.write_pod<std::int32_t>(0);
+        reply.write_pod<int32_t>(0);
         serialize_VkExtent2D(reply, pGranularity_out);
         return true;
     }
@@ -5405,7 +5405,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkReleaseCapturedPipelineDataInfoKHR(r, &pInfo_local, arena)) return false;
         VkResult result = s.on_vkReleaseCapturedPipelineDataKHR(device, &pInfo_local, nullptr);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkCmdBeginQueryIndexedEXT: {
@@ -5427,31 +5427,31 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstCounterBuffer{};
         uint32_t counterBufferCount{};
         VkBuffer* pCounterBuffers_storage = nullptr;
-        std::size_t pCounterBuffers_storage_count = 0;
+        size_t pCounterBuffers_storage_count = 0;
         VkDeviceSize* pCounterBufferOffsets_storage = nullptr;
-        std::size_t pCounterBufferOffsets_storage_count = 0;
-        std::uint8_t pCounterBufferOffsets_present = 0;
+        size_t pCounterBufferOffsets_storage_count = 0;
+        uint8_t pCounterBufferOffsets_present = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(firstCounterBuffer)) return false;
         if (!r.read_pod(counterBufferCount)) return false;
-        pCounterBuffers_storage_count = static_cast<std::size_t>(counterBufferCount);
+        pCounterBuffers_storage_count = static_cast<size_t>(counterBufferCount);
         if (pCounterBuffers_storage_count != 0) {
             pCounterBuffers_storage = arena.allocate<VkBuffer>(pCounterBuffers_storage_count);
             if (pCounterBuffers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pCounterBuffers_storage_count; ++rvk_z) { pCounterBuffers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pCounterBuffers_storage_count; ++rvk_z) { pCounterBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pCounterBuffers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pCounterBuffers_storage_count; ++rvk_i) {
             if (!deserialize_VkBuffer(r, pCounterBuffers_storage[rvk_i])) return false;
         }
         if (!r.read_pod(pCounterBufferOffsets_present)) return false;
         if (pCounterBufferOffsets_present) {
-            pCounterBufferOffsets_storage_count = static_cast<std::size_t>(counterBufferCount);
+            pCounterBufferOffsets_storage_count = static_cast<size_t>(counterBufferCount);
             if (pCounterBufferOffsets_storage_count != 0) {
                 pCounterBufferOffsets_storage = arena.allocate<VkDeviceSize>(pCounterBufferOffsets_storage_count);
                 if (pCounterBufferOffsets_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pCounterBufferOffsets_storage_count; ++rvk_z) { pCounterBufferOffsets_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pCounterBufferOffsets_storage_count; ++rvk_z) { pCounterBufferOffsets_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_i = 0; rvk_i < pCounterBufferOffsets_storage_count; ++rvk_i) {
+            for (size_t rvk_i = 0; rvk_i < pCounterBufferOffsets_storage_count; ++rvk_i) {
                 if (!r.read_pod(pCounterBufferOffsets_storage[rvk_i])) return false;
             }
         }
@@ -5463,42 +5463,42 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstBinding{};
         uint32_t bindingCount{};
         VkBuffer* pBuffers_storage = nullptr;
-        std::size_t pBuffers_storage_count = 0;
+        size_t pBuffers_storage_count = 0;
         VkDeviceSize* pOffsets_storage = nullptr;
-        std::size_t pOffsets_storage_count = 0;
+        size_t pOffsets_storage_count = 0;
         VkDeviceSize* pSizes_storage = nullptr;
-        std::size_t pSizes_storage_count = 0;
-        std::uint8_t pSizes_present = 0;
+        size_t pSizes_storage_count = 0;
+        uint8_t pSizes_present = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(firstBinding)) return false;
         if (!r.read_pod(bindingCount)) return false;
-        pBuffers_storage_count = static_cast<std::size_t>(bindingCount);
+        pBuffers_storage_count = static_cast<size_t>(bindingCount);
         if (pBuffers_storage_count != 0) {
             pBuffers_storage = arena.allocate<VkBuffer>(pBuffers_storage_count);
             if (pBuffers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pBuffers_storage_count; ++rvk_z) { pBuffers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pBuffers_storage_count; ++rvk_z) { pBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pBuffers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pBuffers_storage_count; ++rvk_i) {
             if (!deserialize_VkBuffer(r, pBuffers_storage[rvk_i])) return false;
         }
-        pOffsets_storage_count = static_cast<std::size_t>(bindingCount);
+        pOffsets_storage_count = static_cast<size_t>(bindingCount);
         if (pOffsets_storage_count != 0) {
             pOffsets_storage = arena.allocate<VkDeviceSize>(pOffsets_storage_count);
             if (pOffsets_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pOffsets_storage_count; ++rvk_z) { pOffsets_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pOffsets_storage_count; ++rvk_z) { pOffsets_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pOffsets_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pOffsets_storage_count; ++rvk_i) {
             if (!r.read_pod(pOffsets_storage[rvk_i])) return false;
         }
         if (!r.read_pod(pSizes_present)) return false;
         if (pSizes_present) {
-            pSizes_storage_count = static_cast<std::size_t>(bindingCount);
+            pSizes_storage_count = static_cast<size_t>(bindingCount);
             if (pSizes_storage_count != 0) {
                 pSizes_storage = arena.allocate<VkDeviceSize>(pSizes_storage_count);
                 if (pSizes_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pSizes_storage_count; ++rvk_z) { pSizes_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pSizes_storage_count; ++rvk_z) { pSizes_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_i = 0; rvk_i < pSizes_storage_count; ++rvk_i) {
+            for (size_t rvk_i = 0; rvk_i < pSizes_storage_count; ++rvk_i) {
                 if (!r.read_pod(pSizes_storage[rvk_i])) return false;
             }
         }
@@ -5540,31 +5540,31 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         uint32_t firstCounterBuffer{};
         uint32_t counterBufferCount{};
         VkBuffer* pCounterBuffers_storage = nullptr;
-        std::size_t pCounterBuffers_storage_count = 0;
+        size_t pCounterBuffers_storage_count = 0;
         VkDeviceSize* pCounterBufferOffsets_storage = nullptr;
-        std::size_t pCounterBufferOffsets_storage_count = 0;
-        std::uint8_t pCounterBufferOffsets_present = 0;
+        size_t pCounterBufferOffsets_storage_count = 0;
+        uint8_t pCounterBufferOffsets_present = 0;
         if (!deserialize_VkCommandBuffer(r, commandBuffer)) return false;
         if (!r.read_pod(firstCounterBuffer)) return false;
         if (!r.read_pod(counterBufferCount)) return false;
-        pCounterBuffers_storage_count = static_cast<std::size_t>(counterBufferCount);
+        pCounterBuffers_storage_count = static_cast<size_t>(counterBufferCount);
         if (pCounterBuffers_storage_count != 0) {
             pCounterBuffers_storage = arena.allocate<VkBuffer>(pCounterBuffers_storage_count);
             if (pCounterBuffers_storage == nullptr) return false;
-            for (std::size_t rvk_z = 0; rvk_z < pCounterBuffers_storage_count; ++rvk_z) { pCounterBuffers_storage[rvk_z] = {}; }
+            for (size_t rvk_z = 0; rvk_z < pCounterBuffers_storage_count; ++rvk_z) { pCounterBuffers_storage[rvk_z] = {}; }
         }
-        for (std::size_t rvk_i = 0; rvk_i < pCounterBuffers_storage_count; ++rvk_i) {
+        for (size_t rvk_i = 0; rvk_i < pCounterBuffers_storage_count; ++rvk_i) {
             if (!deserialize_VkBuffer(r, pCounterBuffers_storage[rvk_i])) return false;
         }
         if (!r.read_pod(pCounterBufferOffsets_present)) return false;
         if (pCounterBufferOffsets_present) {
-            pCounterBufferOffsets_storage_count = static_cast<std::size_t>(counterBufferCount);
+            pCounterBufferOffsets_storage_count = static_cast<size_t>(counterBufferCount);
             if (pCounterBufferOffsets_storage_count != 0) {
                 pCounterBufferOffsets_storage = arena.allocate<VkDeviceSize>(pCounterBufferOffsets_storage_count);
                 if (pCounterBufferOffsets_storage == nullptr) return false;
-                for (std::size_t rvk_z = 0; rvk_z < pCounterBufferOffsets_storage_count; ++rvk_z) { pCounterBufferOffsets_storage[rvk_z] = {}; }
+                for (size_t rvk_z = 0; rvk_z < pCounterBufferOffsets_storage_count; ++rvk_z) { pCounterBufferOffsets_storage[rvk_z] = {}; }
             }
-            for (std::size_t rvk_i = 0; rvk_i < pCounterBufferOffsets_storage_count; ++rvk_i) {
+            for (size_t rvk_i = 0; rvk_i < pCounterBufferOffsets_storage_count; ++rvk_i) {
                 if (!r.read_pod(pCounterBufferOffsets_storage[rvk_i])) return false;
             }
         }
@@ -5588,7 +5588,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkFenceGetFdInfoKHR(r, &pGetFdInfo_local, arena)) return false;
         VkResult result = s.on_vkGetFenceFdKHR(device, &pGetFdInfo_local, &pFd_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pFd_out);
         return true;
     }
@@ -5599,7 +5599,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkMemoryGetFdInfoKHR(r, &pGetFdInfo_local, arena)) return false;
         VkResult result = s.on_vkGetMemoryFdKHR(device, &pGetFdInfo_local, &pFd_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pFd_out);
         return true;
     }
@@ -5614,7 +5614,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!r.read_pod(pMemoryFdProperties_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pMemoryFdProperties_out), arena)) return false;
         VkResult result = s.on_vkGetMemoryFdPropertiesKHR(device, handleType, fd, &pMemoryFdProperties_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkMemoryFdPropertiesKHR(reply, pMemoryFdProperties_out);
         return true;
     }
@@ -5625,7 +5625,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSemaphoreGetFdInfoKHR(r, &pGetFdInfo_local, arena)) return false;
         VkResult result = s.on_vkGetSemaphoreFdKHR(device, &pGetFdInfo_local, &pFd_out);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pFd_out);
         return true;
     }
@@ -5635,7 +5635,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImportFenceFdInfoKHR(r, &pImportFenceFdInfo_local, arena)) return false;
         VkResult result = s.on_vkImportFenceFdKHR(device, &pImportFenceFdInfo_local);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkImportSemaphoreFdKHR: {
@@ -5644,7 +5644,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImportSemaphoreFdInfoKHR(r, &pImportSemaphoreFdInfo_local, arena)) return false;
         VkResult result = s.on_vkImportSemaphoreFdKHR(device, &pImportSemaphoreFdInfo_local);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     case ::av::vkproto::kCmd_vkUnmapMemory2KHR: {
@@ -5653,7 +5653,7 @@ bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, ::av::WireReader&
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkMemoryUnmapInfo(r, &pMemoryUnmapInfo_local, arena)) return false;
         VkResult result = s.on_vkUnmapMemory2KHR(device, &pMemoryUnmapInfo_local);
-        reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));
+        reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
     default:

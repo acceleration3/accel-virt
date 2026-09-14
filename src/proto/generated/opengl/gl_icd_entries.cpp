@@ -4,7 +4,7 @@
 
 #include "gl_icd_entries.h"
 
-#include <cstdint>
+#include <stdint.h>
 
 #include "proto/gl_icd_support.hpp"
 #include "gl_dispatch_client.h"
@@ -705,7 +705,7 @@ void APIENTRY glDeleteShader(GLuint shader) {
 void APIENTRY glDeleteSync(GLsync sync) {
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glDeleteSync(*rvk_t, reinterpret_cast<std::uint64_t>(sync));
+    ::av::glproto::rvk_glDeleteSync(*rvk_t, reinterpret_cast<uint64_t>(sync));
 }
 
 void APIENTRY glDeleteTextures(GLsizei n, const GLuint* textures) {
@@ -799,7 +799,7 @@ void APIENTRY glDrawArraysIndirect(GLenum mode, const void* indirect) {
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glDrawArraysIndirect(*rvk_t, mode, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(indirect)));
+    ::av::glproto::rvk_glDrawArraysIndirect(*rvk_t, mode, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indirect)));
 }
 
 void APIENTRY glDrawArraysInstancedBaseInstance(GLenum mode, GLint first, GLsizei count, GLsizei instancecount, GLuint baseinstance) {
@@ -827,14 +827,14 @@ void APIENTRY glDrawElementsBaseVertex(GLenum mode, GLsizei count, GLenum type, 
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glDrawElementsBaseVertex(*rvk_t, mode, count, type, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(indices)), basevertex);
+    ::av::glproto::rvk_glDrawElementsBaseVertex(*rvk_t, mode, count, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indices)), basevertex);
 }
 
 void APIENTRY glDrawElementsIndirect(GLenum mode, GLenum type, const void* indirect) {
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glDrawElementsIndirect(*rvk_t, mode, type, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(indirect)));
+    ::av::glproto::rvk_glDrawElementsIndirect(*rvk_t, mode, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indirect)));
 }
 
 void APIENTRY glDrawElementsInstancedBaseInstance(GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLuint baseinstance) {
@@ -848,7 +848,7 @@ void APIENTRY glDrawElementsInstancedBaseVertex(GLenum mode, GLsizei count, GLen
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glDrawElementsInstancedBaseVertex(*rvk_t, mode, count, type, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(indices)), instancecount, basevertex);
+    ::av::glproto::rvk_glDrawElementsInstancedBaseVertex(*rvk_t, mode, count, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indices)), instancecount, basevertex);
 }
 
 void APIENTRY glDrawElementsInstancedBaseVertexBaseInstance(GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex, GLuint baseinstance) {
@@ -862,7 +862,7 @@ void APIENTRY glDrawRangeElementsBaseVertex(GLenum mode, GLuint start, GLuint en
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glDrawRangeElementsBaseVertex(*rvk_t, mode, start, end, count, type, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(indices)), basevertex);
+    ::av::glproto::rvk_glDrawRangeElementsBaseVertex(*rvk_t, mode, start, end, count, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indices)), basevertex);
 }
 
 void APIENTRY glDrawTransformFeedback(GLenum mode, GLuint id) {
@@ -938,7 +938,7 @@ void APIENTRY glEndTransformFeedback(void) {
 GLsync APIENTRY glFenceSync(GLenum condition, GLbitfield flags) {
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return nullptr;
-    return reinterpret_cast<GLsync>(static_cast<std::uintptr_t>(::av::glproto::rvk_glFenceSync(*rvk_t, condition, flags)));
+    return reinterpret_cast<GLsync>(static_cast<uintptr_t>(::av::glproto::rvk_glFenceSync(*rvk_t, condition, flags)));
 }
 
 void APIENTRY glFinish(void) {
@@ -1315,7 +1315,7 @@ void APIENTRY glGetObjectLabel(GLenum identifier, GLuint name, GLsizei bufSize, 
 void APIENTRY glGetObjectPtrLabel(GLsync ptr, GLsizei bufSize, GLsizei* length, GLchar* label) {
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glGetObjectPtrLabel(*rvk_t, reinterpret_cast<std::uint64_t>(ptr), bufSize, length, label);
+    ::av::glproto::rvk_glGetObjectPtrLabel(*rvk_t, reinterpret_cast<uint64_t>(ptr), bufSize, length, label);
 }
 
 void APIENTRY glGetProgramBinary(GLuint program, GLsizei bufSize, GLsizei* length, GLenum* binaryFormat, void* binary) {
@@ -1523,7 +1523,7 @@ GLint APIENTRY glGetSubroutineUniformLocation(GLuint program, GLenum shadertype,
 void APIENTRY glGetSynciv(GLsync sync, GLenum pname, GLsizei count, GLsizei* length, GLint* values) {
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glGetSynciv(*rvk_t, reinterpret_cast<std::uint64_t>(sync), pname, count, length, values);
+    ::av::glproto::rvk_glGetSynciv(*rvk_t, reinterpret_cast<uint64_t>(sync), pname, count, length, values);
 }
 
 void APIENTRY glGetTexImage(GLenum target, GLint level, GLenum format, GLenum type, void* pixels) {
@@ -1896,7 +1896,7 @@ GLboolean APIENTRY glIsShader(GLuint shader) {
 GLboolean APIENTRY glIsSync(GLsync sync) {
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return 0;
-    return ::av::glproto::rvk_glIsSync(*rvk_t, reinterpret_cast<std::uint64_t>(sync));
+    return ::av::glproto::rvk_glIsSync(*rvk_t, reinterpret_cast<uint64_t>(sync));
 }
 
 GLboolean APIENTRY glIsTexture(GLuint texture) {
@@ -1958,42 +1958,42 @@ void APIENTRY glMultiDrawArraysIndirect(GLenum mode, const void* indirect, GLsiz
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glMultiDrawArraysIndirect(*rvk_t, mode, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(indirect)), drawcount, stride);
+    ::av::glproto::rvk_glMultiDrawArraysIndirect(*rvk_t, mode, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indirect)), drawcount, stride);
 }
 
 void APIENTRY glMultiDrawArraysIndirectCount(GLenum mode, const void* indirect, GLintptr drawcount, GLsizei maxdrawcount, GLsizei stride) {
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glMultiDrawArraysIndirectCount(*rvk_t, mode, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(indirect)), drawcount, maxdrawcount, stride);
+    ::av::glproto::rvk_glMultiDrawArraysIndirectCount(*rvk_t, mode, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indirect)), drawcount, maxdrawcount, stride);
 }
 
 void APIENTRY glMultiDrawElements(GLenum mode, const GLsizei* count, GLenum type, const void* const* indices, GLsizei drawcount) {
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glMultiDrawElements(*rvk_t, mode, count, type, ::av::glicd::offsets_of(indices, static_cast<std::size_t>(drawcount)), drawcount);
+    ::av::glproto::rvk_glMultiDrawElements(*rvk_t, mode, count, type, ::av::glicd::offsets_of(indices, static_cast<size_t>(drawcount)), drawcount);
 }
 
 void APIENTRY glMultiDrawElementsBaseVertex(GLenum mode, const GLsizei* count, GLenum type, const void* const* indices, GLsizei drawcount, const GLint* basevertex) {
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glMultiDrawElementsBaseVertex(*rvk_t, mode, count, type, ::av::glicd::offsets_of(indices, static_cast<std::size_t>(drawcount)), drawcount, basevertex);
+    ::av::glproto::rvk_glMultiDrawElementsBaseVertex(*rvk_t, mode, count, type, ::av::glicd::offsets_of(indices, static_cast<size_t>(drawcount)), drawcount, basevertex);
 }
 
 void APIENTRY glMultiDrawElementsIndirect(GLenum mode, GLenum type, const void* indirect, GLsizei drawcount, GLsizei stride) {
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glMultiDrawElementsIndirect(*rvk_t, mode, type, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(indirect)), drawcount, stride);
+    ::av::glproto::rvk_glMultiDrawElementsIndirect(*rvk_t, mode, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indirect)), drawcount, stride);
 }
 
 void APIENTRY glMultiDrawElementsIndirectCount(GLenum mode, GLenum type, const void* indirect, GLintptr drawcount, GLsizei maxdrawcount, GLsizei stride) {
     auto* rvk_t = ::av::glicd::wire();
     ::av::glicd::flush_persistent_mappings();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glMultiDrawElementsIndirectCount(*rvk_t, mode, type, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(indirect)), drawcount, maxdrawcount, stride);
+    ::av::glproto::rvk_glMultiDrawElementsIndirectCount(*rvk_t, mode, type, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(indirect)), drawcount, maxdrawcount, stride);
 }
 
 void APIENTRY glMultiTexCoordP1ui(GLenum texture, GLenum type, GLuint coords) {
@@ -2132,7 +2132,7 @@ void APIENTRY glObjectLabel(GLenum identifier, GLuint name, GLsizei length, cons
 void APIENTRY glObjectPtrLabel(GLsync ptr, GLsizei length, const GLchar* label) {
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glObjectPtrLabel(*rvk_t, reinterpret_cast<std::uint64_t>(ptr), length, label);
+    ::av::glproto::rvk_glObjectPtrLabel(*rvk_t, reinterpret_cast<uint64_t>(ptr), length, label);
 }
 
 void APIENTRY glPatchParameterfv(GLenum pname, const GLfloat* values) {
@@ -3787,7 +3787,7 @@ void APIENTRY glVertexAttribIFormat(GLuint attribindex, GLint size, GLenum type,
 void APIENTRY glVertexAttribIPointer(GLuint index, GLint size, GLenum type, GLsizei stride, const void* pointer) {
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glVertexAttribIPointer(*rvk_t, index, size, type, stride, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(pointer)));
+    ::av::glproto::rvk_glVertexAttribIPointer(*rvk_t, index, size, type, stride, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pointer)));
 }
 
 void APIENTRY glVertexAttribL1d(GLuint index, GLdouble x) {
@@ -3847,7 +3847,7 @@ void APIENTRY glVertexAttribLFormat(GLuint attribindex, GLint size, GLenum type,
 void APIENTRY glVertexAttribLPointer(GLuint index, GLint size, GLenum type, GLsizei stride, const void* pointer) {
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glVertexAttribLPointer(*rvk_t, index, size, type, stride, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(pointer)));
+    ::av::glproto::rvk_glVertexAttribLPointer(*rvk_t, index, size, type, stride, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pointer)));
 }
 
 void APIENTRY glVertexAttribP1ui(GLuint index, GLenum type, GLboolean normalized, GLuint value) {
@@ -3967,7 +3967,7 @@ void APIENTRY glViewportIndexedfv(GLuint index, const GLfloat* v) {
 void APIENTRY glWaitSync(GLsync sync, GLbitfield flags, GLuint64 timeout) {
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glWaitSync(*rvk_t, reinterpret_cast<std::uint64_t>(sync), flags, timeout);
+    ::av::glproto::rvk_glWaitSync(*rvk_t, reinterpret_cast<uint64_t>(sync), flags, timeout);
 }
 
 void APIENTRY glAccum(GLenum op, GLfloat value) {
@@ -6867,7 +6867,7 @@ void APIENTRY glBindMultiTextureEXT(GLenum texunit, GLenum target, GLuint textur
 void APIENTRY glMultiTexCoordPointerEXT(GLenum texunit, GLint size, GLenum type, GLsizei stride, const void* pointer) {
     auto* rvk_t = ::av::glicd::wire();
     if (rvk_t == nullptr) return;
-    ::av::glproto::rvk_glMultiTexCoordPointerEXT(*rvk_t, texunit, size, type, stride, static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(pointer)));
+    ::av::glproto::rvk_glMultiTexCoordPointerEXT(*rvk_t, texunit, size, type, stride, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pointer)));
 }
 
 void APIENTRY glMultiTexEnvfEXT(GLenum texunit, GLenum target, GLenum pname, GLfloat param) {

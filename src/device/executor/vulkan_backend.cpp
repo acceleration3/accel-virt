@@ -19,9 +19,9 @@ namespace {
  * with no user pointer can take. */
 thread_local VulkanBackend *inside = nullptr;
 
-std::uint64_t number_of(const void *handle)
+uint64_t number_of(const void *handle)
 {
-    std::uint64_t raw = 0u;
+    uint64_t raw = 0u;
     memcpy(&raw, &handle, sizeof handle);
     return raw;
 }
@@ -400,79 +400,79 @@ bool wire_to_handle(uint64_t raw, VkValidationCacheEXT &out) noexcept
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
-std::uint64_t handle_to_wire(VkAccelerationStructureKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkAccelerationStructureKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkAccelerationStructureNV v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkAccelerationStructureNV v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkBuffer v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkBuffer v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkBufferView v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkBufferView v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkCommandBuffer v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkCommandBuffer v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkCommandPool v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkCommandPool v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkDeferredOperationKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDeferredOperationKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkDescriptorPool v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDescriptorPool v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkDescriptorSet v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDescriptorSet v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkDescriptorSetLayout v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDescriptorSetLayout v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkDescriptorUpdateTemplate v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDescriptorUpdateTemplate v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkDevice v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDevice v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkDeviceMemory v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDeviceMemory v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkEvent v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkEvent v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkFence v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkFence v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkFramebuffer v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkFramebuffer v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkImage v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkImage v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkImageView v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkImageView v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkInstance v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkInstance v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkMicromapEXT v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkMicromapEXT v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkPhysicalDevice v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkPhysicalDevice v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkPipeline v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkPipeline v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkPipelineBinaryKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkPipelineBinaryKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkPipelineCache v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkPipelineCache v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkPipelineLayout v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkPipelineLayout v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkPrivateDataSlot v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkPrivateDataSlot v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkQueryPool v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkQueryPool v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkQueue v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkQueue v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkRenderPass v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkRenderPass v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkSampler v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkSampler v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkSamplerYcbcrConversion v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkSamplerYcbcrConversion v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkSemaphore v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkSemaphore v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkShaderEXT v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkShaderEXT v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkShaderModule v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkShaderModule v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkSurfaceKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkSurfaceKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkSwapchainKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkSwapchainKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
-std::uint64_t handle_to_wire(VkValidationCacheEXT v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkValidationCacheEXT v) noexcept { return remember(VulkanBackend::deciding(), v); }
 
 }  // namespace vkproto
 

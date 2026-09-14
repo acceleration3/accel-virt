@@ -1,6 +1,8 @@
-/* The two functions the Windows toolchain calls with no C runtime to supply
- * them: the process entry point lld-link is told about, and the target of a
- * pure virtual call, which the MSVC ABI puts in every abstract vtable.
+/* What the Windows toolchain references with no C runtime to supply it: the
+ * process entry point lld-link is told about, the target of a pure virtual
+ * call, which the MSVC ABI puts in every abstract vtable, and _fltused, which
+ * every object that touches floating point names (the OpenCL client's
+ * cl_float arguments) and which only says the floating-point support is linked.
  *
  * With no C runtime there is no argv: what rvktest takes - the seconds of fence
  * stress to run, 0 for none, the word `tdr` for a run of the timeout scenario
@@ -47,3 +49,5 @@ extern "C" void rvktest_entry()
 }
 
 extern "C" int _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }
+
+extern "C" int _fltused = 0;

@@ -85,7 +85,7 @@ def _emit_default(reg: Registry) -> str:
     lines: list[str] = [
         GENERATED_BANNER,
         "",
-        "#include <cstdint>",
+        "#include <stdint.h>",
         "",
         "#include <vulkan/vulkan_core.h>",
         "",
@@ -129,7 +129,7 @@ def _emit_real(reg: Registry) -> str:
     lines: list[str] = [
         GENERATED_BANNER,
         "",
-        "#include <cstdint>",
+        "#include <stdint.h>",
         "",
         "#include <vulkan/vulkan_core.h>",
         "",

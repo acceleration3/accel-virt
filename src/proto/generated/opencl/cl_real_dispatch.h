@@ -130,10 +130,10 @@ public:
     cl_int on_clEnqueueCopyBufferToImage(cl_command_queue command_queue, cl_mem src_buffer, cl_mem dst_image, size_t src_offset, const size_t* dst_origin, const size_t* region, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) override {
         return ::clEnqueueCopyBufferToImage(command_queue, src_buffer, dst_image, src_offset, dst_origin, region, num_events_in_wait_list, event_wait_list, event);
     }
-    cl_program on_clCreateProgramWithSource(cl_context context, cl_uint count, const char** strings, const std::size_t* lengths, cl_int* errcode_ret) override {
+    cl_program on_clCreateProgramWithSource(cl_context context, cl_uint count, const char** strings, const size_t* lengths, cl_int* errcode_ret) override {
         return ::clCreateProgramWithSource(context, count, strings, lengths, errcode_ret);
     }
-    cl_program on_clCreateProgramWithBinary(cl_context context, cl_uint num_devices, const cl_device_id* device_list, const std::size_t* lengths, const unsigned char** binaries, cl_int* binary_status, cl_int* errcode_ret) override {
+    cl_program on_clCreateProgramWithBinary(cl_context context, cl_uint num_devices, const cl_device_id* device_list, const size_t* lengths, const unsigned char** binaries, cl_int* binary_status, cl_int* errcode_ret) override {
         return ::clCreateProgramWithBinary(context, num_devices, device_list, lengths, binaries, binary_status, errcode_ret);
     }
     cl_int on_clRetainProgram(cl_program program) override {

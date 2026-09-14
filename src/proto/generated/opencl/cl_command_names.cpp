@@ -7,7 +7,7 @@
 
 namespace av::clproto {
 
-const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept {
+const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
     switch (cmd_id) {
         case kCmd_clGetPlatformIDs: return "clGetPlatformIDs";
         case kCmd_clGetPlatformInfo: return "clGetPlatformInfo";

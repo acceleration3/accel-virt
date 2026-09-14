@@ -43,13 +43,13 @@ DISPATCHABLE_HANDLES = frozenset(
 # the generator now knows the whole set, and refuses to emit a wire
 # encoding for any of them that does not say its width explicitly.
 MACHINE_WIDTH_TYPES = frozenset({
-    "size_t", "std::size_t", "ptrdiff_t", "intptr_t", "uintptr_t",
+    "size_t", "size_t", "ptrdiff_t", "intptr_t", "uintptr_t",
     "long", "unsigned long", "signed long",
 })
 
 
 def is_size_t(type_) -> bool:
-    return type_.base in ("size_t", "std::size_t") and type_.pointer_depth == 0
+    return type_.base in ("size_t", "size_t") and type_.pointer_depth == 0
 
 
 def is_machine_width(type_) -> bool:

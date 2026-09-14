@@ -18,6 +18,14 @@ from tool_run import ROOT, run
 
 FETCH = ROOT / "tools" / "fetch_khronos_registries.py"
 
+# Every one vulkan_core.h v1.4.309 includes, and the common header they include.
+VIDEO_HEADERS = (
+    "vulkan_video_codec_av1std.h", "vulkan_video_codec_av1std_decode.h",
+    "vulkan_video_codec_av1std_encode.h", "vulkan_video_codec_h264std.h",
+    "vulkan_video_codec_h264std_decode.h", "vulkan_video_codec_h264std_encode.h",
+    "vulkan_video_codec_h265std.h", "vulkan_video_codec_h265std_decode.h",
+    "vulkan_video_codec_h265std_encode.h", "vulkan_video_codecs_common.h")
+
 
 def archive(root, files):
     """A .tar.gz laid out the way GitHub's source archives are: one top
@@ -44,7 +52,8 @@ class FetchKhronosRegistries(unittest.TestCase):
             ("vulkan", "Vulkan-Headers-1.2.3",
              {"registry/vk.xml": "<registry><vulkan/></registry>\n",
               "include/vulkan/vulkan_core.h": "#define VK_HEADER 1\n",
-              "include/vulkan/vk_platform.h": "#define VK_PLATFORM 1\n"}),
+              "include/vulkan/vk_platform.h": "#define VK_PLATFORM 1\n",
+              **{f"include/vk_video/{name}": f"// {name}\n" for name in VIDEO_HEADERS}}),
             ("opengl", "OpenGL-Registry-abc",
              {"xml/gl.xml": "<registry><gl/></registry>\n",
               # The guest is Windows, so the WGL entry points come too.
@@ -84,6 +93,39 @@ class FetchKhronosRegistries(unittest.TestCase):
                          "#define VK_HEADER 1\n")
         self.assertTrue((self.tree / "VERSION").is_file())
         self.assertIn("vk.xml", result.stdout)
+
+    def test_the_video_headers_vulkan_core_includes_come_with_it(self):
+        """Otherwise a Linux build resolves them from /usr/include, a different
+        version, and the freestanding guest build does not resolve them at all."""
+        result = self.fetch()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for name in VIDEO_HEADERS:
+            self.assertEqual((self.tree / "include" / "vk_video" / name).read_text(),
+                             f"// {name}\n")
+
+    def test_a_vulkan_archive_without_a_video_header_is_refused(self):
+        files = {"registry/vk.xml": "<registry/>\n",
+                 "include/vulkan/vulkan_core.h": "\n", "include/vulkan/vk_platform.h": "\n",
+                 **{f"include/vk_video/{name}": "\n" for name in VIDEO_HEADERS[1:]}}
+        body = archive("Vulkan-Headers-1.2.3", files)
+        (self.sources / "vulkan.tar.gz").write_bytes(body)
+        result = self.fetch(vulkan=hashlib.sha256(body).hexdigest())
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(VIDEO_HEADERS[0], result.stderr)
+        self.assertFalse(self.tree.exists())
+
+    def test_a_tree_fetched_before_a_file_was_wanted_is_fetched_again(self):
+        """The same pins, but a marker from before the video headers were
+        wanted: the tree lacks them, so it is not already fetched."""
+        self.assertEqual(self.fetch().returncode, 0)
+        shutil.rmtree(self.tree / "include" / "vk_video")
+        pins = [line.split() for line in self.pins().read_text().splitlines()]
+        (self.tree / "VERSION").write_text("".join(f"{name} {digest}\n"
+                                                   for name, _url, digest in sorted(pins)))
+        result = self.fetch()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("already", result.stdout)
+        self.assertTrue((self.tree / "include" / "vk_video" / VIDEO_HEADERS[0]).is_file())
 
     def test_a_second_fetch_says_it_has_them_already(self):
         self.assertEqual(self.fetch().returncode, 0)

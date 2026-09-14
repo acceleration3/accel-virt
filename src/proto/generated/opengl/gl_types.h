@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 // The calling convention every GL entry point is declared
 // with, taken the way the Khronos headers take it: from the
@@ -25,13 +25,13 @@ typedef unsigned int GLenum;
 typedef unsigned char GLboolean;
 typedef unsigned int GLbitfield;
 typedef void GLvoid;
-typedef std::int8_t GLbyte;
-typedef std::uint8_t GLubyte;
-typedef std::int16_t GLshort;
-typedef std::uint16_t GLushort;
+typedef int8_t GLbyte;
+typedef uint8_t GLubyte;
+typedef int16_t GLshort;
+typedef uint16_t GLushort;
 typedef int GLint;
 typedef unsigned int GLuint;
-typedef std::int32_t GLclampx;
+typedef int32_t GLclampx;
 typedef int GLsizei;
 typedef float GLfloat;
 typedef float GLclampf;
@@ -46,17 +46,17 @@ typedef void *GLhandleARB;
 #else
 typedef unsigned int GLhandleARB;
 #endif
-typedef std::uint16_t GLhalf;
-typedef std::uint16_t GLhalfARB;
-typedef std::int32_t GLfixed;
-typedef std::intptr_t GLintptr;
-typedef std::intptr_t GLintptrARB;
-typedef std::ptrdiff_t GLsizeiptr;
-typedef std::ptrdiff_t GLsizeiptrARB;
-typedef std::int64_t GLint64;
-typedef std::int64_t GLint64EXT;
-typedef std::uint64_t GLuint64;
-typedef std::uint64_t GLuint64EXT;
+typedef uint16_t GLhalf;
+typedef uint16_t GLhalfARB;
+typedef int32_t GLfixed;
+typedef intptr_t GLintptr;
+typedef intptr_t GLintptrARB;
+typedef ptrdiff_t GLsizeiptr;
+typedef ptrdiff_t GLsizeiptrARB;
+typedef int64_t GLint64;
+typedef int64_t GLint64EXT;
+typedef uint64_t GLuint64;
+typedef uint64_t GLuint64EXT;
 typedef struct __GLsync *GLsync;
 struct _cl_context;
 struct _cl_event;

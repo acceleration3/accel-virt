@@ -40,13 +40,13 @@ def emit(reg: Registry, out_dir: Path) -> None:
     header = [
         GENERATED_BANNER,
         "",
-        "#include <cstdint>",
+        "#include <stdint.h>",
         "",
         "namespace av::vkproto {",
         "",
         "// Returns a static C-string name for a wire command id. Returns",
         "// ``\"unknown\"`` for unknown ids — never null. Cheap (one switch).",
-        "[[nodiscard]] const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept;",
+        "[[nodiscard]] const char* cmd_id_to_string(uint32_t cmd_id) noexcept;",
         "",
         "}  // namespace av::vkproto",
         "",
@@ -60,7 +60,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         "namespace av::vkproto {",
         "",
-        "const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept {",
+        "const char* cmd_id_to_string(uint32_t cmd_id) noexcept {",
         "    switch (cmd_id) {",
     ]
     for cid, name in RVK_INTERNAL_CMDS:

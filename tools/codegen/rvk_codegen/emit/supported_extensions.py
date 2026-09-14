@@ -32,7 +32,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
     out = [
         GENERATED_BANNER,
         "",
-        "#include <cstddef>",
+        "#include <stddef.h>",
         "",
         "namespace av::vkproto {",
         "",

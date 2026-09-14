@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 #ifndef CL_TARGET_OPENCL_VERSION
 #define CL_TARGET_OPENCL_VERSION 300
@@ -63,8 +63,8 @@ public:
     virtual cl_int on_clEnqueueCopyImage(cl_command_queue command_queue, cl_mem src_image, cl_mem dst_image, const size_t* src_origin, const size_t* dst_origin, const size_t* region, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) = 0;
     virtual cl_int on_clEnqueueCopyImageToBuffer(cl_command_queue command_queue, cl_mem src_image, cl_mem dst_buffer, const size_t* src_origin, const size_t* region, size_t dst_offset, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) = 0;
     virtual cl_int on_clEnqueueCopyBufferToImage(cl_command_queue command_queue, cl_mem src_buffer, cl_mem dst_image, size_t src_offset, const size_t* dst_origin, const size_t* region, cl_uint num_events_in_wait_list, const cl_event* event_wait_list, cl_event* event) = 0;
-    virtual cl_program on_clCreateProgramWithSource(cl_context context, cl_uint count, const char** strings, const std::size_t* lengths, cl_int* errcode_ret) = 0;
-    virtual cl_program on_clCreateProgramWithBinary(cl_context context, cl_uint num_devices, const cl_device_id* device_list, const std::size_t* lengths, const unsigned char** binaries, cl_int* binary_status, cl_int* errcode_ret) = 0;
+    virtual cl_program on_clCreateProgramWithSource(cl_context context, cl_uint count, const char** strings, const size_t* lengths, cl_int* errcode_ret) = 0;
+    virtual cl_program on_clCreateProgramWithBinary(cl_context context, cl_uint num_devices, const cl_device_id* device_list, const size_t* lengths, const unsigned char** binaries, cl_int* binary_status, cl_int* errcode_ret) = 0;
     virtual cl_int on_clRetainProgram(cl_program program) = 0;
     virtual cl_int on_clReleaseProgram(cl_program program) = 0;
     virtual cl_int on_clBuildProgram(cl_program program, cl_uint num_devices, const cl_device_id* device_list, const char* options) = 0;
@@ -140,7 +140,7 @@ public:
 // `arena` is where everything a decoded command points at lives,
 // for the length of the call; it is the caller's block, because it
 // has to outlive the decode that filled it.
-[[nodiscard]] bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id,
+[[nodiscard]] bool dispatch_command(ServerDispatch& s, uint32_t cmd_id,
                                     ::av::WireReader& r, ::av::WireWriter& reply,
                                     ::av::WireArena& arena);
 

@@ -11,7 +11,7 @@ namespace {
 // How many raw server handles a wrapper stages on its stack while
 // wrapping an array the application asked for. A request for more is
 // refused with VK_ERROR_OUT_OF_HOST_MEMORY rather than allocated.
-constexpr std::size_t kMaxStagedHandles = 1024;
+constexpr size_t kMaxStagedHandles = 1024;
 
 }  // namespace
 
@@ -32,7 +32,7 @@ VKAPI_ATTR void VKAPI_CALL Wrap_vkDestroyDevice(VkDevice device, const VkAllocat
 
 VKAPI_ATTR void VKAPI_CALL Wrap_vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue* pQueue) {
     auto* conn = ::av::icd::connection_of(device);
-    std::uint64_t server_pQueue = 0;
+    uint64_t server_pQueue = 0;
     ::av::vkproto::rvk_vkGetDeviceQueue(conn->transport(), device, queueFamilyIndex, queueIndex, &server_pQueue);
     *pQueue = ::av::icd::wrap_server_handle<VkQueue>(server_pQueue, conn);
 }
@@ -42,15 +42,15 @@ VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkEnumeratePhysicalDevices(VkInstance instan
     if (pPhysicalDevices == nullptr) {
         return ::av::vkproto::rvk_vkEnumeratePhysicalDevices(conn->transport(), instance, pPhysicalDeviceCount, nullptr);
     }
-    if (static_cast<std::size_t>(*pPhysicalDeviceCount) > kMaxStagedHandles) {
+    if (static_cast<size_t>(*pPhysicalDeviceCount) > kMaxStagedHandles) {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
-    std::uint64_t server_pPhysicalDevices[kMaxStagedHandles] = {};
+    uint64_t server_pPhysicalDevices[kMaxStagedHandles] = {};
     const VkResult rvk_rc = ::av::vkproto::rvk_vkEnumeratePhysicalDevices(conn->transport(), instance, pPhysicalDeviceCount, server_pPhysicalDevices);
     if (rvk_rc != VK_SUCCESS && rvk_rc != VK_INCOMPLETE) {
         return rvk_rc;
     }
-    for (std::uint32_t k = 0; k < *pPhysicalDeviceCount; ++k) {
+    for (uint32_t k = 0; k < *pPhysicalDeviceCount; ++k) {
         pPhysicalDevices[k] = ::av::icd::wrap_server_handle<VkPhysicalDevice>(server_pPhysicalDevices[k], conn);
     }
     return rvk_rc;
@@ -69,7 +69,7 @@ VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkCreateInstance(const VkInstanceCreateInfo*
     // 64 bits wide because that is the wire's width. Holding the
     // server's handle in a VkInstance would narrow it on a 32-bit
     // client and send back a handle no object is at.
-    std::uint64_t server_instance = 0;
+    uint64_t server_instance = 0;
     const VkResult rvk_rc = ::av::vkproto::rvk_vkCreateInstance(conn->transport(), pCreateInfo, pAllocator, &server_instance);
     if (rvk_rc != VK_SUCCESS) {
         ::av::icd::release_connection(conn);
@@ -81,7 +81,7 @@ VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkCreateInstance(const VkInstanceCreateInfo*
 
 VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDevice* pDevice) {
     auto* conn = ::av::icd::connection_of(physicalDevice);
-    std::uint64_t server_pDevice = 0;
+    uint64_t server_pDevice = 0;
     const VkResult rvk_rc = ::av::vkproto::rvk_vkCreateDevice(conn->transport(), physicalDevice, pCreateInfo, pAllocator, &server_pDevice);
     if (rvk_rc != VK_SUCCESS && rvk_rc != VK_INCOMPLETE) {
         return rvk_rc;
@@ -461,15 +461,15 @@ VKAPI_ATTR void VKAPI_CALL Wrap_vkUpdateDescriptorSets(VkDevice device, uint32_t
 
 VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkAllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo* pAllocateInfo, VkCommandBuffer* pCommandBuffers) {
     auto* conn = ::av::icd::connection_of(device);
-    if (static_cast<std::size_t>(pAllocateInfo->commandBufferCount) > kMaxStagedHandles) {
+    if (static_cast<size_t>(pAllocateInfo->commandBufferCount) > kMaxStagedHandles) {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
-    std::uint64_t server_pCommandBuffers[kMaxStagedHandles] = {};
+    uint64_t server_pCommandBuffers[kMaxStagedHandles] = {};
     const VkResult rvk_rc = ::av::vkproto::rvk_vkAllocateCommandBuffers(conn->transport(), device, pAllocateInfo, server_pCommandBuffers);
     if (rvk_rc != VK_SUCCESS && rvk_rc != VK_INCOMPLETE) {
         return rvk_rc;
     }
-    for (std::uint32_t k = 0; k < static_cast<std::uint32_t>(pAllocateInfo->commandBufferCount); ++k) {
+    for (uint32_t k = 0; k < static_cast<uint32_t>(pAllocateInfo->commandBufferCount); ++k) {
         pCommandBuffers[k] = ::av::icd::wrap_server_handle<VkCommandBuffer>(server_pCommandBuffers[k], conn);
     }
     return rvk_rc;
@@ -922,7 +922,7 @@ VKAPI_ATTR uint64_t VKAPI_CALL Wrap_vkGetDeviceMemoryOpaqueCaptureAddress(VkDevi
 
 VKAPI_ATTR void VKAPI_CALL Wrap_vkGetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2* pQueueInfo, VkQueue* pQueue) {
     auto* conn = ::av::icd::connection_of(device);
-    std::uint64_t server_pQueue = 0;
+    uint64_t server_pQueue = 0;
     ::av::vkproto::rvk_vkGetDeviceQueue2(conn->transport(), device, pQueueInfo, &server_pQueue);
     *pQueue = ::av::icd::wrap_server_handle<VkQueue>(server_pQueue, conn);
 }
@@ -2210,12 +2210,12 @@ const Entry kWrapperTable[386] = {
 };
 }  // namespace
 
-EntryTable::EntryTable(const Entry* first, std::size_t count) noexcept
+EntryTable::EntryTable(const Entry* first, size_t count) noexcept
     : first_(first), count_(count) {}
 
 const Entry* EntryTable::begin() const noexcept { return first_; }
 const Entry* EntryTable::end() const noexcept { return first_ + count_; }
-std::size_t EntryTable::size() const noexcept { return count_; }
+size_t EntryTable::size() const noexcept { return count_; }
 
 EntryTable wrapper_entries() noexcept { return EntryTable{kWrapperTable, 386u}; }
 

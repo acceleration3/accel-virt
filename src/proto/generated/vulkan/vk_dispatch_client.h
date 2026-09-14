@@ -1,7 +1,7 @@
 #pragma once
 
 
-#include <cstdint>
+#include <stdint.h>
 
 #include <vulkan/vulkan_core.h>
 
@@ -11,11 +11,11 @@ namespace av::vkproto {
 
 void rvk_vkDestroyInstance(::av::ClientTransport& t, VkInstance instance, const VkAllocationCallbacks* pAllocator);
 void rvk_vkDestroyDevice(::av::ClientTransport& t, VkDevice device, const VkAllocationCallbacks* pAllocator);
-void rvk_vkGetDeviceQueue(::av::ClientTransport& t, VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, std::uint64_t* pQueue);
-VkResult rvk_vkEnumeratePhysicalDevices(::av::ClientTransport& t, VkInstance instance, uint32_t* pPhysicalDeviceCount, std::uint64_t* pPhysicalDevices);
+void rvk_vkGetDeviceQueue(::av::ClientTransport& t, VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, uint64_t* pQueue);
+VkResult rvk_vkEnumeratePhysicalDevices(::av::ClientTransport& t, VkInstance instance, uint32_t* pPhysicalDeviceCount, uint64_t* pPhysicalDevices);
 void rvk_vkGetPhysicalDeviceProperties2(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties2* pProperties);
-VkResult rvk_vkCreateInstance(::av::ClientTransport& t, const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, std::uint64_t* pInstance);
-VkResult rvk_vkCreateDevice(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, std::uint64_t* pDevice);
+VkResult rvk_vkCreateInstance(::av::ClientTransport& t, const VkInstanceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, uint64_t* pInstance);
+VkResult rvk_vkCreateDevice(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo* pCreateInfo, const VkAllocationCallbacks* pAllocator, uint64_t* pDevice);
 void rvk_vkGetPhysicalDeviceProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties);
 void rvk_vkGetPhysicalDeviceFeatures(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkPhysicalDeviceFeatures* pFeatures);
 void rvk_vkGetPhysicalDeviceFormatProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkFormat format, VkFormatProperties* pFormatProperties);
@@ -93,7 +93,7 @@ void rvk_vkCmdNextSubpass(::av::ClientTransport& t, VkCommandBuffer commandBuffe
 void rvk_vkCmdPushConstants(::av::ClientTransport& t, VkCommandBuffer commandBuffer, VkPipelineLayout layout, VkShaderStageFlags stageFlags, uint32_t offset, uint32_t size, const void* pValues);
 VkResult rvk_vkCreateGraphicsPipelines(::av::ClientTransport& t, VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkGraphicsPipelineCreateInfo* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines);
 void rvk_vkUpdateDescriptorSets(::av::ClientTransport& t, VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet* pDescriptorWrites, uint32_t descriptorCopyCount, const VkCopyDescriptorSet* pDescriptorCopies);
-VkResult rvk_vkAllocateCommandBuffers(::av::ClientTransport& t, VkDevice device, const VkCommandBufferAllocateInfo* pAllocateInfo, std::uint64_t* pCommandBuffers);
+VkResult rvk_vkAllocateCommandBuffers(::av::ClientTransport& t, VkDevice device, const VkCommandBufferAllocateInfo* pAllocateInfo, uint64_t* pCommandBuffers);
 VkResult rvk_vkAllocateDescriptorSets(::av::ClientTransport& t, VkDevice device, const VkDescriptorSetAllocateInfo* pAllocateInfo, VkDescriptorSet* pDescriptorSets);
 VkResult rvk_vkFreeDescriptorSets(::av::ClientTransport& t, VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet* pDescriptorSets);
 VkResult rvk_vkCreateComputePipelines(::av::ClientTransport& t, VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkComputePipelineCreateInfo* pCreateInfos, const VkAllocationCallbacks* pAllocator, VkPipeline* pPipelines);
@@ -196,7 +196,7 @@ void rvk_vkGetDeviceImageMemoryRequirements(::av::ClientTransport& t, VkDevice d
 void rvk_vkGetDeviceImageSparseMemoryRequirements(::av::ClientTransport& t, VkDevice device, const VkDeviceImageMemoryRequirements* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2* pSparseMemoryRequirements);
 void rvk_vkGetDeviceMemoryCommitment(::av::ClientTransport& t, VkDevice device, VkDeviceMemory memory, VkDeviceSize* pCommittedMemoryInBytes);
 uint64_t rvk_vkGetDeviceMemoryOpaqueCaptureAddress(::av::ClientTransport& t, VkDevice device, const VkDeviceMemoryOpaqueCaptureAddressInfo* pInfo);
-void rvk_vkGetDeviceQueue2(::av::ClientTransport& t, VkDevice device, const VkDeviceQueueInfo2* pQueueInfo, std::uint64_t* pQueue);
+void rvk_vkGetDeviceQueue2(::av::ClientTransport& t, VkDevice device, const VkDeviceQueueInfo2* pQueueInfo, uint64_t* pQueue);
 void rvk_vkGetImageMemoryRequirements2(::av::ClientTransport& t, VkDevice device, const VkImageMemoryRequirementsInfo2* pInfo, VkMemoryRequirements2* pMemoryRequirements);
 void rvk_vkGetImageSparseMemoryRequirements(::av::ClientTransport& t, VkDevice device, VkImage image, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements* pSparseMemoryRequirements);
 void rvk_vkGetImageSparseMemoryRequirements2(::av::ClientTransport& t, VkDevice device, const VkImageSparseMemoryRequirementsInfo2* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2* pSparseMemoryRequirements);

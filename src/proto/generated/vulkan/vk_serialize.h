@@ -1,9 +1,8 @@
 #pragma once
 
 
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <vulkan/vulkan_core.h>
 
@@ -33,57 +32,57 @@ static_assert(sizeof(void*) == 8 || sizeof(void*) == 4,
 // image's format, which lives in the application's own driver
 // state, not in the struct. Weakly defined to 0 (send nothing) so
 // the server and loopback tests link without an image registry.
-[[nodiscard]] std::uint64_t host_image_copy_bytes(VkImage image, const VkMemoryToImageCopy& region) noexcept;
+[[nodiscard]] uint64_t host_image_copy_bytes(VkImage image, const VkMemoryToImageCopy& region) noexcept;
 // Any field, as the number it holds. A value off the wire is a value
 // its own type may not have - an enum with an unlisted value, most of
 // all - and loading one as that type is undefined. Everything that
 // reads a decoded field for its value rather than to pass it on goes
 // through here (feature 042).
 template <typename T>
-[[nodiscard]] inline std::uint64_t as_number(const T& value) noexcept {
-    std::uint64_t raw = 0;
+[[nodiscard]] inline uint64_t as_number(const T& value) noexcept {
+    uint64_t raw = 0;
     static_assert(sizeof(T) <= sizeof(raw));
-    std::memcpy(&raw, &value, sizeof(T));
+    __builtin_memcpy(&raw, &value, sizeof(T));
     return raw;
 }
 
-[[nodiscard]] std::uint64_t handle_to_wire(VkAccelerationStructureKHR v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkAccelerationStructureNV v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkBuffer v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkBufferView v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkCommandBuffer v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkCommandPool v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkDeferredOperationKHR v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkDescriptorPool v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkDescriptorSet v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkDescriptorSetLayout v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkDescriptorUpdateTemplate v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkDevice v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkDeviceMemory v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkEvent v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkFence v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkFramebuffer v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkImage v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkImageView v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkInstance v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkMicromapEXT v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkPhysicalDevice v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkPipeline v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkPipelineBinaryKHR v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkPipelineCache v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkPipelineLayout v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkPrivateDataSlot v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkQueryPool v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkQueue v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkRenderPass v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkSampler v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkSamplerYcbcrConversion v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkSemaphore v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkShaderEXT v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkShaderModule v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkSurfaceKHR v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkSwapchainKHR v) noexcept;
-[[nodiscard]] std::uint64_t handle_to_wire(VkValidationCacheEXT v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkAccelerationStructureKHR v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkAccelerationStructureNV v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkBuffer v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkBufferView v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkCommandBuffer v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkCommandPool v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkDeferredOperationKHR v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkDescriptorPool v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkDescriptorSet v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkDescriptorSetLayout v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkDescriptorUpdateTemplate v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkDevice v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkDeviceMemory v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkEvent v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkFence v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkFramebuffer v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkImage v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkImageView v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkInstance v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkMicromapEXT v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkPhysicalDevice v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkPipeline v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkPipelineBinaryKHR v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkPipelineCache v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkPipelineLayout v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkPrivateDataSlot v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkQueryPool v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkQueue v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkRenderPass v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkSampler v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkSamplerYcbcrConversion v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkSemaphore v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkShaderEXT v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkShaderModule v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkSurfaceKHR v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkSwapchainKHR v) noexcept;
+[[nodiscard]] uint64_t handle_to_wire(VkValidationCacheEXT v) noexcept;
 
 // The other direction, and the one that decides whether a handle off
 // the wire is a pointer the host will dereference. The default is
@@ -92,43 +91,43 @@ template <typename T>
 // attacker's: a host answers false for any handle it did not make
 // itself. Weakly defined so the guest and the loopback tests link
 // without a registry; see vk_handle_default.cpp (feature 042).
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkAccelerationStructureKHR& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkAccelerationStructureNV& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkBuffer& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkBufferView& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkCommandBuffer& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkCommandPool& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDeferredOperationKHR& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDescriptorPool& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDescriptorSet& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDescriptorSetLayout& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDescriptorUpdateTemplate& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDevice& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkDeviceMemory& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkEvent& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkFence& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkFramebuffer& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkImage& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkImageView& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkInstance& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkMicromapEXT& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkPhysicalDevice& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkPipeline& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkPipelineBinaryKHR& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkPipelineCache& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkPipelineLayout& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkPrivateDataSlot& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkQueryPool& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkQueue& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkRenderPass& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkSampler& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkSamplerYcbcrConversion& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkSemaphore& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkShaderEXT& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkShaderModule& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkSurfaceKHR& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkSwapchainKHR& out) noexcept;
-[[nodiscard]] bool wire_to_handle(std::uint64_t raw, VkValidationCacheEXT& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkAccelerationStructureKHR& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkAccelerationStructureNV& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkBuffer& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkBufferView& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkCommandBuffer& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkCommandPool& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkDeferredOperationKHR& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkDescriptorPool& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkDescriptorSet& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkDescriptorSetLayout& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkDescriptorUpdateTemplate& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkDevice& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkDeviceMemory& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkEvent& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkFence& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkFramebuffer& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkImage& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkImageView& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkInstance& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkMicromapEXT& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkPhysicalDevice& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkPipeline& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkPipelineBinaryKHR& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkPipelineCache& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkPipelineLayout& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkPrivateDataSlot& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkQueryPool& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkQueue& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkRenderPass& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkSampler& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkSamplerYcbcrConversion& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkSemaphore& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkShaderEXT& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkShaderModule& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkSurfaceKHR& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkSwapchainKHR& out) noexcept;
+[[nodiscard]] bool wire_to_handle(uint64_t raw, VkValidationCacheEXT& out) noexcept;
 
 inline void serialize_VkAccelerationStructureKHR(::av::WireWriter& buf, VkAccelerationStructureKHR v) noexcept {
     // Through the hook, like the dispatchable handles: a host that
@@ -139,7 +138,7 @@ inline void serialize_VkAccelerationStructureKHR(::av::WireWriter& buf, VkAccele
 }
 
 [[nodiscard]] inline bool deserialize_VkAccelerationStructureKHR(::av::WireReader& r, VkAccelerationStructureKHR& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -155,7 +154,7 @@ inline void serialize_VkAccelerationStructureNV(::av::WireWriter& buf, VkAcceler
 }
 
 [[nodiscard]] inline bool deserialize_VkAccelerationStructureNV(::av::WireReader& r, VkAccelerationStructureNV& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -171,7 +170,7 @@ inline void serialize_VkBuffer(::av::WireWriter& buf, VkBuffer v) noexcept {
 }
 
 [[nodiscard]] inline bool deserialize_VkBuffer(::av::WireReader& r, VkBuffer& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -187,7 +186,7 @@ inline void serialize_VkBufferView(::av::WireWriter& buf, VkBufferView v) noexce
 }
 
 [[nodiscard]] inline bool deserialize_VkBufferView(::av::WireReader& r, VkBufferView& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -199,7 +198,7 @@ inline void serialize_VkCommandBuffer(::av::WireWriter& buf, VkCommandBuffer v) 
 }
 
 [[nodiscard]] inline bool deserialize_VkCommandBuffer(::av::WireReader& r, VkCommandBuffer& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -215,7 +214,7 @@ inline void serialize_VkCommandPool(::av::WireWriter& buf, VkCommandPool v) noex
 }
 
 [[nodiscard]] inline bool deserialize_VkCommandPool(::av::WireReader& r, VkCommandPool& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -231,7 +230,7 @@ inline void serialize_VkDeferredOperationKHR(::av::WireWriter& buf, VkDeferredOp
 }
 
 [[nodiscard]] inline bool deserialize_VkDeferredOperationKHR(::av::WireReader& r, VkDeferredOperationKHR& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -247,7 +246,7 @@ inline void serialize_VkDescriptorPool(::av::WireWriter& buf, VkDescriptorPool v
 }
 
 [[nodiscard]] inline bool deserialize_VkDescriptorPool(::av::WireReader& r, VkDescriptorPool& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -263,7 +262,7 @@ inline void serialize_VkDescriptorSet(::av::WireWriter& buf, VkDescriptorSet v) 
 }
 
 [[nodiscard]] inline bool deserialize_VkDescriptorSet(::av::WireReader& r, VkDescriptorSet& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -279,7 +278,7 @@ inline void serialize_VkDescriptorSetLayout(::av::WireWriter& buf, VkDescriptorS
 }
 
 [[nodiscard]] inline bool deserialize_VkDescriptorSetLayout(::av::WireReader& r, VkDescriptorSetLayout& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -295,7 +294,7 @@ inline void serialize_VkDescriptorUpdateTemplate(::av::WireWriter& buf, VkDescri
 }
 
 [[nodiscard]] inline bool deserialize_VkDescriptorUpdateTemplate(::av::WireReader& r, VkDescriptorUpdateTemplate& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -307,7 +306,7 @@ inline void serialize_VkDevice(::av::WireWriter& buf, VkDevice v) noexcept {
 }
 
 [[nodiscard]] inline bool deserialize_VkDevice(::av::WireReader& r, VkDevice& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -323,7 +322,7 @@ inline void serialize_VkDeviceMemory(::av::WireWriter& buf, VkDeviceMemory v) no
 }
 
 [[nodiscard]] inline bool deserialize_VkDeviceMemory(::av::WireReader& r, VkDeviceMemory& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -339,7 +338,7 @@ inline void serialize_VkEvent(::av::WireWriter& buf, VkEvent v) noexcept {
 }
 
 [[nodiscard]] inline bool deserialize_VkEvent(::av::WireReader& r, VkEvent& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -355,7 +354,7 @@ inline void serialize_VkFence(::av::WireWriter& buf, VkFence v) noexcept {
 }
 
 [[nodiscard]] inline bool deserialize_VkFence(::av::WireReader& r, VkFence& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -371,7 +370,7 @@ inline void serialize_VkFramebuffer(::av::WireWriter& buf, VkFramebuffer v) noex
 }
 
 [[nodiscard]] inline bool deserialize_VkFramebuffer(::av::WireReader& r, VkFramebuffer& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -387,7 +386,7 @@ inline void serialize_VkImage(::av::WireWriter& buf, VkImage v) noexcept {
 }
 
 [[nodiscard]] inline bool deserialize_VkImage(::av::WireReader& r, VkImage& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -403,7 +402,7 @@ inline void serialize_VkImageView(::av::WireWriter& buf, VkImageView v) noexcept
 }
 
 [[nodiscard]] inline bool deserialize_VkImageView(::av::WireReader& r, VkImageView& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -415,7 +414,7 @@ inline void serialize_VkInstance(::av::WireWriter& buf, VkInstance v) noexcept {
 }
 
 [[nodiscard]] inline bool deserialize_VkInstance(::av::WireReader& r, VkInstance& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -431,7 +430,7 @@ inline void serialize_VkMicromapEXT(::av::WireWriter& buf, VkMicromapEXT v) noex
 }
 
 [[nodiscard]] inline bool deserialize_VkMicromapEXT(::av::WireReader& r, VkMicromapEXT& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -443,7 +442,7 @@ inline void serialize_VkPhysicalDevice(::av::WireWriter& buf, VkPhysicalDevice v
 }
 
 [[nodiscard]] inline bool deserialize_VkPhysicalDevice(::av::WireReader& r, VkPhysicalDevice& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -459,7 +458,7 @@ inline void serialize_VkPipeline(::av::WireWriter& buf, VkPipeline v) noexcept {
 }
 
 [[nodiscard]] inline bool deserialize_VkPipeline(::av::WireReader& r, VkPipeline& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -475,7 +474,7 @@ inline void serialize_VkPipelineBinaryKHR(::av::WireWriter& buf, VkPipelineBinar
 }
 
 [[nodiscard]] inline bool deserialize_VkPipelineBinaryKHR(::av::WireReader& r, VkPipelineBinaryKHR& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -491,7 +490,7 @@ inline void serialize_VkPipelineCache(::av::WireWriter& buf, VkPipelineCache v) 
 }
 
 [[nodiscard]] inline bool deserialize_VkPipelineCache(::av::WireReader& r, VkPipelineCache& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -507,7 +506,7 @@ inline void serialize_VkPipelineLayout(::av::WireWriter& buf, VkPipelineLayout v
 }
 
 [[nodiscard]] inline bool deserialize_VkPipelineLayout(::av::WireReader& r, VkPipelineLayout& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -523,7 +522,7 @@ inline void serialize_VkPrivateDataSlot(::av::WireWriter& buf, VkPrivateDataSlot
 }
 
 [[nodiscard]] inline bool deserialize_VkPrivateDataSlot(::av::WireReader& r, VkPrivateDataSlot& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -539,7 +538,7 @@ inline void serialize_VkQueryPool(::av::WireWriter& buf, VkQueryPool v) noexcept
 }
 
 [[nodiscard]] inline bool deserialize_VkQueryPool(::av::WireReader& r, VkQueryPool& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -551,7 +550,7 @@ inline void serialize_VkQueue(::av::WireWriter& buf, VkQueue v) noexcept {
 }
 
 [[nodiscard]] inline bool deserialize_VkQueue(::av::WireReader& r, VkQueue& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -567,7 +566,7 @@ inline void serialize_VkRenderPass(::av::WireWriter& buf, VkRenderPass v) noexce
 }
 
 [[nodiscard]] inline bool deserialize_VkRenderPass(::av::WireReader& r, VkRenderPass& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -583,7 +582,7 @@ inline void serialize_VkSampler(::av::WireWriter& buf, VkSampler v) noexcept {
 }
 
 [[nodiscard]] inline bool deserialize_VkSampler(::av::WireReader& r, VkSampler& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -599,7 +598,7 @@ inline void serialize_VkSamplerYcbcrConversion(::av::WireWriter& buf, VkSamplerY
 }
 
 [[nodiscard]] inline bool deserialize_VkSamplerYcbcrConversion(::av::WireReader& r, VkSamplerYcbcrConversion& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -615,7 +614,7 @@ inline void serialize_VkSemaphore(::av::WireWriter& buf, VkSemaphore v) noexcept
 }
 
 [[nodiscard]] inline bool deserialize_VkSemaphore(::av::WireReader& r, VkSemaphore& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -631,7 +630,7 @@ inline void serialize_VkShaderEXT(::av::WireWriter& buf, VkShaderEXT v) noexcept
 }
 
 [[nodiscard]] inline bool deserialize_VkShaderEXT(::av::WireReader& r, VkShaderEXT& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -647,7 +646,7 @@ inline void serialize_VkShaderModule(::av::WireWriter& buf, VkShaderModule v) no
 }
 
 [[nodiscard]] inline bool deserialize_VkShaderModule(::av::WireReader& r, VkShaderModule& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -663,7 +662,7 @@ inline void serialize_VkSurfaceKHR(::av::WireWriter& buf, VkSurfaceKHR v) noexce
 }
 
 [[nodiscard]] inline bool deserialize_VkSurfaceKHR(::av::WireReader& r, VkSurfaceKHR& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -679,7 +678,7 @@ inline void serialize_VkSwapchainKHR(::av::WireWriter& buf, VkSwapchainKHR v) no
 }
 
 [[nodiscard]] inline bool deserialize_VkSwapchainKHR(::av::WireReader& r, VkSwapchainKHR& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -695,7 +694,7 @@ inline void serialize_VkValidationCacheEXT(::av::WireWriter& buf, VkValidationCa
 }
 
 [[nodiscard]] inline bool deserialize_VkValidationCacheEXT(::av::WireReader& r, VkValidationCacheEXT& out) noexcept {
-    std::uint64_t raw = 0;
+    uint64_t raw = 0;
     if (!r.read_pod(raw)) {
         return false;
     }
@@ -2208,13 +2207,13 @@ inline void serialize_VkWriteDescriptorSetPartitionedAccelerationStructureNV(::a
 
 // Optional pointer helpers (used by hand-written struct bodies).
 inline void serialize_optional_sampler(::av::WireWriter& buf, const VkSampler* p) {
-    const std::uint8_t present = p != nullptr ? 1 : 0;
+    const uint8_t present = p != nullptr ? 1 : 0;
     buf.write_pod(present);
     if (present) { serialize_VkSampler(buf, *p); }
 }
 
 [[nodiscard]] inline bool deserialize_optional_sampler(::av::WireReader& r, const VkSampler** out, ::av::WireArena& arena) {
-    std::uint8_t present = 0;
+    uint8_t present = 0;
     if (!r.read_pod(present)) { return false; }
     if (!present) { *out = nullptr; return true; }
     auto* v = arena.allocate<VkSampler>();
@@ -2225,13 +2224,13 @@ inline void serialize_optional_sampler(::av::WireWriter& buf, const VkSampler* p
 }
 
 inline void serialize_optional_image_info(::av::WireWriter& buf, const VkDescriptorImageInfo* p) {
-    const std::uint8_t present = p != nullptr ? 1 : 0;
+    const uint8_t present = p != nullptr ? 1 : 0;
     buf.write_pod(present);
     if (present) { serialize_VkDescriptorImageInfo(buf, *p); }
 }
 
 [[nodiscard]] inline bool deserialize_optional_image_info(::av::WireReader& r, const VkDescriptorImageInfo** out, ::av::WireArena& arena) {
-    std::uint8_t present = 0;
+    uint8_t present = 0;
     if (!r.read_pod(present)) { return false; }
     if (!present) { *out = nullptr; return true; }
     auto* v = arena.allocate<VkDescriptorImageInfo>();
@@ -2260,10 +2259,10 @@ inline void serialize_VkAccelerationStructureBuildGeometryInfoKHR(::av::WireWrit
     serialize_VkAccelerationStructureKHR(buf, v.dstAccelerationStructure);
     buf.write_pod(v.geometryCount);
     {
-        const std::uint8_t present = v.pGeometries != nullptr ? 1 : 0;
+        const uint8_t present = v.pGeometries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.geometryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.geometryCount)); ++i) {
                 serialize_VkAccelerationStructureGeometryKHR(buf, v.pGeometries[i]);
             }
         }
@@ -2284,14 +2283,14 @@ inline void serialize_VkAccelerationStructureBuildGeometryInfoKHR(::av::WireWrit
     if (!deserialize_VkAccelerationStructureKHR(r, out->dstAccelerationStructure)) { return false; }
     if (!r.read_pod(out->geometryCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->geometryCount) == 0) {
             out->pGeometries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAccelerationStructureGeometryKHR>(static_cast<std::size_t>(as_number(out->geometryCount)));
+            auto* arr = arena.allocate<VkAccelerationStructureGeometryKHR>(static_cast<size_t>(as_number(out->geometryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->geometryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->geometryCount)); ++i) {
                 if (!deserialize_VkAccelerationStructureGeometryKHR(r, &arr[i], arena)) { return false; }
             }
             out->pGeometries = arr;
@@ -2572,10 +2571,10 @@ inline void serialize_VkAccelerationStructureTrianglesOpacityMicromapEXT(::av::W
     buf.write_pod(v.baseTriangle);
     buf.write_pod(v.usageCountsCount);
     {
-        const std::uint8_t present = v.pUsageCounts != nullptr ? 1 : 0;
+        const uint8_t present = v.pUsageCounts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.usageCountsCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.usageCountsCount)); ++i) {
                 serialize_VkMicromapUsageEXT(buf, v.pUsageCounts[i]);
             }
         }
@@ -2595,14 +2594,14 @@ inline void serialize_VkAccelerationStructureTrianglesOpacityMicromapEXT(::av::W
     if (!r.read_pod(out->baseTriangle)) { return false; }
     if (!r.read_pod(out->usageCountsCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->usageCountsCount) == 0) {
             out->pUsageCounts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkMicromapUsageEXT>(static_cast<std::size_t>(as_number(out->usageCountsCount)));
+            auto* arr = arena.allocate<VkMicromapUsageEXT>(static_cast<size_t>(as_number(out->usageCountsCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->usageCountsCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->usageCountsCount)); ++i) {
                 if (!deserialize_VkMicromapUsageEXT(r, &arr[i], arena)) { return false; }
             }
             out->pUsageCounts = arr;
@@ -2618,10 +2617,10 @@ inline void serialize_VkAccelerationStructureVersionInfoKHR(::av::WireWriter& bu
     buf.write_pod(v.sType);
     serialize_pnext_chain(buf, v.pNext);
     {
-        const std::uint8_t present = v.pVersionData != nullptr ? 1 : 0;
+        const uint8_t present = v.pVersionData != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(2*VK_UUID_SIZE); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(2*VK_UUID_SIZE); ++i) {
                 buf.write_pod(v.pVersionData[i]);
             }
         }
@@ -2633,14 +2632,14 @@ inline void serialize_VkAccelerationStructureVersionInfoKHR(::av::WireWriter& bu
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || 2*VK_UUID_SIZE == 0) {
             out->pVersionData = nullptr;
         } else {
-            auto* arr = arena.allocate<uint8_t>(static_cast<std::size_t>(2*VK_UUID_SIZE));
+            auto* arr = arena.allocate<uint8_t>(static_cast<size_t>(2*VK_UUID_SIZE));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(2*VK_UUID_SIZE); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(2*VK_UUID_SIZE); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pVersionData = arr;
@@ -2695,7 +2694,7 @@ inline void serialize_VkApplicationInfo(::av::WireWriter& buf, const VkApplicati
         if (s == nullptr) {
             buf.write_varint(0);
         } else {
-            const std::size_t n = std::strlen(s) + 1u;
+            const size_t n = __builtin_strlen(s) + 1u;
             buf.write_varint(n);
             buf.write(s, n);
         }
@@ -2706,7 +2705,7 @@ inline void serialize_VkApplicationInfo(::av::WireWriter& buf, const VkApplicati
         if (s == nullptr) {
             buf.write_varint(0);
         } else {
-            const std::size_t n = std::strlen(s) + 1u;
+            const size_t n = __builtin_strlen(s) + 1u;
             buf.write_varint(n);
             buf.write(s, n);
         }
@@ -2720,7 +2719,7 @@ inline void serialize_VkApplicationInfo(::av::WireWriter& buf, const VkApplicati
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     {
-        std::uint64_t n = 0;
+        uint64_t n = 0;
         if (!r.read_varint(n)) { return false; }
         if (n == 0) {
             out->pApplicationName = nullptr;
@@ -2729,16 +2728,16 @@ inline void serialize_VkApplicationInfo(::av::WireWriter& buf, const VkApplicati
             // length is the guest's and a host API will strcmp what it
             // is handed. A fuzzer found this in vkCreateInstance
             // (feature 042).
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
+            char* s = arena.allocate_chars(static_cast<size_t>(n) + 1u);
             if (s == nullptr) { return false; }
-            if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            if (!r.read(s, static_cast<size_t>(n))) { return false; }
             s[n] = '\0';
             out->pApplicationName = s;
         }
     }
     if (!r.read_pod(out->applicationVersion)) { return false; }
     {
-        std::uint64_t n = 0;
+        uint64_t n = 0;
         if (!r.read_varint(n)) { return false; }
         if (n == 0) {
             out->pEngineName = nullptr;
@@ -2747,9 +2746,9 @@ inline void serialize_VkApplicationInfo(::av::WireWriter& buf, const VkApplicati
             // length is the guest's and a host API will strcmp what it
             // is handed. A fuzzer found this in vkCreateInstance
             // (feature 042).
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
+            char* s = arena.allocate_chars(static_cast<size_t>(n) + 1u);
             if (s == nullptr) { return false; }
-            if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            if (!r.read(s, static_cast<size_t>(n))) { return false; }
             s[n] = '\0';
             out->pEngineName = s;
         }
@@ -2880,10 +2879,10 @@ inline void serialize_VkAttachmentSampleCountInfoAMD(::av::WireWriter& buf, cons
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.colorAttachmentCount);
     {
-        const std::uint8_t present = v.pColorAttachmentSamples != nullptr ? 1 : 0;
+        const uint8_t present = v.pColorAttachmentSamples != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 buf.write_pod(v.pColorAttachmentSamples[i]);
             }
         }
@@ -2897,14 +2896,14 @@ inline void serialize_VkAttachmentSampleCountInfoAMD(::av::WireWriter& buf, cons
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->colorAttachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachmentSamples = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSampleCountFlagBits>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
+            auto* arr = arena.allocate<VkSampleCountFlagBits>(static_cast<size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorAttachmentSamples = arr;
@@ -2933,10 +2932,10 @@ inline void serialize_VkSampleLocationsInfoEXT(::av::WireWriter& buf, const VkSa
     serialize_VkExtent2D(buf, v.sampleLocationGridSize);
     buf.write_pod(v.sampleLocationsCount);
     {
-        const std::uint8_t present = v.pSampleLocations != nullptr ? 1 : 0;
+        const uint8_t present = v.pSampleLocations != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.sampleLocationsCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.sampleLocationsCount)); ++i) {
                 serialize_VkSampleLocationEXT(buf, v.pSampleLocations[i]);
             }
         }
@@ -2951,14 +2950,14 @@ inline void serialize_VkSampleLocationsInfoEXT(::av::WireWriter& buf, const VkSa
     if (!deserialize_VkExtent2D(r, &out->sampleLocationGridSize, arena)) { return false; }
     if (!r.read_pod(out->sampleLocationsCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->sampleLocationsCount) == 0) {
             out->pSampleLocations = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSampleLocationEXT>(static_cast<std::size_t>(as_number(out->sampleLocationsCount)));
+            auto* arr = arena.allocate<VkSampleLocationEXT>(static_cast<size_t>(as_number(out->sampleLocationsCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->sampleLocationsCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->sampleLocationsCount)); ++i) {
                 if (!deserialize_VkSampleLocationEXT(r, &arr[i], arena)) { return false; }
             }
             out->pSampleLocations = arr;
@@ -2984,10 +2983,10 @@ inline void serialize_VkBindBufferMemoryDeviceGroupInfo(::av::WireWriter& buf, c
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.deviceIndexCount);
     {
-        const std::uint8_t present = v.pDeviceIndices != nullptr ? 1 : 0;
+        const uint8_t present = v.pDeviceIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.deviceIndexCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.deviceIndexCount)); ++i) {
                 buf.write_pod(v.pDeviceIndices[i]);
             }
         }
@@ -3000,14 +2999,14 @@ inline void serialize_VkBindBufferMemoryDeviceGroupInfo(::av::WireWriter& buf, c
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->deviceIndexCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->deviceIndexCount) == 0) {
             out->pDeviceIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->deviceIndexCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->deviceIndexCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->deviceIndexCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->deviceIndexCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDeviceIndices = arr;
@@ -3039,20 +3038,20 @@ inline void serialize_VkBindImageMemoryDeviceGroupInfo(::av::WireWriter& buf, co
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.deviceIndexCount);
     {
-        const std::uint8_t present = v.pDeviceIndices != nullptr ? 1 : 0;
+        const uint8_t present = v.pDeviceIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.deviceIndexCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.deviceIndexCount)); ++i) {
                 buf.write_pod(v.pDeviceIndices[i]);
             }
         }
     }
     buf.write_pod(v.splitInstanceBindRegionCount);
     {
-        const std::uint8_t present = v.pSplitInstanceBindRegions != nullptr ? 1 : 0;
+        const uint8_t present = v.pSplitInstanceBindRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.splitInstanceBindRegionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.splitInstanceBindRegionCount)); ++i) {
                 serialize_VkRect2D(buf, v.pSplitInstanceBindRegions[i]);
             }
         }
@@ -3065,14 +3064,14 @@ inline void serialize_VkBindImageMemoryDeviceGroupInfo(::av::WireWriter& buf, co
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->deviceIndexCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->deviceIndexCount) == 0) {
             out->pDeviceIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->deviceIndexCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->deviceIndexCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->deviceIndexCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->deviceIndexCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDeviceIndices = arr;
@@ -3080,14 +3079,14 @@ inline void serialize_VkBindImageMemoryDeviceGroupInfo(::av::WireWriter& buf, co
     }
     if (!r.read_pod(out->splitInstanceBindRegionCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->splitInstanceBindRegionCount) == 0) {
             out->pSplitInstanceBindRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(as_number(out->splitInstanceBindRegionCount)));
+            auto* arr = arena.allocate<VkRect2D>(static_cast<size_t>(as_number(out->splitInstanceBindRegionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->splitInstanceBindRegionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->splitInstanceBindRegionCount)); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
             out->pSplitInstanceBindRegions = arr;
@@ -3165,50 +3164,50 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.waitSemaphoreCount);
     {
-        const std::uint8_t present = v.pWaitSemaphores != nullptr ? 1 : 0;
+        const uint8_t present = v.pWaitSemaphores != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.waitSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.waitSemaphoreCount)); ++i) {
                 serialize_VkSemaphore(buf, v.pWaitSemaphores[i]);
             }
         }
     }
     buf.write_pod(v.bufferBindCount);
     {
-        const std::uint8_t present = v.pBufferBinds != nullptr ? 1 : 0;
+        const uint8_t present = v.pBufferBinds != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bufferBindCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.bufferBindCount)); ++i) {
                 serialize_VkSparseBufferMemoryBindInfo(buf, v.pBufferBinds[i]);
             }
         }
     }
     buf.write_pod(v.imageOpaqueBindCount);
     {
-        const std::uint8_t present = v.pImageOpaqueBinds != nullptr ? 1 : 0;
+        const uint8_t present = v.pImageOpaqueBinds != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.imageOpaqueBindCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.imageOpaqueBindCount)); ++i) {
                 serialize_VkSparseImageOpaqueMemoryBindInfo(buf, v.pImageOpaqueBinds[i]);
             }
         }
     }
     buf.write_pod(v.imageBindCount);
     {
-        const std::uint8_t present = v.pImageBinds != nullptr ? 1 : 0;
+        const uint8_t present = v.pImageBinds != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.imageBindCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.imageBindCount)); ++i) {
                 serialize_VkSparseImageMemoryBindInfo(buf, v.pImageBinds[i]);
             }
         }
     }
     buf.write_pod(v.signalSemaphoreCount);
     {
-        const std::uint8_t present = v.pSignalSemaphores != nullptr ? 1 : 0;
+        const uint8_t present = v.pSignalSemaphores != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.signalSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.signalSemaphoreCount)); ++i) {
                 serialize_VkSemaphore(buf, v.pSignalSemaphores[i]);
             }
         }
@@ -3221,14 +3220,14 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->waitSemaphoreCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->waitSemaphoreCount) == 0) {
             out->pWaitSemaphores = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(as_number(out->waitSemaphoreCount)));
+            auto* arr = arena.allocate<VkSemaphore>(static_cast<size_t>(as_number(out->waitSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->waitSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->waitSemaphoreCount)); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
             out->pWaitSemaphores = arr;
@@ -3236,14 +3235,14 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
     }
     if (!r.read_pod(out->bufferBindCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->bufferBindCount) == 0) {
             out->pBufferBinds = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSparseBufferMemoryBindInfo>(static_cast<std::size_t>(as_number(out->bufferBindCount)));
+            auto* arr = arena.allocate<VkSparseBufferMemoryBindInfo>(static_cast<size_t>(as_number(out->bufferBindCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bufferBindCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->bufferBindCount)); ++i) {
                 if (!deserialize_VkSparseBufferMemoryBindInfo(r, &arr[i], arena)) { return false; }
             }
             out->pBufferBinds = arr;
@@ -3251,14 +3250,14 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
     }
     if (!r.read_pod(out->imageOpaqueBindCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->imageOpaqueBindCount) == 0) {
             out->pImageOpaqueBinds = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSparseImageOpaqueMemoryBindInfo>(static_cast<std::size_t>(as_number(out->imageOpaqueBindCount)));
+            auto* arr = arena.allocate<VkSparseImageOpaqueMemoryBindInfo>(static_cast<size_t>(as_number(out->imageOpaqueBindCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->imageOpaqueBindCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->imageOpaqueBindCount)); ++i) {
                 if (!deserialize_VkSparseImageOpaqueMemoryBindInfo(r, &arr[i], arena)) { return false; }
             }
             out->pImageOpaqueBinds = arr;
@@ -3266,14 +3265,14 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
     }
     if (!r.read_pod(out->imageBindCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->imageBindCount) == 0) {
             out->pImageBinds = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSparseImageMemoryBindInfo>(static_cast<std::size_t>(as_number(out->imageBindCount)));
+            auto* arr = arena.allocate<VkSparseImageMemoryBindInfo>(static_cast<size_t>(as_number(out->imageBindCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->imageBindCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->imageBindCount)); ++i) {
                 if (!deserialize_VkSparseImageMemoryBindInfo(r, &arr[i], arena)) { return false; }
             }
             out->pImageBinds = arr;
@@ -3281,14 +3280,14 @@ inline void serialize_VkBindSparseInfo(::av::WireWriter& buf, const VkBindSparse
     }
     if (!r.read_pod(out->signalSemaphoreCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->signalSemaphoreCount) == 0) {
             out->pSignalSemaphores = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(as_number(out->signalSemaphoreCount)));
+            auto* arr = arena.allocate<VkSemaphore>(static_cast<size_t>(as_number(out->signalSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->signalSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->signalSemaphoreCount)); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
             out->pSignalSemaphores = arr;
@@ -3320,10 +3319,10 @@ inline void serialize_VkBlitImageInfo2(::av::WireWriter& buf, const VkBlitImageI
     buf.write_pod(v.dstImageLayout);
     buf.write_pod(v.regionCount);
     {
-        const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
+        const uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkImageBlit2(buf, v.pRegions[i]);
             }
         }
@@ -3341,14 +3340,14 @@ inline void serialize_VkBlitImageInfo2(::av::WireWriter& buf, const VkBlitImageI
     if (!r.read_pod(out->dstImageLayout)) { return false; }
     if (!r.read_pod(out->regionCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageBlit2>(static_cast<std::size_t>(as_number(out->regionCount)));
+            auto* arr = arena.allocate<VkImageBlit2>(static_cast<size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkImageBlit2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -3399,10 +3398,10 @@ inline void serialize_VkBufferCreateInfo(::av::WireWriter& buf, const VkBufferCr
     buf.write_pod(v.sharingMode);
     buf.write_pod(v.queueFamilyIndexCount);
     {
-        const std::uint8_t present = v.pQueueFamilyIndices != nullptr ? 1 : 0;
+        const uint8_t present = v.pQueueFamilyIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.queueFamilyIndexCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.queueFamilyIndexCount)); ++i) {
                 buf.write_pod(v.pQueueFamilyIndices[i]);
             }
         }
@@ -3419,14 +3418,14 @@ inline void serialize_VkBufferCreateInfo(::av::WireWriter& buf, const VkBufferCr
     if (!r.read_pod(out->sharingMode)) { return false; }
     if (!r.read_pod(out->queueFamilyIndexCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->queueFamilyIndexCount) == 0) {
             out->pQueueFamilyIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->queueFamilyIndexCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->queueFamilyIndexCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->queueFamilyIndexCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->queueFamilyIndexCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pQueueFamilyIndices = arr;
@@ -3786,10 +3785,10 @@ inline void serialize_VkCoarseSampleOrderCustomNV(::av::WireWriter& buf, const V
     buf.write_pod(v.sampleCount);
     buf.write_pod(v.sampleLocationCount);
     {
-        const std::uint8_t present = v.pSampleLocations != nullptr ? 1 : 0;
+        const uint8_t present = v.pSampleLocations != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.sampleLocationCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.sampleLocationCount)); ++i) {
                 serialize_VkCoarseSampleLocationNV(buf, v.pSampleLocations[i]);
             }
         }
@@ -3802,14 +3801,14 @@ inline void serialize_VkCoarseSampleOrderCustomNV(::av::WireWriter& buf, const V
     if (!r.read_pod(out->sampleCount)) { return false; }
     if (!r.read_pod(out->sampleLocationCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->sampleLocationCount) == 0) {
             out->pSampleLocations = nullptr;
         } else {
-            auto* arr = arena.allocate<VkCoarseSampleLocationNV>(static_cast<std::size_t>(as_number(out->sampleLocationCount)));
+            auto* arr = arena.allocate<VkCoarseSampleLocationNV>(static_cast<size_t>(as_number(out->sampleLocationCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->sampleLocationCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->sampleLocationCount)); ++i) {
                 if (!deserialize_VkCoarseSampleLocationNV(r, &arr[i], arena)) { return false; }
             }
             out->pSampleLocations = arr;
@@ -3881,9 +3880,9 @@ inline void serialize_VkCommandBufferBeginInfo(::av::WireWriter& buf, const VkCo
     {
         const auto* p = v.pInheritanceInfo;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkCommandBufferInheritanceInfo(buf, *p);
         }
     }
@@ -3895,7 +3894,7 @@ inline void serialize_VkCommandBufferBeginInfo(::av::WireWriter& buf, const VkCo
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->flags)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pInheritanceInfo = nullptr;
@@ -3970,10 +3969,10 @@ inline void serialize_VkCommandBufferInheritanceRenderingInfo(::av::WireWriter& 
     buf.write_pod(v.viewMask);
     buf.write_pod(v.colorAttachmentCount);
     {
-        const std::uint8_t present = v.pColorAttachmentFormats != nullptr ? 1 : 0;
+        const uint8_t present = v.pColorAttachmentFormats != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 buf.write_pod(v.pColorAttachmentFormats[i]);
             }
         }
@@ -3991,14 +3990,14 @@ inline void serialize_VkCommandBufferInheritanceRenderingInfo(::av::WireWriter& 
     if (!r.read_pod(out->viewMask)) { return false; }
     if (!r.read_pod(out->colorAttachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachmentFormats = nullptr;
         } else {
-            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
+            auto* arr = arena.allocate<VkFormat>(static_cast<size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorAttachmentFormats = arr;
@@ -4018,9 +4017,9 @@ inline void serialize_VkCommandBufferInheritanceViewportScissorInfoNV(::av::Wire
     {
         const auto* p = v.pViewportDepths;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkViewport(buf, *p);
         }
     }
@@ -4033,7 +4032,7 @@ inline void serialize_VkCommandBufferInheritanceViewportScissorInfoNV(::av::Wire
     if (!r.read_pod(out->viewportScissor2D)) { return false; }
     if (!r.read_pod(out->viewportDepthCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pViewportDepths = nullptr;
@@ -4106,7 +4105,7 @@ inline void serialize_VkPipelineShaderStageCreateInfo(::av::WireWriter& buf, con
         if (s == nullptr) {
             buf.write_varint(0);
         } else {
-            const std::size_t n = std::strlen(s) + 1u;
+            const size_t n = __builtin_strlen(s) + 1u;
             buf.write_varint(n);
             buf.write(s, n);
         }
@@ -4114,9 +4113,9 @@ inline void serialize_VkPipelineShaderStageCreateInfo(::av::WireWriter& buf, con
     {
         const auto* p = v.pSpecializationInfo;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkSpecializationInfo(buf, *p);
         }
     }
@@ -4130,7 +4129,7 @@ inline void serialize_VkPipelineShaderStageCreateInfo(::av::WireWriter& buf, con
     if (!r.read_pod(out->stage)) { return false; }
     if (!deserialize_VkShaderModule(r, out->module)) { return false; }
     {
-        std::uint64_t n = 0;
+        uint64_t n = 0;
         if (!r.read_varint(n)) { return false; }
         if (n == 0) {
             out->pName = nullptr;
@@ -4139,15 +4138,15 @@ inline void serialize_VkPipelineShaderStageCreateInfo(::av::WireWriter& buf, con
             // length is the guest's and a host API will strcmp what it
             // is handed. A fuzzer found this in vkCreateInstance
             // (feature 042).
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
+            char* s = arena.allocate_chars(static_cast<size_t>(n) + 1u);
             if (s == nullptr) { return false; }
-            if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            if (!r.read(s, static_cast<size_t>(n))) { return false; }
             s[n] = '\0';
             out->pName = s;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pSpecializationInfo = nullptr;
@@ -4278,10 +4277,10 @@ inline void serialize_VkCopyBufferInfo2(::av::WireWriter& buf, const VkCopyBuffe
     serialize_VkBuffer(buf, v.dstBuffer);
     buf.write_pod(v.regionCount);
     {
-        const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
+        const uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkBufferCopy2(buf, v.pRegions[i]);
             }
         }
@@ -4296,14 +4295,14 @@ inline void serialize_VkCopyBufferInfo2(::av::WireWriter& buf, const VkCopyBuffe
     if (!deserialize_VkBuffer(r, out->dstBuffer)) { return false; }
     if (!r.read_pod(out->regionCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBufferCopy2>(static_cast<std::size_t>(as_number(out->regionCount)));
+            auto* arr = arena.allocate<VkBufferCopy2>(static_cast<size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkBufferCopy2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -4320,10 +4319,10 @@ inline void serialize_VkCopyBufferToImageInfo2(::av::WireWriter& buf, const VkCo
     buf.write_pod(v.dstImageLayout);
     buf.write_pod(v.regionCount);
     {
-        const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
+        const uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkBufferImageCopy2(buf, v.pRegions[i]);
             }
         }
@@ -4339,14 +4338,14 @@ inline void serialize_VkCopyBufferToImageInfo2(::av::WireWriter& buf, const VkCo
     if (!r.read_pod(out->dstImageLayout)) { return false; }
     if (!r.read_pod(out->regionCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBufferImageCopy2>(static_cast<std::size_t>(as_number(out->regionCount)));
+            auto* arr = arena.allocate<VkBufferImageCopy2>(static_cast<size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkBufferImageCopy2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -4404,10 +4403,10 @@ inline void serialize_VkCopyImageInfo2(::av::WireWriter& buf, const VkCopyImageI
     buf.write_pod(v.dstImageLayout);
     buf.write_pod(v.regionCount);
     {
-        const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
+        const uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkImageCopy2(buf, v.pRegions[i]);
             }
         }
@@ -4424,14 +4423,14 @@ inline void serialize_VkCopyImageInfo2(::av::WireWriter& buf, const VkCopyImageI
     if (!r.read_pod(out->dstImageLayout)) { return false; }
     if (!r.read_pod(out->regionCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageCopy2>(static_cast<std::size_t>(as_number(out->regionCount)));
+            auto* arr = arena.allocate<VkImageCopy2>(static_cast<size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkImageCopy2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -4448,10 +4447,10 @@ inline void serialize_VkCopyImageToBufferInfo2(::av::WireWriter& buf, const VkCo
     serialize_VkBuffer(buf, v.dstBuffer);
     buf.write_pod(v.regionCount);
     {
-        const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
+        const uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkBufferImageCopy2(buf, v.pRegions[i]);
             }
         }
@@ -4467,14 +4466,14 @@ inline void serialize_VkCopyImageToBufferInfo2(::av::WireWriter& buf, const VkCo
     if (!deserialize_VkBuffer(r, out->dstBuffer)) { return false; }
     if (!r.read_pod(out->regionCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBufferImageCopy2>(static_cast<std::size_t>(as_number(out->regionCount)));
+            auto* arr = arena.allocate<VkBufferImageCopy2>(static_cast<size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkBufferImageCopy2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -4493,10 +4492,10 @@ inline void serialize_VkCopyImageToImageInfo(::av::WireWriter& buf, const VkCopy
     buf.write_pod(v.dstImageLayout);
     buf.write_pod(v.regionCount);
     {
-        const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
+        const uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkImageCopy2(buf, v.pRegions[i]);
             }
         }
@@ -4514,14 +4513,14 @@ inline void serialize_VkCopyImageToImageInfo(::av::WireWriter& buf, const VkCopy
     if (!r.read_pod(out->dstImageLayout)) { return false; }
     if (!r.read_pod(out->regionCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageCopy2>(static_cast<std::size_t>(as_number(out->regionCount)));
+            auto* arr = arena.allocate<VkImageCopy2>(static_cast<size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkImageCopy2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -4538,10 +4537,10 @@ inline void serialize_VkCopyImageToMemoryInfo(::av::WireWriter& buf, const VkCop
     buf.write_pod(v.srcImageLayout);
     buf.write_pod(v.regionCount);
     {
-        const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
+        const uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkImageToMemoryCopy(buf, v.pRegions[i]);
             }
         }
@@ -4557,14 +4556,14 @@ inline void serialize_VkCopyImageToMemoryInfo(::av::WireWriter& buf, const VkCop
     if (!r.read_pod(out->srcImageLayout)) { return false; }
     if (!r.read_pod(out->regionCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageToMemoryCopy>(static_cast<std::size_t>(as_number(out->regionCount)));
+            auto* arr = arena.allocate<VkImageToMemoryCopy>(static_cast<size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkImageToMemoryCopy(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -4598,13 +4597,13 @@ inline void serialize_VkCopyMemoryToImageInfo(::av::WireWriter& buf, const VkCop
     serialize_VkImage(buf, v.dstImage);
     buf.write_pod(v.dstImageLayout);
     buf.write_pod(v.regionCount);
-    for (std::uint32_t i = 0; i < v.regionCount; ++i) {
+    for (uint32_t i = 0; i < v.regionCount; ++i) {
         const VkMemoryToImageCopy& rg = v.pRegions[i];
         serialize_VkMemoryToImageCopy(buf, rg);
-        const std::uint64_t n = (rg.pHostPointer != nullptr)
+        const uint64_t n = (rg.pHostPointer != nullptr)
             ? host_image_copy_bytes(v.dstImage, rg) : 0;
         buf.write_varint(n);
-        if (n != 0) { buf.write(rg.pHostPointer, static_cast<std::size_t>(n)); }
+        if (n != 0) { buf.write(rg.pHostPointer, static_cast<size_t>(n)); }
     }
 }
 
@@ -4617,14 +4616,14 @@ inline void serialize_VkCopyMemoryToImageInfo(::av::WireWriter& buf, const VkCop
     if (!r.read_pod(out->regionCount)) { return false; }
     auto* regions = arena.allocate<VkMemoryToImageCopy>(out->regionCount);
     if (regions == nullptr) { return false; }
-    for (std::uint32_t i = 0; i < out->regionCount; ++i) {
+    for (uint32_t i = 0; i < out->regionCount; ++i) {
         if (!deserialize_VkMemoryToImageCopy(r, &regions[i], arena)) { return false; }
-        std::uint64_t n = 0;
+        uint64_t n = 0;
         if (!r.read_varint(n)) { return false; }
         if (n == 0) { regions[i].pHostPointer = nullptr; continue; }
-        char* blob = arena.allocate_chars(static_cast<std::size_t>(n));
+        char* blob = arena.allocate_chars(static_cast<size_t>(n));
         if (blob == nullptr) { return false; }
-        if (!r.read(blob, static_cast<std::size_t>(n))) { return false; }
+        if (!r.read(blob, static_cast<size_t>(n))) { return false; }
         regions[i].pHostPointer = blob;
     }
     out->pRegions = regions;
@@ -4685,7 +4684,7 @@ inline void serialize_VkDebugUtilsObjectNameInfoEXT(::av::WireWriter& buf, const
         if (s == nullptr) {
             buf.write_varint(0);
         } else {
-            const std::size_t n = std::strlen(s) + 1u;
+            const size_t n = __builtin_strlen(s) + 1u;
             buf.write_varint(n);
             buf.write(s, n);
         }
@@ -4699,7 +4698,7 @@ inline void serialize_VkDebugUtilsObjectNameInfoEXT(::av::WireWriter& buf, const
     if (!r.read_pod(out->objectType)) { return false; }
     if (!r.read_pod(out->objectHandle)) { return false; }
     {
-        std::uint64_t n = 0;
+        uint64_t n = 0;
         if (!r.read_varint(n)) { return false; }
         if (n == 0) {
             out->pObjectName = nullptr;
@@ -4708,9 +4707,9 @@ inline void serialize_VkDebugUtilsObjectNameInfoEXT(::av::WireWriter& buf, const
             // length is the guest's and a host API will strcmp what it
             // is handed. A fuzzer found this in vkCreateInstance
             // (feature 042).
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
+            char* s = arena.allocate_chars(static_cast<size_t>(n) + 1u);
             if (s == nullptr) { return false; }
-            if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            if (!r.read(s, static_cast<size_t>(n))) { return false; }
             s[n] = '\0';
             out->pObjectName = s;
         }
@@ -4768,30 +4767,30 @@ inline void serialize_VkDependencyInfo(::av::WireWriter& buf, const VkDependency
     buf.write_pod(v.dependencyFlags);
     buf.write_pod(v.memoryBarrierCount);
     {
-        const std::uint8_t present = v.pMemoryBarriers != nullptr ? 1 : 0;
+        const uint8_t present = v.pMemoryBarriers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.memoryBarrierCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.memoryBarrierCount)); ++i) {
                 serialize_VkMemoryBarrier2(buf, v.pMemoryBarriers[i]);
             }
         }
     }
     buf.write_pod(v.bufferMemoryBarrierCount);
     {
-        const std::uint8_t present = v.pBufferMemoryBarriers != nullptr ? 1 : 0;
+        const uint8_t present = v.pBufferMemoryBarriers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bufferMemoryBarrierCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.bufferMemoryBarrierCount)); ++i) {
                 serialize_VkBufferMemoryBarrier2(buf, v.pBufferMemoryBarriers[i]);
             }
         }
     }
     buf.write_pod(v.imageMemoryBarrierCount);
     {
-        const std::uint8_t present = v.pImageMemoryBarriers != nullptr ? 1 : 0;
+        const uint8_t present = v.pImageMemoryBarriers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.imageMemoryBarrierCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.imageMemoryBarrierCount)); ++i) {
                 serialize_VkImageMemoryBarrier2(buf, v.pImageMemoryBarriers[i]);
             }
         }
@@ -4805,14 +4804,14 @@ inline void serialize_VkDependencyInfo(::av::WireWriter& buf, const VkDependency
     if (!r.read_pod(out->dependencyFlags)) { return false; }
     if (!r.read_pod(out->memoryBarrierCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->memoryBarrierCount) == 0) {
             out->pMemoryBarriers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkMemoryBarrier2>(static_cast<std::size_t>(as_number(out->memoryBarrierCount)));
+            auto* arr = arena.allocate<VkMemoryBarrier2>(static_cast<size_t>(as_number(out->memoryBarrierCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->memoryBarrierCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->memoryBarrierCount)); ++i) {
                 if (!deserialize_VkMemoryBarrier2(r, &arr[i], arena)) { return false; }
             }
             out->pMemoryBarriers = arr;
@@ -4820,14 +4819,14 @@ inline void serialize_VkDependencyInfo(::av::WireWriter& buf, const VkDependency
     }
     if (!r.read_pod(out->bufferMemoryBarrierCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->bufferMemoryBarrierCount) == 0) {
             out->pBufferMemoryBarriers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBufferMemoryBarrier2>(static_cast<std::size_t>(as_number(out->bufferMemoryBarrierCount)));
+            auto* arr = arena.allocate<VkBufferMemoryBarrier2>(static_cast<size_t>(as_number(out->bufferMemoryBarrierCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bufferMemoryBarrierCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->bufferMemoryBarrierCount)); ++i) {
                 if (!deserialize_VkBufferMemoryBarrier2(r, &arr[i], arena)) { return false; }
             }
             out->pBufferMemoryBarriers = arr;
@@ -4835,14 +4834,14 @@ inline void serialize_VkDependencyInfo(::av::WireWriter& buf, const VkDependency
     }
     if (!r.read_pod(out->imageMemoryBarrierCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->imageMemoryBarrierCount) == 0) {
             out->pImageMemoryBarriers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageMemoryBarrier2>(static_cast<std::size_t>(as_number(out->imageMemoryBarrierCount)));
+            auto* arr = arena.allocate<VkImageMemoryBarrier2>(static_cast<size_t>(as_number(out->imageMemoryBarrierCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->imageMemoryBarrierCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->imageMemoryBarrierCount)); ++i) {
                 if (!deserialize_VkImageMemoryBarrier2(r, &arr[i], arena)) { return false; }
             }
             out->pImageMemoryBarriers = arr;
@@ -4914,10 +4913,10 @@ inline void serialize_VkDescriptorPoolCreateInfo(::av::WireWriter& buf, const Vk
     buf.write_pod(v.maxSets);
     buf.write_pod(v.poolSizeCount);
     {
-        const std::uint8_t present = v.pPoolSizes != nullptr ? 1 : 0;
+        const uint8_t present = v.pPoolSizes != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.poolSizeCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.poolSizeCount)); ++i) {
                 serialize_VkDescriptorPoolSize(buf, v.pPoolSizes[i]);
             }
         }
@@ -4932,14 +4931,14 @@ inline void serialize_VkDescriptorPoolCreateInfo(::av::WireWriter& buf, const Vk
     if (!r.read_pod(out->maxSets)) { return false; }
     if (!r.read_pod(out->poolSizeCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->poolSizeCount) == 0) {
             out->pPoolSizes = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorPoolSize>(static_cast<std::size_t>(as_number(out->poolSizeCount)));
+            auto* arr = arena.allocate<VkDescriptorPoolSize>(static_cast<size_t>(as_number(out->poolSizeCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->poolSizeCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->poolSizeCount)); ++i) {
                 if (!deserialize_VkDescriptorPoolSize(r, &arr[i], arena)) { return false; }
             }
             out->pPoolSizes = arr;
@@ -4980,10 +4979,10 @@ inline void serialize_VkDescriptorSetAllocateInfo(::av::WireWriter& buf, const V
     serialize_VkDescriptorPool(buf, v.descriptorPool);
     buf.write_pod(v.descriptorSetCount);
     {
-        const std::uint8_t present = v.pSetLayouts != nullptr ? 1 : 0;
+        const uint8_t present = v.pSetLayouts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorSetCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.descriptorSetCount)); ++i) {
                 serialize_VkDescriptorSetLayout(buf, v.pSetLayouts[i]);
             }
         }
@@ -4997,14 +4996,14 @@ inline void serialize_VkDescriptorSetAllocateInfo(::av::WireWriter& buf, const V
     if (!deserialize_VkDescriptorPool(r, out->descriptorPool)) { return false; }
     if (!r.read_pod(out->descriptorSetCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->descriptorSetCount) == 0) {
             out->pSetLayouts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<std::size_t>(as_number(out->descriptorSetCount)));
+            auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<size_t>(as_number(out->descriptorSetCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorSetCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->descriptorSetCount)); ++i) {
                 if (!deserialize_VkDescriptorSetLayout(r, arr[i])) { return false; }
             }
             out->pSetLayouts = arr;
@@ -5019,10 +5018,10 @@ inline void serialize_VkDescriptorSetLayoutBinding(::av::WireWriter& buf, const 
     buf.write_pod(v.descriptorCount);
     buf.write_pod(v.stageFlags);
     {
-        const std::uint8_t present = v.pImmutableSamplers != nullptr ? 1 : 0;
+        const uint8_t present = v.pImmutableSamplers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.descriptorCount)); ++i) {
                 serialize_VkSampler(buf, v.pImmutableSamplers[i]);
             }
         }
@@ -5036,14 +5035,14 @@ inline void serialize_VkDescriptorSetLayoutBinding(::av::WireWriter& buf, const 
     if (!r.read_pod(out->descriptorCount)) { return false; }
     if (!r.read_pod(out->stageFlags)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->descriptorCount) == 0) {
             out->pImmutableSamplers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSampler>(static_cast<std::size_t>(as_number(out->descriptorCount)));
+            auto* arr = arena.allocate<VkSampler>(static_cast<size_t>(as_number(out->descriptorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->descriptorCount)); ++i) {
                 if (!deserialize_VkSampler(r, arr[i])) { return false; }
             }
             out->pImmutableSamplers = arr;
@@ -5057,10 +5056,10 @@ inline void serialize_VkDescriptorSetLayoutBindingFlagsCreateInfo(::av::WireWrit
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.bindingCount);
     {
-        const std::uint8_t present = v.pBindingFlags != nullptr ? 1 : 0;
+        const uint8_t present = v.pBindingFlags != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bindingCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.bindingCount)); ++i) {
                 buf.write_pod(v.pBindingFlags[i]);
             }
         }
@@ -5073,14 +5072,14 @@ inline void serialize_VkDescriptorSetLayoutBindingFlagsCreateInfo(::av::WireWrit
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->bindingCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->bindingCount) == 0) {
             out->pBindingFlags = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorBindingFlags>(static_cast<std::size_t>(as_number(out->bindingCount)));
+            auto* arr = arena.allocate<VkDescriptorBindingFlags>(static_cast<size_t>(as_number(out->bindingCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bindingCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->bindingCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pBindingFlags = arr;
@@ -5095,10 +5094,10 @@ inline void serialize_VkDescriptorSetLayoutCreateInfo(::av::WireWriter& buf, con
     buf.write_pod(v.flags);
     buf.write_pod(v.bindingCount);
     {
-        const std::uint8_t present = v.pBindings != nullptr ? 1 : 0;
+        const uint8_t present = v.pBindings != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bindingCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.bindingCount)); ++i) {
                 serialize_VkDescriptorSetLayoutBinding(buf, v.pBindings[i]);
             }
         }
@@ -5112,14 +5111,14 @@ inline void serialize_VkDescriptorSetLayoutCreateInfo(::av::WireWriter& buf, con
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->bindingCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->bindingCount) == 0) {
             out->pBindings = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorSetLayoutBinding>(static_cast<std::size_t>(as_number(out->bindingCount)));
+            auto* arr = arena.allocate<VkDescriptorSetLayoutBinding>(static_cast<size_t>(as_number(out->bindingCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bindingCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->bindingCount)); ++i) {
                 if (!deserialize_VkDescriptorSetLayoutBinding(r, &arr[i], arena)) { return false; }
             }
             out->pBindings = arr;
@@ -5147,10 +5146,10 @@ inline void serialize_VkDescriptorSetVariableDescriptorCountAllocateInfo(::av::W
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.descriptorSetCount);
     {
-        const std::uint8_t present = v.pDescriptorCounts != nullptr ? 1 : 0;
+        const uint8_t present = v.pDescriptorCounts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorSetCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.descriptorSetCount)); ++i) {
                 buf.write_pod(v.pDescriptorCounts[i]);
             }
         }
@@ -5163,14 +5162,14 @@ inline void serialize_VkDescriptorSetVariableDescriptorCountAllocateInfo(::av::W
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->descriptorSetCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->descriptorSetCount) == 0) {
             out->pDescriptorCounts = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->descriptorSetCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->descriptorSetCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorSetCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->descriptorSetCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDescriptorCounts = arr;
@@ -5199,10 +5198,10 @@ inline void serialize_VkDescriptorUpdateTemplateCreateInfo(::av::WireWriter& buf
     buf.write_pod(v.flags);
     buf.write_pod(v.descriptorUpdateEntryCount);
     {
-        const std::uint8_t present = v.pDescriptorUpdateEntries != nullptr ? 1 : 0;
+        const uint8_t present = v.pDescriptorUpdateEntries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorUpdateEntryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.descriptorUpdateEntryCount)); ++i) {
                 serialize_VkDescriptorUpdateTemplateEntry(buf, v.pDescriptorUpdateEntries[i]);
             }
         }
@@ -5221,14 +5220,14 @@ inline void serialize_VkDescriptorUpdateTemplateCreateInfo(::av::WireWriter& buf
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->descriptorUpdateEntryCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->descriptorUpdateEntryCount) == 0) {
             out->pDescriptorUpdateEntries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorUpdateTemplateEntry>(static_cast<std::size_t>(as_number(out->descriptorUpdateEntryCount)));
+            auto* arr = arena.allocate<VkDescriptorUpdateTemplateEntry>(static_cast<size_t>(as_number(out->descriptorUpdateEntryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorUpdateEntryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->descriptorUpdateEntryCount)); ++i) {
                 if (!deserialize_VkDescriptorUpdateTemplateEntry(r, &arr[i], arena)) { return false; }
             }
             out->pDescriptorUpdateEntries = arr;
@@ -5247,8 +5246,8 @@ inline void serialize_VkDescriptorUpdateTemplateEntry(::av::WireWriter& buf, con
     buf.write_pod(v.dstArrayElement);
     buf.write_pod(v.descriptorCount);
     buf.write_pod(v.descriptorType);
-    buf.write_pod<std::uint64_t>(v.offset);
-    buf.write_pod<std::uint64_t>(v.stride);
+    buf.write_pod<uint64_t>(v.offset);
+    buf.write_pod<uint64_t>(v.stride);
 }
 
 [[nodiscard]] inline bool deserialize_VkDescriptorUpdateTemplateEntry(::av::WireReader& r, VkDescriptorUpdateTemplateEntry* out, ::av::WireArena& arena) {
@@ -5258,12 +5257,12 @@ inline void serialize_VkDescriptorUpdateTemplateEntry(::av::WireWriter& buf, con
     if (!r.read_pod(out->descriptorCount)) { return false; }
     if (!r.read_pod(out->descriptorType)) { return false; }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->offset = static_cast<decltype(out->offset)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->stride = static_cast<decltype(out->stride)>(rvk_wide);
     }
@@ -5276,9 +5275,9 @@ inline void serialize_VkDeviceBufferMemoryRequirements(::av::WireWriter& buf, co
     {
         const auto* p = v.pCreateInfo;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkBufferCreateInfo(buf, *p);
         }
     }
@@ -5289,7 +5288,7 @@ inline void serialize_VkDeviceBufferMemoryRequirements(::av::WireWriter& buf, co
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pCreateInfo = nullptr;
@@ -5309,25 +5308,25 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
     buf.write_pod(v.flags);
     buf.write_pod(v.queueCreateInfoCount);
     {
-        const std::uint8_t present = v.pQueueCreateInfos != nullptr ? 1 : 0;
+        const uint8_t present = v.pQueueCreateInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.queueCreateInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.queueCreateInfoCount)); ++i) {
                 serialize_VkDeviceQueueCreateInfo(buf, v.pQueueCreateInfos[i]);
             }
         }
     }
     buf.write_pod(v.enabledLayerCount);
     {
-        const std::uint8_t present = v.ppEnabledLayerNames != nullptr ? 1 : 0;
+        const uint8_t present = v.ppEnabledLayerNames != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.enabledLayerCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.enabledLayerCount)); ++i) {
                 const char* s = v.ppEnabledLayerNames[i];
                 if (s == nullptr) {
                     buf.write_varint(0);
                 } else {
-                    const std::size_t n = std::strlen(s) + 1u;
+                    const size_t n = __builtin_strlen(s) + 1u;
                     buf.write_varint(n);
                     buf.write(s, n);
                 }
@@ -5336,15 +5335,15 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
     }
     buf.write_pod(v.enabledExtensionCount);
     {
-        const std::uint8_t present = v.ppEnabledExtensionNames != nullptr ? 1 : 0;
+        const uint8_t present = v.ppEnabledExtensionNames != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.enabledExtensionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.enabledExtensionCount)); ++i) {
                 const char* s = v.ppEnabledExtensionNames[i];
                 if (s == nullptr) {
                     buf.write_varint(0);
                 } else {
-                    const std::size_t n = std::strlen(s) + 1u;
+                    const size_t n = __builtin_strlen(s) + 1u;
                     buf.write_varint(n);
                     buf.write(s, n);
                 }
@@ -5354,9 +5353,9 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
     {
         const auto* p = v.pEnabledFeatures;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPhysicalDeviceFeatures(buf, *p);
         }
     }
@@ -5369,14 +5368,14 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->queueCreateInfoCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->queueCreateInfoCount) == 0) {
             out->pQueueCreateInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDeviceQueueCreateInfo>(static_cast<std::size_t>(as_number(out->queueCreateInfoCount)));
+            auto* arr = arena.allocate<VkDeviceQueueCreateInfo>(static_cast<size_t>(as_number(out->queueCreateInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->queueCreateInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->queueCreateInfoCount)); ++i) {
                 if (!deserialize_VkDeviceQueueCreateInfo(r, &arr[i], arena)) { return false; }
             }
             out->pQueueCreateInfos = arr;
@@ -5384,15 +5383,15 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
     }
     if (!r.read_pod(out->enabledLayerCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->enabledLayerCount) == 0) {
             out->ppEnabledLayerNames = nullptr;
         } else {
-            auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(as_number(out->enabledLayerCount)));
+            auto** arr = arena.allocate<const char*>(static_cast<size_t>(as_number(out->enabledLayerCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->enabledLayerCount)); ++i) {
-                std::uint64_t n = 0;
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->enabledLayerCount)); ++i) {
+                uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
                 if (n == 0) {
                     // An empty name, not a null one: an element of a
@@ -5405,9 +5404,9 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
                     empty[0] = '\0';
                     arr[i] = empty;
                 } else {
-                    char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
+                    char* s = arena.allocate_chars(static_cast<size_t>(n) + 1u);
                     if (s == nullptr) { return false; }
-                    if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+                    if (!r.read(s, static_cast<size_t>(n))) { return false; }
                     s[n] = '\0';
                     arr[i] = s;
                 }
@@ -5417,15 +5416,15 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
     }
     if (!r.read_pod(out->enabledExtensionCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->enabledExtensionCount) == 0) {
             out->ppEnabledExtensionNames = nullptr;
         } else {
-            auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(as_number(out->enabledExtensionCount)));
+            auto** arr = arena.allocate<const char*>(static_cast<size_t>(as_number(out->enabledExtensionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->enabledExtensionCount)); ++i) {
-                std::uint64_t n = 0;
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->enabledExtensionCount)); ++i) {
+                uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
                 if (n == 0) {
                     // An empty name, not a null one: an element of a
@@ -5438,9 +5437,9 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
                     empty[0] = '\0';
                     arr[i] = empty;
                 } else {
-                    char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
+                    char* s = arena.allocate_chars(static_cast<size_t>(n) + 1u);
                     if (s == nullptr) { return false; }
-                    if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+                    if (!r.read(s, static_cast<size_t>(n))) { return false; }
                     s[n] = '\0';
                     arr[i] = s;
                 }
@@ -5449,7 +5448,7 @@ inline void serialize_VkDeviceCreateInfo(::av::WireWriter& buf, const VkDeviceCr
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pEnabledFeatures = nullptr;
@@ -5532,10 +5531,10 @@ inline void serialize_VkDeviceGroupDeviceCreateInfo(::av::WireWriter& buf, const
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.physicalDeviceCount);
     {
-        const std::uint8_t present = v.pPhysicalDevices != nullptr ? 1 : 0;
+        const uint8_t present = v.pPhysicalDevices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.physicalDeviceCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.physicalDeviceCount)); ++i) {
                 serialize_VkPhysicalDevice(buf, v.pPhysicalDevices[i]);
             }
         }
@@ -5548,14 +5547,14 @@ inline void serialize_VkDeviceGroupDeviceCreateInfo(::av::WireWriter& buf, const
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->physicalDeviceCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->physicalDeviceCount) == 0) {
             out->pPhysicalDevices = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPhysicalDevice>(static_cast<std::size_t>(as_number(out->physicalDeviceCount)));
+            auto* arr = arena.allocate<VkPhysicalDevice>(static_cast<size_t>(as_number(out->physicalDeviceCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->physicalDeviceCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->physicalDeviceCount)); ++i) {
                 if (!deserialize_VkPhysicalDevice(r, arr[i])) { return false; }
             }
             out->pPhysicalDevices = arr;
@@ -5586,10 +5585,10 @@ inline void serialize_VkDeviceGroupRenderPassBeginInfo(::av::WireWriter& buf, co
     buf.write_pod(v.deviceMask);
     buf.write_pod(v.deviceRenderAreaCount);
     {
-        const std::uint8_t present = v.pDeviceRenderAreas != nullptr ? 1 : 0;
+        const uint8_t present = v.pDeviceRenderAreas != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.deviceRenderAreaCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.deviceRenderAreaCount)); ++i) {
                 serialize_VkRect2D(buf, v.pDeviceRenderAreas[i]);
             }
         }
@@ -5603,14 +5602,14 @@ inline void serialize_VkDeviceGroupRenderPassBeginInfo(::av::WireWriter& buf, co
     if (!r.read_pod(out->deviceMask)) { return false; }
     if (!r.read_pod(out->deviceRenderAreaCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->deviceRenderAreaCount) == 0) {
             out->pDeviceRenderAreas = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(as_number(out->deviceRenderAreaCount)));
+            auto* arr = arena.allocate<VkRect2D>(static_cast<size_t>(as_number(out->deviceRenderAreaCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->deviceRenderAreaCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->deviceRenderAreaCount)); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
             out->pDeviceRenderAreas = arr;
@@ -5624,30 +5623,30 @@ inline void serialize_VkDeviceGroupSubmitInfo(::av::WireWriter& buf, const VkDev
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.waitSemaphoreCount);
     {
-        const std::uint8_t present = v.pWaitSemaphoreDeviceIndices != nullptr ? 1 : 0;
+        const uint8_t present = v.pWaitSemaphoreDeviceIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.waitSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.waitSemaphoreCount)); ++i) {
                 buf.write_pod(v.pWaitSemaphoreDeviceIndices[i]);
             }
         }
     }
     buf.write_pod(v.commandBufferCount);
     {
-        const std::uint8_t present = v.pCommandBufferDeviceMasks != nullptr ? 1 : 0;
+        const uint8_t present = v.pCommandBufferDeviceMasks != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.commandBufferCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.commandBufferCount)); ++i) {
                 buf.write_pod(v.pCommandBufferDeviceMasks[i]);
             }
         }
     }
     buf.write_pod(v.signalSemaphoreCount);
     {
-        const std::uint8_t present = v.pSignalSemaphoreDeviceIndices != nullptr ? 1 : 0;
+        const uint8_t present = v.pSignalSemaphoreDeviceIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.signalSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.signalSemaphoreCount)); ++i) {
                 buf.write_pod(v.pSignalSemaphoreDeviceIndices[i]);
             }
         }
@@ -5660,14 +5659,14 @@ inline void serialize_VkDeviceGroupSubmitInfo(::av::WireWriter& buf, const VkDev
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->waitSemaphoreCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->waitSemaphoreCount) == 0) {
             out->pWaitSemaphoreDeviceIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->waitSemaphoreCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->waitSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->waitSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->waitSemaphoreCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pWaitSemaphoreDeviceIndices = arr;
@@ -5675,14 +5674,14 @@ inline void serialize_VkDeviceGroupSubmitInfo(::av::WireWriter& buf, const VkDev
     }
     if (!r.read_pod(out->commandBufferCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->commandBufferCount) == 0) {
             out->pCommandBufferDeviceMasks = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->commandBufferCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->commandBufferCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->commandBufferCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->commandBufferCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCommandBufferDeviceMasks = arr;
@@ -5690,14 +5689,14 @@ inline void serialize_VkDeviceGroupSubmitInfo(::av::WireWriter& buf, const VkDev
     }
     if (!r.read_pod(out->signalSemaphoreCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->signalSemaphoreCount) == 0) {
             out->pSignalSemaphoreDeviceIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->signalSemaphoreCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->signalSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->signalSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->signalSemaphoreCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pSignalSemaphoreDeviceIndices = arr;
@@ -5712,9 +5711,9 @@ inline void serialize_VkDeviceImageMemoryRequirements(::av::WireWriter& buf, con
     {
         const auto* p = v.pCreateInfo;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkImageCreateInfo(buf, *p);
         }
     }
@@ -5726,7 +5725,7 @@ inline void serialize_VkDeviceImageMemoryRequirements(::av::WireWriter& buf, con
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pCreateInfo = nullptr;
@@ -5747,18 +5746,18 @@ inline void serialize_VkDeviceImageSubresourceInfo(::av::WireWriter& buf, const 
     {
         const auto* p = v.pCreateInfo;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkImageCreateInfo(buf, *p);
         }
     }
     {
         const auto* p = v.pSubresource;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkImageSubresource2(buf, *p);
         }
     }
@@ -5769,7 +5768,7 @@ inline void serialize_VkDeviceImageSubresourceInfo(::av::WireWriter& buf, const 
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pCreateInfo = nullptr;
@@ -5781,7 +5780,7 @@ inline void serialize_VkDeviceImageSubresourceInfo(::av::WireWriter& buf, const 
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pSubresource = nullptr;
@@ -5858,10 +5857,10 @@ inline void serialize_VkDeviceQueueCreateInfo(::av::WireWriter& buf, const VkDev
     buf.write_pod(v.queueFamilyIndex);
     buf.write_pod(v.queueCount);
     {
-        const std::uint8_t present = v.pQueuePriorities != nullptr ? 1 : 0;
+        const uint8_t present = v.pQueuePriorities != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.queueCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.queueCount)); ++i) {
                 buf.write_pod(v.pQueuePriorities[i]);
             }
         }
@@ -5876,14 +5875,14 @@ inline void serialize_VkDeviceQueueCreateInfo(::av::WireWriter& buf, const VkDev
     if (!r.read_pod(out->queueFamilyIndex)) { return false; }
     if (!r.read_pod(out->queueCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->queueCount) == 0) {
             out->pQueuePriorities = nullptr;
         } else {
-            auto* arr = arena.allocate<float>(static_cast<std::size_t>(as_number(out->queueCount)));
+            auto* arr = arena.allocate<float>(static_cast<size_t>(as_number(out->queueCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->queueCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->queueCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pQueuePriorities = arr;
@@ -5960,10 +5959,10 @@ inline void serialize_VkDirectDriverLoadingListLUNARG(::av::WireWriter& buf, con
     buf.write_pod(v.mode);
     buf.write_pod(v.driverCount);
     {
-        const std::uint8_t present = v.pDrivers != nullptr ? 1 : 0;
+        const uint8_t present = v.pDrivers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.driverCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.driverCount)); ++i) {
                 serialize_VkDirectDriverLoadingInfoLUNARG(buf, v.pDrivers[i]);
             }
         }
@@ -5977,14 +5976,14 @@ inline void serialize_VkDirectDriverLoadingListLUNARG(::av::WireWriter& buf, con
     if (!r.read_pod(out->mode)) { return false; }
     if (!r.read_pod(out->driverCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->driverCount) == 0) {
             out->pDrivers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDirectDriverLoadingInfoLUNARG>(static_cast<std::size_t>(as_number(out->driverCount)));
+            auto* arr = arena.allocate<VkDirectDriverLoadingInfoLUNARG>(static_cast<size_t>(as_number(out->driverCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->driverCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->driverCount)); ++i) {
                 if (!deserialize_VkDirectDriverLoadingInfoLUNARG(r, &arr[i], arena)) { return false; }
             }
             out->pDrivers = arr;
@@ -6026,10 +6025,10 @@ inline void serialize_VkDrmFormatModifierPropertiesList2EXT(::av::WireWriter& bu
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.drmFormatModifierCount);
     {
-        const std::uint8_t present = v.pDrmFormatModifierProperties != nullptr ? 1 : 0;
+        const uint8_t present = v.pDrmFormatModifierProperties != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.drmFormatModifierCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.drmFormatModifierCount)); ++i) {
                 serialize_VkDrmFormatModifierProperties2EXT(buf, v.pDrmFormatModifierProperties[i]);
             }
         }
@@ -6042,14 +6041,14 @@ inline void serialize_VkDrmFormatModifierPropertiesList2EXT(::av::WireWriter& bu
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->drmFormatModifierCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->drmFormatModifierCount) == 0) {
             out->pDrmFormatModifierProperties = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDrmFormatModifierProperties2EXT>(static_cast<std::size_t>(as_number(out->drmFormatModifierCount)));
+            auto* arr = arena.allocate<VkDrmFormatModifierProperties2EXT>(static_cast<size_t>(as_number(out->drmFormatModifierCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->drmFormatModifierCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->drmFormatModifierCount)); ++i) {
                 if (!deserialize_VkDrmFormatModifierProperties2EXT(r, &arr[i], arena)) { return false; }
             }
             out->pDrmFormatModifierProperties = arr;
@@ -6063,10 +6062,10 @@ inline void serialize_VkDrmFormatModifierPropertiesListEXT(::av::WireWriter& buf
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.drmFormatModifierCount);
     {
-        const std::uint8_t present = v.pDrmFormatModifierProperties != nullptr ? 1 : 0;
+        const uint8_t present = v.pDrmFormatModifierProperties != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.drmFormatModifierCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.drmFormatModifierCount)); ++i) {
                 serialize_VkDrmFormatModifierPropertiesEXT(buf, v.pDrmFormatModifierProperties[i]);
             }
         }
@@ -6079,14 +6078,14 @@ inline void serialize_VkDrmFormatModifierPropertiesListEXT(::av::WireWriter& buf
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->drmFormatModifierCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->drmFormatModifierCount) == 0) {
             out->pDrmFormatModifierProperties = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDrmFormatModifierPropertiesEXT>(static_cast<std::size_t>(as_number(out->drmFormatModifierCount)));
+            auto* arr = arena.allocate<VkDrmFormatModifierPropertiesEXT>(static_cast<size_t>(as_number(out->drmFormatModifierCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->drmFormatModifierCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->drmFormatModifierCount)); ++i) {
                 if (!deserialize_VkDrmFormatModifierPropertiesEXT(r, &arr[i], arena)) { return false; }
             }
             out->pDrmFormatModifierProperties = arr;
@@ -6409,9 +6408,9 @@ inline void serialize_VkFragmentShadingRateAttachmentInfoKHR(::av::WireWriter& b
     {
         const auto* p = v.pFragmentShadingRateAttachment;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkAttachmentReference2(buf, *p);
         }
     }
@@ -6423,7 +6422,7 @@ inline void serialize_VkFragmentShadingRateAttachmentInfoKHR(::av::WireWriter& b
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pFragmentShadingRateAttachment = nullptr;
@@ -6445,31 +6444,31 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
     buf.write_pod(v.frameID);
     buf.write_pod(v.imageCount);
     {
-        const std::uint8_t present = v.pImages != nullptr ? 1 : 0;
+        const uint8_t present = v.pImages != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.imageCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.imageCount)); ++i) {
                 serialize_VkImage(buf, v.pImages[i]);
             }
         }
     }
     buf.write_pod(v.bufferCount);
     {
-        const std::uint8_t present = v.pBuffers != nullptr ? 1 : 0;
+        const uint8_t present = v.pBuffers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bufferCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.bufferCount)); ++i) {
                 serialize_VkBuffer(buf, v.pBuffers[i]);
             }
         }
     }
     buf.write_pod(v.tagName);
-    buf.write_pod<std::uint64_t>(v.tagSize);
+    buf.write_pod<uint64_t>(v.tagSize);
     {
-        const std::uint8_t present = v.pTag != nullptr ? 1 : 0;
+        const uint8_t present = v.pTag != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present && as_number(v.tagSize) != 0) {
-            buf.write(v.pTag, static_cast<std::size_t>(as_number(v.tagSize)));
+            buf.write(v.pTag, static_cast<size_t>(as_number(v.tagSize)));
         }
     }
 }
@@ -6482,14 +6481,14 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
     if (!r.read_pod(out->frameID)) { return false; }
     if (!r.read_pod(out->imageCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->imageCount) == 0) {
             out->pImages = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImage>(static_cast<std::size_t>(as_number(out->imageCount)));
+            auto* arr = arena.allocate<VkImage>(static_cast<size_t>(as_number(out->imageCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->imageCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->imageCount)); ++i) {
                 if (!deserialize_VkImage(r, arr[i])) { return false; }
             }
             out->pImages = arr;
@@ -6497,14 +6496,14 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
     }
     if (!r.read_pod(out->bufferCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->bufferCount) == 0) {
             out->pBuffers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBuffer>(static_cast<std::size_t>(as_number(out->bufferCount)));
+            auto* arr = arena.allocate<VkBuffer>(static_cast<size_t>(as_number(out->bufferCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bufferCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->bufferCount)); ++i) {
                 if (!deserialize_VkBuffer(r, arr[i])) { return false; }
             }
             out->pBuffers = arr;
@@ -6512,19 +6511,19 @@ inline void serialize_VkFrameBoundaryEXT(::av::WireWriter& buf, const VkFrameBou
     }
     if (!r.read_pod(out->tagName)) { return false; }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->tagSize = static_cast<decltype(out->tagSize)>(rvk_wide);
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->tagSize) == 0) {
             out->pTag = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->tagSize)));
+            char* blob = arena.allocate_chars(static_cast<size_t>(as_number(out->tagSize)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(as_number(out->tagSize)))) { return false; }
+            if (!r.read(blob, static_cast<size_t>(as_number(out->tagSize)))) { return false; }
             out->pTag = blob;
         }
     }
@@ -6541,10 +6540,10 @@ inline void serialize_VkFramebufferAttachmentImageInfo(::av::WireWriter& buf, co
     buf.write_pod(v.layerCount);
     buf.write_pod(v.viewFormatCount);
     {
-        const std::uint8_t present = v.pViewFormats != nullptr ? 1 : 0;
+        const uint8_t present = v.pViewFormats != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.viewFormatCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.viewFormatCount)); ++i) {
                 buf.write_pod(v.pViewFormats[i]);
             }
         }
@@ -6562,14 +6561,14 @@ inline void serialize_VkFramebufferAttachmentImageInfo(::av::WireWriter& buf, co
     if (!r.read_pod(out->layerCount)) { return false; }
     if (!r.read_pod(out->viewFormatCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->viewFormatCount) == 0) {
             out->pViewFormats = nullptr;
         } else {
-            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(as_number(out->viewFormatCount)));
+            auto* arr = arena.allocate<VkFormat>(static_cast<size_t>(as_number(out->viewFormatCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->viewFormatCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->viewFormatCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pViewFormats = arr;
@@ -6583,10 +6582,10 @@ inline void serialize_VkFramebufferAttachmentsCreateInfo(::av::WireWriter& buf, 
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.attachmentImageInfoCount);
     {
-        const std::uint8_t present = v.pAttachmentImageInfos != nullptr ? 1 : 0;
+        const uint8_t present = v.pAttachmentImageInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentImageInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.attachmentImageInfoCount)); ++i) {
                 serialize_VkFramebufferAttachmentImageInfo(buf, v.pAttachmentImageInfos[i]);
             }
         }
@@ -6599,14 +6598,14 @@ inline void serialize_VkFramebufferAttachmentsCreateInfo(::av::WireWriter& buf, 
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->attachmentImageInfoCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->attachmentImageInfoCount) == 0) {
             out->pAttachmentImageInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkFramebufferAttachmentImageInfo>(static_cast<std::size_t>(as_number(out->attachmentImageInfoCount)));
+            auto* arr = arena.allocate<VkFramebufferAttachmentImageInfo>(static_cast<size_t>(as_number(out->attachmentImageInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentImageInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->attachmentImageInfoCount)); ++i) {
                 if (!deserialize_VkFramebufferAttachmentImageInfo(r, &arr[i], arena)) { return false; }
             }
             out->pAttachmentImageInfos = arr;
@@ -6622,10 +6621,10 @@ inline void serialize_VkFramebufferCreateInfo(::av::WireWriter& buf, const VkFra
     serialize_VkRenderPass(buf, v.renderPass);
     buf.write_pod(v.attachmentCount);
     {
-        const std::uint8_t present = v.pAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.attachmentCount)); ++i) {
                 serialize_VkImageView(buf, v.pAttachments[i]);
             }
         }
@@ -6643,14 +6642,14 @@ inline void serialize_VkFramebufferCreateInfo(::av::WireWriter& buf, const VkFra
     if (!deserialize_VkRenderPass(r, out->renderPass)) { return false; }
     if (!r.read_pod(out->attachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->attachmentCount) == 0) {
             out->pAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageView>(static_cast<std::size_t>(as_number(out->attachmentCount)));
+            auto* arr = arena.allocate<VkImageView>(static_cast<size_t>(as_number(out->attachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->attachmentCount)); ++i) {
                 if (!deserialize_VkImageView(r, arr[i])) { return false; }
             }
             out->pAttachments = arr;
@@ -6668,10 +6667,10 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
     buf.write_pod(v.flags);
     buf.write_pod(v.stageCount);
     {
-        const std::uint8_t present = v.pStages != nullptr ? 1 : 0;
+        const uint8_t present = v.pStages != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.stageCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.stageCount)); ++i) {
                 serialize_VkPipelineShaderStageCreateInfo(buf, v.pStages[i]);
             }
         }
@@ -6679,81 +6678,81 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
     {
         const auto* p = v.pVertexInputState;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineVertexInputStateCreateInfo(buf, *p);
         }
     }
     {
         const auto* p = v.pInputAssemblyState;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineInputAssemblyStateCreateInfo(buf, *p);
         }
     }
     {
         const auto* p = v.pTessellationState;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineTessellationStateCreateInfo(buf, *p);
         }
     }
     {
         const auto* p = v.pViewportState;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineViewportStateCreateInfo(buf, *p);
         }
     }
     {
         const auto* p = v.pRasterizationState;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineRasterizationStateCreateInfo(buf, *p);
         }
     }
     {
         const auto* p = v.pMultisampleState;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineMultisampleStateCreateInfo(buf, *p);
         }
     }
     {
         const auto* p = v.pDepthStencilState;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineDepthStencilStateCreateInfo(buf, *p);
         }
     }
     {
         const auto* p = v.pColorBlendState;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineColorBlendStateCreateInfo(buf, *p);
         }
     }
     {
         const auto* p = v.pDynamicState;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineDynamicStateCreateInfo(buf, *p);
         }
     }
@@ -6771,21 +6770,21 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->stageCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->stageCount) == 0) {
             out->pStages = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<std::size_t>(as_number(out->stageCount)));
+            auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<size_t>(as_number(out->stageCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->stageCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->stageCount)); ++i) {
                 if (!deserialize_VkPipelineShaderStageCreateInfo(r, &arr[i], arena)) { return false; }
             }
             out->pStages = arr;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pVertexInputState = nullptr;
@@ -6797,7 +6796,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pInputAssemblyState = nullptr;
@@ -6809,7 +6808,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pTessellationState = nullptr;
@@ -6821,7 +6820,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pViewportState = nullptr;
@@ -6833,7 +6832,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pRasterizationState = nullptr;
@@ -6845,7 +6844,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pMultisampleState = nullptr;
@@ -6857,7 +6856,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pDepthStencilState = nullptr;
@@ -6869,7 +6868,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pColorBlendState = nullptr;
@@ -6881,7 +6880,7 @@ inline void serialize_VkGraphicsPipelineCreateInfo(::av::WireWriter& buf, const 
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pDynamicState = nullptr;
@@ -6919,20 +6918,20 @@ inline void serialize_VkGraphicsPipelineShaderGroupsCreateInfoNV(::av::WireWrite
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.groupCount);
     {
-        const std::uint8_t present = v.pGroups != nullptr ? 1 : 0;
+        const uint8_t present = v.pGroups != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.groupCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.groupCount)); ++i) {
                 serialize_VkGraphicsShaderGroupCreateInfoNV(buf, v.pGroups[i]);
             }
         }
     }
     buf.write_pod(v.pipelineCount);
     {
-        const std::uint8_t present = v.pPipelines != nullptr ? 1 : 0;
+        const uint8_t present = v.pPipelines != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.pipelineCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.pipelineCount)); ++i) {
                 serialize_VkPipeline(buf, v.pPipelines[i]);
             }
         }
@@ -6945,14 +6944,14 @@ inline void serialize_VkGraphicsPipelineShaderGroupsCreateInfoNV(::av::WireWrite
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->groupCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->groupCount) == 0) {
             out->pGroups = nullptr;
         } else {
-            auto* arr = arena.allocate<VkGraphicsShaderGroupCreateInfoNV>(static_cast<std::size_t>(as_number(out->groupCount)));
+            auto* arr = arena.allocate<VkGraphicsShaderGroupCreateInfoNV>(static_cast<size_t>(as_number(out->groupCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->groupCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->groupCount)); ++i) {
                 if (!deserialize_VkGraphicsShaderGroupCreateInfoNV(r, &arr[i], arena)) { return false; }
             }
             out->pGroups = arr;
@@ -6960,14 +6959,14 @@ inline void serialize_VkGraphicsPipelineShaderGroupsCreateInfoNV(::av::WireWrite
     }
     if (!r.read_pod(out->pipelineCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->pipelineCount) == 0) {
             out->pPipelines = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipeline>(static_cast<std::size_t>(as_number(out->pipelineCount)));
+            auto* arr = arena.allocate<VkPipeline>(static_cast<size_t>(as_number(out->pipelineCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->pipelineCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->pipelineCount)); ++i) {
                 if (!deserialize_VkPipeline(r, arr[i])) { return false; }
             }
             out->pPipelines = arr;
@@ -6981,10 +6980,10 @@ inline void serialize_VkGraphicsShaderGroupCreateInfoNV(::av::WireWriter& buf, c
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.stageCount);
     {
-        const std::uint8_t present = v.pStages != nullptr ? 1 : 0;
+        const uint8_t present = v.pStages != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.stageCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.stageCount)); ++i) {
                 serialize_VkPipelineShaderStageCreateInfo(buf, v.pStages[i]);
             }
         }
@@ -6992,18 +6991,18 @@ inline void serialize_VkGraphicsShaderGroupCreateInfoNV(::av::WireWriter& buf, c
     {
         const auto* p = v.pVertexInputState;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineVertexInputStateCreateInfo(buf, *p);
         }
     }
     {
         const auto* p = v.pTessellationState;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineTessellationStateCreateInfo(buf, *p);
         }
     }
@@ -7015,21 +7014,21 @@ inline void serialize_VkGraphicsShaderGroupCreateInfoNV(::av::WireWriter& buf, c
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->stageCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->stageCount) == 0) {
             out->pStages = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<std::size_t>(as_number(out->stageCount)));
+            auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<size_t>(as_number(out->stageCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->stageCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->stageCount)); ++i) {
                 if (!deserialize_VkPipelineShaderStageCreateInfo(r, &arr[i], arena)) { return false; }
             }
             out->pStages = arr;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pVertexInputState = nullptr;
@@ -7041,7 +7040,7 @@ inline void serialize_VkGraphicsShaderGroupCreateInfoNV(::av::WireWriter& buf, c
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pTessellationState = nullptr;
@@ -7165,10 +7164,10 @@ inline void serialize_VkImageCompressionControlEXT(::av::WireWriter& buf, const 
     buf.write_pod(v.flags);
     buf.write_pod(v.compressionControlPlaneCount);
     {
-        const std::uint8_t present = v.pFixedRateFlags != nullptr ? 1 : 0;
+        const uint8_t present = v.pFixedRateFlags != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.compressionControlPlaneCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.compressionControlPlaneCount)); ++i) {
                 buf.write_pod(v.pFixedRateFlags[i]);
             }
         }
@@ -7182,14 +7181,14 @@ inline void serialize_VkImageCompressionControlEXT(::av::WireWriter& buf, const 
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->compressionControlPlaneCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->compressionControlPlaneCount) == 0) {
             out->pFixedRateFlags = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageCompressionFixedRateFlagsEXT>(static_cast<std::size_t>(as_number(out->compressionControlPlaneCount)));
+            auto* arr = arena.allocate<VkImageCompressionFixedRateFlagsEXT>(static_cast<size_t>(as_number(out->compressionControlPlaneCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->compressionControlPlaneCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->compressionControlPlaneCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pFixedRateFlags = arr;
@@ -7269,10 +7268,10 @@ inline void serialize_VkImageCreateInfo(::av::WireWriter& buf, const VkImageCrea
     buf.write_pod(v.sharingMode);
     buf.write_pod(v.queueFamilyIndexCount);
     {
-        const std::uint8_t present = v.pQueueFamilyIndices != nullptr ? 1 : 0;
+        const uint8_t present = v.pQueueFamilyIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.queueFamilyIndexCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.queueFamilyIndexCount)); ++i) {
                 buf.write_pod(v.pQueueFamilyIndices[i]);
             }
         }
@@ -7296,14 +7295,14 @@ inline void serialize_VkImageCreateInfo(::av::WireWriter& buf, const VkImageCrea
     if (!r.read_pod(out->sharingMode)) { return false; }
     if (!r.read_pod(out->queueFamilyIndexCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->queueFamilyIndexCount) == 0) {
             out->pQueueFamilyIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->queueFamilyIndexCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->queueFamilyIndexCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->queueFamilyIndexCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->queueFamilyIndexCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pQueueFamilyIndices = arr;
@@ -7319,10 +7318,10 @@ inline void serialize_VkImageDrmFormatModifierExplicitCreateInfoEXT(::av::WireWr
     buf.write_pod(v.drmFormatModifier);
     buf.write_pod(v.drmFormatModifierPlaneCount);
     {
-        const std::uint8_t present = v.pPlaneLayouts != nullptr ? 1 : 0;
+        const uint8_t present = v.pPlaneLayouts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.drmFormatModifierPlaneCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.drmFormatModifierPlaneCount)); ++i) {
                 serialize_VkSubresourceLayout(buf, v.pPlaneLayouts[i]);
             }
         }
@@ -7336,14 +7335,14 @@ inline void serialize_VkImageDrmFormatModifierExplicitCreateInfoEXT(::av::WireWr
     if (!r.read_pod(out->drmFormatModifier)) { return false; }
     if (!r.read_pod(out->drmFormatModifierPlaneCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->drmFormatModifierPlaneCount) == 0) {
             out->pPlaneLayouts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSubresourceLayout>(static_cast<std::size_t>(as_number(out->drmFormatModifierPlaneCount)));
+            auto* arr = arena.allocate<VkSubresourceLayout>(static_cast<size_t>(as_number(out->drmFormatModifierPlaneCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->drmFormatModifierPlaneCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->drmFormatModifierPlaneCount)); ++i) {
                 if (!deserialize_VkSubresourceLayout(r, &arr[i], arena)) { return false; }
             }
             out->pPlaneLayouts = arr;
@@ -7357,10 +7356,10 @@ inline void serialize_VkImageDrmFormatModifierListCreateInfoEXT(::av::WireWriter
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.drmFormatModifierCount);
     {
-        const std::uint8_t present = v.pDrmFormatModifiers != nullptr ? 1 : 0;
+        const uint8_t present = v.pDrmFormatModifiers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.drmFormatModifierCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.drmFormatModifierCount)); ++i) {
                 buf.write_pod(v.pDrmFormatModifiers[i]);
             }
         }
@@ -7373,14 +7372,14 @@ inline void serialize_VkImageDrmFormatModifierListCreateInfoEXT(::av::WireWriter
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->drmFormatModifierCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->drmFormatModifierCount) == 0) {
             out->pDrmFormatModifiers = nullptr;
         } else {
-            auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(as_number(out->drmFormatModifierCount)));
+            auto* arr = arena.allocate<uint64_t>(static_cast<size_t>(as_number(out->drmFormatModifierCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->drmFormatModifierCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->drmFormatModifierCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDrmFormatModifiers = arr;
@@ -7394,10 +7393,10 @@ inline void serialize_VkImageFormatListCreateInfo(::av::WireWriter& buf, const V
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.viewFormatCount);
     {
-        const std::uint8_t present = v.pViewFormats != nullptr ? 1 : 0;
+        const uint8_t present = v.pViewFormats != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.viewFormatCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.viewFormatCount)); ++i) {
                 buf.write_pod(v.pViewFormats[i]);
             }
         }
@@ -7410,14 +7409,14 @@ inline void serialize_VkImageFormatListCreateInfo(::av::WireWriter& buf, const V
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->viewFormatCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->viewFormatCount) == 0) {
             out->pViewFormats = nullptr;
         } else {
-            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(as_number(out->viewFormatCount)));
+            auto* arr = arena.allocate<VkFormat>(static_cast<size_t>(as_number(out->viewFormatCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->viewFormatCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->viewFormatCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pViewFormats = arr;
@@ -7877,23 +7876,23 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
     {
         const auto* p = v.pApplicationInfo;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkApplicationInfo(buf, *p);
         }
     }
     buf.write_pod(v.enabledLayerCount);
     {
-        const std::uint8_t present = v.ppEnabledLayerNames != nullptr ? 1 : 0;
+        const uint8_t present = v.ppEnabledLayerNames != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.enabledLayerCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.enabledLayerCount)); ++i) {
                 const char* s = v.ppEnabledLayerNames[i];
                 if (s == nullptr) {
                     buf.write_varint(0);
                 } else {
-                    const std::size_t n = std::strlen(s) + 1u;
+                    const size_t n = __builtin_strlen(s) + 1u;
                     buf.write_varint(n);
                     buf.write(s, n);
                 }
@@ -7902,15 +7901,15 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
     }
     buf.write_pod(v.enabledExtensionCount);
     {
-        const std::uint8_t present = v.ppEnabledExtensionNames != nullptr ? 1 : 0;
+        const uint8_t present = v.ppEnabledExtensionNames != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.enabledExtensionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.enabledExtensionCount)); ++i) {
                 const char* s = v.ppEnabledExtensionNames[i];
                 if (s == nullptr) {
                     buf.write_varint(0);
                 } else {
-                    const std::size_t n = std::strlen(s) + 1u;
+                    const size_t n = __builtin_strlen(s) + 1u;
                     buf.write_varint(n);
                     buf.write(s, n);
                 }
@@ -7925,7 +7924,7 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->flags)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pApplicationInfo = nullptr;
@@ -7938,15 +7937,15 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
     }
     if (!r.read_pod(out->enabledLayerCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->enabledLayerCount) == 0) {
             out->ppEnabledLayerNames = nullptr;
         } else {
-            auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(as_number(out->enabledLayerCount)));
+            auto** arr = arena.allocate<const char*>(static_cast<size_t>(as_number(out->enabledLayerCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->enabledLayerCount)); ++i) {
-                std::uint64_t n = 0;
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->enabledLayerCount)); ++i) {
+                uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
                 if (n == 0) {
                     // An empty name, not a null one: an element of a
@@ -7959,9 +7958,9 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
                     empty[0] = '\0';
                     arr[i] = empty;
                 } else {
-                    char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
+                    char* s = arena.allocate_chars(static_cast<size_t>(n) + 1u);
                     if (s == nullptr) { return false; }
-                    if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+                    if (!r.read(s, static_cast<size_t>(n))) { return false; }
                     s[n] = '\0';
                     arr[i] = s;
                 }
@@ -7971,15 +7970,15 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
     }
     if (!r.read_pod(out->enabledExtensionCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->enabledExtensionCount) == 0) {
             out->ppEnabledExtensionNames = nullptr;
         } else {
-            auto** arr = arena.allocate<const char*>(static_cast<std::size_t>(as_number(out->enabledExtensionCount)));
+            auto** arr = arena.allocate<const char*>(static_cast<size_t>(as_number(out->enabledExtensionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->enabledExtensionCount)); ++i) {
-                std::uint64_t n = 0;
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->enabledExtensionCount)); ++i) {
+                uint64_t n = 0;
                 if (!r.read_varint(n)) { return false; }
                 if (n == 0) {
                     // An empty name, not a null one: an element of a
@@ -7992,9 +7991,9 @@ inline void serialize_VkInstanceCreateInfo(::av::WireWriter& buf, const VkInstan
                     empty[0] = '\0';
                     arr[i] = empty;
                 } else {
-                    char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
+                    char* s = arena.allocate_chars(static_cast<size_t>(n) + 1u);
                     if (s == nullptr) { return false; }
-                    if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+                    if (!r.read(s, static_cast<size_t>(n))) { return false; }
                     s[n] = '\0';
                     arr[i] = s;
                 }
@@ -8041,7 +8040,7 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
         if (s == nullptr) {
             buf.write_varint(0);
         } else {
-            const std::size_t n = std::strlen(s) + 1u;
+            const size_t n = __builtin_strlen(s) + 1u;
             buf.write_varint(n);
             buf.write(s, n);
         }
@@ -8051,7 +8050,7 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
         if (s == nullptr) {
             buf.write_varint(0);
         } else {
-            const std::size_t n = std::strlen(s) + 1u;
+            const size_t n = __builtin_strlen(s) + 1u;
             buf.write_varint(n);
             buf.write(s, n);
         }
@@ -8059,10 +8058,10 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
     buf.write_pod(v.type);
     buf.write_pod(v.valueCount);
     {
-        const std::uint8_t present = v.pValues != nullptr ? 1 : 0;
+        const uint8_t present = v.pValues != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present && as_number(v.valueCount) != 0) {
-            buf.write(v.pValues, static_cast<std::size_t>(as_number(v.valueCount)));
+            buf.write(v.pValues, static_cast<size_t>(as_number(v.valueCount)));
         }
     }
 }
@@ -8070,7 +8069,7 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
 [[nodiscard]] inline bool deserialize_VkLayerSettingEXT(::av::WireReader& r, VkLayerSettingEXT* out, ::av::WireArena& arena) {
     (void)arena;
     {
-        std::uint64_t n = 0;
+        uint64_t n = 0;
         if (!r.read_varint(n)) { return false; }
         if (n == 0) {
             out->pLayerName = nullptr;
@@ -8079,15 +8078,15 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
             // length is the guest's and a host API will strcmp what it
             // is handed. A fuzzer found this in vkCreateInstance
             // (feature 042).
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
+            char* s = arena.allocate_chars(static_cast<size_t>(n) + 1u);
             if (s == nullptr) { return false; }
-            if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            if (!r.read(s, static_cast<size_t>(n))) { return false; }
             s[n] = '\0';
             out->pLayerName = s;
         }
     }
     {
-        std::uint64_t n = 0;
+        uint64_t n = 0;
         if (!r.read_varint(n)) { return false; }
         if (n == 0) {
             out->pSettingName = nullptr;
@@ -8096,9 +8095,9 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
             // length is the guest's and a host API will strcmp what it
             // is handed. A fuzzer found this in vkCreateInstance
             // (feature 042).
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
+            char* s = arena.allocate_chars(static_cast<size_t>(n) + 1u);
             if (s == nullptr) { return false; }
-            if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            if (!r.read(s, static_cast<size_t>(n))) { return false; }
             s[n] = '\0';
             out->pSettingName = s;
         }
@@ -8106,14 +8105,14 @@ inline void serialize_VkLayerSettingEXT(::av::WireWriter& buf, const VkLayerSett
     if (!r.read_pod(out->type)) { return false; }
     if (!r.read_pod(out->valueCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->valueCount) == 0) {
             out->pValues = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->valueCount)));
+            char* blob = arena.allocate_chars(static_cast<size_t>(as_number(out->valueCount)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(as_number(out->valueCount)))) { return false; }
+            if (!r.read(blob, static_cast<size_t>(as_number(out->valueCount)))) { return false; }
             out->pValues = blob;
         }
     }
@@ -8125,10 +8124,10 @@ inline void serialize_VkLayerSettingsCreateInfoEXT(::av::WireWriter& buf, const 
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.settingCount);
     {
-        const std::uint8_t present = v.pSettings != nullptr ? 1 : 0;
+        const uint8_t present = v.pSettings != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.settingCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.settingCount)); ++i) {
                 serialize_VkLayerSettingEXT(buf, v.pSettings[i]);
             }
         }
@@ -8141,14 +8140,14 @@ inline void serialize_VkLayerSettingsCreateInfoEXT(::av::WireWriter& buf, const 
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->settingCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->settingCount) == 0) {
             out->pSettings = nullptr;
         } else {
-            auto* arr = arena.allocate<VkLayerSettingEXT>(static_cast<std::size_t>(as_number(out->settingCount)));
+            auto* arr = arena.allocate<VkLayerSettingEXT>(static_cast<size_t>(as_number(out->settingCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->settingCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->settingCount)); ++i) {
                 if (!deserialize_VkLayerSettingEXT(r, &arr[i], arena)) { return false; }
             }
             out->pSettings = arr;
@@ -8544,10 +8543,10 @@ inline void serialize_VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM(::av:
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.perViewRenderAreaCount);
     {
-        const std::uint8_t present = v.pPerViewRenderAreas != nullptr ? 1 : 0;
+        const uint8_t present = v.pPerViewRenderAreas != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.perViewRenderAreaCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.perViewRenderAreaCount)); ++i) {
                 serialize_VkRect2D(buf, v.pPerViewRenderAreas[i]);
             }
         }
@@ -8560,14 +8559,14 @@ inline void serialize_VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM(::av:
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->perViewRenderAreaCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->perViewRenderAreaCount) == 0) {
             out->pPerViewRenderAreas = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(as_number(out->perViewRenderAreaCount)));
+            auto* arr = arena.allocate<VkRect2D>(static_cast<size_t>(as_number(out->perViewRenderAreaCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->perViewRenderAreaCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->perViewRenderAreaCount)); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
             out->pPerViewRenderAreas = arr;
@@ -8581,10 +8580,10 @@ inline void serialize_VkMutableDescriptorTypeCreateInfoEXT(::av::WireWriter& buf
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.mutableDescriptorTypeListCount);
     {
-        const std::uint8_t present = v.pMutableDescriptorTypeLists != nullptr ? 1 : 0;
+        const uint8_t present = v.pMutableDescriptorTypeLists != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.mutableDescriptorTypeListCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.mutableDescriptorTypeListCount)); ++i) {
                 serialize_VkMutableDescriptorTypeListEXT(buf, v.pMutableDescriptorTypeLists[i]);
             }
         }
@@ -8597,14 +8596,14 @@ inline void serialize_VkMutableDescriptorTypeCreateInfoEXT(::av::WireWriter& buf
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->mutableDescriptorTypeListCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->mutableDescriptorTypeListCount) == 0) {
             out->pMutableDescriptorTypeLists = nullptr;
         } else {
-            auto* arr = arena.allocate<VkMutableDescriptorTypeListEXT>(static_cast<std::size_t>(as_number(out->mutableDescriptorTypeListCount)));
+            auto* arr = arena.allocate<VkMutableDescriptorTypeListEXT>(static_cast<size_t>(as_number(out->mutableDescriptorTypeListCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->mutableDescriptorTypeListCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->mutableDescriptorTypeListCount)); ++i) {
                 if (!deserialize_VkMutableDescriptorTypeListEXT(r, &arr[i], arena)) { return false; }
             }
             out->pMutableDescriptorTypeLists = arr;
@@ -8616,10 +8615,10 @@ inline void serialize_VkMutableDescriptorTypeCreateInfoEXT(::av::WireWriter& buf
 inline void serialize_VkMutableDescriptorTypeListEXT(::av::WireWriter& buf, const VkMutableDescriptorTypeListEXT& v) {
     buf.write_pod(v.descriptorTypeCount);
     {
-        const std::uint8_t present = v.pDescriptorTypes != nullptr ? 1 : 0;
+        const uint8_t present = v.pDescriptorTypes != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorTypeCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.descriptorTypeCount)); ++i) {
                 buf.write_pod(v.pDescriptorTypes[i]);
             }
         }
@@ -8630,14 +8629,14 @@ inline void serialize_VkMutableDescriptorTypeListEXT(::av::WireWriter& buf, cons
     (void)arena;
     if (!r.read_pod(out->descriptorTypeCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->descriptorTypeCount) == 0) {
             out->pDescriptorTypes = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorType>(static_cast<std::size_t>(as_number(out->descriptorTypeCount)));
+            auto* arr = arena.allocate<VkDescriptorType>(static_cast<size_t>(as_number(out->descriptorTypeCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorTypeCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->descriptorTypeCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDescriptorTypes = arr;
@@ -9575,7 +9574,7 @@ inline void serialize_VkPhysicalDeviceDepthStencilResolveProperties(::av::WireWr
 inline void serialize_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT(::av::WireWriter& buf, const VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT& v) {
     buf.write_pod(v.sType);
     serialize_pnext_chain(buf, v.pNext);
-    buf.write_pod<std::uint64_t>(v.combinedImageSamplerDensityMapDescriptorSize);
+    buf.write_pod<uint64_t>(v.combinedImageSamplerDensityMapDescriptorSize);
 }
 
 [[nodiscard]] inline bool deserialize_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT(::av::WireReader& r, VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT* out, ::av::WireArena& arena) {
@@ -9583,7 +9582,7 @@ inline void serialize_VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT(::
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->combinedImageSamplerDensityMapDescriptorSize = static_cast<decltype(out->combinedImageSamplerDensityMapDescriptorSize)>(rvk_wide);
     }
@@ -9622,25 +9621,25 @@ inline void serialize_VkPhysicalDeviceDescriptorBufferPropertiesEXT(::av::WireWr
     buf.write_pod(v.maxSamplerDescriptorBufferBindings);
     buf.write_pod(v.maxEmbeddedImmutableSamplerBindings);
     buf.write_pod(v.maxEmbeddedImmutableSamplers);
-    buf.write_pod<std::uint64_t>(v.bufferCaptureReplayDescriptorDataSize);
-    buf.write_pod<std::uint64_t>(v.imageCaptureReplayDescriptorDataSize);
-    buf.write_pod<std::uint64_t>(v.imageViewCaptureReplayDescriptorDataSize);
-    buf.write_pod<std::uint64_t>(v.samplerCaptureReplayDescriptorDataSize);
-    buf.write_pod<std::uint64_t>(v.accelerationStructureCaptureReplayDescriptorDataSize);
-    buf.write_pod<std::uint64_t>(v.samplerDescriptorSize);
-    buf.write_pod<std::uint64_t>(v.combinedImageSamplerDescriptorSize);
-    buf.write_pod<std::uint64_t>(v.sampledImageDescriptorSize);
-    buf.write_pod<std::uint64_t>(v.storageImageDescriptorSize);
-    buf.write_pod<std::uint64_t>(v.uniformTexelBufferDescriptorSize);
-    buf.write_pod<std::uint64_t>(v.robustUniformTexelBufferDescriptorSize);
-    buf.write_pod<std::uint64_t>(v.storageTexelBufferDescriptorSize);
-    buf.write_pod<std::uint64_t>(v.robustStorageTexelBufferDescriptorSize);
-    buf.write_pod<std::uint64_t>(v.uniformBufferDescriptorSize);
-    buf.write_pod<std::uint64_t>(v.robustUniformBufferDescriptorSize);
-    buf.write_pod<std::uint64_t>(v.storageBufferDescriptorSize);
-    buf.write_pod<std::uint64_t>(v.robustStorageBufferDescriptorSize);
-    buf.write_pod<std::uint64_t>(v.inputAttachmentDescriptorSize);
-    buf.write_pod<std::uint64_t>(v.accelerationStructureDescriptorSize);
+    buf.write_pod<uint64_t>(v.bufferCaptureReplayDescriptorDataSize);
+    buf.write_pod<uint64_t>(v.imageCaptureReplayDescriptorDataSize);
+    buf.write_pod<uint64_t>(v.imageViewCaptureReplayDescriptorDataSize);
+    buf.write_pod<uint64_t>(v.samplerCaptureReplayDescriptorDataSize);
+    buf.write_pod<uint64_t>(v.accelerationStructureCaptureReplayDescriptorDataSize);
+    buf.write_pod<uint64_t>(v.samplerDescriptorSize);
+    buf.write_pod<uint64_t>(v.combinedImageSamplerDescriptorSize);
+    buf.write_pod<uint64_t>(v.sampledImageDescriptorSize);
+    buf.write_pod<uint64_t>(v.storageImageDescriptorSize);
+    buf.write_pod<uint64_t>(v.uniformTexelBufferDescriptorSize);
+    buf.write_pod<uint64_t>(v.robustUniformTexelBufferDescriptorSize);
+    buf.write_pod<uint64_t>(v.storageTexelBufferDescriptorSize);
+    buf.write_pod<uint64_t>(v.robustStorageTexelBufferDescriptorSize);
+    buf.write_pod<uint64_t>(v.uniformBufferDescriptorSize);
+    buf.write_pod<uint64_t>(v.robustUniformBufferDescriptorSize);
+    buf.write_pod<uint64_t>(v.storageBufferDescriptorSize);
+    buf.write_pod<uint64_t>(v.robustStorageBufferDescriptorSize);
+    buf.write_pod<uint64_t>(v.inputAttachmentDescriptorSize);
+    buf.write_pod<uint64_t>(v.accelerationStructureDescriptorSize);
     buf.write_pod(v.maxSamplerDescriptorBufferRange);
     buf.write_pod(v.maxResourceDescriptorBufferRange);
     buf.write_pod(v.samplerDescriptorBufferAddressSpaceSize);
@@ -9662,97 +9661,97 @@ inline void serialize_VkPhysicalDeviceDescriptorBufferPropertiesEXT(::av::WireWr
     if (!r.read_pod(out->maxEmbeddedImmutableSamplerBindings)) { return false; }
     if (!r.read_pod(out->maxEmbeddedImmutableSamplers)) { return false; }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->bufferCaptureReplayDescriptorDataSize = static_cast<decltype(out->bufferCaptureReplayDescriptorDataSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->imageCaptureReplayDescriptorDataSize = static_cast<decltype(out->imageCaptureReplayDescriptorDataSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->imageViewCaptureReplayDescriptorDataSize = static_cast<decltype(out->imageViewCaptureReplayDescriptorDataSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->samplerCaptureReplayDescriptorDataSize = static_cast<decltype(out->samplerCaptureReplayDescriptorDataSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->accelerationStructureCaptureReplayDescriptorDataSize = static_cast<decltype(out->accelerationStructureCaptureReplayDescriptorDataSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->samplerDescriptorSize = static_cast<decltype(out->samplerDescriptorSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->combinedImageSamplerDescriptorSize = static_cast<decltype(out->combinedImageSamplerDescriptorSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->sampledImageDescriptorSize = static_cast<decltype(out->sampledImageDescriptorSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->storageImageDescriptorSize = static_cast<decltype(out->storageImageDescriptorSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->uniformTexelBufferDescriptorSize = static_cast<decltype(out->uniformTexelBufferDescriptorSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->robustUniformTexelBufferDescriptorSize = static_cast<decltype(out->robustUniformTexelBufferDescriptorSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->storageTexelBufferDescriptorSize = static_cast<decltype(out->storageTexelBufferDescriptorSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->robustStorageTexelBufferDescriptorSize = static_cast<decltype(out->robustStorageTexelBufferDescriptorSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->uniformBufferDescriptorSize = static_cast<decltype(out->uniformBufferDescriptorSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->robustUniformBufferDescriptorSize = static_cast<decltype(out->robustUniformBufferDescriptorSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->storageBufferDescriptorSize = static_cast<decltype(out->storageBufferDescriptorSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->robustStorageBufferDescriptorSize = static_cast<decltype(out->robustStorageBufferDescriptorSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->inputAttachmentDescriptorSize = static_cast<decltype(out->inputAttachmentDescriptorSize)>(rvk_wide);
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->accelerationStructureDescriptorSize = static_cast<decltype(out->accelerationStructureDescriptorSize)>(rvk_wide);
     }
@@ -10957,20 +10956,20 @@ inline void serialize_VkPhysicalDeviceHostImageCopyProperties(::av::WireWriter& 
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.copySrcLayoutCount);
     {
-        const std::uint8_t present = v.pCopySrcLayouts != nullptr ? 1 : 0;
+        const uint8_t present = v.pCopySrcLayouts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.copySrcLayoutCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.copySrcLayoutCount)); ++i) {
                 buf.write_pod(v.pCopySrcLayouts[i]);
             }
         }
     }
     buf.write_pod(v.copyDstLayoutCount);
     {
-        const std::uint8_t present = v.pCopyDstLayouts != nullptr ? 1 : 0;
+        const uint8_t present = v.pCopyDstLayouts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.copyDstLayoutCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.copyDstLayoutCount)); ++i) {
                 buf.write_pod(v.pCopyDstLayouts[i]);
             }
         }
@@ -10985,14 +10984,14 @@ inline void serialize_VkPhysicalDeviceHostImageCopyProperties(::av::WireWriter& 
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->copySrcLayoutCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->copySrcLayoutCount) == 0) {
             out->pCopySrcLayouts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageLayout>(static_cast<std::size_t>(as_number(out->copySrcLayoutCount)));
+            auto* arr = arena.allocate<VkImageLayout>(static_cast<size_t>(as_number(out->copySrcLayoutCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->copySrcLayoutCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->copySrcLayoutCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCopySrcLayouts = arr;
@@ -11000,14 +10999,14 @@ inline void serialize_VkPhysicalDeviceHostImageCopyProperties(::av::WireWriter& 
     }
     if (!r.read_pod(out->copyDstLayoutCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->copyDstLayoutCount) == 0) {
             out->pCopyDstLayouts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageLayout>(static_cast<std::size_t>(as_number(out->copyDstLayoutCount)));
+            auto* arr = arena.allocate<VkImageLayout>(static_cast<size_t>(as_number(out->copyDstLayoutCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->copyDstLayoutCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->copyDstLayoutCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCopyDstLayouts = arr;
@@ -11133,10 +11132,10 @@ inline void serialize_VkPhysicalDeviceImageDrmFormatModifierInfoEXT(::av::WireWr
     buf.write_pod(v.sharingMode);
     buf.write_pod(v.queueFamilyIndexCount);
     {
-        const std::uint8_t present = v.pQueueFamilyIndices != nullptr ? 1 : 0;
+        const uint8_t present = v.pQueueFamilyIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.queueFamilyIndexCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.queueFamilyIndexCount)); ++i) {
                 buf.write_pod(v.pQueueFamilyIndices[i]);
             }
         }
@@ -11151,14 +11150,14 @@ inline void serialize_VkPhysicalDeviceImageDrmFormatModifierInfoEXT(::av::WireWr
     if (!r.read_pod(out->sharingMode)) { return false; }
     if (!r.read_pod(out->queueFamilyIndexCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->queueFamilyIndexCount) == 0) {
             out->pQueueFamilyIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->queueFamilyIndexCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->queueFamilyIndexCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->queueFamilyIndexCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->queueFamilyIndexCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pQueueFamilyIndices = arr;
@@ -11430,10 +11429,10 @@ inline void serialize_VkPhysicalDeviceLayeredApiPropertiesListKHR(::av::WireWrit
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.layeredApiCount);
     {
-        const std::uint8_t present = v.pLayeredApis != nullptr ? 1 : 0;
+        const uint8_t present = v.pLayeredApis != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.layeredApiCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.layeredApiCount)); ++i) {
                 serialize_VkPhysicalDeviceLayeredApiPropertiesKHR(buf, v.pLayeredApis[i]);
             }
         }
@@ -11446,14 +11445,14 @@ inline void serialize_VkPhysicalDeviceLayeredApiPropertiesListKHR(::av::WireWrit
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->layeredApiCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->layeredApiCount) == 0) {
             out->pLayeredApis = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPhysicalDeviceLayeredApiPropertiesKHR>(static_cast<std::size_t>(as_number(out->layeredApiCount)));
+            auto* arr = arena.allocate<VkPhysicalDeviceLayeredApiPropertiesKHR>(static_cast<size_t>(as_number(out->layeredApiCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->layeredApiCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->layeredApiCount)); ++i) {
                 if (!deserialize_VkPhysicalDeviceLayeredApiPropertiesKHR(r, &arr[i], arena)) { return false; }
             }
             out->pLayeredApis = arr;
@@ -11529,7 +11528,7 @@ inline void serialize_VkPhysicalDeviceLimits(::av::WireWriter& buf, const VkPhys
     buf.write(&v.maxViewportDimensions[0], sizeof(v.maxViewportDimensions));
     buf.write(&v.viewportBoundsRange[0], sizeof(v.viewportBoundsRange));
     buf.write_pod(v.viewportSubPixelBits);
-    buf.write_pod<std::uint64_t>(v.minMemoryMapAlignment);
+    buf.write_pod<uint64_t>(v.minMemoryMapAlignment);
     buf.write_pod(v.minTexelBufferOffsetAlignment);
     buf.write_pod(v.minUniformBufferOffsetAlignment);
     buf.write_pod(v.minStorageBufferOffsetAlignment);
@@ -11640,7 +11639,7 @@ inline void serialize_VkPhysicalDeviceLimits(::av::WireWriter& buf, const VkPhys
     if (!r.read(&out->viewportBoundsRange[0], sizeof(out->viewportBoundsRange))) { return false; }
     if (!r.read_pod(out->viewportSubPixelBits)) { return false; }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->minMemoryMapAlignment = static_cast<decltype(out->minMemoryMapAlignment)>(rvk_wide);
     }
@@ -15196,9 +15195,9 @@ inline void serialize_VkPipelineBinaryCreateInfoKHR(::av::WireWriter& buf, const
     {
         const auto* p = v.pKeysAndDataInfo;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineBinaryKeysAndDataKHR(buf, *p);
         }
     }
@@ -15206,9 +15205,9 @@ inline void serialize_VkPipelineBinaryCreateInfoKHR(::av::WireWriter& buf, const
     {
         const auto* p = v.pPipelineCreateInfo;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineCreateInfoKHR(buf, *p);
         }
     }
@@ -15219,7 +15218,7 @@ inline void serialize_VkPipelineBinaryCreateInfoKHR(::av::WireWriter& buf, const
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pKeysAndDataInfo = nullptr;
@@ -15232,7 +15231,7 @@ inline void serialize_VkPipelineBinaryCreateInfoKHR(::av::WireWriter& buf, const
     }
     if (!deserialize_VkPipeline(r, out->pipeline)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pPipelineCreateInfo = nullptr;
@@ -15261,12 +15260,12 @@ inline void serialize_VkPipelineBinaryDataInfoKHR(::av::WireWriter& buf, const V
 }
 
 inline void serialize_VkPipelineBinaryDataKHR(::av::WireWriter& buf, const VkPipelineBinaryDataKHR& v) {
-    buf.write_pod<std::uint64_t>(v.dataSize);
+    buf.write_pod<uint64_t>(v.dataSize);
     {
-        const std::uint8_t present = v.pData != nullptr ? 1 : 0;
+        const uint8_t present = v.pData != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present && as_number(v.dataSize) != 0) {
-            buf.write(v.pData, static_cast<std::size_t>(as_number(v.dataSize)));
+            buf.write(v.pData, static_cast<size_t>(as_number(v.dataSize)));
         }
     }
 }
@@ -15274,19 +15273,19 @@ inline void serialize_VkPipelineBinaryDataKHR(::av::WireWriter& buf, const VkPip
 [[nodiscard]] inline bool deserialize_VkPipelineBinaryDataKHR(::av::WireReader& r, VkPipelineBinaryDataKHR* out, ::av::WireArena& arena) {
     (void)arena;
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->dataSize = static_cast<decltype(out->dataSize)>(rvk_wide);
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->dataSize) == 0) {
             out->pData = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->dataSize)));
+            char* blob = arena.allocate_chars(static_cast<size_t>(as_number(out->dataSize)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(as_number(out->dataSize)))) { return false; }
+            if (!r.read(blob, static_cast<size_t>(as_number(out->dataSize)))) { return false; }
             out->pData = blob;
         }
     }
@@ -15298,10 +15297,10 @@ inline void serialize_VkPipelineBinaryHandlesInfoKHR(::av::WireWriter& buf, cons
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.pipelineBinaryCount);
     {
-        const std::uint8_t present = v.pPipelineBinaries != nullptr ? 1 : 0;
+        const uint8_t present = v.pPipelineBinaries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.pipelineBinaryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.pipelineBinaryCount)); ++i) {
                 serialize_VkPipelineBinaryKHR(buf, v.pPipelineBinaries[i]);
             }
         }
@@ -15314,14 +15313,14 @@ inline void serialize_VkPipelineBinaryHandlesInfoKHR(::av::WireWriter& buf, cons
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->pipelineBinaryCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->pipelineBinaryCount) == 0) {
             out->pPipelineBinaries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineBinaryKHR>(static_cast<std::size_t>(as_number(out->pipelineBinaryCount)));
+            auto* arr = arena.allocate<VkPipelineBinaryKHR>(static_cast<size_t>(as_number(out->pipelineBinaryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->pipelineBinaryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->pipelineBinaryCount)); ++i) {
                 if (!deserialize_VkPipelineBinaryKHR(r, arr[i])) { return false; }
             }
             out->pPipelineBinaries = arr;
@@ -15335,10 +15334,10 @@ inline void serialize_VkPipelineBinaryInfoKHR(::av::WireWriter& buf, const VkPip
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.binaryCount);
     {
-        const std::uint8_t present = v.pPipelineBinaries != nullptr ? 1 : 0;
+        const uint8_t present = v.pPipelineBinaries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.binaryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.binaryCount)); ++i) {
                 serialize_VkPipelineBinaryKHR(buf, v.pPipelineBinaries[i]);
             }
         }
@@ -15351,14 +15350,14 @@ inline void serialize_VkPipelineBinaryInfoKHR(::av::WireWriter& buf, const VkPip
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->binaryCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->binaryCount) == 0) {
             out->pPipelineBinaries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineBinaryKHR>(static_cast<std::size_t>(as_number(out->binaryCount)));
+            auto* arr = arena.allocate<VkPipelineBinaryKHR>(static_cast<size_t>(as_number(out->binaryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->binaryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->binaryCount)); ++i) {
                 if (!deserialize_VkPipelineBinaryKHR(r, arr[i])) { return false; }
             }
             out->pPipelineBinaries = arr;
@@ -15386,19 +15385,19 @@ inline void serialize_VkPipelineBinaryKeyKHR(::av::WireWriter& buf, const VkPipe
 inline void serialize_VkPipelineBinaryKeysAndDataKHR(::av::WireWriter& buf, const VkPipelineBinaryKeysAndDataKHR& v) {
     buf.write_pod(v.binaryCount);
     {
-        const std::uint8_t present = v.pPipelineBinaryKeys != nullptr ? 1 : 0;
+        const uint8_t present = v.pPipelineBinaryKeys != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.binaryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.binaryCount)); ++i) {
                 serialize_VkPipelineBinaryKeyKHR(buf, v.pPipelineBinaryKeys[i]);
             }
         }
     }
     {
-        const std::uint8_t present = v.pPipelineBinaryData != nullptr ? 1 : 0;
+        const uint8_t present = v.pPipelineBinaryData != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.binaryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.binaryCount)); ++i) {
                 serialize_VkPipelineBinaryDataKHR(buf, v.pPipelineBinaryData[i]);
             }
         }
@@ -15409,28 +15408,28 @@ inline void serialize_VkPipelineBinaryKeysAndDataKHR(::av::WireWriter& buf, cons
     (void)arena;
     if (!r.read_pod(out->binaryCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->binaryCount) == 0) {
             out->pPipelineBinaryKeys = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineBinaryKeyKHR>(static_cast<std::size_t>(as_number(out->binaryCount)));
+            auto* arr = arena.allocate<VkPipelineBinaryKeyKHR>(static_cast<size_t>(as_number(out->binaryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->binaryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->binaryCount)); ++i) {
                 if (!deserialize_VkPipelineBinaryKeyKHR(r, &arr[i], arena)) { return false; }
             }
             out->pPipelineBinaryKeys = arr;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->binaryCount) == 0) {
             out->pPipelineBinaryData = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineBinaryDataKHR>(static_cast<std::size_t>(as_number(out->binaryCount)));
+            auto* arr = arena.allocate<VkPipelineBinaryDataKHR>(static_cast<size_t>(as_number(out->binaryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->binaryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->binaryCount)); ++i) {
                 if (!deserialize_VkPipelineBinaryDataKHR(r, &arr[i], arena)) { return false; }
             }
             out->pPipelineBinaryData = arr;
@@ -15443,12 +15442,12 @@ inline void serialize_VkPipelineCacheCreateInfo(::av::WireWriter& buf, const VkP
     buf.write_pod(v.sType);
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.flags);
-    buf.write_pod<std::uint64_t>(v.initialDataSize);
+    buf.write_pod<uint64_t>(v.initialDataSize);
     {
-        const std::uint8_t present = v.pInitialData != nullptr ? 1 : 0;
+        const uint8_t present = v.pInitialData != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present && as_number(v.initialDataSize) != 0) {
-            buf.write(v.pInitialData, static_cast<std::size_t>(as_number(v.initialDataSize)));
+            buf.write(v.pInitialData, static_cast<size_t>(as_number(v.initialDataSize)));
         }
     }
 }
@@ -15459,19 +15458,19 @@ inline void serialize_VkPipelineCacheCreateInfo(::av::WireWriter& buf, const VkP
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->flags)) { return false; }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->initialDataSize = static_cast<decltype(out->initialDataSize)>(rvk_wide);
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->initialDataSize) == 0) {
             out->pInitialData = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->initialDataSize)));
+            char* blob = arena.allocate_chars(static_cast<size_t>(as_number(out->initialDataSize)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(as_number(out->initialDataSize)))) { return false; }
+            if (!r.read(blob, static_cast<size_t>(as_number(out->initialDataSize)))) { return false; }
             out->pInitialData = blob;
         }
     }
@@ -15528,10 +15527,10 @@ inline void serialize_VkPipelineColorBlendStateCreateInfo(::av::WireWriter& buf,
     buf.write_pod(v.logicOp);
     buf.write_pod(v.attachmentCount);
     {
-        const std::uint8_t present = v.pAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.attachmentCount)); ++i) {
                 serialize_VkPipelineColorBlendAttachmentState(buf, v.pAttachments[i]);
             }
         }
@@ -15548,14 +15547,14 @@ inline void serialize_VkPipelineColorBlendStateCreateInfo(::av::WireWriter& buf,
     if (!r.read_pod(out->logicOp)) { return false; }
     if (!r.read_pod(out->attachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->attachmentCount) == 0) {
             out->pAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineColorBlendAttachmentState>(static_cast<std::size_t>(as_number(out->attachmentCount)));
+            auto* arr = arena.allocate<VkPipelineColorBlendAttachmentState>(static_cast<size_t>(as_number(out->attachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->attachmentCount)); ++i) {
                 if (!deserialize_VkPipelineColorBlendAttachmentState(r, &arr[i], arena)) { return false; }
             }
             out->pAttachments = arr;
@@ -15570,10 +15569,10 @@ inline void serialize_VkPipelineColorWriteCreateInfoEXT(::av::WireWriter& buf, c
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.attachmentCount);
     {
-        const std::uint8_t present = v.pColorWriteEnables != nullptr ? 1 : 0;
+        const uint8_t present = v.pColorWriteEnables != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.attachmentCount)); ++i) {
                 buf.write_pod(v.pColorWriteEnables[i]);
             }
         }
@@ -15586,14 +15585,14 @@ inline void serialize_VkPipelineColorWriteCreateInfoEXT(::av::WireWriter& buf, c
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->attachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->attachmentCount) == 0) {
             out->pColorWriteEnables = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBool32>(static_cast<std::size_t>(as_number(out->attachmentCount)));
+            auto* arr = arena.allocate<VkBool32>(static_cast<size_t>(as_number(out->attachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->attachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorWriteEnables = arr;
@@ -15624,10 +15623,10 @@ inline void serialize_VkPipelineCoverageModulationStateCreateInfoNV(::av::WireWr
     buf.write_pod(v.coverageModulationTableEnable);
     buf.write_pod(v.coverageModulationTableCount);
     {
-        const std::uint8_t present = v.pCoverageModulationTable != nullptr ? 1 : 0;
+        const uint8_t present = v.pCoverageModulationTable != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.coverageModulationTableCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.coverageModulationTableCount)); ++i) {
                 buf.write_pod(v.pCoverageModulationTable[i]);
             }
         }
@@ -15643,14 +15642,14 @@ inline void serialize_VkPipelineCoverageModulationStateCreateInfoNV(::av::WireWr
     if (!r.read_pod(out->coverageModulationTableEnable)) { return false; }
     if (!r.read_pod(out->coverageModulationTableCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->coverageModulationTableCount) == 0) {
             out->pCoverageModulationTable = nullptr;
         } else {
-            auto* arr = arena.allocate<float>(static_cast<std::size_t>(as_number(out->coverageModulationTableCount)));
+            auto* arr = arena.allocate<float>(static_cast<size_t>(as_number(out->coverageModulationTableCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->coverageModulationTableCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->coverageModulationTableCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCoverageModulationTable = arr;
@@ -15737,18 +15736,18 @@ inline void serialize_VkPipelineCreationFeedbackCreateInfo(::av::WireWriter& buf
     {
         const auto* p = v.pPipelineCreationFeedback;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineCreationFeedback(buf, *p);
         }
     }
     buf.write_pod(v.pipelineStageCreationFeedbackCount);
     {
-        const std::uint8_t present = v.pPipelineStageCreationFeedbacks != nullptr ? 1 : 0;
+        const uint8_t present = v.pPipelineStageCreationFeedbacks != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.pipelineStageCreationFeedbackCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.pipelineStageCreationFeedbackCount)); ++i) {
                 serialize_VkPipelineCreationFeedback(buf, v.pPipelineStageCreationFeedbacks[i]);
             }
         }
@@ -15760,7 +15759,7 @@ inline void serialize_VkPipelineCreationFeedbackCreateInfo(::av::WireWriter& buf
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pPipelineCreationFeedback = nullptr;
@@ -15773,14 +15772,14 @@ inline void serialize_VkPipelineCreationFeedbackCreateInfo(::av::WireWriter& buf
     }
     if (!r.read_pod(out->pipelineStageCreationFeedbackCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->pipelineStageCreationFeedbackCount) == 0) {
             out->pPipelineStageCreationFeedbacks = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineCreationFeedback>(static_cast<std::size_t>(as_number(out->pipelineStageCreationFeedbackCount)));
+            auto* arr = arena.allocate<VkPipelineCreationFeedback>(static_cast<size_t>(as_number(out->pipelineStageCreationFeedbackCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->pipelineStageCreationFeedbackCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->pipelineStageCreationFeedbackCount)); ++i) {
                 if (!deserialize_VkPipelineCreationFeedback(r, &arr[i], arena)) { return false; }
             }
             out->pPipelineStageCreationFeedbacks = arr;
@@ -15850,10 +15849,10 @@ inline void serialize_VkPipelineDiscardRectangleStateCreateInfoEXT(::av::WireWri
     buf.write_pod(v.discardRectangleMode);
     buf.write_pod(v.discardRectangleCount);
     {
-        const std::uint8_t present = v.pDiscardRectangles != nullptr ? 1 : 0;
+        const uint8_t present = v.pDiscardRectangles != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.discardRectangleCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.discardRectangleCount)); ++i) {
                 serialize_VkRect2D(buf, v.pDiscardRectangles[i]);
             }
         }
@@ -15868,14 +15867,14 @@ inline void serialize_VkPipelineDiscardRectangleStateCreateInfoEXT(::av::WireWri
     if (!r.read_pod(out->discardRectangleMode)) { return false; }
     if (!r.read_pod(out->discardRectangleCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->discardRectangleCount) == 0) {
             out->pDiscardRectangles = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(as_number(out->discardRectangleCount)));
+            auto* arr = arena.allocate<VkRect2D>(static_cast<size_t>(as_number(out->discardRectangleCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->discardRectangleCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->discardRectangleCount)); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
             out->pDiscardRectangles = arr;
@@ -15890,10 +15889,10 @@ inline void serialize_VkPipelineDynamicStateCreateInfo(::av::WireWriter& buf, co
     buf.write_pod(v.flags);
     buf.write_pod(v.dynamicStateCount);
     {
-        const std::uint8_t present = v.pDynamicStates != nullptr ? 1 : 0;
+        const uint8_t present = v.pDynamicStates != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.dynamicStateCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.dynamicStateCount)); ++i) {
                 buf.write_pod(v.pDynamicStates[i]);
             }
         }
@@ -15907,14 +15906,14 @@ inline void serialize_VkPipelineDynamicStateCreateInfo(::av::WireWriter& buf, co
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->dynamicStateCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->dynamicStateCount) == 0) {
             out->pDynamicStates = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDynamicState>(static_cast<std::size_t>(as_number(out->dynamicStateCount)));
+            auto* arr = arena.allocate<VkDynamicState>(static_cast<size_t>(as_number(out->dynamicStateCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->dynamicStateCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->dynamicStateCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDynamicStates = arr;
@@ -15981,20 +15980,20 @@ inline void serialize_VkPipelineLayoutCreateInfo(::av::WireWriter& buf, const Vk
     buf.write_pod(v.flags);
     buf.write_pod(v.setLayoutCount);
     {
-        const std::uint8_t present = v.pSetLayouts != nullptr ? 1 : 0;
+        const uint8_t present = v.pSetLayouts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.setLayoutCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.setLayoutCount)); ++i) {
                 serialize_VkDescriptorSetLayout(buf, v.pSetLayouts[i]);
             }
         }
     }
     buf.write_pod(v.pushConstantRangeCount);
     {
-        const std::uint8_t present = v.pPushConstantRanges != nullptr ? 1 : 0;
+        const uint8_t present = v.pPushConstantRanges != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.pushConstantRangeCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.pushConstantRangeCount)); ++i) {
                 serialize_VkPushConstantRange(buf, v.pPushConstantRanges[i]);
             }
         }
@@ -16008,14 +16007,14 @@ inline void serialize_VkPipelineLayoutCreateInfo(::av::WireWriter& buf, const Vk
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->setLayoutCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->setLayoutCount) == 0) {
             out->pSetLayouts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<std::size_t>(as_number(out->setLayoutCount)));
+            auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<size_t>(as_number(out->setLayoutCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->setLayoutCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->setLayoutCount)); ++i) {
                 if (!deserialize_VkDescriptorSetLayout(r, arr[i])) { return false; }
             }
             out->pSetLayouts = arr;
@@ -16023,14 +16022,14 @@ inline void serialize_VkPipelineLayoutCreateInfo(::av::WireWriter& buf, const Vk
     }
     if (!r.read_pod(out->pushConstantRangeCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->pushConstantRangeCount) == 0) {
             out->pPushConstantRanges = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPushConstantRange>(static_cast<std::size_t>(as_number(out->pushConstantRangeCount)));
+            auto* arr = arena.allocate<VkPushConstantRange>(static_cast<size_t>(as_number(out->pushConstantRangeCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->pushConstantRangeCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->pushConstantRangeCount)); ++i) {
                 if (!deserialize_VkPushConstantRange(r, &arr[i], arena)) { return false; }
             }
             out->pPushConstantRanges = arr;
@@ -16044,10 +16043,10 @@ inline void serialize_VkPipelineLibraryCreateInfoKHR(::av::WireWriter& buf, cons
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.libraryCount);
     {
-        const std::uint8_t present = v.pLibraries != nullptr ? 1 : 0;
+        const uint8_t present = v.pLibraries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.libraryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.libraryCount)); ++i) {
                 serialize_VkPipeline(buf, v.pLibraries[i]);
             }
         }
@@ -16060,14 +16059,14 @@ inline void serialize_VkPipelineLibraryCreateInfoKHR(::av::WireWriter& buf, cons
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->libraryCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->libraryCount) == 0) {
             out->pLibraries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipeline>(static_cast<std::size_t>(as_number(out->libraryCount)));
+            auto* arr = arena.allocate<VkPipeline>(static_cast<size_t>(as_number(out->libraryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->libraryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->libraryCount)); ++i) {
                 if (!deserialize_VkPipeline(r, arr[i])) { return false; }
             }
             out->pLibraries = arr;
@@ -16084,10 +16083,10 @@ inline void serialize_VkPipelineMultisampleStateCreateInfo(::av::WireWriter& buf
     buf.write_pod(v.sampleShadingEnable);
     buf.write_pod(v.minSampleShading);
     {
-        const std::uint8_t present = v.pSampleMask != nullptr ? 1 : 0;
+        const uint8_t present = v.pSampleMask != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>((as_number(v.rasterizationSamples) + 31) / 32); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>((as_number(v.rasterizationSamples) + 31) / 32); ++i) {
                 buf.write_pod(v.pSampleMask[i]);
             }
         }
@@ -16105,14 +16104,14 @@ inline void serialize_VkPipelineMultisampleStateCreateInfo(::av::WireWriter& buf
     if (!r.read_pod(out->sampleShadingEnable)) { return false; }
     if (!r.read_pod(out->minSampleShading)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || (as_number(out->rasterizationSamples) + 31) / 32 == 0) {
             out->pSampleMask = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSampleMask>(static_cast<std::size_t>((as_number(out->rasterizationSamples) + 31) / 32));
+            auto* arr = arena.allocate<VkSampleMask>(static_cast<size_t>((as_number(out->rasterizationSamples) + 31) / 32));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>((as_number(out->rasterizationSamples) + 31) / 32); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>((as_number(out->rasterizationSamples) + 31) / 32); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pSampleMask = arr;
@@ -16261,10 +16260,10 @@ inline void serialize_VkPipelineRenderingCreateInfo(::av::WireWriter& buf, const
     buf.write_pod(v.viewMask);
     buf.write_pod(v.colorAttachmentCount);
     {
-        const std::uint8_t present = v.pColorAttachmentFormats != nullptr ? 1 : 0;
+        const uint8_t present = v.pColorAttachmentFormats != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 buf.write_pod(v.pColorAttachmentFormats[i]);
             }
         }
@@ -16280,14 +16279,14 @@ inline void serialize_VkPipelineRenderingCreateInfo(::av::WireWriter& buf, const
     if (!r.read_pod(out->viewMask)) { return false; }
     if (!r.read_pod(out->colorAttachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachmentFormats = nullptr;
         } else {
-            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
+            auto* arr = arena.allocate<VkFormat>(static_cast<size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorAttachmentFormats = arr;
@@ -16353,10 +16352,10 @@ inline void serialize_VkPipelineShaderStageModuleIdentifierCreateInfoEXT(::av::W
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.identifierSize);
     {
-        const std::uint8_t present = v.pIdentifier != nullptr ? 1 : 0;
+        const uint8_t present = v.pIdentifier != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.identifierSize)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.identifierSize)); ++i) {
                 buf.write_pod(v.pIdentifier[i]);
             }
         }
@@ -16369,14 +16368,14 @@ inline void serialize_VkPipelineShaderStageModuleIdentifierCreateInfoEXT(::av::W
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->identifierSize)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->identifierSize) == 0) {
             out->pIdentifier = nullptr;
         } else {
-            auto* arr = arena.allocate<uint8_t>(static_cast<std::size_t>(as_number(out->identifierSize)));
+            auto* arr = arena.allocate<uint8_t>(static_cast<size_t>(as_number(out->identifierSize)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->identifierSize)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->identifierSize)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pIdentifier = arr;
@@ -16434,10 +16433,10 @@ inline void serialize_VkPipelineVertexInputDivisorStateCreateInfo(::av::WireWrit
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.vertexBindingDivisorCount);
     {
-        const std::uint8_t present = v.pVertexBindingDivisors != nullptr ? 1 : 0;
+        const uint8_t present = v.pVertexBindingDivisors != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.vertexBindingDivisorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.vertexBindingDivisorCount)); ++i) {
                 serialize_VkVertexInputBindingDivisorDescription(buf, v.pVertexBindingDivisors[i]);
             }
         }
@@ -16450,14 +16449,14 @@ inline void serialize_VkPipelineVertexInputDivisorStateCreateInfo(::av::WireWrit
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->vertexBindingDivisorCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->vertexBindingDivisorCount) == 0) {
             out->pVertexBindingDivisors = nullptr;
         } else {
-            auto* arr = arena.allocate<VkVertexInputBindingDivisorDescription>(static_cast<std::size_t>(as_number(out->vertexBindingDivisorCount)));
+            auto* arr = arena.allocate<VkVertexInputBindingDivisorDescription>(static_cast<size_t>(as_number(out->vertexBindingDivisorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->vertexBindingDivisorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->vertexBindingDivisorCount)); ++i) {
                 if (!deserialize_VkVertexInputBindingDivisorDescription(r, &arr[i], arena)) { return false; }
             }
             out->pVertexBindingDivisors = arr;
@@ -16472,20 +16471,20 @@ inline void serialize_VkPipelineVertexInputStateCreateInfo(::av::WireWriter& buf
     buf.write_pod(v.flags);
     buf.write_pod(v.vertexBindingDescriptionCount);
     {
-        const std::uint8_t present = v.pVertexBindingDescriptions != nullptr ? 1 : 0;
+        const uint8_t present = v.pVertexBindingDescriptions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.vertexBindingDescriptionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.vertexBindingDescriptionCount)); ++i) {
                 serialize_VkVertexInputBindingDescription(buf, v.pVertexBindingDescriptions[i]);
             }
         }
     }
     buf.write_pod(v.vertexAttributeDescriptionCount);
     {
-        const std::uint8_t present = v.pVertexAttributeDescriptions != nullptr ? 1 : 0;
+        const uint8_t present = v.pVertexAttributeDescriptions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.vertexAttributeDescriptionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.vertexAttributeDescriptionCount)); ++i) {
                 serialize_VkVertexInputAttributeDescription(buf, v.pVertexAttributeDescriptions[i]);
             }
         }
@@ -16499,14 +16498,14 @@ inline void serialize_VkPipelineVertexInputStateCreateInfo(::av::WireWriter& buf
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->vertexBindingDescriptionCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->vertexBindingDescriptionCount) == 0) {
             out->pVertexBindingDescriptions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkVertexInputBindingDescription>(static_cast<std::size_t>(as_number(out->vertexBindingDescriptionCount)));
+            auto* arr = arena.allocate<VkVertexInputBindingDescription>(static_cast<size_t>(as_number(out->vertexBindingDescriptionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->vertexBindingDescriptionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->vertexBindingDescriptionCount)); ++i) {
                 if (!deserialize_VkVertexInputBindingDescription(r, &arr[i], arena)) { return false; }
             }
             out->pVertexBindingDescriptions = arr;
@@ -16514,14 +16513,14 @@ inline void serialize_VkPipelineVertexInputStateCreateInfo(::av::WireWriter& buf
     }
     if (!r.read_pod(out->vertexAttributeDescriptionCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->vertexAttributeDescriptionCount) == 0) {
             out->pVertexAttributeDescriptions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkVertexInputAttributeDescription>(static_cast<std::size_t>(as_number(out->vertexAttributeDescriptionCount)));
+            auto* arr = arena.allocate<VkVertexInputAttributeDescription>(static_cast<size_t>(as_number(out->vertexAttributeDescriptionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->vertexAttributeDescriptionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->vertexAttributeDescriptionCount)); ++i) {
                 if (!deserialize_VkVertexInputAttributeDescription(r, &arr[i], arena)) { return false; }
             }
             out->pVertexAttributeDescriptions = arr;
@@ -16536,10 +16535,10 @@ inline void serialize_VkPipelineViewportCoarseSampleOrderStateCreateInfoNV(::av:
     buf.write_pod(v.sampleOrderType);
     buf.write_pod(v.customSampleOrderCount);
     {
-        const std::uint8_t present = v.pCustomSampleOrders != nullptr ? 1 : 0;
+        const uint8_t present = v.pCustomSampleOrders != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.customSampleOrderCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.customSampleOrderCount)); ++i) {
                 serialize_VkCoarseSampleOrderCustomNV(buf, v.pCustomSampleOrders[i]);
             }
         }
@@ -16553,14 +16552,14 @@ inline void serialize_VkPipelineViewportCoarseSampleOrderStateCreateInfoNV(::av:
     if (!r.read_pod(out->sampleOrderType)) { return false; }
     if (!r.read_pod(out->customSampleOrderCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->customSampleOrderCount) == 0) {
             out->pCustomSampleOrders = nullptr;
         } else {
-            auto* arr = arena.allocate<VkCoarseSampleOrderCustomNV>(static_cast<std::size_t>(as_number(out->customSampleOrderCount)));
+            auto* arr = arena.allocate<VkCoarseSampleOrderCustomNV>(static_cast<size_t>(as_number(out->customSampleOrderCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->customSampleOrderCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->customSampleOrderCount)); ++i) {
                 if (!deserialize_VkCoarseSampleOrderCustomNV(r, &arr[i], arena)) { return false; }
             }
             out->pCustomSampleOrders = arr;
@@ -16576,9 +16575,9 @@ inline void serialize_VkPipelineViewportDepthClampControlCreateInfoEXT(::av::Wir
     {
         const auto* p = v.pDepthClampRange;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkDepthClampRangeEXT(buf, *p);
         }
     }
@@ -16590,7 +16589,7 @@ inline void serialize_VkPipelineViewportDepthClampControlCreateInfoEXT(::av::Wir
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->depthClampMode)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pDepthClampRange = nullptr;
@@ -16623,10 +16622,10 @@ inline void serialize_VkPipelineViewportExclusiveScissorStateCreateInfoNV(::av::
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.exclusiveScissorCount);
     {
-        const std::uint8_t present = v.pExclusiveScissors != nullptr ? 1 : 0;
+        const uint8_t present = v.pExclusiveScissors != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.exclusiveScissorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.exclusiveScissorCount)); ++i) {
                 serialize_VkRect2D(buf, v.pExclusiveScissors[i]);
             }
         }
@@ -16639,14 +16638,14 @@ inline void serialize_VkPipelineViewportExclusiveScissorStateCreateInfoNV(::av::
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->exclusiveScissorCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->exclusiveScissorCount) == 0) {
             out->pExclusiveScissors = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(as_number(out->exclusiveScissorCount)));
+            auto* arr = arena.allocate<VkRect2D>(static_cast<size_t>(as_number(out->exclusiveScissorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->exclusiveScissorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->exclusiveScissorCount)); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
             out->pExclusiveScissors = arr;
@@ -16661,10 +16660,10 @@ inline void serialize_VkPipelineViewportShadingRateImageStateCreateInfoNV(::av::
     buf.write_pod(v.shadingRateImageEnable);
     buf.write_pod(v.viewportCount);
     {
-        const std::uint8_t present = v.pShadingRatePalettes != nullptr ? 1 : 0;
+        const uint8_t present = v.pShadingRatePalettes != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.viewportCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.viewportCount)); ++i) {
                 serialize_VkShadingRatePaletteNV(buf, v.pShadingRatePalettes[i]);
             }
         }
@@ -16678,14 +16677,14 @@ inline void serialize_VkPipelineViewportShadingRateImageStateCreateInfoNV(::av::
     if (!r.read_pod(out->shadingRateImageEnable)) { return false; }
     if (!r.read_pod(out->viewportCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->viewportCount) == 0) {
             out->pShadingRatePalettes = nullptr;
         } else {
-            auto* arr = arena.allocate<VkShadingRatePaletteNV>(static_cast<std::size_t>(as_number(out->viewportCount)));
+            auto* arr = arena.allocate<VkShadingRatePaletteNV>(static_cast<size_t>(as_number(out->viewportCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->viewportCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->viewportCount)); ++i) {
                 if (!deserialize_VkShadingRatePaletteNV(r, &arr[i], arena)) { return false; }
             }
             out->pShadingRatePalettes = arr;
@@ -16700,20 +16699,20 @@ inline void serialize_VkPipelineViewportStateCreateInfo(::av::WireWriter& buf, c
     buf.write_pod(v.flags);
     buf.write_pod(v.viewportCount);
     {
-        const std::uint8_t present = v.pViewports != nullptr ? 1 : 0;
+        const uint8_t present = v.pViewports != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.viewportCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.viewportCount)); ++i) {
                 serialize_VkViewport(buf, v.pViewports[i]);
             }
         }
     }
     buf.write_pod(v.scissorCount);
     {
-        const std::uint8_t present = v.pScissors != nullptr ? 1 : 0;
+        const uint8_t present = v.pScissors != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.scissorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.scissorCount)); ++i) {
                 serialize_VkRect2D(buf, v.pScissors[i]);
             }
         }
@@ -16727,14 +16726,14 @@ inline void serialize_VkPipelineViewportStateCreateInfo(::av::WireWriter& buf, c
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->viewportCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->viewportCount) == 0) {
             out->pViewports = nullptr;
         } else {
-            auto* arr = arena.allocate<VkViewport>(static_cast<std::size_t>(as_number(out->viewportCount)));
+            auto* arr = arena.allocate<VkViewport>(static_cast<size_t>(as_number(out->viewportCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->viewportCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->viewportCount)); ++i) {
                 if (!deserialize_VkViewport(r, &arr[i], arena)) { return false; }
             }
             out->pViewports = arr;
@@ -16742,14 +16741,14 @@ inline void serialize_VkPipelineViewportStateCreateInfo(::av::WireWriter& buf, c
     }
     if (!r.read_pod(out->scissorCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->scissorCount) == 0) {
             out->pScissors = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRect2D>(static_cast<std::size_t>(as_number(out->scissorCount)));
+            auto* arr = arena.allocate<VkRect2D>(static_cast<size_t>(as_number(out->scissorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->scissorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->scissorCount)); ++i) {
                 if (!deserialize_VkRect2D(r, &arr[i], arena)) { return false; }
             }
             out->pScissors = arr;
@@ -16764,10 +16763,10 @@ inline void serialize_VkPipelineViewportSwizzleStateCreateInfoNV(::av::WireWrite
     buf.write_pod(v.flags);
     buf.write_pod(v.viewportCount);
     {
-        const std::uint8_t present = v.pViewportSwizzles != nullptr ? 1 : 0;
+        const uint8_t present = v.pViewportSwizzles != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.viewportCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.viewportCount)); ++i) {
                 serialize_VkViewportSwizzleNV(buf, v.pViewportSwizzles[i]);
             }
         }
@@ -16781,14 +16780,14 @@ inline void serialize_VkPipelineViewportSwizzleStateCreateInfoNV(::av::WireWrite
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->viewportCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->viewportCount) == 0) {
             out->pViewportSwizzles = nullptr;
         } else {
-            auto* arr = arena.allocate<VkViewportSwizzleNV>(static_cast<std::size_t>(as_number(out->viewportCount)));
+            auto* arr = arena.allocate<VkViewportSwizzleNV>(static_cast<size_t>(as_number(out->viewportCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->viewportCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->viewportCount)); ++i) {
                 if (!deserialize_VkViewportSwizzleNV(r, &arr[i], arena)) { return false; }
             }
             out->pViewportSwizzles = arr;
@@ -16803,10 +16802,10 @@ inline void serialize_VkPipelineViewportWScalingStateCreateInfoNV(::av::WireWrit
     buf.write_pod(v.viewportWScalingEnable);
     buf.write_pod(v.viewportCount);
     {
-        const std::uint8_t present = v.pViewportWScalings != nullptr ? 1 : 0;
+        const uint8_t present = v.pViewportWScalings != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.viewportCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.viewportCount)); ++i) {
                 serialize_VkViewportWScalingNV(buf, v.pViewportWScalings[i]);
             }
         }
@@ -16820,14 +16819,14 @@ inline void serialize_VkPipelineViewportWScalingStateCreateInfoNV(::av::WireWrit
     if (!r.read_pod(out->viewportWScalingEnable)) { return false; }
     if (!r.read_pod(out->viewportCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->viewportCount) == 0) {
             out->pViewportWScalings = nullptr;
         } else {
-            auto* arr = arena.allocate<VkViewportWScalingNV>(static_cast<std::size_t>(as_number(out->viewportCount)));
+            auto* arr = arena.allocate<VkViewportWScalingNV>(static_cast<size_t>(as_number(out->viewportCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->viewportCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->viewportCount)); ++i) {
                 if (!deserialize_VkViewportWScalingNV(r, &arr[i], arena)) { return false; }
             }
             out->pViewportWScalings = arr;
@@ -16920,10 +16919,10 @@ inline void serialize_VkQueryPoolPerformanceCreateInfoKHR(::av::WireWriter& buf,
     buf.write_pod(v.queueFamilyIndex);
     buf.write_pod(v.counterIndexCount);
     {
-        const std::uint8_t present = v.pCounterIndices != nullptr ? 1 : 0;
+        const uint8_t present = v.pCounterIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.counterIndexCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.counterIndexCount)); ++i) {
                 buf.write_pod(v.pCounterIndices[i]);
             }
         }
@@ -16937,14 +16936,14 @@ inline void serialize_VkQueryPoolPerformanceCreateInfoKHR(::av::WireWriter& buf,
     if (!r.read_pod(out->queueFamilyIndex)) { return false; }
     if (!r.read_pod(out->counterIndexCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->counterIndexCount) == 0) {
             out->pCounterIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->counterIndexCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->counterIndexCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->counterIndexCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->counterIndexCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCounterIndices = arr;
@@ -17103,20 +17102,20 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
     buf.write_pod(v.flags);
     buf.write_pod(v.stageCount);
     {
-        const std::uint8_t present = v.pStages != nullptr ? 1 : 0;
+        const uint8_t present = v.pStages != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.stageCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.stageCount)); ++i) {
                 serialize_VkPipelineShaderStageCreateInfo(buf, v.pStages[i]);
             }
         }
     }
     buf.write_pod(v.groupCount);
     {
-        const std::uint8_t present = v.pGroups != nullptr ? 1 : 0;
+        const uint8_t present = v.pGroups != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.groupCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.groupCount)); ++i) {
                 serialize_VkRayTracingShaderGroupCreateInfoKHR(buf, v.pGroups[i]);
             }
         }
@@ -17125,27 +17124,27 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
     {
         const auto* p = v.pLibraryInfo;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineLibraryCreateInfoKHR(buf, *p);
         }
     }
     {
         const auto* p = v.pLibraryInterface;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkRayTracingPipelineInterfaceCreateInfoKHR(buf, *p);
         }
     }
     {
         const auto* p = v.pDynamicState;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkPipelineDynamicStateCreateInfo(buf, *p);
         }
     }
@@ -17161,14 +17160,14 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->stageCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->stageCount) == 0) {
             out->pStages = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<std::size_t>(as_number(out->stageCount)));
+            auto* arr = arena.allocate<VkPipelineShaderStageCreateInfo>(static_cast<size_t>(as_number(out->stageCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->stageCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->stageCount)); ++i) {
                 if (!deserialize_VkPipelineShaderStageCreateInfo(r, &arr[i], arena)) { return false; }
             }
             out->pStages = arr;
@@ -17176,14 +17175,14 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
     }
     if (!r.read_pod(out->groupCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->groupCount) == 0) {
             out->pGroups = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRayTracingShaderGroupCreateInfoKHR>(static_cast<std::size_t>(as_number(out->groupCount)));
+            auto* arr = arena.allocate<VkRayTracingShaderGroupCreateInfoKHR>(static_cast<size_t>(as_number(out->groupCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->groupCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->groupCount)); ++i) {
                 if (!deserialize_VkRayTracingShaderGroupCreateInfoKHR(r, &arr[i], arena)) { return false; }
             }
             out->pGroups = arr;
@@ -17191,7 +17190,7 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
     }
     if (!r.read_pod(out->maxPipelineRayRecursionDepth)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pLibraryInfo = nullptr;
@@ -17203,7 +17202,7 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pLibraryInterface = nullptr;
@@ -17215,7 +17214,7 @@ inline void serialize_VkRayTracingPipelineCreateInfoKHR(::av::WireWriter& buf, c
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pDynamicState = nullptr;
@@ -17293,10 +17292,10 @@ inline void serialize_VkRenderPassAttachmentBeginInfo(::av::WireWriter& buf, con
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.attachmentCount);
     {
-        const std::uint8_t present = v.pAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.attachmentCount)); ++i) {
                 serialize_VkImageView(buf, v.pAttachments[i]);
             }
         }
@@ -17309,14 +17308,14 @@ inline void serialize_VkRenderPassAttachmentBeginInfo(::av::WireWriter& buf, con
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->attachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->attachmentCount) == 0) {
             out->pAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageView>(static_cast<std::size_t>(as_number(out->attachmentCount)));
+            auto* arr = arena.allocate<VkImageView>(static_cast<size_t>(as_number(out->attachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->attachmentCount)); ++i) {
                 if (!deserialize_VkImageView(r, arr[i])) { return false; }
             }
             out->pAttachments = arr;
@@ -17333,10 +17332,10 @@ inline void serialize_VkRenderPassBeginInfo(::av::WireWriter& buf, const VkRende
     serialize_VkRect2D(buf, v.renderArea);
     buf.write_pod(v.clearValueCount);
     {
-        const std::uint8_t present = v.pClearValues != nullptr ? 1 : 0;
+        const uint8_t present = v.pClearValues != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.clearValueCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.clearValueCount)); ++i) {
                 serialize_VkClearValue(buf, v.pClearValues[i]);
             }
         }
@@ -17352,14 +17351,14 @@ inline void serialize_VkRenderPassBeginInfo(::av::WireWriter& buf, const VkRende
     if (!deserialize_VkRect2D(r, &out->renderArea, arena)) { return false; }
     if (!r.read_pod(out->clearValueCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->clearValueCount) == 0) {
             out->pClearValues = nullptr;
         } else {
-            auto* arr = arena.allocate<VkClearValue>(static_cast<std::size_t>(as_number(out->clearValueCount)));
+            auto* arr = arena.allocate<VkClearValue>(static_cast<size_t>(as_number(out->clearValueCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->clearValueCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->clearValueCount)); ++i) {
                 if (!deserialize_VkClearValue(r, &arr[i], arena)) { return false; }
             }
             out->pClearValues = arr;
@@ -17374,30 +17373,30 @@ inline void serialize_VkRenderPassCreateInfo(::av::WireWriter& buf, const VkRend
     buf.write_pod(v.flags);
     buf.write_pod(v.attachmentCount);
     {
-        const std::uint8_t present = v.pAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.attachmentCount)); ++i) {
                 serialize_VkAttachmentDescription(buf, v.pAttachments[i]);
             }
         }
     }
     buf.write_pod(v.subpassCount);
     {
-        const std::uint8_t present = v.pSubpasses != nullptr ? 1 : 0;
+        const uint8_t present = v.pSubpasses != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.subpassCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.subpassCount)); ++i) {
                 serialize_VkSubpassDescription(buf, v.pSubpasses[i]);
             }
         }
     }
     buf.write_pod(v.dependencyCount);
     {
-        const std::uint8_t present = v.pDependencies != nullptr ? 1 : 0;
+        const uint8_t present = v.pDependencies != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.dependencyCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.dependencyCount)); ++i) {
                 serialize_VkSubpassDependency(buf, v.pDependencies[i]);
             }
         }
@@ -17411,14 +17410,14 @@ inline void serialize_VkRenderPassCreateInfo(::av::WireWriter& buf, const VkRend
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->attachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->attachmentCount) == 0) {
             out->pAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentDescription>(static_cast<std::size_t>(as_number(out->attachmentCount)));
+            auto* arr = arena.allocate<VkAttachmentDescription>(static_cast<size_t>(as_number(out->attachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->attachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentDescription(r, &arr[i], arena)) { return false; }
             }
             out->pAttachments = arr;
@@ -17426,14 +17425,14 @@ inline void serialize_VkRenderPassCreateInfo(::av::WireWriter& buf, const VkRend
     }
     if (!r.read_pod(out->subpassCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->subpassCount) == 0) {
             out->pSubpasses = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSubpassDescription>(static_cast<std::size_t>(as_number(out->subpassCount)));
+            auto* arr = arena.allocate<VkSubpassDescription>(static_cast<size_t>(as_number(out->subpassCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->subpassCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->subpassCount)); ++i) {
                 if (!deserialize_VkSubpassDescription(r, &arr[i], arena)) { return false; }
             }
             out->pSubpasses = arr;
@@ -17441,14 +17440,14 @@ inline void serialize_VkRenderPassCreateInfo(::av::WireWriter& buf, const VkRend
     }
     if (!r.read_pod(out->dependencyCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->dependencyCount) == 0) {
             out->pDependencies = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSubpassDependency>(static_cast<std::size_t>(as_number(out->dependencyCount)));
+            auto* arr = arena.allocate<VkSubpassDependency>(static_cast<size_t>(as_number(out->dependencyCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->dependencyCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->dependencyCount)); ++i) {
                 if (!deserialize_VkSubpassDependency(r, &arr[i], arena)) { return false; }
             }
             out->pDependencies = arr;
@@ -17463,40 +17462,40 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
     buf.write_pod(v.flags);
     buf.write_pod(v.attachmentCount);
     {
-        const std::uint8_t present = v.pAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.attachmentCount)); ++i) {
                 serialize_VkAttachmentDescription2(buf, v.pAttachments[i]);
             }
         }
     }
     buf.write_pod(v.subpassCount);
     {
-        const std::uint8_t present = v.pSubpasses != nullptr ? 1 : 0;
+        const uint8_t present = v.pSubpasses != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.subpassCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.subpassCount)); ++i) {
                 serialize_VkSubpassDescription2(buf, v.pSubpasses[i]);
             }
         }
     }
     buf.write_pod(v.dependencyCount);
     {
-        const std::uint8_t present = v.pDependencies != nullptr ? 1 : 0;
+        const uint8_t present = v.pDependencies != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.dependencyCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.dependencyCount)); ++i) {
                 serialize_VkSubpassDependency2(buf, v.pDependencies[i]);
             }
         }
     }
     buf.write_pod(v.correlatedViewMaskCount);
     {
-        const std::uint8_t present = v.pCorrelatedViewMasks != nullptr ? 1 : 0;
+        const uint8_t present = v.pCorrelatedViewMasks != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.correlatedViewMaskCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.correlatedViewMaskCount)); ++i) {
                 buf.write_pod(v.pCorrelatedViewMasks[i]);
             }
         }
@@ -17510,14 +17509,14 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->attachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->attachmentCount) == 0) {
             out->pAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentDescription2>(static_cast<std::size_t>(as_number(out->attachmentCount)));
+            auto* arr = arena.allocate<VkAttachmentDescription2>(static_cast<size_t>(as_number(out->attachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->attachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentDescription2(r, &arr[i], arena)) { return false; }
             }
             out->pAttachments = arr;
@@ -17525,14 +17524,14 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
     }
     if (!r.read_pod(out->subpassCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->subpassCount) == 0) {
             out->pSubpasses = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSubpassDescription2>(static_cast<std::size_t>(as_number(out->subpassCount)));
+            auto* arr = arena.allocate<VkSubpassDescription2>(static_cast<size_t>(as_number(out->subpassCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->subpassCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->subpassCount)); ++i) {
                 if (!deserialize_VkSubpassDescription2(r, &arr[i], arena)) { return false; }
             }
             out->pSubpasses = arr;
@@ -17540,14 +17539,14 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
     }
     if (!r.read_pod(out->dependencyCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->dependencyCount) == 0) {
             out->pDependencies = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSubpassDependency2>(static_cast<std::size_t>(as_number(out->dependencyCount)));
+            auto* arr = arena.allocate<VkSubpassDependency2>(static_cast<size_t>(as_number(out->dependencyCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->dependencyCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->dependencyCount)); ++i) {
                 if (!deserialize_VkSubpassDependency2(r, &arr[i], arena)) { return false; }
             }
             out->pDependencies = arr;
@@ -17555,14 +17554,14 @@ inline void serialize_VkRenderPassCreateInfo2(::av::WireWriter& buf, const VkRen
     }
     if (!r.read_pod(out->correlatedViewMaskCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->correlatedViewMaskCount) == 0) {
             out->pCorrelatedViewMasks = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->correlatedViewMaskCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->correlatedViewMaskCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->correlatedViewMaskCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->correlatedViewMaskCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCorrelatedViewMasks = arr;
@@ -17591,9 +17590,9 @@ inline void serialize_VkRenderPassCreationFeedbackCreateInfoEXT(::av::WireWriter
     {
         const auto* p = v.pRenderPassFeedback;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkRenderPassCreationFeedbackInfoEXT(buf, *p);
         }
     }
@@ -17604,7 +17603,7 @@ inline void serialize_VkRenderPassCreationFeedbackCreateInfoEXT(::av::WireWriter
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pRenderPassFeedback = nullptr;
@@ -17647,10 +17646,10 @@ inline void serialize_VkRenderPassInputAttachmentAspectCreateInfo(::av::WireWrit
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.aspectReferenceCount);
     {
-        const std::uint8_t present = v.pAspectReferences != nullptr ? 1 : 0;
+        const uint8_t present = v.pAspectReferences != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.aspectReferenceCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.aspectReferenceCount)); ++i) {
                 serialize_VkInputAttachmentAspectReference(buf, v.pAspectReferences[i]);
             }
         }
@@ -17663,14 +17662,14 @@ inline void serialize_VkRenderPassInputAttachmentAspectCreateInfo(::av::WireWrit
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->aspectReferenceCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->aspectReferenceCount) == 0) {
             out->pAspectReferences = nullptr;
         } else {
-            auto* arr = arena.allocate<VkInputAttachmentAspectReference>(static_cast<std::size_t>(as_number(out->aspectReferenceCount)));
+            auto* arr = arena.allocate<VkInputAttachmentAspectReference>(static_cast<size_t>(as_number(out->aspectReferenceCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->aspectReferenceCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->aspectReferenceCount)); ++i) {
                 if (!deserialize_VkInputAttachmentAspectReference(r, &arr[i], arena)) { return false; }
             }
             out->pAspectReferences = arr;
@@ -17684,30 +17683,30 @@ inline void serialize_VkRenderPassMultiviewCreateInfo(::av::WireWriter& buf, con
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.subpassCount);
     {
-        const std::uint8_t present = v.pViewMasks != nullptr ? 1 : 0;
+        const uint8_t present = v.pViewMasks != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.subpassCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.subpassCount)); ++i) {
                 buf.write_pod(v.pViewMasks[i]);
             }
         }
     }
     buf.write_pod(v.dependencyCount);
     {
-        const std::uint8_t present = v.pViewOffsets != nullptr ? 1 : 0;
+        const uint8_t present = v.pViewOffsets != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.dependencyCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.dependencyCount)); ++i) {
                 buf.write_pod(v.pViewOffsets[i]);
             }
         }
     }
     buf.write_pod(v.correlationMaskCount);
     {
-        const std::uint8_t present = v.pCorrelationMasks != nullptr ? 1 : 0;
+        const uint8_t present = v.pCorrelationMasks != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.correlationMaskCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.correlationMaskCount)); ++i) {
                 buf.write_pod(v.pCorrelationMasks[i]);
             }
         }
@@ -17720,14 +17719,14 @@ inline void serialize_VkRenderPassMultiviewCreateInfo(::av::WireWriter& buf, con
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->subpassCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->subpassCount) == 0) {
             out->pViewMasks = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->subpassCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->subpassCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->subpassCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->subpassCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pViewMasks = arr;
@@ -17735,14 +17734,14 @@ inline void serialize_VkRenderPassMultiviewCreateInfo(::av::WireWriter& buf, con
     }
     if (!r.read_pod(out->dependencyCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->dependencyCount) == 0) {
             out->pViewOffsets = nullptr;
         } else {
-            auto* arr = arena.allocate<int32_t>(static_cast<std::size_t>(as_number(out->dependencyCount)));
+            auto* arr = arena.allocate<int32_t>(static_cast<size_t>(as_number(out->dependencyCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->dependencyCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->dependencyCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pViewOffsets = arr;
@@ -17750,14 +17749,14 @@ inline void serialize_VkRenderPassMultiviewCreateInfo(::av::WireWriter& buf, con
     }
     if (!r.read_pod(out->correlationMaskCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->correlationMaskCount) == 0) {
             out->pCorrelationMasks = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->correlationMaskCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->correlationMaskCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->correlationMaskCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->correlationMaskCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCorrelationMasks = arr;
@@ -17771,20 +17770,20 @@ inline void serialize_VkRenderPassSampleLocationsBeginInfoEXT(::av::WireWriter& 
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.attachmentInitialSampleLocationsCount);
     {
-        const std::uint8_t present = v.pAttachmentInitialSampleLocations != nullptr ? 1 : 0;
+        const uint8_t present = v.pAttachmentInitialSampleLocations != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.attachmentInitialSampleLocationsCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.attachmentInitialSampleLocationsCount)); ++i) {
                 serialize_VkAttachmentSampleLocationsEXT(buf, v.pAttachmentInitialSampleLocations[i]);
             }
         }
     }
     buf.write_pod(v.postSubpassSampleLocationsCount);
     {
-        const std::uint8_t present = v.pPostSubpassSampleLocations != nullptr ? 1 : 0;
+        const uint8_t present = v.pPostSubpassSampleLocations != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.postSubpassSampleLocationsCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.postSubpassSampleLocationsCount)); ++i) {
                 serialize_VkSubpassSampleLocationsEXT(buf, v.pPostSubpassSampleLocations[i]);
             }
         }
@@ -17797,14 +17796,14 @@ inline void serialize_VkRenderPassSampleLocationsBeginInfoEXT(::av::WireWriter& 
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->attachmentInitialSampleLocationsCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->attachmentInitialSampleLocationsCount) == 0) {
             out->pAttachmentInitialSampleLocations = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentSampleLocationsEXT>(static_cast<std::size_t>(as_number(out->attachmentInitialSampleLocationsCount)));
+            auto* arr = arena.allocate<VkAttachmentSampleLocationsEXT>(static_cast<size_t>(as_number(out->attachmentInitialSampleLocationsCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->attachmentInitialSampleLocationsCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->attachmentInitialSampleLocationsCount)); ++i) {
                 if (!deserialize_VkAttachmentSampleLocationsEXT(r, &arr[i], arena)) { return false; }
             }
             out->pAttachmentInitialSampleLocations = arr;
@@ -17812,14 +17811,14 @@ inline void serialize_VkRenderPassSampleLocationsBeginInfoEXT(::av::WireWriter& 
     }
     if (!r.read_pod(out->postSubpassSampleLocationsCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->postSubpassSampleLocationsCount) == 0) {
             out->pPostSubpassSampleLocations = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSubpassSampleLocationsEXT>(static_cast<std::size_t>(as_number(out->postSubpassSampleLocationsCount)));
+            auto* arr = arena.allocate<VkSubpassSampleLocationsEXT>(static_cast<size_t>(as_number(out->postSubpassSampleLocationsCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->postSubpassSampleLocationsCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->postSubpassSampleLocationsCount)); ++i) {
                 if (!deserialize_VkSubpassSampleLocationsEXT(r, &arr[i], arena)) { return false; }
             }
             out->pPostSubpassSampleLocations = arr;
@@ -17833,10 +17832,10 @@ inline void serialize_VkRenderPassStripeBeginInfoARM(::av::WireWriter& buf, cons
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.stripeInfoCount);
     {
-        const std::uint8_t present = v.pStripeInfos != nullptr ? 1 : 0;
+        const uint8_t present = v.pStripeInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.stripeInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.stripeInfoCount)); ++i) {
                 serialize_VkRenderPassStripeInfoARM(buf, v.pStripeInfos[i]);
             }
         }
@@ -17849,14 +17848,14 @@ inline void serialize_VkRenderPassStripeBeginInfoARM(::av::WireWriter& buf, cons
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->stripeInfoCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->stripeInfoCount) == 0) {
             out->pStripeInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRenderPassStripeInfoARM>(static_cast<std::size_t>(as_number(out->stripeInfoCount)));
+            auto* arr = arena.allocate<VkRenderPassStripeInfoARM>(static_cast<size_t>(as_number(out->stripeInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->stripeInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->stripeInfoCount)); ++i) {
                 if (!deserialize_VkRenderPassStripeInfoARM(r, &arr[i], arena)) { return false; }
             }
             out->pStripeInfos = arr;
@@ -17884,10 +17883,10 @@ inline void serialize_VkRenderPassStripeSubmitInfoARM(::av::WireWriter& buf, con
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.stripeSemaphoreInfoCount);
     {
-        const std::uint8_t present = v.pStripeSemaphoreInfos != nullptr ? 1 : 0;
+        const uint8_t present = v.pStripeSemaphoreInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.stripeSemaphoreInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.stripeSemaphoreInfoCount)); ++i) {
                 serialize_VkSemaphoreSubmitInfo(buf, v.pStripeSemaphoreInfos[i]);
             }
         }
@@ -17900,14 +17899,14 @@ inline void serialize_VkRenderPassStripeSubmitInfoARM(::av::WireWriter& buf, con
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->stripeSemaphoreInfoCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->stripeSemaphoreInfoCount) == 0) {
             out->pStripeSemaphoreInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<std::size_t>(as_number(out->stripeSemaphoreInfoCount)));
+            auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<size_t>(as_number(out->stripeSemaphoreInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->stripeSemaphoreInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->stripeSemaphoreInfoCount)); ++i) {
                 if (!deserialize_VkSemaphoreSubmitInfo(r, &arr[i], arena)) { return false; }
             }
             out->pStripeSemaphoreInfos = arr;
@@ -17922,9 +17921,9 @@ inline void serialize_VkRenderPassSubpassFeedbackCreateInfoEXT(::av::WireWriter&
     {
         const auto* p = v.pSubpassFeedback;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkRenderPassSubpassFeedbackInfoEXT(buf, *p);
         }
     }
@@ -17935,7 +17934,7 @@ inline void serialize_VkRenderPassSubpassFeedbackCreateInfoEXT(::av::WireWriter&
     if (!r.read_pod(out->sType)) { return false; }
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pSubpassFeedback = nullptr;
@@ -17983,10 +17982,10 @@ inline void serialize_VkRenderingAreaInfo(::av::WireWriter& buf, const VkRenderi
     buf.write_pod(v.viewMask);
     buf.write_pod(v.colorAttachmentCount);
     {
-        const std::uint8_t present = v.pColorAttachmentFormats != nullptr ? 1 : 0;
+        const uint8_t present = v.pColorAttachmentFormats != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 buf.write_pod(v.pColorAttachmentFormats[i]);
             }
         }
@@ -18002,14 +18001,14 @@ inline void serialize_VkRenderingAreaInfo(::av::WireWriter& buf, const VkRenderi
     if (!r.read_pod(out->viewMask)) { return false; }
     if (!r.read_pod(out->colorAttachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachmentFormats = nullptr;
         } else {
-            auto* arr = arena.allocate<VkFormat>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
+            auto* arr = arena.allocate<VkFormat>(static_cast<size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorAttachmentFormats = arr;
@@ -18053,10 +18052,10 @@ inline void serialize_VkRenderingAttachmentLocationInfo(::av::WireWriter& buf, c
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.colorAttachmentCount);
     {
-        const std::uint8_t present = v.pColorAttachmentLocations != nullptr ? 1 : 0;
+        const uint8_t present = v.pColorAttachmentLocations != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 buf.write_pod(v.pColorAttachmentLocations[i]);
             }
         }
@@ -18069,14 +18068,14 @@ inline void serialize_VkRenderingAttachmentLocationInfo(::av::WireWriter& buf, c
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->colorAttachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachmentLocations = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorAttachmentLocations = arr;
@@ -18128,10 +18127,10 @@ inline void serialize_VkRenderingInfo(::av::WireWriter& buf, const VkRenderingIn
     buf.write_pod(v.viewMask);
     buf.write_pod(v.colorAttachmentCount);
     {
-        const std::uint8_t present = v.pColorAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pColorAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 serialize_VkRenderingAttachmentInfo(buf, v.pColorAttachments[i]);
             }
         }
@@ -18139,18 +18138,18 @@ inline void serialize_VkRenderingInfo(::av::WireWriter& buf, const VkRenderingIn
     {
         const auto* p = v.pDepthAttachment;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkRenderingAttachmentInfo(buf, *p);
         }
     }
     {
         const auto* p = v.pStencilAttachment;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkRenderingAttachmentInfo(buf, *p);
         }
     }
@@ -18166,21 +18165,21 @@ inline void serialize_VkRenderingInfo(::av::WireWriter& buf, const VkRenderingIn
     if (!r.read_pod(out->viewMask)) { return false; }
     if (!r.read_pod(out->colorAttachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkRenderingAttachmentInfo>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
+            auto* arr = arena.allocate<VkRenderingAttachmentInfo>(static_cast<size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!deserialize_VkRenderingAttachmentInfo(r, &arr[i], arena)) { return false; }
             }
             out->pColorAttachments = arr;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pDepthAttachment = nullptr;
@@ -18192,7 +18191,7 @@ inline void serialize_VkRenderingInfo(::av::WireWriter& buf, const VkRenderingIn
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pStencilAttachment = nullptr;
@@ -18211,10 +18210,10 @@ inline void serialize_VkRenderingInputAttachmentIndexInfo(::av::WireWriter& buf,
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.colorAttachmentCount);
     {
-        const std::uint8_t present = v.pColorAttachmentInputIndices != nullptr ? 1 : 0;
+        const uint8_t present = v.pColorAttachmentInputIndices != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 buf.write_pod(v.pColorAttachmentInputIndices[i]);
             }
         }
@@ -18231,14 +18230,14 @@ inline void serialize_VkRenderingInputAttachmentIndexInfo(::av::WireWriter& buf,
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->colorAttachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachmentInputIndices = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pColorAttachmentInputIndices = arr;
@@ -18260,10 +18259,10 @@ inline void serialize_VkResolveImageInfo2(::av::WireWriter& buf, const VkResolve
     buf.write_pod(v.dstImageLayout);
     buf.write_pod(v.regionCount);
     {
-        const std::uint8_t present = v.pRegions != nullptr ? 1 : 0;
+        const uint8_t present = v.pRegions != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.regionCount)); ++i) {
                 serialize_VkImageResolve2(buf, v.pRegions[i]);
             }
         }
@@ -18280,14 +18279,14 @@ inline void serialize_VkResolveImageInfo2(::av::WireWriter& buf, const VkResolve
     if (!r.read_pod(out->dstImageLayout)) { return false; }
     if (!r.read_pod(out->regionCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->regionCount) == 0) {
             out->pRegions = nullptr;
         } else {
-            auto* arr = arena.allocate<VkImageResolve2>(static_cast<std::size_t>(as_number(out->regionCount)));
+            auto* arr = arena.allocate<VkImageResolve2>(static_cast<size_t>(as_number(out->regionCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->regionCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->regionCount)); ++i) {
                 if (!deserialize_VkImageResolve2(r, &arr[i], arena)) { return false; }
             }
             out->pRegions = arr;
@@ -18588,19 +18587,19 @@ inline void serialize_VkSemaphoreWaitInfo(::av::WireWriter& buf, const VkSemapho
     buf.write_pod(v.flags);
     buf.write_pod(v.semaphoreCount);
     {
-        const std::uint8_t present = v.pSemaphores != nullptr ? 1 : 0;
+        const uint8_t present = v.pSemaphores != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.semaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.semaphoreCount)); ++i) {
                 serialize_VkSemaphore(buf, v.pSemaphores[i]);
             }
         }
     }
     {
-        const std::uint8_t present = v.pValues != nullptr ? 1 : 0;
+        const uint8_t present = v.pValues != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.semaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.semaphoreCount)); ++i) {
                 buf.write_pod(v.pValues[i]);
             }
         }
@@ -18614,28 +18613,28 @@ inline void serialize_VkSemaphoreWaitInfo(::av::WireWriter& buf, const VkSemapho
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->semaphoreCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->semaphoreCount) == 0) {
             out->pSemaphores = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(as_number(out->semaphoreCount)));
+            auto* arr = arena.allocate<VkSemaphore>(static_cast<size_t>(as_number(out->semaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->semaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->semaphoreCount)); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
             out->pSemaphores = arr;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->semaphoreCount) == 0) {
             out->pValues = nullptr;
         } else {
-            auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(as_number(out->semaphoreCount)));
+            auto* arr = arena.allocate<uint64_t>(static_cast<size_t>(as_number(out->semaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->semaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->semaphoreCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pValues = arr;
@@ -18651,12 +18650,12 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
     buf.write_pod(v.stage);
     buf.write_pod(v.nextStage);
     buf.write_pod(v.codeType);
-    buf.write_pod<std::uint64_t>(v.codeSize);
+    buf.write_pod<uint64_t>(v.codeSize);
     {
-        const std::uint8_t present = v.pCode != nullptr ? 1 : 0;
+        const uint8_t present = v.pCode != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present && as_number(v.codeSize) != 0) {
-            buf.write(v.pCode, static_cast<std::size_t>(as_number(v.codeSize)));
+            buf.write(v.pCode, static_cast<size_t>(as_number(v.codeSize)));
         }
     }
     {
@@ -18664,27 +18663,27 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
         if (s == nullptr) {
             buf.write_varint(0);
         } else {
-            const std::size_t n = std::strlen(s) + 1u;
+            const size_t n = __builtin_strlen(s) + 1u;
             buf.write_varint(n);
             buf.write(s, n);
         }
     }
     buf.write_pod(v.setLayoutCount);
     {
-        const std::uint8_t present = v.pSetLayouts != nullptr ? 1 : 0;
+        const uint8_t present = v.pSetLayouts != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.setLayoutCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.setLayoutCount)); ++i) {
                 serialize_VkDescriptorSetLayout(buf, v.pSetLayouts[i]);
             }
         }
     }
     buf.write_pod(v.pushConstantRangeCount);
     {
-        const std::uint8_t present = v.pPushConstantRanges != nullptr ? 1 : 0;
+        const uint8_t present = v.pPushConstantRanges != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.pushConstantRangeCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.pushConstantRangeCount)); ++i) {
                 serialize_VkPushConstantRange(buf, v.pPushConstantRanges[i]);
             }
         }
@@ -18692,9 +18691,9 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
     {
         const auto* p = v.pSpecializationInfo;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkSpecializationInfo(buf, *p);
         }
     }
@@ -18709,24 +18708,24 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
     if (!r.read_pod(out->nextStage)) { return false; }
     if (!r.read_pod(out->codeType)) { return false; }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->codeSize = static_cast<decltype(out->codeSize)>(rvk_wide);
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->codeSize) == 0) {
             out->pCode = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->codeSize)));
+            char* blob = arena.allocate_chars(static_cast<size_t>(as_number(out->codeSize)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(as_number(out->codeSize)))) { return false; }
+            if (!r.read(blob, static_cast<size_t>(as_number(out->codeSize)))) { return false; }
             out->pCode = blob;
         }
     }
     {
-        std::uint64_t n = 0;
+        uint64_t n = 0;
         if (!r.read_varint(n)) { return false; }
         if (n == 0) {
             out->pName = nullptr;
@@ -18735,23 +18734,23 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
             // length is the guest's and a host API will strcmp what it
             // is handed. A fuzzer found this in vkCreateInstance
             // (feature 042).
-            char* s = arena.allocate_chars(static_cast<std::size_t>(n) + 1u);
+            char* s = arena.allocate_chars(static_cast<size_t>(n) + 1u);
             if (s == nullptr) { return false; }
-            if (!r.read(s, static_cast<std::size_t>(n))) { return false; }
+            if (!r.read(s, static_cast<size_t>(n))) { return false; }
             s[n] = '\0';
             out->pName = s;
         }
     }
     if (!r.read_pod(out->setLayoutCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->setLayoutCount) == 0) {
             out->pSetLayouts = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<std::size_t>(as_number(out->setLayoutCount)));
+            auto* arr = arena.allocate<VkDescriptorSetLayout>(static_cast<size_t>(as_number(out->setLayoutCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->setLayoutCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->setLayoutCount)); ++i) {
                 if (!deserialize_VkDescriptorSetLayout(r, arr[i])) { return false; }
             }
             out->pSetLayouts = arr;
@@ -18759,21 +18758,21 @@ inline void serialize_VkShaderCreateInfoEXT(::av::WireWriter& buf, const VkShade
     }
     if (!r.read_pod(out->pushConstantRangeCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->pushConstantRangeCount) == 0) {
             out->pPushConstantRanges = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPushConstantRange>(static_cast<std::size_t>(as_number(out->pushConstantRangeCount)));
+            auto* arr = arena.allocate<VkPushConstantRange>(static_cast<size_t>(as_number(out->pushConstantRangeCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->pushConstantRangeCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->pushConstantRangeCount)); ++i) {
                 if (!deserialize_VkPushConstantRange(r, &arr[i], arena)) { return false; }
             }
             out->pPushConstantRanges = arr;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pSpecializationInfo = nullptr;
@@ -18791,12 +18790,12 @@ inline void serialize_VkShaderModuleCreateInfo(::av::WireWriter& buf, const VkSh
     buf.write_pod(v.sType);
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.flags);
-    buf.write_pod<std::uint64_t>(v.codeSize);
+    buf.write_pod<uint64_t>(v.codeSize);
     {
-        const std::uint8_t present = v.pCode != nullptr ? 1 : 0;
+        const uint8_t present = v.pCode != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.codeSize) / 4); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.codeSize) / 4); ++i) {
                 buf.write_pod(v.pCode[i]);
             }
         }
@@ -18809,19 +18808,19 @@ inline void serialize_VkShaderModuleCreateInfo(::av::WireWriter& buf, const VkSh
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->flags)) { return false; }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->codeSize = static_cast<decltype(out->codeSize)>(rvk_wide);
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->codeSize) / 4 == 0) {
             out->pCode = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->codeSize) / 4));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->codeSize) / 4));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->codeSize) / 4); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->codeSize) / 4); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pCode = arr;
@@ -18847,10 +18846,10 @@ inline void serialize_VkShaderModuleValidationCacheCreateInfoEXT(::av::WireWrite
 inline void serialize_VkShadingRatePaletteNV(::av::WireWriter& buf, const VkShadingRatePaletteNV& v) {
     buf.write_pod(v.shadingRatePaletteEntryCount);
     {
-        const std::uint8_t present = v.pShadingRatePaletteEntries != nullptr ? 1 : 0;
+        const uint8_t present = v.pShadingRatePaletteEntries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.shadingRatePaletteEntryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.shadingRatePaletteEntryCount)); ++i) {
                 buf.write_pod(v.pShadingRatePaletteEntries[i]);
             }
         }
@@ -18861,14 +18860,14 @@ inline void serialize_VkShadingRatePaletteNV(::av::WireWriter& buf, const VkShad
     (void)arena;
     if (!r.read_pod(out->shadingRatePaletteEntryCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->shadingRatePaletteEntryCount) == 0) {
             out->pShadingRatePaletteEntries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkShadingRatePaletteEntryNV>(static_cast<std::size_t>(as_number(out->shadingRatePaletteEntryCount)));
+            auto* arr = arena.allocate<VkShadingRatePaletteEntryNV>(static_cast<size_t>(as_number(out->shadingRatePaletteEntryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->shadingRatePaletteEntryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->shadingRatePaletteEntryCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pShadingRatePaletteEntries = arr;
@@ -18881,10 +18880,10 @@ inline void serialize_VkSparseBufferMemoryBindInfo(::av::WireWriter& buf, const 
     serialize_VkBuffer(buf, v.buffer);
     buf.write_pod(v.bindCount);
     {
-        const std::uint8_t present = v.pBinds != nullptr ? 1 : 0;
+        const uint8_t present = v.pBinds != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bindCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.bindCount)); ++i) {
                 serialize_VkSparseMemoryBind(buf, v.pBinds[i]);
             }
         }
@@ -18896,14 +18895,14 @@ inline void serialize_VkSparseBufferMemoryBindInfo(::av::WireWriter& buf, const 
     if (!deserialize_VkBuffer(r, out->buffer)) { return false; }
     if (!r.read_pod(out->bindCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->bindCount) == 0) {
             out->pBinds = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSparseMemoryBind>(static_cast<std::size_t>(as_number(out->bindCount)));
+            auto* arr = arena.allocate<VkSparseMemoryBind>(static_cast<size_t>(as_number(out->bindCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bindCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->bindCount)); ++i) {
                 if (!deserialize_VkSparseMemoryBind(r, &arr[i], arena)) { return false; }
             }
             out->pBinds = arr;
@@ -18964,10 +18963,10 @@ inline void serialize_VkSparseImageMemoryBindInfo(::av::WireWriter& buf, const V
     serialize_VkImage(buf, v.image);
     buf.write_pod(v.bindCount);
     {
-        const std::uint8_t present = v.pBinds != nullptr ? 1 : 0;
+        const uint8_t present = v.pBinds != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bindCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.bindCount)); ++i) {
                 serialize_VkSparseImageMemoryBind(buf, v.pBinds[i]);
             }
         }
@@ -18979,14 +18978,14 @@ inline void serialize_VkSparseImageMemoryBindInfo(::av::WireWriter& buf, const V
     if (!deserialize_VkImage(r, out->image)) { return false; }
     if (!r.read_pod(out->bindCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->bindCount) == 0) {
             out->pBinds = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSparseImageMemoryBind>(static_cast<std::size_t>(as_number(out->bindCount)));
+            auto* arr = arena.allocate<VkSparseImageMemoryBind>(static_cast<size_t>(as_number(out->bindCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bindCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->bindCount)); ++i) {
                 if (!deserialize_VkSparseImageMemoryBind(r, &arr[i], arena)) { return false; }
             }
             out->pBinds = arr;
@@ -19031,10 +19030,10 @@ inline void serialize_VkSparseImageOpaqueMemoryBindInfo(::av::WireWriter& buf, c
     serialize_VkImage(buf, v.image);
     buf.write_pod(v.bindCount);
     {
-        const std::uint8_t present = v.pBinds != nullptr ? 1 : 0;
+        const uint8_t present = v.pBinds != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.bindCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.bindCount)); ++i) {
                 serialize_VkSparseMemoryBind(buf, v.pBinds[i]);
             }
         }
@@ -19046,14 +19045,14 @@ inline void serialize_VkSparseImageOpaqueMemoryBindInfo(::av::WireWriter& buf, c
     if (!deserialize_VkImage(r, out->image)) { return false; }
     if (!r.read_pod(out->bindCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->bindCount) == 0) {
             out->pBinds = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSparseMemoryBind>(static_cast<std::size_t>(as_number(out->bindCount)));
+            auto* arr = arena.allocate<VkSparseMemoryBind>(static_cast<size_t>(as_number(out->bindCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->bindCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->bindCount)); ++i) {
                 if (!deserialize_VkSparseMemoryBind(r, &arr[i], arena)) { return false; }
             }
             out->pBinds = arr;
@@ -19083,20 +19082,20 @@ inline void serialize_VkSparseMemoryBind(::av::WireWriter& buf, const VkSparseMe
 inline void serialize_VkSpecializationInfo(::av::WireWriter& buf, const VkSpecializationInfo& v) {
     buf.write_pod(v.mapEntryCount);
     {
-        const std::uint8_t present = v.pMapEntries != nullptr ? 1 : 0;
+        const uint8_t present = v.pMapEntries != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.mapEntryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.mapEntryCount)); ++i) {
                 serialize_VkSpecializationMapEntry(buf, v.pMapEntries[i]);
             }
         }
     }
-    buf.write_pod<std::uint64_t>(v.dataSize);
+    buf.write_pod<uint64_t>(v.dataSize);
     {
-        const std::uint8_t present = v.pData != nullptr ? 1 : 0;
+        const uint8_t present = v.pData != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present && as_number(v.dataSize) != 0) {
-            buf.write(v.pData, static_cast<std::size_t>(as_number(v.dataSize)));
+            buf.write(v.pData, static_cast<size_t>(as_number(v.dataSize)));
         }
     }
 }
@@ -19105,33 +19104,33 @@ inline void serialize_VkSpecializationInfo(::av::WireWriter& buf, const VkSpecia
     (void)arena;
     if (!r.read_pod(out->mapEntryCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->mapEntryCount) == 0) {
             out->pMapEntries = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSpecializationMapEntry>(static_cast<std::size_t>(as_number(out->mapEntryCount)));
+            auto* arr = arena.allocate<VkSpecializationMapEntry>(static_cast<size_t>(as_number(out->mapEntryCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->mapEntryCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->mapEntryCount)); ++i) {
                 if (!deserialize_VkSpecializationMapEntry(r, &arr[i], arena)) { return false; }
             }
             out->pMapEntries = arr;
         }
     }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->dataSize = static_cast<decltype(out->dataSize)>(rvk_wide);
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->dataSize) == 0) {
             out->pData = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->dataSize)));
+            char* blob = arena.allocate_chars(static_cast<size_t>(as_number(out->dataSize)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(as_number(out->dataSize)))) { return false; }
+            if (!r.read(blob, static_cast<size_t>(as_number(out->dataSize)))) { return false; }
             out->pData = blob;
         }
     }
@@ -19141,7 +19140,7 @@ inline void serialize_VkSpecializationInfo(::av::WireWriter& buf, const VkSpecia
 inline void serialize_VkSpecializationMapEntry(::av::WireWriter& buf, const VkSpecializationMapEntry& v) {
     buf.write_pod(v.constantID);
     buf.write_pod(v.offset);
-    buf.write_pod<std::uint64_t>(v.size);
+    buf.write_pod<uint64_t>(v.size);
 }
 
 [[nodiscard]] inline bool deserialize_VkSpecializationMapEntry(::av::WireReader& r, VkSpecializationMapEntry* out, ::av::WireArena& arena) {
@@ -19149,7 +19148,7 @@ inline void serialize_VkSpecializationMapEntry(::av::WireWriter& buf, const VkSp
     if (!r.read_pod(out->constantID)) { return false; }
     if (!r.read_pod(out->offset)) { return false; }
     {
-        std::uint64_t rvk_wide = 0;
+        uint64_t rvk_wide = 0;
         if (!r.read_pod(rvk_wide)) { return false; }
         out->size = static_cast<decltype(out->size)>(rvk_wide);
     }
@@ -19175,39 +19174,39 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.waitSemaphoreCount);
     {
-        const std::uint8_t present = v.pWaitSemaphores != nullptr ? 1 : 0;
+        const uint8_t present = v.pWaitSemaphores != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.waitSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.waitSemaphoreCount)); ++i) {
                 serialize_VkSemaphore(buf, v.pWaitSemaphores[i]);
             }
         }
     }
     {
-        const std::uint8_t present = v.pWaitDstStageMask != nullptr ? 1 : 0;
+        const uint8_t present = v.pWaitDstStageMask != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.waitSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.waitSemaphoreCount)); ++i) {
                 buf.write_pod(v.pWaitDstStageMask[i]);
             }
         }
     }
     buf.write_pod(v.commandBufferCount);
     {
-        const std::uint8_t present = v.pCommandBuffers != nullptr ? 1 : 0;
+        const uint8_t present = v.pCommandBuffers != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.commandBufferCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.commandBufferCount)); ++i) {
                 serialize_VkCommandBuffer(buf, v.pCommandBuffers[i]);
             }
         }
     }
     buf.write_pod(v.signalSemaphoreCount);
     {
-        const std::uint8_t present = v.pSignalSemaphores != nullptr ? 1 : 0;
+        const uint8_t present = v.pSignalSemaphores != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.signalSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.signalSemaphoreCount)); ++i) {
                 serialize_VkSemaphore(buf, v.pSignalSemaphores[i]);
             }
         }
@@ -19220,28 +19219,28 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->waitSemaphoreCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->waitSemaphoreCount) == 0) {
             out->pWaitSemaphores = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(as_number(out->waitSemaphoreCount)));
+            auto* arr = arena.allocate<VkSemaphore>(static_cast<size_t>(as_number(out->waitSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->waitSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->waitSemaphoreCount)); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
             out->pWaitSemaphores = arr;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->waitSemaphoreCount) == 0) {
             out->pWaitDstStageMask = nullptr;
         } else {
-            auto* arr = arena.allocate<VkPipelineStageFlags>(static_cast<std::size_t>(as_number(out->waitSemaphoreCount)));
+            auto* arr = arena.allocate<VkPipelineStageFlags>(static_cast<size_t>(as_number(out->waitSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->waitSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->waitSemaphoreCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pWaitDstStageMask = arr;
@@ -19249,14 +19248,14 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
     }
     if (!r.read_pod(out->commandBufferCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->commandBufferCount) == 0) {
             out->pCommandBuffers = nullptr;
         } else {
-            auto* arr = arena.allocate<VkCommandBuffer>(static_cast<std::size_t>(as_number(out->commandBufferCount)));
+            auto* arr = arena.allocate<VkCommandBuffer>(static_cast<size_t>(as_number(out->commandBufferCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->commandBufferCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->commandBufferCount)); ++i) {
                 if (!deserialize_VkCommandBuffer(r, arr[i])) { return false; }
             }
             out->pCommandBuffers = arr;
@@ -19264,14 +19263,14 @@ inline void serialize_VkSubmitInfo(::av::WireWriter& buf, const VkSubmitInfo& v)
     }
     if (!r.read_pod(out->signalSemaphoreCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->signalSemaphoreCount) == 0) {
             out->pSignalSemaphores = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphore>(static_cast<std::size_t>(as_number(out->signalSemaphoreCount)));
+            auto* arr = arena.allocate<VkSemaphore>(static_cast<size_t>(as_number(out->signalSemaphoreCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->signalSemaphoreCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->signalSemaphoreCount)); ++i) {
                 if (!deserialize_VkSemaphore(r, arr[i])) { return false; }
             }
             out->pSignalSemaphores = arr;
@@ -19286,30 +19285,30 @@ inline void serialize_VkSubmitInfo2(::av::WireWriter& buf, const VkSubmitInfo2& 
     buf.write_pod(v.flags);
     buf.write_pod(v.waitSemaphoreInfoCount);
     {
-        const std::uint8_t present = v.pWaitSemaphoreInfos != nullptr ? 1 : 0;
+        const uint8_t present = v.pWaitSemaphoreInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.waitSemaphoreInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.waitSemaphoreInfoCount)); ++i) {
                 serialize_VkSemaphoreSubmitInfo(buf, v.pWaitSemaphoreInfos[i]);
             }
         }
     }
     buf.write_pod(v.commandBufferInfoCount);
     {
-        const std::uint8_t present = v.pCommandBufferInfos != nullptr ? 1 : 0;
+        const uint8_t present = v.pCommandBufferInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.commandBufferInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.commandBufferInfoCount)); ++i) {
                 serialize_VkCommandBufferSubmitInfo(buf, v.pCommandBufferInfos[i]);
             }
         }
     }
     buf.write_pod(v.signalSemaphoreInfoCount);
     {
-        const std::uint8_t present = v.pSignalSemaphoreInfos != nullptr ? 1 : 0;
+        const uint8_t present = v.pSignalSemaphoreInfos != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.signalSemaphoreInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.signalSemaphoreInfoCount)); ++i) {
                 serialize_VkSemaphoreSubmitInfo(buf, v.pSignalSemaphoreInfos[i]);
             }
         }
@@ -19323,14 +19322,14 @@ inline void serialize_VkSubmitInfo2(::av::WireWriter& buf, const VkSubmitInfo2& 
     if (!r.read_pod(out->flags)) { return false; }
     if (!r.read_pod(out->waitSemaphoreInfoCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->waitSemaphoreInfoCount) == 0) {
             out->pWaitSemaphoreInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<std::size_t>(as_number(out->waitSemaphoreInfoCount)));
+            auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<size_t>(as_number(out->waitSemaphoreInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->waitSemaphoreInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->waitSemaphoreInfoCount)); ++i) {
                 if (!deserialize_VkSemaphoreSubmitInfo(r, &arr[i], arena)) { return false; }
             }
             out->pWaitSemaphoreInfos = arr;
@@ -19338,14 +19337,14 @@ inline void serialize_VkSubmitInfo2(::av::WireWriter& buf, const VkSubmitInfo2& 
     }
     if (!r.read_pod(out->commandBufferInfoCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->commandBufferInfoCount) == 0) {
             out->pCommandBufferInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkCommandBufferSubmitInfo>(static_cast<std::size_t>(as_number(out->commandBufferInfoCount)));
+            auto* arr = arena.allocate<VkCommandBufferSubmitInfo>(static_cast<size_t>(as_number(out->commandBufferInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->commandBufferInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->commandBufferInfoCount)); ++i) {
                 if (!deserialize_VkCommandBufferSubmitInfo(r, &arr[i], arena)) { return false; }
             }
             out->pCommandBufferInfos = arr;
@@ -19353,14 +19352,14 @@ inline void serialize_VkSubmitInfo2(::av::WireWriter& buf, const VkSubmitInfo2& 
     }
     if (!r.read_pod(out->signalSemaphoreInfoCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->signalSemaphoreInfoCount) == 0) {
             out->pSignalSemaphoreInfos = nullptr;
         } else {
-            auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<std::size_t>(as_number(out->signalSemaphoreInfoCount)));
+            auto* arr = arena.allocate<VkSemaphoreSubmitInfo>(static_cast<size_t>(as_number(out->signalSemaphoreInfoCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->signalSemaphoreInfoCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->signalSemaphoreInfoCount)); ++i) {
                 if (!deserialize_VkSemaphoreSubmitInfo(r, &arr[i], arena)) { return false; }
             }
             out->pSignalSemaphoreInfos = arr;
@@ -19438,29 +19437,29 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
     buf.write_pod(v.pipelineBindPoint);
     buf.write_pod(v.inputAttachmentCount);
     {
-        const std::uint8_t present = v.pInputAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pInputAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.inputAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.inputAttachmentCount)); ++i) {
                 serialize_VkAttachmentReference(buf, v.pInputAttachments[i]);
             }
         }
     }
     buf.write_pod(v.colorAttachmentCount);
     {
-        const std::uint8_t present = v.pColorAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pColorAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 serialize_VkAttachmentReference(buf, v.pColorAttachments[i]);
             }
         }
     }
     {
-        const std::uint8_t present = v.pResolveAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pResolveAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 serialize_VkAttachmentReference(buf, v.pResolveAttachments[i]);
             }
         }
@@ -19468,18 +19467,18 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
     {
         const auto* p = v.pDepthStencilAttachment;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkAttachmentReference(buf, *p);
         }
     }
     buf.write_pod(v.preserveAttachmentCount);
     {
-        const std::uint8_t present = v.pPreserveAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pPreserveAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.preserveAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.preserveAttachmentCount)); ++i) {
                 buf.write_pod(v.pPreserveAttachments[i]);
             }
         }
@@ -19492,14 +19491,14 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
     if (!r.read_pod(out->pipelineBindPoint)) { return false; }
     if (!r.read_pod(out->inputAttachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->inputAttachmentCount) == 0) {
             out->pInputAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentReference>(static_cast<std::size_t>(as_number(out->inputAttachmentCount)));
+            auto* arr = arena.allocate<VkAttachmentReference>(static_cast<size_t>(as_number(out->inputAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->inputAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->inputAttachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentReference(r, &arr[i], arena)) { return false; }
             }
             out->pInputAttachments = arr;
@@ -19507,35 +19506,35 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
     }
     if (!r.read_pod(out->colorAttachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentReference>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
+            auto* arr = arena.allocate<VkAttachmentReference>(static_cast<size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentReference(r, &arr[i], arena)) { return false; }
             }
             out->pColorAttachments = arr;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pResolveAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentReference>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
+            auto* arr = arena.allocate<VkAttachmentReference>(static_cast<size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentReference(r, &arr[i], arena)) { return false; }
             }
             out->pResolveAttachments = arr;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pDepthStencilAttachment = nullptr;
@@ -19548,14 +19547,14 @@ inline void serialize_VkSubpassDescription(::av::WireWriter& buf, const VkSubpas
     }
     if (!r.read_pod(out->preserveAttachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->preserveAttachmentCount) == 0) {
             out->pPreserveAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->preserveAttachmentCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->preserveAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->preserveAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->preserveAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pPreserveAttachments = arr;
@@ -19572,29 +19571,29 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
     buf.write_pod(v.viewMask);
     buf.write_pod(v.inputAttachmentCount);
     {
-        const std::uint8_t present = v.pInputAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pInputAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.inputAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.inputAttachmentCount)); ++i) {
                 serialize_VkAttachmentReference2(buf, v.pInputAttachments[i]);
             }
         }
     }
     buf.write_pod(v.colorAttachmentCount);
     {
-        const std::uint8_t present = v.pColorAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pColorAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 serialize_VkAttachmentReference2(buf, v.pColorAttachments[i]);
             }
         }
     }
     {
-        const std::uint8_t present = v.pResolveAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pResolveAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.colorAttachmentCount)); ++i) {
                 serialize_VkAttachmentReference2(buf, v.pResolveAttachments[i]);
             }
         }
@@ -19602,18 +19601,18 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
     {
         const auto* p = v.pDepthStencilAttachment;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkAttachmentReference2(buf, *p);
         }
     }
     buf.write_pod(v.preserveAttachmentCount);
     {
-        const std::uint8_t present = v.pPreserveAttachments != nullptr ? 1 : 0;
+        const uint8_t present = v.pPreserveAttachments != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.preserveAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.preserveAttachmentCount)); ++i) {
                 buf.write_pod(v.pPreserveAttachments[i]);
             }
         }
@@ -19629,14 +19628,14 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
     if (!r.read_pod(out->viewMask)) { return false; }
     if (!r.read_pod(out->inputAttachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->inputAttachmentCount) == 0) {
             out->pInputAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<std::size_t>(as_number(out->inputAttachmentCount)));
+            auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<size_t>(as_number(out->inputAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->inputAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->inputAttachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentReference2(r, &arr[i], arena)) { return false; }
             }
             out->pInputAttachments = arr;
@@ -19644,35 +19643,35 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
     }
     if (!r.read_pod(out->colorAttachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pColorAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
+            auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentReference2(r, &arr[i], arena)) { return false; }
             }
             out->pColorAttachments = arr;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->colorAttachmentCount) == 0) {
             out->pResolveAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<std::size_t>(as_number(out->colorAttachmentCount)));
+            auto* arr = arena.allocate<VkAttachmentReference2>(static_cast<size_t>(as_number(out->colorAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->colorAttachmentCount)); ++i) {
                 if (!deserialize_VkAttachmentReference2(r, &arr[i], arena)) { return false; }
             }
             out->pResolveAttachments = arr;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pDepthStencilAttachment = nullptr;
@@ -19685,14 +19684,14 @@ inline void serialize_VkSubpassDescription2(::av::WireWriter& buf, const VkSubpa
     }
     if (!r.read_pod(out->preserveAttachmentCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->preserveAttachmentCount) == 0) {
             out->pPreserveAttachments = nullptr;
         } else {
-            auto* arr = arena.allocate<uint32_t>(static_cast<std::size_t>(as_number(out->preserveAttachmentCount)));
+            auto* arr = arena.allocate<uint32_t>(static_cast<size_t>(as_number(out->preserveAttachmentCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->preserveAttachmentCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->preserveAttachmentCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pPreserveAttachments = arr;
@@ -19709,9 +19708,9 @@ inline void serialize_VkSubpassDescriptionDepthStencilResolve(::av::WireWriter& 
     {
         const auto* p = v.pDepthStencilResolveAttachment;
         if (p == nullptr) {
-            buf.write_pod<std::uint8_t>(0);
+            buf.write_pod<uint8_t>(0);
         } else {
-            buf.write_pod<std::uint8_t>(1);
+            buf.write_pod<uint8_t>(1);
             serialize_VkAttachmentReference2(buf, *p);
         }
     }
@@ -19724,7 +19723,7 @@ inline void serialize_VkSubpassDescriptionDepthStencilResolve(::av::WireWriter& 
     if (!r.read_pod(out->depthResolveMode)) { return false; }
     if (!r.read_pod(out->stencilResolveMode)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (present == 0) {
             out->pDepthStencilResolveAttachment = nullptr;
@@ -19755,10 +19754,10 @@ inline void serialize_VkSubpassFragmentDensityMapOffsetEndInfoQCOM(::av::WireWri
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.fragmentDensityOffsetCount);
     {
-        const std::uint8_t present = v.pFragmentDensityOffsets != nullptr ? 1 : 0;
+        const uint8_t present = v.pFragmentDensityOffsets != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.fragmentDensityOffsetCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.fragmentDensityOffsetCount)); ++i) {
                 serialize_VkOffset2D(buf, v.pFragmentDensityOffsets[i]);
             }
         }
@@ -19771,14 +19770,14 @@ inline void serialize_VkSubpassFragmentDensityMapOffsetEndInfoQCOM(::av::WireWri
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->fragmentDensityOffsetCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->fragmentDensityOffsetCount) == 0) {
             out->pFragmentDensityOffsets = nullptr;
         } else {
-            auto* arr = arena.allocate<VkOffset2D>(static_cast<std::size_t>(as_number(out->fragmentDensityOffsetCount)));
+            auto* arr = arena.allocate<VkOffset2D>(static_cast<size_t>(as_number(out->fragmentDensityOffsetCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->fragmentDensityOffsetCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->fragmentDensityOffsetCount)); ++i) {
                 if (!deserialize_VkOffset2D(r, &arr[i], arena)) { return false; }
             }
             out->pFragmentDensityOffsets = arr;
@@ -19894,20 +19893,20 @@ inline void serialize_VkTimelineSemaphoreSubmitInfo(::av::WireWriter& buf, const
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.waitSemaphoreValueCount);
     {
-        const std::uint8_t present = v.pWaitSemaphoreValues != nullptr ? 1 : 0;
+        const uint8_t present = v.pWaitSemaphoreValues != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.waitSemaphoreValueCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.waitSemaphoreValueCount)); ++i) {
                 buf.write_pod(v.pWaitSemaphoreValues[i]);
             }
         }
     }
     buf.write_pod(v.signalSemaphoreValueCount);
     {
-        const std::uint8_t present = v.pSignalSemaphoreValues != nullptr ? 1 : 0;
+        const uint8_t present = v.pSignalSemaphoreValues != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.signalSemaphoreValueCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.signalSemaphoreValueCount)); ++i) {
                 buf.write_pod(v.pSignalSemaphoreValues[i]);
             }
         }
@@ -19920,14 +19919,14 @@ inline void serialize_VkTimelineSemaphoreSubmitInfo(::av::WireWriter& buf, const
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->waitSemaphoreValueCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->waitSemaphoreValueCount) == 0) {
             out->pWaitSemaphoreValues = nullptr;
         } else {
-            auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(as_number(out->waitSemaphoreValueCount)));
+            auto* arr = arena.allocate<uint64_t>(static_cast<size_t>(as_number(out->waitSemaphoreValueCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->waitSemaphoreValueCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->waitSemaphoreValueCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pWaitSemaphoreValues = arr;
@@ -19935,14 +19934,14 @@ inline void serialize_VkTimelineSemaphoreSubmitInfo(::av::WireWriter& buf, const
     }
     if (!r.read_pod(out->signalSemaphoreValueCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->signalSemaphoreValueCount) == 0) {
             out->pSignalSemaphoreValues = nullptr;
         } else {
-            auto* arr = arena.allocate<uint64_t>(static_cast<std::size_t>(as_number(out->signalSemaphoreValueCount)));
+            auto* arr = arena.allocate<uint64_t>(static_cast<size_t>(as_number(out->signalSemaphoreValueCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->signalSemaphoreValueCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->signalSemaphoreValueCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pSignalSemaphoreValues = arr;
@@ -19956,20 +19955,20 @@ inline void serialize_VkValidationFeaturesEXT(::av::WireWriter& buf, const VkVal
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.enabledValidationFeatureCount);
     {
-        const std::uint8_t present = v.pEnabledValidationFeatures != nullptr ? 1 : 0;
+        const uint8_t present = v.pEnabledValidationFeatures != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.enabledValidationFeatureCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.enabledValidationFeatureCount)); ++i) {
                 buf.write_pod(v.pEnabledValidationFeatures[i]);
             }
         }
     }
     buf.write_pod(v.disabledValidationFeatureCount);
     {
-        const std::uint8_t present = v.pDisabledValidationFeatures != nullptr ? 1 : 0;
+        const uint8_t present = v.pDisabledValidationFeatures != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.disabledValidationFeatureCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.disabledValidationFeatureCount)); ++i) {
                 buf.write_pod(v.pDisabledValidationFeatures[i]);
             }
         }
@@ -19982,14 +19981,14 @@ inline void serialize_VkValidationFeaturesEXT(::av::WireWriter& buf, const VkVal
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->enabledValidationFeatureCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->enabledValidationFeatureCount) == 0) {
             out->pEnabledValidationFeatures = nullptr;
         } else {
-            auto* arr = arena.allocate<VkValidationFeatureEnableEXT>(static_cast<std::size_t>(as_number(out->enabledValidationFeatureCount)));
+            auto* arr = arena.allocate<VkValidationFeatureEnableEXT>(static_cast<size_t>(as_number(out->enabledValidationFeatureCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->enabledValidationFeatureCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->enabledValidationFeatureCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pEnabledValidationFeatures = arr;
@@ -19997,14 +19996,14 @@ inline void serialize_VkValidationFeaturesEXT(::av::WireWriter& buf, const VkVal
     }
     if (!r.read_pod(out->disabledValidationFeatureCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->disabledValidationFeatureCount) == 0) {
             out->pDisabledValidationFeatures = nullptr;
         } else {
-            auto* arr = arena.allocate<VkValidationFeatureDisableEXT>(static_cast<std::size_t>(as_number(out->disabledValidationFeatureCount)));
+            auto* arr = arena.allocate<VkValidationFeatureDisableEXT>(static_cast<size_t>(as_number(out->disabledValidationFeatureCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->disabledValidationFeatureCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->disabledValidationFeatureCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDisabledValidationFeatures = arr;
@@ -20018,10 +20017,10 @@ inline void serialize_VkValidationFlagsEXT(::av::WireWriter& buf, const VkValida
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.disabledValidationCheckCount);
     {
-        const std::uint8_t present = v.pDisabledValidationChecks != nullptr ? 1 : 0;
+        const uint8_t present = v.pDisabledValidationChecks != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.disabledValidationCheckCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.disabledValidationCheckCount)); ++i) {
                 buf.write_pod(v.pDisabledValidationChecks[i]);
             }
         }
@@ -20034,14 +20033,14 @@ inline void serialize_VkValidationFlagsEXT(::av::WireWriter& buf, const VkValida
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->disabledValidationCheckCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->disabledValidationCheckCount) == 0) {
             out->pDisabledValidationChecks = nullptr;
         } else {
-            auto* arr = arena.allocate<VkValidationCheckEXT>(static_cast<std::size_t>(as_number(out->disabledValidationCheckCount)));
+            auto* arr = arena.allocate<VkValidationCheckEXT>(static_cast<size_t>(as_number(out->disabledValidationCheckCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->disabledValidationCheckCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->disabledValidationCheckCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pDisabledValidationChecks = arr;
@@ -20277,10 +20276,10 @@ inline void serialize_VkVideoProfileListInfoKHR(::av::WireWriter& buf, const VkV
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.profileCount);
     {
-        const std::uint8_t present = v.pProfiles != nullptr ? 1 : 0;
+        const uint8_t present = v.pProfiles != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.profileCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.profileCount)); ++i) {
                 serialize_VkVideoProfileInfoKHR(buf, v.pProfiles[i]);
             }
         }
@@ -20293,14 +20292,14 @@ inline void serialize_VkVideoProfileListInfoKHR(::av::WireWriter& buf, const VkV
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->profileCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->profileCount) == 0) {
             out->pProfiles = nullptr;
         } else {
-            auto* arr = arena.allocate<VkVideoProfileInfoKHR>(static_cast<std::size_t>(as_number(out->profileCount)));
+            auto* arr = arena.allocate<VkVideoProfileInfoKHR>(static_cast<size_t>(as_number(out->profileCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->profileCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->profileCount)); ++i) {
                 if (!deserialize_VkVideoProfileInfoKHR(r, &arr[i], arena)) { return false; }
             }
             out->pProfiles = arr;
@@ -20366,28 +20365,28 @@ inline void serialize_VkWriteDescriptorSet(::av::WireWriter& buf, const VkWriteD
     buf.write_pod(v.descriptorCount);
     buf.write_pod(v.descriptorType);
     {
-        const std::uint8_t present = v.pImageInfo != nullptr ? 1 : 0;
+        const uint8_t present = v.pImageInfo != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.descriptorCount)); ++i) {
                 serialize_VkDescriptorImageInfo(buf, v.pImageInfo[i]);
             }
         }
     }
     {
-        const std::uint8_t present = v.pBufferInfo != nullptr ? 1 : 0;
+        const uint8_t present = v.pBufferInfo != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.descriptorCount)); ++i) {
                 serialize_VkDescriptorBufferInfo(buf, v.pBufferInfo[i]);
             }
         }
     }
     {
-        const std::uint8_t present = v.pTexelBufferView != nullptr ? 1 : 0;
+        const uint8_t present = v.pTexelBufferView != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.descriptorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.descriptorCount)); ++i) {
                 serialize_VkBufferView(buf, v.pTexelBufferView[i]);
             }
         }
@@ -20404,42 +20403,42 @@ inline void serialize_VkWriteDescriptorSet(::av::WireWriter& buf, const VkWriteD
     if (!r.read_pod(out->descriptorCount)) { return false; }
     if (!r.read_pod(out->descriptorType)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->descriptorCount) == 0) {
             out->pImageInfo = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorImageInfo>(static_cast<std::size_t>(as_number(out->descriptorCount)));
+            auto* arr = arena.allocate<VkDescriptorImageInfo>(static_cast<size_t>(as_number(out->descriptorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->descriptorCount)); ++i) {
                 if (!deserialize_VkDescriptorImageInfo(r, &arr[i], arena)) { return false; }
             }
             out->pImageInfo = arr;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->descriptorCount) == 0) {
             out->pBufferInfo = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDescriptorBufferInfo>(static_cast<std::size_t>(as_number(out->descriptorCount)));
+            auto* arr = arena.allocate<VkDescriptorBufferInfo>(static_cast<size_t>(as_number(out->descriptorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->descriptorCount)); ++i) {
                 if (!deserialize_VkDescriptorBufferInfo(r, &arr[i], arena)) { return false; }
             }
             out->pBufferInfo = arr;
         }
     }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->descriptorCount) == 0) {
             out->pTexelBufferView = nullptr;
         } else {
-            auto* arr = arena.allocate<VkBufferView>(static_cast<std::size_t>(as_number(out->descriptorCount)));
+            auto* arr = arena.allocate<VkBufferView>(static_cast<size_t>(as_number(out->descriptorCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->descriptorCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->descriptorCount)); ++i) {
                 if (!deserialize_VkBufferView(r, arr[i])) { return false; }
             }
             out->pTexelBufferView = arr;
@@ -20453,10 +20452,10 @@ inline void serialize_VkWriteDescriptorSetAccelerationStructureKHR(::av::WireWri
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.accelerationStructureCount);
     {
-        const std::uint8_t present = v.pAccelerationStructures != nullptr ? 1 : 0;
+        const uint8_t present = v.pAccelerationStructures != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.accelerationStructureCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.accelerationStructureCount)); ++i) {
                 serialize_VkAccelerationStructureKHR(buf, v.pAccelerationStructures[i]);
             }
         }
@@ -20469,14 +20468,14 @@ inline void serialize_VkWriteDescriptorSetAccelerationStructureKHR(::av::WireWri
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->accelerationStructureCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->accelerationStructureCount) == 0) {
             out->pAccelerationStructures = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAccelerationStructureKHR>(static_cast<std::size_t>(as_number(out->accelerationStructureCount)));
+            auto* arr = arena.allocate<VkAccelerationStructureKHR>(static_cast<size_t>(as_number(out->accelerationStructureCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->accelerationStructureCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->accelerationStructureCount)); ++i) {
                 if (!deserialize_VkAccelerationStructureKHR(r, arr[i])) { return false; }
             }
             out->pAccelerationStructures = arr;
@@ -20490,10 +20489,10 @@ inline void serialize_VkWriteDescriptorSetAccelerationStructureNV(::av::WireWrit
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.accelerationStructureCount);
     {
-        const std::uint8_t present = v.pAccelerationStructures != nullptr ? 1 : 0;
+        const uint8_t present = v.pAccelerationStructures != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.accelerationStructureCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.accelerationStructureCount)); ++i) {
                 serialize_VkAccelerationStructureNV(buf, v.pAccelerationStructures[i]);
             }
         }
@@ -20506,14 +20505,14 @@ inline void serialize_VkWriteDescriptorSetAccelerationStructureNV(::av::WireWrit
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->accelerationStructureCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->accelerationStructureCount) == 0) {
             out->pAccelerationStructures = nullptr;
         } else {
-            auto* arr = arena.allocate<VkAccelerationStructureNV>(static_cast<std::size_t>(as_number(out->accelerationStructureCount)));
+            auto* arr = arena.allocate<VkAccelerationStructureNV>(static_cast<size_t>(as_number(out->accelerationStructureCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->accelerationStructureCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->accelerationStructureCount)); ++i) {
                 if (!deserialize_VkAccelerationStructureNV(r, arr[i])) { return false; }
             }
             out->pAccelerationStructures = arr;
@@ -20527,10 +20526,10 @@ inline void serialize_VkWriteDescriptorSetInlineUniformBlock(::av::WireWriter& b
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.dataSize);
     {
-        const std::uint8_t present = v.pData != nullptr ? 1 : 0;
+        const uint8_t present = v.pData != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present && as_number(v.dataSize) != 0) {
-            buf.write(v.pData, static_cast<std::size_t>(as_number(v.dataSize)));
+            buf.write(v.pData, static_cast<size_t>(as_number(v.dataSize)));
         }
     }
 }
@@ -20541,14 +20540,14 @@ inline void serialize_VkWriteDescriptorSetInlineUniformBlock(::av::WireWriter& b
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->dataSize)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->dataSize) == 0) {
             out->pData = nullptr;
         } else {
-            char* blob = arena.allocate_chars(static_cast<std::size_t>(as_number(out->dataSize)));
+            char* blob = arena.allocate_chars(static_cast<size_t>(as_number(out->dataSize)));
             if (blob == nullptr) { return false; }
-            if (!r.read(blob, static_cast<std::size_t>(as_number(out->dataSize)))) { return false; }
+            if (!r.read(blob, static_cast<size_t>(as_number(out->dataSize)))) { return false; }
             out->pData = blob;
         }
     }
@@ -20560,10 +20559,10 @@ inline void serialize_VkWriteDescriptorSetPartitionedAccelerationStructureNV(::a
     serialize_pnext_chain(buf, v.pNext);
     buf.write_pod(v.accelerationStructureCount);
     {
-        const std::uint8_t present = v.pAccelerationStructures != nullptr ? 1 : 0;
+        const uint8_t present = v.pAccelerationStructures != nullptr ? 1 : 0;
         buf.write_pod(present);
         if (present) {
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(v.accelerationStructureCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(v.accelerationStructureCount)); ++i) {
                 buf.write_pod(v.pAccelerationStructures[i]);
             }
         }
@@ -20576,14 +20575,14 @@ inline void serialize_VkWriteDescriptorSetPartitionedAccelerationStructureNV(::a
     if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(out), arena)) { return false; }
     if (!r.read_pod(out->accelerationStructureCount)) { return false; }
     {
-        std::uint8_t present = 0;
+        uint8_t present = 0;
         if (!r.read_pod(present)) { return false; }
         if (!present || as_number(out->accelerationStructureCount) == 0) {
             out->pAccelerationStructures = nullptr;
         } else {
-            auto* arr = arena.allocate<VkDeviceAddress>(static_cast<std::size_t>(as_number(out->accelerationStructureCount)));
+            auto* arr = arena.allocate<VkDeviceAddress>(static_cast<size_t>(as_number(out->accelerationStructureCount)));
             if (arr == nullptr) { return false; }
-            for (std::uint32_t i = 0; i < static_cast<std::uint32_t>(as_number(out->accelerationStructureCount)); ++i) {
+            for (uint32_t i = 0; i < static_cast<uint32_t>(as_number(out->accelerationStructureCount)); ++i) {
                 if (!r.read_pod(arr[i])) { return false; }
             }
             out->pAccelerationStructures = arr;
@@ -21104,7 +21103,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
     while (p != nullptr && !pnext_is_encodable(p->sType)) { p = p->pNext; }
     if (p == nullptr) { buf.write_varint(0); return; }
     buf.write_varint(1);
-    buf.write_pod(static_cast<std::uint32_t>(p->sType));
+    buf.write_pod(static_cast<uint32_t>(p->sType));
     switch (p->sType) {
     case VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_LINEAR_SWEPT_SPHERES_DATA_NV:
         serialize_VkAccelerationStructureGeometryLinearSweptSpheresDataNV(buf, *reinterpret_cast<const VkAccelerationStructureGeometryLinearSweptSpheresDataNV*>(p));
@@ -22599,18 +22598,18 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
 }
 
 [[nodiscard]] inline bool deserialize_pnext_chain(::av::WireReader& r, VkBaseOutStructure* out, ::av::WireArena& arena) {
-    std::uint64_t present = 0;
+    uint64_t present = 0;
     if (!r.read_varint(present)) { return false; }
     // Nothing on the wire: leave the caller's chain exactly as it is.
     if (present == 0) { return true; }
-    std::uint32_t raw = 0;
+    uint32_t raw = 0;
     if (!r.read_pod(raw)) { return false; }
     // Switched on as the number it is. Loading an attacker's u32 as a
     // VkStructureType is undefined for every value the enum does not
     // have, and a fuzzer found one (feature 042).
     VkBaseOutStructure* dst = nullptr;
     for (VkBaseOutStructure* n = out->pNext; n != nullptr; n = n->pNext) {
-        if (static_cast<std::uint32_t>(n->sType) == raw) { dst = n; break; }
+        if (static_cast<uint32_t>(n->sType) == raw) { dst = n; break; }
     }
     // Only adopt a freshly allocated node when the caller had no
     // chain at all (the server side). Splicing one into an
@@ -22618,7 +22617,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
     // for and never frees.
     const bool adopt = (dst == nullptr && out->pNext == nullptr);
     switch (raw) {
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_LINEAR_SWEPT_SPHERES_DATA_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_LINEAR_SWEPT_SPHERES_DATA_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAccelerationStructureGeometryLinearSweptSpheresDataNV*>(dst)
                                        : arena.allocate<VkAccelerationStructureGeometryLinearSweptSpheresDataNV>();
         if (typed == nullptr) { return false; }
@@ -22626,7 +22625,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_MOTION_TRIANGLES_DATA_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_MOTION_TRIANGLES_DATA_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAccelerationStructureGeometryMotionTrianglesDataNV*>(dst)
                                        : arena.allocate<VkAccelerationStructureGeometryMotionTrianglesDataNV>();
         if (typed == nullptr) { return false; }
@@ -22634,7 +22633,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_SPHERES_DATA_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_SPHERES_DATA_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAccelerationStructureGeometrySpheresDataNV*>(dst)
                                        : arena.allocate<VkAccelerationStructureGeometrySpheresDataNV>();
         if (typed == nullptr) { return false; }
@@ -22642,7 +22641,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MOTION_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MOTION_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAccelerationStructureMotionInfoNV*>(dst)
                                        : arena.allocate<VkAccelerationStructureMotionInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22650,7 +22649,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_AMIGO_PROFILING_SUBMIT_INFO_SEC): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_AMIGO_PROFILING_SUBMIT_INFO_SEC): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAmigoProfilingSubmitInfoSEC*>(dst)
                                        : arena.allocate<VkAmigoProfilingSubmitInfoSEC>();
         if (typed == nullptr) { return false; }
@@ -22658,7 +22657,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAttachmentDescriptionStencilLayout*>(dst)
                                        : arena.allocate<VkAttachmentDescriptionStencilLayout>();
         if (typed == nullptr) { return false; }
@@ -22666,7 +22665,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_STENCIL_LAYOUT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_STENCIL_LAYOUT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAttachmentReferenceStencilLayout*>(dst)
                                        : arena.allocate<VkAttachmentReferenceStencilLayout>();
         if (typed == nullptr) { return false; }
@@ -22674,7 +22673,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_ATTACHMENT_SAMPLE_COUNT_INFO_AMD): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_ATTACHMENT_SAMPLE_COUNT_INFO_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkAttachmentSampleCountInfoAMD*>(dst)
                                        : arena.allocate<VkAttachmentSampleCountInfoAMD>();
         if (typed == nullptr) { return false; }
@@ -22682,7 +22681,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSampleLocationsInfoEXT*>(dst)
                                        : arena.allocate<VkSampleLocationsInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -22690,7 +22689,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBindBufferMemoryDeviceGroupInfo*>(dst)
                                        : arena.allocate<VkBindBufferMemoryDeviceGroupInfo>();
         if (typed == nullptr) { return false; }
@@ -22698,7 +22697,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBindImageMemoryDeviceGroupInfo*>(dst)
                                        : arena.allocate<VkBindImageMemoryDeviceGroupInfo>();
         if (typed == nullptr) { return false; }
@@ -22706,7 +22705,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBindImageMemorySwapchainInfoKHR*>(dst)
                                        : arena.allocate<VkBindImageMemorySwapchainInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -22714,7 +22713,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBindImagePlaneMemoryInfo*>(dst)
                                        : arena.allocate<VkBindImagePlaneMemoryInfo>();
         if (typed == nullptr) { return false; }
@@ -22722,7 +22721,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BLIT_IMAGE_CUBIC_WEIGHTS_INFO_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_BLIT_IMAGE_CUBIC_WEIGHTS_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBlitImageCubicWeightsInfoQCOM*>(dst)
                                        : arena.allocate<VkBlitImageCubicWeightsInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -22730,7 +22729,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBufferDeviceAddressCreateInfoEXT*>(dst)
                                        : arena.allocate<VkBufferDeviceAddressCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -22738,7 +22737,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BUFFER_OPAQUE_CAPTURE_ADDRESS_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_BUFFER_OPAQUE_CAPTURE_ADDRESS_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBufferOpaqueCaptureAddressCreateInfo*>(dst)
                                        : arena.allocate<VkBufferOpaqueCaptureAddressCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22746,7 +22745,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkBufferUsageFlags2CreateInfo*>(dst)
                                        : arena.allocate<VkBufferUsageFlags2CreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22754,7 +22753,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkCommandBufferInheritanceConditionalRenderingInfoEXT*>(dst)
                                        : arena.allocate<VkCommandBufferInheritanceConditionalRenderingInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -22762,7 +22761,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDER_PASS_TRANSFORM_INFO_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDER_PASS_TRANSFORM_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkCommandBufferInheritanceRenderPassTransformInfoQCOM*>(dst)
                                        : arena.allocate<VkCommandBufferInheritanceRenderPassTransformInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -22770,7 +22769,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkCommandBufferInheritanceRenderingInfo*>(dst)
                                        : arena.allocate<VkCommandBufferInheritanceRenderingInfo>();
         if (typed == nullptr) { return false; }
@@ -22778,7 +22777,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_VIEWPORT_SCISSOR_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_VIEWPORT_SCISSOR_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkCommandBufferInheritanceViewportScissorInfoNV*>(dst)
                                        : arena.allocate<VkCommandBufferInheritanceViewportScissorInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22786,7 +22785,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkComputePipelineCreateInfo*>(dst)
                                        : arena.allocate<VkComputePipelineCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22794,7 +22793,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_INDIRECT_BUFFER_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_INDIRECT_BUFFER_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkComputePipelineIndirectBufferInfoNV*>(dst)
                                        : arena.allocate<VkComputePipelineIndirectBufferInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22802,7 +22801,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_COPY_COMMAND_TRANSFORM_INFO_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_COPY_COMMAND_TRANSFORM_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkCopyCommandTransformInfoQCOM*>(dst)
                                        : arena.allocate<VkCopyCommandTransformInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -22810,7 +22809,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDebugUtilsObjectNameInfoEXT*>(dst)
                                        : arena.allocate<VkDebugUtilsObjectNameInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -22818,7 +22817,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_BUFFER_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_BUFFER_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDedicatedAllocationBufferCreateInfoNV*>(dst)
                                        : arena.allocate<VkDedicatedAllocationBufferCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22826,7 +22825,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_IMAGE_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_IMAGE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDedicatedAllocationImageCreateInfoNV*>(dst)
                                        : arena.allocate<VkDedicatedAllocationImageCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22834,7 +22833,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_MEMORY_ALLOCATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_MEMORY_ALLOCATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDedicatedAllocationMemoryAllocateInfoNV*>(dst)
                                        : arena.allocate<VkDedicatedAllocationMemoryAllocateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22842,7 +22841,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEPTH_BIAS_REPRESENTATION_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEPTH_BIAS_REPRESENTATION_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDepthBiasRepresentationInfoEXT*>(dst)
                                        : arena.allocate<VkDepthBiasRepresentationInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -22850,7 +22849,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDescriptorPoolInlineUniformBlockCreateInfo*>(dst)
                                        : arena.allocate<VkDescriptorPoolInlineUniformBlockCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22858,7 +22857,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDescriptorSetLayoutBindingFlagsCreateInfo*>(dst)
                                        : arena.allocate<VkDescriptorSetLayoutBindingFlagsCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22866,7 +22865,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDescriptorSetVariableDescriptorCountAllocateInfo*>(dst)
                                        : arena.allocate<VkDescriptorSetVariableDescriptorCountAllocateInfo>();
         if (typed == nullptr) { return false; }
@@ -22874,7 +22873,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDescriptorSetVariableDescriptorCountLayoutSupport*>(dst)
                                        : arena.allocate<VkDescriptorSetVariableDescriptorCountLayoutSupport>();
         if (typed == nullptr) { return false; }
@@ -22882,7 +22881,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceDiagnosticsConfigCreateInfoNV*>(dst)
                                        : arena.allocate<VkDeviceDiagnosticsConfigCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -22890,7 +22889,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_BIND_SPARSE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_BIND_SPARSE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceGroupBindSparseInfo*>(dst)
                                        : arena.allocate<VkDeviceGroupBindSparseInfo>();
         if (typed == nullptr) { return false; }
@@ -22898,7 +22897,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceGroupCommandBufferBeginInfo*>(dst)
                                        : arena.allocate<VkDeviceGroupCommandBufferBeginInfo>();
         if (typed == nullptr) { return false; }
@@ -22906,7 +22905,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceGroupDeviceCreateInfo*>(dst)
                                        : arena.allocate<VkDeviceGroupDeviceCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22914,7 +22913,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_RENDER_PASS_BEGIN_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_RENDER_PASS_BEGIN_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceGroupRenderPassBeginInfo*>(dst)
                                        : arena.allocate<VkDeviceGroupRenderPassBeginInfo>();
         if (typed == nullptr) { return false; }
@@ -22922,7 +22921,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceGroupSubmitInfo*>(dst)
                                        : arena.allocate<VkDeviceGroupSubmitInfo>();
         if (typed == nullptr) { return false; }
@@ -22930,7 +22929,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceMemoryOverallocationCreateInfoAMD*>(dst)
                                        : arena.allocate<VkDeviceMemoryOverallocationCreateInfoAMD>();
         if (typed == nullptr) { return false; }
@@ -22938,7 +22937,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_PIPELINE_BINARY_INTERNAL_CACHE_CONTROL_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEVICE_PIPELINE_BINARY_INTERNAL_CACHE_CONTROL_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDevicePipelineBinaryInternalCacheControlKHR*>(dst)
                                        : arena.allocate<VkDevicePipelineBinaryInternalCacheControlKHR>();
         if (typed == nullptr) { return false; }
@@ -22946,7 +22945,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDevicePrivateDataCreateInfo*>(dst)
                                        : arena.allocate<VkDevicePrivateDataCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22954,7 +22953,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceQueueGlobalPriorityCreateInfo*>(dst)
                                        : arena.allocate<VkDeviceQueueGlobalPriorityCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -22962,7 +22961,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DEVICE_QUEUE_SHADER_CORE_CONTROL_CREATE_INFO_ARM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DEVICE_QUEUE_SHADER_CORE_CONTROL_CREATE_INFO_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDeviceQueueShaderCoreControlCreateInfoARM*>(dst)
                                        : arena.allocate<VkDeviceQueueShaderCoreControlCreateInfoARM>();
         if (typed == nullptr) { return false; }
@@ -22970,7 +22969,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DIRECT_DRIVER_LOADING_LIST_LUNARG): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DIRECT_DRIVER_LOADING_LIST_LUNARG): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDirectDriverLoadingListLUNARG*>(dst)
                                        : arena.allocate<VkDirectDriverLoadingListLUNARG>();
         if (typed == nullptr) { return false; }
@@ -22978,7 +22977,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDrmFormatModifierPropertiesList2EXT*>(dst)
                                        : arena.allocate<VkDrmFormatModifierPropertiesList2EXT>();
         if (typed == nullptr) { return false; }
@@ -22986,7 +22985,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkDrmFormatModifierPropertiesListEXT*>(dst)
                                        : arena.allocate<VkDrmFormatModifierPropertiesListEXT>();
         if (typed == nullptr) { return false; }
@@ -22994,7 +22993,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExportFenceCreateInfo*>(dst)
                                        : arena.allocate<VkExportFenceCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -23002,7 +23001,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExportMemoryAllocateInfo*>(dst)
                                        : arena.allocate<VkExportMemoryAllocateInfo>();
         if (typed == nullptr) { return false; }
@@ -23010,7 +23009,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExportMemoryAllocateInfoNV*>(dst)
                                        : arena.allocate<VkExportMemoryAllocateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -23018,7 +23017,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExportSemaphoreCreateInfo*>(dst)
                                        : arena.allocate<VkExportSemaphoreCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -23026,7 +23025,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExternalImageFormatProperties*>(dst)
                                        : arena.allocate<VkExternalImageFormatProperties>();
         if (typed == nullptr) { return false; }
@@ -23034,7 +23033,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_ACQUIRE_UNMODIFIED_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_ACQUIRE_UNMODIFIED_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExternalMemoryAcquireUnmodifiedEXT*>(dst)
                                        : arena.allocate<VkExternalMemoryAcquireUnmodifiedEXT>();
         if (typed == nullptr) { return false; }
@@ -23042,7 +23041,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExternalMemoryBufferCreateInfo*>(dst)
                                        : arena.allocate<VkExternalMemoryBufferCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -23050,7 +23049,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExternalMemoryImageCreateInfo*>(dst)
                                        : arena.allocate<VkExternalMemoryImageCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -23058,7 +23057,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkExternalMemoryImageCreateInfoNV*>(dst)
                                        : arena.allocate<VkExternalMemoryImageCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -23066,7 +23065,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_FILTER_CUBIC_IMAGE_VIEW_IMAGE_FORMAT_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_FILTER_CUBIC_IMAGE_VIEW_IMAGE_FORMAT_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkFilterCubicImageViewImageFormatPropertiesEXT*>(dst)
                                        : arena.allocate<VkFilterCubicImageViewImageFormatPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23074,7 +23073,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkFormatProperties3*>(dst)
                                        : arena.allocate<VkFormatProperties3>();
         if (typed == nullptr) { return false; }
@@ -23082,7 +23081,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkFragmentShadingRateAttachmentInfoKHR*>(dst)
                                        : arena.allocate<VkFragmentShadingRateAttachmentInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -23090,7 +23089,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_FRAME_BOUNDARY_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_FRAME_BOUNDARY_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkFrameBoundaryEXT*>(dst)
                                        : arena.allocate<VkFrameBoundaryEXT>();
         if (typed == nullptr) { return false; }
@@ -23098,7 +23097,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkFramebufferAttachmentsCreateInfo*>(dst)
                                        : arena.allocate<VkFramebufferAttachmentsCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -23106,7 +23105,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkGraphicsPipelineCreateInfo*>(dst)
                                        : arena.allocate<VkGraphicsPipelineCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -23114,7 +23113,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkGraphicsPipelineLibraryCreateInfoEXT*>(dst)
                                        : arena.allocate<VkGraphicsPipelineLibraryCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23122,7 +23121,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_SHADER_GROUPS_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_SHADER_GROUPS_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkGraphicsPipelineShaderGroupsCreateInfoNV*>(dst)
                                        : arena.allocate<VkGraphicsPipelineShaderGroupsCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -23130,7 +23129,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_HOST_IMAGE_COPY_DEVICE_PERFORMANCE_QUERY): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_HOST_IMAGE_COPY_DEVICE_PERFORMANCE_QUERY): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkHostImageCopyDevicePerformanceQuery*>(dst)
                                        : arena.allocate<VkHostImageCopyDevicePerformanceQuery>();
         if (typed == nullptr) { return false; }
@@ -23138,7 +23137,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_ALIGNMENT_CONTROL_CREATE_INFO_MESA): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_ALIGNMENT_CONTROL_CREATE_INFO_MESA): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageAlignmentControlCreateInfoMESA*>(dst)
                                        : arena.allocate<VkImageAlignmentControlCreateInfoMESA>();
         if (typed == nullptr) { return false; }
@@ -23146,7 +23145,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageCompressionControlEXT*>(dst)
                                        : arena.allocate<VkImageCompressionControlEXT>();
         if (typed == nullptr) { return false; }
@@ -23154,7 +23153,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageCompressionPropertiesEXT*>(dst)
                                        : arena.allocate<VkImageCompressionPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23162,7 +23161,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageDrmFormatModifierExplicitCreateInfoEXT*>(dst)
                                        : arena.allocate<VkImageDrmFormatModifierExplicitCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23170,7 +23169,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageDrmFormatModifierListCreateInfoEXT*>(dst)
                                        : arena.allocate<VkImageDrmFormatModifierListCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23178,7 +23177,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageFormatListCreateInfo*>(dst)
                                        : arena.allocate<VkImageFormatListCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -23186,7 +23185,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImagePlaneMemoryRequirementsInfo*>(dst)
                                        : arena.allocate<VkImagePlaneMemoryRequirementsInfo>();
         if (typed == nullptr) { return false; }
@@ -23194,7 +23193,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageStencilUsageCreateInfo*>(dst)
                                        : arena.allocate<VkImageStencilUsageCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -23202,7 +23201,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageSwapchainCreateInfoKHR*>(dst)
                                        : arena.allocate<VkImageSwapchainCreateInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -23210,7 +23209,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_ASTC_DECODE_MODE_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_ASTC_DECODE_MODE_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageViewASTCDecodeModeEXT*>(dst)
                                        : arena.allocate<VkImageViewASTCDecodeModeEXT>();
         if (typed == nullptr) { return false; }
@@ -23218,7 +23217,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_MIN_LOD_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageViewMinLodCreateInfoEXT*>(dst)
                                        : arena.allocate<VkImageViewMinLodCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23226,7 +23225,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_SAMPLE_WEIGHT_CREATE_INFO_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_SAMPLE_WEIGHT_CREATE_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageViewSampleWeightCreateInfoQCOM*>(dst)
                                        : arena.allocate<VkImageViewSampleWeightCreateInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -23234,7 +23233,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_SLICED_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_SLICED_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageViewSlicedCreateInfoEXT*>(dst)
                                        : arena.allocate<VkImageViewSlicedCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23242,7 +23241,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImageViewUsageCreateInfo*>(dst)
                                        : arena.allocate<VkImageViewUsageCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -23250,7 +23249,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkImportMemoryFdInfoKHR*>(dst)
                                        : arena.allocate<VkImportMemoryFdInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -23258,7 +23257,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_LATENCY_SUBMISSION_PRESENT_ID_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_LATENCY_SUBMISSION_PRESENT_ID_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkLatencySubmissionPresentIdNV*>(dst)
                                        : arena.allocate<VkLatencySubmissionPresentIdNV>();
         if (typed == nullptr) { return false; }
@@ -23266,7 +23265,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkLayerSettingsCreateInfoEXT*>(dst)
                                        : arena.allocate<VkLayerSettingsCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23274,7 +23273,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryAllocateFlagsInfo*>(dst)
                                        : arena.allocate<VkMemoryAllocateFlagsInfo>();
         if (typed == nullptr) { return false; }
@@ -23282,7 +23281,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_BARRIER_2): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_MEMORY_BARRIER_2): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryBarrier2*>(dst)
                                        : arena.allocate<VkMemoryBarrier2>();
         if (typed == nullptr) { return false; }
@@ -23290,7 +23289,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_BARRIER_ACCESS_FLAGS_3_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_MEMORY_BARRIER_ACCESS_FLAGS_3_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryBarrierAccessFlags3KHR*>(dst)
                                        : arena.allocate<VkMemoryBarrierAccessFlags3KHR>();
         if (typed == nullptr) { return false; }
@@ -23298,7 +23297,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryDedicatedAllocateInfo*>(dst)
                                        : arena.allocate<VkMemoryDedicatedAllocateInfo>();
         if (typed == nullptr) { return false; }
@@ -23306,7 +23305,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryDedicatedRequirements*>(dst)
                                        : arena.allocate<VkMemoryDedicatedRequirements>();
         if (typed == nullptr) { return false; }
@@ -23314,7 +23313,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryOpaqueCaptureAddressAllocateInfo*>(dst)
                                        : arena.allocate<VkMemoryOpaqueCaptureAddressAllocateInfo>();
         if (typed == nullptr) { return false; }
@@ -23322,7 +23321,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MEMORY_PRIORITY_ALLOCATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_MEMORY_PRIORITY_ALLOCATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMemoryPriorityAllocateInfoEXT*>(dst)
                                        : arena.allocate<VkMemoryPriorityAllocateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23330,7 +23329,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMultisampledRenderToSingleSampledInfoEXT*>(dst)
                                        : arena.allocate<VkMultisampledRenderToSingleSampledInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23338,7 +23337,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MULTIVIEW_PER_VIEW_ATTRIBUTES_INFO_NVX): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_MULTIVIEW_PER_VIEW_ATTRIBUTES_INFO_NVX): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMultiviewPerViewAttributesInfoNVX*>(dst)
                                        : arena.allocate<VkMultiviewPerViewAttributesInfoNVX>();
         if (typed == nullptr) { return false; }
@@ -23346,7 +23345,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MULTIVIEW_PER_VIEW_RENDER_AREAS_RENDER_PASS_BEGIN_INFO_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_MULTIVIEW_PER_VIEW_RENDER_AREAS_RENDER_PASS_BEGIN_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM*>(dst)
                                        : arena.allocate<VkMultiviewPerViewRenderAreasRenderPassBeginInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -23354,7 +23353,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_MUTABLE_DESCRIPTOR_TYPE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkMutableDescriptorTypeCreateInfoEXT*>(dst)
                                        : arena.allocate<VkMutableDescriptorTypeCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -23362,7 +23361,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_OPTICAL_FLOW_IMAGE_FORMAT_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_OPTICAL_FLOW_IMAGE_FORMAT_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkOpticalFlowImageFormatInfoNV*>(dst)
                                        : arena.allocate<VkOpticalFlowImageFormatInfoNV>();
         if (typed == nullptr) { return false; }
@@ -23370,7 +23369,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PERFORMANCE_QUERY_SUBMIT_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PERFORMANCE_QUERY_SUBMIT_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPerformanceQuerySubmitInfoKHR*>(dst)
                                        : arena.allocate<VkPerformanceQuerySubmitInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -23378,7 +23377,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevice16BitStorageFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDevice16BitStorageFeatures>();
         if (typed == nullptr) { return false; }
@@ -23386,7 +23385,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevice4444FormatsFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevice4444FormatsFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23394,7 +23393,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevice8BitStorageFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDevice8BitStorageFeatures>();
         if (typed == nullptr) { return false; }
@@ -23402,7 +23401,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ASTC_DECODE_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ASTC_DECODE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceASTCDecodeFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceASTCDecodeFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23410,7 +23409,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAccelerationStructureFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAccelerationStructureFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -23418,7 +23417,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAccelerationStructurePropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAccelerationStructurePropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -23426,7 +23425,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAddressBindingReportFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAddressBindingReportFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23434,7 +23433,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_AMIGO_PROFILING_FEATURES_SEC): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_AMIGO_PROFILING_FEATURES_SEC): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAmigoProfilingFeaturesSEC*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAmigoProfilingFeaturesSEC>();
         if (typed == nullptr) { return false; }
@@ -23442,7 +23441,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ANTI_LAG_FEATURES_AMD): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ANTI_LAG_FEATURES_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAntiLagFeaturesAMD*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAntiLagFeaturesAMD>();
         if (typed == nullptr) { return false; }
@@ -23450,7 +23449,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_DYNAMIC_STATE_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_DYNAMIC_STATE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAttachmentFeedbackLoopDynamicStateFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23458,7 +23457,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ATTACHMENT_FEEDBACK_LOOP_LAYOUT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23466,7 +23465,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23474,7 +23473,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23482,7 +23481,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BORDER_COLOR_SWIZZLE_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BORDER_COLOR_SWIZZLE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceBorderColorSwizzleFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceBorderColorSwizzleFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23490,7 +23489,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceBufferDeviceAddressFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceBufferDeviceAddressFeatures>();
         if (typed == nullptr) { return false; }
@@ -23498,7 +23497,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceBufferDeviceAddressFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceBufferDeviceAddressFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23506,7 +23505,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_ACCELERATION_STRUCTURE_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_ACCELERATION_STRUCTURE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceClusterAccelerationStructureFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceClusterAccelerationStructureFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23514,7 +23513,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_ACCELERATION_STRUCTURE_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_ACCELERATION_STRUCTURE_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceClusterAccelerationStructurePropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceClusterAccelerationStructurePropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23522,7 +23521,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_FEATURES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceClusterCullingShaderFeaturesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -23530,7 +23529,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_PROPERTIES_HUAWEI): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_PROPERTIES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceClusterCullingShaderPropertiesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -23538,7 +23537,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_VRS_FEATURES_HUAWEI): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CLUSTER_CULLING_SHADER_VRS_FEATURES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceClusterCullingShaderVrsFeaturesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceClusterCullingShaderVrsFeaturesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -23546,7 +23545,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCoherentMemoryFeaturesAMD*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCoherentMemoryFeaturesAMD>();
         if (typed == nullptr) { return false; }
@@ -23554,7 +23553,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceColorWriteEnableFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceColorWriteEnableFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23562,7 +23561,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMMAND_BUFFER_INHERITANCE_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMMAND_BUFFER_INHERITANCE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCommandBufferInheritanceFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCommandBufferInheritanceFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23570,7 +23569,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceComputeShaderDerivativesFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -23578,7 +23577,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_PROPERTIES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceComputeShaderDerivativesPropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceComputeShaderDerivativesPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -23586,7 +23585,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceConditionalRenderingFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceConditionalRenderingFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23594,7 +23593,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceConservativeRasterizationPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceConservativeRasterizationPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23602,7 +23601,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_2_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_2_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeMatrix2FeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeMatrix2FeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23610,7 +23609,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_2_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_2_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeMatrix2PropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeMatrix2PropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23618,7 +23617,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeMatrixFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeMatrixFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -23626,7 +23625,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeMatrixFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeMatrixFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23634,7 +23633,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeMatrixPropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeMatrixPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -23642,7 +23641,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeMatrixPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeMatrixPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23650,7 +23649,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_VECTOR_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_VECTOR_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeVectorFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeVectorFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23658,7 +23657,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_VECTOR_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_VECTOR_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCooperativeVectorPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCooperativeVectorPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23666,7 +23665,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCopyMemoryIndirectFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCopyMemoryIndirectFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23674,7 +23673,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COPY_MEMORY_INDIRECT_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCopyMemoryIndirectPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCopyMemoryIndirectPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23682,7 +23681,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CORNER_SAMPLED_IMAGE_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CORNER_SAMPLED_IMAGE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCornerSampledImageFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCornerSampledImageFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23690,7 +23689,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COVERAGE_REDUCTION_MODE_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COVERAGE_REDUCTION_MODE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCoverageReductionModeFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCoverageReductionModeFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23698,7 +23697,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUBIC_CLAMP_FEATURES_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUBIC_CLAMP_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCubicClampFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCubicClampFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -23706,7 +23705,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUBIC_WEIGHTS_FEATURES_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUBIC_WEIGHTS_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCubicWeightsFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCubicWeightsFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -23714,7 +23713,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCudaKernelLaunchFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCudaKernelLaunchFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23722,7 +23721,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUDA_KERNEL_LAUNCH_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCudaKernelLaunchPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCudaKernelLaunchPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23730,7 +23729,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCustomBorderColorFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCustomBorderColorFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23738,7 +23737,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceCustomBorderColorPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceCustomBorderColorPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23746,7 +23745,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEDICATED_ALLOCATION_IMAGE_ALIASING_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEDICATED_ALLOCATION_IMAGE_ALIASING_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23754,7 +23753,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_BIAS_CONTROL_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_BIAS_CONTROL_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDepthBiasControlFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDepthBiasControlFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23762,7 +23761,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_CONTROL_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_CONTROL_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDepthClampControlFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDepthClampControlFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23770,7 +23769,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_ZERO_ONE_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLAMP_ZERO_ONE_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDepthClampZeroOneFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDepthClampZeroOneFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -23778,7 +23777,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDepthClipControlFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDepthClipControlFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23786,7 +23785,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDepthClipEnableFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDepthClipEnableFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23794,7 +23793,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDepthStencilResolveProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDepthStencilResolveProperties>();
         if (typed == nullptr) { return false; }
@@ -23802,7 +23801,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_DENSITY_MAP_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_DENSITY_MAP_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorBufferDensityMapPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23810,7 +23809,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorBufferFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorBufferFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23818,7 +23817,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorBufferPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorBufferPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23826,7 +23825,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorIndexingFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorIndexingFeatures>();
         if (typed == nullptr) { return false; }
@@ -23834,7 +23833,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorIndexingProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorIndexingProperties>();
         if (typed == nullptr) { return false; }
@@ -23842,7 +23841,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_POOL_OVERALLOCATION_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_POOL_OVERALLOCATION_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23850,7 +23849,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_SET_HOST_MAPPING_FEATURES_VALVE): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_SET_HOST_MAPPING_FEATURES_VALVE): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDescriptorSetHostMappingFeaturesVALVE>();
         if (typed == nullptr) { return false; }
@@ -23858,7 +23857,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_COMPUTE_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_COMPUTE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDeviceGeneratedCommandsComputeFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23866,7 +23865,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDeviceGeneratedCommandsFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23874,7 +23873,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23882,7 +23881,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDeviceGeneratedCommandsPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDeviceGeneratedCommandsPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23890,7 +23889,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_GENERATED_COMMANDS_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -23898,7 +23897,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_MEMORY_REPORT_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEVICE_MEMORY_REPORT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDeviceMemoryReportFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDeviceMemoryReportFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23906,7 +23905,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DIAGNOSTICS_CONFIG_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DIAGNOSTICS_CONFIG_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDiagnosticsConfigFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDiagnosticsConfigFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23914,7 +23913,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DISCARD_RECTANGLE_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DISCARD_RECTANGLE_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDiscardRectanglePropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDiscardRectanglePropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23922,7 +23921,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDriverProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDriverProperties>();
         if (typed == nullptr) { return false; }
@@ -23930,7 +23929,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRM_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDrmPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDrmPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23938,7 +23937,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDynamicRenderingFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDynamicRenderingFeatures>();
         if (typed == nullptr) { return false; }
@@ -23946,7 +23945,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_LOCAL_READ_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_LOCAL_READ_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDynamicRenderingLocalReadFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDynamicRenderingLocalReadFeatures>();
         if (typed == nullptr) { return false; }
@@ -23954,7 +23953,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceDynamicRenderingUnusedAttachmentsFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23962,7 +23961,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXCLUSIVE_SCISSOR_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXCLUSIVE_SCISSOR_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExclusiveScissorFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExclusiveScissorFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -23970,7 +23969,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExtendedDynamicState2FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExtendedDynamicState2FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23978,7 +23977,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExtendedDynamicState3FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExtendedDynamicState3FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -23986,7 +23985,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExtendedDynamicState3PropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExtendedDynamicState3PropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -23994,7 +23993,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24002,7 +24001,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExtendedSparseAddressSpaceFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24010,7 +24009,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_SPARSE_ADDRESS_SPACE_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExtendedSparseAddressSpacePropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExtendedSparseAddressSpacePropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -24018,7 +24017,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExternalImageFormatInfo*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExternalImageFormatInfo>();
         if (typed == nullptr) { return false; }
@@ -24026,7 +24025,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExternalMemoryHostPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExternalMemoryHostPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24034,7 +24033,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_RDMA_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_RDMA_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceExternalMemoryRDMAFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceExternalMemoryRDMAFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24042,7 +24041,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFaultFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFaultFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24050,7 +24049,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFeatures2*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFeatures2>();
         if (typed == nullptr) { return false; }
@@ -24058,7 +24057,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFloatControlsProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFloatControlsProperties>();
         if (typed == nullptr) { return false; }
@@ -24066,7 +24065,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentDensityMap2FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentDensityMap2FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24074,7 +24073,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_2_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentDensityMap2PropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentDensityMap2PropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24082,7 +24081,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentDensityMapFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentDensityMapFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24090,7 +24089,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_FEATURES_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentDensityMapOffsetFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24098,7 +24097,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_PROPERTIES_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_OFFSET_PROPERTIES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentDensityMapOffsetPropertiesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24106,7 +24105,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentDensityMapPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentDensityMapPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24114,7 +24113,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShaderBarycentricFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24122,7 +24121,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_PROPERTIES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShaderBarycentricPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -24130,7 +24129,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24138,7 +24137,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_ENUMS_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_ENUMS_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShadingRateEnumsFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShadingRateEnumsFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24146,7 +24145,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_ENUMS_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_ENUMS_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShadingRateEnumsPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShadingRateEnumsPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -24154,7 +24153,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShadingRateFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24162,7 +24161,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFragmentShadingRatePropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -24170,7 +24169,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAME_BOUNDARY_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAME_BOUNDARY_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceFrameBoundaryFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceFrameBoundaryFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24178,7 +24177,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GLOBAL_PRIORITY_QUERY_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GLOBAL_PRIORITY_QUERY_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceGlobalPriorityQueryFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceGlobalPriorityQueryFeatures>();
         if (typed == nullptr) { return false; }
@@ -24186,7 +24185,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceGraphicsPipelineLibraryFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24194,7 +24193,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GRAPHICS_PIPELINE_LIBRARY_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceGraphicsPipelineLibraryPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24202,7 +24201,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HDR_VIVID_FEATURES_HUAWEI): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HDR_VIVID_FEATURES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceHdrVividFeaturesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceHdrVividFeaturesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -24210,7 +24209,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceHostImageCopyFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceHostImageCopyFeatures>();
         if (typed == nullptr) { return false; }
@@ -24218,7 +24217,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_IMAGE_COPY_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceHostImageCopyProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceHostImageCopyProperties>();
         if (typed == nullptr) { return false; }
@@ -24226,7 +24225,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceHostQueryResetFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceHostQueryResetFeatures>();
         if (typed == nullptr) { return false; }
@@ -24234,7 +24233,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceIDProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceIDProperties>();
         if (typed == nullptr) { return false; }
@@ -24242,7 +24241,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_2D_VIEW_OF_3D_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_2D_VIEW_OF_3D_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImage2DViewOf3DFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImage2DViewOf3DFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24250,7 +24249,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_FEATURES_MESA): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_FEATURES_MESA): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageAlignmentControlFeaturesMESA*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageAlignmentControlFeaturesMESA>();
         if (typed == nullptr) { return false; }
@@ -24258,7 +24257,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_PROPERTIES_MESA): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ALIGNMENT_CONTROL_PROPERTIES_MESA): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageAlignmentControlPropertiesMESA*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageAlignmentControlPropertiesMESA>();
         if (typed == nullptr) { return false; }
@@ -24266,7 +24265,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageCompressionControlFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageCompressionControlFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24274,7 +24273,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_COMPRESSION_CONTROL_SWAPCHAIN_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageCompressionControlSwapchainFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24282,7 +24281,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageDrmFormatModifierInfoEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageDrmFormatModifierInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -24290,7 +24289,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_FEATURES_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageProcessing2FeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageProcessing2FeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24298,7 +24297,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_PROPERTIES_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_2_PROPERTIES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageProcessing2PropertiesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageProcessing2PropertiesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24306,7 +24305,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_FEATURES_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageProcessingFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageProcessingFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24314,7 +24313,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_PROPERTIES_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_PROCESSING_PROPERTIES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageProcessingPropertiesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageProcessingPropertiesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24322,7 +24321,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageRobustnessFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageRobustnessFeatures>();
         if (typed == nullptr) { return false; }
@@ -24330,7 +24329,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_SLICED_VIEW_OF_3D_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_SLICED_VIEW_OF_3D_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageSlicedViewOf3DFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageSlicedViewOf3DFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24338,7 +24337,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_IMAGE_FORMAT_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_IMAGE_FORMAT_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageViewImageFormatInfoEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageViewImageFormatInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -24346,7 +24345,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_MIN_LOD_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_VIEW_MIN_LOD_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImageViewMinLodFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImageViewMinLodFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24354,7 +24353,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceImagelessFramebufferFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceImagelessFramebufferFeatures>();
         if (typed == nullptr) { return false; }
@@ -24362,7 +24361,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceIndexTypeUint8Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceIndexTypeUint8Features>();
         if (typed == nullptr) { return false; }
@@ -24370,7 +24369,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INHERITED_VIEWPORT_SCISSOR_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INHERITED_VIEWPORT_SCISSOR_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceInheritedViewportScissorFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceInheritedViewportScissorFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24378,7 +24377,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceInlineUniformBlockFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceInlineUniformBlockFeatures>();
         if (typed == nullptr) { return false; }
@@ -24386,7 +24385,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceInlineUniformBlockProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceInlineUniformBlockProperties>();
         if (typed == nullptr) { return false; }
@@ -24394,7 +24393,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INVOCATION_MASK_FEATURES_HUAWEI): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INVOCATION_MASK_FEATURES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceInvocationMaskFeaturesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceInvocationMaskFeaturesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -24402,7 +24401,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_PROPERTIES_LIST_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_PROPERTIES_LIST_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLayeredApiPropertiesListKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLayeredApiPropertiesListKHR>();
         if (typed == nullptr) { return false; }
@@ -24410,7 +24409,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_VULKAN_PROPERTIES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_API_VULKAN_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLayeredApiVulkanPropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLayeredApiVulkanPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -24418,7 +24417,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_DRIVER_PROPERTIES_MSFT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LAYERED_DRIVER_PROPERTIES_MSFT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLayeredDriverPropertiesMSFT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLayeredDriverPropertiesMSFT>();
         if (typed == nullptr) { return false; }
@@ -24426,7 +24425,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_DITHERING_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_DITHERING_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLegacyDitheringFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLegacyDitheringFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24434,7 +24433,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_VERTEX_ATTRIBUTES_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_VERTEX_ATTRIBUTES_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLegacyVertexAttributesFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLegacyVertexAttributesFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24442,7 +24441,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_VERTEX_ATTRIBUTES_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LEGACY_VERTEX_ATTRIBUTES_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLegacyVertexAttributesPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLegacyVertexAttributesPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24450,7 +24449,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLineRasterizationFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLineRasterizationFeatures>();
         if (typed == nullptr) { return false; }
@@ -24458,7 +24457,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLineRasterizationProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLineRasterizationProperties>();
         if (typed == nullptr) { return false; }
@@ -24466,7 +24465,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINEAR_COLOR_ATTACHMENT_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINEAR_COLOR_ATTACHMENT_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceLinearColorAttachmentFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceLinearColorAttachmentFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24474,7 +24473,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance3Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance3Properties>();
         if (typed == nullptr) { return false; }
@@ -24482,7 +24481,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance4Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance4Features>();
         if (typed == nullptr) { return false; }
@@ -24490,7 +24489,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance4Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance4Properties>();
         if (typed == nullptr) { return false; }
@@ -24498,7 +24497,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance5Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance5Features>();
         if (typed == nullptr) { return false; }
@@ -24506,7 +24505,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_5_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance5Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance5Properties>();
         if (typed == nullptr) { return false; }
@@ -24514,7 +24513,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance6Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance6Features>();
         if (typed == nullptr) { return false; }
@@ -24522,7 +24521,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_6_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance6Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance6Properties>();
         if (typed == nullptr) { return false; }
@@ -24530,7 +24529,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance7FeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance7FeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24538,7 +24537,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_PROPERTIES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_7_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance7PropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance7PropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -24546,7 +24545,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_8_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMaintenance8FeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMaintenance8FeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24554,7 +24553,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAP_MEMORY_PLACED_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAP_MEMORY_PLACED_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMapMemoryPlacedFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMapMemoryPlacedFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24562,7 +24561,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAP_MEMORY_PLACED_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAP_MEMORY_PLACED_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMapMemoryPlacedPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMapMemoryPlacedPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24570,7 +24569,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMemoryBudgetPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMemoryBudgetPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24578,7 +24577,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMemoryDecompressionFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMemoryDecompressionFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24586,7 +24585,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_DECOMPRESSION_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMemoryDecompressionPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMemoryDecompressionPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -24594,7 +24593,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMemoryPriorityFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMemoryPriorityFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24602,7 +24601,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMeshShaderFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMeshShaderFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24610,7 +24609,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMeshShaderFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMeshShaderFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24618,7 +24617,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMeshShaderPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMeshShaderPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24626,7 +24625,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMeshShaderPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMeshShaderPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -24634,7 +24633,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiDrawFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiDrawFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24642,7 +24641,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTI_DRAW_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiDrawPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiDrawPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24650,7 +24649,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultisampledRenderToSingleSampledFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultisampledRenderToSingleSampledFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24658,7 +24657,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiviewFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiviewFeatures>();
         if (typed == nullptr) { return false; }
@@ -24666,7 +24665,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_ATTRIBUTES_PROPERTIES_NVX): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_ATTRIBUTES_PROPERTIES_NVX): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX>();
         if (typed == nullptr) { return false; }
@@ -24674,7 +24673,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_RENDER_AREAS_FEATURES_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_RENDER_AREAS_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiviewPerViewRenderAreasFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiviewPerViewRenderAreasFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24682,7 +24681,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_VIEWPORTS_FEATURES_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PER_VIEW_VIEWPORTS_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiviewPerViewViewportsFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -24690,7 +24689,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMultiviewProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMultiviewProperties>();
         if (typed == nullptr) { return false; }
@@ -24698,7 +24697,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MUTABLE_DESCRIPTOR_TYPE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceMutableDescriptorTypeFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24706,7 +24705,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceNestedCommandBufferFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceNestedCommandBufferFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24714,7 +24713,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceNestedCommandBufferPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceNestedCommandBufferPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24722,7 +24721,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NON_SEAMLESS_CUBE_MAP_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NON_SEAMLESS_CUBE_MAP_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceNonSeamlessCubeMapFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24730,7 +24729,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceOpacityMicromapFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceOpacityMicromapFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24738,7 +24737,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPACITY_MICROMAP_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceOpacityMicromapPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceOpacityMicromapPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24746,7 +24745,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceOpticalFlowFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceOpticalFlowFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24754,7 +24753,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceOpticalFlowPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceOpticalFlowPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -24762,7 +24761,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePCIBusInfoPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePCIBusInfoPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24770,7 +24769,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PAGEABLE_DEVICE_LOCAL_MEMORY_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePageableDeviceLocalMemoryFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24778,7 +24777,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PARTITIONED_ACCELERATION_STRUCTURE_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PARTITIONED_ACCELERATION_STRUCTURE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDevicePartitionedAccelerationStructureFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24786,7 +24785,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PARTITIONED_ACCELERATION_STRUCTURE_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PARTITIONED_ACCELERATION_STRUCTURE_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDevicePartitionedAccelerationStructurePropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -24794,7 +24793,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PER_STAGE_DESCRIPTOR_SET_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PER_STAGE_DESCRIPTOR_SET_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePerStageDescriptorSetFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDevicePerStageDescriptorSetFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24802,7 +24801,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePerformanceQueryFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePerformanceQueryFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24810,7 +24809,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_PROPERTIES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePerformanceQueryPropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePerformanceQueryPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -24818,7 +24817,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineBinaryFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineBinaryFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24826,7 +24825,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_PROPERTIES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_BINARY_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineBinaryPropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineBinaryPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -24834,7 +24833,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineCreationCacheControlFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineCreationCacheControlFeatures>();
         if (typed == nullptr) { return false; }
@@ -24842,7 +24841,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24850,7 +24849,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_LIBRARY_GROUP_HANDLES_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineLibraryGroupHandlesFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24858,7 +24857,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_OPACITY_MICROMAP_FEATURES_ARM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_OPACITY_MICROMAP_FEATURES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineOpacityMicromapFeaturesARM*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineOpacityMicromapFeaturesARM>();
         if (typed == nullptr) { return false; }
@@ -24866,7 +24865,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_PROPERTIES_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_PROPERTIES_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelinePropertiesFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelinePropertiesFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24874,7 +24873,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_PROTECTED_ACCESS_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_PROTECTED_ACCESS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineProtectedAccessFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineProtectedAccessFeatures>();
         if (typed == nullptr) { return false; }
@@ -24882,7 +24881,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineRobustnessFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineRobustnessFeatures>();
         if (typed == nullptr) { return false; }
@@ -24890,7 +24889,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePipelineRobustnessProperties*>(dst)
                                        : arena.allocate<VkPhysicalDevicePipelineRobustnessProperties>();
         if (typed == nullptr) { return false; }
@@ -24898,7 +24897,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePointClippingProperties*>(dst)
                                        : arena.allocate<VkPhysicalDevicePointClippingProperties>();
         if (typed == nullptr) { return false; }
@@ -24906,7 +24905,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_BARRIER_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_BARRIER_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePresentBarrierFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDevicePresentBarrierFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -24914,7 +24913,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePresentIdFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePresentIdFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24922,7 +24921,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_MODE_FIFO_LATEST_READY_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_MODE_FIFO_LATEST_READY_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24930,7 +24929,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePresentWaitFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDevicePresentWaitFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -24938,7 +24937,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVE_TOPOLOGY_LIST_RESTART_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVE_TOPOLOGY_LIST_RESTART_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePrimitiveTopologyListRestartFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24946,7 +24945,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVES_GENERATED_QUERY_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIMITIVES_GENERATED_QUERY_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24954,7 +24953,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePrivateDataFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDevicePrivateDataFeatures>();
         if (typed == nullptr) { return false; }
@@ -24962,7 +24961,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceProtectedMemoryFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceProtectedMemoryFeatures>();
         if (typed == nullptr) { return false; }
@@ -24970,7 +24969,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceProtectedMemoryProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceProtectedMemoryProperties>();
         if (typed == nullptr) { return false; }
@@ -24978,7 +24977,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceProvokingVertexFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceProvokingVertexFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -24986,7 +24985,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceProvokingVertexPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceProvokingVertexPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -24994,7 +24993,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDevicePushDescriptorProperties*>(dst)
                                        : arena.allocate<VkPhysicalDevicePushDescriptorProperties>();
         if (typed == nullptr) { return false; }
@@ -25002,7 +25001,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RGBA10X6_FORMATS_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RGBA10X6_FORMATS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRGBA10X6FormatsFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25010,7 +25009,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25018,7 +25017,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAW_ACCESS_CHAINS_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAW_ACCESS_CHAINS_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRawAccessChainsFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRawAccessChainsFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25026,7 +25025,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayQueryFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayQueryFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25034,7 +25033,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25042,7 +25041,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingInvocationReorderPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -25050,7 +25049,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_LINEAR_SWEPT_SPHERES_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_LINEAR_SWEPT_SPHERES_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingLinearSweptSpheresFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25058,7 +25057,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MAINTENANCE_1_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingMaintenance1FeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25066,7 +25065,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MOTION_BLUR_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_MOTION_BLUR_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingMotionBlurFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingMotionBlurFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25074,7 +25073,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingPipelineFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25082,7 +25081,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingPipelinePropertiesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingPipelinePropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -25090,7 +25089,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_POSITION_FETCH_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingPositionFetchFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25098,7 +25097,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -25106,7 +25105,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_VALIDATION_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRayTracingValidationFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRayTracingValidationFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25114,7 +25113,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RELAXED_LINE_RASTERIZATION_FEATURES_IMG): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RELAXED_LINE_RASTERIZATION_FEATURES_IMG): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRelaxedLineRasterizationFeaturesIMG*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRelaxedLineRasterizationFeaturesIMG>();
         if (typed == nullptr) { return false; }
@@ -25122,7 +25121,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_FEATURES_ARM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_FEATURES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRenderPassStripedFeaturesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRenderPassStripedFeaturesARM>();
         if (typed == nullptr) { return false; }
@@ -25130,7 +25129,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_PROPERTIES_ARM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RENDER_PASS_STRIPED_PROPERTIES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRenderPassStripedPropertiesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRenderPassStripedPropertiesARM>();
         if (typed == nullptr) { return false; }
@@ -25138,7 +25137,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_REPRESENTATIVE_FRAGMENT_TEST_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_REPRESENTATIVE_FRAGMENT_TEST_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25146,7 +25145,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRobustness2FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRobustness2FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25154,7 +25153,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceRobustness2PropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceRobustness2PropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25162,7 +25161,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSampleLocationsPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSampleLocationsPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25170,7 +25169,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSamplerFilterMinmaxProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSamplerFilterMinmaxProperties>();
         if (typed == nullptr) { return false; }
@@ -25178,7 +25177,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSamplerYcbcrConversionFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSamplerYcbcrConversionFeatures>();
         if (typed == nullptr) { return false; }
@@ -25186,7 +25185,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceScalarBlockLayoutFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceScalarBlockLayoutFeatures>();
         if (typed == nullptr) { return false; }
@@ -25194,7 +25193,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCHEDULING_CONTROLS_FEATURES_ARM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCHEDULING_CONTROLS_FEATURES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSchedulingControlsFeaturesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSchedulingControlsFeaturesARM>();
         if (typed == nullptr) { return false; }
@@ -25202,7 +25201,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCHEDULING_CONTROLS_PROPERTIES_ARM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCHEDULING_CONTROLS_PROPERTIES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSchedulingControlsPropertiesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSchedulingControlsPropertiesARM>();
         if (typed == nullptr) { return false; }
@@ -25210,7 +25209,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures>();
         if (typed == nullptr) { return false; }
@@ -25218,7 +25217,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT16_VECTOR_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT16_VECTOR_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderAtomicFloat16VectorFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25226,7 +25225,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_2_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderAtomicFloat2FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25234,7 +25233,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderAtomicFloatFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25242,7 +25241,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderAtomicInt64Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderAtomicInt64Features>();
         if (typed == nullptr) { return false; }
@@ -25250,7 +25249,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderClockFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderClockFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25258,7 +25257,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_FEATURES_ARM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_FEATURES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderCoreBuiltinsFeaturesARM>();
         if (typed == nullptr) { return false; }
@@ -25266,7 +25265,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_PROPERTIES_ARM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_BUILTINS_PROPERTIES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderCoreBuiltinsPropertiesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderCoreBuiltinsPropertiesARM>();
         if (typed == nullptr) { return false; }
@@ -25274,7 +25273,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderCoreProperties2AMD*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderCoreProperties2AMD>();
         if (typed == nullptr) { return false; }
@@ -25282,7 +25281,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderCorePropertiesAMD*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderCorePropertiesAMD>();
         if (typed == nullptr) { return false; }
@@ -25290,7 +25289,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_ARM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderCorePropertiesARM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderCorePropertiesARM>();
         if (typed == nullptr) { return false; }
@@ -25298,7 +25297,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderDemoteToHelperInvocationFeatures>();
         if (typed == nullptr) { return false; }
@@ -25306,7 +25305,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderDrawParametersFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderDrawParametersFeatures>();
         if (typed == nullptr) { return false; }
@@ -25314,7 +25313,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EARLY_AND_LATE_FRAGMENT_TESTS_FEATURES_AMD): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EARLY_AND_LATE_FRAGMENT_TESTS_FEATURES_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderEarlyAndLateFragmentTestsFeaturesAMD*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderEarlyAndLateFragmentTestsFeaturesAMD>();
         if (typed == nullptr) { return false; }
@@ -25322,7 +25321,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EXPECT_ASSUME_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_EXPECT_ASSUME_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderExpectAssumeFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderExpectAssumeFeatures>();
         if (typed == nullptr) { return false; }
@@ -25330,7 +25329,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderFloat16Int8Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderFloat16Int8Features>();
         if (typed == nullptr) { return false; }
@@ -25338,7 +25337,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT_CONTROLS_2_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT_CONTROLS_2_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderFloatControls2Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderFloatControls2Features>();
         if (typed == nullptr) { return false; }
@@ -25346,7 +25345,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25354,7 +25353,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_FOOTPRINT_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_FOOTPRINT_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderImageFootprintFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderImageFootprintFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25362,7 +25361,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderIntegerDotProductFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderIntegerDotProductFeatures>();
         if (typed == nullptr) { return false; }
@@ -25370,7 +25369,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderIntegerDotProductProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderIntegerDotProductProperties>();
         if (typed == nullptr) { return false; }
@@ -25378,7 +25377,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_FUNCTIONS_2_FEATURES_INTEL): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_FUNCTIONS_2_FEATURES_INTEL): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL>();
         if (typed == nullptr) { return false; }
@@ -25386,7 +25385,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MAXIMAL_RECONVERGENCE_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MAXIMAL_RECONVERGENCE_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderMaximalReconvergenceFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25394,7 +25393,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderModuleIdentifierFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25402,7 +25401,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_MODULE_IDENTIFIER_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderModuleIdentifierPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25410,7 +25409,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderObjectFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderObjectFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25418,7 +25417,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_OBJECT_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderObjectPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderObjectPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25426,7 +25425,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_QUAD_CONTROL_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_QUAD_CONTROL_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderQuadControlFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderQuadControlFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25434,7 +25433,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25442,7 +25441,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_REPLICATED_COMPOSITES_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_REPLICATED_COMPOSITES_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderReplicatedCompositesFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25450,7 +25449,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderSMBuiltinsFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderSMBuiltinsFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25458,7 +25457,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderSMBuiltinsPropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderSMBuiltinsPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -25466,7 +25465,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures>();
         if (typed == nullptr) { return false; }
@@ -25474,7 +25473,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_ROTATE_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_ROTATE_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderSubgroupRotateFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderSubgroupRotateFeatures>();
         if (typed == nullptr) { return false; }
@@ -25482,7 +25481,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25490,7 +25489,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderTerminateInvocationFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderTerminateInvocationFeatures>();
         if (typed == nullptr) { return false; }
@@ -25498,7 +25497,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TILE_IMAGE_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TILE_IMAGE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderTileImageFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderTileImageFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25506,7 +25505,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TILE_IMAGE_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TILE_IMAGE_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShaderTileImagePropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShaderTileImagePropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25514,7 +25513,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_FEATURES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_FEATURES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShadingRateImageFeaturesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShadingRateImageFeaturesNV>();
         if (typed == nullptr) { return false; }
@@ -25522,7 +25521,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceShadingRateImagePropertiesNV*>(dst)
                                        : arena.allocate<VkPhysicalDeviceShadingRateImagePropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -25530,7 +25529,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSubgroupProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSubgroupProperties>();
         if (typed == nullptr) { return false; }
@@ -25538,7 +25537,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSubgroupSizeControlFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSubgroupSizeControlFeatures>();
         if (typed == nullptr) { return false; }
@@ -25546,7 +25545,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSubgroupSizeControlProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSubgroupSizeControlProperties>();
         if (typed == nullptr) { return false; }
@@ -25554,7 +25553,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_MERGE_FEEDBACK_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_MERGE_FEEDBACK_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSubpassMergeFeedbackFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25562,7 +25561,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_SHADING_FEATURES_HUAWEI): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_SHADING_FEATURES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSubpassShadingFeaturesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSubpassShadingFeaturesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -25570,7 +25569,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_SHADING_PROPERTIES_HUAWEI): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBPASS_SHADING_PROPERTIES_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSubpassShadingPropertiesHUAWEI*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSubpassShadingPropertiesHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -25578,7 +25577,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25586,7 +25585,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceSynchronization2Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceSynchronization2Features>();
         if (typed == nullptr) { return false; }
@@ -25594,7 +25593,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25602,7 +25601,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTexelBufferAlignmentProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTexelBufferAlignmentProperties>();
         if (typed == nullptr) { return false; }
@@ -25610,7 +25609,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXTURE_COMPRESSION_ASTC_HDR_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXTURE_COMPRESSION_ASTC_HDR_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTextureCompressionASTCHDRFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTextureCompressionASTCHDRFeatures>();
         if (typed == nullptr) { return false; }
@@ -25618,7 +25617,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_PROPERTIES_FEATURES_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_PROPERTIES_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTilePropertiesFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTilePropertiesFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -25626,7 +25625,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTimelineSemaphoreFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTimelineSemaphoreFeatures>();
         if (typed == nullptr) { return false; }
@@ -25634,7 +25633,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTimelineSemaphoreProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTimelineSemaphoreProperties>();
         if (typed == nullptr) { return false; }
@@ -25642,7 +25641,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTransformFeedbackFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTransformFeedbackFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25650,7 +25649,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceTransformFeedbackPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceTransformFeedbackPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25658,7 +25657,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceUniformBufferStandardLayoutFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceUniformBufferStandardLayoutFeatures>();
         if (typed == nullptr) { return false; }
@@ -25666,7 +25665,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTERS_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTERS_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVariablePointersFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVariablePointersFeatures>();
         if (typed == nullptr) { return false; }
@@ -25674,7 +25673,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVertexAttributeDivisorFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVertexAttributeDivisorFeatures>();
         if (typed == nullptr) { return false; }
@@ -25682,7 +25681,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVertexAttributeDivisorProperties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVertexAttributeDivisorProperties>();
         if (typed == nullptr) { return false; }
@@ -25690,7 +25689,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT>();
         if (typed == nullptr) { return false; }
@@ -25698,7 +25697,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_ROBUSTNESS_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_ROBUSTNESS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVertexAttributeRobustnessFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25706,7 +25705,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_INPUT_DYNAMIC_STATE_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVertexInputDynamicStateFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25714,7 +25713,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_AV1_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_AV1_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVideoEncodeAV1FeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVideoEncodeAV1FeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25722,7 +25721,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_QUANTIZATION_MAP_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_ENCODE_QUANTIZATION_MAP_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVideoEncodeQuantizationMapFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVideoEncodeQuantizationMapFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25730,7 +25729,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_1_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_1_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVideoMaintenance1FeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVideoMaintenance1FeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25738,7 +25737,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_2_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VIDEO_MAINTENANCE_2_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVideoMaintenance2FeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVideoMaintenance2FeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25746,7 +25745,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkan11Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkan11Features>();
         if (typed == nullptr) { return false; }
@@ -25754,7 +25753,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkan11Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkan11Properties>();
         if (typed == nullptr) { return false; }
@@ -25762,7 +25761,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkan12Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkan12Features>();
         if (typed == nullptr) { return false; }
@@ -25770,7 +25769,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkan12Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkan12Properties>();
         if (typed == nullptr) { return false; }
@@ -25778,7 +25777,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkan13Features*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkan13Features>();
         if (typed == nullptr) { return false; }
@@ -25786,7 +25785,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkan13Properties*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkan13Properties>();
         if (typed == nullptr) { return false; }
@@ -25794,7 +25793,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceVulkanMemoryModelFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceVulkanMemoryModelFeatures>();
         if (typed == nullptr) { return false; }
@@ -25802,7 +25801,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_FEATURES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_WORKGROUP_MEMORY_EXPLICIT_LAYOUT_FEATURES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR*>(dst)
                                        : arena.allocate<VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR>();
         if (typed == nullptr) { return false; }
@@ -25810,7 +25809,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_2_PLANE_444_FORMATS_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_2_PLANE_444_FORMATS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceYcbcr2Plane444FormatsFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceYcbcr2Plane444FormatsFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25818,7 +25817,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_DEGAMMA_FEATURES_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_DEGAMMA_FEATURES_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceYcbcrDegammaFeaturesQCOM*>(dst)
                                        : arena.allocate<VkPhysicalDeviceYcbcrDegammaFeaturesQCOM>();
         if (typed == nullptr) { return false; }
@@ -25826,7 +25825,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_IMAGE_ARRAYS_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_IMAGE_ARRAYS_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceYcbcrImageArraysFeaturesEXT*>(dst)
                                        : arena.allocate<VkPhysicalDeviceYcbcrImageArraysFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -25834,7 +25833,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures*>(dst)
                                        : arena.allocate<VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeatures>();
         if (typed == nullptr) { return false; }
@@ -25842,7 +25841,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_BINARY_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_BINARY_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineBinaryInfoKHR*>(dst)
                                        : arena.allocate<VkPipelineBinaryInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -25850,7 +25849,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineColorBlendAdvancedStateCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineColorBlendAdvancedStateCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25858,7 +25857,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COLOR_WRITE_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COLOR_WRITE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineColorWriteCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineColorWriteCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25866,7 +25865,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COMPILER_CONTROL_CREATE_INFO_AMD): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COMPILER_CONTROL_CREATE_INFO_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineCompilerControlCreateInfoAMD*>(dst)
                                        : arena.allocate<VkPipelineCompilerControlCreateInfoAMD>();
         if (typed == nullptr) { return false; }
@@ -25874,7 +25873,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_MODULATION_STATE_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_MODULATION_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineCoverageModulationStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineCoverageModulationStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25882,7 +25881,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_REDUCTION_STATE_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_REDUCTION_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineCoverageReductionStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineCoverageReductionStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25890,7 +25889,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_TO_COLOR_STATE_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_TO_COLOR_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineCoverageToColorStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineCoverageToColorStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25898,7 +25897,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineCreateFlags2CreateInfo*>(dst)
                                        : arena.allocate<VkPipelineCreateFlags2CreateInfo>();
         if (typed == nullptr) { return false; }
@@ -25906,7 +25905,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineCreationFeedbackCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineCreationFeedbackCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -25914,7 +25913,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_DISCARD_RECTANGLE_STATE_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_DISCARD_RECTANGLE_STATE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineDiscardRectangleStateCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineDiscardRectangleStateCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25922,7 +25921,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_ENUM_STATE_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_ENUM_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineFragmentShadingRateEnumStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineFragmentShadingRateEnumStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -25930,7 +25929,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineFragmentShadingRateStateCreateInfoKHR*>(dst)
                                        : arena.allocate<VkPipelineFragmentShadingRateStateCreateInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -25938,7 +25937,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineLayoutCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineLayoutCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -25946,7 +25945,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineLibraryCreateInfoKHR*>(dst)
                                        : arena.allocate<VkPipelineLibraryCreateInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -25954,7 +25953,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRasterizationConservativeStateCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineRasterizationConservativeStateCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25962,7 +25961,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRasterizationDepthClipStateCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineRasterizationDepthClipStateCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25970,7 +25969,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRasterizationLineStateCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineRasterizationLineStateCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -25978,7 +25977,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_PROVOKING_VERTEX_STATE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRasterizationProvokingVertexStateCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineRasterizationProvokingVertexStateCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -25986,7 +25985,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRasterizationStateRasterizationOrderAMD*>(dst)
                                        : arena.allocate<VkPipelineRasterizationStateRasterizationOrderAMD>();
         if (typed == nullptr) { return false; }
@@ -25994,7 +25993,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRasterizationStateStreamCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineRasterizationStateStreamCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26002,7 +26001,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRenderingCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineRenderingCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26010,7 +26009,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_REPRESENTATIVE_FRAGMENT_TEST_STATE_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_REPRESENTATIVE_FRAGMENT_TEST_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRepresentativeFragmentTestStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineRepresentativeFragmentTestStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -26018,7 +26017,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineRobustnessCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineRobustnessCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26026,7 +26025,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineSampleLocationsStateCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineSampleLocationsStateCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26034,7 +26033,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_MODULE_IDENTIFIER_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineShaderStageModuleIdentifierCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineShaderStageModuleIdentifierCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26042,7 +26041,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineShaderStageRequiredSubgroupSizeCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineShaderStageRequiredSubgroupSizeCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26050,7 +26049,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineTessellationDomainOriginStateCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineTessellationDomainOriginStateCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26058,7 +26057,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineVertexInputDivisorStateCreateInfo*>(dst)
                                        : arena.allocate<VkPipelineVertexInputDivisorStateCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26066,7 +26065,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_COARSE_SAMPLE_ORDER_STATE_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_COARSE_SAMPLE_ORDER_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportCoarseSampleOrderStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineViewportCoarseSampleOrderStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -26074,7 +26073,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLAMP_CONTROL_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLAMP_CONTROL_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportDepthClampControlCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineViewportDepthClampControlCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26082,7 +26081,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_DEPTH_CLIP_CONTROL_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportDepthClipControlCreateInfoEXT*>(dst)
                                        : arena.allocate<VkPipelineViewportDepthClipControlCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26090,7 +26089,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_EXCLUSIVE_SCISSOR_STATE_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_EXCLUSIVE_SCISSOR_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportExclusiveScissorStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineViewportExclusiveScissorStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -26098,7 +26097,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_SHADING_RATE_IMAGE_STATE_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_SHADING_RATE_IMAGE_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportShadingRateImageStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineViewportShadingRateImageStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -26106,7 +26105,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_SWIZZLE_STATE_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_SWIZZLE_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportSwizzleStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineViewportSwizzleStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -26114,7 +26113,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_W_SCALING_STATE_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_W_SCALING_STATE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkPipelineViewportWScalingStateCreateInfoNV*>(dst)
                                        : arena.allocate<VkPipelineViewportWScalingStateCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -26122,7 +26121,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkProtectedSubmitInfo*>(dst)
                                        : arena.allocate<VkProtectedSubmitInfo>();
         if (typed == nullptr) { return false; }
@@ -26130,7 +26129,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUERY_POOL_PERFORMANCE_CREATE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_QUERY_POOL_PERFORMANCE_CREATE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueryPoolPerformanceCreateInfoKHR*>(dst)
                                        : arena.allocate<VkQueryPoolPerformanceCreateInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26138,7 +26137,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUERY_POOL_PERFORMANCE_QUERY_CREATE_INFO_INTEL): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_QUERY_POOL_PERFORMANCE_QUERY_CREATE_INFO_INTEL): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueryPoolPerformanceQueryCreateInfoINTEL*>(dst)
                                        : arena.allocate<VkQueryPoolPerformanceQueryCreateInfoINTEL>();
         if (typed == nullptr) { return false; }
@@ -26146,7 +26145,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUERY_POOL_VIDEO_ENCODE_FEEDBACK_CREATE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_QUERY_POOL_VIDEO_ENCODE_FEEDBACK_CREATE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueryPoolVideoEncodeFeedbackCreateInfoKHR*>(dst)
                                        : arena.allocate<VkQueryPoolVideoEncodeFeedbackCreateInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26154,7 +26153,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_2_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_2_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueueFamilyCheckpointProperties2NV*>(dst)
                                        : arena.allocate<VkQueueFamilyCheckpointProperties2NV>();
         if (typed == nullptr) { return false; }
@@ -26162,7 +26161,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueueFamilyCheckpointPropertiesNV*>(dst)
                                        : arena.allocate<VkQueueFamilyCheckpointPropertiesNV>();
         if (typed == nullptr) { return false; }
@@ -26170,7 +26169,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueueFamilyGlobalPriorityProperties*>(dst)
                                        : arena.allocate<VkQueueFamilyGlobalPriorityProperties>();
         if (typed == nullptr) { return false; }
@@ -26178,7 +26177,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_QUERY_RESULT_STATUS_PROPERTIES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_QUERY_RESULT_STATUS_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueueFamilyQueryResultStatusPropertiesKHR*>(dst)
                                        : arena.allocate<VkQueueFamilyQueryResultStatusPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -26186,7 +26185,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_VIDEO_PROPERTIES_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_QUEUE_FAMILY_VIDEO_PROPERTIES_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkQueueFamilyVideoPropertiesKHR*>(dst)
                                        : arena.allocate<VkQueueFamilyVideoPropertiesKHR>();
         if (typed == nullptr) { return false; }
@@ -26194,7 +26193,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CLUSTER_ACCELERATION_STRUCTURE_CREATE_INFO_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CLUSTER_ACCELERATION_STRUCTURE_CREATE_INFO_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV*>(dst)
                                        : arena.allocate<VkRayTracingPipelineClusterAccelerationStructureCreateInfoNV>();
         if (typed == nullptr) { return false; }
@@ -26202,7 +26201,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassAttachmentBeginInfo*>(dst)
                                        : arena.allocate<VkRenderPassAttachmentBeginInfo>();
         if (typed == nullptr) { return false; }
@@ -26210,7 +26209,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_CREATION_CONTROL_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_CREATION_CONTROL_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassCreationControlEXT*>(dst)
                                        : arena.allocate<VkRenderPassCreationControlEXT>();
         if (typed == nullptr) { return false; }
@@ -26218,7 +26217,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_CREATION_FEEDBACK_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_CREATION_FEEDBACK_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassCreationFeedbackCreateInfoEXT*>(dst)
                                        : arena.allocate<VkRenderPassCreationFeedbackCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26226,7 +26225,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_FRAGMENT_DENSITY_MAP_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_FRAGMENT_DENSITY_MAP_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassFragmentDensityMapCreateInfoEXT*>(dst)
                                        : arena.allocate<VkRenderPassFragmentDensityMapCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26234,7 +26233,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassInputAttachmentAspectCreateInfo*>(dst)
                                        : arena.allocate<VkRenderPassInputAttachmentAspectCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26242,7 +26241,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassMultiviewCreateInfo*>(dst)
                                        : arena.allocate<VkRenderPassMultiviewCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26250,7 +26249,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_SAMPLE_LOCATIONS_BEGIN_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_SAMPLE_LOCATIONS_BEGIN_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassSampleLocationsBeginInfoEXT*>(dst)
                                        : arena.allocate<VkRenderPassSampleLocationsBeginInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26258,7 +26257,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_BEGIN_INFO_ARM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_BEGIN_INFO_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassStripeBeginInfoARM*>(dst)
                                        : arena.allocate<VkRenderPassStripeBeginInfoARM>();
         if (typed == nullptr) { return false; }
@@ -26266,7 +26265,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_SUBMIT_INFO_ARM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_STRIPE_SUBMIT_INFO_ARM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassStripeSubmitInfoARM*>(dst)
                                        : arena.allocate<VkRenderPassStripeSubmitInfoARM>();
         if (typed == nullptr) { return false; }
@@ -26274,7 +26273,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_SUBPASS_FEEDBACK_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_SUBPASS_FEEDBACK_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassSubpassFeedbackCreateInfoEXT*>(dst)
                                        : arena.allocate<VkRenderPassSubpassFeedbackCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26282,7 +26281,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_TRANSFORM_BEGIN_INFO_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDER_PASS_TRANSFORM_BEGIN_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderPassTransformBeginInfoQCOM*>(dst)
                                        : arena.allocate<VkRenderPassTransformBeginInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -26290,7 +26289,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_LOCATION_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_LOCATION_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderingAttachmentLocationInfo*>(dst)
                                        : arena.allocate<VkRenderingAttachmentLocationInfo>();
         if (typed == nullptr) { return false; }
@@ -26298,7 +26297,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_DENSITY_MAP_ATTACHMENT_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_DENSITY_MAP_ATTACHMENT_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderingFragmentDensityMapAttachmentInfoEXT*>(dst)
                                        : arena.allocate<VkRenderingFragmentDensityMapAttachmentInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26306,7 +26305,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_RENDERING_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkRenderingFragmentShadingRateAttachmentInfoKHR*>(dst)
                                        : arena.allocate<VkRenderingFragmentShadingRateAttachmentInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26314,7 +26313,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_BLOCK_MATCH_WINDOW_CREATE_INFO_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_BLOCK_MATCH_WINDOW_CREATE_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerBlockMatchWindowCreateInfoQCOM*>(dst)
                                        : arena.allocate<VkSamplerBlockMatchWindowCreateInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -26322,7 +26321,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_BORDER_COLOR_COMPONENT_MAPPING_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerBorderColorComponentMappingCreateInfoEXT*>(dst)
                                        : arena.allocate<VkSamplerBorderColorComponentMappingCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26330,7 +26329,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_CUBIC_WEIGHTS_CREATE_INFO_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_CUBIC_WEIGHTS_CREATE_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerCubicWeightsCreateInfoQCOM*>(dst)
                                        : arena.allocate<VkSamplerCubicWeightsCreateInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -26338,7 +26337,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerCustomBorderColorCreateInfoEXT*>(dst)
                                        : arena.allocate<VkSamplerCustomBorderColorCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26346,7 +26345,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerReductionModeCreateInfo*>(dst)
                                        : arena.allocate<VkSamplerReductionModeCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26354,7 +26353,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerYcbcrConversionImageFormatProperties*>(dst)
                                        : arena.allocate<VkSamplerYcbcrConversionImageFormatProperties>();
         if (typed == nullptr) { return false; }
@@ -26362,7 +26361,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerYcbcrConversionInfo*>(dst)
                                        : arena.allocate<VkSamplerYcbcrConversionInfo>();
         if (typed == nullptr) { return false; }
@@ -26370,7 +26369,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_YCBCR_DEGAMMA_CREATE_INFO_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_YCBCR_DEGAMMA_CREATE_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSamplerYcbcrConversionYcbcrDegammaCreateInfoQCOM*>(dst)
                                        : arena.allocate<VkSamplerYcbcrConversionYcbcrDegammaCreateInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -26378,7 +26377,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSemaphoreTypeCreateInfo*>(dst)
                                        : arena.allocate<VkSemaphoreTypeCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26386,7 +26385,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkShaderModuleCreateInfo*>(dst)
                                        : arena.allocate<VkShaderModuleCreateInfo>();
         if (typed == nullptr) { return false; }
@@ -26394,7 +26393,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SHADER_MODULE_VALIDATION_CACHE_CREATE_INFO_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SHADER_MODULE_VALIDATION_CACHE_CREATE_INFO_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkShaderModuleValidationCacheCreateInfoEXT*>(dst)
                                        : arena.allocate<VkShaderModuleValidationCacheCreateInfoEXT>();
         if (typed == nullptr) { return false; }
@@ -26402,7 +26401,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSubpassDescriptionDepthStencilResolve*>(dst)
                                        : arena.allocate<VkSubpassDescriptionDepthStencilResolve>();
         if (typed == nullptr) { return false; }
@@ -26410,7 +26409,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SUBPASS_FRAGMENT_DENSITY_MAP_OFFSET_END_INFO_QCOM): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SUBPASS_FRAGMENT_DENSITY_MAP_OFFSET_END_INFO_QCOM): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSubpassFragmentDensityMapOffsetEndInfoQCOM*>(dst)
                                        : arena.allocate<VkSubpassFragmentDensityMapOffsetEndInfoQCOM>();
         if (typed == nullptr) { return false; }
@@ -26418,7 +26417,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SUBPASS_RESOLVE_PERFORMANCE_QUERY_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SUBPASS_RESOLVE_PERFORMANCE_QUERY_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSubpassResolvePerformanceQueryEXT*>(dst)
                                        : arena.allocate<VkSubpassResolvePerformanceQueryEXT>();
         if (typed == nullptr) { return false; }
@@ -26426,7 +26425,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SUBPASS_SHADING_PIPELINE_CREATE_INFO_HUAWEI): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SUBPASS_SHADING_PIPELINE_CREATE_INFO_HUAWEI): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSubpassShadingPipelineCreateInfoHUAWEI*>(dst)
                                        : arena.allocate<VkSubpassShadingPipelineCreateInfoHUAWEI>();
         if (typed == nullptr) { return false; }
@@ -26434,7 +26433,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_SUBRESOURCE_HOST_MEMCPY_SIZE): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_SUBRESOURCE_HOST_MEMCPY_SIZE): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkSubresourceHostMemcpySize*>(dst)
                                        : arena.allocate<VkSubresourceHostMemcpySize>();
         if (typed == nullptr) { return false; }
@@ -26442,7 +26441,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkTextureLODGatherFormatPropertiesAMD*>(dst)
                                        : arena.allocate<VkTextureLODGatherFormatPropertiesAMD>();
         if (typed == nullptr) { return false; }
@@ -26450,7 +26449,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkTimelineSemaphoreSubmitInfo*>(dst)
                                        : arena.allocate<VkTimelineSemaphoreSubmitInfo>();
         if (typed == nullptr) { return false; }
@@ -26458,7 +26457,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkValidationFeaturesEXT*>(dst)
                                        : arena.allocate<VkValidationFeaturesEXT>();
         if (typed == nullptr) { return false; }
@@ -26466,7 +26465,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VALIDATION_FLAGS_EXT): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_VALIDATION_FLAGS_EXT): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkValidationFlagsEXT*>(dst)
                                        : arena.allocate<VkValidationFlagsEXT>();
         if (typed == nullptr) { return false; }
@@ -26474,7 +26473,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_DECODE_AV1_PROFILE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_VIDEO_DECODE_AV1_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoDecodeAV1ProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoDecodeAV1ProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26482,7 +26481,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_PROFILE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoDecodeH264ProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoDecodeH264ProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26490,7 +26489,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_PROFILE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_VIDEO_DECODE_H265_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoDecodeH265ProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoDecodeH265ProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26498,7 +26497,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_DECODE_USAGE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_VIDEO_DECODE_USAGE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoDecodeUsageInfoKHR*>(dst)
                                        : arena.allocate<VkVideoDecodeUsageInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26506,7 +26505,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_ENCODE_AV1_PROFILE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_VIDEO_ENCODE_AV1_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoEncodeAV1ProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoEncodeAV1ProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26514,7 +26513,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_PROFILE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H264_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoEncodeH264ProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoEncodeH264ProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26522,7 +26521,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PROFILE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_VIDEO_ENCODE_H265_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoEncodeH265ProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoEncodeH265ProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26530,7 +26529,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_ENCODE_USAGE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_VIDEO_ENCODE_USAGE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoEncodeUsageInfoKHR*>(dst)
                                        : arena.allocate<VkVideoEncodeUsageInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26538,7 +26537,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_VIDEO_PROFILE_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoProfileInfoKHR*>(dst)
                                        : arena.allocate<VkVideoProfileInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26546,7 +26545,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_VIDEO_PROFILE_LIST_INFO_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_VIDEO_PROFILE_LIST_INFO_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkVideoProfileListInfoKHR*>(dst)
                                        : arena.allocate<VkVideoProfileListInfoKHR>();
         if (typed == nullptr) { return false; }
@@ -26554,7 +26553,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkWriteDescriptorSetAccelerationStructureKHR*>(dst)
                                        : arena.allocate<VkWriteDescriptorSetAccelerationStructureKHR>();
         if (typed == nullptr) { return false; }
@@ -26562,7 +26561,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkWriteDescriptorSetAccelerationStructureNV*>(dst)
                                        : arena.allocate<VkWriteDescriptorSetAccelerationStructureNV>();
         if (typed == nullptr) { return false; }
@@ -26570,7 +26569,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkWriteDescriptorSetInlineUniformBlock*>(dst)
                                        : arena.allocate<VkWriteDescriptorSetInlineUniformBlock>();
         if (typed == nullptr) { return false; }
@@ -26578,7 +26577,7 @@ inline void serialize_pnext_chain(::av::WireWriter& buf, const void* pNext) {
         if (adopt) { out->pNext = reinterpret_cast<VkBaseOutStructure*>(typed); }
         break;
     }
-    case static_cast<std::uint32_t>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_PARTITIONED_ACCELERATION_STRUCTURE_NV): {
+    case static_cast<uint32_t>(VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_PARTITIONED_ACCELERATION_STRUCTURE_NV): {
         auto* typed = (dst != nullptr) ? reinterpret_cast<VkWriteDescriptorSetPartitionedAccelerationStructureNV*>(dst)
                                        : arena.allocate<VkWriteDescriptorSetPartitionedAccelerationStructureNV>();
         if (typed == nullptr) { return false; }

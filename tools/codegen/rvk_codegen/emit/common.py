@@ -63,4 +63,4 @@ def is_handle(reg, type_name: str) -> bool:
 
 def wire_handle_type() -> str:
     """All Vulkan handles travel as 64-bit on the wire (see docs/protocol.md)."""
-    return "std::uint64_t"
+    return "uint64_t"

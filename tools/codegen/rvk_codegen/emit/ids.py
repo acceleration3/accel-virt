@@ -12,12 +12,12 @@ def emit(reg: Registry, out_dir: Path) -> None:
     lines = [
         GENERATED_BANNER,
         "",
-        "#include <cstdint>",
+        "#include <stdint.h>",
         "",
         "namespace av::vkproto {",
         "",
         "// Stable wire-protocol command IDs. See codegen/protocol_ids.toml.",
-        "enum CmdId : std::uint32_t {",
+        "enum CmdId : uint32_t {",
     ]
     # Sort by ID so the file is stable.
     for cmd in sorted(reg.commands.values(), key=lambda c: c.cmd_id):

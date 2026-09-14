@@ -23,9 +23,9 @@ description: "Tasks: rvk contexts in a real guest"
 
 **Purpose**: the generated clients build where the guest suite builds (research §1).
 
-- [ ] T001 [P] `tools/fetch_khronos_registries.py`: fetch `include/vk_video/*.h` from the already-pinned Vulkan-Headers tarball into `third_party/khronos/include/vk_video/`, so no build resolves them from `/usr/include`; its test in `tests/tools/` covers the new entries
-- [ ] T002 The emitters write freestanding C++: `tools/codegen/rvk_codegen/emit/{client_dispatch,serialize,ids}.py` and `tools/codegen/rvk_codegen/opencl/emit.py` (and the OpenGL emitter where it shares the pattern) include `<stdint.h>`/`<stddef.h>` instead of `<cstdint>`/`<cstddef>`/`<cstring>`, name `uint32_t`/`size_t` unqualified, and call `__builtin_memcpy`/`__builtin_strlen`; regenerate `src/proto/generated/`; `python3 tools/check_generated.py` green; the Linux build and every test unchanged
-- [ ] T003 `src/um/CMakeLists.txt`: build `vk_dispatch_client.cpp`, `cl_dispatch_client.cpp`, `vk_handle_default.cpp` and `vk_host_image_default.cpp` into `rvktest.exe` with `third_party/khronos/include` and the two generated directories on its include path; `src/um/imports/ntdll.def` gains `strlen`; `tools/check_guest_image.py` still passes (imports only gdi32, kernel32, ntdll)
+- [X] T001 [P] `tools/fetch_khronos_registries.py`: fetch `include/vk_video/*.h` from the already-pinned Vulkan-Headers tarball into `third_party/khronos/include/vk_video/`, so no build resolves them from `/usr/include`; its test in `tests/tools/` covers the new entries
+- [X] T002 The emitters write freestanding C++: `tools/codegen/rvk_codegen/emit/{client_dispatch,serialize,ids}.py` and `tools/codegen/rvk_codegen/opencl/emit.py` (and the OpenGL emitter where it shares the pattern) include `<stdint.h>`/`<stddef.h>` instead of `<cstdint>`/`<cstddef>`/`<cstring>`, name `uint32_t`/`size_t` unqualified, and call `__builtin_memcpy`/`__builtin_strlen`; regenerate `src/proto/generated/`; `python3 tools/check_generated.py` green; the Linux build and every test unchanged
+- [X] T003 `src/um/CMakeLists.txt`: build `vk_dispatch_client.cpp`, `cl_dispatch_client.cpp`, `vk_handle_default.cpp` and `vk_host_image_default.cpp` into `rvktest.exe` with `third_party/khronos/include` and the two generated directories on its include path; `src/um/imports/ntdll.def` gains `strlen`; `tools/check_guest_image.py` still passes (imports only gdi32, kernel32, ntdll)
 
 **Checkpoint**: `rvktest.exe` links the Vulkan and OpenCL clients. Commit.
 

@@ -141,7 +141,7 @@ def _emit_create_instance(cmd: Command) -> list[str]:
         "    // 64 bits wide because that is the wire's width. Holding the",
         "    // server's handle in a VkInstance would narrow it on a 32-bit",
         "    // client and send back a handle no object is at.",
-        "    std::uint64_t server_instance = 0;",
+        "    uint64_t server_instance = 0;",
         f"    const VkResult rvk_rc = ::av::vkproto::rvk_{cmd.name}("
         + "conn->transport(), "
         + ", ".join(forwarded)
@@ -198,10 +198,10 @@ def _staging_array(cmd: Command, name: str, count_expr: str) -> list[str]:
             "array output; it has no way to refuse an oversized request"
         )
     return [
-        f"    if (static_cast<std::size_t>({count_expr}) > kMaxStagedHandles) {{",
+        f"    if (static_cast<size_t>({count_expr}) > kMaxStagedHandles) {{",
         "        return VK_ERROR_OUT_OF_HOST_MEMORY;",
         "    }",
-        f"    std::uint64_t {name}[kMaxStagedHandles] = {{}};",
+        f"    uint64_t {name}[kMaxStagedHandles] = {{}};",
     ]
 
 
@@ -273,7 +273,7 @@ def _emit_default_body(cmd: Command) -> list[str]:
                 call_args.append(count.name)
                 call_args.append(vec_name)
                 post_call.append(
-                    f"    for (std::uint32_t k = 0; k < *{count.name}; ++k) {{"
+                    f"    for (uint32_t k = 0; k < *{count.name}; ++k) {{"
                 )
                 post_call.append(
                     f"        {arr.name}[k] = "
@@ -301,7 +301,7 @@ def _emit_default_body(cmd: Command) -> list[str]:
         ):
             # SINGLE dispatchable handle output (e.g. vkCreateDevice's pDevice).
             local = f"server_{p.name}"
-            pre_call.append(f"    std::uint64_t {local} = 0;")
+            pre_call.append(f"    uint64_t {local} = 0;")
             call_args.append(f"&{local}")
             post_call.append(
                 f"    *{p.name} = ::av::icd::wrap_server_handle<{p.type.base}>({local}, conn);"
@@ -326,7 +326,7 @@ def _emit_default_body(cmd: Command) -> list[str]:
             pre_call.extend(_staging_array(cmd, vec, count_expr))
             call_args.append(vec)
             post_call.append(
-                f"    for (std::uint32_t k = 0; k < static_cast<std::uint32_t>({count_expr}); ++k) {{"
+                f"    for (uint32_t k = 0; k < static_cast<uint32_t>({count_expr}); ++k) {{"
             )
             post_call.append(
                 f"        {p.name}[k] = ::av::icd::wrap_server_handle<{p.type.base}>({vec}[k], conn);"
@@ -376,8 +376,8 @@ def emit(reg: Registry, out_dir: Path) -> None:
     h = [
         GENERATED_BANNER,
         "",
-        "#include <cstddef>",
-        "#include <cstdint>",
+        "#include <stddef.h>",
+        "#include <stdint.h>",
         "",
         "#include <vulkan/vulkan_core.h>",
         "",
@@ -405,15 +405,15 @@ def emit(reg: Registry, out_dir: Path) -> None:
     h.append("// so the table carries its own length.")
     h.append("class EntryTable {")
     h.append("public:")
-    h.append("    EntryTable(const Entry* first, std::size_t count) noexcept;")
+    h.append("    EntryTable(const Entry* first, size_t count) noexcept;")
     h.append("")
     h.append("    const Entry* begin() const noexcept;")
     h.append("    const Entry* end() const noexcept;")
-    h.append("    std::size_t size() const noexcept;")
+    h.append("    size_t size() const noexcept;")
     h.append("")
     h.append("private:")
     h.append("    const Entry* first_;")
-    h.append("    std::size_t count_;")
+    h.append("    size_t count_;")
     h.append("};")
     h.append("")
     h.append("// The generated wrapper entries. The ICD layer prepends its own")
@@ -440,7 +440,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "// How many raw server handles a wrapper stages on its stack while",
         "// wrapping an array the application asked for. A request for more is",
         "// refused with VK_ERROR_OUT_OF_HOST_MEMORY rather than allocated.",
-        "constexpr std::size_t kMaxStagedHandles = 1024;",
+        "constexpr size_t kMaxStagedHandles = 1024;",
         "",
         "}  // namespace",
         "",
@@ -464,7 +464,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
     s.append("}  // namespace")
     s.append("")
     s.append(
-        "EntryTable::EntryTable(const Entry* first, std::size_t count) noexcept"
+        "EntryTable::EntryTable(const Entry* first, size_t count) noexcept"
     )
     s.append("    : first_(first), count_(count) {}")
     s.append("")
@@ -472,7 +472,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
     s.append(
         "const Entry* EntryTable::end() const noexcept { return first_ + count_; }"
     )
-    s.append("std::size_t EntryTable::size() const noexcept { return count_; }")
+    s.append("size_t EntryTable::size() const noexcept { return count_; }")
     s.append("")
     s.append(
         f"EntryTable wrapper_entries() noexcept {{ "

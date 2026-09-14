@@ -26,7 +26,7 @@ from .common import GENERATED_BANNER, header_guard, write
 # number no object was ever at. A 32-bit guest — DXVK running an old
 # Direct3D game — got exactly that far and then hung inside the driver.
 #
-# So an output dispatchable handle is a ``std::uint64_t*`` here: the
+# So an output dispatchable handle is a ``uint64_t*`` here: the
 # wire's width, on both platforms. The ICD wraps that raw value into the
 # handle it gives the application. On a 64-bit build this generates the
 # same code it always did.
@@ -46,7 +46,7 @@ def _signature(reg: Registry, cmd: Command) -> str:
     args = ["::av::ClientTransport& t"]
     for p in cmd.params:
         if _out_handle_is_raw(reg, p, cmd.params):
-            args.append(f"std::uint64_t* {p.name}")
+            args.append(f"uint64_t* {p.name}")
         else:
             args.append(f"{classify.param_cpp(p.type)} {p.name}")
     return f"{cmd.return_type.cpp()} rvk_{cmd.name}({', '.join(args)})"
@@ -76,11 +76,11 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             count = cmd.params[i]
             arr = cmd.params[i + 1]
             lines.append(
-                f"const std::uint8_t array_present = {arr.name} != nullptr ? 1 : 0;"
+                f"const uint8_t array_present = {arr.name} != nullptr ? 1 : 0;"
             )
             lines.append("payload.write_pod(array_present);")
             lines.append("if (array_present) {")
-            lines.append(f"    payload.write_pod<std::uint32_t>(*{count.name});")
+            lines.append(f"    payload.write_pod<uint32_t>(*{count.name});")
             lines.append("}")
             has_array_pair = True
             i += 2
@@ -103,7 +103,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             # run, while the application was told each had succeeded and
             # drew with no descriptors bound.
             if classify.is_size_t(p.type):
-                lines.append(f"payload.write_pod<std::uint64_t>({p.name});")
+                lines.append(f"payload.write_pod<uint64_t>({p.name});")
             else:
                 lines.append(f"payload.write_pod({p.name});")
         elif kind == "out_handle":
@@ -114,7 +114,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append("    if (s == nullptr) {")
             lines.append("        payload.write_varint(0);")
             lines.append("    } else {")
-            lines.append("        const std::size_t n = std::strlen(s) + 1u;")
+            lines.append("        const size_t n = __builtin_strlen(s) + 1u;")
             lines.append("        payload.write_varint(n);")
             lines.append("        payload.write(s, n);")
             lines.append("    }")
@@ -135,13 +135,13 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             pad = ""
             if nullable:
                 lines.append(
-                    f"const std::uint8_t {p.name}_present = {p.name} != nullptr ? 1 : 0;"
+                    f"const uint8_t {p.name}_present = {p.name} != nullptr ? 1 : 0;"
                 )
                 lines.append(f"payload.write_pod({p.name}_present);")
                 lines.append(f"if ({p.name}_present) {{")
                 pad = "    "
             lines.append(
-                f"{pad}for (std::uint32_t rvk_i = 0; rvk_i < static_cast<std::uint32_t>({p.len_expr}); ++rvk_i) {{"
+                f"{pad}for (uint32_t rvk_i = 0; rvk_i < static_cast<uint32_t>({p.len_expr}); ++rvk_i) {{"
             )
             lines.append(f"{pad}{elem_line}")
             lines.append(f"{pad}}}")
@@ -151,9 +151,9 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             # Outer array of pointers; each inner array's length comes
             # from a member of the matching element of a sibling array.
             sib, _, member = p.inner_len.partition(".")
-            lines.append(f"for (std::uint32_t rvk_i = 0; rvk_i < static_cast<std::uint32_t>({p.len_expr}); ++rvk_i) {{")
-            lines.append(f"    const std::uint32_t rvk_n = static_cast<std::uint32_t>({sib}[rvk_i].{member});")
-            lines.append(f"    for (std::uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {{")
+            lines.append(f"for (uint32_t rvk_i = 0; rvk_i < static_cast<uint32_t>({p.len_expr}); ++rvk_i) {{")
+            lines.append(f"    const uint32_t rvk_n = static_cast<uint32_t>({sib}[rvk_i].{member});")
+            lines.append(f"    for (uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {{")
             if kind == "in_struct_array2":
                 lines.append(f"        serialize_{p.type.base}(payload, {p.name}[rvk_i][rvk_j]);")
             else:
@@ -163,12 +163,12 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         elif kind == "in_byte_array":
             lines.append(f"if ({p.name} != nullptr && {p.len_expr} > 0) {{")
             lines.append(
-                f"    payload.write({p.name}, static_cast<std::size_t>({p.len_expr}));"
+                f"    payload.write({p.name}, static_cast<size_t>({p.len_expr}));"
             )
             lines.append("}")
         elif kind == "in_fixed_array":
             lines.append(
-                f"for (std::uint32_t rvk_i = 0; rvk_i < {p.type.fixed_dim}u; ++rvk_i) {{"
+                f"for (uint32_t rvk_i = 0; rvk_i < {p.type.fixed_dim}u; ++rvk_i) {{"
             )
             lines.append(f"    payload.write_pod({p.name}[rvk_i]);")
             lines.append("}")
@@ -216,9 +216,9 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     lines.append("}")
     # Must match the width the server wrote — see classify.returns_wide.
     if classify.returns_wide(cmd):
-        lines.append("std::uint64_t result_code = 0;")
+        lines.append("uint64_t result_code = 0;")
     else:
-        lines.append("std::int32_t result_code = 0;")
+        lines.append("int32_t result_code = 0;")
     lines.append("if (!r.read_pod(result_code)) {")
     lines.append(on_fail)
     lines.append("}")
@@ -236,13 +236,13 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             element_is_struct = arr.type.base in reg.structs
             element_is_handle = arr.type.base in reg.handles
             lines.append("if (array_present) {")
-            lines.append(f"    for (std::uint32_t k = 0; k < *{count.name}; ++k) {{")
+            lines.append(f"    for (uint32_t k = 0; k < *{count.name}; ++k) {{")
             if element_is_struct:
                 lines.append(
                     f"        if (!deserialize_{arr.type.base}(r, &{arr.name}[k], t.decode_arena())) {{"
                 )
             elif arr.type.base in classify.DISPATCHABLE_HANDLES:
-                # Raw 64 bits: the caller's array is std::uint64_t[] so
+                # Raw 64 bits: the caller's array is uint64_t[] so
                 # nothing is narrowed on a 32-bit client.
                 lines.append(f"        if (!r.read_pod({arr.name}[k])) {{")
             elif element_is_handle:
@@ -278,7 +278,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             # application already sized it and owns it.
             lines.append(f"if ({p.name} != nullptr && {p.len_expr} > 0) {{")
             lines.append(
-                f"    if (!r.read({p.name}, static_cast<std::size_t>({p.len_expr}))) {{"
+                f"    if (!r.read({p.name}, static_cast<size_t>({p.len_expr}))) {{"
             )
             lines.append("    " + on_fail.lstrip())
             lines.append("    }")
@@ -286,7 +286,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         elif kind in ("out_handle_array", "out_struct_array", "out_pod_array"):
             elem = p.type.base
             lines.append(
-                f"for (std::uint32_t rvk_k = 0; rvk_k < static_cast<std::uint32_t>({p.len_expr}); ++rvk_k) {{"
+                f"for (uint32_t rvk_k = 0; rvk_k < static_cast<uint32_t>({p.len_expr}); ++rvk_k) {{"
             )
             if kind == "out_handle_array":
                 lines.append(f"    if (!r.read_pod({p.name}[rvk_k])) {{")
@@ -322,7 +322,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
     header = [
         GENERATED_BANNER,
         "",
-        "#include <cstdint>",
+        "#include <stdint.h>",
         "",
         "#include <vulkan/vulkan_core.h>",
         "",

@@ -1,12 +1,12 @@
 #pragma once
 
 
-#include <cstdint>
+#include <stdint.h>
 
 namespace av::vkproto {
 
 // Stable wire-protocol command IDs. See codegen/protocol_ids.toml.
-enum CmdId : std::uint32_t {
+enum CmdId : uint32_t {
     kCmd_vkDestroyInstance = 0x00010001u,
     kCmd_vkDestroyDevice = 0x00010002u,
     kCmd_vkGetDeviceQueue = 0x00010003u,

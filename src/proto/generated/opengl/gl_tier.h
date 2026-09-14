@@ -4,8 +4,7 @@
 
 #pragma once
 
-#include <cstdint>
-#include <cstring>
+#include <stdint.h>
 
 namespace av::glproto {
 
@@ -16,8 +15,8 @@ namespace av::glproto {
 // promise entry points the wire does not carry. So the
 // version is capped to this and the extension list is
 // filtered to the table below.
-inline constexpr std::uint32_t kTierMajor = 4;
-inline constexpr std::uint32_t kTierMinor = 6;
+inline constexpr uint32_t kTierMajor = 4;
+inline constexpr uint32_t kTierMinor = 6;
 
 // Every extension whose commands are all generated. An
 // extension needing an entry point that does not cross is
@@ -647,13 +646,13 @@ inline constexpr const char* kCarriedExtensions[] = {
     "GL_WIN_specular_fog",
 };
 
-inline constexpr std::size_t kCarriedExtensionCount =
+inline constexpr size_t kCarriedExtensionCount =
     sizeof(kCarriedExtensions) / sizeof(kCarriedExtensions[0]);
 
 [[nodiscard]] inline bool extension_is_carried(const char* name) noexcept {
     if (name == nullptr) return false;
-    for (std::size_t i = 0; i < kCarriedExtensionCount; ++i) {
-        if (std::strcmp(name, kCarriedExtensions[i]) == 0) return true;
+    for (size_t i = 0; i < kCarriedExtensionCount; ++i) {
+        if (__builtin_strcmp(name, kCarriedExtensions[i]) == 0) return true;
     }
     return false;
 }

@@ -4,10 +4,10 @@
 
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
 
 namespace av::glproto {
 
-const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept;
+const char* cmd_id_to_string(uint32_t cmd_id) noexcept;
 
 }  // namespace av::glproto

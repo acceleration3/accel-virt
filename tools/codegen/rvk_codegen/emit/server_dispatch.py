@@ -24,7 +24,7 @@ def _interface_signature(cmd: Command) -> str:
 def _storage_decls(name: str, elem: str) -> list[str]:
     return [
         f"    {elem}* {name} = nullptr;",
-        f"    std::size_t {name}_count = 0;",
+        f"    size_t {name}_count = 0;",
     ]
 
 
@@ -41,14 +41,14 @@ def _storage_alloc(
     what is there.
     """
     lines = [
-        f"{pad}{name}_count = static_cast<std::size_t>({count_expr});",
+        f"{pad}{name}_count = static_cast<size_t>({count_expr});",
         f"{pad}if ({name}_count != 0) {{",
         f"{pad}    {name} = arena.allocate<{elem}>({name}_count);",
         f"{pad}    if ({name} == nullptr) return false;",
     ]
     if zero_fill:
         lines.append(
-            f"{pad}    for (std::size_t rvk_z = 0; rvk_z < {name}_count; ++rvk_z) "
+            f"{pad}    for (size_t rvk_z = 0; rvk_z < {name}_count; ++rvk_z) "
             f"{{ {name}[rvk_z] = {{}}; }}"
         )
     lines.append(f"{pad}}}")
@@ -70,8 +70,8 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         if classify.is_count_array_pair(cmd.params, i):
             count = cmd.params[i]
             arr = cmd.params[i + 1]
-            decl_lines.append("    std::uint8_t array_present = 0;")
-            decl_lines.append(f"    std::uint32_t {count.name}_local = 0;")
+            decl_lines.append("    uint8_t array_present = 0;")
+            decl_lines.append(f"    uint32_t {count.name}_local = 0;")
             decl_lines.extend(_storage_decls(f"{arr.name}_storage", arr.type.base))
             decode_lines.append("    if (!r.read_pod(array_present)) return false;")
             decode_lines.append("    if (array_present) {")
@@ -84,7 +84,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             stype_value = classify.stype_value_for_struct(reg, arr.type.base)
             if stype_value is not None:
                 decode_lines.append(
-                    f"        for (std::size_t rvk_e = 0; "
+                    f"        for (size_t rvk_e = 0; "
                     f"rvk_e < {arr.name}_storage_count; ++rvk_e) {{ "
                     f"{arr.name}_storage[rvk_e].sType = {stype_value}; "
                     f"{arr.name}_storage[rvk_e].pNext = nullptr; }}"
@@ -94,7 +94,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             call_args.append(f"array_present ? {arr.name}_storage : nullptr")
             out_after_call.append(f"    reply.write_pod({count.name}_local);")
             out_after_call.append("    if (array_present) {")
-            out_after_call.append(f"        for (std::uint32_t k = 0; k < {count.name}_local; ++k) {{")
+            out_after_call.append(f"        for (uint32_t k = 0; k < {count.name}_local; ++k) {{")
             if arr.type.base in reg.structs or arr.type.base in reg.handles:
                 out_after_call.append(
                     f"            serialize_{arr.type.base}(reply, {arr.name}_storage[k]);"
@@ -121,7 +121,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 # Read the wire's 64 bits, then narrow to this machine's
                 # size_t. See the same case on the client side.
                 decode_lines.append("    {")
-                decode_lines.append("        std::uint64_t rvk_wide = 0;")
+                decode_lines.append("        uint64_t rvk_wide = 0;")
                 decode_lines.append("        if (!r.read_pod(rvk_wide)) return false;")
                 decode_lines.append(
                     f"        {p.name} = static_cast<{p.type.cpp()}>(rvk_wide);")
@@ -132,14 +132,14 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         elif kind == "in_string":
             decl_lines.append(f"    const char* {p.name} = nullptr;")
             decode_lines.append("    {")
-            decode_lines.append("        std::uint64_t n = 0;")
+            decode_lines.append("        uint64_t n = 0;")
             decode_lines.append("        if (!r.read_varint(n)) return false;")
             decode_lines.append("        if (n > 0) {")
             decode_lines.append(
-                "            char* tmp_str = arena.allocate_chars(static_cast<std::size_t>(n));"
+                "            char* tmp_str = arena.allocate_chars(static_cast<size_t>(n));"
             )
             decode_lines.append(
-                "            if (!r.read(tmp_str, static_cast<std::size_t>(n))) return false;"
+                "            if (!r.read(tmp_str, static_cast<size_t>(n))) return false;"
             )
             decode_lines.append(f"            {p.name} = tmp_str;")
             decode_lines.append("        }")
@@ -161,7 +161,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             decl_lines.extend(_storage_decls(f"{p.name}_storage", elem))
             pad = ""
             if nullable:
-                decl_lines.append(f"    std::uint8_t {p.name}_present = 0;")
+                decl_lines.append(f"    uint8_t {p.name}_present = 0;")
                 decode_lines.append(
                     f"    if (!r.read_pod({p.name}_present)) return false;"
                 )
@@ -171,7 +171,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 _storage_alloc(f"{pad}    ", f"{p.name}_storage", elem, srv_len)
             )
             decode_lines.append(
-                f"{pad}    for (std::size_t rvk_i = 0; "
+                f"{pad}    for (size_t rvk_i = 0; "
                 f"rvk_i < {p.name}_storage_count; ++rvk_i) {{"
             )
             if kind == "in_handle_array":
@@ -203,14 +203,14 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             decl_lines.append(f"    const {elem}** {p.name}_outer = nullptr;")
             decode_lines.append(f"    {{")
             decode_lines.append(
-                f"        const std::uint32_t rvk_n_outer = static_cast<std::uint32_t>({srv_outer});")
+                f"        const uint32_t rvk_n_outer = static_cast<uint32_t>({srv_outer});")
             decode_lines.append(
                 f"        auto** rvk_ptrs = arena.allocate<const {elem}*>(rvk_n_outer);")
-            decode_lines.append("        for (std::uint32_t rvk_i = 0; rvk_i < rvk_n_outer; ++rvk_i) {")
+            decode_lines.append("        for (uint32_t rvk_i = 0; rvk_i < rvk_n_outer; ++rvk_i) {")
             decode_lines.append(
-                f"            const std::uint32_t rvk_n = static_cast<std::uint32_t>({sib}_storage[rvk_i].{member});")
+                f"            const uint32_t rvk_n = static_cast<uint32_t>({sib}_storage[rvk_i].{member});")
             decode_lines.append(f"            auto* rvk_inner = arena.allocate<{elem}>(rvk_n);")
-            decode_lines.append("            for (std::uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {")
+            decode_lines.append("            for (uint32_t rvk_j = 0; rvk_j < rvk_n; ++rvk_j) {")
             if kind == "in_struct_array2":
                 decode_lines.append(
                     f"                if (!deserialize_{elem}(r, &rvk_inner[rvk_j], arena)) return false;")
@@ -224,11 +224,11 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             call_args.append(f"{p.name}_outer")
         elif kind == "in_byte_array":
             srv_len = classify.server_len_expr(cmd.params, p.len_expr)
-            decl_lines.extend(_storage_decls(f"{p.name}_storage", "std::uint8_t"))
+            decl_lines.extend(_storage_decls(f"{p.name}_storage", "uint8_t"))
             # The read fills every byte, so it goes inside the allocation's
             # own guard and the block is not zeroed first.
             alloc = _storage_alloc(
-                "    ", f"{p.name}_storage", "std::uint8_t", srv_len, zero_fill=False
+                "    ", f"{p.name}_storage", "uint8_t", srv_len, zero_fill=False
             )
             alloc.insert(
                 len(alloc) - 1,
@@ -242,7 +242,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 f"    {p.type.base} {p.name}_local[{p.type.fixed_dim}]{{}};"
             )
             decode_lines.append(
-                f"    for (std::uint32_t rvk_i = 0; rvk_i < {p.type.fixed_dim}u; ++rvk_i) {{"
+                f"    for (uint32_t rvk_i = 0; rvk_i < {p.type.fixed_dim}u; ++rvk_i) {{"
             )
             decode_lines.append(
                 f"        if (!r.read_pod({p.name}_local[rvk_i])) return false;"
@@ -274,9 +274,9 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             out_after_call.append(f"    reply.write_pod({p.name}_out);")
         elif kind == "out_byte_array":
             srv_len = classify.server_len_expr(cmd.params, p.len_expr)
-            decl_lines.extend(_storage_decls(f"{p.name}_storage", "std::uint8_t"))
+            decl_lines.extend(_storage_decls(f"{p.name}_storage", "uint8_t"))
             decode_lines.extend(
-                _storage_alloc("    ", f"{p.name}_storage", "std::uint8_t", srv_len)
+                _storage_alloc("    ", f"{p.name}_storage", "uint8_t", srv_len)
             )
             call_args.append(f"{p.name}_storage")
             out_after_call.append(f"    if ({p.name}_storage_count != 0) {{")
@@ -293,7 +293,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             )
             call_args.append(f"{p.name}_storage")
             out_after_call.append(
-                f"    for (std::size_t rvk_k = 0; rvk_k < {p.name}_storage_count; ++rvk_k) {{"
+                f"    for (size_t rvk_k = 0; rvk_k < {p.name}_storage_count; ++rvk_k) {{"
             )
             if kind in ("out_handle_array", "out_struct_array"):
                 out_after_call.append(
@@ -312,7 +312,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     if is_void:
         lines.append(f"    s.on_{cmd.name}({', '.join(call_args)});")
         if cmd.sync_mode == "sync":
-            lines.append("    reply.write_pod<std::int32_t>(0);")
+            lines.append("    reply.write_pod<int32_t>(0);")
             lines.extend(out_after_call)
     else:
         lines.append(
@@ -326,11 +326,11 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         # VK_ERROR_DEVICE_LOST, nowhere near the actual cause.
         if classify.returns_wide(cmd):
             lines.append(
-                "    reply.write_pod<std::uint64_t>(static_cast<std::uint64_t>(result));"
+                "    reply.write_pod<uint64_t>(static_cast<uint64_t>(result));"
             )
         else:
             lines.append(
-                "    reply.write_pod<std::int32_t>(static_cast<std::int32_t>(result));"
+                "    reply.write_pod<int32_t>(static_cast<int32_t>(result));"
             )
         lines.extend(out_after_call)
 
@@ -346,8 +346,8 @@ def emit(reg: Registry, out_dir: Path) -> None:
     header = [
         GENERATED_BANNER,
         "",
-        "#include <cstddef>",
-        "#include <cstdint>",
+        "#include <stddef.h>",
+        "#include <stdint.h>",
         "",
         "#include <vulkan/vulkan_core.h>",
         "",
@@ -381,7 +381,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
     )
     header.append("// the decode that filled it.")
     header.append(
-        "[[nodiscard]] bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, "
+        "[[nodiscard]] bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, "
         "::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena);"
     )
     header.append("")
@@ -400,7 +400,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         "namespace av::vkproto {",
         "",
-        "bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id, "
+        "bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, "
         "::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena) {",
         "    switch (cmd_id) {",
     ]

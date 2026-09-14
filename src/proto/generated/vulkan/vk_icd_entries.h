@@ -1,8 +1,8 @@
 #pragma once
 
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 #include <vulkan/vulkan_core.h>
 
@@ -413,15 +413,15 @@ struct Entry {
 // so the table carries its own length.
 class EntryTable {
 public:
-    EntryTable(const Entry* first, std::size_t count) noexcept;
+    EntryTable(const Entry* first, size_t count) noexcept;
 
     const Entry* begin() const noexcept;
     const Entry* end() const noexcept;
-    std::size_t size() const noexcept;
+    size_t size() const noexcept;
 
 private:
     const Entry* first_;
-    std::size_t count_;
+    size_t count_;
 };
 
 // The generated wrapper entries. The ICD layer prepends its own

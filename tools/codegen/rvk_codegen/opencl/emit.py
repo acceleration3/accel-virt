@@ -36,7 +36,7 @@ HEADER = ("// THIS FILE IS GENERATED. DO NOT EDIT.\n"
 # never dereferences one — its ICD keeps its own objects and carries
 # this alongside — so the two address spaces do not have to agree on
 # anything but the width.
-HANDLE_T = "std::uint64_t"
+HANDLE_T = "uint64_t"
 
 # cl.h picks a version by #pragma message when nobody says, and marks
 # everything 1.2 and 2.x retired with a deprecation attribute. This wire
@@ -88,7 +88,7 @@ def _client_param_decl(reg: Registry, p: Param) -> list[str]:
         # OpenCL leaves this one implicit — an image transfer's size is
         # its region, its pitches and its format — so the caller, which
         # knows all three, passes it.
-        decl.append(f"std::size_t {p.name}_bytes")
+        decl.append(f"size_t {p.name}_bytes")
     return decl
 
 
@@ -120,7 +120,7 @@ def _client_signature(reg: Registry, cmd: Command) -> str:
             # Not on the wire, but a string array's lengths are read by
             # the encoder, so the caller still passes them.
             if _lengths_owner(cmd, p) is not None:
-                params.append(f"const std::size_t* {p.name}")
+                params.append(f"const size_t* {p.name}")
             continue
         params.extend(_client_param_decl(reg, p))
     return f"{ret} rvk_{cmd.name}({', '.join(params)})"
@@ -142,80 +142,80 @@ def _encode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
     if p.role == Role.IGNORED:
         return
     if p.role == Role.SCALAR:
-        out.append(f"    b.write_varint(static_cast<std::uint64_t>({n}));")
+        out.append(f"    b.write_varint(static_cast<uint64_t>({n}));")
     elif p.role == Role.HANDLE:
         out.append(f"    b.write_pod<{HANDLE_T}>({n});")
     elif p.role == Role.HANDLE_ARRAY:
         count = p.len_param
-        out.append(f"    b.write_pod<std::uint8_t>({n} != nullptr ? 1 : 0);")
+        out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
         out.append(f"    if ({n} != nullptr) {{")
-        out.append(f"        b.write_varint(static_cast<std::uint64_t>({count}));")
-        out.append(f"        for (std::uint64_t i = 0; i < static_cast<std::uint64_t>({count}); ++i) {{")
+        out.append(f"        b.write_varint(static_cast<uint64_t>({count}));")
+        out.append(f"        for (uint64_t i = 0; i < static_cast<uint64_t>({count}); ++i) {{")
         out.append(f"            b.write_pod<{HANDLE_T}>({n}[i]);")
         out.append("        }")
         out.append("    }")
     elif p.role == Role.SCALAR_ARRAY:
         count = p.len_param
-        out.append(f"    b.write_pod<std::uint8_t>({n} != nullptr ? 1 : 0);")
+        out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
         out.append(f"    if ({n} != nullptr) {{")
-        out.append(f"        b.write_varint(static_cast<std::uint64_t>({count}));")
-        out.append(f"        for (std::uint64_t i = 0; i < static_cast<std::uint64_t>({count}); ++i) {{")
-        out.append(f"            b.write_varint(static_cast<std::uint64_t>({n}[i]));")
+        out.append(f"        b.write_varint(static_cast<uint64_t>({count}));")
+        out.append(f"        for (uint64_t i = 0; i < static_cast<uint64_t>({count}); ++i) {{")
+        out.append(f"            b.write_varint(static_cast<uint64_t>({n}[i]));")
         out.append("        }")
         out.append("    }")
     elif p.role == Role.STRING:
-        out.append(f"    b.write_pod<std::uint8_t>({n} != nullptr ? 1 : 0);")
+        out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
         out.append(f"    if ({n} != nullptr) {{")
-        out.append(f"        const std::size_t wire_len = std::strlen({n});")
+        out.append(f"        const size_t wire_len = __builtin_strlen({n});")
         out.append("        b.write_varint(wire_len);")
         out.append(f"        b.write({n}, wire_len);")
         out.append("    }")
     elif p.role == Role.STRING_ARRAY:
         count = p.len_param
         lengths = p.lengths_param
-        out.append(f"    b.write_pod<std::uint8_t>({n} != nullptr ? 1 : 0);")
+        out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
         out.append(f"    if ({n} != nullptr) {{")
-        out.append(f"        b.write_varint(static_cast<std::uint64_t>({count}));")
-        out.append(f"        for (std::uint64_t i = 0; i < static_cast<std::uint64_t>({count}); ++i) {{")
+        out.append(f"        b.write_varint(static_cast<uint64_t>({count}));")
+        out.append(f"        for (uint64_t i = 0; i < static_cast<uint64_t>({count}); ++i) {{")
         if lengths:
-            out.append(f"            const std::size_t wire_len = ({lengths} != nullptr && {lengths}[i] != 0)")
+            out.append(f"            const size_t wire_len = ({lengths} != nullptr && {lengths}[i] != 0)")
             out.append(f"                ? {lengths}[i]")
-            out.append(f"                : ({n}[i] != nullptr ? std::strlen(reinterpret_cast<const char*>({n}[i])) : 0);")
+            out.append(f"                : ({n}[i] != nullptr ? __builtin_strlen(reinterpret_cast<const char*>({n}[i])) : 0);")
         else:
-            out.append(f"            const std::size_t wire_len = {n}[i] != nullptr ? std::strlen({n}[i]) : 0;")
+            out.append(f"            const size_t wire_len = {n}[i] != nullptr ? __builtin_strlen({n}[i]) : 0;")
         out.append("            b.write_varint(wire_len);")
         out.append(f"            if (wire_len != 0) b.write({n}[i], wire_len);")
         out.append("        }")
         out.append("    }")
     elif p.role == Role.BYTES_IN:
         size = f"{n}_bytes" if (p.len_param or "").startswith("@") else p.len_param
-        out.append(f"    b.write_pod<std::uint8_t>({n} != nullptr ? 1 : 0);")
+        out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
         out.append(f"    if ({n} != nullptr) {{")
-        out.append(f"        b.write_varint(static_cast<std::uint64_t>({size}));")
-        out.append(f"        b.write({n}, static_cast<std::size_t>({size}));")
+        out.append(f"        b.write_varint(static_cast<uint64_t>({size}));")
+        out.append(f"        b.write({n}, static_cast<size_t>({size}));")
         out.append("    }")
     elif p.role == Role.STRUCT_IN:
-        out.append(f"    b.write_pod<std::uint8_t>({n} != nullptr ? 1 : 0);")
+        out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
         out.append(f"    if ({n} != nullptr) b.write({n}, sizeof(*{n}));")
     elif p.role == Role.PROPERTIES:
         # Zero-terminated key/value pairs. Counted here so the far side
         # does not have to trust a terminator that may not be there.
-        out.append(f"    b.write_pod<std::uint8_t>({n} != nullptr ? 1 : 0);")
+        out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
         out.append(f"    if ({n} != nullptr) {{")
-        out.append("        std::uint64_t wire_count = 0;")
+        out.append("        uint64_t wire_count = 0;")
         out.append(f"        while ({n}[wire_count] != 0) wire_count += 2;")
         out.append("        b.write_varint(wire_count);")
-        out.append("        for (std::uint64_t i = 0; i < wire_count; ++i) {")
+        out.append("        for (uint64_t i = 0; i < wire_count; ++i) {")
         out.append(f"            b.write_pod<{HANDLE_T}>({n}[i]);")
         out.append("        }")
         out.append("    }")
     elif p.role == Role.PROPERTY_LIST:
-        out.append(f"    b.write_pod<std::uint8_t>({n} != nullptr ? 1 : 0);")
+        out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
         out.append(f"    if ({n} != nullptr) {{")
-        out.append("        std::uint64_t wire_count = 0;")
+        out.append("        uint64_t wire_count = 0;")
         out.append(f"        while ({n}[wire_count] != 0) ++wire_count;")
         out.append("        b.write_varint(wire_count);")
-        out.append("        for (std::uint64_t i = 0; i < wire_count; ++i) {")
+        out.append("        for (uint64_t i = 0; i < wire_count; ++i) {")
         out.append(f"            b.write_pod<{HANDLE_T}>(static_cast<{HANDLE_T}>({n}[i]));")
         out.append("        }")
         out.append("    }")
@@ -223,11 +223,11 @@ def _encode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
                     Role.HANDLE_ARRAY_OUT, Role.INFO_VALUE):
         # The byte says whether the caller wants it; the server skips
         # producing what nobody asked for.
-        out.append(f"    b.write_pod<std::uint8_t>({n} != nullptr ? 1 : 0);")
+        out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
     elif p.role == Role.BYTES_OUT:
         size = f"{n}_bytes" if (p.len_param or "").startswith("@") else p.len_param
-        out.append(f"    b.write_pod<std::uint8_t>({n} != nullptr ? 1 : 0);")
-        out.append(f"    if ({n} != nullptr) b.write_varint(static_cast<std::uint64_t>({size}));")
+        out.append(f"    b.write_pod<uint8_t>({n} != nullptr ? 1 : 0);")
+        out.append(f"    if ({n} != nullptr) b.write_varint(static_cast<uint64_t>({size}));")
     else:
         raise AssertionError(f"no encoder for {p.role}")
 
@@ -239,7 +239,7 @@ def _decode_reply(reg: Registry, cmd: Command, out: list[str]) -> None:
         out.append("    if (!r.read_pod(ret)) return 0;")
     elif not cmd.returns_void:
         out.append(f"    {cmd.return_type.cpp()} ret{{}};")
-        out.append("    std::int64_t ret_wire = 0;")
+        out.append("    int64_t ret_wire = 0;")
         out.append("    if (!r.read_varint(ret_wire)) return static_cast<"
                    f"{cmd.return_type.cpp()}>(-1);")
         out.append(f"    ret = static_cast<{cmd.return_type.cpp()}>(ret_wire);")
@@ -253,21 +253,21 @@ def _decode_reply(reg: Registry, cmd: Command, out: list[str]) -> None:
         if p.role == Role.HANDLE_OUT:
             out.append(f"        if (!r.read_pod(*{n})) {fail}")
         elif p.role == Role.SCALAR_OUT:
-            out.append("        std::uint64_t wire_value = 0;")
+            out.append("        uint64_t wire_value = 0;")
             out.append(f"        if (!r.read_varint(wire_value)) {fail}")
             out.append(f"        *{n} = static_cast<{p.type.base}>(wire_value);")
         elif p.role == Role.STRUCT_OUT:
             out.append(f"        if (!r.read({n}, sizeof(*{n}))) {fail}")
         elif p.role == Role.HANDLE_ARRAY_OUT:
-            out.append("        std::uint64_t wire_count = 0;")
+            out.append("        uint64_t wire_count = 0;")
             out.append(f"        if (!r.read_varint(wire_count)) {fail}")
-            out.append("        for (std::uint64_t i = 0; i < wire_count; ++i) {")
+            out.append("        for (uint64_t i = 0; i < wire_count; ++i) {")
             out.append(f"            if (!r.read_pod({n}[i])) {fail}")
             out.append("        }")
         elif p.role in (Role.BYTES_OUT, Role.INFO_VALUE):
-            out.append("        std::uint64_t wire_count = 0;")
+            out.append("        uint64_t wire_count = 0;")
             out.append(f"        if (!r.read_varint(wire_count)) {fail}")
-            out.append(f"        if (wire_count != 0 && !r.read({n}, static_cast<std::size_t>(wire_count))) {fail}")
+            out.append(f"        if (wire_count != 0 && !r.read({n}, static_cast<size_t>(wire_count))) {fail}")
         else:
             raise AssertionError(f"no reply decoder for {p.role}")
         out.append("    }")
@@ -275,11 +275,10 @@ def _decode_reply(reg: Registry, cmd: Command, out: list[str]) -> None:
 
 def emit_client(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
-         "#include <cstddef>", "#include <cstdint>", ""] + CL_PREAMBLE + ["",
+         "#include <stddef.h>", "#include <stdint.h>", ""] + CL_PREAMBLE + ["",
          '#include "proto/client_transport.hpp"', "",
          "namespace av::clproto {", ""]
     c = [HEADER, '#include "cl_dispatch_client.h"', "",
-         "#include <cstring>", "",
          '#include "proto/wire/wire_arena.hpp"',
          '#include "proto/wire/wire_reader.hpp"',
          '#include "proto/wire/wire_writer.hpp"',
@@ -339,7 +338,7 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         return
     if p.role == Role.SCALAR:
         out.append("    {")
-        out.append("        std::uint64_t wire_value = 0;")
+        out.append("        uint64_t wire_value = 0;")
         out.append("        if (!r.read_varint(wire_value)) return false;")
         out.append(f"        {n} = static_cast<{p.type.base}>(wire_value);")
         out.append("    }")
@@ -347,24 +346,24 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append(f"    {{ {HANDLE_T} wire_handle = 0;")
         out.append("      if (!r.read_pod(wire_handle)) return false;")
         out.append(f"      {n} = reinterpret_cast<{p.type.base}>("
-                   "static_cast<std::uintptr_t>(wire_handle)); }")
+                   "static_cast<uintptr_t>(wire_handle)); }")
     elif p.role in (Role.HANDLE_ARRAY, Role.SCALAR_ARRAY):
         elem = p.element if p.role == Role.HANDLE_ARRAY else p.type.base
         out.append("    {")
-        out.append("        std::uint8_t wire_present = 0;")
+        out.append("        uint8_t wire_present = 0;")
         out.append("        if (!r.read_pod(wire_present)) return false;")
         out.append("        if (wire_present != 0) {")
-        out.append("            std::uint64_t wire_count = 0;")
+        out.append("            uint64_t wire_count = 0;")
         out.append("            if (!r.read_varint(wire_count)) return false;")
-        out.append(f"            auto* wire_items = arena.allocate<{elem}>(static_cast<std::size_t>(wire_count) + 1);")
+        out.append(f"            auto* wire_items = arena.allocate<{elem}>(static_cast<size_t>(wire_count) + 1);")
         out.append("            if (wire_items == nullptr) return false;")
-        out.append("            for (std::uint64_t i = 0; i < wire_count; ++i) {")
+        out.append("            for (uint64_t i = 0; i < wire_count; ++i) {")
         if p.role == Role.HANDLE_ARRAY:
             out.append(f"                {HANDLE_T} wire_handle = 0;")
             out.append("                if (!r.read_pod(wire_handle)) return false;")
-            out.append(f"                wire_items[i] = reinterpret_cast<{elem}>(static_cast<std::uintptr_t>(wire_handle));")
+            out.append(f"                wire_items[i] = reinterpret_cast<{elem}>(static_cast<uintptr_t>(wire_handle));")
         else:
-            out.append("                std::uint64_t wire_value = 0;")
+            out.append("                uint64_t wire_value = 0;")
             out.append("                if (!r.read_varint(wire_value)) return false;")
             out.append(f"                wire_items[i] = static_cast<{elem}>(wire_value);")
         out.append("            }")
@@ -373,43 +372,43 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append("    }")
     elif p.role == Role.STRING:
         out.append("    {")
-        out.append("        std::uint8_t wire_present = 0;")
+        out.append("        uint8_t wire_present = 0;")
         out.append("        if (!r.read_pod(wire_present)) return false;")
         out.append("        if (wire_present != 0) {")
-        out.append("            std::uint64_t wire_len = 0;")
+        out.append("            uint64_t wire_len = 0;")
         out.append("            if (!r.read_varint(wire_len)) return false;")
-        out.append("            char* wire_text = arena.allocate_chars(static_cast<std::size_t>(wire_len) + 1);")
+        out.append("            char* wire_text = arena.allocate_chars(static_cast<size_t>(wire_len) + 1);")
         out.append("            if (wire_text == nullptr) return false;")
-        out.append("            if (wire_len != 0 && !r.read(wire_text, static_cast<std::size_t>(wire_len))) return false;")
+        out.append("            if (wire_len != 0 && !r.read(wire_text, static_cast<size_t>(wire_len))) return false;")
         out.append("            wire_text[wire_len] = '\\0';")
         out.append(f"            {n} = wire_text;")
         out.append("        }")
         out.append("    }")
     elif p.role == Role.STRING_ARRAY:
         out.append("    {")
-        out.append("        std::uint8_t wire_present = 0;")
+        out.append("        uint8_t wire_present = 0;")
         out.append("        if (!r.read_pod(wire_present)) return false;")
         out.append("        if (wire_present != 0) {")
-        out.append("            std::uint64_t wire_count = 0;")
+        out.append("            uint64_t wire_count = 0;")
         out.append("            if (!r.read_varint(wire_count)) return false;")
         out.append(f"            auto** wire_items = arena.allocate<const {p.type.base}*>("
-                   "static_cast<std::size_t>(wire_count) + 1);")
+                   "static_cast<size_t>(wire_count) + 1);")
         out.append("            if (wire_items == nullptr) return false;")
         keeps_lengths = _lengths_consumer(cmd, p) is not None
         if keeps_lengths:
-            out.append("            auto* wire_lengths = arena.allocate<std::size_t>("
-                       "static_cast<std::size_t>(wire_count) + 1);")
+            out.append("            auto* wire_lengths = arena.allocate<size_t>("
+                       "static_cast<size_t>(wire_count) + 1);")
             out.append("            if (wire_lengths == nullptr) return false;")
-        out.append("            for (std::uint64_t i = 0; i < wire_count; ++i) {")
-        out.append("                std::uint64_t wire_len = 0;")
+        out.append("            for (uint64_t i = 0; i < wire_count; ++i) {")
+        out.append("                uint64_t wire_len = 0;")
         out.append("                if (!r.read_varint(wire_len)) return false;")
-        out.append("                char* wire_text = arena.allocate_chars(static_cast<std::size_t>(wire_len) + 1);")
+        out.append("                char* wire_text = arena.allocate_chars(static_cast<size_t>(wire_len) + 1);")
         out.append("                if (wire_text == nullptr) return false;")
-        out.append("                if (wire_len != 0 && !r.read(wire_text, static_cast<std::size_t>(wire_len))) return false;")
+        out.append("                if (wire_len != 0 && !r.read(wire_text, static_cast<size_t>(wire_len))) return false;")
         out.append("                wire_text[wire_len] = '\\0';")
         out.append(f"                wire_items[i] = reinterpret_cast<const {p.type.base}*>(wire_text);")
         if keeps_lengths:
-            out.append("                wire_lengths[i] = static_cast<std::size_t>(wire_len);")
+            out.append("                wire_lengths[i] = static_cast<size_t>(wire_len);")
         out.append("            }")
         out.append(f"            {n} = wire_items;")
         if keeps_lengths:
@@ -418,24 +417,24 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append("    }")
     elif p.role == Role.BYTES_IN:
         out.append("    {")
-        out.append("        std::uint8_t wire_present = 0;")
+        out.append("        uint8_t wire_present = 0;")
         out.append("        if (!r.read_pod(wire_present)) return false;")
         out.append("        if (wire_present != 0) {")
-        out.append("            std::uint64_t wire_count = 0;")
+        out.append("            uint64_t wire_count = 0;")
         out.append("            if (!r.read_varint(wire_count)) return false;")
         # The reader hands out no view of its own buffer, so the bytes are
         # copied into the caller's block like everything else pointed at.
-        out.append("            auto* wire_bytes = arena.allocate<std::uint8_t>("
-                   "static_cast<std::size_t>(wire_count) + 1);")
+        out.append("            auto* wire_bytes = arena.allocate<uint8_t>("
+                   "static_cast<size_t>(wire_count) + 1);")
         out.append("            if (wire_bytes == nullptr) return false;")
         out.append("            if (wire_count != 0 && !r.read(wire_bytes, "
-                   "static_cast<std::size_t>(wire_count))) return false;")
+                   "static_cast<size_t>(wire_count))) return false;")
         out.append(f"            {n} = reinterpret_cast<{p.type.cpp()}>(wire_bytes);")
         out.append("        }")
         out.append("    }")
     elif p.role == Role.STRUCT_IN:
         out.append("    {")
-        out.append("        std::uint8_t wire_present = 0;")
+        out.append("        uint8_t wire_present = 0;")
         out.append("        if (!r.read_pod(wire_present)) return false;")
         out.append("        if (wire_present != 0) {")
         out.append(f"            auto* wire_item = arena.allocate<{p.element}>(1);")
@@ -446,14 +445,14 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append("    }")
     elif p.role == Role.PROPERTIES:
         out.append("    {")
-        out.append("        std::uint8_t wire_present = 0;")
+        out.append("        uint8_t wire_present = 0;")
         out.append("        if (!r.read_pod(wire_present)) return false;")
         out.append("        if (wire_present != 0) {")
-        out.append("            std::uint64_t wire_count = 0;")
+        out.append("            uint64_t wire_count = 0;")
         out.append("            if (!r.read_varint(wire_count)) return false;")
-        out.append(f"            auto* wire_items = arena.allocate<{p.type.base}>(static_cast<std::size_t>(wire_count) + 1);")
+        out.append(f"            auto* wire_items = arena.allocate<{p.type.base}>(static_cast<size_t>(wire_count) + 1);")
         out.append("            if (wire_items == nullptr) return false;")
-        out.append("            for (std::uint64_t i = 0; i < wire_count; ++i) {")
+        out.append("            for (uint64_t i = 0; i < wire_count; ++i) {")
         out.append(f"                {HANDLE_T} wire_value = 0;")
         out.append("                if (!r.read_pod(wire_value)) return false;")
         out.append(f"                wire_items[i] = static_cast<{p.type.base}>(wire_value);")
@@ -464,14 +463,14 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         out.append("    }")
     elif p.role == Role.PROPERTY_LIST:
         out.append("    {")
-        out.append("        std::uint8_t wire_present = 0;")
+        out.append("        uint8_t wire_present = 0;")
         out.append("        if (!r.read_pod(wire_present)) return false;")
         out.append("        if (wire_present != 0) {")
-        out.append("            std::uint64_t wire_count = 0;")
+        out.append("            uint64_t wire_count = 0;")
         out.append("            if (!r.read_varint(wire_count)) return false;")
-        out.append(f"            auto* wire_items = arena.allocate<{p.type.base}>(static_cast<std::size_t>(wire_count) + 1);")
+        out.append(f"            auto* wire_items = arena.allocate<{p.type.base}>(static_cast<size_t>(wire_count) + 1);")
         out.append("            if (wire_items == nullptr) return false;")
-        out.append("            for (std::uint64_t i = 0; i < wire_count; ++i) {")
+        out.append("            for (uint64_t i = 0; i < wire_count; ++i) {")
         out.append(f"                {HANDLE_T} wire_value = 0;")
         out.append("                if (!r.read_pod(wire_value)) return false;")
         out.append(f"                wire_items[i] = static_cast<{p.type.base}>(wire_value);")
@@ -483,14 +482,14 @@ def _decode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
     elif p.role in (Role.HANDLE_OUT, Role.SCALAR_OUT, Role.STRUCT_OUT,
                     Role.HANDLE_ARRAY_OUT, Role.INFO_VALUE, Role.BYTES_OUT):
         out.append("    {")
-        out.append("        std::uint8_t wire_wanted = 0;")
+        out.append("        uint8_t wire_wanted = 0;")
         out.append("        if (!r.read_pod(wire_wanted)) return false;")
         out.append(f"        {n}_wanted = wire_wanted != 0;")
         if p.role == Role.BYTES_OUT:
             out.append(f"        if ({n}_wanted) {{")
-            out.append("            std::uint64_t cap = 0;")
+            out.append("            uint64_t cap = 0;")
             out.append("            if (!r.read_varint(cap)) return false;")
-            out.append(f"            {n}_capacity = static_cast<std::size_t>(cap);")
+            out.append(f"            {n}_capacity = static_cast<size_t>(cap);")
             out.append("        }")
         out.append("    }")
     else:
@@ -524,7 +523,7 @@ def _server_params(reg: Registry, cmd: Command) -> list[tuple[Param, str]]:
             if owner is not None:
                 # Not on the wire — the lengths travel inside the strings
                 # — but the call underneath still takes them.
-                result.append((p, f"const std::size_t* {p.name}"))
+                result.append((p, f"const size_t* {p.name}"))
             continue
         result.append((p, _server_param_decl(reg, p)))
     return result
@@ -547,7 +546,7 @@ def _capacity_expr(cmd: Command, p: Param) -> str:
 
 def emit_server(reg: Registry, out_dir: Path) -> None:
     h = [HEADER, "#pragma once\n",
-         "#include <cstddef>", "#include <cstdint>", ""] + CL_PREAMBLE + ["",
+         "#include <stddef.h>", "#include <stdint.h>", ""] + CL_PREAMBLE + ["",
          '#include "proto/wire/wire_arena.hpp"',
          '#include "proto/wire/wire_reader.hpp"',
          '#include "proto/wire/wire_writer.hpp"', "",
@@ -556,7 +555,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
          "class ServerDispatch {", "public:",
          "    virtual ~ServerDispatch() = default;", ""]
     c = [HEADER, '#include "cl_dispatch_server.h"', "",
-         "#include <cstddef>", "#include <cstdint>", "",
+         "#include <stddef.h>", "#include <stdint.h>", "",
          '#include "cl_protocol_ids.h"', "",
          "namespace av::clproto {", ""]
 
@@ -575,7 +574,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             if p.role == Role.IGNORED:
                 owner = _lengths_owner(cmd, p)
                 if owner is not None:
-                    c.append(f"    const std::size_t* {p.name} = nullptr;")
+                    c.append(f"    const size_t* {p.name} = nullptr;")
                 continue
             if p.role == Role.SCALAR:
                 c.append(f"    {p.type.base} {p.name}{{}};")
@@ -590,7 +589,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             elif p.role == Role.STRING_ARRAY:
                 c.append(f"    const {p.type.base}** {p.name} = nullptr;")
                 if _lengths_consumer(cmd, p) is not None:
-                    c.append(f"    const std::size_t* {p.name}_lengths = nullptr;")
+                    c.append(f"    const size_t* {p.name}_lengths = nullptr;")
             elif p.role == Role.BYTES_IN:
                 c.append(f"    {p.type.cpp()} {p.name} = nullptr;")
             elif p.role == Role.STRUCT_IN:
@@ -600,7 +599,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             else:
                 c.append(f"    bool {p.name}_wanted = false;")
                 if p.role == Role.BYTES_OUT:
-                    c.append(f"    std::size_t {p.name}_capacity = 0;")
+                    c.append(f"    size_t {p.name}_capacity = 0;")
 
         for p in cmd.params:
             _decode_param(reg, cmd, p, c)
@@ -621,7 +620,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 cap = _capacity_expr(cmd, p)
                 c.append(f"    {p.element}* {n} = nullptr;")
                 c.append(f"    if ({n}_wanted) {{")
-                c.append(f"        {n} = arena.allocate<{p.element}>(static_cast<std::size_t>({cap}) + 1);")
+                c.append(f"        {n} = arena.allocate<{p.element}>(static_cast<size_t>({cap}) + 1);")
                 c.append(f"        if ({n} == nullptr) return false;")
                 c.append("    }")
             elif p.role in (Role.INFO_VALUE, Role.BYTES_OUT):
@@ -630,7 +629,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 c.append(f"    {ptr_t} {n} = nullptr;")
                 c.append(f"    if ({n}_wanted) {{")
                 c.append(f"        {n} = reinterpret_cast<{ptr_t}>("
-                         f"arena.allocate<std::uint8_t>(static_cast<std::size_t>({cap}) + 1));")
+                         f"arena.allocate<uint8_t>(static_cast<size_t>({cap}) + 1));")
                 c.append(f"        if ({n} == nullptr) return false;")
                 c.append("    }")
 
@@ -649,19 +648,19 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
         # Reply: the return value, then what was asked for.
         if cmd.returns_handle:
             c.append("    reply.write_pod<" + HANDLE_T +
-                     ">(static_cast<" + HANDLE_T + ">(reinterpret_cast<std::uintptr_t>(ret)));")
+                     ">(static_cast<" + HANDLE_T + ">(reinterpret_cast<uintptr_t>(ret)));")
         elif not cmd.returns_void:
-            c.append("    reply.write_varint(static_cast<std::uint64_t>("
-                     "static_cast<std::int64_t>(ret)));")
+            c.append("    reply.write_varint(static_cast<uint64_t>("
+                     "static_cast<int64_t>(ret)));")
 
         for p in cmd.out_params:
             n = p.name
             c.append(f"    if ({n}_wanted) {{")
             if p.role == Role.HANDLE_OUT:
                 c.append(f"        reply.write_pod<{HANDLE_T}>(static_cast<{HANDLE_T}>("
-                         f"reinterpret_cast<std::uintptr_t>({n}_storage)));")
+                         f"reinterpret_cast<uintptr_t>({n}_storage)));")
             elif p.role == Role.SCALAR_OUT:
-                c.append(f"        reply.write_varint(static_cast<std::uint64_t>({n}_storage));")
+                c.append(f"        reply.write_varint(static_cast<uint64_t>({n}_storage));")
             elif p.role == Role.STRUCT_OUT:
                 c.append(f"        reply.write(&{n}_storage, sizeof({n}_storage));")
             elif p.role == Role.HANDLE_ARRAY_OUT:
@@ -670,42 +669,42 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 count = p.size_ret_param
                 cap = _capacity_expr(cmd, p)
                 if count:
-                    c.append(f"        const std::uint64_t wire_produced = {count} != nullptr")
-                    c.append(f"            ? static_cast<std::uint64_t>(*{count})")
-                    c.append(f"            : static_cast<std::uint64_t>({cap});")
+                    c.append(f"        const uint64_t wire_produced = {count} != nullptr")
+                    c.append(f"            ? static_cast<uint64_t>(*{count})")
+                    c.append(f"            : static_cast<uint64_t>({cap});")
                 else:
-                    c.append(f"        const std::uint64_t wire_produced = static_cast<std::uint64_t>({cap});")
-                c.append(f"        const std::uint64_t wire_sent = wire_produced < static_cast<std::uint64_t>({cap})")
-                c.append(f"            ? wire_produced : static_cast<std::uint64_t>({cap});")
+                    c.append(f"        const uint64_t wire_produced = static_cast<uint64_t>({cap});")
+                c.append(f"        const uint64_t wire_sent = wire_produced < static_cast<uint64_t>({cap})")
+                c.append(f"            ? wire_produced : static_cast<uint64_t>({cap});")
                 c.append("        reply.write_varint(wire_sent);")
-                c.append("        for (std::uint64_t i = 0; i < wire_sent; ++i) {")
+                c.append("        for (uint64_t i = 0; i < wire_sent; ++i) {")
                 c.append(f"            reply.write_pod<{HANDLE_T}>(static_cast<{HANDLE_T}>("
-                         f"reinterpret_cast<std::uintptr_t>({n}[i])));")
+                         f"reinterpret_cast<uintptr_t>({n}[i])));")
                 c.append("        }")
             elif p.role == Role.INFO_VALUE:
                 size_ret = p.size_ret_param
                 cap = _capacity_expr(cmd, p)
                 if size_ret:
-                    c.append(f"        std::uint64_t wire_written = {size_ret} != nullptr")
-                    c.append(f"            ? static_cast<std::uint64_t>(*{size_ret})")
-                    c.append(f"            : static_cast<std::uint64_t>({cap});")
+                    c.append(f"        uint64_t wire_written = {size_ret} != nullptr")
+                    c.append(f"            ? static_cast<uint64_t>(*{size_ret})")
+                    c.append(f"            : static_cast<uint64_t>({cap});")
                 else:
-                    c.append(f"        std::uint64_t wire_written = static_cast<std::uint64_t>({cap});")
-                c.append(f"        if (wire_written > static_cast<std::uint64_t>({cap}))")
-                c.append(f"            wire_written = static_cast<std::uint64_t>({cap});")
+                    c.append(f"        uint64_t wire_written = static_cast<uint64_t>({cap});")
+                c.append(f"        if (wire_written > static_cast<uint64_t>({cap}))")
+                c.append(f"            wire_written = static_cast<uint64_t>({cap});")
                 c.append("        reply.write_varint(wire_written);")
-                c.append(f"        if (wire_written != 0) reply.write({n}, static_cast<std::size_t>(wire_written));")
+                c.append(f"        if (wire_written != 0) reply.write({n}, static_cast<size_t>(wire_written));")
             elif p.role == Role.BYTES_OUT:
                 cap = _capacity_expr(cmd, p)
-                c.append(f"        reply.write_varint(static_cast<std::uint64_t>({cap}));")
-                c.append(f"        if ({cap} != 0) reply.write({n}, static_cast<std::size_t>({cap}));")
+                c.append(f"        reply.write_varint(static_cast<uint64_t>({cap}));")
+                c.append(f"        if ({cap} != 0) reply.write({n}, static_cast<size_t>({cap}));")
             c.append("    }")
 
         c.append("    return true;")
         c.append("}")
         c.append("")
 
-    c.append("bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id,")
+    c.append("bool dispatch_command(ServerDispatch& s, uint32_t cmd_id,")
     c.append("                      ::av::WireReader& r, ::av::WireWriter& reply,")
     c.append("                      ::av::WireArena& arena) {")
     c.append("    switch (cmd_id) {")
@@ -721,7 +720,7 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
           "// `arena` is where everything a decoded command points at lives,",
           "// for the length of the call; it is the caller's block, because it",
           "// has to outlive the decode that filled it.",
-          "[[nodiscard]] bool dispatch_command(ServerDispatch& s, std::uint32_t cmd_id,",
+          "[[nodiscard]] bool dispatch_command(ServerDispatch& s, uint32_t cmd_id,",
           "                                    ::av::WireReader& r, ::av::WireWriter& reply,",
           "                                    ::av::WireArena& arena);", "",
           "}  // namespace av::clproto", ""]
@@ -816,26 +815,26 @@ def emit_real_dispatch(reg: Registry, out_dir: Path) -> None:
 
 
 def emit_ids(reg: Registry, out_dir: Path) -> None:
-    out = [HEADER, "#pragma once\n", "#include <cstdint>", "",
+    out = [HEADER, "#pragma once\n", "#include <stdint.h>", "",
            "namespace av::clproto {", ""]
     for cmd in reg.commands.values():
-        out.append(f"inline constexpr std::uint32_t kCmd_{cmd.name} = "
+        out.append(f"inline constexpr uint32_t kCmd_{cmd.name} = "
                    f"0x{cmd.cmd_id:08X}U;")
     out += ["", "}  // namespace av::clproto", ""]
     write(out_dir / "cl_protocol_ids.h", "\n".join(out))
 
 
 def emit_names(reg: Registry, out_dir: Path) -> None:
-    h = [HEADER, "#pragma once\n", "#include <cstdint>", "",
+    h = [HEADER, "#pragma once\n", "#include <stdint.h>", "",
          "namespace av::clproto {", "",
          "// A static name for a wire id; \"unknown\" for anything else,",
          "// never null.",
-         "[[nodiscard]] const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept;",
+         "[[nodiscard]] const char* cmd_id_to_string(uint32_t cmd_id) noexcept;",
          "", "}  // namespace av::clproto", ""]
     c = [HEADER, '#include "cl_command_names.h"', "",
          '#include "cl_protocol_ids.h"', "",
          "namespace av::clproto {", "",
-         "const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept {",
+         "const char* cmd_id_to_string(uint32_t cmd_id) noexcept {",
          "    switch (cmd_id) {"]
     for cmd in reg.commands.values():
         c.append(f'        case kCmd_{cmd.name}: return "{cmd.name}";')

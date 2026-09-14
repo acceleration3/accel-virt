@@ -512,7 +512,7 @@ len = "1"
 # came later and somewhere else: a page fault inside compiler::clear(),
 # a hundred lines from the call that caused it.
 [params."glGetProgramResourceiv.params"]
-len = "static_cast<std::size_t>(propCount) < static_cast<std::size_t>(count) ? static_cast<std::size_t>(propCount) : static_cast<std::size_t>(count)"
+len = "static_cast<size_t>(propCount) < static_cast<size_t>(count) ? static_cast<size_t>(propCount) : static_cast<size_t>(count)"
 
 # The same call under its Apple name, for the same reason.
 [params."glGetSyncivAPPLE.values"]
@@ -790,13 +790,13 @@ len = "::av::glproto::compressed_image_size(rvk_t, target, lod)"
 # COMPSIZE(size) is the registry being careful about a parameter that
 # is already the answer.
 [params."glNamedBufferDataEXT.data"]
-len = "(size < 0 ? 0 : static_cast<std::size_t>(size))"
+len = "(size < 0 ? 0 : static_cast<size_t>(size))"
 
 [params."glNamedBufferSubDataEXT.data"]
-len = "(size < 0 ? 0 : static_cast<std::size_t>(size))"
+len = "(size < 0 ? 0 : static_cast<size_t>(size))"
 
 [params."glGetNamedBufferSubDataEXT.data"]
-len = "(size < 0 ? 0 : static_cast<std::size_t>(size))"
+len = "(size < 0 ? 0 : static_cast<size_t>(size))"
 
 # How long an assembly program's source is, asked of the program.
 [params."glGetNamedProgramStringEXT.string"]
@@ -835,40 +835,40 @@ len = "(buffer == 0x1800 ? 4 : 1)"
 # where a negative length means the text is terminated instead.
 
 [params."glDebugMessageInsert.buf"]
-len = "(length < 0 ? std::strlen(reinterpret_cast<const char*>(buf)) : static_cast<std::size_t>(length))"
+len = "(length < 0 ? __builtin_strlen(reinterpret_cast<const char*>(buf)) : static_cast<size_t>(length))"
 
 [params."glObjectLabel.label"]
-len = "(length < 0 ? std::strlen(reinterpret_cast<const char*>(label)) : static_cast<std::size_t>(length))"
+len = "(length < 0 ? __builtin_strlen(reinterpret_cast<const char*>(label)) : static_cast<size_t>(length))"
 
 [params."glObjectPtrLabel.label"]
-len = "(length < 0 ? std::strlen(reinterpret_cast<const char*>(label)) : static_cast<std::size_t>(length))"
+len = "(length < 0 ? __builtin_strlen(reinterpret_cast<const char*>(label)) : static_cast<size_t>(length))"
 
 [params."glPushDebugGroup.message"]
-len = "(length < 0 ? std::strlen(reinterpret_cast<const char*>(message)) : static_cast<std::size_t>(length))"
+len = "(length < 0 ? __builtin_strlen(reinterpret_cast<const char*>(message)) : static_cast<size_t>(length))"
 
 # The viewport arrays: one viewport is four values, one depth range is
 # two, and the count says how many of them there are.
 
 [params."glViewportArrayv.v"]
-len = "(static_cast<std::size_t>(count) * 4)"
+len = "(static_cast<size_t>(count) * 4)"
 
 [params."glScissorArrayv.v"]
-len = "(static_cast<std::size_t>(count) * 4)"
+len = "(static_cast<size_t>(count) * 4)"
 
 [params."glDepthRangeArrayv.v"]
-len = "(static_cast<std::size_t>(count) * 2)"
+len = "(static_cast<size_t>(count) * 2)"
 
 # One exclusive scissor rectangle is four values, and one sample
 # location is two — an x and a y inside the pixel.
 
 [params."glScissorExclusiveArrayvNV.v"]
-len = "(static_cast<std::size_t>(count) * 4)"
+len = "(static_cast<size_t>(count) * 4)"
 
 [params."glFramebufferSampleLocationsfvNV.v"]
-len = "(static_cast<std::size_t>(count) * 2)"
+len = "(static_cast<size_t>(count) * 2)"
 
 [params."glNamedFramebufferSampleLocationsfvNV.v"]
-len = "(static_cast<std::size_t>(count) * 2)"
+len = "(static_cast<size_t>(count) * 2)"
 
 # A resource is looked up by a name, which is a name.
 
@@ -1043,16 +1043,16 @@ len = "::av::glproto::pixel_map_size(rvk_t, map)"
 # and the table is in the helpers rather than here because glGetMap
 # needs it too.
 [params."glMap1d.points"]
-len = "::av::glproto::map_point_values(target) + static_cast<std::size_t>(stride) * static_cast<std::size_t>(order - 1)"
+len = "::av::glproto::map_point_values(target) + static_cast<size_t>(stride) * static_cast<size_t>(order - 1)"
 
 [params."glMap1f.points"]
-len = "::av::glproto::map_point_values(target) + static_cast<std::size_t>(stride) * static_cast<std::size_t>(order - 1)"
+len = "::av::glproto::map_point_values(target) + static_cast<size_t>(stride) * static_cast<size_t>(order - 1)"
 
 [params."glMap2d.points"]
-len = "::av::glproto::map_point_values(target) + static_cast<std::size_t>(ustride) * static_cast<std::size_t>(uorder - 1) + static_cast<std::size_t>(vstride) * static_cast<std::size_t>(vorder - 1)"
+len = "::av::glproto::map_point_values(target) + static_cast<size_t>(ustride) * static_cast<size_t>(uorder - 1) + static_cast<size_t>(vstride) * static_cast<size_t>(vorder - 1)"
 
 [params."glMap2f.points"]
-len = "::av::glproto::map_point_values(target) + static_cast<std::size_t>(ustride) * static_cast<std::size_t>(uorder - 1) + static_cast<std::size_t>(vstride) * static_cast<std::size_t>(vorder - 1)"
+len = "::av::glproto::map_point_values(target) + static_cast<size_t>(ustride) * static_cast<size_t>(uorder - 1) + static_cast<size_t>(vstride) * static_cast<size_t>(vorder - 1)"
 
 # An evaluator answers with its control points, and how many that is
 # depends on the map's order and on how many values each point holds —

@@ -5,7 +5,7 @@
 
 #include "vk_serialize.h"
 
-#include <cstdint>
+#include <stdint.h>
 
 #if defined(_WIN32)
 // PE: no weak definitions. See the comment in the emitter.
@@ -18,6 +18,6 @@ namespace av::vkproto {
 
 // Default: no image registry here, so no pixels are sent.
 // The ICD overrides this; see icd/host_image_copy.cpp.
-RVK_HOOK_DEFAULT std::uint64_t host_image_copy_bytes(VkImage, const VkMemoryToImageCopy&) noexcept { return 0; }
+RVK_HOOK_DEFAULT uint64_t host_image_copy_bytes(VkImage, const VkMemoryToImageCopy&) noexcept { return 0; }
 
 }  // namespace av::vkproto

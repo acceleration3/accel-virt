@@ -6,9 +6,11 @@ endif()
 
 # As windows_kernel_flags.cmake, without /kernel: /X keeps only the kit
 # visible, the overlay makes it case-insensitive. /GS- and /Gs: no C runtime
-# seeds a cookie or provides __chkstk, so neither may be called.
+# seeds a cookie or provides __chkstk, so neither may be called. /Gy /Gw: the
+# generated clients encode every command of their API and the suite calls a
+# handful, so /OPT:REF gets a section per function and variable to drop.
 string(JOIN " " CMAKE_CXX_FLAGS_INIT
-  /GR- /EHs-c- /Zl /X /Z7 /GS- /Gs1048576
+  /GR- /EHs-c- /Zl /X /Z7 /GS- /Gs1048576 /Gy /Gw
   /D_AMD64_ /DAMD64 /D_WIN64 /DAV_CHECKED=1 /DWIN32_LEAN_AND_MEAN /DNOMINMAX
   /W4 /WX -Wextra -Wconversion -Wsign-conversion -Wshadow -Wold-style-cast
   /clang:-ivfsoverlay${AV_WINDOWS_KIT_DIR}/overlay.yaml

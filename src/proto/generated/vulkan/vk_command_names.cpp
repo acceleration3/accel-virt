@@ -7,7 +7,7 @@
 
 namespace av::vkproto {
 
-const char* cmd_id_to_string(std::uint32_t cmd_id) noexcept {
+const char* cmd_id_to_string(uint32_t cmd_id) noexcept {
     switch (cmd_id) {
         case 0x00000001u: return "kCmdHello";
         case 0x00000002u: return "kCmdHelloAck";

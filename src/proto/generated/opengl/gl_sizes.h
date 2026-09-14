@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace av::glproto {
 
@@ -15,7 +15,7 @@ namespace av::glproto {
 // enum answers with one value; the ones that do not are
 // listed in the profile, and both sides read this table, so
 // they agree about how much came back.
-[[nodiscard]] inline std::size_t pname_count(std::uint32_t pname) noexcept {
+[[nodiscard]] inline size_t pname_count(uint32_t pname) noexcept {
     switch (pname) {
         case 0x0B80: return 4;  // GL_ACCUM_CLEAR_VALUE
         case 0x846E: return 2;  // GL_ALIASED_LINE_WIDTH_RANGE
@@ -65,7 +65,7 @@ namespace av::glproto {
 }
 
 // How wide one element of an index or vertex array is.
-[[nodiscard]] inline std::size_t type_size(std::uint32_t type) noexcept {
+[[nodiscard]] inline size_t type_size(uint32_t type) noexcept {
     switch (type) {
         case 0x1400: return 1;  // GL_BYTE
         case 0x1401: return 1;  // GL_UNSIGNED_BYTE
