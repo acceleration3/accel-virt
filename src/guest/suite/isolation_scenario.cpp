@@ -21,7 +21,7 @@ void IsolationScenario::run()
         KmtTransport doomed(link_.connection(), SubApi::vulkan, ScenarioTransport::ring_order);
         if (steps_.check("fault", fault(doomed)) != Status::ok) return;
         uint32_t answered = 0u;
-        /* The transport refuses every send once a wait has failed, so this
+        /* The transport refuses every send once a call has failed, so this
          * proves the fault stuck to the context rather than asking the host. */
         steps_.check_refused("faulted_send", doomed.nop(answered));
     }

@@ -42,6 +42,8 @@ transition, it is a bug.
 
 ## `ContextLoss` (system class) — FR-003
 
+> **Superseded (044):** the driver never reports `DMA_FAULTED` - dxgmms2.sys `VidSchDdiNotifyInterruptWorker` @140031b80 bugchecks 0x119/0xD on `DXGK_INTERRUPT_DMA_FAULTED` from a GPU MMU adapter; a faulted context's queued work is completed, its later submissions are refused, ResetEngine reports nothing more, and `ContextLoss` is deleted (`docs/kb/05-scheduling.md`).
+
 Which contexts nobody can finish, and whether their owners know.
 
 | Field | Type | Meaning |

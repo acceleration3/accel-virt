@@ -69,6 +69,8 @@ public:
 private:
     static constexpr std::uintptr_t virtual_base = 0x7FA000000000u;
     static constexpr std::uint64_t  region_step  = 0x1000u;
+    /* DXGK_INTERRUPT_TYPE */
+    static constexpr std::int32_t   dma_faulted  = 4;
 
     struct Mapping {
         void         *address;

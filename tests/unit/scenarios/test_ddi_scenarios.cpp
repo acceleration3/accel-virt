@@ -767,7 +767,7 @@ TEST(ddi_scenario, a_scanning_source_survives_d3_and_comes_back_at_d0)
  * (dxgkrnl.sys @14006e0a4) checks that the driver returns at the IRQL it was
  * called at, so the whole sequence runs at dispatch and the mock holds us to
  * it. */
-TEST(ddi_scenario, an_engine_that_stops_moving_is_reset_and_its_context_lost)
+TEST(ddi_scenario, an_engine_that_stops_moving_is_reset_with_nothing_more_reported)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
@@ -809,8 +809,8 @@ TEST(ddi_scenario, an_engine_that_stops_moving_is_reset_and_its_context_lost)
                table.routine(DdiSlot::DxgkDdiResetEngine))(adapter, &reset),
            0);
   CHECK_EQ(reset.LastAbortedFenceId, 1u);
-  CHECK_EQ(device.dxgkrnl().interrupts(), before + 1u);
-  CHECK_EQ(device.dxgkrnl().interrupt(before).InterruptType, 4);   /* DMA_FAULTED */
+  /* VidSch knows what it reset; DMA_FAULTED here would bugcheck 0x119/0xD. */
+  CHECK_EQ(device.dxgkrnl().interrupts(), before);
   /* An engine with nothing queued is responsive again. */
   status.EngineStatus = 0u;
   CHECK_EQ(engine_status(adapter, &status), 0);
@@ -829,10 +829,11 @@ TEST(ddi_scenario, an_engine_that_stops_moving_is_reset_and_its_context_lost)
 /* FR-005: a hibernated guest is restored onto whatever QEMU is running now, and
  * the device behind the same PCI function may be another one - another host
  * GPU, or an older protocol. What the guest still holds cannot be finished on
- * it: the work queued on the device that is gone is reported faulted, a new
- * context is refused, and the desktop - the scanout, which is none of this -
- * goes on working. */
-TEST(ddi_scenario, a_device_that_changed_across_hibernation_loses_its_contexts)
+ * it: nothing is reported (DMA_FAULTED bugchecks 0x119/0xD), the work queued on
+ * the device that is gone waits for dxgkrnl's timeout reset, a new context and
+ * a new submission are refused, and the desktop - the scanout, which is none of
+ * this - goes on working. */
+TEST(ddi_scenario, a_device_that_changed_across_hibernation_refuses_its_contexts)
 { LoadedDriver driver;
   Device device(driver, 0u);
   CHECK_EQ(device.fdo().add_device(), 0);
@@ -864,19 +865,17 @@ TEST(ddi_scenario, a_device_that_changed_across_hibernation_loses_its_contexts)
   /* The transition itself succeeds: not bugchecking is what FR-005 asks for. */
   CHECK_EQ(device.resume(), 0);
   CHECK_EQ(device.function().common().status(), driver_ok_status);
-  CHECK_EQ(device.dxgkrnl().interrupts(), before + 1u);
-  CHECK_EQ(device.dxgkrnl().interrupt(before).InterruptType, 4);   /* DMA_FAULTED */
-  CHECK_EQ(device.dxgkrnl().interrupt(before).FenceId, 1u);
+  CHECK_EQ(device.dxgkrnl().interrupts(), before);
 
   /* Nothing new runs on it, and a submission on the context that is left is
-   * answered with a fault rather than a completion nobody will send. */
+   * refused rather than taken for a completion nobody will send. */
   av::DxgkargCreateContextRecord refused = {};
   refused.Flags = 0x4u;
   CHECK(reinterpret_cast<std::int32_t (*)(void *, av::DxgkargCreateContextRecord *)>(
             table.routine(DdiSlot::DxgkDdiCreateContext))(created.hDevice, &refused) < 0);
   submit.SubmissionFenceId = 2u;
-  CHECK_EQ(submit_virtual(adapter, &submit), 0);
-  CHECK_EQ(device.dxgkrnl().interrupt(device.dxgkrnl().interrupts() - 1u).InterruptType, 4);
+  CHECK_EQ(static_cast<std::uint32_t>(submit_virtual(adapter, &submit)), 0xC000000Du);   /* STATUS_INVALID_PARAMETER */
+  CHECK_EQ(device.dxgkrnl().interrupts(), before);
 
   /* The display is still the driver's to run: the guest commits a mode and the
    * host is asked to scan it out. */

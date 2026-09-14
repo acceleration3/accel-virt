@@ -143,39 +143,38 @@ TEST(execution_node_finish, only_the_owner_s_packets_are_finished)
   fixture.node().finish(nullptr, 100u);
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
   CHECK_EQ(fixture.node().pending(), 1u);
-  void *aborted_owner = nullptr;
-  CHECK_EQ(fixture.node().abort_pending(aborted_owner), 4u);
-  CHECK(aborted_owner == &owner);
+  /* The owner's own host finishing through 2 is what lets it complete. */
+  fixture.node().finish(&owner, 1u);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.node().pending(), 1u);
+  fixture.node().finish(&owner, 2u);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.node().pending(), 0u);
+  CHECK_EQ(fixture.node().current_fence(), 4u);
   CHECK(fixture.node().invariants_hold()); }
 
-/* A context that faulted on the host finishes nothing: its packets leave the
- * node, the others keep their order and still complete, and the first dropped
- * one is what dxgkrnl is told faulted. */
-TEST(execution_node_abort_owner, drops_one_owner_s_packets_and_names_the_first)
+/* A context the host faulted has everything it queued finished at once: the
+ * node completes its packets in order with the others', and one owner's
+ * finish never releases another's. */
+TEST(execution_node_finish, finishing_everything_an_owner_queued_releases_only_its_packets)
 { Fixture fixture;
   int faulted = 0;
   int healthy = 0;
-  CHECK_STATUS(fixture.node().submit(1u, &healthy, 1u), Status::ok);
-  CHECK_STATUS(fixture.node().submit(2u, &faulted, 1u), Status::ok);
-  CHECK_STATUS(fixture.node().submit(3u, &healthy, 2u), Status::ok);
-  CHECK_STATUS(fixture.node().submit(4u, &faulted, 2u), Status::ok);
-  CHECK_EQ(fixture.node().abort_owner(nullptr), 0u);
-  CHECK_EQ(fixture.node().abort_owner(&faulted), 2u);
+  CHECK_STATUS(fixture.node().submit(1u, &faulted, 1u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(2u, &healthy, 1u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(3u, &faulted, 2u), Status::ok);
+  fixture.node().finish(&faulted, UINT64_MAX);
   CHECK(fixture.node().invariants_hold());
-  CHECK_EQ(fixture.node().pending(), 2u);
-  CHECK_EQ(fixture.node().last_submitted(), 3u);   /* the tail it still holds */
-  CHECK_EQ(fixture.node().abort_owner(&faulted), 0u);
-  fixture.node().finish(&healthy, 1u);
-  CHECK_EQ(fixture.node().abort_owner(&healthy), 3u);   /* what its host finished stays */
-  CHECK_EQ(fixture.node().pending(), 1u);
-  CHECK_STATUS(fixture.node().submit(5u, &healthy, 3u), Status::ok);
-  fixture.node().finish(&healthy, 3u);
   CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
-  CHECK_EQ(fixture.dxgkrnl().interrupts(), 2u);
-  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).FenceId, 5u);
-  CHECK_EQ(fixture.node().abort_owner(&healthy), 0u);   /* nothing left of it */
-  CHECK_STATUS(fixture.node().submit(6u, &faulted, 1u), Status::ok);
-  CHECK_EQ(fixture.node().abort_owner(&faulted), 6u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 1u);   /* 1, then the healthy 2 holds 3 behind it */
+  CHECK_EQ(fixture.dxgkrnl().interrupt(0u).FenceId, 1u);
+  CHECK_EQ(fixture.node().pending(), 2u);
+  fixture.node().finish(&healthy, 1u);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), 3u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(1u).FenceId, 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(2u).FenceId, 3u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(2u).InterruptType, 1);   /* DMA_COMPLETED */
   CHECK_EQ(fixture.node().pending(), 0u);
   CHECK(fixture.node().invariants_hold()); }
 

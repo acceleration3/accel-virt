@@ -128,6 +128,8 @@ scenario with the executor made to fault one context.
 1. **Given** the host reports a fault for one context, **Then** the driver
    reports the DMA as faulted, only that device is reset, and the adapter stays
    up.
+
+> **Superseded (044):** the driver never reports `DMA_FAULTED` - dxgmms2.sys `VidSchDdiNotifyInterruptWorker` @140031b80 bugchecks 0x119/0xD on `DXGK_INTERRUPT_DMA_FAULTED` from a GPU MMU adapter; a faulted context's queued work is completed, its later submissions are refused, ResetEngine reports nothing more, and `ContextLoss` is deleted (`docs/kb/05-scheduling.md`).
 2. **Given** a device realized without an executor, **Then** the adapter starts
    with the 2D path only and refuses rvk contexts with a reported status.
 

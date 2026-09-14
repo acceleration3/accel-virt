@@ -82,8 +82,7 @@ TEST(fullstack_suite, the_fence_stress_run_completes_every_fence_it_submits)
   if (failed != 0u) print(report);
   CHECK_EQ(failed, 0u);
   CHECK(reported(report, "ok stress.fences 3840"));
-  CHECK(reported(report, "ok stress.blanks 60"));
-  CHECK_EQ(rig.kmt().fences().faults(), 0u); }
+  CHECK(reported(report, "ok stress.blanks 60")); }
 
 /* The timeout run cannot pass on this rig, and this says exactly where. The
  * scenario needs dxgkrnl's timeout detection - VidSch seeing the held node

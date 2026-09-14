@@ -126,6 +126,11 @@ public:
      * this one (up to max_answer bytes), before any answer_waits answers: how a
      * test plays a device through a sequence of calls. */
     void          queue_answer(const std::uint8_t *answer, std::uint32_t size);
+    /* The Nth wait for a context from now (1-based) succeeds, writes nothing
+     * and takes no queued answer: how a context the host faulted looks to its
+     * process, since the driver completes what it queued and never reports
+     * DMA_FAULTED, which bugchecks the guest. */
+    void          withhold_answer_at(std::uint32_t nth);
     /* Queued answers no wait has taken yet. */
     std::uint32_t queued_answers() const;
     /* Commands submitted on transports' rings, in order, and the id and size
@@ -179,6 +184,7 @@ private:
     Status        refuse(std::uint32_t code);
     Status        succeed();
     bool          zeroed(Call call);
+    bool          withheld();
     std::uint32_t open(Kind kind, std::uint32_t owner, std::uint64_t address, std::uint64_t pages);
     Object       *find(Kind kind, std::uint32_t handle);
     Object       *find_mapping(std::uint64_t address);
@@ -225,6 +231,7 @@ private:
     std::uint32_t queued_sizes_[max_queued];
     std::uint32_t queued_count_;
     std::uint32_t queued_taken_;
+    std::uint32_t withheld_countdown_;
     std::uint32_t journal_ids_[max_journal];
     std::uint32_t journal_sizes_[max_journal];
     std::uint8_t  journal_bytes_[max_journal][journal_bytes];

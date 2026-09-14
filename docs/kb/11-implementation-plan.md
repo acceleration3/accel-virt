@@ -191,8 +191,10 @@ fallback, not as a dependency.
 
 A context whose host API call reports device loss, or whose decode fails, is
 marked faulted in its fence page and gets an interrupt. The device destroys
-the host context; the guest KMD reports `DXGK_INTERRUPT_DMA_FAULTED` and lets
-`dxgkrnl` run TDR for that device only. A malformed frame never asserts — it
+the host context; the guest KMD completes what the context queued and refuses
+its later submissions. It never reports `DXGK_INTERRUPT_DMA_FAULTED`, which
+dxgmms2.sys bugchecks 0x119/0xD on for a GPU MMU adapter
+(`VidSchDdiNotifyInterruptWorker` @140031b80; `docs/kb/05-scheduling.md`). A malformed frame never asserts — it
 faults the context: errors are values on the wire, never assertions.
 
 **Security and stability trade-off, accepted deliberately:** guest-controlled

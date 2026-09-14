@@ -101,6 +101,26 @@ does the notify + queue DPC pair. `basicrender.sys` does exactly this in
 `WARPKMADAPTER::WarpSynchronizeNotifyInterrupt`, which is two indirect calls:
 `DxgkCbNotifyInterrupt` then `DxgkCbQueueDpc`.
 
+### `DMA_FAULTED` bugchecks a GPU MMU adapter (read from dxgmms2, feature 044)
+
+A live Windows 11 guest bugchecked **0x119 VIDEO_SCHEDULER_INTERNAL_ERROR
+(0xD, node 0, engine 0, fence 0x2E)** the moment the driver reported
+`DXGK_INTERRUPT_DMA_FAULTED`. In the 26100 dxgmms2.sys,
+`VidSchDdiNotifyInterruptWorker` @140031b80 reaches
+`WdLogSingleEntry5(0, 0x119, 0xD, NodeOrdinal, EngineOrdinal, FaultedFenceId)`
+for every interrupt of type 4 on an adapter whose contexts use GPU virtual
+addressing; it is never processed. So this driver never reports it:
+
+- a context the host faulted has everything it queued **completed** by the
+  DPC, so the process waiting on it wakes and finds no reply for its fence,
+  and every later `SubmitCommandVirtual` on it answers
+  `STATUS_INVALID_PARAMETER`, which D3DKMTSubmitCommand returns to the process;
+- `ResetEngine` answers `LastAbortedFenceId` and reports nothing more - VidSch
+  already knows what it reset;
+- work queued for a device that changed across D3 stays queued, so the engine
+  stops moving and timeout detection resets it; a submission on that device is
+  refused.
+
 ## Preemption and TDR
 
 The KMD must implement, and mean, all of:

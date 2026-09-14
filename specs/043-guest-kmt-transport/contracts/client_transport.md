@@ -44,7 +44,9 @@ covers 166, 98, 255.
   driver completes that fence when the device's fence page says the batch
   finished, so no thread spins (SC-003).
 - A faulted fence page becomes a failed `send_sync` and a context that answers
-  not-`Ok` afterwards - `ContextLoss` seen from user mode.
+  not-`Ok` afterwards - `ContextLoss` seen from user mode. (044: the wait
+  completes with no reply and the driver refuses later submissions; it never
+  reports `DMA_FAULTED`, because dxgmms2.sys `VidSchDdiNotifyInterruptWorker` @140031b80 bugchecks 0x119/0xD on `DXGK_INTERRUPT_DMA_FAULTED` from a GPU MMU adapter.)
 
 ## D. What does not change
 

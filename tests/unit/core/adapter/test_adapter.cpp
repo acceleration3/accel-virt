@@ -1310,10 +1310,11 @@ TEST(adapter_reset_engine, aborts_what_the_node_was_executing_and_keeps_it_runni
 /* VidSchiCheckNodeTimeout (dxgmms2.sys @1400c9b50) takes a responsive answer as
  * "no timeout this round", so an engine with work that has stopped moving must
  * say so: an answer that is always yes defers a hung host forever. */
-/* US3 of feature 040: a reset throws away the work on the node, and the context
- * that submitted it is told it cannot be finished. The other process's context
- * is untouched - a reset of one engine is not an outage. */
-TEST(adapter_reset_engine, loses_the_context_whose_work_it_threw_away_and_no_other)
+/* US3 of feature 040: a reset throws away the work on the node and answers
+ * what was executing; VidSch already knows what it reset, so nothing more is
+ * reported - DMA_FAULTED would bugcheck the guest (0x119/0xD). The other
+ * process's context is untouched - a reset of one engine is not an outage. */
+TEST(adapter_reset_engine, answers_what_it_threw_away_and_reports_nothing_more)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
   av::DxgkargCreateDeviceRecord first_device = {};
@@ -1332,21 +1333,30 @@ TEST(adapter_reset_engine, loses_the_context_whose_work_it_threw_away_and_no_oth
   submit.DmaBufferVirtualAddress = 0x8000000000ull;
   submit.SubmissionFenceId = 1u;
   CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
-
-  const std::uint32_t before = fixture.dxgkrnl().interrupts();
-  av::DxgkargResetEngineRecord reset = {0u, 0u, 0u};
-  CHECK_EQ(nt(fixture.adapter().reset_engine(&reset)), success);
-  CHECK_EQ(reset.LastAbortedFenceId, 1u);
-  /* One fault reported: the first context's, and nobody else's. */
-  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 1u);
-  CHECK_EQ(fixture.dxgkrnl().interrupt(before).InterruptType, 4);   /* DMA_FAULTED */
-  CHECK_EQ(fixture.dxgkrnl().interrupt(before).FenceId, 1u);
-
-  /* The other context still submits, and a reset with nothing queued loses
-   * nobody. */
-  submit.hContext = second.hContext;
   submit.SubmissionFenceId = 2u;
   CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  fixture.platform().set_irql(Irql::dispatch);
+  av::DxgkargResetEngineRecord reset = {0u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().reset_engine(&reset)), success);
+  CHECK_EQ(reset.LastAbortedFenceId, 1u);   /* the head, not the tail */
+  fixture.adapter().dpc_routine();          /* and nothing it threw away completes afterwards */
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before);
+
+  /* Both contexts still submit, and their work completes. */
+  submit.SubmissionFenceId = 3u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+  submit.hContext = second.hContext;
+  submit.SubmissionFenceId = 4u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before).InterruptType, 1);   /* DMA_COMPLETED */
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before + 1u).FenceId, 4u);
   CHECK_EQ(nt(fixture.adapter().destroy_context(first.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_context(second.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(first_device.hDevice)), success);
@@ -2767,10 +2777,13 @@ TEST(adapter_set_power_state, the_same_device_across_a_power_cycle_keeps_its_con
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
 /* Another host GPU behind the same PCI function is another device: what the
- * guest still holds cannot be finished on it, so its work is reported lost and
- * a new context is refused - while the display, which is the scanout and none
- * of this, keeps working. */
-TEST(adapter_set_power_state, a_device_that_changed_loses_its_contexts_and_keeps_the_display)
+ * guest still holds cannot be finished on it. Nothing is reported at D0 -
+ * DMA_FAULTED would bugcheck the guest (0x119/0xD) - so the work queued for
+ * the device that is gone stays queued until dxgkrnl's timeout detection
+ * resets the engine, and ResetEngine answers it. A new context and a new
+ * submission are refused, while the display, which is the scanout and none of
+ * this, keeps working. */
+TEST(adapter_set_power_state, a_device_that_changed_refuses_its_contexts_and_keeps_the_display)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
   av::DxgkargCreateDeviceRecord device = {};
@@ -2793,20 +2806,26 @@ TEST(adapter_set_power_state, a_device_that_changed_loses_its_contexts_and_keeps
    * not doing. */
   CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d0, 0)), success);
   fixture.platform().on_stall(nullptr, nullptr);
-  /* The work that was queued on the device that is gone is reported faulted. */
-  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 1u);
-  CHECK_EQ(fixture.dxgkrnl().interrupt(before).InterruptType, 4);   /* DMA_FAULTED */
-  CHECK_EQ(fixture.dxgkrnl().interrupt(before).FenceId, 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before);
+  CHECK(fixture.platform().logged_line("rvkgpu: the device under this adapter is not the one it started on"));
 
-  /* Nothing new runs on it, and a submission for a context that survived the
-   * refusal is answered with a fault rather than a completion nobody will
-   * send. */
+  /* Nothing new runs on it: a context is refused, and so is a submission on
+   * the context that survived, rather than being taken for a completion nobody
+   * will send. */
   av::DxgkargCreateContextRecord refused = {};
   refused.Flags = 0x4u;
   CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &refused)), not_supported);
   submit.SubmissionFenceId = 2u;
-  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
-  CHECK_EQ(fixture.dxgkrnl().interrupt(fixture.dxgkrnl().interrupts() - 1u).InterruptType, 4);
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), invalid_parameter);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before);
+
+  /* WDDM's own recovery: the reset answers the submission that was queued. */
+  fixture.platform().set_irql(Irql::dispatch);
+  av::DxgkargResetEngineRecord reset = {0u, 0u, 0u};
+  CHECK_EQ(nt(fixture.adapter().reset_engine(&reset)), success);
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(reset.LastAbortedFenceId, 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before);
 
   /* The desktop is untouched: the scanout the adapter restored is still the
    * one it had. */
@@ -2854,8 +2873,8 @@ TEST(adapter_set_power_state, a_device_that_never_said_what_it_was_is_not_judged
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
-/* A device that changed with nothing queued on the one that is gone has no
- * owner to tell: the refusal still stands for everything after it. */
+/* A device that changed with nothing queued on the one that is gone reports
+ * nothing either, and the refusal still stands for everything after it. */
 TEST(adapter_set_power_state, a_device_that_changed_with_no_work_queued_tells_nobody)
 { Fixture fixture;
   CHECK_EQ(fixture.start(), success);
@@ -2872,31 +2891,6 @@ TEST(adapter_set_power_state, a_device_that_changed_with_no_work_queued_tells_no
   av::DxgkargCreateContextRecord refused = {};
   refused.Flags = 0x4u;
   CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &refused)), not_supported);
-  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
-
-/* dxgkrnl refusing the report leaves the loss pending and says so once: a
- * context that cannot be reported is not a context quietly forgotten. */
-TEST(adapter_reset_engine, a_loss_dxgkrnl_refuses_is_logged)
-{ Fixture fixture;
-  CHECK_EQ(fixture.start(), success);
-  av::DxgkargCreateDeviceRecord device = {};
-  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
-  av::DxgkargCreateContextRecord context = {};
-  context.Flags = 0x4u;
-  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
-  av::DxgkargSubmitCommandVirtualRecord submit = {};
-  submit.hContext = context.hContext;
-  submit.DmaBufferVirtualAddress = 0x8000000000ull;
-  submit.SubmissionFenceId = 1u;
-  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&submit)), success);
-  fixture.dxgkrnl().refuse_synchronize(0xC0000001u);
-  const std::uint32_t logged = fixture.platform().logged();
-  fixture.platform().set_irql(Irql::dispatch);
-  av::DxgkargResetEngineRecord reset = {0u, 0u, 0u};
-  CHECK_EQ(nt(fixture.adapter().reset_engine(&reset)), success);
-  fixture.platform().set_irql(Irql::passive);
-  CHECK(fixture.platform().logged() > logged);
-  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 
 /* Feature 041, US1: VidMm maps a process's view of a CPU-visible segment
@@ -3298,24 +3292,47 @@ TEST(adapter_start_device, doorbell_pages_that_cannot_be_mapped_fail_the_start)
   CHECK_EQ(fixture.dxgkrnl().live_mappings(), 0u);
   CHECK(fixture.adapter().invariants_hold()); }
 
-/* FR-006: a context the host faulted reaches dxgkrnl as DMA_FAULTED against the
- * submission it had waiting, so the process waiting on it wakes to a loss. */
-TEST(adapter_rvk_context, a_host_fault_is_reported_against_the_waiting_submission)
+/* FR-006: a context the host faulted has what it queued completed, so the
+ * process waiting on it wakes (to no reply), and every later submission on it
+ * is refused; a plain context beside it keeps completing. dxgkrnl is never
+ * told DMA_FAULTED, which bugchecks a GPU MMU adapter (0x119/0xD). */
+TEST(adapter_rvk_context, a_host_fault_completes_the_waiting_submission_and_refuses_the_next)
 { Fixture fixture; av::FakeHandleTable handles;
   fixture.function().add_doorbell_region();
   CHECK_EQ(fixture.start(), success);
   RvkProcess process(fixture, handles);
   av::DxgkargCreateContextRecord context = {};
   CHECK_EQ(process.create_context(context), success);
+  av::DxgkargCreateContextRecord neighbour = {};
+  neighbour.Flags = 0x4u;
+  CHECK_EQ(nt(fixture.adapter().create_context(process.device(), &neighbour)), success);
   CHECK_EQ(process.submit(context.hContext, 7u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
+  CHECK_EQ(process.submit(context.hContext, 8u, av::SubmissionDescriptor(2u, 32u, 64u)), success);
   const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  const std::uint32_t rings = fixture.function().doorbells().rings(0u);
   process.host_faults(0u, 6u);
   fixture.platform().set_irql(Irql::dispatch);
   fixture.adapter().dpc_routine();
   fixture.platform().set_irql(Irql::passive);
-  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 1u);
-  CHECK_EQ(fixture.dxgkrnl().interrupt(before).InterruptType, 4);   /* DMA_FAULTED */
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 2u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before).InterruptType, 1);   /* DMA_COMPLETED */
   CHECK_EQ(fixture.dxgkrnl().interrupt(before).FenceId, 7u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before + 1u).InterruptType, 1);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before + 1u).FenceId, 8u);
+  CHECK_EQ(process.submit(context.hContext, 9u, av::SubmissionDescriptor(3u, 64u, 96u)), invalid_parameter);
+  CHECK_EQ(fixture.function().doorbells().rings(0u), rings);
+
+  av::DxgkargSubmitCommandVirtualRecord plain = {};
+  plain.hContext = neighbour.hContext;
+  plain.DmaBufferVirtualAddress = 0x8000000000ull;
+  plain.SubmissionFenceId = 10u;
+  CHECK_EQ(nt(fixture.adapter().submit_command_virtual(&plain)), success);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 3u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before + 2u).FenceId, 10u);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(neighbour.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
 

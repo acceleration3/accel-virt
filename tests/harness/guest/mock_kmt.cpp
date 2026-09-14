@@ -26,7 +26,7 @@ MockKmt::MockKmt()
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
-      queued_taken_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
+      queued_taken_(0u), withheld_countdown_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
       journal_count_(0u) {}
 
 bool MockKmt::begin(Call call)
@@ -341,7 +341,7 @@ Status MockKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
     const Object *const object = find(Kind::context, context);
     if (find(Kind::device, device) == nullptr || object == nullptr || object->owner != device) return misuse();
     ticks_ += wait_cost_;
-    write_answer(*object);
+    if (!withheld()) write_answer(*object);
     consume(*object);
     return succeed();
 }
@@ -486,6 +486,14 @@ void MockKmt::fail_at(Call call, std::uint32_t nth, std::uint32_t code)
 }
 
 void MockKmt::zero_next(Call call) { zeroing_[static_cast<unsigned>(call)] = true; }
+
+void MockKmt::withhold_answer_at(std::uint32_t nth) { withheld_countdown_ = nth; }
+
+bool MockKmt::withheld()
+{
+    if (withheld_countdown_ == 0u) return false;
+    return --withheld_countdown_ == 0u;
+}
 
 std::uint32_t MockKmt::calls(Call call) const { return calls_[static_cast<unsigned>(call)]; }
 

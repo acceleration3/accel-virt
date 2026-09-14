@@ -122,7 +122,8 @@ A malformed stream must fault its own context without handing a host ICD a bad
 handle. **Decision:** the isolation scenario sends `vkCreateInstance` with a
 truncated payload on one context: the Vulkan decoder - handle-checked and
 fuzzed since 042 - answers `RVK_UNDECODABLE`, the device faults that context with
-code 6, and the driver reports `DMA_FAULTED` (043). A second context completes a
+code 6, and the driver completes that context's queued work and refuses its
+later submissions - not `DMA_FAULTED`, which dxgmms2.sys `VidSchDdiNotifyInterruptWorker` @140031b80 bugchecks 0x119/0xD on `DXGK_INTERRUPT_DMA_FAULTED` from a GPU MMU adapter. A second context completes a
 NOP and a Vulkan call before and after; the first context's next send fails and
 the adapter stays started. US2.3 (TDR on one device) is 040's `tdr` scenario
 with the echo library's stall, unchanged.

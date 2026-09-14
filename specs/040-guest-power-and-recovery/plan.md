@@ -79,6 +79,8 @@ No violations.
 | `PowerTransition` | object | what the adapter had running when power went away: whether the device was started, and which sources were scanning out | Put the adapter back the way power found it |
 | `ContextLoss` | system | which contexts could not be carried across a transition or a reset, and whether their owners have been told | Report a context nobody can finish |
 
+> **Superseded (044):** the driver never reports `DMA_FAULTED` - dxgmms2.sys `VidSchDdiNotifyInterruptWorker` @140031b80 bugchecks 0x119/0xD on `DXGK_INTERRUPT_DMA_FAULTED` from a GPU MMU adapter; a faulted context's queued work is completed, its later submissions are refused, ResetEngine reports nothing more, and `ContextLoss` is deleted (`docs/kb/05-scheduling.md`).
+
 The echo executor gains stall and fault controls; it is a test double in
 `tests/qemu/`, not a class in `src/`.
 

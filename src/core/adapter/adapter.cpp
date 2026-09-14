@@ -97,7 +97,7 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_, memory_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
       rvk_contexts_(platform, dxgkrnl_, allocations_),
-      hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), losses_(platform), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
+      hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u),
       display_changed_(0u), started_(false), present_(true) {}
 
@@ -189,24 +189,15 @@ void Adapter::judge_device()
         return;
     }
     /* Nothing runs on a device that changed, and its region is not the one
-     * VidMm was told about. */
+     * VidMm was told about. What an rvk context queued for it stays on the
+     * node and never completes: the engine stops moving, and dxgkrnl's timeout
+     * detection resets it through ResetEngine. Dropping it here would leave an
+     * idle engine answering responsive while VidSch still waits on it, and
+     * telling dxgkrnl would mean DMA_FAULTED, which bugchecks this adapter
+     * (docs/kb/05-scheduling.md). The display is the scanout the transition
+     * restored, none of this, and keeps working. */
     close_region();
-    /* Whatever was queued on the device that is gone will never complete: its
-     * owner is told now rather than left waiting for a fence nobody will
-     * signal. The display is not this - it is the scanout the transition
-     * restored - and keeps working. */
     rvk_contexts_.abandon_all();
-    void          *owner = nullptr;
-    const uint32_t aborted = node_.abort_pending(owner);
-    if (owner == nullptr) return;
-    losses_.lose(owner, aborted, Status::conflict);
-    report_losses("rvkgpu: device change loss");
-}
-
-void Adapter::report_losses(const char *what)
-{
-    const Status told = losses_.report(notification_);
-    if (told != Status::ok) log_status(what, NtStatus(told).value());
 }
 
 Status Adapter::power_up()
@@ -334,8 +325,7 @@ void Adapter::dpc_routine()
         platform_.log("rvkgpu: control queue harvest failed in the DPC");
     if (harvest && device_.object().harvest_cursor(completed) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: cursor queue harvest failed in the DPC");
-    rvk_contexts_.serve(node_, losses_);
-    if (losses_.pending() != 0u) report_losses("rvkgpu: rvk context loss");
+    rvk_contexts_.serve(node_);
     if (node_.complete(notification_) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: a completion was refused in the DPC");
     if (hw_submissions_.complete(notification_) != Status::ok && budget_.allows())
@@ -1095,15 +1085,10 @@ int32_t Adapter::reset_engine(DxgkargResetEngineRecord *request)
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::reset_engine");
     if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
-    /* Whose work was thrown away: its owner is told it cannot be finished, and
-     * every other context keeps running - a reset of one engine is not an
-     * outage (FR-002, FR-003). */
-    void *owner = nullptr;
-    request->LastAbortedFenceId = node_.abort_pending(owner);
-    if (owner != nullptr) {
-        losses_.lose(owner, request->LastAbortedFenceId, Status::conflict);
-        report_losses("rvkgpu: ResetEngine loss");
-    }
+    /* VidSch already knows what it reset, so nothing more is reported; every
+     * other context keeps running - a reset of one engine is not an outage
+     * (FR-002, FR-003). */
+    request->LastAbortedFenceId = node_.abort_pending();
     return NtStatus(Status::ok).value();
 }
 
@@ -1218,15 +1203,10 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
     if (context == nullptr || !context->admits(request->DmaBufferVirtualAddress))
         return NtStatus(Status::invalid_parameter).value();
     /* The device that would have run this is not the one this adapter started
-     * on: the submission is taken and answered with a fault, because a
-     * completion is what will never come (FR-005). */
-    if (identity_.changed()) {
-        losses_.lose(request->hContext, request->SubmissionFenceId, Status::conflict);
-        report_losses("rvkgpu: submission on a changed device");
-        return NtStatus(Status::ok).value();
-    }
-    const Status status = context->is_rvk() ? submit_rvk(*request)
-                                            : node_.submit(request->SubmissionFenceId, request->hContext);
+     * on, so no completion would ever come; SubmitCommandVirtual may refuse,
+     * and D3DKMTSubmitCommand fails for the process instead (FR-005). */
+    if (identity_.changed()) return NtStatus(Status::invalid_parameter).value();
+    const Status status = context->is_rvk() ? submit_rvk(*request) : node_.submit(request->SubmissionFenceId);
     if (status == Status::ok) static_cast<void>(dxgkrnl_.queue_dpc());
     return NtStatus(status == Status::ok ? Status::ok : Status::invalid_parameter).value();
 }

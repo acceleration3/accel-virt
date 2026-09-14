@@ -15,7 +15,6 @@
 #include "core/memory/memory_segments.hpp"
 #include "core/miniport/interrupt_notification.hpp"
 #include "core/rvk/rvk_context_table.hpp"
-#include "core/scheduling/context_loss.hpp"
 #include "core/scheduling/execution_node.hpp"
 #include "core/support/status.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
@@ -207,7 +206,7 @@ public:
           segments_(mapped_.platform(), aperture_, host_visible_),
           allocations_(mapped_.platform(), aperture_, segments_),
           table_(mapped_.platform(), mapped_.interface(), allocations_),
-          notification_(mapped_.platform(), mapped_.interface()), node_(mapped_.platform()), losses_(mapped_.platform())
+          notification_(mapped_.platform(), mapped_.interface()), node_(mapped_.platform())
     {
         mapped_.function().add_doorbell_region();
         CHECK_STATUS(mapped_.map(), Status::ok);
@@ -254,7 +253,7 @@ public:
     void serve()
     {
         mapped_.platform().set_irql(Irql::dispatch);
-        table_.serve(node_, losses_);
+        table_.serve(node_);
         CHECK_STATUS(node_.complete(notification_), Status::ok);
         mapped_.platform().set_irql(Irql::passive);
     }
@@ -266,7 +265,6 @@ public:
     av::AllocationTable      &allocations() { return allocations_; }
     RvkContextTable          &table() { return table_; }
     ExecutionNode            &node() { return node_; }
-    av::ContextLoss          &losses() { return losses_; }
     ProcessAllocation        &ring() { return *ring_; }
     ProcessAllocation        &fence() { return *fence_; }
     ProcessAllocation        &reply() { return *reply_; }
@@ -281,7 +279,6 @@ private:
     RvkContextTable                         table_;
     av::InterruptNotification               notification_;
     ExecutionNode                           node_;
-    av::ContextLoss                         losses_;
     std::optional<av::VirtioGpuDevice>      device_;
     std::optional<ProcessAllocation>        ring_;
     std::optional<ProcessAllocation>        fence_;
@@ -558,7 +555,7 @@ TEST(rvk_context_table, runs_at_the_levels_it_declares)
   fixture.platform().set_irql(Irql::isr);
   std::uint64_t awaited = 0u;
   static_cast<void>(fixture.table().submit(&first_context, nullptr, 0u, awaited));
-  fixture.table().serve(fixture.node(), fixture.losses());
+  fixture.table().serve(fixture.node());
   fixture.platform().set_irql(Irql::passive);
   while (fixture.platform().claim(Violation::irql_ceiling)) {}
   while (fixture.platform().claim(Violation::blocking_at_dispatch)) {}
@@ -645,7 +642,7 @@ TEST(rvk_context_table_unbind, a_context_failed_by_its_fence_page_is_still_destr
   fixture.complete_through(5u);   /* nothing was ever submitted */
   fixture.serve();
   std::uint64_t awaited = 0u;
-  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::invalid_state);
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::invalid_parameter);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
   CHECK_EQ(host.count_of(ctx_destroy_type), 1u);
   CHECK_EQ(host.count_of(unref_type), 3u); }
@@ -661,29 +658,61 @@ TEST(rvk_context_table, destruction_releases_what_is_still_bound)
     CHECK_EQ(fixture.platform().mapped_frames(), 2u); }
   CHECK_EQ(fixture.platform().mapped_frames(), 0u); }
 
-/* FR-006: a batch the host faulted finishes nothing, and the owner is told its
- * context is lost against the first submission it had waiting - once, and never
- * about a healthy neighbour. */
-TEST(rvk_context_table_serve, a_fault_the_host_writes_loses_that_context_s_waiting_work)
+/* FR-006: a context the host faulted has everything it queued completed, in
+ * order, so the process waiting on it wakes; its next submission is refused
+ * and publishes nothing; a packet of another context between its packets is
+ * still held for that context's own host. */
+TEST(rvk_context_table_serve, a_fault_the_host_writes_completes_that_context_s_work_and_refuses_more)
 { Fixture fixture;
   Host host(fixture.mapped());
   CHECK_STATUS(fixture.bind(&first_context), Status::ok);
   std::uint64_t awaited = 0u;
   CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::ok);
   CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(2u, 32u, 64u), awaited), Status::ok);
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(3u, 64u, 96u), awaited), Status::ok);
   fixture.platform().set_irql(Irql::dispatch);
   CHECK_STATUS(fixture.node().submit(10u, &first_context, 1u), Status::ok);
   CHECK_STATUS(fixture.node().submit(11u, &first_context, 2u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(12u, &second_context, 1u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(13u, &first_context, 3u), Status::ok);
   fixture.platform().set_irql(Irql::passive);
+  const std::uint32_t rings = fixture.mapped().function().doorbells().rings(0u);
   fixture.complete_through(1u, 6u);   /* the first completed, then the context faulted with code 6 */
   fixture.serve();
-  CHECK_EQ(fixture.node().current_fence(), 10u);
-  CHECK_EQ(fixture.node().pending(), 0u);
-  CHECK_EQ(fixture.losses().pending(), 1u);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_EQ(fixture.node().current_fence(), 11u);
+  CHECK_EQ(fixture.node().pending(), 2u);   /* 12 waits for its own host, and holds 13 */
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(4u, 96u, 128u), awaited), Status::invalid_parameter);
+  CHECK_EQ(awaited, 0u);
+  CHECK_EQ(fixture.mapped().function().doorbells().rings(0u), rings);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.node().finish(&second_context, 1u);
+  fixture.platform().set_irql(Irql::passive);
   fixture.serve();
-  CHECK_EQ(fixture.losses().pending(), 1u);   /* nothing more was waiting */
+  CHECK_EQ(fixture.node().current_fence(), 13u);
+  CHECK_EQ(fixture.node().pending(), 0u);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
+/* A packet whose batch was published before the fault was seen reaches the
+ * node after the serve that saw it; the next serve finishes it too. */
+TEST(rvk_context_table_serve, a_packet_queued_after_the_fault_was_seen_is_finished_by_the_next_serve)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  std::uint64_t awaited = 0u;
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(1u, 0u, 32u), awaited), Status::ok);
+  fixture.complete_through(0u, 6u);
+  fixture.serve();
+  fixture.platform().set_irql(Irql::dispatch);
+  CHECK_STATUS(fixture.node().submit(20u, &first_context, awaited), Status::ok);
+  fixture.platform().set_irql(Irql::passive);
+  fixture.serve();
+  CHECK_EQ(fixture.node().current_fence(), 20u);
+  CHECK_EQ(fixture.node().pending(), 0u);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* A page completing a fence never submitted fails the context: it is lost the
+ * same way, its work completed and its next submission refused. */
 TEST(rvk_context_table_serve, a_page_no_device_could_write_loses_the_context_too)
 { Fixture fixture;
   Host host(fixture.mapped());
@@ -696,5 +725,6 @@ TEST(rvk_context_table_serve, a_page_no_device_could_write_loses_the_context_too
   fixture.complete_through(9u);   /* completes a fence never submitted */
   fixture.serve();
   CHECK_EQ(fixture.node().pending(), 0u);
-  CHECK_EQ(fixture.losses().pending(), 1u);
+  CHECK_EQ(fixture.node().current_fence(), 3u);
+  CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(2u, 32u, 64u), awaited), Status::invalid_parameter);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }

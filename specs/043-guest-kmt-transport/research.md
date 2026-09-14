@@ -168,6 +168,8 @@ faulted page becomes `DXGK_INTERRUPT_DMA_FAULTED` for the owning context, which
 is `ContextLoss`'s existing path, and recovery is `CTX_DESTROY` and a fresh
 setup.
 
+> **Superseded (044):** the driver never reports `DMA_FAULTED` - dxgmms2.sys `VidSchDdiNotifyInterruptWorker` @140031b80 bugchecks 0x119/0xD on `DXGK_INTERRUPT_DMA_FAULTED` from a GPU MMU adapter; a faulted context's queued work is completed, its later submissions are refused, ResetEngine reports nothing more, and `ContextLoss` is deleted (`docs/kb/05-scheduling.md`).
+
 Monitored-fence and native-fence DDIs stay null: this uses the submission fence
 dxgkrnl already tracks, signalled when the page says so, which needs no new DDI
 slot. Doorbell DDIs also stay null - the doorbell store is the miniport's, on
@@ -191,7 +193,7 @@ Deliver: private-data context creation wiring an rvk `GuestContext` into the
 miniport; aperture-segment ring/fence/reply allocations published as guest
 blobs and mapped to the process; RVKS submission read from the DMA buffer with
 the doorbell rung by the driver; the fence-page interrupt and a real wait;
-faults to `DMA_FAULTED`; the `ClientTransport` interface the generated client is
+faults to `DMA_FAULTED` (superseded in 044, see §5); the `ClientTransport` interface the generated client is
 handed, with the emitter changed to lend the writer; and the Vulkan and OpenCL
 clients compiling against it. Prove it over L4 and in a real guest.
 

@@ -496,7 +496,8 @@ Status DdiKmt::destroy_context(std::uint32_t context)
 }
 
 /* DXGCONTEXT::SubmitCommand refuses private data larger than the context asked
- * for before anything reaches the driver, and a lost context takes nothing. */
+ * for before anything reaches the driver; whether a context can still take a
+ * submission is the driver's answer. */
 Status DdiKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint64_t length,
                       const std::uint8_t *private_data, std::uint32_t private_size)
 {
@@ -504,7 +505,6 @@ Status DdiKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint64
     if (found == nullptr || private_size > found->private_capacity || private_size > max_private_data ||
         (private_data == nullptr && private_size != 0u))
         return refuse(Status::invalid_parameter);
-    if (fences_.lost(slot_of(*found))) return refuse(Status::invalid_state);
     if (private_size != 0u) std::memcpy(kernel_copy_, private_data, private_size);
     DxgkargSubmitCommandVirtualRecord request = {};
     request.hContext = found->driver;

@@ -9,7 +9,7 @@
  * copied, then SetRootPageTable; a submission gets node 0's next fence and is
  * SubmitCommandVirtual at PASSIVE with its private data copied, refused past
  * the size the context asked for. A wait delivers interrupts until the
- * driver has completed what the context submitted or faulted it; a vertical
+ * driver has completed what the context submitted; a vertical
  * blank turns the driver's vsync on and runs the platform's timers to the
  * next one. Paging runs inside the call that asks for it, so every paging
  * fence is reached on return. VidMm's GPU page tables are not built: GPU

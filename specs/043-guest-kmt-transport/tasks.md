@@ -106,8 +106,8 @@ setup there. The tasks below are closed as moved, not as done.
 
 **Goal**: a faulted context, a TDR and a lost device each reach the waiting client rather than hanging it.
 
-- [X] T027 [US3] Write the fault tests first, over `MockKmt` and the loopback rig: a context the device faults makes the next `send_sync` return not-`Ok` and every one after; a fence page marked faulted becomes `DXGK_INTERRUPT_DMA_FAULTED` for that context and no other; a wait on a faulted context wakes rather than sleeping forever
-- [X] T028 [US3] The binding maps a faulted fence page to `ContextLoss`'s `DMA_FAULTED` for the owning context (`adapter.cpp` already has the path for a changed device), and `KmtTransport` turns a faulted wait into a failed call - the client sees loss, not a hang
+- [X] T027 [US3] Write the fault tests first, over `MockKmt` and the loopback rig: a context the device faults makes the next `send_sync` return not-`Ok` and every one after; a fence page marked faulted becomes `DXGK_INTERRUPT_DMA_FAULTED` for that context and no other; a wait on a faulted context wakes rather than sleeping forever *Superseded in 044: no `DMA_FAULTED`; the faulted context's work completes and its next submission is refused.*
+- [X] T028 [US3] The binding maps a faulted fence page to `ContextLoss`'s `DMA_FAULTED` for the owning context (`adapter.cpp` already has the path for a changed device), and `KmtTransport` turns a faulted wait into a failed call - the client sees loss, not a hang *Superseded in 044: the driver never reports `DMA_FAULTED`, because dxgmms2.sys `VidSchDdiNotifyInterruptWorker` @140031b80 bugchecks 0x119/0xD on `DXGK_INTERRUPT_DMA_FAULTED` from a GPU MMU adapter; `RvkContextTable::serve` completes a faulted context's queued work, `submit` refuses it afterwards, and `ContextLoss` is deleted.*
 - [X] T029 [US3] A TDR on the adapter and a device loss reach a waiting client: the wait returns, `send_sync` answers not-`Ok`, and recovery is `CTX_DESTROY` and a fresh setup (research §5). Tested over the loopback rig's reset path
 
 **Checkpoint**: every failure reaches the client. Commit.

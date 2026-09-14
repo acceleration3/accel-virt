@@ -21,12 +21,21 @@
 
 #include <cstdint>
 
+namespace av {
+
+struct KmtTransportProbe {
+    static void forget_fault(KmtTransport &transport) { transport.faulted_ = false; }
+};
+
+}  // namespace av
+
 using av::DdiKmt;
 using av::DdiSlot;
 using av::DdiTable;
 using av::FullStackRig;
 using av::GuestConnection;
 using av::KmtTransport;
+using av::KmtTransportProbe;
 using av::MockExecutorOps;
 using av::Status;
 using av::SubApi;
@@ -43,6 +52,8 @@ constexpr std::uint64_t echo_payload = 0x0123456789ABCDEFull;
 constexpr std::uint8_t  ring_order = 12u;
 constexpr std::int32_t  power_d0 = 1;
 constexpr std::int32_t  power_d3 = 4;
+/* STATUS_INVALID_PARAMETER, what SubmitCommandVirtual answers a lost context. */
+constexpr std::uint32_t invalid_parameter = 0xC000000Du;
 
 /* One echo on `transport`: whether it came back as exactly the payload sent. */
 bool echoes(KmtTransport &transport, std::uint64_t payload)
@@ -98,7 +109,6 @@ TEST(fullstack_transport, an_echo_crosses_the_real_driver_and_the_real_device_co
   CHECK(rig.device().executor().executed() > executed);
   CHECK_EQ(rig.device().executor().id_at(executed), echo_command);
   CHECK(rig.device().doorbells().stores() >= 1u);
-  CHECK_EQ(kmt.fences().faults(), 0u);
   /* A second batch on the same ring, after the first moved its head. */
   CHECK(echoes(transport, ~echo_payload));
   CHECK_EQ(kmt.fences().completed(), 2u);
@@ -147,8 +157,10 @@ TEST(fullstack_transport, a_batch_the_host_finishes_later_completes_on_its_fence
   connection.close(); }
 
 /* FR-006 through the whole stack: a batch the executor cannot decode faults
- * its context on the host, the driver reports DMA_FAULTED for it, and the
- * process's wait fails; a context beside it on the same device keeps running. */
+ * its context on the host; the driver completes the submission, so the
+ * process's wait returns and finds no reply, and refuses the context's next
+ * submission; a context beside it on the same device keeps running. The
+ * driver never reports DMA_FAULTED, which dxgkrnl bugchecks on (0x119/0xD). */
 TEST(fullstack_transport, a_faulted_context_fails_its_wait_and_its_neighbour_still_echoes)
 { FullStackRig rig;
   CHECK_EQ(rig.started(), 0);
@@ -164,10 +176,19 @@ TEST(fullstack_transport, a_faulted_context_fails_its_wait_and_its_neighbour_sti
   WireWriter request = doomed.request_writer();
   request.write_u64(echo_payload);
   WireReader reply(nullptr, 0u);
+  const std::uint32_t completed = kmt.fences().completed();
   CHECK(doomed.send_sync(MockExecutorOps::undecodable_id, request, reply) == TransportResult::failed);
   CHECK(doomed.faulted());
-  CHECK_EQ(kmt.fences().faults(), 1u);
+  CHECK_EQ(kmt.fences().completed(), completed + 1u);   /* the wait completed; the reply is what is missing */
+  CHECK_EQ(kmt.last_code(), 0u);
+  /* With the transport's own latch lifted the send reaches the driver, which
+   * refuses it before the doorbell rings. */
+  const std::uint32_t stores = rig.device().doorbells().stores();
+  KmtTransportProbe::forget_fault(doomed);
   CHECK(!echoes(doomed, echo_payload));
+  CHECK_EQ(kmt.last_code(), invalid_parameter);
+  CHECK_EQ(rig.device().doorbells().stores(), stores);
+  CHECK(doomed.faulted());
 
   CHECK(echoes(healthy, echo_payload));
   CHECK(!healthy.faulted());

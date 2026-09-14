@@ -37,7 +37,7 @@ and the transport core; the same for the guest suite. Python 3 for the emitter
 change and the guest runner.
 
 **Primary Dependencies**: the guest-side rvk classes (034); host-visible and
-aperture allocations (041); `ContextLoss` and TDR (040); the generated client
+aperture allocations (041); `ContextLoss` (deleted in 044) and TDR (040); the generated client
 dispatch and the emitter (063); the running device and executor (042) for the L4
 and L5 ends.
 

@@ -217,7 +217,10 @@ Each scenario arrives with the DDIs it calls. Since feature 006:
   `FakeVirtioGpuFunction`, QEMU's virtio-gpu-pci with its captured config
   space, resource list and register regions; mapping a BAR attaches the
   regions to the mock, unmapping detaches them, and a mapping left at the end
-  fails the test.
+  fails the test. A `DXGK_INTERRUPT_DMA_FAULTED` notification fails the test
+  and is not delivered: `VidSchDdiNotifyInterruptWorker` (dxgmms2.sys 26100
+  @140031b80) bugchecks 0x119/0xD for every one on this GPU MMU adapter, which
+  a live guest hit while this fake still accepted it.
 
 - `FakeDxgadapter` is `DXGADAPTER::Initialize` (feature 007): the
   `DRIVERCAPS` query and the ones it gates (`PHYSICALADAPTERCAPS`,
@@ -380,7 +383,8 @@ src/guest (GuestSuite, GuestConnection, KmtTransport)   unchanged
   SetRootPageTable; SubmitCommandVirtual at PASSIVE with node 0's next fence and
   copied private data, refused past what the context asked for. `NodeFences`
   keeps what the driver's notifications make of each fence, and a wait pumps
-  interrupts until the context's last fence completed or the context faulted.
+  interrupts until the context's last fence completed; a faulted context's
+  last fence completes too, with no reply behind it.
   A vertical blank turns the driver's vsync on and runs the platform's timers
   to the next one.
 
@@ -391,7 +395,8 @@ What it runs (`tests/loopback/test_fullstack_*.cpp`):
 - the 043 transport round trip through the real driver - `RvkContextTable`
   binding on doorbell 0, the echo `0x10001` and its reply - with the completion
   proven to arrive only through the fence interrupt
-- a context the executor faults, whose wait fails while its neighbour echoes
+- a context the executor faults, whose wait completes with no reply and whose
+  next submission the driver refuses, while its neighbour echoes
 - D3 and D0, ResetFromTimeout and RestartFromTimeout, and StopDevice and
   StartDevice, each under a live transport: the context lost, the region blob
   made again, a new transport echoing
@@ -717,4 +722,6 @@ Those are L5's job, and they are why L5 exists even though it is small.
 The honest failure mode of this approach is a harness that encodes a wrong
 belief about `dxgkrnl`. That is why every scenario cites the function it was
 derived from: when the guest disagrees with the harness, one of them is wrong
-and the citation says where to look.
+and the citation says where to look. It happened once: the fake accepted
+`DMA_FAULTED`, and dxgmms2.sys bugchecks 0x119/0xD on it (see
+`docs/kb/05-scheduling.md`).

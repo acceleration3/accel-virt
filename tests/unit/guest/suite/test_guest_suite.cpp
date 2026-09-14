@@ -735,7 +735,7 @@ TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_ad
   host.healthy_context();
   const std::uint32_t before_fault = 1u + av::ScriptedHost::vulkan_waits + av::ScriptedHost::opencl_waits + 1u +
                                      av::ScriptedHost::isolation_waits_before_fault;
-  kmt.fail_at(MockKmt::Call::wait_for_context, before_fault + 1u, device_removed);
+  kmt.withhold_answer_at(before_fault + 1u);
   host.healthy_context();
   host.nop();
   GuestReport report;

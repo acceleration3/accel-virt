@@ -16,6 +16,8 @@
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
+#include <cstring>
+
 using av::ClientDescriptor;
 using av::MockKmt;
 using av::PciIdentity;
@@ -480,6 +482,28 @@ TEST(mock_kmt_queue_answer, one_queued_answer_per_wait_then_the_standing_one)
   MockKmt full;
   for (std::uint32_t i = 0u; i < MockKmt::max_queued + 3u; i++) full.queue_answer(first, sizeof first);
   CHECK_EQ(full.queued_answers(), MockKmt::max_queued); }
+
+/* A withheld wait succeeds with the slot untouched and leaves the queued
+ * answer for the wait after it. */
+TEST(mock_kmt_withhold_answer_at, the_nth_wait_writes_nothing_and_takes_no_queued_answer)
+{ MockKmt kmt;
+  AnsweringRig rig(kmt);
+  const std::uint32_t context = rig.context_naming(rig.reply());
+  const std::uint8_t first[2] = {0x11u, 0x12u};
+  const std::uint8_t second[3] = {0x21u, 0x22u, 0x23u};
+  kmt.queue_answer(first, sizeof first);
+  kmt.queue_answer(second, sizeof second);
+  kmt.withhold_answer_at(2u);
+  rig.submit_fence(context, 1u);
+  CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
+  CHECK_EQ(rig.slot()[ReplyHeader::encoded_size], 0x11u);
+  std::memset(rig.slot(), 0, ReplyHeader::encoded_size + sizeof second);
+  CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
+  CHECK(slot_is_empty(rig.slot()));
+  CHECK_EQ(kmt.queued_answers(), 1u);
+  CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
+  CHECK_EQ(rig.slot()[ReplyHeader::encoded_size], 0x21u);
+  CHECK_EQ(kmt.queued_answers(), 0u); }
 
 /* Through a real transport: every command a batch carries is journalled by id
  * and size, and a wait consumes the ring, so synchronous commands that would

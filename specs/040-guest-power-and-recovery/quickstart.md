@@ -3,7 +3,7 @@
 ## L1 and L2, on Linux
 
 ```bash
-ctest --test-dir build -R "engine_progress|context_loss|power_transition|ddi_scenarios"
+ctest --test-dir build -R "engine_progress|power_transition|ddi_scenarios"
 ```
 
 ## L5, in the guest

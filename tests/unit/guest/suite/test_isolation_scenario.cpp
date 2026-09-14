@@ -1,5 +1,7 @@
 /* Fault isolation over MockKmt, the test playing the host through ScriptedHost
- * and faulting the second context's wait as the driver reports DMA_FAULTED:
+ * and faulting the second context as the driver leaves it: its wait completes
+ * with no reply written, since the driver completes a faulted context's work
+ * and never reports DMA_FAULTED (dxgmms2.sys bugchecks 0x119/0xD on it):
  * the healthy context works before and after, the faulted one's next send
  * fails, a context made afterwards works, and every step's failure stops the
  * run with every context torn down. */
@@ -33,7 +35,7 @@ namespace {
 
 const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
                       AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
-/* What D3DKMT answers a wait on a context the driver reported faulted. */
+/* What D3DKMT answers a wait on a device that was removed. */
 constexpr std::uint32_t device_removed = 0xC00E0102u;
 /* The healthy context's three waits, then the faulted command's. */
 constexpr std::uint32_t fault_wait = ScriptedHost::isolation_waits_before_fault + 1u;
@@ -75,7 +77,7 @@ private:
 TEST(isolation_scenario, a_faulted_context_changes_no_other)
 { Rig rig;
   rig.host().healthy_context();
-  rig.kmt().fail_at(MockKmt::Call::wait_for_context, fault_wait, device_removed);
+  rig.kmt().withhold_answer_at(fault_wait);
   rig.host().healthy_context();
   rig.host().nop();
   GuestReport report;
@@ -155,7 +157,7 @@ TEST(isolation_scenario, a_fault_that_never_happens_fails_fault)
 TEST(isolation_scenario, a_failure_after_the_fault_is_reported_where_it_happened)
 { { Rig rig;
     rig.host().healthy_context();
-    rig.kmt().fail_at(MockKmt::Call::wait_for_context, fault_wait, device_removed);
+    rig.kmt().withhold_answer_at(fault_wait);
     rig.host().nop();
     rig.host().vk_handle(-3, 0u);
     GuestReport report;
@@ -167,7 +169,7 @@ TEST(isolation_scenario, a_failure_after_the_fault_is_reported_where_it_happened
     rig.check_nothing_left_but_the_adapter(); }
   { Rig rig;
     rig.host().healthy_context();
-    rig.kmt().fail_at(MockKmt::Call::wait_for_context, fault_wait, device_removed);
+    rig.kmt().withhold_answer_at(fault_wait);
     rig.host().healthy_context();
     rig.kmt().fail_at(MockKmt::Call::create_context_virtual, 3u, 0xC0000001u);
     GuestReport report;
@@ -178,7 +180,7 @@ TEST(isolation_scenario, a_failure_after_the_fault_is_reported_where_it_happened
     rig.check_nothing_left_but_the_adapter(); }
   { Rig rig;
     rig.host().healthy_context();
-    rig.kmt().fail_at(MockKmt::Call::wait_for_context, fault_wait, device_removed);
+    rig.kmt().withhold_answer_at(fault_wait);
     rig.host().healthy_context();
     rig.host().vk_result(0);   /* bytes where the relinked context's no-op answers none */
     GuestReport report;

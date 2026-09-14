@@ -26,7 +26,6 @@ namespace av {
 class Allocation;
 class AllocationTable;
 class CapsetInfo;
-class ContextLoss;
 class DxgkrnlInterface;
 class ExecutionNode;
 class GuestPageList;
@@ -63,15 +62,17 @@ public:
     [[nodiscard]] Status unbind(void *context, VirtioGpuDevice *device);
     /* DISPATCH. Publishes the batch the submission's private data describes and
      * rings its doorbell, answering in `awaited` the host fence the node waits
-     * for. invalid_parameter for a context not live or bytes that are not a
-     * descriptor of its ring; the binding's refusal otherwise. */
+     * for. invalid_parameter for a context not live, one the host faulted or
+     * whose fence page failed it, or bytes that are not a descriptor of its
+     * ring; the binding's refusal otherwise. */
     [[nodiscard]] Status submit(void *context, const uint8_t *private_data, size_t size, uint64_t &awaited);
     /* DISPATCH, from the DPC: reads every live context's fence page and
      * finishes on `node` what each one's host completed. A context the host
-     * faulted, or whose page no device could write, finishes nothing more:
-     * what it still has queued is dropped and its loss recorded in `losses`
-     * against the first of it, for the DPC to tell dxgkrnl (FR-006). */
-    void                 serve(ExecutionNode &node, ContextLoss &losses);
+     * faulted, or whose page no device could write, has everything it queued
+     * finished, so the node completes it in order and its process wakes to a
+     * fence with no reply behind it (FR-006). dxgkrnl is not told of the
+     * fault: DMA_FAULTED bugchecks a GPU MMU adapter (docs/kb/05-scheduling.md). */
+    void                 serve(ExecutionNode &node);
     /* PASSIVE. The device was reset or destroyed: no context survives on it,
      * so each is let go of and serves nothing until unbound. */
     void                 abandon_all();
@@ -87,6 +88,8 @@ private:
     static constexpr uint32_t no_slot = max_contexts;
 
     uint32_t             slot_of(const void *context) const;
+    /* The host faulted the slot's context, or its fence page failed it. */
+    bool                 lost(uint32_t slot) const;
     /* Claims a free slot for `context` under the lock; no_slot when full or
      * when `context` already holds one (in `duplicate`). */
     uint32_t             claim(void *context, bool &duplicate);

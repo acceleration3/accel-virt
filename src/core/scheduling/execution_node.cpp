@@ -17,12 +17,6 @@ Status ExecutionNode::submit(uint32_t fence)
     return queue(fence, nullptr, 0u);
 }
 
-Status ExecutionNode::submit(uint32_t fence, void *owner)
-{
-    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::submit");
-    return queue(fence, owner, 0u);
-}
-
 Status ExecutionNode::submit(uint32_t fence, void *owner, uint64_t awaited)
 {
     platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::submit");
@@ -146,46 +140,14 @@ void ExecutionNode::restart()
 
 uint32_t ExecutionNode::abort_pending()
 {
-    void *owner = nullptr;
-    return abort_pending(owner);
-}
-
-uint32_t ExecutionNode::abort_pending(void *&owner)
-{
     platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::abort_pending");
     SpinLockGuard lock(lock_);
     InvariantScope<ExecutionNode> guard(platform_, *this, "abort_pending");
     const uint32_t executing = count_ != 0u ? pending_[head_] : last_completed_;
-    owner = count_ != 0u ? owners_[head_] : nullptr;
     head_ = 0u;
     count_ = 0u;
     preemption_requested_ = false;
     return executing;
-}
-
-uint32_t ExecutionNode::abort_owner(const void *owner)
-{
-    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::abort_owner");
-    SpinLockGuard lock(lock_);
-    InvariantScope<ExecutionNode> guard(platform_, *this, "abort_owner");
-    uint32_t first = 0u;
-    uint32_t kept = 0u;
-    for (uint32_t index = 0u; index < count_; index++) {
-        const uint32_t from = (head_ + index) % capacity;
-        const bool     dropped = owner != nullptr && owners_[from] == owner && awaited_[from] != 0u;
-        if (dropped && first == 0u) first = pending_[from];
-        if (dropped) continue;
-        const uint32_t to = (head_ + kept) % capacity;
-        pending_[to] = pending_[from];
-        owners_[to] = owners_[from];
-        awaited_[to] = awaited_[from];
-        kept++;
-    }
-    count_ = kept;
-    /* The queue still ends at the last submission it holds; what dxgkrnl
-     * submits next is above the dropped ones anyway. */
-    if (count_ != 0u) last_submitted_ = pending_[(head_ + count_ - 1u) % capacity];
-    return first;
 }
 
 uint32_t ExecutionNode::pending()

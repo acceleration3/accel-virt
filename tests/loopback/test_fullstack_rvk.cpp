@@ -111,8 +111,7 @@ TEST(fullstack_rvk, the_vulkan_chain_runs_on_the_host_gpu)
   CHECK_EQ(report.failed(), 0u);
   CHECK(std::strstr(report.text(), "\nok vulkan.physical_device ") != nullptr);
   CHECK(reported(report, "ok vulkan.bind"));
-  CHECK(reported(report, "ok vulkan.destroy"));
-  CHECK_EQ(rig.kmt().fences().faults(), 0u); }
+  CHECK(reported(report, "ok vulkan.destroy")); }
 
 /* Vector add on the host GPU, the output read back exact. */
 TEST(fullstack_rvk, vector_add_runs_on_the_host_gpu)
@@ -124,12 +123,13 @@ TEST(fullstack_rvk, vector_add_runs_on_the_host_gpu)
   run_alone<av::OpenClScenario>(rig, report);
   CHECK_EQ(report.failed(), 0u);
   CHECK(reported(report, "ok opencl.sum 64"));
-  CHECK(reported(report, "ok opencl.release"));
-  CHECK_EQ(rig.kmt().fences().faults(), 0u); }
+  CHECK(reported(report, "ok opencl.release")); }
 
 /* The host refuses the truncated create-info before any ICD sees it, the
- * driver faults that context alone, and the host's Vulkan keeps serving the
- * other context and a new one. */
+ * driver completes that context's work with no reply and refuses its next
+ * submission - never DMA_FAULTED, which the fake dxgkrnl fails as the real one
+ * bugchecks on it - and the host's Vulkan keeps serving the other context and
+ * a new one. */
 TEST(fullstack_rvk, a_malformed_stream_faults_only_its_own_context)
 { const WidestHostGpu gpu;
   if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) return;
@@ -140,7 +140,6 @@ TEST(fullstack_rvk, a_malformed_stream_faults_only_its_own_context)
   CHECK_EQ(report.failed(), 0u);
   CHECK(reported(report, "ok isolation.fault"));
   CHECK(reported(report, "ok isolation.relink"));
-  CHECK_EQ(rig.kmt().fences().faults(), 1u);
   CHECK(rig.fdo().started()); }
 
 /* What `rvktest.exe rvk` runs in the guest, whole: every step passes. */

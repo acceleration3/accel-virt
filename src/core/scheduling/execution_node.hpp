@@ -28,20 +28,12 @@ public:
 
     /* invalid_parameter for a fence not above the last submitted, or a full queue. */
     [[nodiscard]] Status submit(uint32_t fence);
-    /* The same, remembering whose submission it is: SubmitCommandVirtual names
-     * a context, and a reset has to say whose work it threw away. */
-    [[nodiscard]] Status submit(uint32_t fence, void *owner);
     /* The same, for a packet the host runs: it completes only once `owner`
      * has been finished through the host fence `awaited`, and holds every
      * packet queued behind it until then (feature 043). */
     [[nodiscard]] Status submit(uint32_t fence, void *owner, uint64_t awaited);
     /* `owner`'s host has completed every fence up to `completed`. */
     void                 finish(const void *owner, uint64_t completed);
-    /* Drops every packet `owner` queued that its host has not finished,
-     * leaving the others in order, and answers the first one dropped; 0 when
-     * there was none. A context that faulted on the host will finish nothing
-     * more it submitted (feature 043). */
-    uint32_t             abort_owner(const void *owner);
     /* The latest request wins; reported at the next completion. */
     [[nodiscard]] Status preempt(uint32_t fence);
     /* Completes and reports every queued fence, then any preemption; stops at
@@ -60,9 +52,6 @@ public:
      * and answers the fence that was executing - the last completed one when
      * nothing was queued. */
     uint32_t             abort_pending();
-    /* The same, with the context that submitted the fence that was executing,
-     * or null for a submission that named none. */
-    uint32_t             abort_pending(void *&owner);
 
     bool invariants_hold() const;
 

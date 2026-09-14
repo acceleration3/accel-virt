@@ -25,9 +25,6 @@ public:
 
     [[nodiscard]] Status report_completed(uint32_t fence);
     [[nodiscard]] Status report_preempted(uint32_t preemption_fence, uint32_t last_completed_fence);
-    /* DXGK_INTERRUPT_DMA_FAULTED: the submission a context died on, and what
-     * killed it - the owner is told its context cannot be finished. */
-    [[nodiscard]] Status report_faulted(uint32_t fence, Status why);
     /* Hardware queue progress fences of the node's engine were written. */
     [[nodiscard]] Status report_monitored_fence_signaled(uint32_t node, uint32_t engine);
     /* The address is the primary the target shows at this vsync. */
@@ -36,8 +33,10 @@ public:
     uint8_t              notify();
 
 private:
-    enum : int32_t { dma_completed = 1, dma_preempted = 2, crtc_vsync = 3, dma_faulted = 4,
-                     monitored_fence_signaled = 11 };   /* DXGK_INTERRUPT_TYPE */
+    /* DXGK_INTERRUPT_TYPE. DMA_FAULTED (4) is absent on purpose: on a GPU MMU
+     * adapter VidSchDdiNotifyInterruptWorker (dxgmms2.sys 26100 @140031b80)
+     * bugchecks 0x119/0xD for it instead of processing it. */
+    enum : int32_t { dma_completed = 1, dma_preempted = 2, crtc_vsync = 3, monitored_fence_signaled = 11 };
     /* One adapter, not linked: physical adapter 0. */
     static constexpr uint32_t physical_adapter_mask = 1u;
 

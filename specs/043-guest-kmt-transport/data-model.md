@@ -260,6 +260,8 @@ path (research §5). Destroyed at `DxgkDdiDestroyContext`, at `PASSIVE`, after
 `GuestContext::tear_down` and `release`. Its state is `GuestContext::State`
 (`guest_context.hpp:33`), and the state machine below is that enum.
 
+> **Superseded (044):** the driver never reports `DMA_FAULTED` - dxgmms2.sys `VidSchDdiNotifyInterruptWorker` @140031b80 bugchecks 0x119/0xD on `DXGK_INTERRUPT_DMA_FAULTED` from a GPU MMU adapter; a faulted context's queued work is completed, its later submissions are refused, ResetEngine reports nothing more, and `ContextLoss` is deleted (`docs/kb/05-scheduling.md`).
+
 ## `ContextPages` (object, miniport side)
 
 The memory one context runs on, as each of its readers reaches it: the
@@ -316,7 +318,8 @@ fence queue; and sets the host context up. `submit` reads the submission's
 private data as an RVKS (dxgkrnl copies it into kernel memory,
 `DXGCONTEXT::SubmitCommand` @1402d7720) and publishes it; the node holds the
 packet until `serve` reads the fence page. A faulted context's waiting packets
-are dropped and its loss reported as `DMA_FAULTED`. Freeing an allocation a
+are dropped and its loss reported as `DMA_FAULTED` (superseded in 044: they are
+completed and its later submissions refused, because dxgmms2.sys `VidSchDdiNotifyInterruptWorker` @140031b80 bugchecks 0x119/0xD on `DXGK_INTERRUPT_DMA_FAULTED` from a GPU MMU adapter). Freeing an allocation a
 context runs on unbinds that context first, so the device never writes pages
 that are no longer the process's.
 
@@ -439,7 +442,7 @@ idle ──▶ setting_up ──▶ established ──────────�
 | setting_up | established | the setup sequence's last answer established the context |
 | setting_up | failed | a refused setup step (`ContextRequestSequence::refused`) |
 | established | established | `submit` (via `SubmissionReader`), or `serve` observing progress |
-| established | failed | `serve` observes a faulted fence page: `FenceObserver` fails the context (`fence_observer.hpp:5-7`), and the binding raises `DXGK_INTERRUPT_DMA_FAULTED` |
+| established | failed | `serve` observes a faulted fence page: `FenceObserver` fails the context (`fence_observer.hpp:5-7`), and the binding raises `DXGK_INTERRUPT_DMA_FAULTED` (superseded in 044: its queued work is completed and later submissions refused; dxgmms2.sys `VidSchDdiNotifyInterruptWorker` @140031b80 bugchecks 0x119/0xD on `DXGK_INTERRUPT_DMA_FAULTED` from a GPU MMU adapter) |
 | established or failed | tearing_down | `GuestContext::tear_down` begins releasing what the device holds |
 | tearing_down | torn_down | `release` frees the memory once the device let go of it; `abandon` on a device reset jumps straight here |
 

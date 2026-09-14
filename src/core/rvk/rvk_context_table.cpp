@@ -6,7 +6,6 @@
 #include "core/platform/register_window.hpp"
 #include "core/platform/spin_lock_guard.hpp"
 #include "core/rvk/context_pages.hpp"
-#include "core/scheduling/context_loss.hpp"
 #include "core/scheduling/execution_node.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/support/nt_status.hpp"
@@ -166,7 +165,7 @@ Status RvkContextTable::submit(void *context, const uint8_t *private_data, size_
     awaited = 0u;
     SpinLockGuard  locked(lock_);
     const uint32_t slot = slot_of(context);
-    if (slot == no_slot || !live_[slot]) return Status::invalid_parameter;
+    if (slot == no_slot || !live_[slot] || lost(slot)) return Status::invalid_parameter;
     SubmissionDescriptor submission;
     if (reader_.read(private_data, size, RingHeader(orders_[slot], 0u, 0u), submission) != Status::ok)
         return Status::invalid_parameter;
@@ -175,9 +174,11 @@ Status RvkContextTable::submit(void *context, const uint8_t *private_data, size_
     return status;
 }
 
-/* A page that fails its context leaves it serving nothing more; what it
- * completed before that is still finished. */
-void RvkContextTable::serve(ExecutionNode &node, ContextLoss &losses)
+/* What a lost context submitted is finished rather than dropped: a packet
+ * left on the node would hold every context's work queued behind it until a
+ * timeout reset. Serving it on every DPC also finishes a packet whose batch
+ * was published before the fault was seen and which reached the node after. */
+void RvkContextTable::serve(ExecutionNode &node)
 {
     platform_.require_irql_at_most(Irql::dispatch, "RvkContextTable::serve");
     SpinLockGuard locked(lock_);
@@ -185,12 +186,14 @@ void RvkContextTable::serve(ExecutionNode &node, ContextLoss &losses)
         if (!live_[slot]) continue;
         RvkContextBinding &binding = bindings_[slot].object();
         static_cast<void>(binding.serve());
-        node.finish(contexts_[slot], binding.completed());
-        const bool lying = binding.state() == GuestContext::State::failed;
-        if (!lying && !binding.faulted()) continue;
-        const uint32_t first = node.abort_owner(contexts_[slot]);
-        if (first != 0u) losses.lose(contexts_[slot], first, lying ? Status::malformed : Status::invalid_state);
+        node.finish(contexts_[slot], lost(slot) ? UINT64_MAX : binding.completed());
     }
+}
+
+bool RvkContextTable::lost(uint32_t slot) const
+{
+    const RvkContextBinding &binding = bindings_[slot].object();
+    return binding.state() == GuestContext::State::failed || binding.faulted();
 }
 
 void RvkContextTable::abandon_all()

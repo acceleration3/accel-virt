@@ -19,8 +19,9 @@ AV_GUEST_IMAGE=~/.local/share/libvirt/images/win11.qcow2 \
 
 Expected: `verdict.txt` names the executor and the host GPU; `report.txt` has
 `ok transport.nop`, a `transport.latency` measurement, every `vulkan.*`,
-`opencl.*`, `opengl.*` and `isolation.*` step ok; `rvkgpu.log` shows one
-`DMA_FAULTED` for the isolation scenario's faulted context and no adapter reset.
+`opencl.*`, `opengl.*` and `isolation.*` step ok; the host log shows the
+isolation scenario's context faulted with code 6, and the guest shows no adapter
+reset and no bugcheck. The driver never reports `DMA_FAULTED`: dxgmms2.sys `VidSchDdiNotifyInterruptWorker` @140031b80 bugchecks 0x119/0xD on `DXGK_INTERRUPT_DMA_FAULTED` from a GPU MMU adapter.
 
 ## The gate
 

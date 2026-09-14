@@ -91,6 +91,27 @@ TEST(fake_dxgkrnl_adapter, a_mapping_left_behind_fails_the_test)
                                 0u, 0u, 0, &mapped), 0); }
   CHECK(TestRegistry::instance().take_current_failure()); }
 
+/* dxgmms2.sys bugchecks 0x119/0xD on DMA_FAULTED from this adapter
+ * (VidSchDdiNotifyInterruptWorker @140031b80), so a driver that reports one
+ * fails the test and nothing is delivered; a completion still is. */
+TEST(fake_dxgkrnl_adapter, a_dma_faulted_interrupt_fails_the_test_and_is_not_delivered)
+{ MockPlatform platform; FakeVirtioGpuFunction function;
+  FakeDxgkrnlAdapter dxgkrnl(platform, function);
+  platform.set_irql(av::Irql::isr);
+  av::DxgkargcbNotifyInterruptDataRecord faulted = {};
+  faulted.InterruptType = 4;
+  faulted.FenceId = 0x2Eu;
+  dxgkrnl.notify_interrupt(faulted);
+  CHECK(TestRegistry::instance().take_current_failure());
+  CHECK_EQ(dxgkrnl.interrupts(), 0u);
+  av::DxgkargcbNotifyInterruptDataRecord completed = {};
+  completed.InterruptType = 1;
+  completed.FenceId = 0x2Eu;
+  dxgkrnl.notify_interrupt(completed);
+  platform.set_irql(av::Irql::passive);
+  CHECK_EQ(dxgkrnl.interrupts(), 1u);
+  CHECK_EQ(dxgkrnl.interrupt(0u).FenceId, 0x2Eu); }
+
 TEST(fake_virtio_gpu_function, knobs_shape_the_resource_list)
 { MockPlatform platform; FakeVirtioGpuFunction function;
   function.set_message_interrupts(0u);

@@ -1,8 +1,9 @@
 /* A faulted context changes no other (feature 044, US2): a healthy Vulkan
  * context answers a no-op and makes and destroys an instance; a second
  * context on the same device sends vkCreateInstance with a body too short to
- * decode, which the host refuses and the driver reports faulted, and its next
- * send fails; the first context still does all it did before; and a third
+ * decode, which the host refuses: the driver completes it with no reply
+ * written and refuses the context's later submissions, and its next send
+ * fails; the first context still does all it did before; and a third
  * context made afterwards on the same device answers a no-op. */
 #ifndef AV_ISOLATION_SCENARIO_HPP
 #define AV_ISOLATION_SCENARIO_HPP

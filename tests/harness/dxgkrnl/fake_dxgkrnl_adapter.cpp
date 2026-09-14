@@ -182,6 +182,17 @@ void FakeDxgkrnlAdapter::notify_interrupt(const DxgkargcbNotifyInterruptDataReco
 {
     if (!synchronized_ && platform_.current_irql() != Irql::isr)
         TestRegistry::instance().record_failure(__FILE__, __LINE__, "DxgkCbNotifyInterrupt outside the ISR");
+    /* dxgkrnl never processes DMA_FAULTED from this adapter: on a GPU MMU
+     * adapter VidSchDdiNotifyInterruptWorker (dxgmms2.sys 26100 @140031b80)
+     * reaches WdLogSingleEntry5(0, 0x119, 0xD, node, engine, fence) for every
+     * one, and a real guest bugchecked 0x119 VIDEO_SCHEDULER_INTERNAL_ERROR
+     * on the first. */
+    if (data.InterruptType == dma_faulted) {
+        TestRegistry::instance().record_failure(__FILE__, __LINE__,
+                                                "DXGK_INTERRUPT_DMA_FAULTED for fence %u bugchecks 0x119/0xD",
+                                                data.FenceId);
+        return;
+    }
     if (interrupt_count_ < max_interrupts) interrupts_[interrupt_count_] = data;
     interrupt_count_++;
     if (sink_ != nullptr) sink_(sink_context_, data);

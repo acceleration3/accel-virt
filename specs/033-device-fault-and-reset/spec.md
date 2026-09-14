@@ -107,6 +107,8 @@ Users: the guest driver's interrupt and TDR paths (M3): an ISR that reads a
 faulted fence page and reports `DXGK_INTERRUPT_DMA_FAULTED`, a
 `QueryEngineStatus` that watches progress, and a reset that recreates contexts.
 
+> **Superseded (044):** the driver never reports `DMA_FAULTED` - dxgmms2.sys `VidSchDdiNotifyInterruptWorker` @140031b80 bugchecks 0x119/0xD on `DXGK_INTERRUPT_DMA_FAULTED` from a GPU MMU adapter; a faulted context's queued work is completed, its later submissions are refused, ResetEngine reports nothing more, and `ContextLoss` is deleted (`docs/kb/05-scheduling.md`).
+
 ### User Story 1 - A fault reaches the guest (Priority: P1)
 
 **Independent Test**: over qtest, bind a context, send a batch the echo
