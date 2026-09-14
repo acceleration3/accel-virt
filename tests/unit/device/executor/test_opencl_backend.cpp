@@ -133,11 +133,7 @@ TEST(opencl_backend, answers_the_decoder_only_for_objects_its_calls_made)
   CHECK(backend.handle_for(av::clproto::HandleKind::command_queue, wire_of(queue)) == queue);
   backend.released(av::clproto::HandleKind::command_queue, queue);
   CHECK(backend.handle_for(av::clproto::HandleKind::command_queue, wire_of(queue)) == nullptr);
-  CHECK(!backend.lost());
-  /* A context that ends forgets everything it made. */
-  backend.made(av::clproto::HandleKind::mem, queue);
-  backend.shut_down();
-  CHECK(backend.handle_for(av::clproto::HandleKind::mem, wire_of(queue)) == nullptr); }
+  CHECK(!backend.lost()); }
 
 /* A registry with no room left would hand the guest a number the host then
  * refuses; the backend loses its device instead, which ends the context. */
@@ -148,5 +144,43 @@ TEST(opencl_backend, an_object_it_has_no_room_to_hold_loses_the_device)
   CHECK(!backend.lost());
   backend.made(av::clproto::HandleKind::event, &host_objects[av::ClHandleRegistry::max_handles]);
   CHECK(backend.lost());
+  /* Given back first, because shutting down releases what is still held and
+   * these are not objects any ICD made. */
+  for (std::size_t i = 0u; i < av::ClHandleRegistry::max_handles; i++)
+      backend.released(av::clproto::HandleKind::event, &host_objects[i]);
   backend.shut_down();
   CHECK(!backend.lost()); }
+
+/* A context that dies holding an OpenCL context gives the ICD back every
+ * reference the guest held on it, and nothing more: the ICD's own count is
+ * what says so. The test holds a reference of its own so the context outlives
+ * the shutdown and can be asked. A host with no OpenCL device has no context
+ * to make, and this says nothing there. */
+TEST(opencl_backend, shutting_down_releases_the_references_the_guest_still_held)
+{ cl_platform_id platform = nullptr;
+  cl_uint platforms = 0u;
+  if (::clGetPlatformIDs(1u, &platform, &platforms) != CL_SUCCESS || platforms == 0u) return;
+  cl_device_id device = nullptr;
+  cl_uint devices = 0u;
+  if (::clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, 1u, &device, &devices) != CL_SUCCESS ||
+      devices == 0u)
+      return;
+  cl_int error = CL_SUCCESS;
+  const cl_context context = ::clCreateContext(nullptr, 1u, &device, nullptr, nullptr, &error);
+  if (context == nullptr) return;
+
+  OpenClBackend backend;
+  backend.made(av::clproto::HandleKind::context, context);
+  /* The guest retained it once more, and the ICD took that reference. */
+  CHECK_EQ(::clRetainContext(context), CL_SUCCESS);
+  backend.retained(av::clproto::HandleKind::context, context);
+  CHECK_EQ(::clRetainContext(context), CL_SUCCESS);
+
+  backend.shut_down();
+  cl_uint references = 0u;
+  CHECK_EQ(::clGetContextInfo(context, CL_CONTEXT_REFERENCE_COUNT, sizeof references, &references,
+                              nullptr),
+           CL_SUCCESS);
+  CHECK_EQ(references, 1u);
+  CHECK(backend.handle_for(av::clproto::HandleKind::context, wire_of(context)) == nullptr);
+  CHECK_EQ(::clReleaseContext(context), CL_SUCCESS); }

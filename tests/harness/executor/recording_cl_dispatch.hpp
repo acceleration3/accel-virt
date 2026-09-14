@@ -73,6 +73,8 @@ public:
     std::uint32_t builds_without_argument_info() const;
     Declared      argument_declared(cl_uint index) const;
     const ClHandleRegistry &handles() const;
+    /* The id of the `index`th call, or 0 past the calls made or the log. */
+    std::uint32_t called_at(std::size_t index) const;
 
 protected:
     void  called(std::uint32_t command_id) override;
@@ -95,6 +97,9 @@ private:
     std::uint32_t       strays_;
     std::uint32_t       refused_;
     std::uint32_t       builds_without_argument_info_;
+
+    static constexpr std::size_t max_logged = 64u;
+    std::uint32_t                logged_[max_logged];
 };
 
 }  // namespace av

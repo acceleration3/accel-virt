@@ -16,12 +16,14 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkInstance instance = VK_NULL_HANDLE;
         if (!deserialize_VkInstance(r, instance)) return false;
         s.on_vkDestroyInstance(instance, nullptr);
+        handle_ended(as_number(instance));
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyDevice: {
         VkDevice device = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         s.on_vkDestroyDevice(device, nullptr);
+        handle_ended(as_number(device));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceQueue: {
@@ -33,6 +35,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!r.read_pod(queueFamilyIndex)) return false;
         if (!r.read_pod(queueIndex)) return false;
         s.on_vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &pQueue_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(0);
         serialize_VkQueue(reply, pQueue_out);
         return true;
@@ -55,6 +58,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             }
         }
         VkResult result = s.on_vkEnumeratePhysicalDevices(instance, &pPhysicalDeviceCount_local, array_present ? pPhysicalDevices_storage : nullptr);
+        handles_made_through(as_number(instance));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pPhysicalDeviceCount_local);
         if (array_present) {
@@ -91,6 +95,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkPhysicalDevice(r, physicalDevice)) return false;
         if (!deserialize_VkDeviceCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateDevice(physicalDevice, &pCreateInfo_local, nullptr, &pDevice_out);
+        handles_made_through(as_number(physicalDevice));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDevice(reply, pDevice_out);
         return true;
@@ -408,6 +413,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkMemoryAllocateInfo(r, &pAllocateInfo_local, arena)) return false;
         VkResult result = s.on_vkAllocateMemory(device, &pAllocateInfo_local, nullptr, &pMemory_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDeviceMemory(reply, pMemory_out);
         return true;
@@ -418,6 +424,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeviceMemory(r, memory)) return false;
         s.on_vkFreeMemory(device, memory, nullptr);
+        handle_ended(as_number(memory));
         return true;
     }
     case ::av::vkproto::kCmd_vkBindBufferMemory: {
@@ -475,6 +482,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBufferCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateBuffer(device, &pCreateInfo_local, nullptr, &pBuffer_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkBuffer(reply, pBuffer_out);
         return true;
@@ -485,6 +493,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBuffer(r, buffer)) return false;
         s.on_vkDestroyBuffer(device, buffer, nullptr);
+        handle_ended(as_number(buffer));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateImage: {
@@ -494,6 +503,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImageCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateImage(device, &pCreateInfo_local, nullptr, &pImage_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkImage(reply, pImage_out);
         return true;
@@ -504,6 +514,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImage(r, image)) return false;
         s.on_vkDestroyImage(device, image, nullptr);
+        handle_ended(as_number(image));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateImageView: {
@@ -513,6 +524,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImageViewCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateImageView(device, &pCreateInfo_local, nullptr, &pView_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkImageView(reply, pView_out);
         return true;
@@ -523,6 +535,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkImageView(r, imageView)) return false;
         s.on_vkDestroyImageView(device, imageView, nullptr);
+        handle_ended(as_number(imageView));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateSampler: {
@@ -532,6 +545,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSamplerCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateSampler(device, &pCreateInfo_local, nullptr, &pSampler_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkSampler(reply, pSampler_out);
         return true;
@@ -542,6 +556,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSampler(r, sampler)) return false;
         s.on_vkDestroySampler(device, sampler, nullptr);
+        handle_ended(as_number(sampler));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateSemaphore: {
@@ -551,6 +566,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSemaphoreCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateSemaphore(device, &pCreateInfo_local, nullptr, &pSemaphore_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkSemaphore(reply, pSemaphore_out);
         return true;
@@ -561,6 +577,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSemaphore(r, semaphore)) return false;
         s.on_vkDestroySemaphore(device, semaphore, nullptr);
+        handle_ended(as_number(semaphore));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateFence: {
@@ -570,6 +587,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkFenceCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateFence(device, &pCreateInfo_local, nullptr, &pFence_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkFence(reply, pFence_out);
         return true;
@@ -580,6 +598,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkFence(r, fence)) return false;
         s.on_vkDestroyFence(device, fence, nullptr);
+        handle_ended(as_number(fence));
         return true;
     }
     case ::av::vkproto::kCmd_vkResetFences: {
@@ -642,6 +661,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkCommandPoolCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateCommandPool(device, &pCreateInfo_local, nullptr, &pCommandPool_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkCommandPool(reply, pCommandPool_out);
         return true;
@@ -652,6 +672,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkCommandPool(r, commandPool)) return false;
         s.on_vkDestroyCommandPool(device, commandPool, nullptr);
+        handle_ended(as_number(commandPool));
         return true;
     }
     case ::av::vkproto::kCmd_vkResetCommandPool: {
@@ -696,6 +717,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkShaderModule(r, shaderModule)) return false;
         s.on_vkDestroyShaderModule(device, shaderModule, nullptr);
+        handle_ended(as_number(shaderModule));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateShaderModule: {
@@ -705,6 +727,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkShaderModuleCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateShaderModule(device, &pCreateInfo_local, nullptr, &pShaderModule_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkShaderModule(reply, pShaderModule_out);
         return true;
@@ -716,6 +739,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipelineLayoutCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreatePipelineLayout(device, &pCreateInfo_local, nullptr, &pPipelineLayout_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkPipelineLayout(reply, pPipelineLayout_out);
         return true;
@@ -726,6 +750,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipelineLayout(r, pipelineLayout)) return false;
         s.on_vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+        handle_ended(as_number(pipelineLayout));
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyPipeline: {
@@ -734,6 +759,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipeline(r, pipeline)) return false;
         s.on_vkDestroyPipeline(device, pipeline, nullptr);
+        handle_ended(as_number(pipeline));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreatePipelineCache: {
@@ -743,6 +769,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipelineCacheCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreatePipelineCache(device, &pCreateInfo_local, nullptr, &pPipelineCache_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkPipelineCache(reply, pPipelineCache_out);
         return true;
@@ -753,6 +780,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipelineCache(r, pipelineCache)) return false;
         s.on_vkDestroyPipelineCache(device, pipelineCache, nullptr);
+        handle_ended(as_number(pipelineCache));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateRenderPass: {
@@ -762,6 +790,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkRenderPassCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateRenderPass(device, &pCreateInfo_local, nullptr, &pRenderPass_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkRenderPass(reply, pRenderPass_out);
         return true;
@@ -772,6 +801,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkRenderPass(r, renderPass)) return false;
         s.on_vkDestroyRenderPass(device, renderPass, nullptr);
+        handle_ended(as_number(renderPass));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateFramebuffer: {
@@ -781,6 +811,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkFramebufferCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateFramebuffer(device, &pCreateInfo_local, nullptr, &pFramebuffer_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkFramebuffer(reply, pFramebuffer_out);
         return true;
@@ -791,6 +822,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkFramebuffer(r, framebuffer)) return false;
         s.on_vkDestroyFramebuffer(device, framebuffer, nullptr);
+        handle_ended(as_number(framebuffer));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateDescriptorSetLayout: {
@@ -800,6 +832,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorSetLayoutCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateDescriptorSetLayout(device, &pCreateInfo_local, nullptr, &pSetLayout_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDescriptorSetLayout(reply, pSetLayout_out);
         return true;
@@ -810,6 +843,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorSetLayout(r, descriptorSetLayout)) return false;
         s.on_vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+        handle_ended(as_number(descriptorSetLayout));
         return true;
     }
     case ::av::vkproto::kCmd_vkCreateDescriptorPool: {
@@ -819,6 +853,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorPoolCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateDescriptorPool(device, &pCreateInfo_local, nullptr, &pDescriptorPool_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDescriptorPool(reply, pDescriptorPool_out);
         return true;
@@ -829,6 +864,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorPool(r, descriptorPool)) return false;
         s.on_vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+        handle_ended(as_number(descriptorPool));
         return true;
     }
     case ::av::vkproto::kCmd_vkFreeCommandBuffers: {
@@ -850,6 +886,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             if (!deserialize_VkCommandBuffer(r, pCommandBuffers_storage[rvk_i])) return false;
         }
         s.on_vkFreeCommandBuffers(device, commandPool, commandBufferCount, pCommandBuffers_storage);
+        for (size_t rvk_e = 0; rvk_e < pCommandBuffers_storage_count; ++rvk_e) {
+            handle_ended(as_number(pCommandBuffers_storage[rvk_e]));
+        }
         return true;
     }
     case ::av::vkproto::kCmd_vkQueueSubmit: {
@@ -1185,6 +1224,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             for (size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         for (size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
             serialize_VkPipeline(reply, pPipelines_storage[rvk_k]);
@@ -1237,6 +1277,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             for (size_t rvk_z = 0; rvk_z < pCommandBuffers_storage_count; ++rvk_z) { pCommandBuffers_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkAllocateCommandBuffers(device, &pAllocateInfo_local, pCommandBuffers_storage);
+        handles_made_through(as_number(pAllocateInfo_local.commandPool));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         for (size_t rvk_k = 0; rvk_k < pCommandBuffers_storage_count; ++rvk_k) {
             serialize_VkCommandBuffer(reply, pCommandBuffers_storage[rvk_k]);
@@ -1257,6 +1298,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             for (size_t rvk_z = 0; rvk_z < pDescriptorSets_storage_count; ++rvk_z) { pDescriptorSets_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkAllocateDescriptorSets(device, &pAllocateInfo_local, pDescriptorSets_storage);
+        handles_made_through(as_number(pAllocateInfo_local.descriptorPool));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         for (size_t rvk_k = 0; rvk_k < pDescriptorSets_storage_count; ++rvk_k) {
             serialize_VkDescriptorSet(reply, pDescriptorSets_storage[rvk_k]);
@@ -1282,6 +1324,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             if (!deserialize_VkDescriptorSet(r, pDescriptorSets_storage[rvk_i])) return false;
         }
         VkResult result = s.on_vkFreeDescriptorSets(device, descriptorPool, descriptorSetCount, pDescriptorSets_storage);
+        for (size_t rvk_e = 0; rvk_e < pDescriptorSets_storage_count; ++rvk_e) {
+            handle_ended(as_number(pDescriptorSets_storage[rvk_e]));
+        }
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
@@ -1312,6 +1357,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             for (size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkCreateComputePipelines(device, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         for (size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
             serialize_VkPipeline(reply, pPipelines_storage[rvk_k]);
@@ -1326,6 +1372,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDescriptorPool(r, descriptorPool)) return false;
         if (!r.read_pod(flags)) return false;
         VkResult result = s.on_vkResetDescriptorPool(device, descriptorPool, flags);
+        handle_children_ended(as_number(descriptorPool));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         return true;
     }
@@ -1336,6 +1383,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkEventCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateEvent(device, &pCreateInfo_local, nullptr, &pEvent_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkEvent(reply, pEvent_out);
         return true;
@@ -1346,6 +1394,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkEvent(r, event)) return false;
         s.on_vkDestroyEvent(device, event, nullptr);
+        handle_ended(as_number(event));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetEventStatus: {
@@ -2395,6 +2444,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBufferViewCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateBufferView(device, &pCreateInfo_local, nullptr, &pView_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkBufferView(reply, pView_out);
         return true;
@@ -2406,6 +2456,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorUpdateTemplateCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateDescriptorUpdateTemplate(device, &pCreateInfo_local, nullptr, &pDescriptorUpdateTemplate_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDescriptorUpdateTemplate(reply, pDescriptorUpdateTemplate_out);
         return true;
@@ -2417,6 +2468,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPrivateDataSlotCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreatePrivateDataSlot(device, &pCreateInfo_local, nullptr, &pPrivateDataSlot_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkPrivateDataSlot(reply, pPrivateDataSlot_out);
         return true;
@@ -2428,6 +2480,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkQueryPoolCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateQueryPool(device, &pCreateInfo_local, nullptr, &pQueryPool_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkQueryPool(reply, pQueryPool_out);
         return true;
@@ -2439,6 +2492,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkRenderPassCreateInfo2(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateRenderPass2(device, &pCreateInfo_local, nullptr, &pRenderPass_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkRenderPass(reply, pRenderPass_out);
         return true;
@@ -2450,6 +2504,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSamplerYcbcrConversionCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateSamplerYcbcrConversion(device, &pCreateInfo_local, nullptr, &pYcbcrConversion_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkSamplerYcbcrConversion(reply, pYcbcrConversion_out);
         return true;
@@ -2460,6 +2515,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkBufferView(r, bufferView)) return false;
         s.on_vkDestroyBufferView(device, bufferView, nullptr);
+        handle_ended(as_number(bufferView));
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyDescriptorUpdateTemplate: {
@@ -2468,6 +2524,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorUpdateTemplate(r, descriptorUpdateTemplate)) return false;
         s.on_vkDestroyDescriptorUpdateTemplate(device, descriptorUpdateTemplate, nullptr);
+        handle_ended(as_number(descriptorUpdateTemplate));
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyPrivateDataSlot: {
@@ -2476,6 +2533,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPrivateDataSlot(r, privateDataSlot)) return false;
         s.on_vkDestroyPrivateDataSlot(device, privateDataSlot, nullptr);
+        handle_ended(as_number(privateDataSlot));
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyQueryPool: {
@@ -2484,6 +2542,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkQueryPool(r, queryPool)) return false;
         s.on_vkDestroyQueryPool(device, queryPool, nullptr);
+        handle_ended(as_number(queryPool));
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroySamplerYcbcrConversion: {
@@ -2492,6 +2551,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSamplerYcbcrConversion(r, ycbcrConversion)) return false;
         s.on_vkDestroySamplerYcbcrConversion(device, ycbcrConversion, nullptr);
+        handle_ended(as_number(ycbcrConversion));
         return true;
     }
     case ::av::vkproto::kCmd_vkEnumeratePhysicalDeviceGroups: {
@@ -2513,6 +2573,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             for (size_t rvk_e = 0; rvk_e < pPhysicalDeviceGroupProperties_storage_count; ++rvk_e) { pPhysicalDeviceGroupProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES; pPhysicalDeviceGroupProperties_storage[rvk_e].pNext = nullptr; }
         }
         VkResult result = s.on_vkEnumeratePhysicalDeviceGroups(instance, &pPhysicalDeviceGroupCount_local, array_present ? pPhysicalDeviceGroupProperties_storage : nullptr);
+        handles_made_through(as_number(instance));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pPhysicalDeviceGroupCount_local);
         if (array_present) {
@@ -2706,6 +2767,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeviceQueueInfo2(r, &pQueueInfo_local, arena)) return false;
         s.on_vkGetDeviceQueue2(device, &pQueueInfo_local, &pQueue_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(0);
         serialize_VkQueue(reply, pQueue_out);
         return true;
@@ -3547,6 +3609,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorUpdateTemplateCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateDescriptorUpdateTemplateKHR(device, &pCreateInfo_local, nullptr, &pDescriptorUpdateTemplate_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDescriptorUpdateTemplate(reply, pDescriptorUpdateTemplate_out);
         return true;
@@ -3558,6 +3621,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkRenderPassCreateInfo2(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateRenderPass2KHR(device, &pCreateInfo_local, nullptr, &pRenderPass_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkRenderPass(reply, pRenderPass_out);
         return true;
@@ -3569,6 +3633,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSamplerYcbcrConversionCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateSamplerYcbcrConversionKHR(device, &pCreateInfo_local, nullptr, &pYcbcrConversion_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkSamplerYcbcrConversion(reply, pYcbcrConversion_out);
         return true;
@@ -3579,6 +3644,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDescriptorUpdateTemplate(r, descriptorUpdateTemplate)) return false;
         s.on_vkDestroyDescriptorUpdateTemplateKHR(device, descriptorUpdateTemplate, nullptr);
+        handle_ended(as_number(descriptorUpdateTemplate));
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroySamplerYcbcrConversionKHR: {
@@ -3587,6 +3653,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkSamplerYcbcrConversion(r, ycbcrConversion)) return false;
         s.on_vkDestroySamplerYcbcrConversionKHR(device, ycbcrConversion, nullptr);
+        handle_ended(as_number(ycbcrConversion));
         return true;
     }
     case ::av::vkproto::kCmd_vkEnumeratePhysicalDeviceGroupsKHR: {
@@ -3608,6 +3675,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             for (size_t rvk_e = 0; rvk_e < pPhysicalDeviceGroupProperties_storage_count; ++rvk_e) { pPhysicalDeviceGroupProperties_storage[rvk_e].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES; pPhysicalDeviceGroupProperties_storage[rvk_e].pNext = nullptr; }
         }
         VkResult result = s.on_vkEnumeratePhysicalDeviceGroupsKHR(instance, &pPhysicalDeviceGroupCount_local, array_present ? pPhysicalDeviceGroupProperties_storage : nullptr);
+        handles_made_through(as_number(instance));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         reply.write_pod(pPhysicalDeviceGroupCount_local);
         if (array_present) {
@@ -4875,6 +4943,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkAccelerationStructureCreateInfoKHR(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateAccelerationStructureKHR(device, &pCreateInfo_local, nullptr, &pAccelerationStructure_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkAccelerationStructureKHR(reply, pAccelerationStructure_out);
         return true;
@@ -4884,6 +4953,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkDeferredOperationKHR pDeferredOperation_out = VK_NULL_HANDLE;
         if (!deserialize_VkDevice(r, device)) return false;
         VkResult result = s.on_vkCreateDeferredOperationKHR(device, nullptr, &pDeferredOperation_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkDeferredOperationKHR(reply, pDeferredOperation_out);
         return true;
@@ -4917,6 +4987,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             for (size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkCreateRayTracingPipelinesKHR(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         for (size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
             serialize_VkPipeline(reply, pPipelines_storage[rvk_k]);
@@ -4948,6 +5019,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
             for (size_t rvk_z = 0; rvk_z < pShaders_storage_count; ++rvk_z) { pShaders_storage[rvk_z] = {}; }
         }
         VkResult result = s.on_vkCreateShadersEXT(device, createInfoCount, pCreateInfos_storage, nullptr, pShaders_storage);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         for (size_t rvk_k = 0; rvk_k < pShaders_storage_count; ++rvk_k) {
             serialize_VkShaderEXT(reply, pShaders_storage[rvk_k]);
@@ -4969,6 +5041,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkAccelerationStructureKHR(r, accelerationStructure)) return false;
         s.on_vkDestroyAccelerationStructureKHR(device, accelerationStructure, nullptr);
+        handle_ended(as_number(accelerationStructure));
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyDeferredOperationKHR: {
@@ -4977,6 +5050,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkDeferredOperationKHR(r, operation)) return false;
         s.on_vkDestroyDeferredOperationKHR(device, operation, nullptr);
+        handle_ended(as_number(operation));
         return true;
     }
     case ::av::vkproto::kCmd_vkDestroyShaderEXT: {
@@ -4985,6 +5059,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkShaderEXT(r, shader)) return false;
         s.on_vkDestroyShaderEXT(device, shader, nullptr);
+        handle_ended(as_number(shader));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetAccelerationStructureBuildSizesKHR: {
@@ -5335,6 +5410,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!r.read_pod(pBinaries_out.sType)) return false;
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pBinaries_out), arena)) return false;
         VkResult result = s.on_vkCreatePipelineBinariesKHR(device, &pCreateInfo_local, nullptr, &pBinaries_out);
+        handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
         serialize_VkPipelineBinaryHandlesInfoKHR(reply, pBinaries_out);
         return true;
@@ -5345,6 +5421,7 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkDevice(r, device)) return false;
         if (!deserialize_VkPipelineBinaryKHR(r, pipelineBinary)) return false;
         s.on_vkDestroyPipelineBinaryKHR(device, pipelineBinary, nullptr);
+        handle_ended(as_number(pipelineBinary));
         return true;
     }
     case ::av::vkproto::kCmd_vkGetDeviceImageSubresourceLayoutKHR: {

@@ -344,5 +344,48 @@ TEST(vulkan_backend_device, a_buffer_this_context_made_is_accepted_back)
       destroy.write_pod(buffer);
       CHECK(guest.send(av::vkproto::kCmd_vkDestroyBuffer, frame, destroy.offset(), reply,
                        sizeof reply, answered));
+      /* The driver freed it, so naming it again is refused before the driver
+       * is handed a freed pointer (T031). */
+      CHECK(!backend.knows_handle(buffer));
+      CHECK(!guest.send(av::vkproto::kCmd_vkDestroyBuffer, frame, destroy.offset(), reply,
+                        sizeof reply, answered));
   }
+  backend.shut_down(); }
+
+/* A driver destroying a device frees the buffers made on it, so after the
+ * guest destroys the device a buffer it never destroyed is refused too. */
+TEST(vulkan_backend_device, a_buffer_of_a_destroyed_device_is_refused)
+{ VulkanBackend backend;
+  GuestSequence guest(backend);
+  const std::uint64_t instance = guest.create_instance();
+  if (instance == 0u) return;
+  const std::uint64_t physical = guest.first_physical_device(instance);
+  if (physical == 0u) { backend.shut_down(); return; }
+  const std::uint64_t device = guest.create_device(physical, false);
+  if (device == 0u) { backend.shut_down(); return; }
+
+  std::uint8_t frame[256];
+  WireWriter writer(frame, sizeof frame);
+  writer.write_pod(device);
+  VkBufferCreateInfo create = {};
+  create.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  create.size = 4096u;
+  create.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+  av::vkproto::serialize_VkBufferCreateInfo(writer, create);
+  std::uint8_t reply[64] = {};
+  std::size_t answered = 0u;
+  CHECK(guest.send(av::vkproto::kCmd_vkCreateBuffer, frame, writer.offset(), reply, sizeof reply,
+                   answered));
+  WireReader read(reply, answered);
+  std::int32_t returned = 0;
+  std::uint64_t buffer = 0u;
+  CHECK(read.read_pod(returned));
+  CHECK(read.read_pod(buffer));
+  if (returned != 0 || buffer == 0u) { backend.shut_down(); return; }
+
+  CHECK(guest.destroy(av::vkproto::kCmd_vkDestroyDevice, device));
+  CHECK(!backend.knows_handle(buffer));
+  CHECK(backend.knows_handle(physical));
+  CHECK(guest.destroy(av::vkproto::kCmd_vkDestroyInstance, instance));
+  CHECK(!backend.knows_handle(physical));
   backend.shut_down(); }

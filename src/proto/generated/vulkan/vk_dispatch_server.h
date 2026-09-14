@@ -411,4 +411,19 @@ public:
 // the decode that filled it.
 [[nodiscard]] bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena);
 
+// What a decoded command did to the handles the host answers for. A
+// handle leaves through handle_to_wire and comes back through
+// wire_to_handle; these say when one stops being an object at all, so
+// a host that checks the way back in stops accepting it. Weakly
+// defined to nothing, which is right wherever nothing is checked; see
+// vk_handle_lifetime_default.cpp.
+//
+// The handles the reply is about to carry were made through `parent`,
+// and end when it does.
+void handles_made_through(uint64_t parent) noexcept;
+// `handle` was destroyed or freed, and with it what was made through it.
+void handle_ended(uint64_t handle) noexcept;
+// What was made through `handle` was freed, and `handle` was not.
+void handle_children_ended(uint64_t handle) noexcept;
+
 }  // namespace av::vkproto

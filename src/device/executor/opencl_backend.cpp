@@ -63,7 +63,7 @@ void OpenClBackend::released(clproto::HandleKind kind, void *object) { handles_.
 
 void OpenClBackend::shut_down()
 {
-    handles_.forget_all();
+    handles_.release_all(*this);
     ran_ = 0u;
     lost_ = false;
 }

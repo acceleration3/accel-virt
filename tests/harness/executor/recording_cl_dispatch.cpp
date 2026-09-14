@@ -44,7 +44,8 @@ cl_int answer_info(const void *answer, std::size_t bytes, std::size_t room, void
 
 RecordingClDispatch::RecordingClDispatch(const std::uint8_t *block, const WireArena &arena)
     : block_(block), arena_(arena), handles_(), objects_{}, produced_(0u), calls_(0u),
-      last_called_(0u), strangers_(0u), strays_(0u), refused_(0u), builds_without_argument_info_(0u)
+      last_called_(0u), strangers_(0u), strays_(0u), refused_(0u), builds_without_argument_info_(0u),
+      logged_{}
 {}
 
 void *RecordingClDispatch::handle_for(clproto::HandleKind kind, std::uint64_t wire) const
@@ -166,6 +167,7 @@ const ClHandleRegistry &RecordingClDispatch::handles() const { return handles_; 
 
 void RecordingClDispatch::called(std::uint32_t command_id)
 {
+    if (calls_ < max_logged) logged_[calls_] = command_id;
     calls_++;
     last_called_ = command_id;
 }
@@ -191,6 +193,11 @@ void *RecordingClDispatch::produce(clproto::HandleKind)
 {
     if (produced_ == max_objects) return nullptr;
     return &objects_[produced_++];
+}
+
+std::uint32_t RecordingClDispatch::called_at(std::size_t index) const
+{
+    return index < calls_ && index < max_logged ? logged_[index] : 0u;
 }
 
 }  // namespace av

@@ -4,12 +4,17 @@
  * gave back, names nothing the host ICD will be given. */
 #include "device/executor/cl_handle_registry.hpp"
 #include "harness/executor/cl_handle_registry_probe.hpp"
+#include "harness/executor/recording_cl_dispatch.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/generated/opencl/cl_protocol_ids.h"
+#include "proto/wire/wire_arena.hpp"
 
 #include <cstdint>
 
 using av::ClHandleRegistry;
 using av::ClHandleRegistryProbe;
+using av::RecordingClDispatch;
+using av::WireArena;
 using av::clproto::HandleKind;
 
 namespace {
@@ -158,6 +163,62 @@ TEST(cl_handle_registry, a_saturated_reference_count_stays_held)
   registry.retain(HandleKind::mem, object(0));
   registry.release(HandleKind::mem, object(0));
   CHECK(registry.resolve(HandleKind::mem, wire(object(0))) == object(0));
+  CHECK(registry.invariants_hold()); }
+
+/* A context that dies still holding objects gives the ICD back every reference
+ * the guest held, dependents before what they depend on, and then names
+ * nothing. Made here in creation order, which is the opposite of the order
+ * they must go back in. */
+TEST(cl_handle_registry, releasing_everything_gives_back_each_reference_dependents_first)
+{ struct Made {
+      HandleKind kind;
+      std::uint32_t retains;
+  };
+  constexpr Made made[] = {
+      {HandleKind::platform, 0u}, {HandleKind::device, 0u},  {HandleKind::context, 1u},
+      {HandleKind::command_queue, 0u}, {HandleKind::mem, 2u}, {HandleKind::program, 0u},
+      {HandleKind::kernel, 0u},   {HandleKind::sampler, 0u}, {HandleKind::event, 0u},
+      {HandleKind::mem, 0u},
+  };
+  std::uint8_t block[64];
+  WireArena arena(block, sizeof block);
+  RecordingClDispatch icd(block, arena);
+  ClHandleRegistry registry;
+  for (std::size_t i = 0u; i < sizeof made / sizeof made[0]; i++) {
+      CHECK(registry.remember(made[i].kind, object(i)));
+      for (std::uint32_t n = 0u; n < made[i].retains; n++) registry.retain(made[i].kind, object(i));
+      /* Held by the recording too, so a release handed the wrong object or the
+       * wrong kind counts as a stranger. */
+      icd.made(made[i].kind, object(i));
+  }
+  /* A count that saturated no longer says how many the guest holds: one. */
+  ClHandleRegistryProbe(registry).set_references(9u, ~std::uint32_t{0});
+
+  registry.release_all(icd);
+  constexpr std::uint32_t expected[] = {
+      av::clproto::kCmd_clReleaseEvent,        av::clproto::kCmd_clReleaseKernel,
+      av::clproto::kCmd_clReleaseProgram,      av::clproto::kCmd_clReleaseSampler,
+      av::clproto::kCmd_clReleaseMemObject,    av::clproto::kCmd_clReleaseMemObject,
+      av::clproto::kCmd_clReleaseMemObject,    av::clproto::kCmd_clReleaseMemObject,
+      av::clproto::kCmd_clReleaseCommandQueue, av::clproto::kCmd_clReleaseContext,
+      av::clproto::kCmd_clReleaseContext,      av::clproto::kCmd_clReleaseDevice,
+  };
+  CHECK_EQ(icd.calls(), sizeof expected / sizeof expected[0]);
+  for (std::size_t i = 0u; i < sizeof expected / sizeof expected[0]; i++)
+      CHECK_EQ(icd.called_at(i), expected[i]);
+  CHECK_EQ(icd.strangers(), 0u);
+  CHECK_EQ(registry.count(), 0u);
+  CHECK(registry.resolve(HandleKind::context, wire(object(2))) == nullptr);
+  CHECK(registry.resolve(HandleKind::platform, wire(object(0))) == nullptr);
+  CHECK(registry.invariants_hold()); }
+
+TEST(cl_handle_registry, releasing_everything_held_by_nobody_calls_nothing)
+{ std::uint8_t block[64];
+  WireArena arena(block, sizeof block);
+  RecordingClDispatch icd(block, arena);
+  ClHandleRegistry registry;
+  registry.release_all(icd);
+  CHECK_EQ(icd.calls(), 0u);
   CHECK(registry.invariants_hold()); }
 
 TEST(cl_handle_registry_invariants, a_count_past_the_table_breaks_them)

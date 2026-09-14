@@ -58,10 +58,20 @@ public:
     /* Commands run since this backend was made, which is what a conformance
      * run counts. */
     uint64_t ran() const;
-    /* Records a handle this backend is about to hand the guest. A registry
+    /* Records a handle this backend is about to hand the guest, made through
+     * whatever the command being decoded named with made_through. A registry
      * with no room left loses the device rather than hand out one it would
      * refuse when the guest sent it back. */
     void     made(uint64_t raw);
+    /* The object the command being decoded makes its handles through - its
+     * device, its pool - so that they end when it does. Nothing between
+     * commands: every run forgets it when the decode returns. */
+    void     made_through(uint64_t parent);
+    /* A destroy or free the decoder ran: `raw`, and everything made through
+     * it, is no longer a handle the guest can name. */
+    void     ended(uint64_t raw);
+    /* A reset that freed what was made through `raw` and left `raw`. */
+    void     children_ended(uint64_t raw);
     /* Whether this backend made the handle a guest just named. What the
      * generated decoder asks through wire_to_handle. */
     bool     knows_handle(uint64_t raw) const;
@@ -71,6 +81,14 @@ public:
     static VulkanBackend *deciding();
 
 private:
+    friend struct VulkanBackendProbe;
+
+    /* Decodes one command into `driver` with this backend deciding its
+     * handles. Always this backend's own driver but in a test, which puts one
+     * with no GPU behind it there. */
+    [[nodiscard]] bool run_through(vkproto::ServerDispatch &driver, uint32_t command_id,
+                                   WireReader &payload, WireWriter &reply, WireArena &arena);
+
     /* Every Vulkan command id has this in its top 16 bits; the device filters
      * by API before calling, so anything else is the device disagreeing with
      * itself rather than a guest doing something. */
@@ -83,6 +101,7 @@ private:
     VkDevice         device_;
     HandleRegistry   handles_;
     VulkanHostImport import_;
+    uint64_t parent_;
     uint64_t ran_;
     bool     lost_;
 };

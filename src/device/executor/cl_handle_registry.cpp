@@ -58,6 +58,46 @@ void ClHandleRegistry::release(clproto::HandleKind kind, void *object)
     kinds_[slot] = kinds_[count_];
 }
 
+void ClHandleRegistry::release_all(clproto::ServerDispatch &icd)
+{
+    struct Release {
+        clproto::HandleKind kind;
+        cl_int (*call)(clproto::ServerDispatch &icd, void *object);
+    };
+    /* Dependents before what they depend on, the order an application tearing
+     * down in reverse would use, so the driver is never asked to free a context
+     * it still has queues and buffers on. */
+    constexpr Release order[] = {
+        {clproto::HandleKind::event, [](clproto::ServerDispatch &icd, void *object) {
+             return icd.on_clReleaseEvent(static_cast<cl_event>(object)); }},
+        {clproto::HandleKind::kernel, [](clproto::ServerDispatch &icd, void *object) {
+             return icd.on_clReleaseKernel(static_cast<cl_kernel>(object)); }},
+        {clproto::HandleKind::program, [](clproto::ServerDispatch &icd, void *object) {
+             return icd.on_clReleaseProgram(static_cast<cl_program>(object)); }},
+        {clproto::HandleKind::sampler, [](clproto::ServerDispatch &icd, void *object) {
+             return icd.on_clReleaseSampler(static_cast<cl_sampler>(object)); }},
+        {clproto::HandleKind::mem, [](clproto::ServerDispatch &icd, void *object) {
+             return icd.on_clReleaseMemObject(static_cast<cl_mem>(object)); }},
+        {clproto::HandleKind::command_queue, [](clproto::ServerDispatch &icd, void *object) {
+             return icd.on_clReleaseCommandQueue(static_cast<cl_command_queue>(object)); }},
+        {clproto::HandleKind::context, [](clproto::ServerDispatch &icd, void *object) {
+             return icd.on_clReleaseContext(static_cast<cl_context>(object)); }},
+        {clproto::HandleKind::device, [](clproto::ServerDispatch &icd, void *object) {
+             return icd.on_clReleaseDevice(static_cast<cl_device_id>(object)); }},
+    };
+    for (const Release &release : order) {
+        for (uint32_t slot = 0u; slot < count_; slot++) {
+            if (kinds_[slot] != release.kind) continue;
+            const uint32_t times = references_[slot] == ~uint32_t{0} ? 1u : references_[slot];
+            void *const object = reinterpret_cast<void *>(static_cast<uintptr_t>(objects_[slot]));
+            /* What the ICD answers changes nothing: the context is gone either
+             * way, and there is nobody left to tell. */
+            for (uint32_t n = 0u; n < times; n++) (void)release.call(icd, object);
+        }
+    }
+    forget_all();
+}
+
 void ClHandleRegistry::forget_all() { count_ = 0u; }
 
 uint32_t ClHandleRegistry::count() const { return count_; }

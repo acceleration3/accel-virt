@@ -68,6 +68,7 @@ set(AV_GENERATED_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_host_image_default.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_lifetime_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_server.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/opencl/cl_dispatch_server.cpp

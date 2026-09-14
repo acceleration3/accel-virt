@@ -55,6 +55,80 @@ def _storage_alloc(
     return lines
 
 
+# Commands that end objects without ending the one they name. vk.xml says
+# which handle a command destroys only by the command's name, and says nothing
+# of a reset that frees every set a pool gave out - so this is the one place
+# that knowledge is written down.
+_ENDS_CHILDREN = {"vkResetDescriptorPool": "descriptorPool"}
+
+
+def _handles_in_struct(reg: Registry, name: str, seen: set[str]) -> set[str]:
+    if name in seen or name not in reg.structs:
+        return set()
+    seen.add(name)
+    found: set[str] = set()
+    for m in reg.structs[name].members:
+        if m.type.base in reg.handles:
+            found.add(m.type.base)
+        else:
+            found |= _handles_in_struct(reg, m.type.base, seen)
+    return found
+
+
+def _made_through(reg: Registry, cmd: Command) -> str | None:
+    """The expression naming the object a command makes its handles through.
+
+    A host that forgets what a destroy ends has to forget what was made through
+    it too - a device's buffers, a pool's command buffers - or the guest could
+    still name them after the driver freed them. vk.xml gives every handle type
+    its parent type; the object is the command's argument of that type, either
+    a parameter or a member of the create info a parameter points to.
+    """
+    made: set[str] = set()
+    for p in cmd.params:
+        if p.direction != "out":
+            continue
+        if p.type.base in reg.handles:
+            made.add(p.type.base)
+        else:
+            made |= _handles_in_struct(reg, p.type.base, set())
+    parents = {reg.handles[h].parent for h in made} - {None}
+    if not parents:
+        return None
+    if len(parents) != 1:
+        raise ValueError(f"{cmd.name} makes handles through {sorted(parents)}; want one parent")
+    parent = parents.pop()
+    for p in cmd.params:
+        if p.direction == "in" and p.type.base == parent and p.type.pointer_depth == 0:
+            return f"as_number({p.name})"
+    for p in cmd.params:
+        if classify.classify(reg, p, cmd.params) != "in_struct_ptr":
+            continue
+        for m in reg.structs[p.type.base].members:
+            if m.type.base == parent and m.type.pointer_depth == 0:
+                return f"as_number({p.name}_local.{m.name})"
+    raise ValueError(f"{cmd.name} makes a handle through {parent} and names none")
+
+
+def _ending_lines(reg: Registry, cmd: Command) -> list[str]:
+    """What a destroy, free or reset tells the host has ended."""
+    if cmd.name in _ENDS_CHILDREN:
+        return [f"    handle_children_ended(as_number({_ENDS_CHILDREN[cmd.name]}));"]
+    if not cmd.name.startswith(("vkDestroy", "vkFree")):
+        return []
+    ended = [p for p in cmd.params if p.direction == "in" and p.type.base in reg.handles]
+    if not ended:
+        raise ValueError(f"{cmd.name} destroys and names no handle")
+    last = ended[-1]
+    if classify.classify(reg, last, cmd.params) == "in_handle":
+        return [f"    handle_ended(as_number({last.name}));"]
+    return [
+        f"    for (size_t rvk_e = 0; rvk_e < {last.name}_storage_count; ++rvk_e) {{",
+        f"        handle_ended(as_number({last.name}_storage[rvk_e]));",
+        "    }",
+    ]
+
+
 def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     is_void = cmd.return_type.base == "void"
     lines: list[str] = [f"case ::av::vkproto::kCmd_{cmd.name}: {{"]
@@ -309,8 +383,19 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     lines.extend(decl_lines)
     lines.extend(decode_lines)
 
+    # Told after the driver call, whatever it answered. Every destroy and free
+    # ends its objects - the spec gives them no failure that keeps one - and
+    # were one kept anyway, forgetting it costs a leak the device's own
+    # destruction reclaims, where remembering a freed one is a pointer the
+    # guest could hand the driver again.
+    after_call = _ending_lines(reg, cmd)
+    parent = _made_through(reg, cmd)
+    if parent is not None:
+        after_call.append(f"    handles_made_through({parent});")
+
     if is_void:
         lines.append(f"    s.on_{cmd.name}({', '.join(call_args)});")
+        lines.extend(after_call)
         if cmd.sync_mode == "sync":
             lines.append("    reply.write_pod<int32_t>(0);")
             lines.extend(out_after_call)
@@ -318,6 +403,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         lines.append(
             f"    {cmd.return_type.cpp()} result = s.on_{cmd.name}({', '.join(call_args)});"
         )
+        lines.extend(after_call)
         # Encode the return in its own width. Most commands return
         # VkResult and fit in 32 bits, but the device-address and
         # opaque-capture-address queries return 64. Forcing those through
@@ -385,9 +471,54 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "::av::WireReader& r, ::av::WireWriter& reply, ::av::WireArena& arena);"
     )
     header.append("")
+    header.extend([
+        "// What a decoded command did to the handles the host answers for. A",
+        "// handle leaves through handle_to_wire and comes back through",
+        "// wire_to_handle; these say when one stops being an object at all, so",
+        "// a host that checks the way back in stops accepting it. Weakly",
+        "// defined to nothing, which is right wherever nothing is checked; see",
+        "// vk_handle_lifetime_default.cpp.",
+        "//",
+        "// The handles the reply is about to carry were made through `parent`,",
+        "// and end when it does.",
+        "void handles_made_through(uint64_t parent) noexcept;",
+        "// `handle` was destroyed or freed, and with it what was made through it.",
+        "void handle_ended(uint64_t handle) noexcept;",
+        "// What was made through `handle` was freed, and `handle` was not.",
+        "void handle_children_ended(uint64_t handle) noexcept;",
+        "",
+    ])
     header.append("}  // namespace av::vkproto")
     header.append("")
     write(out_dir / "vk_dispatch_server.h", header_guard("\n".join(header[1:])))
+
+    # The defaults in a file of their own, for the reason the handle hooks
+    # are two files (emit/serialize.py): on PE an archive member is displaced
+    # whole, so a host defining these must not also be defining anything the
+    # file beside them holds.
+    lifetime_default = [
+        GENERATED_BANNER,
+        "",
+        '#include "vk_dispatch_server.h"',
+        "",
+        "#include <stdint.h>",
+        "",
+        "#if defined(_WIN32)",
+        "#  define RVK_HOOK_DEFAULT",
+        "#else",
+        "#  define RVK_HOOK_DEFAULT [[gnu::weak]]",
+        "#endif",
+        "",
+        "namespace av::vkproto {",
+        "",
+        "RVK_HOOK_DEFAULT void handles_made_through(uint64_t) noexcept {}",
+        "RVK_HOOK_DEFAULT void handle_ended(uint64_t) noexcept {}",
+        "RVK_HOOK_DEFAULT void handle_children_ended(uint64_t) noexcept {}",
+        "",
+        "}  // namespace av::vkproto",
+        "",
+    ]
+    write(out_dir / "vk_handle_lifetime_default.cpp", "\n".join(lifetime_default))
 
     # ---- Source ----
     source = [

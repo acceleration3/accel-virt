@@ -19,13 +19,6 @@ namespace {
  * with no user pointer can take. */
 thread_local VulkanBackend *inside = nullptr;
 
-uint64_t number_of(const void *handle)
-{
-    uint64_t raw = 0u;
-    memcpy(&raw, &handle, sizeof handle);
-    return raw;
-}
-
 
 /* Every other handle. The driver dereferences these too - a VkBuffer this
  * executor never made is the same hole one layer down - but null is a value the
@@ -46,14 +39,20 @@ bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
 }  // namespace
 
 VulkanBackend::VulkanBackend()
-    : instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), handles_(), import_(), ran_(0u),
-      lost_(false)
+    : instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), handles_(), import_(), parent_(0u),
+      ran_(0u), lost_(false)
 {}
 
 void VulkanBackend::made(uint64_t raw)
 {
-    if (!handles_.remember(raw)) lost_ = true;
+    if (!handles_.remember(raw, parent_)) lost_ = true;
 }
+
+void VulkanBackend::made_through(uint64_t parent) { parent_ = parent; }
+
+void VulkanBackend::ended(uint64_t raw) { handles_.forget(raw); }
+
+void VulkanBackend::children_ended(uint64_t raw) { handles_.forget_children(raw); }
 
 bool VulkanBackend::knows_handle(uint64_t raw) const { return handles_.knows(raw); }
 
@@ -72,7 +71,6 @@ VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateI
 
 void VulkanBackend::on_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *)
 {
-    handles_.forget(number_of(instance));
     if (instance == instance_) instance_ = VK_NULL_HANDLE;
     RealVulkanDispatch::on_vkDestroyInstance(instance, nullptr);
 }
@@ -90,9 +88,16 @@ bool VulkanBackend::knows(uint32_t command_id) const
 bool VulkanBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply,
                         WireArena &arena)
 {
+    return run_through(*this, command_id, payload, reply, arena);
+}
+
+bool VulkanBackend::run_through(vkproto::ServerDispatch &driver, uint32_t command_id,
+                                WireReader &payload, WireWriter &reply, WireArena &arena)
+{
     inside = this;
-    const bool decoded = vkproto::dispatch_command(*this, command_id, payload, reply, arena);
+    const bool decoded = vkproto::dispatch_command(driver, command_id, payload, reply, arena);
     inside = nullptr;
+    parent_ = 0u;
     if (!decoded) return false;
     ran_++;
     return true;
@@ -114,7 +119,6 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
 void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *)
 {
     if (device == device_) device_ = VK_NULL_HANDLE;
-    handles_.forget(number_of(device));
     RealVulkanDispatch::on_vkDestroyDevice(device, nullptr);
 }
 
@@ -214,6 +218,23 @@ bool answer(const VulkanBackend *backend, uint64_t raw, H &out)
 }
 
 }  // namespace
+
+/* Nobody deciding is the guest side again, where nothing is remembered and so
+ * nothing is forgotten. */
+void handles_made_through(uint64_t parent) noexcept
+{
+    if (VulkanBackend *backend = VulkanBackend::deciding()) backend->made_through(parent);
+}
+
+void handle_ended(uint64_t handle) noexcept
+{
+    if (VulkanBackend *backend = VulkanBackend::deciding()) backend->ended(handle);
+}
+
+void handle_children_ended(uint64_t handle) noexcept
+{
+    if (VulkanBackend *backend = VulkanBackend::deciding()) backend->children_ended(handle);
+}
 
 bool wire_to_handle(uint64_t raw, VkInstance &out) noexcept
 {

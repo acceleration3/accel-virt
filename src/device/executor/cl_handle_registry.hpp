@@ -46,6 +46,11 @@ public:
     void  retain(clproto::HandleKind kind, void *object);
     /* A release the ICD accepted; the last one forgets the object. */
     void  release(clproto::HandleKind kind, void *object);
+    /* Gives `icd` back every reference the guest still holds - once for a
+     * saturated count, which no longer says how many - dependents before what
+     * they depend on, then forgets everything. Platforms are never released:
+     * the API has no call for it. */
+    void  release_all(clproto::ServerDispatch &icd);
     void  forget_all();
 
     uint32_t count() const;
