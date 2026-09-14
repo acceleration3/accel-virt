@@ -56,11 +56,8 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
 { MockKmt kmt;
   kmt.add_adapter(PciIdentity(0x1414u, 0x008Cu, 0u, 0u), 3100u);
   kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
-  /* The host's echo executor, answering the transport's command. */
-  std::uint8_t echo[TransportScenario::payload_bytes] = {};
-  for (std::uint32_t i = 0u; i < TransportScenario::payload_bytes; i++)
-      echo[i] = static_cast<std::uint8_t>(TransportScenario::echo_payload >> (8u * i));
-  kmt.answer_waits(echo, sizeof echo);
+  /* The device answering the transport's no-op with nothing. */
+  kmt.answer_waits(nullptr, 0u);
   GuestReport report;
   GuestSuite suite(kmt, report, 0u);
   CHECK_EQ(suite.run(), 0u);
@@ -103,8 +100,8 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
                     "ok transport.adapter\n"
                     "ok transport.connection\n"
                     "ok transport.initialize\n"
-                    "ok transport.send_sync\n"
-                    "ok transport.reply 8\n"
+                    "ok transport.nop 0\n"
+                    "ok transport.latency 0\n"
                     "ok suite.close_adapter\n"
                     "rvktest: 41 passed, 0 failed\n") == 0);
   CHECK_EQ(kmt.open_objects(), 0u);
