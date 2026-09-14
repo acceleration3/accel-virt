@@ -63,16 +63,21 @@ VkResult rvk_vkEnumeratePhysicalDevices(::av::ClientTransport& t, VkInstance ins
     if (!r.read_pod(result_code)) {
         return VK_ERROR_DEVICE_LOST;
     }
-    if (!r.read_pod(*pPhysicalDeviceCount)) {
+    uint32_t pPhysicalDeviceCount_answered = 0;
+    if (!r.read_pod(pPhysicalDeviceCount_answered)) {
         return VK_ERROR_DEVICE_LOST;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pPhysicalDeviceCount; ++k) {
+        if (pPhysicalDeviceCount_answered > *pPhysicalDeviceCount) {
+            return VK_ERROR_DEVICE_LOST;
+        }
+        for (uint32_t k = 0; k < pPhysicalDeviceCount_answered; ++k) {
             if (!r.read_pod(pPhysicalDevices[k])) {
             return VK_ERROR_DEVICE_LOST;
             }
         }
     }
+    *pPhysicalDeviceCount = pPhysicalDeviceCount_answered;
     return static_cast<VkResult>(result_code);
 }
 
@@ -234,16 +239,21 @@ void rvk_vkGetPhysicalDeviceQueueFamilyProperties(::av::ClientTransport& t, VkPh
     if (!r.read_pod(result_code)) {
         return;
     }
-    if (!r.read_pod(*pQueueFamilyPropertyCount)) {
+    uint32_t pQueueFamilyPropertyCount_answered = 0;
+    if (!r.read_pod(pQueueFamilyPropertyCount_answered)) {
         return;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pQueueFamilyPropertyCount; ++k) {
+        if (pQueueFamilyPropertyCount_answered > *pQueueFamilyPropertyCount) {
+            return;
+        }
+        for (uint32_t k = 0; k < pQueueFamilyPropertyCount_answered; ++k) {
             if (!deserialize_VkQueueFamilyProperties(r, &pQueueFamilyProperties[k], t.decode_arena())) {
             return;
             }
         }
     }
+    *pQueueFamilyPropertyCount = pQueueFamilyPropertyCount_answered;
 }
 
 void rvk_vkGetPhysicalDeviceSparseImageFormatProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type, VkSampleCountFlagBits samples, VkImageUsageFlags usage, VkImageTiling tiling, uint32_t* pPropertyCount, VkSparseImageFormatProperties* pProperties) {
@@ -267,16 +277,21 @@ void rvk_vkGetPhysicalDeviceSparseImageFormatProperties(::av::ClientTransport& t
     if (!r.read_pod(result_code)) {
         return;
     }
-    if (!r.read_pod(*pPropertyCount)) {
+    uint32_t pPropertyCount_answered = 0;
+    if (!r.read_pod(pPropertyCount_answered)) {
         return;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pPropertyCount; ++k) {
+        if (pPropertyCount_answered > *pPropertyCount) {
+            return;
+        }
+        for (uint32_t k = 0; k < pPropertyCount_answered; ++k) {
             if (!deserialize_VkSparseImageFormatProperties(r, &pProperties[k], t.decode_arena())) {
             return;
             }
         }
     }
+    *pPropertyCount = pPropertyCount_answered;
 }
 
 VkResult rvk_vkEnumerateDeviceExtensionProperties(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const char* pLayerName, uint32_t* pPropertyCount, VkExtensionProperties* pProperties) {
@@ -305,16 +320,21 @@ VkResult rvk_vkEnumerateDeviceExtensionProperties(::av::ClientTransport& t, VkPh
     if (!r.read_pod(result_code)) {
         return VK_ERROR_DEVICE_LOST;
     }
-    if (!r.read_pod(*pPropertyCount)) {
+    uint32_t pPropertyCount_answered = 0;
+    if (!r.read_pod(pPropertyCount_answered)) {
         return VK_ERROR_DEVICE_LOST;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pPropertyCount; ++k) {
+        if (pPropertyCount_answered > *pPropertyCount) {
+            return VK_ERROR_DEVICE_LOST;
+        }
+        for (uint32_t k = 0; k < pPropertyCount_answered; ++k) {
             if (!deserialize_VkExtensionProperties(r, &pProperties[k], t.decode_arena())) {
             return VK_ERROR_DEVICE_LOST;
             }
         }
     }
+    *pPropertyCount = pPropertyCount_answered;
     return static_cast<VkResult>(result_code);
 }
 
@@ -334,16 +354,21 @@ VkResult rvk_vkEnumerateDeviceLayerProperties(::av::ClientTransport& t, VkPhysic
     if (!r.read_pod(result_code)) {
         return VK_ERROR_DEVICE_LOST;
     }
-    if (!r.read_pod(*pPropertyCount)) {
+    uint32_t pPropertyCount_answered = 0;
+    if (!r.read_pod(pPropertyCount_answered)) {
         return VK_ERROR_DEVICE_LOST;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pPropertyCount; ++k) {
+        if (pPropertyCount_answered > *pPropertyCount) {
+            return VK_ERROR_DEVICE_LOST;
+        }
+        for (uint32_t k = 0; k < pPropertyCount_answered; ++k) {
             if (!deserialize_VkLayerProperties(r, &pProperties[k], t.decode_arena())) {
             return VK_ERROR_DEVICE_LOST;
             }
         }
     }
+    *pPropertyCount = pPropertyCount_answered;
     return static_cast<VkResult>(result_code);
 }
 
@@ -438,16 +463,21 @@ void rvk_vkGetPhysicalDeviceQueueFamilyProperties2(::av::ClientTransport& t, VkP
     if (!r.read_pod(result_code)) {
         return;
     }
-    if (!r.read_pod(*pQueueFamilyPropertyCount)) {
+    uint32_t pQueueFamilyPropertyCount_answered = 0;
+    if (!r.read_pod(pQueueFamilyPropertyCount_answered)) {
         return;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pQueueFamilyPropertyCount; ++k) {
+        if (pQueueFamilyPropertyCount_answered > *pQueueFamilyPropertyCount) {
+            return;
+        }
+        for (uint32_t k = 0; k < pQueueFamilyPropertyCount_answered; ++k) {
             if (!deserialize_VkQueueFamilyProperties2(r, &pQueueFamilyProperties[k], t.decode_arena())) {
             return;
             }
         }
     }
+    *pQueueFamilyPropertyCount = pQueueFamilyPropertyCount_answered;
 }
 
 void rvk_vkGetPhysicalDeviceSparseImageFormatProperties2(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo, uint32_t* pPropertyCount, VkSparseImageFormatProperties2* pProperties) {
@@ -467,16 +497,21 @@ void rvk_vkGetPhysicalDeviceSparseImageFormatProperties2(::av::ClientTransport& 
     if (!r.read_pod(result_code)) {
         return;
     }
-    if (!r.read_pod(*pPropertyCount)) {
+    uint32_t pPropertyCount_answered = 0;
+    if (!r.read_pod(pPropertyCount_answered)) {
         return;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pPropertyCount; ++k) {
+        if (pPropertyCount_answered > *pPropertyCount) {
+            return;
+        }
+        for (uint32_t k = 0; k < pPropertyCount_answered; ++k) {
             if (!deserialize_VkSparseImageFormatProperties2(r, &pProperties[k], t.decode_arena())) {
             return;
             }
         }
     }
+    *pPropertyCount = pPropertyCount_answered;
 }
 
 VkResult rvk_vkDeviceWaitIdle(::av::ClientTransport& t, VkDevice device) {
@@ -2525,16 +2560,21 @@ VkResult rvk_vkEnumeratePhysicalDeviceGroups(::av::ClientTransport& t, VkInstanc
     if (!r.read_pod(result_code)) {
         return VK_ERROR_DEVICE_LOST;
     }
-    if (!r.read_pod(*pPhysicalDeviceGroupCount)) {
+    uint32_t pPhysicalDeviceGroupCount_answered = 0;
+    if (!r.read_pod(pPhysicalDeviceGroupCount_answered)) {
         return VK_ERROR_DEVICE_LOST;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pPhysicalDeviceGroupCount; ++k) {
+        if (pPhysicalDeviceGroupCount_answered > *pPhysicalDeviceGroupCount) {
+            return VK_ERROR_DEVICE_LOST;
+        }
+        for (uint32_t k = 0; k < pPhysicalDeviceGroupCount_answered; ++k) {
             if (!deserialize_VkPhysicalDeviceGroupProperties(r, &pPhysicalDeviceGroupProperties[k], t.decode_arena())) {
             return VK_ERROR_DEVICE_LOST;
             }
         }
     }
+    *pPhysicalDeviceGroupCount = pPhysicalDeviceGroupCount_answered;
     return static_cast<VkResult>(result_code);
 }
 
@@ -2735,16 +2775,21 @@ void rvk_vkGetDeviceImageSparseMemoryRequirements(::av::ClientTransport& t, VkDe
     if (!r.read_pod(result_code)) {
         return;
     }
-    if (!r.read_pod(*pSparseMemoryRequirementCount)) {
+    uint32_t pSparseMemoryRequirementCount_answered = 0;
+    if (!r.read_pod(pSparseMemoryRequirementCount_answered)) {
         return;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pSparseMemoryRequirementCount; ++k) {
+        if (pSparseMemoryRequirementCount_answered > *pSparseMemoryRequirementCount) {
+            return;
+        }
+        for (uint32_t k = 0; k < pSparseMemoryRequirementCount_answered; ++k) {
             if (!deserialize_VkSparseImageMemoryRequirements2(r, &pSparseMemoryRequirements[k], t.decode_arena())) {
             return;
             }
         }
     }
+    *pSparseMemoryRequirementCount = pSparseMemoryRequirementCount_answered;
 }
 
 void rvk_vkGetDeviceMemoryCommitment(::av::ClientTransport& t, VkDevice device, VkDeviceMemory memory, VkDeviceSize* pCommittedMemoryInBytes) {
@@ -2832,16 +2877,21 @@ void rvk_vkGetImageSparseMemoryRequirements(::av::ClientTransport& t, VkDevice d
     if (!r.read_pod(result_code)) {
         return;
     }
-    if (!r.read_pod(*pSparseMemoryRequirementCount)) {
+    uint32_t pSparseMemoryRequirementCount_answered = 0;
+    if (!r.read_pod(pSparseMemoryRequirementCount_answered)) {
         return;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pSparseMemoryRequirementCount; ++k) {
+        if (pSparseMemoryRequirementCount_answered > *pSparseMemoryRequirementCount) {
+            return;
+        }
+        for (uint32_t k = 0; k < pSparseMemoryRequirementCount_answered; ++k) {
             if (!deserialize_VkSparseImageMemoryRequirements(r, &pSparseMemoryRequirements[k], t.decode_arena())) {
             return;
             }
         }
     }
+    *pSparseMemoryRequirementCount = pSparseMemoryRequirementCount_answered;
 }
 
 void rvk_vkGetImageSparseMemoryRequirements2(::av::ClientTransport& t, VkDevice device, const VkImageSparseMemoryRequirementsInfo2* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2* pSparseMemoryRequirements) {
@@ -2861,16 +2911,21 @@ void rvk_vkGetImageSparseMemoryRequirements2(::av::ClientTransport& t, VkDevice 
     if (!r.read_pod(result_code)) {
         return;
     }
-    if (!r.read_pod(*pSparseMemoryRequirementCount)) {
+    uint32_t pSparseMemoryRequirementCount_answered = 0;
+    if (!r.read_pod(pSparseMemoryRequirementCount_answered)) {
         return;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pSparseMemoryRequirementCount; ++k) {
+        if (pSparseMemoryRequirementCount_answered > *pSparseMemoryRequirementCount) {
+            return;
+        }
+        for (uint32_t k = 0; k < pSparseMemoryRequirementCount_answered; ++k) {
             if (!deserialize_VkSparseImageMemoryRequirements2(r, &pSparseMemoryRequirements[k], t.decode_arena())) {
             return;
             }
         }
     }
+    *pSparseMemoryRequirementCount = pSparseMemoryRequirementCount_answered;
 }
 
 void rvk_vkGetImageSubresourceLayout(::av::ClientTransport& t, VkDevice device, VkImage image, const VkImageSubresource* pSubresource, VkSubresourceLayout* pLayout) {
@@ -2965,16 +3020,21 @@ VkResult rvk_vkGetPhysicalDevicePresentRectanglesKHR(::av::ClientTransport& t, V
     if (!r.read_pod(result_code)) {
         return VK_ERROR_DEVICE_LOST;
     }
-    if (!r.read_pod(*pRectCount)) {
+    uint32_t pRectCount_answered = 0;
+    if (!r.read_pod(pRectCount_answered)) {
         return VK_ERROR_DEVICE_LOST;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pRectCount; ++k) {
+        if (pRectCount_answered > *pRectCount) {
+            return VK_ERROR_DEVICE_LOST;
+        }
+        for (uint32_t k = 0; k < pRectCount_answered; ++k) {
             if (!deserialize_VkRect2D(r, &pRects[k], t.decode_arena())) {
             return VK_ERROR_DEVICE_LOST;
             }
         }
     }
+    *pRectCount = pRectCount_answered;
     return static_cast<VkResult>(result_code);
 }
 
@@ -2994,16 +3054,21 @@ VkResult rvk_vkGetPhysicalDeviceToolProperties(::av::ClientTransport& t, VkPhysi
     if (!r.read_pod(result_code)) {
         return VK_ERROR_DEVICE_LOST;
     }
-    if (!r.read_pod(*pToolCount)) {
+    uint32_t pToolCount_answered = 0;
+    if (!r.read_pod(pToolCount_answered)) {
         return VK_ERROR_DEVICE_LOST;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pToolCount; ++k) {
+        if (pToolCount_answered > *pToolCount) {
+            return VK_ERROR_DEVICE_LOST;
+        }
+        for (uint32_t k = 0; k < pToolCount_answered; ++k) {
             if (!deserialize_VkPhysicalDeviceToolProperties(r, &pToolProperties[k], t.decode_arena())) {
             return VK_ERROR_DEVICE_LOST;
             }
         }
     }
+    *pToolCount = pToolCount_answered;
     return static_cast<VkResult>(result_code);
 }
 
@@ -3335,16 +3400,21 @@ void rvk_vkGetPhysicalDeviceQueueFamilyProperties2KHR(::av::ClientTransport& t, 
     if (!r.read_pod(result_code)) {
         return;
     }
-    if (!r.read_pod(*pQueueFamilyPropertyCount)) {
+    uint32_t pQueueFamilyPropertyCount_answered = 0;
+    if (!r.read_pod(pQueueFamilyPropertyCount_answered)) {
         return;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pQueueFamilyPropertyCount; ++k) {
+        if (pQueueFamilyPropertyCount_answered > *pQueueFamilyPropertyCount) {
+            return;
+        }
+        for (uint32_t k = 0; k < pQueueFamilyPropertyCount_answered; ++k) {
             if (!deserialize_VkQueueFamilyProperties2(r, &pQueueFamilyProperties[k], t.decode_arena())) {
             return;
             }
         }
     }
+    *pQueueFamilyPropertyCount = pQueueFamilyPropertyCount_answered;
 }
 
 void rvk_vkGetPhysicalDeviceSparseImageFormatProperties2KHR(::av::ClientTransport& t, VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2* pFormatInfo, uint32_t* pPropertyCount, VkSparseImageFormatProperties2* pProperties) {
@@ -3364,16 +3434,21 @@ void rvk_vkGetPhysicalDeviceSparseImageFormatProperties2KHR(::av::ClientTranspor
     if (!r.read_pod(result_code)) {
         return;
     }
-    if (!r.read_pod(*pPropertyCount)) {
+    uint32_t pPropertyCount_answered = 0;
+    if (!r.read_pod(pPropertyCount_answered)) {
         return;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pPropertyCount; ++k) {
+        if (pPropertyCount_answered > *pPropertyCount) {
+            return;
+        }
+        for (uint32_t k = 0; k < pPropertyCount_answered; ++k) {
             if (!deserialize_VkSparseImageFormatProperties2(r, &pProperties[k], t.decode_arena())) {
             return;
             }
         }
     }
+    *pPropertyCount = pPropertyCount_answered;
 }
 
 VkResult rvk_vkBindBufferMemory2KHR(::av::ClientTransport& t, VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfo* pBindInfos) {
@@ -3467,16 +3542,21 @@ void rvk_vkGetImageSparseMemoryRequirements2KHR(::av::ClientTransport& t, VkDevi
     if (!r.read_pod(result_code)) {
         return;
     }
-    if (!r.read_pod(*pSparseMemoryRequirementCount)) {
+    uint32_t pSparseMemoryRequirementCount_answered = 0;
+    if (!r.read_pod(pSparseMemoryRequirementCount_answered)) {
         return;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pSparseMemoryRequirementCount; ++k) {
+        if (pSparseMemoryRequirementCount_answered > *pSparseMemoryRequirementCount) {
+            return;
+        }
+        for (uint32_t k = 0; k < pSparseMemoryRequirementCount_answered; ++k) {
             if (!deserialize_VkSparseImageMemoryRequirements2(r, &pSparseMemoryRequirements[k], t.decode_arena())) {
             return;
             }
         }
     }
+    *pSparseMemoryRequirementCount = pSparseMemoryRequirementCount_answered;
 }
 
 void rvk_vkCmdBeginRenderPass2KHR(::av::ClientTransport& t, VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* pRenderPassBegin, const VkSubpassBeginInfo* pSubpassBeginInfo) {
@@ -3778,16 +3858,21 @@ VkResult rvk_vkEnumeratePhysicalDeviceGroupsKHR(::av::ClientTransport& t, VkInst
     if (!r.read_pod(result_code)) {
         return VK_ERROR_DEVICE_LOST;
     }
-    if (!r.read_pod(*pPhysicalDeviceGroupCount)) {
+    uint32_t pPhysicalDeviceGroupCount_answered = 0;
+    if (!r.read_pod(pPhysicalDeviceGroupCount_answered)) {
         return VK_ERROR_DEVICE_LOST;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pPhysicalDeviceGroupCount; ++k) {
+        if (pPhysicalDeviceGroupCount_answered > *pPhysicalDeviceGroupCount) {
+            return VK_ERROR_DEVICE_LOST;
+        }
+        for (uint32_t k = 0; k < pPhysicalDeviceGroupCount_answered; ++k) {
             if (!deserialize_VkPhysicalDeviceGroupProperties(r, &pPhysicalDeviceGroupProperties[k], t.decode_arena())) {
             return VK_ERROR_DEVICE_LOST;
             }
         }
     }
+    *pPhysicalDeviceGroupCount = pPhysicalDeviceGroupCount_answered;
     return static_cast<VkResult>(result_code);
 }
 
@@ -3914,16 +3999,21 @@ void rvk_vkGetDeviceImageSparseMemoryRequirementsKHR(::av::ClientTransport& t, V
     if (!r.read_pod(result_code)) {
         return;
     }
-    if (!r.read_pod(*pSparseMemoryRequirementCount)) {
+    uint32_t pSparseMemoryRequirementCount_answered = 0;
+    if (!r.read_pod(pSparseMemoryRequirementCount_answered)) {
         return;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pSparseMemoryRequirementCount; ++k) {
+        if (pSparseMemoryRequirementCount_answered > *pSparseMemoryRequirementCount) {
+            return;
+        }
+        for (uint32_t k = 0; k < pSparseMemoryRequirementCount_answered; ++k) {
             if (!deserialize_VkSparseImageMemoryRequirements2(r, &pSparseMemoryRequirements[k], t.decode_arena())) {
             return;
             }
         }
     }
+    *pSparseMemoryRequirementCount = pSparseMemoryRequirementCount_answered;
 }
 
 uint64_t rvk_vkGetDeviceMemoryOpaqueCaptureAddressKHR(::av::ClientTransport& t, VkDevice device, const VkDeviceMemoryOpaqueCaptureAddressInfo* pInfo) {
@@ -5209,16 +5299,21 @@ VkResult rvk_vkGetPhysicalDeviceFragmentShadingRatesKHR(::av::ClientTransport& t
     if (!r.read_pod(result_code)) {
         return VK_ERROR_DEVICE_LOST;
     }
-    if (!r.read_pod(*pFragmentShadingRateCount)) {
+    uint32_t pFragmentShadingRateCount_answered = 0;
+    if (!r.read_pod(pFragmentShadingRateCount_answered)) {
         return VK_ERROR_DEVICE_LOST;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pFragmentShadingRateCount; ++k) {
+        if (pFragmentShadingRateCount_answered > *pFragmentShadingRateCount) {
+            return VK_ERROR_DEVICE_LOST;
+        }
+        for (uint32_t k = 0; k < pFragmentShadingRateCount_answered; ++k) {
             if (!deserialize_VkPhysicalDeviceFragmentShadingRateKHR(r, &pFragmentShadingRates[k], t.decode_arena())) {
             return VK_ERROR_DEVICE_LOST;
             }
         }
     }
+    *pFragmentShadingRateCount = pFragmentShadingRateCount_answered;
     return static_cast<VkResult>(result_code);
 }
 
@@ -5371,16 +5466,21 @@ VkResult rvk_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(::av::ClientTranspor
     if (!r.read_pod(result_code)) {
         return VK_ERROR_DEVICE_LOST;
     }
-    if (!r.read_pod(*pTimeDomainCount)) {
+    uint32_t pTimeDomainCount_answered = 0;
+    if (!r.read_pod(pTimeDomainCount_answered)) {
         return VK_ERROR_DEVICE_LOST;
     }
     if (array_present) {
-        for (uint32_t k = 0; k < *pTimeDomainCount; ++k) {
+        if (pTimeDomainCount_answered > *pTimeDomainCount) {
+            return VK_ERROR_DEVICE_LOST;
+        }
+        for (uint32_t k = 0; k < pTimeDomainCount_answered; ++k) {
             if (!r.read_pod(pTimeDomains[k])) {
             return VK_ERROR_DEVICE_LOST;
             }
         }
     }
+    *pTimeDomainCount = pTimeDomainCount_answered;
     return static_cast<VkResult>(result_code);
 }
 

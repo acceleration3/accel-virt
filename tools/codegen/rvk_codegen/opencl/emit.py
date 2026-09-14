@@ -661,20 +661,41 @@ def _encode_param(reg: Registry, cmd: Command, p: Param, out: list[str]) -> None
         raise AssertionError(f"no encoder for {p.role}")
 
 
+def _client_failure(cmd: Command) -> str:
+    """What a call the client could not complete returns: a send that failed,
+    and a reply that is short or answers more than the caller had room for,
+    which is the same failure seen from the caller."""
+    if cmd.returns_handle:
+        return "return 0;"
+    if cmd.returns_void:
+        return "return;"
+    return "return CL_OUT_OF_RESOURCES;"
+
+
+def _client_room(p: Param) -> str:
+    """The caller's own capacity for an output, in elements or bytes."""
+    if p.role == Role.HANDLE_ARRAY_OUT:
+        return p.len_param
+    if p.role == Role.INFO_VALUE:
+        return p.size_param
+    return f"{p.name}_bytes" if (p.len_param or "").startswith("@") else p.len_param
+
+
 def _decode_reply(reg: Registry, cmd: Command, out: list[str]) -> None:
-    """Client side: pull the return value and the out parameters back."""
+    """Client side: pull the return value and the out parameters back.
+
+    Every count and length a reply carries is the host's word, and the
+    caller's buffer holds what the caller said it does: an answer larger
+    than that is refused before anything is written into it."""
+    fail = _client_failure(cmd)
     if cmd.returns_handle:
         out.append("    " + HANDLE_T + " ret = 0;")
-        out.append("    if (!r.read_pod(ret)) return 0;")
+        out.append(f"    if (!r.read_pod(ret)) {fail}")
     elif not cmd.returns_void:
         out.append(f"    {cmd.return_type.cpp()} ret{{}};")
         out.append("    int64_t ret_wire = 0;")
-        out.append("    if (!r.read_varint(ret_wire)) return static_cast<"
-                   f"{cmd.return_type.cpp()}>(-1);")
+        out.append(f"    if (!r.read_varint(ret_wire)) {fail}")
         out.append(f"    ret = static_cast<{cmd.return_type.cpp()}>(ret_wire);")
-
-    fail = "return 0;" if cmd.returns_handle else (
-        "return;" if cmd.returns_void else "return ret;")
 
     for p in cmd.out_params:
         n = p.name
@@ -690,12 +711,14 @@ def _decode_reply(reg: Registry, cmd: Command, out: list[str]) -> None:
         elif p.role == Role.HANDLE_ARRAY_OUT:
             out.append("        uint64_t wire_count = 0;")
             out.append(f"        if (!r.read_varint(wire_count)) {fail}")
+            out.append(f"        if (wire_count > static_cast<uint64_t>({_client_room(p)})) {fail}")
             out.append("        for (uint64_t i = 0; i < wire_count; ++i) {")
             out.append(f"            if (!r.read_pod({n}[i])) {fail}")
             out.append("        }")
         elif p.role in (Role.BYTES_OUT, Role.INFO_VALUE):
             out.append("        uint64_t wire_count = 0;")
             out.append(f"        if (!r.read_varint(wire_count)) {fail}")
+            out.append(f"        if (wire_count > static_cast<uint64_t>({_client_room(p)})) {fail}")
             out.append(f"        if (wire_count != 0 && !r.read({n}, static_cast<size_t>(wire_count))) {fail}")
         else:
             raise AssertionError(f"no reply decoder for {p.role}")
@@ -721,12 +744,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         c.append("    ::av::WireWriter b = t.request_writer();")
         for p in cmd.params:
             _encode_param(reg, cmd, p, c)
-        if cmd.returns_handle:
-            fail = "        return 0;"
-        elif cmd.returns_void:
-            fail = "        return;"
-        else:
-            fail = "        return CL_OUT_OF_RESOURCES;"
+        fail = "        " + _client_failure(cmd)
         if cmd.is_async:
             # A writer that overflowed its slot is a failed call, not a short
             # command on the wire.
@@ -970,6 +988,47 @@ def _server_signature2(reg: Registry, cmd: Command) -> str:
     return f"{cmd.return_type.cpp()} on_{cmd.name}({decls})"
 
 
+# The bytes one reported element of a byte output occupies, for the byte
+# outputs whose call counts elements rather than bytes.
+REPORTED_ELEMENTS = {"@image_format_bytes": "cl_image_format"}
+
+
+def _reported_output(cmd: Command, p: Param) -> Param | None:
+    """The output whose count or size this scalar output reports, if any."""
+    for q in cmd.out_params:
+        if q.role in (Role.HANDLE_ARRAY_OUT, Role.INFO_VALUE, Role.BYTES_OUT) and \
+                q.size_ret_param == p.name:
+            return q
+    return None
+
+
+def _answered_scalar(cmd: Command, p: Param) -> str:
+    """A scalar output as the reply carries it. A cl_int output is the call's
+    own report of what failed - errcode_ret, binary_status - and is sent
+    whatever the call answered; any other is an answer only a call that
+    worked gave."""
+    if p.type.base == "cl_int":
+        return f"static_cast<uint64_t>({p.name}_storage)"
+    return f"({_succeeded(cmd)}) ? static_cast<uint64_t>({p.name}_storage) : 0u"
+
+
+def _produced_expr(cmd: Command, p: Param) -> str:
+    """How much of an output the call says it wrote, in the units of its
+    capacity, or 0 for a call that failed. Only the count the call reported
+    is trusted, since that is how much of the output it wrote; an output
+    nothing reports is as large as its room."""
+    cap = f"static_cast<uint64_t>({_capacity_expr(cmd, p)})"
+    count = p.size_ret_param
+    if count is None:
+        reported = cap
+    elif p.role == Role.BYTES_OUT:
+        element = REPORTED_ELEMENTS[p.len_param]
+        reported = f"static_cast<uint64_t>({count}_storage) * sizeof({element})"
+    else:
+        reported = f"static_cast<uint64_t>({count}_storage)"
+    return f"({_succeeded(cmd)}) ? {reported} : 0u"
+
+
 def _capacity_expr(cmd: Command, p: Param) -> str:
     if p.role == Role.HANDLE_ARRAY_OUT:
         return p.len_param or "0"
@@ -1069,7 +1128,12 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
                 c.append(f"    {p.element}* {n} = {n}_wanted ? &{n}_storage : nullptr;")
             elif p.role == Role.SCALAR_OUT:
                 c.append(f"    {p.type.base} {n}_storage{{}};")
-                c.append(f"    {p.type.base}* {n} = {n}_wanted ? &{n}_storage : nullptr;")
+                reported = _reported_output(cmd, p)
+                # The call is always asked how much it wrote into an output
+                # the guest wants, whether or not the guest asked to be told:
+                # the reply sends only that much.
+                wanted = f"({n}_wanted || {reported.name}_wanted)" if reported else f"{n}_wanted"
+                c.append(f"    {p.type.base}* {n} = {wanted} ? &{n}_storage : nullptr;")
             elif p.role == Role.STRUCT_OUT:
                 c.append(f"    {p.element} {n}_storage{{}};")
                 c.append(f"    {p.element}* {n} = {n}_wanted ? &{n}_storage : nullptr;")
@@ -1120,51 +1184,37 @@ def emit_server(reg: Registry, out_dir: Path) -> None:
             n = p.name
             c.append(f"    if ({n}_wanted) {{")
             if p.role == Role.HANDLE_OUT:
-                c.append(f"        if (({succeeded}) && {n}_storage != nullptr) "
+                # A failed call made nothing, whatever it left in the output.
+                c.append(f"        if (!({succeeded})) {n}_storage = nullptr;")
+                c.append(f"        if ({n}_storage != nullptr) "
                          f"s.made(HandleKind::{_kind(p.element)}, {n}_storage);")
                 c.append(f"        reply.write_pod<{HANDLE_T}>(static_cast<{HANDLE_T}>("
                          f"reinterpret_cast<uintptr_t>({n}_storage)));")
             elif p.role == Role.SCALAR_OUT:
-                c.append(f"        reply.write_varint(static_cast<uint64_t>({n}_storage));")
+                c.append(f"        reply.write_varint({_answered_scalar(cmd, p)});")
             elif p.role == Role.STRUCT_OUT:
                 c.append(f"        reply.write(&{n}_storage, sizeof({n}_storage));")
             elif p.role == Role.HANDLE_ARRAY_OUT:
                 # However many the call actually produced, never more
                 # than the caller's room for them.
-                count = p.size_ret_param
                 cap = _capacity_expr(cmd, p)
-                if count:
-                    c.append(f"        const uint64_t wire_produced = {count} != nullptr")
-                    c.append(f"            ? static_cast<uint64_t>(*{count})")
-                    c.append(f"            : static_cast<uint64_t>({cap});")
-                else:
-                    c.append(f"        const uint64_t wire_produced = static_cast<uint64_t>({cap});")
+                c.append(f"        const uint64_t wire_produced = {_produced_expr(cmd, p)};")
                 c.append(f"        const uint64_t wire_sent = wire_produced < static_cast<uint64_t>({cap})")
                 c.append(f"            ? wire_produced : static_cast<uint64_t>({cap});")
                 c.append("        reply.write_varint(wire_sent);")
                 c.append("        for (uint64_t i = 0; i < wire_sent; ++i) {")
-                c.append(f"            if (({succeeded}) && {n}[i] != nullptr) "
+                c.append(f"            if ({n}[i] != nullptr) "
                          f"s.made(HandleKind::{_kind(p.element)}, {n}[i]);")
                 c.append(f"            reply.write_pod<{HANDLE_T}>(static_cast<{HANDLE_T}>("
                          f"reinterpret_cast<uintptr_t>({n}[i])));")
                 c.append("        }")
-            elif p.role == Role.INFO_VALUE:
-                size_ret = p.size_ret_param
+            elif p.role in (Role.INFO_VALUE, Role.BYTES_OUT):
                 cap = _capacity_expr(cmd, p)
-                if size_ret:
-                    c.append(f"        uint64_t wire_written = {size_ret} != nullptr")
-                    c.append(f"            ? static_cast<uint64_t>(*{size_ret})")
-                    c.append(f"            : static_cast<uint64_t>({cap});")
-                else:
-                    c.append(f"        uint64_t wire_written = static_cast<uint64_t>({cap});")
+                c.append(f"        uint64_t wire_written = {_produced_expr(cmd, p)};")
                 c.append(f"        if (wire_written > static_cast<uint64_t>({cap}))")
                 c.append(f"            wire_written = static_cast<uint64_t>({cap});")
                 c.append("        reply.write_varint(wire_written);")
                 c.append(f"        if (wire_written != 0) reply.write({n}, static_cast<size_t>(wire_written));")
-            elif p.role == Role.BYTES_OUT:
-                cap = _capacity_expr(cmd, p)
-                c.append(f"        reply.write_varint(static_cast<uint64_t>({cap}));")
-                c.append(f"        if ({cap} != 0) reply.write({n}, static_cast<size_t>({cap}));")
             c.append("    }")
 
         c.append("    return true;")

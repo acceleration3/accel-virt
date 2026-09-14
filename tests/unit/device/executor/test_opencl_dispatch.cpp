@@ -798,3 +798,182 @@ TEST(opencl_dispatch, the_other_image_calls_hold_their_host_bytes_to_their_exten
   }
   CHECK_EQ(session.dispatch().calls(), before + 3u);
   CHECK_EQ(session.dispatch().strays(), 0u); }
+
+namespace {
+
+/* An answer's result, as the decoder writes it. */
+cl_int answered_result(WireReader &reply)
+{
+    std::uint64_t result = 0u;
+    CHECK(reply.read_varint(result));
+    return static_cast<cl_int>(static_cast<std::int64_t>(result));
+}
+
+/* clGetDeviceIDs(platform, all, num_entries, the ids wanted, the count wanted
+ * or not). */
+bool query_devices(ClSession &session, std::uint64_t platform, std::uint32_t entries, bool count_wanted)
+{
+    std::uint8_t bytes[frame_bytes];
+    WireWriter frame(bytes, sizeof bytes);
+    frame.write_pod<std::uint64_t>(platform);
+    frame.write_varint(CL_DEVICE_TYPE_ALL);
+    frame.write_varint(entries);
+    frame.write_pod<std::uint8_t>(1u);
+    frame.write_pod<std::uint8_t>(count_wanted ? 1u : 0u);
+    return session.run(av::clproto::kCmd_clGetDeviceIDs, frame, bytes);
+}
+
+/* clGetDeviceInfo(device, CL_DEVICE_VENDOR, `room` bytes wanted, the size
+ * wanted). */
+bool query_vendor(ClSession &session, std::uint64_t device, std::uint32_t room)
+{
+    std::uint8_t bytes[frame_bytes];
+    WireWriter frame(bytes, sizeof bytes);
+    frame.write_pod<std::uint64_t>(device);
+    frame.write_varint(CL_DEVICE_VENDOR);
+    frame.write_varint(room);
+    frame.write_pod<std::uint8_t>(1u);
+    frame.write_pod<std::uint8_t>(1u);
+    return session.run(av::clproto::kCmd_clGetDeviceInfo, frame, bytes);
+}
+
+}  // namespace
+
+/* T033: an ICD that fails an ID query may leave anything in the array - a host
+ * pointer included - and a count to match. The guest that wanted the ids and
+ * not the count used to be sent num_entries of them regardless, and the host
+ * to remember every one as an object it made. */
+TEST(opencl_dispatch, a_failed_id_query_answers_no_ids_whatever_the_icd_left)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  RecordingClDispatch &dispatch = session.dispatch();
+  const std::uint32_t held = dispatch.handles().count();
+  for (std::uint32_t pass = 0u; pass < 2u; pass++) {
+      const bool count_wanted = pass == 1u;
+      dispatch.answer_next_with(CL_INVALID_VALUE, 4u);
+      CHECK(query_devices(session, platform, 4u, count_wanted));
+      WireReader reply = session.answer();
+      CHECK_EQ(answered_result(reply), CL_INVALID_VALUE);
+      std::uint64_t sent = ~std::uint64_t{0};
+      CHECK(reply.read_varint(sent));
+      CHECK_EQ(sent, 0u);
+      if (count_wanted) {
+          std::uint64_t total = ~std::uint64_t{0};
+          CHECK(reply.read_varint(total));
+          CHECK_EQ(total, 0u);
+      }
+      CHECK_EQ(reply.remaining(), 0u);
+  }
+  { std::uint8_t bytes[frame_bytes];
+    WireWriter frame(bytes, sizeof bytes);
+    frame.write_varint(4u);
+    frame.write_pod<std::uint8_t>(1u);
+    frame.write_pod<std::uint8_t>(0u);
+    dispatch.answer_next_with(CL_OUT_OF_HOST_MEMORY, 4u);
+    CHECK(session.run(av::clproto::kCmd_clGetPlatformIDs, frame, bytes));
+    WireReader reply = session.answer();
+    CHECK_EQ(answered_result(reply), CL_OUT_OF_HOST_MEMORY);
+    std::uint64_t sent = ~std::uint64_t{0};
+    CHECK(reply.read_varint(sent));
+    CHECK_EQ(sent, 0u);
+    CHECK_EQ(reply.remaining(), 0u); }
+  CHECK_EQ(dispatch.handles().count(), held);
+  CHECK_EQ(dispatch.refused(), 0u);
+  CHECK(dispatch.handles().invariants_hold()); }
+
+/* A query that worked answers as many ids as the ICD said it wrote, not as
+ * many as there was room for: the slots past them are whatever the ICD left. */
+TEST(opencl_dispatch, an_id_query_answers_only_the_ids_the_icd_reported)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  RecordingClDispatch &dispatch = session.dispatch();
+  const std::uint32_t held = dispatch.handles().count();
+  dispatch.answer_next_with(CL_SUCCESS, 1u);
+  CHECK(query_devices(session, platform, 4u, false));
+  WireReader reply = session.answer();
+  CHECK_EQ(answered_result(reply), CL_SUCCESS);
+  std::uint64_t sent = 0u;
+  CHECK(reply.read_varint(sent));
+  CHECK_EQ(sent, 1u);
+  std::uint64_t listed = 0u;
+  CHECK(reply.read_pod(listed));
+  CHECK(dispatch.handle_for(HandleKind::device, listed) != nullptr);
+  CHECK_EQ(reply.remaining(), 0u);
+  CHECK_EQ(dispatch.handles().count(), held + 1u);
+  /* An ICD reporting more than the room it was given is held to the room. */
+  dispatch.answer_next_with(CL_SUCCESS, 9u);
+  CHECK(query_devices(session, platform, 2u, true));
+  WireReader bounded = session.answer();
+  CHECK_EQ(answered_result(bounded), CL_SUCCESS);
+  CHECK(bounded.read_varint(sent));
+  CHECK_EQ(sent, 2u);
+  CHECK(dispatch.handles().invariants_hold()); }
+
+/* An info query answers the bytes the ICD reported writing, and a failed one
+ * none, and no size. */
+TEST(opencl_dispatch, an_info_query_answers_only_the_bytes_the_icd_reported)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  RecordingClDispatch &dispatch = session.dispatch();
+  dispatch.answer_next_with(CL_SUCCESS, 5u);
+  CHECK(query_vendor(session, device, 16u));
+  { WireReader reply = session.answer();
+    CHECK_EQ(answered_result(reply), CL_SUCCESS);
+    std::uint64_t sent = 0u;
+    CHECK(reply.read_varint(sent));
+    CHECK_EQ(sent, 5u);
+    std::uint8_t value[5] = {};
+    CHECK(reply.read(value, sizeof value));
+    for (const std::uint8_t byte : value) CHECK_EQ(byte, RecordingClDispatch::answered);
+    std::uint64_t size = 0u;
+    CHECK(reply.read_varint(size));
+    CHECK_EQ(size, 5u);
+    CHECK_EQ(reply.remaining(), 0u); }
+  dispatch.answer_next_with(CL_INVALID_VALUE, 16u);
+  CHECK(query_vendor(session, device, 16u));
+  { WireReader reply = session.answer();
+    CHECK_EQ(answered_result(reply), CL_INVALID_VALUE);
+    std::uint64_t sent = ~std::uint64_t{0};
+    std::uint64_t size = ~std::uint64_t{0};
+    CHECK(reply.read_varint(sent));
+    CHECK(reply.read_varint(size));
+    CHECK_EQ(sent, 0u);
+    CHECK_EQ(size, 0u);
+    CHECK_EQ(reply.remaining(), 0u); } }
+
+/* A failed read sends back no bytes, and no event: what the ICD left there was
+ * never an event, and naming it would make it one the guest may wait on. */
+TEST(opencl_dispatch, a_failed_read_answers_no_bytes_and_no_event)
+{ ClSession session;
+  std::uint64_t platform = 0u, device = 0u, context = 0u, queue = 0u;
+  session.make_chain(platform, device, context, queue);
+  const std::uint64_t buffer = session.make_buffer(context, 64u);
+  RecordingClDispatch &dispatch = session.dispatch();
+  const std::uint32_t held = dispatch.handles().count();
+  dispatch.answer_next_with(CL_MEM_OBJECT_ALLOCATION_FAILURE, 0u);
+  std::uint8_t bytes[frame_bytes];
+  WireWriter frame(bytes, sizeof bytes);
+  frame.write_pod<std::uint64_t>(queue);
+  frame.write_pod<std::uint64_t>(buffer);
+  frame.write_varint(CL_TRUE);
+  frame.write_varint(0u);
+  frame.write_varint(16u);
+  frame.write_pod<std::uint8_t>(1u);
+  frame.write_varint(16u);
+  frame.write_varint(0u);
+  frame.write_pod<std::uint8_t>(0u);
+  frame.write_pod<std::uint8_t>(1u);
+  CHECK(session.run(av::clproto::kCmd_clEnqueueReadBuffer, frame, bytes));
+  WireReader reply = session.answer();
+  CHECK_EQ(answered_result(reply), CL_MEM_OBJECT_ALLOCATION_FAILURE);
+  std::uint64_t sent = ~std::uint64_t{0};
+  CHECK(reply.read_varint(sent));
+  CHECK_EQ(sent, 0u);
+  std::uint64_t event = ~std::uint64_t{0};
+  CHECK(reply.read_pod(event));
+  CHECK_EQ(event, 0u);
+  CHECK_EQ(reply.remaining(), 0u);
+  CHECK_EQ(dispatch.handles().count(), held); }

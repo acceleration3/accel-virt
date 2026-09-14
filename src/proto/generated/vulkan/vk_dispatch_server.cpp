@@ -60,9 +60,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkEnumeratePhysicalDevices(instance, &pPhysicalDeviceCount_local, array_present ? pPhysicalDevices_storage : nullptr);
         handles_made_through(as_number(instance));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
-        reply.write_pod(pPhysicalDeviceCount_local);
+        uint32_t pPhysicalDeviceCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pPhysicalDeviceCount_local;
+        if (array_present && pPhysicalDeviceCount_sent > pPhysicalDevices_storage_count) {
+            pPhysicalDeviceCount_sent = static_cast<uint32_t>(pPhysicalDevices_storage_count);
+        }
+        reply.write_pod(pPhysicalDeviceCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pPhysicalDeviceCount_local; ++k) {
+            for (uint32_t k = 0; k < pPhysicalDeviceCount_sent; ++k) {
                 serialize_VkPhysicalDevice(reply, pPhysicalDevices_storage[k]);
             }
         }
@@ -85,6 +89,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkInstanceCreateInfo(r, &pCreateInfo_local, arena)) return false;
         VkResult result = s.on_vkCreateInstance(&pCreateInfo_local, nullptr, &pInstance_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pInstance_out = VK_NULL_HANDLE;
+        }
         serialize_VkInstance(reply, pInstance_out);
         return true;
     }
@@ -97,6 +104,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateDevice(physicalDevice, &pCreateInfo_local, nullptr, &pDevice_out);
         handles_made_through(as_number(physicalDevice));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pDevice_out = VK_NULL_HANDLE;
+        }
         serialize_VkDevice(reply, pDevice_out);
         return true;
     }
@@ -145,6 +155,10 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!r.read_pod(flags)) return false;
         VkResult result = s.on_vkGetPhysicalDeviceImageFormatProperties(physicalDevice, format, type, tiling, usage, flags, &pImageFormatProperties_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            VkImageFormatProperties pImageFormatProperties_blank{};
+            pImageFormatProperties_out = pImageFormatProperties_blank;
+        }
         serialize_VkImageFormatProperties(reply, pImageFormatProperties_out);
         return true;
     }
@@ -176,9 +190,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         s.on_vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &pQueueFamilyPropertyCount_local, array_present ? pQueueFamilyProperties_storage : nullptr);
         reply.write_pod<int32_t>(0);
-        reply.write_pod(pQueueFamilyPropertyCount_local);
+        uint32_t pQueueFamilyPropertyCount_sent = pQueueFamilyPropertyCount_local;
+        if (array_present && pQueueFamilyPropertyCount_sent > pQueueFamilyProperties_storage_count) {
+            pQueueFamilyPropertyCount_sent = static_cast<uint32_t>(pQueueFamilyProperties_storage_count);
+        }
+        reply.write_pod(pQueueFamilyPropertyCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pQueueFamilyPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pQueueFamilyPropertyCount_sent; ++k) {
                 serialize_VkQueueFamilyProperties(reply, pQueueFamilyProperties_storage[k]);
             }
         }
@@ -213,9 +231,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         s.on_vkGetPhysicalDeviceSparseImageFormatProperties(physicalDevice, format, type, samples, usage, tiling, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
         reply.write_pod<int32_t>(0);
-        reply.write_pod(pPropertyCount_local);
+        uint32_t pPropertyCount_sent = pPropertyCount_local;
+        if (array_present && pPropertyCount_sent > pProperties_storage_count) {
+            pPropertyCount_sent = static_cast<uint32_t>(pProperties_storage_count);
+        }
+        reply.write_pod(pPropertyCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pPropertyCount_sent; ++k) {
                 serialize_VkSparseImageFormatProperties(reply, pProperties_storage[k]);
             }
         }
@@ -251,9 +273,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         VkResult result = s.on_vkEnumerateDeviceExtensionProperties(physicalDevice, pLayerName, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
-        reply.write_pod(pPropertyCount_local);
+        uint32_t pPropertyCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pPropertyCount_local;
+        if (array_present && pPropertyCount_sent > pProperties_storage_count) {
+            pPropertyCount_sent = static_cast<uint32_t>(pProperties_storage_count);
+        }
+        reply.write_pod(pPropertyCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pPropertyCount_sent; ++k) {
                 serialize_VkExtensionProperties(reply, pProperties_storage[k]);
             }
         }
@@ -278,9 +304,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         VkResult result = s.on_vkEnumerateDeviceLayerProperties(physicalDevice, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
-        reply.write_pod(pPropertyCount_local);
+        uint32_t pPropertyCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pPropertyCount_local;
+        if (array_present && pPropertyCount_sent > pProperties_storage_count) {
+            pPropertyCount_sent = static_cast<uint32_t>(pProperties_storage_count);
+        }
+        reply.write_pod(pPropertyCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pPropertyCount_sent; ++k) {
                 serialize_VkLayerProperties(reply, pProperties_storage[k]);
             }
         }
@@ -320,6 +350,11 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pImageFormatProperties_out), arena)) return false;
         VkResult result = s.on_vkGetPhysicalDeviceImageFormatProperties2(physicalDevice, &pImageFormatInfo_local, &pImageFormatProperties_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            VkImageFormatProperties2 pImageFormatProperties_blank{};
+            pImageFormatProperties_blank.sType = pImageFormatProperties_out.sType;
+            pImageFormatProperties_out = pImageFormatProperties_blank;
+        }
         serialize_VkImageFormatProperties2(reply, pImageFormatProperties_out);
         return true;
     }
@@ -354,9 +389,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         s.on_vkGetPhysicalDeviceQueueFamilyProperties2(physicalDevice, &pQueueFamilyPropertyCount_local, array_present ? pQueueFamilyProperties_storage : nullptr);
         reply.write_pod<int32_t>(0);
-        reply.write_pod(pQueueFamilyPropertyCount_local);
+        uint32_t pQueueFamilyPropertyCount_sent = pQueueFamilyPropertyCount_local;
+        if (array_present && pQueueFamilyPropertyCount_sent > pQueueFamilyProperties_storage_count) {
+            pQueueFamilyPropertyCount_sent = static_cast<uint32_t>(pQueueFamilyProperties_storage_count);
+        }
+        reply.write_pod(pQueueFamilyPropertyCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pQueueFamilyPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pQueueFamilyPropertyCount_sent; ++k) {
                 serialize_VkQueueFamilyProperties2(reply, pQueueFamilyProperties_storage[k]);
             }
         }
@@ -384,9 +423,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         s.on_vkGetPhysicalDeviceSparseImageFormatProperties2(physicalDevice, &pFormatInfo_local, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
         reply.write_pod<int32_t>(0);
-        reply.write_pod(pPropertyCount_local);
+        uint32_t pPropertyCount_sent = pPropertyCount_local;
+        if (array_present && pPropertyCount_sent > pProperties_storage_count) {
+            pPropertyCount_sent = static_cast<uint32_t>(pProperties_storage_count);
+        }
+        reply.write_pod(pPropertyCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pPropertyCount_sent; ++k) {
                 serialize_VkSparseImageFormatProperties2(reply, pProperties_storage[k]);
             }
         }
@@ -415,6 +458,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkAllocateMemory(device, &pAllocateInfo_local, nullptr, &pMemory_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pMemory_out = VK_NULL_HANDLE;
+        }
         serialize_VkDeviceMemory(reply, pMemory_out);
         return true;
     }
@@ -484,6 +530,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateBuffer(device, &pCreateInfo_local, nullptr, &pBuffer_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pBuffer_out = VK_NULL_HANDLE;
+        }
         serialize_VkBuffer(reply, pBuffer_out);
         return true;
     }
@@ -505,6 +554,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateImage(device, &pCreateInfo_local, nullptr, &pImage_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pImage_out = VK_NULL_HANDLE;
+        }
         serialize_VkImage(reply, pImage_out);
         return true;
     }
@@ -526,6 +578,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateImageView(device, &pCreateInfo_local, nullptr, &pView_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pView_out = VK_NULL_HANDLE;
+        }
         serialize_VkImageView(reply, pView_out);
         return true;
     }
@@ -547,6 +602,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateSampler(device, &pCreateInfo_local, nullptr, &pSampler_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pSampler_out = VK_NULL_HANDLE;
+        }
         serialize_VkSampler(reply, pSampler_out);
         return true;
     }
@@ -568,6 +626,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateSemaphore(device, &pCreateInfo_local, nullptr, &pSemaphore_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pSemaphore_out = VK_NULL_HANDLE;
+        }
         serialize_VkSemaphore(reply, pSemaphore_out);
         return true;
     }
@@ -589,6 +650,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateFence(device, &pCreateInfo_local, nullptr, &pFence_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pFence_out = VK_NULL_HANDLE;
+        }
         serialize_VkFence(reply, pFence_out);
         return true;
     }
@@ -663,6 +727,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateCommandPool(device, &pCreateInfo_local, nullptr, &pCommandPool_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pCommandPool_out = VK_NULL_HANDLE;
+        }
         serialize_VkCommandPool(reply, pCommandPool_out);
         return true;
     }
@@ -729,6 +796,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateShaderModule(device, &pCreateInfo_local, nullptr, &pShaderModule_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pShaderModule_out = VK_NULL_HANDLE;
+        }
         serialize_VkShaderModule(reply, pShaderModule_out);
         return true;
     }
@@ -741,6 +811,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreatePipelineLayout(device, &pCreateInfo_local, nullptr, &pPipelineLayout_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pPipelineLayout_out = VK_NULL_HANDLE;
+        }
         serialize_VkPipelineLayout(reply, pPipelineLayout_out);
         return true;
     }
@@ -771,6 +844,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreatePipelineCache(device, &pCreateInfo_local, nullptr, &pPipelineCache_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pPipelineCache_out = VK_NULL_HANDLE;
+        }
         serialize_VkPipelineCache(reply, pPipelineCache_out);
         return true;
     }
@@ -792,6 +868,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateRenderPass(device, &pCreateInfo_local, nullptr, &pRenderPass_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pRenderPass_out = VK_NULL_HANDLE;
+        }
         serialize_VkRenderPass(reply, pRenderPass_out);
         return true;
     }
@@ -813,6 +892,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateFramebuffer(device, &pCreateInfo_local, nullptr, &pFramebuffer_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pFramebuffer_out = VK_NULL_HANDLE;
+        }
         serialize_VkFramebuffer(reply, pFramebuffer_out);
         return true;
     }
@@ -834,6 +916,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateDescriptorSetLayout(device, &pCreateInfo_local, nullptr, &pSetLayout_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pSetLayout_out = VK_NULL_HANDLE;
+        }
         serialize_VkDescriptorSetLayout(reply, pSetLayout_out);
         return true;
     }
@@ -855,6 +940,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateDescriptorPool(device, &pCreateInfo_local, nullptr, &pDescriptorPool_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pDescriptorPool_out = VK_NULL_HANDLE;
+        }
         serialize_VkDescriptorPool(reply, pDescriptorPool_out);
         return true;
     }
@@ -1226,6 +1314,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            for (size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
+        }
         for (size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
             serialize_VkPipeline(reply, pPipelines_storage[rvk_k]);
         }
@@ -1279,6 +1370,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkAllocateCommandBuffers(device, &pAllocateInfo_local, pCommandBuffers_storage);
         handles_made_through(as_number(pAllocateInfo_local.commandPool));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            for (size_t rvk_z = 0; rvk_z < pCommandBuffers_storage_count; ++rvk_z) { pCommandBuffers_storage[rvk_z] = {}; }
+        }
         for (size_t rvk_k = 0; rvk_k < pCommandBuffers_storage_count; ++rvk_k) {
             serialize_VkCommandBuffer(reply, pCommandBuffers_storage[rvk_k]);
         }
@@ -1300,6 +1394,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkAllocateDescriptorSets(device, &pAllocateInfo_local, pDescriptorSets_storage);
         handles_made_through(as_number(pAllocateInfo_local.descriptorPool));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            for (size_t rvk_z = 0; rvk_z < pDescriptorSets_storage_count; ++rvk_z) { pDescriptorSets_storage[rvk_z] = {}; }
+        }
         for (size_t rvk_k = 0; rvk_k < pDescriptorSets_storage_count; ++rvk_k) {
             serialize_VkDescriptorSet(reply, pDescriptorSets_storage[rvk_k]);
         }
@@ -1359,6 +1456,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateComputePipelines(device, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            for (size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
+        }
         for (size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
             serialize_VkPipeline(reply, pPipelines_storage[rvk_k]);
         }
@@ -1385,6 +1485,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateEvent(device, &pCreateInfo_local, nullptr, &pEvent_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pEvent_out = VK_NULL_HANDLE;
+        }
         serialize_VkEvent(reply, pEvent_out);
         return true;
     }
@@ -1875,6 +1978,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkAcquireNextImageInfoKHR(r, &pAcquireInfo_local, arena)) return false;
         VkResult result = s.on_vkAcquireNextImage2KHR(device, &pAcquireInfo_local, &pImageIndex_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pImageIndex_out = {};
+        }
         reply.write_pod(pImageIndex_out);
         return true;
     }
@@ -2446,6 +2552,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateBufferView(device, &pCreateInfo_local, nullptr, &pView_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pView_out = VK_NULL_HANDLE;
+        }
         serialize_VkBufferView(reply, pView_out);
         return true;
     }
@@ -2458,6 +2567,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateDescriptorUpdateTemplate(device, &pCreateInfo_local, nullptr, &pDescriptorUpdateTemplate_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pDescriptorUpdateTemplate_out = VK_NULL_HANDLE;
+        }
         serialize_VkDescriptorUpdateTemplate(reply, pDescriptorUpdateTemplate_out);
         return true;
     }
@@ -2470,6 +2582,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreatePrivateDataSlot(device, &pCreateInfo_local, nullptr, &pPrivateDataSlot_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pPrivateDataSlot_out = VK_NULL_HANDLE;
+        }
         serialize_VkPrivateDataSlot(reply, pPrivateDataSlot_out);
         return true;
     }
@@ -2482,6 +2597,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateQueryPool(device, &pCreateInfo_local, nullptr, &pQueryPool_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pQueryPool_out = VK_NULL_HANDLE;
+        }
         serialize_VkQueryPool(reply, pQueryPool_out);
         return true;
     }
@@ -2494,6 +2612,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateRenderPass2(device, &pCreateInfo_local, nullptr, &pRenderPass_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pRenderPass_out = VK_NULL_HANDLE;
+        }
         serialize_VkRenderPass(reply, pRenderPass_out);
         return true;
     }
@@ -2506,6 +2627,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateSamplerYcbcrConversion(device, &pCreateInfo_local, nullptr, &pYcbcrConversion_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pYcbcrConversion_out = VK_NULL_HANDLE;
+        }
         serialize_VkSamplerYcbcrConversion(reply, pYcbcrConversion_out);
         return true;
     }
@@ -2575,9 +2699,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkEnumeratePhysicalDeviceGroups(instance, &pPhysicalDeviceGroupCount_local, array_present ? pPhysicalDeviceGroupProperties_storage : nullptr);
         handles_made_through(as_number(instance));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
-        reply.write_pod(pPhysicalDeviceGroupCount_local);
+        uint32_t pPhysicalDeviceGroupCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pPhysicalDeviceGroupCount_local;
+        if (array_present && pPhysicalDeviceGroupCount_sent > pPhysicalDeviceGroupProperties_storage_count) {
+            pPhysicalDeviceGroupCount_sent = static_cast<uint32_t>(pPhysicalDeviceGroupProperties_storage_count);
+        }
+        reply.write_pod(pPhysicalDeviceGroupCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pPhysicalDeviceGroupCount_local; ++k) {
+            for (uint32_t k = 0; k < pPhysicalDeviceGroupCount_sent; ++k) {
                 serialize_VkPhysicalDeviceGroupProperties(reply, pPhysicalDeviceGroupProperties_storage[k]);
             }
         }
@@ -2683,6 +2811,11 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pDeviceGroupPresentCapabilities_out), arena)) return false;
         VkResult result = s.on_vkGetDeviceGroupPresentCapabilitiesKHR(device, &pDeviceGroupPresentCapabilities_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            VkDeviceGroupPresentCapabilitiesKHR pDeviceGroupPresentCapabilities_blank{};
+            pDeviceGroupPresentCapabilities_blank.sType = pDeviceGroupPresentCapabilities_out.sType;
+            pDeviceGroupPresentCapabilities_out = pDeviceGroupPresentCapabilities_blank;
+        }
         serialize_VkDeviceGroupPresentCapabilitiesKHR(reply, pDeviceGroupPresentCapabilities_out);
         return true;
     }
@@ -2694,6 +2827,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkSurfaceKHR(r, surface)) return false;
         VkResult result = s.on_vkGetDeviceGroupSurfacePresentModesKHR(device, surface, &pModes_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pModes_out = {};
+        }
         reply.write_pod(pModes_out);
         return true;
     }
@@ -2732,9 +2868,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         s.on_vkGetDeviceImageSparseMemoryRequirements(device, &pInfo_local, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
         reply.write_pod<int32_t>(0);
-        reply.write_pod(pSparseMemoryRequirementCount_local);
+        uint32_t pSparseMemoryRequirementCount_sent = pSparseMemoryRequirementCount_local;
+        if (array_present && pSparseMemoryRequirementCount_sent > pSparseMemoryRequirements_storage_count) {
+            pSparseMemoryRequirementCount_sent = static_cast<uint32_t>(pSparseMemoryRequirements_storage_count);
+        }
+        reply.write_pod(pSparseMemoryRequirementCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
+            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_sent; ++k) {
                 serialize_VkSparseImageMemoryRequirements2(reply, pSparseMemoryRequirements_storage[k]);
             }
         }
@@ -2806,9 +2946,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         s.on_vkGetImageSparseMemoryRequirements(device, image, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
         reply.write_pod<int32_t>(0);
-        reply.write_pod(pSparseMemoryRequirementCount_local);
+        uint32_t pSparseMemoryRequirementCount_sent = pSparseMemoryRequirementCount_local;
+        if (array_present && pSparseMemoryRequirementCount_sent > pSparseMemoryRequirements_storage_count) {
+            pSparseMemoryRequirementCount_sent = static_cast<uint32_t>(pSparseMemoryRequirements_storage_count);
+        }
+        reply.write_pod(pSparseMemoryRequirementCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
+            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_sent; ++k) {
                 serialize_VkSparseImageMemoryRequirements(reply, pSparseMemoryRequirements_storage[k]);
             }
         }
@@ -2836,9 +2980,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         s.on_vkGetImageSparseMemoryRequirements2(device, &pInfo_local, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
         reply.write_pod<int32_t>(0);
-        reply.write_pod(pSparseMemoryRequirementCount_local);
+        uint32_t pSparseMemoryRequirementCount_sent = pSparseMemoryRequirementCount_local;
+        if (array_present && pSparseMemoryRequirementCount_sent > pSparseMemoryRequirements_storage_count) {
+            pSparseMemoryRequirementCount_sent = static_cast<uint32_t>(pSparseMemoryRequirements_storage_count);
+        }
+        reply.write_pod(pSparseMemoryRequirementCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
+            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_sent; ++k) {
                 serialize_VkSparseImageMemoryRequirements2(reply, pSparseMemoryRequirements_storage[k]);
             }
         }
@@ -2917,9 +3065,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         VkResult result = s.on_vkGetPhysicalDevicePresentRectanglesKHR(physicalDevice, surface, &pRectCount_local, array_present ? pRects_storage : nullptr);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
-        reply.write_pod(pRectCount_local);
+        uint32_t pRectCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pRectCount_local;
+        if (array_present && pRectCount_sent > pRects_storage_count) {
+            pRectCount_sent = static_cast<uint32_t>(pRects_storage_count);
+        }
+        reply.write_pod(pRectCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pRectCount_local; ++k) {
+            for (uint32_t k = 0; k < pRectCount_sent; ++k) {
                 serialize_VkRect2D(reply, pRects_storage[k]);
             }
         }
@@ -2945,9 +3097,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         VkResult result = s.on_vkGetPhysicalDeviceToolProperties(physicalDevice, &pToolCount_local, array_present ? pToolProperties_storage : nullptr);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
-        reply.write_pod(pToolCount_local);
+        uint32_t pToolCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pToolCount_local;
+        if (array_present && pToolCount_sent > pToolProperties_storage_count) {
+            pToolCount_sent = static_cast<uint32_t>(pToolProperties_storage_count);
+        }
+        reply.write_pod(pToolCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pToolCount_local; ++k) {
+            for (uint32_t k = 0; k < pToolCount_sent; ++k) {
                 serialize_VkPhysicalDeviceToolProperties(reply, pToolProperties_storage[k]);
             }
         }
@@ -2997,6 +3153,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!r.read_pod(flags)) return false;
         VkResult result = s.on_vkGetQueryPoolResults(device, queryPool, firstQuery, queryCount, dataSize, pData_storage, stride, flags);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            for (size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
+        }
         if (pData_storage_count != 0) {
             reply.write(pData_storage, pData_storage_count);
         }
@@ -3021,6 +3180,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkSemaphore(r, semaphore)) return false;
         VkResult result = s.on_vkGetSemaphoreCounterValue(device, semaphore, &pValue_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pValue_out = {};
+        }
         reply.write_pod(pValue_out);
         return true;
     }
@@ -3201,6 +3363,11 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pImageFormatProperties_out), arena)) return false;
         VkResult result = s.on_vkGetPhysicalDeviceImageFormatProperties2KHR(physicalDevice, &pImageFormatInfo_local, &pImageFormatProperties_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            VkImageFormatProperties2 pImageFormatProperties_blank{};
+            pImageFormatProperties_blank.sType = pImageFormatProperties_out.sType;
+            pImageFormatProperties_out = pImageFormatProperties_blank;
+        }
         serialize_VkImageFormatProperties2(reply, pImageFormatProperties_out);
         return true;
     }
@@ -3246,9 +3413,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         s.on_vkGetPhysicalDeviceQueueFamilyProperties2KHR(physicalDevice, &pQueueFamilyPropertyCount_local, array_present ? pQueueFamilyProperties_storage : nullptr);
         reply.write_pod<int32_t>(0);
-        reply.write_pod(pQueueFamilyPropertyCount_local);
+        uint32_t pQueueFamilyPropertyCount_sent = pQueueFamilyPropertyCount_local;
+        if (array_present && pQueueFamilyPropertyCount_sent > pQueueFamilyProperties_storage_count) {
+            pQueueFamilyPropertyCount_sent = static_cast<uint32_t>(pQueueFamilyProperties_storage_count);
+        }
+        reply.write_pod(pQueueFamilyPropertyCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pQueueFamilyPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pQueueFamilyPropertyCount_sent; ++k) {
                 serialize_VkQueueFamilyProperties2(reply, pQueueFamilyProperties_storage[k]);
             }
         }
@@ -3276,9 +3447,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         s.on_vkGetPhysicalDeviceSparseImageFormatProperties2KHR(physicalDevice, &pFormatInfo_local, &pPropertyCount_local, array_present ? pProperties_storage : nullptr);
         reply.write_pod<int32_t>(0);
-        reply.write_pod(pPropertyCount_local);
+        uint32_t pPropertyCount_sent = pPropertyCount_local;
+        if (array_present && pPropertyCount_sent > pProperties_storage_count) {
+            pPropertyCount_sent = static_cast<uint32_t>(pProperties_storage_count);
+        }
+        reply.write_pod(pPropertyCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pPropertyCount_local; ++k) {
+            for (uint32_t k = 0; k < pPropertyCount_sent; ++k) {
                 serialize_VkSparseImageFormatProperties2(reply, pProperties_storage[k]);
             }
         }
@@ -3372,9 +3547,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         s.on_vkGetImageSparseMemoryRequirements2KHR(device, &pInfo_local, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
         reply.write_pod<int32_t>(0);
-        reply.write_pod(pSparseMemoryRequirementCount_local);
+        uint32_t pSparseMemoryRequirementCount_sent = pSparseMemoryRequirementCount_local;
+        if (array_present && pSparseMemoryRequirementCount_sent > pSparseMemoryRequirements_storage_count) {
+            pSparseMemoryRequirementCount_sent = static_cast<uint32_t>(pSparseMemoryRequirements_storage_count);
+        }
+        reply.write_pod(pSparseMemoryRequirementCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
+            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_sent; ++k) {
                 serialize_VkSparseImageMemoryRequirements2(reply, pSparseMemoryRequirements_storage[k]);
             }
         }
@@ -3611,6 +3790,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateDescriptorUpdateTemplateKHR(device, &pCreateInfo_local, nullptr, &pDescriptorUpdateTemplate_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pDescriptorUpdateTemplate_out = VK_NULL_HANDLE;
+        }
         serialize_VkDescriptorUpdateTemplate(reply, pDescriptorUpdateTemplate_out);
         return true;
     }
@@ -3623,6 +3805,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateRenderPass2KHR(device, &pCreateInfo_local, nullptr, &pRenderPass_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pRenderPass_out = VK_NULL_HANDLE;
+        }
         serialize_VkRenderPass(reply, pRenderPass_out);
         return true;
     }
@@ -3635,6 +3820,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateSamplerYcbcrConversionKHR(device, &pCreateInfo_local, nullptr, &pYcbcrConversion_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pYcbcrConversion_out = VK_NULL_HANDLE;
+        }
         serialize_VkSamplerYcbcrConversion(reply, pYcbcrConversion_out);
         return true;
     }
@@ -3677,9 +3865,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkEnumeratePhysicalDeviceGroupsKHR(instance, &pPhysicalDeviceGroupCount_local, array_present ? pPhysicalDeviceGroupProperties_storage : nullptr);
         handles_made_through(as_number(instance));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
-        reply.write_pod(pPhysicalDeviceGroupCount_local);
+        uint32_t pPhysicalDeviceGroupCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pPhysicalDeviceGroupCount_local;
+        if (array_present && pPhysicalDeviceGroupCount_sent > pPhysicalDeviceGroupProperties_storage_count) {
+            pPhysicalDeviceGroupCount_sent = static_cast<uint32_t>(pPhysicalDeviceGroupProperties_storage_count);
+        }
+        reply.write_pod(pPhysicalDeviceGroupCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pPhysicalDeviceGroupCount_local; ++k) {
+            for (uint32_t k = 0; k < pPhysicalDeviceGroupCount_sent; ++k) {
                 serialize_VkPhysicalDeviceGroupProperties(reply, pPhysicalDeviceGroupProperties_storage[k]);
             }
         }
@@ -3779,9 +3971,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         s.on_vkGetDeviceImageSparseMemoryRequirementsKHR(device, &pInfo_local, &pSparseMemoryRequirementCount_local, array_present ? pSparseMemoryRequirements_storage : nullptr);
         reply.write_pod<int32_t>(0);
-        reply.write_pod(pSparseMemoryRequirementCount_local);
+        uint32_t pSparseMemoryRequirementCount_sent = pSparseMemoryRequirementCount_local;
+        if (array_present && pSparseMemoryRequirementCount_sent > pSparseMemoryRequirements_storage_count) {
+            pSparseMemoryRequirementCount_sent = static_cast<uint32_t>(pSparseMemoryRequirements_storage_count);
+        }
+        reply.write_pod(pSparseMemoryRequirementCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_local; ++k) {
+            for (uint32_t k = 0; k < pSparseMemoryRequirementCount_sent; ++k) {
                 serialize_VkSparseImageMemoryRequirements2(reply, pSparseMemoryRequirements_storage[k]);
             }
         }
@@ -3843,6 +4039,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkSemaphore(r, semaphore)) return false;
         VkResult result = s.on_vkGetSemaphoreCounterValueKHR(device, semaphore, &pValue_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pValue_out = {};
+        }
         reply.write_pod(pValue_out);
         return true;
     }
@@ -4945,6 +5144,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateAccelerationStructureKHR(device, &pCreateInfo_local, nullptr, &pAccelerationStructure_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pAccelerationStructure_out = VK_NULL_HANDLE;
+        }
         serialize_VkAccelerationStructureKHR(reply, pAccelerationStructure_out);
         return true;
     }
@@ -4955,6 +5157,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateDeferredOperationKHR(device, nullptr, &pDeferredOperation_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pDeferredOperation_out = VK_NULL_HANDLE;
+        }
         serialize_VkDeferredOperationKHR(reply, pDeferredOperation_out);
         return true;
     }
@@ -4989,6 +5194,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateRayTracingPipelinesKHR(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos_storage, nullptr, pPipelines_storage);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            for (size_t rvk_z = 0; rvk_z < pPipelines_storage_count; ++rvk_z) { pPipelines_storage[rvk_z] = {}; }
+        }
         for (size_t rvk_k = 0; rvk_k < pPipelines_storage_count; ++rvk_k) {
             serialize_VkPipeline(reply, pPipelines_storage[rvk_k]);
         }
@@ -5021,6 +5229,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreateShadersEXT(device, createInfoCount, pCreateInfos_storage, nullptr, pShaders_storage);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            for (size_t rvk_z = 0; rvk_z < pShaders_storage_count; ++rvk_z) { pShaders_storage[rvk_z] = {}; }
+        }
         for (size_t rvk_k = 0; rvk_k < pShaders_storage_count; ++rvk_k) {
             serialize_VkShaderEXT(reply, pShaders_storage[rvk_k]);
         }
@@ -5165,9 +5376,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         VkResult result = s.on_vkGetPhysicalDeviceFragmentShadingRatesKHR(physicalDevice, &pFragmentShadingRateCount_local, array_present ? pFragmentShadingRates_storage : nullptr);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
-        reply.write_pod(pFragmentShadingRateCount_local);
+        uint32_t pFragmentShadingRateCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pFragmentShadingRateCount_local;
+        if (array_present && pFragmentShadingRateCount_sent > pFragmentShadingRates_storage_count) {
+            pFragmentShadingRateCount_sent = static_cast<uint32_t>(pFragmentShadingRates_storage_count);
+        }
+        reply.write_pod(pFragmentShadingRateCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pFragmentShadingRateCount_local; ++k) {
+            for (uint32_t k = 0; k < pFragmentShadingRateCount_sent; ++k) {
                 serialize_VkPhysicalDeviceFragmentShadingRateKHR(reply, pFragmentShadingRates_storage[k]);
             }
         }
@@ -5198,6 +5413,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         VkResult result = s.on_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR(device, pipeline, firstGroup, groupCount, dataSize, pData_storage);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            for (size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
+        }
         if (pData_storage_count != 0) {
             reply.write(pData_storage, pData_storage_count);
         }
@@ -5228,6 +5446,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         VkResult result = s.on_vkGetRayTracingShaderGroupHandlesKHR(device, pipeline, firstGroup, groupCount, dataSize, pData_storage);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            for (size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
+        }
         if (pData_storage_count != 0) {
             reply.write(pData_storage, pData_storage_count);
         }
@@ -5306,6 +5527,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         VkResult result = s.on_vkWriteAccelerationStructuresPropertiesKHR(device, accelerationStructureCount, pAccelerationStructures_storage, queryType, dataSize, pData_storage, stride);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            for (size_t rvk_z = 0; rvk_z < pData_storage_count; ++rvk_z) { pData_storage[rvk_z] = {}; }
+        }
         if (pData_storage_count != 0) {
             reply.write(pData_storage, pData_storage_count);
         }
@@ -5338,6 +5562,10 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         VkResult result = s.on_vkGetCalibratedTimestampsEXT(device, timestampCount, pTimestampInfos_storage, pTimestamps_storage, &pMaxDeviation_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            for (size_t rvk_z = 0; rvk_z < pTimestamps_storage_count; ++rvk_z) { pTimestamps_storage[rvk_z] = {}; }
+            pMaxDeviation_out = {};
+        }
         for (size_t rvk_k = 0; rvk_k < pTimestamps_storage_count; ++rvk_k) {
             reply.write_pod(pTimestamps_storage[rvk_k]);
         }
@@ -5363,9 +5591,13 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         }
         VkResult result = s.on_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(physicalDevice, &pTimeDomainCount_local, array_present ? pTimeDomains_storage : nullptr);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
-        reply.write_pod(pTimeDomainCount_local);
+        uint32_t pTimeDomainCount_sent = static_cast<int32_t>(result) < 0 ? 0u : pTimeDomainCount_local;
+        if (array_present && pTimeDomainCount_sent > pTimeDomains_storage_count) {
+            pTimeDomainCount_sent = static_cast<uint32_t>(pTimeDomains_storage_count);
+        }
+        reply.write_pod(pTimeDomainCount_sent);
         if (array_present) {
-            for (uint32_t k = 0; k < pTimeDomainCount_local; ++k) {
+            for (uint32_t k = 0; k < pTimeDomainCount_sent; ++k) {
                 reply.write_pod(pTimeDomains_storage[k]);
             }
         }
@@ -5412,6 +5644,11 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         VkResult result = s.on_vkCreatePipelineBinariesKHR(device, &pCreateInfo_local, nullptr, &pBinaries_out);
         handles_made_through(as_number(device));
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            VkPipelineBinaryHandlesInfoKHR pBinaries_blank{};
+            pBinaries_blank.sType = pBinaries_out.sType;
+            pBinaries_out = pBinaries_blank;
+        }
         serialize_VkPipelineBinaryHandlesInfoKHR(reply, pBinaries_out);
         return true;
     }
@@ -5462,6 +5699,11 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pPipelineKey_out), arena)) return false;
         VkResult result = s.on_vkGetPipelineKeyKHR(device, &pPipelineCreateInfo_local, &pPipelineKey_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            VkPipelineBinaryKeyKHR pPipelineKey_blank{};
+            pPipelineKey_blank.sType = pPipelineKey_out.sType;
+            pPipelineKey_out = pPipelineKey_blank;
+        }
         serialize_VkPipelineBinaryKeyKHR(reply, pPipelineKey_out);
         return true;
     }
@@ -5666,6 +5908,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkFenceGetFdInfoKHR(r, &pGetFdInfo_local, arena)) return false;
         VkResult result = s.on_vkGetFenceFdKHR(device, &pGetFdInfo_local, &pFd_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pFd_out = {};
+        }
         reply.write_pod(pFd_out);
         return true;
     }
@@ -5677,6 +5922,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkMemoryGetFdInfoKHR(r, &pGetFdInfo_local, arena)) return false;
         VkResult result = s.on_vkGetMemoryFdKHR(device, &pGetFdInfo_local, &pFd_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pFd_out = {};
+        }
         reply.write_pod(pFd_out);
         return true;
     }
@@ -5692,6 +5940,11 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_pnext_chain(r, reinterpret_cast<VkBaseOutStructure*>(&pMemoryFdProperties_out), arena)) return false;
         VkResult result = s.on_vkGetMemoryFdPropertiesKHR(device, handleType, fd, &pMemoryFdProperties_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            VkMemoryFdPropertiesKHR pMemoryFdProperties_blank{};
+            pMemoryFdProperties_blank.sType = pMemoryFdProperties_out.sType;
+            pMemoryFdProperties_out = pMemoryFdProperties_blank;
+        }
         serialize_VkMemoryFdPropertiesKHR(reply, pMemoryFdProperties_out);
         return true;
     }
@@ -5703,6 +5956,9 @@ bool dispatch_command(ServerDispatch& s, uint32_t cmd_id, ::av::WireReader& r, :
         if (!deserialize_VkSemaphoreGetFdInfoKHR(r, &pGetFdInfo_local, arena)) return false;
         VkResult result = s.on_vkGetSemaphoreFdKHR(device, &pGetFdInfo_local, &pFd_out);
         reply.write_pod<int32_t>(static_cast<int32_t>(result));
+        if (static_cast<int32_t>(result) < 0) {
+            pFd_out = {};
+        }
         reply.write_pod(pFd_out);
         return true;
     }

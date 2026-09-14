@@ -69,7 +69,6 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
 
     # ---- Encode inputs ----
     i = 0
-    has_array_pair = False
     while i < len(cmd.params):
         p = cmd.params[i]
         if classify.is_count_array_pair(cmd.params, i):
@@ -82,7 +81,6 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append("if (array_present) {")
             lines.append(f"    payload.write_pod<uint32_t>(*{count.name});")
             lines.append("}")
-            has_array_pair = True
             i += 2
             continue
 
@@ -230,13 +228,21 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         if classify.is_count_array_pair(cmd.params, i):
             count = cmd.params[i]
             arr = cmd.params[i + 1]
-            lines.append(f"if (!r.read_pod(*{count.name})) {{")
+            # The count is the host's word, and the caller's array holds only
+            # what the caller said it does: a reply listing more than that is
+            # a failed call, refused before a single element is written.
+            answered = f"{count.name}_answered"
+            lines.append(f"uint32_t {answered} = 0;")
+            lines.append(f"if (!r.read_pod({answered})) {{")
             lines.append(on_fail)
             lines.append("}")
             element_is_struct = arr.type.base in reg.structs
             element_is_handle = arr.type.base in reg.handles
             lines.append("if (array_present) {")
-            lines.append(f"    for (uint32_t k = 0; k < *{count.name}; ++k) {{")
+            lines.append(f"    if ({answered} > *{count.name}) {{")
+            lines.append("        " + on_fail.lstrip())
+            lines.append("    }")
+            lines.append(f"    for (uint32_t k = 0; k < {answered}; ++k) {{")
             if element_is_struct:
                 lines.append(
                     f"        if (!deserialize_{arr.type.base}(r, &{arr.name}[k], t.decode_arena())) {{"
@@ -255,6 +261,7 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append("        }")
             lines.append("    }")
             lines.append("}")
+            lines.append(f"*{count.name} = {answered};")
             i += 2
             continue
 
@@ -304,11 +311,6 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 lines.append("    }")
             lines.append("}")
         i += 1
-
-    if has_array_pair:
-        # Nothing — variable was consumed already above; suppresses the
-        # "unused variable" pylint warning that this block used to need.
-        pass
 
     if not is_void:
         lines.append(f"return static_cast<{cmd.return_type.cpp()}>(result_code);")

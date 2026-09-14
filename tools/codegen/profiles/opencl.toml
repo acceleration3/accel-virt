@@ -303,6 +303,7 @@ size_ret = "num_kernels_ret"
 [params."clGetSupportedImageFormats.image_formats"]
 role = "bytes_out"
 len = "@image_format_bytes"
+size_ret = "num_image_formats"
 
 # A sub-buffer's "create info" is a cl_buffer_region and nothing else
 # in 1.2, so it travels as that struct rather than as loose bytes.

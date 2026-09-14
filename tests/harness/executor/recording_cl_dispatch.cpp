@@ -45,8 +45,76 @@ cl_int answer_info(const void *answer, std::size_t bytes, std::size_t room, void
 RecordingClDispatch::RecordingClDispatch(const std::uint8_t *block, const WireArena &arena)
     : block_(block), arena_(arena), handles_(), objects_{}, produced_(0u), calls_(0u),
       last_called_(0u), strangers_(0u), strays_(0u), refused_(0u), builds_without_argument_info_(0u),
-      logged_{}
+      answer_pending_(false), answer_result_(CL_SUCCESS), answer_reported_(0u), logged_{}
 {}
+
+void RecordingClDispatch::answer_next_with(cl_int result, std::size_t reported)
+{
+    answer_pending_ = true;
+    answer_result_ = result;
+    answer_reported_ = reported;
+}
+
+bool RecordingClDispatch::take_answer()
+{
+    const bool pending = answer_pending_;
+    answer_pending_ = false;
+    return pending;
+}
+
+cl_int RecordingClDispatch::scribble_ids(void *ids, cl_uint room, cl_uint *count)
+{
+    std::size_t kept = 0u;
+    if (answer_result_ == CL_SUCCESS) kept = answer_reported_ < room ? answer_reported_ : room;
+    if (ids != nullptr && kept < room)
+        std::memset(static_cast<char *>(ids) + kept * sizeof(void *), garbage, (room - kept) * sizeof(void *));
+    if (count != nullptr) *count = static_cast<cl_uint>(answer_reported_);
+    return answer_result_;
+}
+
+cl_int RecordingClDispatch::on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms,
+                                                cl_uint *num_platforms)
+{
+    const cl_int listed = DefaultDispatch::on_clGetPlatformIDs(num_entries, platforms, num_platforms);
+    return take_answer() ? scribble_ids(platforms, num_entries, num_platforms) : listed;
+}
+
+cl_int RecordingClDispatch::on_clGetDeviceIDs(cl_platform_id platform, cl_device_type device_type,
+                                              cl_uint num_entries, cl_device_id *devices, cl_uint *num_devices)
+{
+    const cl_int listed = DefaultDispatch::on_clGetDeviceIDs(platform, device_type, num_entries, devices, num_devices);
+    return take_answer() ? scribble_ids(devices, num_entries, num_devices) : listed;
+}
+
+cl_int RecordingClDispatch::on_clGetDeviceInfo(cl_device_id device, cl_device_info param_name,
+                                               std::size_t param_value_size, void *param_value,
+                                               std::size_t *param_value_size_ret)
+{
+    const cl_int described = DefaultDispatch::on_clGetDeviceInfo(device, param_name, param_value_size,
+                                                                 param_value, param_value_size_ret);
+    if (!take_answer()) return described;
+    const std::size_t written =
+        answer_result_ == CL_SUCCESS && answer_reported_ < param_value_size ? answer_reported_ : 0u;
+    if (param_value != nullptr) {
+        std::memset(param_value, garbage, param_value_size);
+        std::memset(param_value, answered, written);
+    }
+    if (param_value_size_ret != nullptr) *param_value_size_ret = answer_reported_;
+    return answer_result_;
+}
+
+cl_int RecordingClDispatch::on_clEnqueueReadBuffer(cl_command_queue command_queue, cl_mem buffer,
+                                                   cl_bool blocking_read, std::size_t offset, std::size_t size,
+                                                   void *ptr, cl_uint num_events_in_wait_list,
+                                                   const cl_event *event_wait_list, cl_event *event)
+{
+    const cl_int read = DefaultDispatch::on_clEnqueueReadBuffer(command_queue, buffer, blocking_read, offset, size,
+                                                                ptr, num_events_in_wait_list, event_wait_list, event);
+    if (!take_answer()) return read;
+    if (ptr != nullptr) std::memset(ptr, garbage, size);
+    if (event != nullptr) std::memset(static_cast<void *>(event), garbage, sizeof *event);
+    return answer_result_;
+}
 
 void *RecordingClDispatch::handle_for(clproto::HandleKind kind, std::uint64_t wire) const
 {

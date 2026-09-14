@@ -259,23 +259,21 @@ static bool decode_clGetPlatformIDs(ServerDispatch& s, ::av::WireReader& r,
         if (platforms == nullptr) return false;
     }
     cl_uint num_platforms_storage{};
-    cl_uint* num_platforms = num_platforms_wanted ? &num_platforms_storage : nullptr;
+    cl_uint* num_platforms = (num_platforms_wanted || platforms_wanted) ? &num_platforms_storage : nullptr;
     const cl_int ret = s.on_clGetPlatformIDs(num_entries, platforms, num_platforms);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (platforms_wanted) {
-        const uint64_t wire_produced = num_platforms != nullptr
-            ? static_cast<uint64_t>(*num_platforms)
-            : static_cast<uint64_t>(num_entries);
+        const uint64_t wire_produced = (ret == CL_SUCCESS) ? static_cast<uint64_t>(num_platforms_storage) : 0u;
         const uint64_t wire_sent = wire_produced < static_cast<uint64_t>(num_entries)
             ? wire_produced : static_cast<uint64_t>(num_entries);
         reply.write_varint(wire_sent);
         for (uint64_t i = 0; i < wire_sent; ++i) {
-            if ((ret == CL_SUCCESS) && platforms[i] != nullptr) s.made(HandleKind::platform, platforms[i]);
+            if (platforms[i] != nullptr) s.made(HandleKind::platform, platforms[i]);
             reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(platforms[i])));
         }
     }
     if (num_platforms_wanted) {
-        reply.write_varint(static_cast<uint64_t>(num_platforms_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(num_platforms_storage) : 0u);
     }
     return true;
 }
@@ -322,20 +320,18 @@ static bool decode_clGetPlatformInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetPlatformInfo(platform, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -382,23 +378,21 @@ static bool decode_clGetDeviceIDs(ServerDispatch& s, ::av::WireReader& r,
         if (devices == nullptr) return false;
     }
     cl_uint num_devices_storage{};
-    cl_uint* num_devices = num_devices_wanted ? &num_devices_storage : nullptr;
+    cl_uint* num_devices = (num_devices_wanted || devices_wanted) ? &num_devices_storage : nullptr;
     const cl_int ret = s.on_clGetDeviceIDs(platform, device_type, num_entries, devices, num_devices);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (devices_wanted) {
-        const uint64_t wire_produced = num_devices != nullptr
-            ? static_cast<uint64_t>(*num_devices)
-            : static_cast<uint64_t>(num_entries);
+        const uint64_t wire_produced = (ret == CL_SUCCESS) ? static_cast<uint64_t>(num_devices_storage) : 0u;
         const uint64_t wire_sent = wire_produced < static_cast<uint64_t>(num_entries)
             ? wire_produced : static_cast<uint64_t>(num_entries);
         reply.write_varint(wire_sent);
         for (uint64_t i = 0; i < wire_sent; ++i) {
-            if ((ret == CL_SUCCESS) && devices[i] != nullptr) s.made(HandleKind::device, devices[i]);
+            if (devices[i] != nullptr) s.made(HandleKind::device, devices[i]);
             reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(devices[i])));
         }
     }
     if (num_devices_wanted) {
-        reply.write_varint(static_cast<uint64_t>(num_devices_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(num_devices_storage) : 0u);
     }
     return true;
 }
@@ -445,20 +439,18 @@ static bool decode_clGetDeviceInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetDeviceInfo(device, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -676,20 +668,18 @@ static bool decode_clGetContextInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetContextInfo(context, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -869,20 +859,18 @@ static bool decode_clGetCommandQueueInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetCommandQueueInfo(command_queue, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -1193,20 +1181,18 @@ static bool decode_clGetMemObjectInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetMemObjectInfo(memobj, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -1253,20 +1239,18 @@ static bool decode_clGetImageInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetImageInfo(image, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -1326,15 +1310,18 @@ static bool decode_clGetSupportedImageFormats(ServerDispatch& s, ::av::WireReade
         if (image_formats == nullptr) return false;
     }
     cl_uint num_image_formats_storage{};
-    cl_uint* num_image_formats = num_image_formats_wanted ? &num_image_formats_storage : nullptr;
+    cl_uint* num_image_formats = (num_image_formats_wanted || image_formats_wanted) ? &num_image_formats_storage : nullptr;
     const cl_int ret = s.on_clGetSupportedImageFormats(context, flags, image_type, num_entries, image_formats, num_image_formats);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (image_formats_wanted) {
-        reply.write_varint(static_cast<uint64_t>(image_formats_capacity));
-        if (image_formats_capacity != 0) reply.write(image_formats, static_cast<size_t>(image_formats_capacity));
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(num_image_formats_storage) * sizeof(cl_image_format) : 0u;
+        if (wire_written > static_cast<uint64_t>(image_formats_capacity))
+            wire_written = static_cast<uint64_t>(image_formats_capacity);
+        reply.write_varint(wire_written);
+        if (wire_written != 0) reply.write(image_formats, static_cast<size_t>(wire_written));
     }
     if (num_image_formats_wanted) {
-        reply.write_varint(static_cast<uint64_t>(num_image_formats_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(num_image_formats_storage) : 0u);
     }
     return true;
 }
@@ -1432,11 +1419,15 @@ static bool decode_clEnqueueReadBuffer(ServerDispatch& s, ::av::WireReader& r,
     const cl_int ret = s.on_clEnqueueReadBuffer(command_queue, buffer, blocking_read, offset, size, ptr, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (ptr_wanted) {
-        reply.write_varint(static_cast<uint64_t>(ptr_capacity));
-        if (ptr_capacity != 0) reply.write(ptr, static_cast<size_t>(ptr_capacity));
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(ptr_capacity) : 0u;
+        if (wire_written > static_cast<uint64_t>(ptr_capacity))
+            wire_written = static_cast<uint64_t>(ptr_capacity);
+        reply.write_varint(wire_written);
+        if (wire_written != 0) reply.write(ptr, static_cast<size_t>(wire_written));
     }
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -1533,7 +1524,8 @@ static bool decode_clEnqueueWriteBuffer(ServerDispatch& s, ::av::WireReader& r,
     const cl_int ret = s.on_clEnqueueWriteBuffer(command_queue, buffer, blocking_write, offset, size, ptr, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -1621,7 +1613,8 @@ static bool decode_clEnqueueCopyBuffer(ServerDispatch& s, ::av::WireReader& r,
     const cl_int ret = s.on_clEnqueueCopyBuffer(command_queue, src_buffer, dst_buffer, src_offset, dst_offset, size, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -1718,7 +1711,8 @@ static bool decode_clEnqueueFillBuffer(ServerDispatch& s, ::av::WireReader& r,
     const cl_int ret = s.on_clEnqueueFillBuffer(command_queue, buffer, pattern, pattern_size, offset, size, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -1861,11 +1855,15 @@ static bool decode_clEnqueueReadImage(ServerDispatch& s, ::av::WireReader& r,
     const cl_int ret = s.on_clEnqueueReadImage(command_queue, image, blocking_read, origin, region, row_pitch, slice_pitch, ptr, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (ptr_wanted) {
-        reply.write_varint(static_cast<uint64_t>(ptr_capacity));
-        if (ptr_capacity != 0) reply.write(ptr, static_cast<size_t>(ptr_capacity));
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(ptr_capacity) : 0u;
+        if (wire_written > static_cast<uint64_t>(ptr_capacity))
+            wire_written = static_cast<uint64_t>(ptr_capacity);
+        reply.write_varint(wire_written);
+        if (wire_written != 0) reply.write(ptr, static_cast<size_t>(wire_written));
     }
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -2006,7 +2004,8 @@ static bool decode_clEnqueueWriteImage(ServerDispatch& s, ::av::WireReader& r,
     const cl_int ret = s.on_clEnqueueWriteImage(command_queue, image, blocking_write, origin, region, input_row_pitch, input_slice_pitch, ptr, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -2136,7 +2135,8 @@ static bool decode_clEnqueueCopyImage(ServerDispatch& s, ::av::WireReader& r,
     const cl_int ret = s.on_clEnqueueCopyImage(command_queue, src_image, dst_image, src_origin, dst_origin, region, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -2252,7 +2252,8 @@ static bool decode_clEnqueueCopyImageToBuffer(ServerDispatch& s, ::av::WireReade
     const cl_int ret = s.on_clEnqueueCopyImageToBuffer(command_queue, src_image, dst_buffer, src_origin, region, dst_offset, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -2368,7 +2369,8 @@ static bool decode_clEnqueueCopyBufferToImage(ServerDispatch& s, ::av::WireReade
     const cl_int ret = s.on_clEnqueueCopyBufferToImage(command_queue, src_buffer, dst_image, src_offset, dst_origin, region, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -2676,20 +2678,18 @@ static bool decode_clGetProgramInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetProgramInfo(program, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -2743,20 +2743,18 @@ static bool decode_clGetProgramBuildInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetProgramBuildInfo(program, device, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -2857,23 +2855,21 @@ static bool decode_clCreateKernelsInProgram(ServerDispatch& s, ::av::WireReader&
         if (kernels == nullptr) return false;
     }
     cl_uint num_kernels_ret_storage{};
-    cl_uint* num_kernels_ret = num_kernels_ret_wanted ? &num_kernels_ret_storage : nullptr;
+    cl_uint* num_kernels_ret = (num_kernels_ret_wanted || kernels_wanted) ? &num_kernels_ret_storage : nullptr;
     const cl_int ret = s.on_clCreateKernelsInProgram(program, num_kernels, kernels, num_kernels_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (kernels_wanted) {
-        const uint64_t wire_produced = num_kernels_ret != nullptr
-            ? static_cast<uint64_t>(*num_kernels_ret)
-            : static_cast<uint64_t>(num_kernels);
+        const uint64_t wire_produced = (ret == CL_SUCCESS) ? static_cast<uint64_t>(num_kernels_ret_storage) : 0u;
         const uint64_t wire_sent = wire_produced < static_cast<uint64_t>(num_kernels)
             ? wire_produced : static_cast<uint64_t>(num_kernels);
         reply.write_varint(wire_sent);
         for (uint64_t i = 0; i < wire_sent; ++i) {
-            if ((ret == CL_SUCCESS) && kernels[i] != nullptr) s.made(HandleKind::kernel, kernels[i]);
+            if (kernels[i] != nullptr) s.made(HandleKind::kernel, kernels[i]);
             reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(kernels[i])));
         }
     }
     if (num_kernels_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(num_kernels_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(num_kernels_ret_storage) : 0u);
     }
     return true;
 }
@@ -3002,20 +2998,18 @@ static bool decode_clGetKernelInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetKernelInfo(kernel, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -3068,20 +3062,18 @@ static bool decode_clGetKernelArgInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetKernelArgInfo(kernel, arg_index, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -3135,20 +3127,18 @@ static bool decode_clGetKernelWorkGroupInfo(ServerDispatch& s, ::av::WireReader&
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetKernelWorkGroupInfo(kernel, device, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -3276,7 +3266,8 @@ static bool decode_clEnqueueNDRangeKernel(ServerDispatch& s, ::av::WireReader& r
     const cl_int ret = s.on_clEnqueueNDRangeKernel(command_queue, kernel, work_dim, global_work_offset, global_work_size, local_work_size, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -3332,7 +3323,8 @@ static bool decode_clEnqueueMarkerWithWaitList(ServerDispatch& s, ::av::WireRead
     const cl_int ret = s.on_clEnqueueMarkerWithWaitList(command_queue, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -3388,7 +3380,8 @@ static bool decode_clEnqueueBarrierWithWaitList(ServerDispatch& s, ::av::WireRea
     const cl_int ret = s.on_clEnqueueBarrierWithWaitList(command_queue, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -3473,20 +3466,18 @@ static bool decode_clGetEventInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetEventInfo(event, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -3621,20 +3612,18 @@ static bool decode_clGetEventProfilingInfo(ServerDispatch& s, ::av::WireReader& 
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetEventProfilingInfo(event, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -3911,10 +3900,10 @@ static bool decode_clGetGLObjectInfo(ServerDispatch& s, ::av::WireReader& r,
     const cl_int ret = s.on_clGetGLObjectInfo(memobj, gl_object_type, gl_object_name);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (gl_object_type_wanted) {
-        reply.write_varint(static_cast<uint64_t>(gl_object_type_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(gl_object_type_storage) : 0u);
     }
     if (gl_object_name_wanted) {
-        reply.write_varint(static_cast<uint64_t>(gl_object_name_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(gl_object_name_storage) : 0u);
     }
     return true;
 }
@@ -3961,20 +3950,18 @@ static bool decode_clGetGLTextureInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetGLTextureInfo(memobj, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -4056,7 +4043,8 @@ static bool decode_clEnqueueAcquireGLObjects(ServerDispatch& s, ::av::WireReader
     const cl_int ret = s.on_clEnqueueAcquireGLObjects(command_queue, num_objects, mem_objects, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -4139,7 +4127,8 @@ static bool decode_clEnqueueReleaseGLObjects(ServerDispatch& s, ::av::WireReader
     const cl_int ret = s.on_clEnqueueReleaseGLObjects(command_queue, num_objects, mem_objects, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -4209,20 +4198,18 @@ static bool decode_clGetGLContextInfoKHR(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetGLContextInfoKHR(properties, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -4318,23 +4305,21 @@ static bool decode_clCreateSubDevices(ServerDispatch& s, ::av::WireReader& r,
         if (out_devices == nullptr) return false;
     }
     cl_uint num_devices_ret_storage{};
-    cl_uint* num_devices_ret = num_devices_ret_wanted ? &num_devices_ret_storage : nullptr;
+    cl_uint* num_devices_ret = (num_devices_ret_wanted || out_devices_wanted) ? &num_devices_ret_storage : nullptr;
     const cl_int ret = s.on_clCreateSubDevices(in_device, properties, num_devices, out_devices, num_devices_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (out_devices_wanted) {
-        const uint64_t wire_produced = num_devices_ret != nullptr
-            ? static_cast<uint64_t>(*num_devices_ret)
-            : static_cast<uint64_t>(num_devices);
+        const uint64_t wire_produced = (ret == CL_SUCCESS) ? static_cast<uint64_t>(num_devices_ret_storage) : 0u;
         const uint64_t wire_sent = wire_produced < static_cast<uint64_t>(num_devices)
             ? wire_produced : static_cast<uint64_t>(num_devices);
         reply.write_varint(wire_sent);
         for (uint64_t i = 0; i < wire_sent; ++i) {
-            if ((ret == CL_SUCCESS) && out_devices[i] != nullptr) s.made(HandleKind::device, out_devices[i]);
+            if (out_devices[i] != nullptr) s.made(HandleKind::device, out_devices[i]);
             reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(out_devices[i])));
         }
     }
     if (num_devices_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(num_devices_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(num_devices_ret_storage) : 0u);
     }
     return true;
 }
@@ -4396,7 +4381,8 @@ static bool decode_clEnqueueTask(ServerDispatch& s, ::av::WireReader& r,
     const cl_int ret = s.on_clEnqueueTask(command_queue, kernel, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -4425,7 +4411,8 @@ static bool decode_clEnqueueMarker(ServerDispatch& s, ::av::WireReader& r,
     const cl_int ret = s.on_clEnqueueMarker(command_queue, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -4575,7 +4562,8 @@ static bool decode_clEnqueueMigrateMemObjects(ServerDispatch& s, ::av::WireReade
     const cl_int ret = s.on_clEnqueueMigrateMemObjects(command_queue, num_mem_objects, mem_objects, flags, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -4750,11 +4738,15 @@ static bool decode_clEnqueueReadBufferRect(ServerDispatch& s, ::av::WireReader& 
     const cl_int ret = s.on_clEnqueueReadBufferRect(command_queue, buffer, blocking_read, buffer_origin, host_origin, region, buffer_row_pitch, buffer_slice_pitch, host_row_pitch, host_slice_pitch, ptr, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (ptr_wanted) {
-        reply.write_varint(static_cast<uint64_t>(ptr_capacity));
-        if (ptr_capacity != 0) reply.write(ptr, static_cast<size_t>(ptr_capacity));
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(ptr_capacity) : 0u;
+        if (wire_written > static_cast<uint64_t>(ptr_capacity))
+            wire_written = static_cast<uint64_t>(ptr_capacity);
+        reply.write_varint(wire_written);
+        if (wire_written != 0) reply.write(ptr, static_cast<size_t>(wire_written));
     }
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -4927,7 +4919,8 @@ static bool decode_clEnqueueWriteBufferRect(ServerDispatch& s, ::av::WireReader&
     const cl_int ret = s.on_clEnqueueWriteBufferRect(command_queue, buffer, blocking_write, buffer_origin, host_origin, region, buffer_row_pitch, buffer_slice_pitch, host_row_pitch, host_slice_pitch, ptr, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -5081,7 +5074,8 @@ static bool decode_clEnqueueCopyBufferRect(ServerDispatch& s, ::av::WireReader& 
     const cl_int ret = s.on_clEnqueueCopyBufferRect(command_queue, src_buffer, dst_buffer, src_origin, dst_origin, region, src_row_pitch, src_slice_pitch, dst_row_pitch, dst_slice_pitch, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -5200,7 +5194,8 @@ static bool decode_clEnqueueFillImage(ServerDispatch& s, ::av::WireReader& r,
     const cl_int ret = s.on_clEnqueueFillImage(command_queue, image, fill_color, origin, region, num_events_in_wait_list, event_wait_list, event);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (event_wanted) {
-        if ((ret == CL_SUCCESS) && event_storage != nullptr) s.made(HandleKind::event, event_storage);
+        if (!(ret == CL_SUCCESS)) event_storage = nullptr;
+        if (event_storage != nullptr) s.made(HandleKind::event, event_storage);
         reply.write_pod<uint64_t>(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(event_storage)));
     }
     return true;
@@ -5435,7 +5430,7 @@ static bool decode_clSetCommandQueueProperty(ServerDispatch& s, ::av::WireReader
     const cl_int ret = s.on_clSetCommandQueueProperty(command_queue, properties, enable, old_properties);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (old_properties_wanted) {
-        reply.write_varint(static_cast<uint64_t>(old_properties_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(old_properties_storage) : 0u);
     }
     return true;
 }
@@ -5892,20 +5887,18 @@ static bool decode_clGetKernelSubGroupInfo(ServerDispatch& s, ::av::WireReader& 
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetKernelSubGroupInfo(kernel, device, param_name, input_value_size, input_value, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -5933,7 +5926,7 @@ static bool decode_clGetHostTimer(ServerDispatch& s, ::av::WireReader& r,
     const cl_int ret = s.on_clGetHostTimer(device, host_timestamp);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (host_timestamp_wanted) {
-        reply.write_varint(static_cast<uint64_t>(host_timestamp_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(host_timestamp_storage) : 0u);
     }
     return true;
 }
@@ -5969,10 +5962,10 @@ static bool decode_clGetDeviceAndHostTimer(ServerDispatch& s, ::av::WireReader& 
     const cl_int ret = s.on_clGetDeviceAndHostTimer(device, device_timestamp, host_timestamp);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (device_timestamp_wanted) {
-        reply.write_varint(static_cast<uint64_t>(device_timestamp_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(device_timestamp_storage) : 0u);
     }
     if (host_timestamp_wanted) {
-        reply.write_varint(static_cast<uint64_t>(host_timestamp_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(host_timestamp_storage) : 0u);
     }
     return true;
 }
@@ -6367,20 +6360,18 @@ static bool decode_clGetSamplerInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetSamplerInfo(sampler, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }
@@ -6493,20 +6484,18 @@ static bool decode_clGetPipeInfo(ServerDispatch& s, ::av::WireReader& r,
         if (param_value == nullptr) return false;
     }
     size_t param_value_size_ret_storage{};
-    size_t* param_value_size_ret = param_value_size_ret_wanted ? &param_value_size_ret_storage : nullptr;
+    size_t* param_value_size_ret = (param_value_size_ret_wanted || param_value_wanted) ? &param_value_size_ret_storage : nullptr;
     const cl_int ret = s.on_clGetPipeInfo(pipe, param_name, param_value_size, param_value, param_value_size_ret);
     reply.write_varint(static_cast<uint64_t>(static_cast<int64_t>(ret)));
     if (param_value_wanted) {
-        uint64_t wire_written = param_value_size_ret != nullptr
-            ? static_cast<uint64_t>(*param_value_size_ret)
-            : static_cast<uint64_t>(param_value_size);
+        uint64_t wire_written = (ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u;
         if (wire_written > static_cast<uint64_t>(param_value_size))
             wire_written = static_cast<uint64_t>(param_value_size);
         reply.write_varint(wire_written);
         if (wire_written != 0) reply.write(param_value, static_cast<size_t>(wire_written));
     }
     if (param_value_size_ret_wanted) {
-        reply.write_varint(static_cast<uint64_t>(param_value_size_ret_storage));
+        reply.write_varint((ret == CL_SUCCESS) ? static_cast<uint64_t>(param_value_size_ret_storage) : 0u);
     }
     return true;
 }

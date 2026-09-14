@@ -15,12 +15,16 @@ constexpr std::int32_t  cl_device_not_found = -1;
 
 }  // namespace
 
-ScriptedHost::ScriptedHost(MockKmt &kmt) : kmt_(kmt), answer_{} {}
+ScriptedHost::ScriptedHost(MockKmt &kmt) : kmt_(kmt), cut_(uncut), answer_{} {}
 
 void ScriptedHost::queue(const WireWriter &writer)
 {
-    kmt_.queue_answer(answer_, static_cast<std::uint32_t>(writer.offset()));
+    const auto written = static_cast<std::uint32_t>(writer.offset());
+    kmt_.queue_answer(answer_, cut_ < written ? cut_ : written);
+    cut_ = uncut;
 }
+
+void ScriptedHost::cut_next(std::uint32_t bytes) { cut_ = bytes; }
 
 void ScriptedHost::nop() { kmt_.queue_answer(nullptr, 0u); }
 
@@ -68,6 +72,20 @@ void ScriptedHost::vk_memory_requirements(std::uint32_t memory_types)
     queue(writer);
 }
 
+void ScriptedHost::vk_queue_families(std::uint32_t count)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_pod<std::int32_t>(0);
+    writer.write_pod(count);
+    for (std::uint32_t index = 0u; index < count; index++) {
+        VkQueueFamilyProperties family = {};
+        family.queueFlags = VK_QUEUE_GRAPHICS_BIT;
+        family.queueCount = count;
+        vkproto::serialize_VkQueueFamilyProperties(writer, family);
+    }
+    queue(writer);
+}
+
 void ScriptedHost::cl_result(std::int32_t result)
 {
     WireWriter writer(answer_, sizeof answer_);
@@ -99,6 +117,16 @@ void ScriptedHost::cl_read(std::int32_t result, const float *values, std::uint32
     writer.write_varint(static_cast<std::int64_t>(result));
     writer.write_varint(count * sizeof(float));
     writer.write(values, count * sizeof(float));
+    queue(writer);
+}
+
+void ScriptedHost::cl_info(std::int32_t result, const char *value, std::uint32_t size)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_varint(static_cast<std::int64_t>(result));
+    writer.write_varint(size);
+    writer.write(value, size);
+    writer.write_varint(size);
     queue(writer);
 }
 

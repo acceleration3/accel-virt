@@ -10,7 +10,9 @@
  * Its kernels declare their arguments by index, so a test or a fuzz input
  * reaches every kind the decoder tells apart by choosing an index: see
  * argument_declared. Setting an argument the kernel reads as an object with
- * bytes that are not one this dispatch made is a stranger too. */
+ * bytes that are not one this dispatch made is a stranger too.
+ *
+ * And it can answer the way a careless ICD does: see answer_next_with. */
 #ifndef AV_RECORDING_CL_DISPATCH_HPP
 #define AV_RECORDING_CL_DISPATCH_HPP
 
@@ -40,7 +42,27 @@ public:
                                          constant };
     static constexpr std::uint32_t declared_arguments = 8u;
 
+    /* What a careless ICD leaves in an output it did not write. */
+    static constexpr std::uint8_t garbage = 0xA5u;
+    /* What an info query that answers writes into the bytes it reports. */
+    static constexpr std::uint8_t answered = 0x6Bu;
+
+    /* The next ID query, device info query or buffer read answers `result`,
+     * as an ICD that failed or wrote less than its room and cleared nothing:
+     * a query reports `reported` ids or bytes and leaves every output past
+     * those it wrote as garbage - all of them, for a result that is not
+     * CL_SUCCESS - and a read leaves its bytes and its event as garbage. */
+    void answer_next_with(cl_int result, std::size_t reported);
+
     void *handle_for(clproto::HandleKind kind, std::uint64_t wire) const override;
+    cl_int on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms) override;
+    cl_int on_clGetDeviceIDs(cl_platform_id platform, cl_device_type device_type, cl_uint num_entries,
+                             cl_device_id *devices, cl_uint *num_devices) override;
+    cl_int on_clGetDeviceInfo(cl_device_id device, cl_device_info param_name, std::size_t param_value_size,
+                              void *param_value, std::size_t *param_value_size_ret) override;
+    cl_int on_clEnqueueReadBuffer(cl_command_queue command_queue, cl_mem buffer, cl_bool blocking_read,
+                                  std::size_t offset, std::size_t size, void *ptr, cl_uint num_events_in_wait_list,
+                                  const cl_event *event_wait_list, cl_event *event) override;
     cl_int on_clGetKernelArgInfo(cl_kernel kernel, cl_uint arg_index, cl_kernel_arg_info param_name,
                                  std::size_t param_value_size, void *param_value,
                                  std::size_t *param_value_size_ret) override;
@@ -85,6 +107,10 @@ protected:
 private:
     /* Counts a build whose options lack -cl-kernel-arg-info. */
     void built(const char *options);
+    /* Whether answer_next_with is waiting for a call; the call takes it. */
+    bool take_answer();
+    /* An ID query's answer: garbage past the ids reported, and the count. */
+    cl_int scribble_ids(void *ids, cl_uint room, cl_uint *count);
 
     const std::uint8_t *block_;
     const WireArena    &arena_;
@@ -97,6 +123,9 @@ private:
     std::uint32_t       strays_;
     std::uint32_t       refused_;
     std::uint32_t       builds_without_argument_info_;
+    bool                answer_pending_;
+    cl_int              answer_result_;
+    std::size_t         answer_reported_;
 
     static constexpr std::size_t max_logged = 64u;
     std::uint32_t                logged_[max_logged];

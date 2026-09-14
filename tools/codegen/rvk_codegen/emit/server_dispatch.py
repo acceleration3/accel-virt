@@ -55,6 +55,21 @@ def _storage_alloc(
     return lines
 
 
+def _failed(cmd: Command) -> str | None:
+    """Whether the call failed, after it, or None for one that cannot.
+
+    A VkResult below zero is an error; VK_INCOMPLETE and the other positive
+    codes are successes whose outputs mean what they say."""
+    if cmd.return_type.base == "VkResult" and cmd.return_type.pointer_depth == 0:
+        return "static_cast<int32_t>(result) < 0"
+    return None
+
+
+def _cleared_storage(name: str) -> str:
+    return (f"        for (size_t rvk_z = 0; rvk_z < {name}_storage_count; ++rvk_z) "
+            f"{{ {name}_storage[rvk_z] = {{}}; }}")
+
+
 # Commands that end objects without ending the one they name. vk.xml says
 # which handle a command destroys only by the command's name, and says nothing
 # of a reset that frees every set a pool gave out - so this is the one place
@@ -137,6 +152,11 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
     decode_lines: list[str] = []
     call_args: list[str] = []
     out_after_call: list[str] = []
+    # A failed call's outputs are whatever the driver left in them, which may
+    # be a handle it never made - and serializing a handle is what makes the
+    # host accept it back. So each output is put back to nothing first.
+    failed = _failed(cmd)
+    cleared_on_failure: list[str] = []
 
     i = 0
     while i < len(cmd.params):
@@ -166,9 +186,18 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             decode_lines.append("    }")
             call_args.append(f"&{count.name}_local")
             call_args.append(f"array_present ? {arr.name}_storage : nullptr")
-            out_after_call.append(f"    reply.write_pod({count.name}_local);")
+            # What the driver says it listed is sent only for a call that
+            # worked, and never past the room the guest gave: a count the
+            # driver raised would serialize arena memory beyond the array.
+            sent = f"{count.name}_sent"
+            listed = f"{count.name}_local" if failed is None else f"{failed} ? 0u : {count.name}_local"
+            out_after_call.append(f"    uint32_t {sent} = {listed};")
+            out_after_call.append(f"    if (array_present && {sent} > {arr.name}_storage_count) {{")
+            out_after_call.append(f"        {sent} = static_cast<uint32_t>({arr.name}_storage_count);")
+            out_after_call.append("    }")
+            out_after_call.append(f"    reply.write_pod({sent});")
             out_after_call.append("    if (array_present) {")
-            out_after_call.append(f"        for (uint32_t k = 0; k < {count.name}_local; ++k) {{")
+            out_after_call.append(f"        for (uint32_t k = 0; k < {sent}; ++k) {{")
             if arr.type.base in reg.structs or arr.type.base in reg.handles:
                 out_after_call.append(
                     f"            serialize_{arr.type.base}(reply, {arr.name}_storage[k]);"
@@ -325,6 +354,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             call_args.append(f"{p.name}_local")
         elif kind == "out_handle":
             decl_lines.append(f"    {p.type.base} {p.name}_out = VK_NULL_HANDLE;")
+            cleared_on_failure.append(f"        {p.name}_out = VK_NULL_HANDLE;")
             call_args.append(f"&{p.name}_out")
             out_after_call.append(f"    serialize_{p.type.base}(reply, {p.name}_out);")
         elif kind == "out_struct":
@@ -340,10 +370,15 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                     f"reinterpret_cast<VkBaseOutStructure*>(&{p.name}_out), arena)) "
                     f"return false;"
                 )
+            cleared_on_failure.append(f"        {p.type.base} {p.name}_blank{{}};")
+            if reg.structs[p.type.base].has_stype:
+                cleared_on_failure.append(f"        {p.name}_blank.sType = {p.name}_out.sType;")
+            cleared_on_failure.append(f"        {p.name}_out = {p.name}_blank;")
             call_args.append(f"&{p.name}_out")
             out_after_call.append(f"    serialize_{p.type.base}(reply, {p.name}_out);")
         elif kind == "out_pod":
             decl_lines.append(f"    {p.type.base} {p.name}_out{{}};")
+            cleared_on_failure.append(f"        {p.name}_out = {{}};")
             call_args.append(f"&{p.name}_out")
             out_after_call.append(f"    reply.write_pod({p.name}_out);")
         elif kind == "out_byte_array":
@@ -353,6 +388,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 _storage_alloc("    ", f"{p.name}_storage", "uint8_t", srv_len)
             )
             call_args.append(f"{p.name}_storage")
+            cleared_on_failure.append(_cleared_storage(p.name))
             out_after_call.append(f"    if ({p.name}_storage_count != 0) {{")
             out_after_call.append(
                 f"        reply.write({p.name}_storage, {p.name}_storage_count);"
@@ -366,6 +402,7 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
                 _storage_alloc("    ", f"{p.name}_storage", elem, srv_len)
             )
             call_args.append(f"{p.name}_storage")
+            cleared_on_failure.append(_cleared_storage(p.name))
             out_after_call.append(
                 f"    for (size_t rvk_k = 0; rvk_k < {p.name}_storage_count; ++rvk_k) {{"
             )
@@ -418,6 +455,10 @@ def _emit_case(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
             lines.append(
                 "    reply.write_pod<int32_t>(static_cast<int32_t>(result));"
             )
+        if failed is not None and cleared_on_failure:
+            lines.append(f"    if ({failed}) {{")
+            lines.extend(cleared_on_failure)
+            lines.append("    }")
         lines.extend(out_after_call)
 
     lines.append("    return true;")

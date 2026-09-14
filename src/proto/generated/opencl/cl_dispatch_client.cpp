@@ -23,18 +23,19 @@ cl_int rvk_clGetPlatformIDs(::av::ClientTransport& t, cl_uint num_entries, uint6
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (platforms != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(num_entries)) return CL_OUT_OF_RESOURCES;
         for (uint64_t i = 0; i < wire_count; ++i) {
-            if (!r.read_pod(platforms[i])) return ret;
+            if (!r.read_pod(platforms[i])) return CL_OUT_OF_RESOURCES;
         }
     }
     if (num_platforms != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *num_platforms = static_cast<cl_uint>(wire_value);
     }
     return ret;
@@ -55,16 +56,17 @@ cl_int rvk_clGetPlatformInfo(::av::ClientTransport& t, uint64_t platform, cl_pla
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -85,18 +87,19 @@ cl_int rvk_clGetDeviceIDs(::av::ClientTransport& t, uint64_t platform, cl_device
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (devices != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(num_entries)) return CL_OUT_OF_RESOURCES;
         for (uint64_t i = 0; i < wire_count; ++i) {
-            if (!r.read_pod(devices[i])) return ret;
+            if (!r.read_pod(devices[i])) return CL_OUT_OF_RESOURCES;
         }
     }
     if (num_devices != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *num_devices = static_cast<cl_uint>(wire_value);
     }
     return ret;
@@ -117,16 +120,17 @@ cl_int rvk_clGetDeviceInfo(::av::ClientTransport& t, uint64_t device, cl_device_
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -217,7 +221,7 @@ cl_int rvk_clReleaseContext(::av::ClientTransport& t, uint64_t context) {
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -237,16 +241,17 @@ cl_int rvk_clGetContextInfo(::av::ClientTransport& t, uint64_t context, cl_conte
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -324,7 +329,7 @@ cl_int rvk_clReleaseCommandQueue(::av::ClientTransport& t, uint64_t command_queu
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -344,16 +349,17 @@ cl_int rvk_clGetCommandQueueInfo(::av::ClientTransport& t, uint64_t command_queu
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -370,7 +376,7 @@ cl_int rvk_clFlush(::av::ClientTransport& t, uint64_t command_queue) {
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -386,7 +392,7 @@ cl_int rvk_clFinish(::av::ClientTransport& t, uint64_t command_queue) {
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -492,7 +498,7 @@ cl_int rvk_clReleaseMemObject(::av::ClientTransport& t, uint64_t memobj) {
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -512,16 +518,17 @@ cl_int rvk_clGetMemObjectInfo(::av::ClientTransport& t, uint64_t memobj, cl_mem_
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -542,16 +549,17 @@ cl_int rvk_clGetImageInfo(::av::ClientTransport& t, uint64_t image, cl_image_inf
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -574,16 +582,17 @@ cl_int rvk_clGetSupportedImageFormats(::av::ClientTransport& t, uint64_t context
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (image_formats != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(image_formats, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(image_formats_bytes)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(image_formats, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (num_image_formats != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *num_image_formats = static_cast<cl_uint>(wire_value);
     }
     return ret;
@@ -615,15 +624,16 @@ cl_int rvk_clEnqueueReadBuffer(::av::ClientTransport& t, uint64_t command_queue,
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (ptr != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(ptr, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(ptr, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -657,10 +667,10 @@ cl_int rvk_clEnqueueWriteBuffer(::av::ClientTransport& t, uint64_t command_queue
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -690,10 +700,10 @@ cl_int rvk_clEnqueueCopyBuffer(::av::ClientTransport& t, uint64_t command_queue,
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -727,10 +737,10 @@ cl_int rvk_clEnqueueFillBuffer(::av::ClientTransport& t, uint64_t command_queue,
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -775,15 +785,16 @@ cl_int rvk_clEnqueueReadImage(::av::ClientTransport& t, uint64_t command_queue, 
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (ptr != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(ptr, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(ptr_bytes)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(ptr, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -831,10 +842,10 @@ cl_int rvk_clEnqueueWriteImage(::av::ClientTransport& t, uint64_t command_queue,
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -882,10 +893,10 @@ cl_int rvk_clEnqueueCopyImage(::av::ClientTransport& t, uint64_t command_queue, 
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -927,10 +938,10 @@ cl_int rvk_clEnqueueCopyImageToBuffer(::av::ClientTransport& t, uint64_t command
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -972,10 +983,10 @@ cl_int rvk_clEnqueueCopyBufferToImage(::av::ClientTransport& t, uint64_t command
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -1077,7 +1088,7 @@ cl_int rvk_clReleaseProgram(::av::ClientTransport& t, uint64_t program) {
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -1107,7 +1118,7 @@ cl_int rvk_clBuildProgram(::av::ClientTransport& t, uint64_t program, cl_uint nu
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -1127,16 +1138,17 @@ cl_int rvk_clGetProgramInfo(::av::ClientTransport& t, uint64_t program, cl_progr
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1158,16 +1170,17 @@ cl_int rvk_clGetProgramBuildInfo(::av::ClientTransport& t, uint64_t program, uin
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1184,7 +1197,7 @@ cl_int rvk_clUnloadPlatformCompiler(::av::ClientTransport& t, uint64_t platform)
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -1229,18 +1242,19 @@ cl_int rvk_clCreateKernelsInProgram(::av::ClientTransport& t, uint64_t program, 
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (kernels != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(num_kernels)) return CL_OUT_OF_RESOURCES;
         for (uint64_t i = 0; i < wire_count; ++i) {
-            if (!r.read_pod(kernels[i])) return ret;
+            if (!r.read_pod(kernels[i])) return CL_OUT_OF_RESOURCES;
         }
     }
     if (num_kernels_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *num_kernels_ret = static_cast<cl_uint>(wire_value);
     }
     return ret;
@@ -1266,7 +1280,7 @@ cl_int rvk_clReleaseKernel(::av::ClientTransport& t, uint64_t kernel) {
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -1289,7 +1303,7 @@ cl_int rvk_clSetKernelArg(::av::ClientTransport& t, uint64_t kernel, cl_uint arg
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -1309,16 +1323,17 @@ cl_int rvk_clGetKernelInfo(::av::ClientTransport& t, uint64_t kernel, cl_kernel_
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1340,16 +1355,17 @@ cl_int rvk_clGetKernelArgInfo(::av::ClientTransport& t, uint64_t kernel, cl_uint
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1371,16 +1387,17 @@ cl_int rvk_clGetKernelWorkGroupInfo(::av::ClientTransport& t, uint64_t kernel, u
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1429,10 +1446,10 @@ cl_int rvk_clEnqueueNDRangeKernel(::av::ClientTransport& t, uint64_t command_que
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -1457,10 +1474,10 @@ cl_int rvk_clEnqueueMarkerWithWaitList(::av::ClientTransport& t, uint64_t comman
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -1485,10 +1502,10 @@ cl_int rvk_clEnqueueBarrierWithWaitList(::av::ClientTransport& t, uint64_t comma
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -1511,7 +1528,7 @@ cl_int rvk_clWaitForEvents(::av::ClientTransport& t, cl_uint num_events, const u
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -1531,16 +1548,17 @@ cl_int rvk_clGetEventInfo(::av::ClientTransport& t, uint64_t event, cl_event_inf
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1578,7 +1596,7 @@ cl_int rvk_clSetUserEventStatus(::av::ClientTransport& t, uint64_t event, cl_int
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -1603,7 +1621,7 @@ cl_int rvk_clReleaseEvent(::av::ClientTransport& t, uint64_t event) {
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -1623,16 +1641,17 @@ cl_int rvk_clGetEventProfilingInfo(::av::ClientTransport& t, uint64_t event, cl_
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1767,16 +1786,16 @@ cl_int rvk_clGetGLObjectInfo(::av::ClientTransport& t, uint64_t memobj, cl_gl_ob
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (gl_object_type != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *gl_object_type = static_cast<cl_gl_object_type>(wire_value);
     }
     if (gl_object_name != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *gl_object_name = static_cast<cl_GLuint>(wire_value);
     }
     return ret;
@@ -1797,16 +1816,17 @@ cl_int rvk_clGetGLTextureInfo(::av::ClientTransport& t, uint64_t memobj, cl_gl_t
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1840,10 +1860,10 @@ cl_int rvk_clEnqueueAcquireGLObjects(::av::ClientTransport& t, uint64_t command_
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -1876,10 +1896,10 @@ cl_int rvk_clEnqueueReleaseGLObjects(::av::ClientTransport& t, uint64_t command_
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -1907,16 +1927,17 @@ cl_int rvk_clGetGLContextInfoKHR(::av::ClientTransport& t, const uint64_t* prope
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -1933,7 +1954,7 @@ cl_int rvk_clRetainDevice(::av::ClientTransport& t, uint64_t device) {
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -1949,7 +1970,7 @@ cl_int rvk_clReleaseDevice(::av::ClientTransport& t, uint64_t device) {
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -1977,18 +1998,19 @@ cl_int rvk_clCreateSubDevices(::av::ClientTransport& t, uint64_t in_device, cons
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (out_devices != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(num_devices)) return CL_OUT_OF_RESOURCES;
         for (uint64_t i = 0; i < wire_count; ++i) {
-            if (!r.read_pod(out_devices[i])) return ret;
+            if (!r.read_pod(out_devices[i])) return CL_OUT_OF_RESOURCES;
         }
     }
     if (num_devices_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *num_devices_ret = static_cast<cl_uint>(wire_value);
     }
     return ret;
@@ -2015,10 +2037,10 @@ cl_int rvk_clEnqueueTask(::av::ClientTransport& t, uint64_t command_queue, uint6
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -2035,10 +2057,10 @@ cl_int rvk_clEnqueueMarker(::av::ClientTransport& t, uint64_t command_queue, uin
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -2054,7 +2076,7 @@ cl_int rvk_clEnqueueBarrier(::av::ClientTransport& t, uint64_t command_queue) {
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -2078,7 +2100,7 @@ cl_int rvk_clEnqueueWaitForEvents(::av::ClientTransport& t, uint64_t command_que
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -2112,10 +2134,10 @@ cl_int rvk_clEnqueueMigrateMemObjects(::av::ClientTransport& t, uint64_t command
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -2169,15 +2191,16 @@ cl_int rvk_clEnqueueReadBufferRect(::av::ClientTransport& t, uint64_t command_qu
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (ptr != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(ptr, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(ptr_bytes)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(ptr, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -2234,10 +2257,10 @@ cl_int rvk_clEnqueueWriteBufferRect(::av::ClientTransport& t, uint64_t command_q
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -2289,10 +2312,10 @@ cl_int rvk_clEnqueueCopyBufferRect(::av::ClientTransport& t, uint64_t command_qu
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -2337,10 +2360,10 @@ cl_int rvk_clEnqueueFillImage(::av::ClientTransport& t, uint64_t command_queue, 
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (event != nullptr) {
-        if (!r.read_pod(*event)) return ret;
+        if (!r.read_pod(*event)) return CL_OUT_OF_RESOURCES;
     }
     return ret;
 }
@@ -2419,7 +2442,7 @@ cl_int rvk_clUnloadCompiler(::av::ClientTransport& t) {
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -2438,11 +2461,11 @@ cl_int rvk_clSetCommandQueueProperty(::av::ClientTransport& t, uint64_t command_
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (old_properties != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *old_properties = static_cast<cl_command_queue_properties>(wire_value);
     }
     return ret;
@@ -2516,7 +2539,7 @@ cl_int rvk_clCompileProgram(::av::ClientTransport& t, uint64_t program, cl_uint 
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -2581,7 +2604,7 @@ cl_int rvk_clSetProgramSpecializationConstant(::av::ClientTransport& t, uint64_t
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -2624,7 +2647,7 @@ cl_int rvk_clSetKernelExecInfo(::av::ClientTransport& t, uint64_t kernel, cl_ker
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -2651,16 +2674,17 @@ cl_int rvk_clGetKernelSubGroupInfo(::av::ClientTransport& t, uint64_t kernel, ui
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -2678,11 +2702,11 @@ cl_int rvk_clGetHostTimer(::av::ClientTransport& t, uint64_t device, cl_ulong* h
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (host_timestamp != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *host_timestamp = static_cast<cl_ulong>(wire_value);
     }
     return ret;
@@ -2701,16 +2725,16 @@ cl_int rvk_clGetDeviceAndHostTimer(::av::ClientTransport& t, uint64_t device, cl
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (device_timestamp != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *device_timestamp = static_cast<cl_ulong>(wire_value);
     }
     if (host_timestamp != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *host_timestamp = static_cast<cl_ulong>(wire_value);
     }
     return ret;
@@ -2833,7 +2857,7 @@ cl_int rvk_clSetDefaultDeviceCommandQueue(::av::ClientTransport& t, uint64_t con
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -2881,7 +2905,7 @@ cl_int rvk_clReleaseSampler(::av::ClientTransport& t, uint64_t sampler) {
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     return ret;
 }
@@ -2901,16 +2925,17 @@ cl_int rvk_clGetSamplerInfo(::av::ClientTransport& t, uint64_t sampler, cl_sampl
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;
@@ -2963,16 +2988,17 @@ cl_int rvk_clGetPipeInfo(::av::ClientTransport& t, uint64_t pipe, cl_pipe_info p
     [[maybe_unused]] ::av::WireArena& arena = t.decode_arena();
     cl_int ret{};
     int64_t ret_wire = 0;
-    if (!r.read_varint(ret_wire)) return static_cast<cl_int>(-1);
+    if (!r.read_varint(ret_wire)) return CL_OUT_OF_RESOURCES;
     ret = static_cast<cl_int>(ret_wire);
     if (param_value != nullptr) {
         uint64_t wire_count = 0;
-        if (!r.read_varint(wire_count)) return ret;
-        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return ret;
+        if (!r.read_varint(wire_count)) return CL_OUT_OF_RESOURCES;
+        if (wire_count > static_cast<uint64_t>(param_value_size)) return CL_OUT_OF_RESOURCES;
+        if (wire_count != 0 && !r.read(param_value, static_cast<size_t>(wire_count))) return CL_OUT_OF_RESOURCES;
     }
     if (param_value_size_ret != nullptr) {
         uint64_t wire_value = 0;
-        if (!r.read_varint(wire_value)) return ret;
+        if (!r.read_varint(wire_value)) return CL_OUT_OF_RESOURCES;
         *param_value_size_ret = static_cast<size_t>(wire_value);
     }
     return ret;

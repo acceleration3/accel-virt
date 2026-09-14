@@ -51,6 +51,9 @@ public:
     /* `count` devices numbered from vk_physical_device. */
     void vk_physical_devices(std::int32_t result, std::uint32_t count);
     void vk_memory_requirements(std::uint32_t memory_types);
+    /* `count` queue families, each with `count` graphics queues: a void
+     * command's zero, the count, and the structures. */
+    void vk_queue_families(std::uint32_t count);
     void cl_result(std::int32_t result);
     void cl_handle(std::uint64_t handle, std::int32_t error);
     /* An ID query's answer: the result, the `sent` ids that fit the room the
@@ -58,6 +61,12 @@ public:
     void cl_ids(std::int32_t result, const std::uint64_t *ids, std::uint32_t sent, std::uint32_t total);
     /* A blocking read's answer: the result and `count` floats. */
     void cl_read(std::int32_t result, const float *values, std::uint32_t count);
+    /* An info query's answer: the result, `size` bytes of `value`, and the
+     * size again as the size it reports. */
+    void cl_info(std::int32_t result, const char *value, std::uint32_t size);
+    /* The next answer queued stops after its first `bytes`, as a host that
+     * wrote a short reply leaves it. */
+    void cut_next(std::uint32_t bytes);
 
     /* Whole successful runs, every wait from a scenario's first to its last. */
     void vulkan_run();
@@ -72,10 +81,13 @@ private:
     static constexpr std::uint32_t answer_bytes = 512u;
     static constexpr std::uint32_t cl_releases = 7u;
 
+    static constexpr std::uint32_t uncut = ~std::uint32_t{0};
+
     void queue(const WireWriter &writer);
 
-    MockKmt     &kmt_;
-    std::uint8_t answer_[answer_bytes];
+    MockKmt      &kmt_;
+    std::uint32_t cut_;
+    std::uint8_t  answer_[answer_bytes];
 };
 
 }  // namespace av
