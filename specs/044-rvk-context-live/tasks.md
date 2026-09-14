@@ -42,6 +42,9 @@ description: "Tasks: rvk contexts in a real guest"
 - [X] T008 Write `tests/unit/device/execution/test_transport_command.cpp` first (contracts/transport_nop.md): NOP with the reply flag writes an empty reply for the batch's fence and never reaches the executor library; without the flag writes nothing; a NOP with a body is `command_framing`; another API-0 id is skipped as unknown
 - [X] T009 `TransportCommand` (object class) in `src/device/execution/transport_command.{hpp,cpp}`, called by `BatchExecutor` for API 0; `CommandHeader`'s NOP id in `src/proto/submission/`; `docs/protocol.md` defines it under "Command stream"; `tests/qemu/test_virtio_gpu_execution.py` sends a NOP under both the echo and the null executor
 
+- [ ] T030 [P] The holes T004-T007 found and did not close, each refused before any host call with a hostile-input test and a fuzz seed: `clSetKernelArg` resolves buffer, image and sampler arguments through `ClHandleRegistry` using the kernel's argument info (the server appends `-cl-kernel-arg-info` to every build and compile; where the ICD cannot answer `CL_KERNEL_ARG_TYPE_NAME`, an 8-byte argument is refused rather than trusted); `clCreateImage*` with copied host pointers checks format × extent against the bytes that crossed; the OpenGL decoder checks count-sized outputs (`glGen*(n, ...)`) against their room, never passes a null output, checks pixel and array uploads against what the driver reads, and refuses buffer offsets followed as addresses with no buffer bound
+- [ ] T031 [P] `VulkanBackend` forgets every handle a destroy or free call ends, not only instances and devices; `OpenClBackend::shut_down` releases the ICD objects it still holds, as its comment says
+
 **Checkpoint**: the executor refuses what it does not know, and a NOP round-trips on the device. Commit.
 
 ---
@@ -52,7 +55,7 @@ description: "Tasks: rvk contexts in a real guest"
 
 - [X] T026 The full-stack rig in `tests/harness/fullstack/`: the PCI function's virtqueues and doorbells served by the real device core (`LoopbackDevice`), interrupts delivered through `FakeDxgkrnlFdo`, and `DdiKmt` - an `av::Kmt` that calls the registered DDI table the way dxgkrnl's D3DKMT layer does (handles, aperture paging, GPU VAs, submission fences and private data, waits on DMA_COMPLETED)
 - [X] T027 `tests/loopback/test_fullstack_*.cpp`: the adapter starts on the device core; 043's transport round trip through the real driver; `GuestSuite` over `DdiKmt`, every step that can pass passing and each that cannot named with its reason; a faulted context beside a healthy one; nothing leaked
-- [ ] T028 Every guest scenario in Phases 3-4 runs over the rig with `MockExecutorOps`, and with `build/librvk_executor.so` on this machine's GPU when `AV_REAL_EXECUTOR` names it
+- [ ] T028 [US1] Every guest scenario in Phases 3-4 runs over the rig with `MockExecutorOps`, and with `build/librvk_executor.so` on this machine's GPU when `AV_REAL_EXECUTOR` names it
 - [X] T029 A quick guest mode. *As built:* the long part of a run is not the reboots but the display, mode, power, cycle, sleep and hibernate scenarios (the monitor timeout alone waits minutes), so `run_guest_suite.py --quick` runs install, check and the suite without them, and `--rvk` skips them too; the gate still runs everything. A cached installed-driver disk layer is not built: the prepared image already has test signing, so it would save one install reboot
 
 ## Phase 3: US1 - A context per sub-API runs real host work (Priority: P1) 🎯 MVP
