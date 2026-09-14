@@ -649,7 +649,9 @@ int32_t Adapter::destroy_context(void *context)
     /* DXGCONTEXT::DestroyContext destroys a context's queues first. */
     if (hw_queues_.serves(context)) return NtStatus(Status::invalid_parameter).value();
     const Context *const found = contexts_.find(context);
-    if (found != nullptr && found->is_rvk()) static_cast<void>(rvk_contexts_.unbind(context, answering_device()));
+    if (found != nullptr && found->is_rvk()) {
+        log_status("rvkgpu: rvk context destroyed", NtStatus(rvk_contexts_.unbind(context, answering_device())).value());
+    }
     return NtStatus(contexts_.destroy(context)).value();
 }
 
@@ -1207,8 +1209,14 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
      * and D3DKMTSubmitCommand fails for the process instead (FR-005). */
     if (identity_.changed()) return NtStatus(Status::invalid_parameter).value();
     const Status status = context->is_rvk() ? submit_rvk(*request) : node_.submit(request->SubmissionFenceId);
-    if (status == Status::ok) static_cast<void>(dxgkrnl_.queue_dpc());
-    return NtStatus(status == Status::ok ? Status::ok : Status::invalid_parameter).value();
+    if (status == Status::ok) {
+        static_cast<void>(dxgkrnl_.queue_dpc());
+        return NtStatus(Status::ok).value();
+    }
+    /* A refusal is what dxgkrnl answers the process with, and may be what puts
+     * its device in error: the log is the only place the reason survives. */
+    log_status("rvkgpu: SubmitCommandVirtual refused", NtStatus(status).value());
+    return NtStatus(Status::invalid_parameter).value();
 }
 
 /* The host may finish the batch before its packet is queued; the DPC queued
