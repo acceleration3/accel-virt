@@ -1,7 +1,7 @@
 #include "core/rvk/context_request_sequence.hpp"
 
-#include "core/rvk/context_memory.hpp"
 #include "proto/context/capset_info.hpp"
+#include "proto/resources/guest_page_list.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
 #include "proto/virtio_gpu/rvk_request_writer.hpp"
@@ -9,24 +9,21 @@
 namespace av {
 
 ContextRequestSequence::ContextRequestSequence(Platform &platform)
-    : platform_(platform), phase_(Phase::idle), setup_(), context_id_(0u), addresses_{}, lengths_{}, step_(0u),
+    : platform_(platform), phase_(Phase::idle), setup_(), context_id_(0u), pages_(), step_(0u),
       awaiting_(false), context_created_(false), blobs_created_(0u), refusal_(0u), refused_(false) {}
 
-Status ContextRequestSequence::begin_setup(uint32_t context_id, const ContextSetup &setup, const ContextMemory &memory)
+Status ContextRequestSequence::begin_setup(uint32_t context_id, const ContextSetup &setup, const ContextPages &pages)
 {
     platform_.require_irql_at_most(Irql::dispatch, "ContextRequestSequence::begin_setup");
     if (phase_ != Phase::idle) return Status::invalid_state;
-    if (!memory.allocated()) return Status::invalid_parameter;
+    if (!pages.complete()) return Status::invalid_parameter;
     setup_ = setup;
     context_id_ = context_id;
-    addresses_[0] = memory.ring_address();
-    lengths_[0] = static_cast<uint32_t>(memory.ring_bytes());
-    addresses_[1] = memory.fence_address();
-    lengths_[1] = ContextMemory::page_bytes;
-    addresses_[2] = memory.reply_address();
-    lengths_[2] = ContextMemory::page_bytes;
+    pages_ = pages;
     phase_ = Phase::setting_up;
     step_ = 0u;
+    refused_ = false;
+    refusal_ = 0u;
     return Status::ok;
 }
 
@@ -53,13 +50,13 @@ Status ContextRequestSequence::next_request(uint8_t *bytes, size_t capacity, siz
 
 Status ContextRequestSequence::write_setup_request(uint8_t *bytes, size_t capacity, size_t &length)
 {
-    RvkRequestWriter writer(bytes, capacity);
-    const uint32_t   resources[blob_count] = {setup_.ring_resource(), setup_.fence_resource(), setup_.reply_resource()};
-    Status           status = Status::ok;
+    RvkRequestWriter    writer(bytes, capacity);
+    const uint32_t      resources[blob_count] = {setup_.ring_resource(), setup_.fence_resource(), setup_.reply_resource()};
+    const GuestPageList blobs[blob_count] = {pages_.ring(), pages_.fence(), pages_.reply()};
+    Status              status = Status::ok;
     if (step_ == context_step) status = writer.create_context(context_id_, CapsetInfo::capset_id);
     else if (step_ == setup_step) status = writer.setup(context_id_, setup_);
-    else status = writer.guest_blob(resources[step_ - first_blob_step], addresses_[step_ - first_blob_step],
-                                    lengths_[step_ - first_blob_step]);
+    else status = writer.guest_blob_pages(resources[step_ - first_blob_step], blobs[step_ - first_blob_step]);
     length = writer.length();
     return status;
 }

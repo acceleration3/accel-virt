@@ -43,7 +43,7 @@ Three words are used throughout with one meaning each:
 | `TransportFence` | object | process | `src/guest/transport/transport_fence.hpp` |
 | `RvkContextRecord` | object | shared | `src/proto/context/rvk_context_record.hpp` |
 | `RvkContextBinding` | object | miniport | `src/core/rvk/rvk_context_binding.hpp` |
-| `ContextBlobPublisher` | system | miniport | `src/core/rvk/context_blob_publisher.hpp` |
+| `ContextPages` | object | miniport | `src/core/rvk/context_pages.hpp` |
 | `SubmissionReader` | object | miniport | `src/core/adapter/submission_reader.hpp` |
 | `FenceInterruptRoute` | system | miniport | `src/core/rvk/fence_interrupt_route.hpp` |
 
@@ -197,7 +197,7 @@ deliberate difference: it carries **no doorbell**, because the miniport owns the
 doorbell page and rings it itself (research §5), and it names the context's
 **D3DKMT allocations** rather than virtio-gpu resource ids, because the
 virtio-gpu resource ids do not exist until the miniport publishes the blobs
-(`ContextBlobPublisher`, below).
+(`RvkContextBinding`, below).
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
@@ -245,13 +245,13 @@ dxgkrnl context runs on, and the three blobs behind it.
 |---|---|---|
 | `context_` | `GuestContext` | by value; the rvk state machine (`src/core/rvk/guest_context.hpp:31`) |
 | `record_` | `RvkContextRecord` | the decoded private data this binding was built from |
-| `blobs_` | three virtio-gpu resource ids | the ring, fence and reply blobs `ContextBlobPublisher` pinned |
+| `first_resource_id_` | `uint32_t` | the ring, fence and reply blobs are this id, +1 and +2, assigned by the driver |
 | `sync_object_` | the scheduling context's submission fence | signalled when the fence page says a batch completed |
 
 Constructed at `DxgkDdiCreateContext`, at `PASSIVE`, when an `RvkContextRecord`
 decodes and validates against the capset; `set_up` drives `GuestContext::set_up`
 (`guest_context.hpp:40`) with a `ContextSetup` built from `record_` and the ids
-`ContextBlobPublisher` assigned. `submit` reads the DMA buffer through
+the driver assigned it, over the `ContextPages` of the three allocations. `submit` reads the DMA buffer through
 `SubmissionReader` and calls `GuestContext::submit` at `DISPATCH`; `serve`
 observes the fence page at `DISPATCH` from the DPC and completes `sync_object_`
 when `completed_fence` advances. A faulted page raises
@@ -260,24 +260,17 @@ path (research §5). Destroyed at `DxgkDdiDestroyContext`, at `PASSIVE`, after
 `GuestContext::tear_down` and `release`. Its state is `GuestContext::State`
 (`guest_context.hpp:33`), and the state machine below is that enum.
 
-## `ContextBlobPublisher` (system, miniport side)
+## `ContextPages` (object, miniport side)
 
-Turns a context's ring/fence/reply allocations into blobs the device names. One
-per adapter, injected where a binding is created.
-
-| State | Type | Meaning |
-|---|---|---|
-| `pins_` | a fixed table of pinned aperture allocations, by context | the pages VidMm handed the driver, held while the binding lives |
-| `next_id_` | `uint32_t` | the next virtio-gpu blob resource id to assign (above the 1..15 reserved range, `docs/protocol.md`) |
-
-Constructed with the adapter, destroyed with it. For each of a context's three
-allocations it pins the aperture-segment pages the same way a primary is pinned
-(`Allocation::map_aperture`, research §3), creates a `RESOURCE_CREATE_BLOB`
-GUEST over those pages, and returns the three distinct non-zero resource ids the
-`ContextSetup` needs (RVKC requires three distinct ids, `context_setup.cpp:58-62`).
-The pins are released when the binding tears down, not before: a blob the device
-holds may not be unreferenced until `CTX_DESTROY` (`docs/protocol.md`, "Capset
-and context commands"). Runs at `PASSIVE` (blob creation is context setup).
+The memory one context runs on, as each of its readers reaches it: the
+`GuestPageList`s of the ring, fence and reply allocations - what the device is
+handed as guest blobs - and the kernel's one-page views of the ring header and
+the fence page. The frames and views belong to whoever built it (the aperture
+pins in a guest, `ContextMemory` in the L4 rig). There is no separate blob
+publisher: `ContextRequestSequence` publishes each blob itself, one memory entry
+per run of adjacent pages, under the ids `RvkContextBinding` assigns, and
+releases them on teardown after `CTX_DESTROY` (`docs/protocol.md`, "Capset and
+context commands").
 
 ## `SubmissionReader` (object, miniport side)
 
@@ -327,10 +320,9 @@ Process (user mode)
 
 Miniport (kernel)
   Adapter
-  ├── ContextBlobPublisher    the aperture pins, one adapter-wide service
   ├── FenceInterruptRoute     vector -> binding, one adapter-wide service
   └── RvkContextBinding[]      one per dxgkrnl virtual context
-        └── GuestContext       (034) owns ContextMemory, the sequence,
+        └── GuestContext       (034) runs on ContextPages; owns the sequence,
                                RingSubmitter, FenceObserver, FenceProgress
 ```
 
@@ -429,7 +421,7 @@ idle ──▶ setting_up ──▶ established ──────────�
 
 | From | To | What causes it |
 |---|---|---|
-| idle | setting_up | `DxgkDdiCreateContext` decoded a valid `RvkContextRecord`, `ContextBlobPublisher` pinned the three blobs, and `GuestContext::set_up` began the sequence |
+| idle | setting_up | `DxgkDdiCreateContext` decoded a valid `RvkContextRecord`, the three allocations are pinned, and `GuestContext::set_up` began the sequence on their `ContextPages` |
 | setting_up | established | the setup sequence's last answer established the context |
 | setting_up | failed | a refused setup step (`ContextRequestSequence::refused`) |
 | established | established | `submit` (via `SubmissionReader`), or `serve` observing progress |

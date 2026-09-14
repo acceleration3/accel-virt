@@ -2,6 +2,8 @@
  * vector points to and no other; a vector whose context has torn down, or that
  * none claims, is a no-op. Two contexts are established over a fake device so a
  * served binding shows the fence progress its page holds. */
+#include "core/rvk/context_memory.hpp"
+#include "core/rvk/context_pages.hpp"
 #include "core/rvk/fence_interrupt_route.hpp"
 #include "core/rvk/rvk_context_binding.hpp"
 #include "core/support/status.hpp"
@@ -24,6 +26,8 @@
 #include <optional>
 
 using av::CapsetInfo;
+using av::ContextMemory;
+using av::ContextPages;
 using av::FakeDoorbellPages;
 using av::FakeVirtqueueDevice;
 using av::FenceInterruptRoute;
@@ -69,24 +73,33 @@ private:
     FakeVirtqueueDevice queue_;
 };
 
+/* Each context's memory stands in for its process's allocations. */
 class Fixture {
 public:
+    Fixture() : first_(mapped_.platform()), second_(mapped_.platform()) {}
+
     Status start()
     {
         const Status mapped = mapped_.map();
         if (mapped != Status::ok) return mapped;
+        if (first_.allocate(12u) != Status::ok || second_.allocate(12u) != Status::ok) return Status::no_memory;
         device_.emplace(mapped_.platform(), mapped_.mappings(), mapped_.layout());
         return device_->start(3u);
     }
     MappedVirtioFunction &mapped() { return mapped_; }
     av::VirtioGpuDevice  &device() { return *device_; }
     FakeDoorbellPages    &doorbells() { return doorbells_; }
+    ContextPages          pages(std::uint32_t index) const { return index == 0u ? first_.pages() : second_.pages(); }
 
 private:
     MappedVirtioFunction               mapped_;
     FakeDoorbellPages                  doorbells_;
+    ContextMemory                      first_;
+    ContextMemory                      second_;
     std::optional<av::VirtioGpuDevice> device_;
 };
+
+constexpr std::uint32_t first_resource = 0x00100000u;
 
 /* Submits one batch on the binding (so a completed fence is legitimate) and
  * seeds its fence page as the device would when that batch finishes. */
@@ -106,11 +119,12 @@ TEST(fence_interrupt_route, routes_a_vector_to_its_context_and_no_other)
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
   RvkContextBinding first(fixture.mapped().platform(), fixture.doorbells(),
-                          RvkContextRecord(SubApi::vulkan, 12u, 10u, 11u, 12u), 3u, 2u);
+                          RvkContextRecord(SubApi::vulkan, 12u, 10u, 11u, 12u), 3u, 2u, first_resource);
   RvkContextBinding second(fixture.mapped().platform(), fixture.doorbells(),
-                           RvkContextRecord(SubApi::vulkan, 12u, 20u, 21u, 22u), 4u, 3u);
-  CHECK_STATUS(first.set_up(fixture.device(), capset()), Status::ok);
-  CHECK_STATUS(second.set_up(fixture.device(), capset()), Status::ok);
+                           RvkContextRecord(SubApi::vulkan, 12u, 20u, 21u, 22u), 4u, 3u,
+                           first_resource + RvkContextBinding::resources_per_context);
+  CHECK_STATUS(first.set_up(fixture.device(), capset(), fixture.pages(0u)), Status::ok);
+  CHECK_STATUS(second.set_up(fixture.device(), capset(), fixture.pages(1u)), Status::ok);
   prime(fixture.mapped().platform(), first, 5u, 64u);
   prime(fixture.mapped().platform(), second, 7u, 64u);
 
@@ -136,8 +150,8 @@ TEST(fence_interrupt_route, a_detached_or_unclaimed_vector_is_a_no_op)
   CHECK_STATUS(fixture.start(), Status::ok);
   Host host(fixture.mapped());
   RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(),
-                            RvkContextRecord(SubApi::vulkan, 12u, 10u, 11u, 12u), 3u, 2u);
-  CHECK_STATUS(binding.set_up(fixture.device(), capset()), Status::ok);
+                            RvkContextRecord(SubApi::vulkan, 12u, 10u, 11u, 12u), 3u, 2u, first_resource);
+  CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages(0u)), Status::ok);
 
   FenceInterruptRoute route(fixture.mapped().platform());
   CHECK_STATUS(route.attach(2u, binding), Status::ok);
@@ -161,7 +175,7 @@ TEST(fence_interrupt_route, refuses_a_vector_out_of_range_or_already_claimed)
 { MappedVirtioFunction mapped;
   FakeDoorbellPages doorbells;
   RvkContextBinding binding(mapped.platform(), doorbells,
-                            RvkContextRecord(SubApi::vulkan, 12u, 10u, 11u, 12u), 3u, 2u);
+                            RvkContextRecord(SubApi::vulkan, 12u, 10u, 11u, 12u), 3u, 2u, first_resource);
   FenceInterruptRoute route(mapped.platform());
   CHECK_STATUS(route.attach(FenceInterruptRoute::fence_queues, binding), Status::invalid_parameter);
   CHECK_STATUS(route.attach(1u, binding), Status::ok);

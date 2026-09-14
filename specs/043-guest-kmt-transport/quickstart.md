@@ -22,7 +22,7 @@ ls tests/fuzz/fuzz_reply_reader.cpp      # the reply/fence-page fuzz target — 
 ```
 
 Also absent: `src/proto/context/rvk_context_record.*`, the miniport half
-(`RvkContextBinding`, `ContextBlobPublisher`, `SubmissionReader`,
+(`RvkContextBinding`, `ContextPages`, `SubmissionReader`,
 `FenceInterruptRoute` in `src/core/rvk/` and `src/core/adapter/`), the emitter's
 writer-lending change under `tools/codegen/rvk_codegen/emit/`, and the new
 guest scenario in `src/guest/suite/`. The class list is `plan.md`, "Classes this

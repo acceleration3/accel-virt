@@ -2,6 +2,8 @@
  * answers, head and fence page written by hand; the loopback suite runs the
  * same context against the device core. */
 #include "core/platform/platform.hpp"
+#include "core/rvk/context_memory.hpp"
+#include "core/rvk/context_pages.hpp"
 #include "core/rvk/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "harness/device/fake_doorbell_pages.hpp"
@@ -22,6 +24,8 @@
 #include <cstring>
 
 using av::CapsetInfo;
+using av::ContextMemory;
+using av::ContextPages;
 using av::ContextSetup;
 using av::FakeDoorbellPages;
 using av::FencePage;
@@ -43,11 +47,11 @@ struct GuestContextProbe {
     static void establish_unattached(GuestContext &context) { context.state_ = GuestContext::State::established; }
     static void attach_ring_only(GuestContext &context)
     {
-        static_cast<void>(context.submitter_.attach(context.memory_.ring(), 12u, 0u));
+        static_cast<void>(context.submitter_.attach(context.pages_.ring_view(), 12u, 0u));
     }
-    static void allocate_while_idle(GuestContext &context)
+    static void hold_while_idle(GuestContext &context, const ContextPages &pages)
     {
-        static_cast<void>(context.memory_.allocate(12u));
+        context.pages_ = pages;
         context.state_ = GuestContext::State::idle;
     }
 };
@@ -69,14 +73,18 @@ ContextSetup setup(std::uint8_t order = 12u, SubApi api = SubApi::vulkan)
     return ContextSetup(ProtocolVersion(1u, 0u), api, 10u, order, 11u, 2u, 12u);
 }
 
+/* The memory stands in for a process's ring, fence and reply allocations, and
+ * outlives the context set up on it. */
 class Fixture {
 public:
-    Fixture() : context_(platform_, doorbells_) {}
+    Fixture() : memory_(platform_), context_(platform_, doorbells_) { CHECK_STATUS(memory_.allocate(12u), Status::ok); }
     ~Fixture() { platform_.set_irql(Irql::passive); }
 
     MockPlatform      &platform() { return platform_; }
     FakeDoorbellPages &doorbells() { return doorbells_; }
+    ContextMemory     &memory() { return memory_; }
     GuestContext      &context() { return context_; }
+    ContextPages       pages() const { return memory_.pages(); }
 
     /* Answers every request the context has with `type`: how many there were. */
     std::uint32_t answer_all(std::uint32_t type = GpuResponse::ok_nodata)
@@ -97,7 +105,7 @@ public:
     }
     void established()
     {
-        CHECK_STATUS(context_.set_up(capset(), 3u, setup()), Status::ok);
+        CHECK_STATUS(context_.set_up(capset(), 3u, setup(), memory_.pages()), Status::ok);
         CHECK_EQ(answer_all(), 5u);
         CHECK(context_.state() == GuestContext::State::established);
         static_cast<void>(FencePage(0u, 0u).encode(page(), 32u));
@@ -122,6 +130,7 @@ public:
 private:
     MockPlatform      platform_;
     FakeDoorbellPages doorbells_;
+    ContextMemory     memory_;
     GuestContext      context_;
 };
 
@@ -130,8 +139,10 @@ private:
 TEST(guest_context, sets_up_submits_serves_and_tears_down)
 { Fixture fixture;
   CHECK(fixture.context().state() == GuestContext::State::idle);
+  CHECK(fixture.context().ring() == nullptr && fixture.context().fence_page() == nullptr);
   fixture.established();
-  CHECK(fixture.context().ring() != nullptr && fixture.context().reply() != nullptr);
+  CHECK(fixture.context().ring() == fixture.memory().ring());
+  CHECK(fixture.context().fence_page() == fixture.memory().fence_page());
   CHECK_STATUS(fixture.submit(1u, 0u, 24u), Status::ok);
   CHECK_EQ(fixture.doorbells().rings(2u), 1u);
   CHECK(fixture.context().tail() == 24u);
@@ -147,6 +158,7 @@ TEST(guest_context, sets_up_submits_serves_and_tears_down)
   CHECK_STATUS(fixture.context().release(), Status::ok);
   CHECK(fixture.context().state() == GuestContext::State::idle);
   CHECK(fixture.context().ring() == nullptr);
+  CHECK(fixture.context().fence_page() == nullptr);
   fixture.established(); }
 
 TEST(guest_context, a_fault_is_reported_and_the_context_still_tears_down)
@@ -182,7 +194,7 @@ TEST(guest_context, a_device_that_lies_fails_the_context)
 
 TEST(guest_context, a_refused_setup_fails_the_context_and_releases_what_was_created)
 { Fixture fixture;
-  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup()), Status::ok);
+  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup(), fixture.pages()), Status::ok);
   std::uint8_t bytes[RvkRequestWriter::max_request_size] = {};
   std::size_t  length = 0u;
   fixture.platform().set_irql(Irql::dispatch);
@@ -205,22 +217,45 @@ TEST(guest_context, a_refused_setup_fails_the_context_and_releases_what_was_crea
 
 TEST(guest_context, a_setup_refused_before_anything_exists_needs_no_teardown)
 { Fixture fixture;
-  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup()), Status::ok);
+  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup(), fixture.pages()), Status::ok);
   CHECK_EQ(fixture.answer_all(GpuResponse::err_invalid_context_id), 1u);
   CHECK_STATUS(fixture.at_dispatch(&GuestContext::tear_down), Status::ok);
   CHECK(fixture.context().state() == GuestContext::State::torn_down);
   CHECK_EQ(fixture.answer_all(), 0u);
-  CHECK_STATUS(fixture.context().release(), Status::ok); }
+  CHECK_STATUS(fixture.context().release(), Status::ok);
+  CHECK(fixture.context().invariants_hold());
+  fixture.established(); }
 
-TEST(guest_context_set_up, a_setup_the_capset_does_not_allow_or_no_memory_sets_nothing_up)
+TEST(guest_context_set_up, a_setup_the_capset_does_not_allow_sets_nothing_up)
 { Fixture fixture;
-  CHECK_STATUS(fixture.context().set_up(capset(2u), 3u, setup()), Status::invalid_parameter);
-  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup(21u)), Status::invalid_parameter);
-  fixture.platform().fail_allocation_at(1u);
-  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup()), Status::no_memory);
+  CHECK_STATUS(fixture.context().set_up(capset(2u), 3u, setup(), fixture.pages()), Status::invalid_parameter);
+  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup(21u), fixture.pages()), Status::invalid_parameter);
   CHECK(fixture.context().state() == GuestContext::State::idle);
-  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup()), Status::ok);
-  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup()), Status::invalid_state); }
+  CHECK(fixture.context().invariants_hold());
+  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup(), fixture.pages()), Status::ok);
+  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup(), fixture.pages()), Status::invalid_state); }
+
+/* Pages with a part missing - here, memory never allocated - carry no context,
+ * and nothing is sent for them. */
+TEST(guest_context_set_up, pages_not_complete_set_nothing_up)
+{ Fixture fixture;
+  ContextMemory unallocated(fixture.platform());
+  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup(), unallocated.pages()), Status::invalid_parameter);
+  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup(), ContextPages()), Status::invalid_parameter);
+  CHECK(fixture.context().state() == GuestContext::State::idle);
+  CHECK(fixture.context().ring() == nullptr);
+  CHECK_EQ(fixture.answer_all(), 0u);
+  fixture.established(); }
+
+/* The context runs on exactly the pages it is handed: the ring header it
+ * publishes a tail into is the caller's own. */
+TEST(guest_context_set_up, publishes_into_the_ring_it_was_handed)
+{ Fixture fixture;
+  fixture.established();
+  CHECK_STATUS(fixture.submit(1u, 0u, 24u), Status::ok);
+  std::uint64_t tail = 0u;
+  std::memcpy(&tail, fixture.memory().ring() + 8u, 8u);
+  CHECK(tail == 24u); }
 
 TEST(guest_context_abandon, a_device_reset_releases_everything_the_device_held)
 { Fixture fixture;
@@ -246,7 +281,7 @@ TEST(guest_context, runs_at_the_levels_it_declares)
   fixture.context().abandon();
   fixture.platform().set_irql(Irql::dispatch);
   static_cast<void>(fixture.context().release());
-  static_cast<void>(fixture.context().set_up(capset(), 3u, setup()));
+  static_cast<void>(fixture.context().set_up(capset(), 3u, setup(), fixture.pages()));
   fixture.platform().set_irql(Irql::passive);
   while (fixture.platform().claim(Violation::irql_ceiling)) {}
   while (fixture.platform().claim(Violation::lock_order)) {}
@@ -256,13 +291,13 @@ TEST(guest_context, runs_at_the_levels_it_declares)
 TEST(guest_context_invariants, an_established_context_with_nothing_attached_is_detected)
 { Fixture fixture;
   CHECK(fixture.context().invariants_hold());
-  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup()), Status::ok);
+  CHECK_STATUS(fixture.context().set_up(capset(), 3u, setup(), fixture.pages()), Status::ok);
   av::GuestContextProbe::establish_unattached(fixture.context());
   CHECK(!fixture.context().invariants_hold());
   av::GuestContextProbe::attach_ring_only(fixture.context());
   CHECK(!fixture.context().invariants_hold());
   Fixture idle;
-  av::GuestContextProbe::allocate_while_idle(idle.context());
+  av::GuestContextProbe::hold_while_idle(idle.context(), idle.pages());
   CHECK(!idle.context().invariants_hold());
   Fixture released;
   av::GuestContextProbe::establish_unattached(released.context());

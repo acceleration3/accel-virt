@@ -1,11 +1,13 @@
 /* One process holding both sides: a guest's MockPlatform, the device core over
- * it, the driver carrying requests between them, and two guest contexts. The
- * device is reset before the contexts' memory is released, as a guest's
- * memory outlives the device's view of it. */
+ * it, the driver carrying requests between them, and two guest contexts, each
+ * on memory of its own standing in for a process's allocations. The device is
+ * reset before the contexts' memory is released, as a guest's memory outlives
+ * the device's view of it. */
 #ifndef AV_LOOPBACK_RIG_HPP
 #define AV_LOOPBACK_RIG_HPP
 
 #include "core/rvk/capset_query.hpp"
+#include "core/rvk/context_memory.hpp"
 #include "core/rvk/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "harness/loopback/loopback_device.hpp"
@@ -32,6 +34,8 @@ public:
     LoopbackDevice &device();
     LoopbackDriver &driver();
     GuestContext   &context(std::uint32_t index);
+    /* The memory context `index` runs on: where its replies land. */
+    ContextMemory  &memory(std::uint32_t index);
     /* The doorbell, and fence line, context `index` sets up on: index + 1. */
     std::uint32_t   line(std::uint32_t index) const;
 
@@ -39,8 +43,9 @@ public:
     bool   read_capset();
     /* What the device offered, once read. */
     const CapsetInfo &capset() const;
-    /* Sets context `index` up with ids of its own: the set_up status, then
-     * whether every request was answered and it is established. */
+    /* Sets context `index` up with ids of its own, on fresh memory when it is
+     * idle: the set_up status, then whether every request was answered and it
+     * is established. */
     Status set_up(std::uint32_t index);
     bool   establish(std::uint32_t index);
     /* Tears context `index` down and releases it: whether it went idle. */
@@ -53,6 +58,8 @@ private:
     LoopbackDevice device_;
     LoopbackDriver driver_;
     CapsetQuery    query_;
+    ContextMemory  first_memory_;
+    ContextMemory  second_memory_;
     GuestContext   first_;
     GuestContext   second_;
 };

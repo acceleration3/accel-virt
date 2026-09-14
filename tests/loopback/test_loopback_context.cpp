@@ -138,10 +138,10 @@ TEST(loopback_context, sets_up_runs_batches_with_a_reply_and_tears_down)
   CHECK(!rig.context(0u).faulted());
   CHECK_EQ(rig.device().executor().executed(), 2u);
   ReplyHeader reply;
-  CHECK_STATUS(reply.decode(rig.context(0u).reply(), ReplyHeader::encoded_size), Status::ok);
+  CHECK_STATUS(reply.decode(rig.memory(0u).reply(), ReplyHeader::encoded_size), Status::ok);
   CHECK_EQ(reply.fence_id(), 2u);
   CHECK_EQ(reply.size(), 8u);
-  CHECK(std::memcmp(rig.context(0u).reply() + ReplyHeader::encoded_size, "loopback", 8u) == 0);
+  CHECK(std::memcmp(rig.memory(0u).reply() + ReplyHeader::encoded_size, "loopback", 8u) == 0);
   CHECK(rig.retire(0u));
   CHECK_EQ(rig.device().device().contexts(), 0u);
   CHECK_EQ(rig.device().device().blobs(), 0u);

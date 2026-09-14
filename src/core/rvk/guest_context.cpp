@@ -7,20 +7,20 @@
 namespace av {
 
 GuestContext::GuestContext(Platform &platform, RegisterWindow &doorbells)
-    : platform_(platform), lock_(platform, LockRank::rvk_context), memory_(platform), sequence_(platform), fences_(),
+    : platform_(platform), lock_(platform, LockRank::rvk_context), pages_(), sequence_(platform), fences_(),
       submitter_(platform, doorbells, fences_), observer_(platform, fences_), order_(0u), doorbell_(0u),
       state_(State::idle) {}
 
-Status GuestContext::set_up(const CapsetInfo &capset, uint32_t context_id, const ContextSetup &setup)
+Status GuestContext::set_up(const CapsetInfo &capset, uint32_t context_id, const ContextSetup &setup,
+                            const ContextPages &pages)
 {
     platform_.require_irql_at_most(Irql::passive, "GuestContext::set_up");
     if (state_ != State::idle) return Status::invalid_state;
-    if (setup.validate_against(capset) != Status::ok) return Status::invalid_parameter;
-    const Status allocated = memory_.allocate(setup.ring_order());
-    if (allocated != Status::ok) return allocated;
+    if (setup.validate_against(capset) != Status::ok || !pages.complete()) return Status::invalid_parameter;
     SpinLockGuard guard(lock_);
-    /* Memory just allocated and a sequence never run: begin_setup has nothing to refuse. */
-    static_cast<void>(sequence_.begin_setup(context_id, setup, memory_));
+    /* Complete pages and a sequence left idle by the last teardown: begin_setup has nothing to refuse. */
+    static_cast<void>(sequence_.begin_setup(context_id, setup, pages));
+    pages_ = pages;
     fences_ = FenceProgress();
     order_ = setup.ring_order();
     doorbell_ = setup.doorbell();
@@ -56,10 +56,10 @@ void GuestContext::finish_sequence()
         state_ = State::failed;
         return;
     }
-    /* The memory and order were accepted at set_up, and nothing is attached
+    /* The pages and order were accepted at set_up, and nothing is attached
      * before a setup finishes: neither can refuse. */
-    static_cast<void>(submitter_.attach(memory_.ring(), order_, doorbell_));
-    static_cast<void>(observer_.attach(memory_.fence_page()));
+    static_cast<void>(submitter_.attach(pages_.ring_view(), order_, doorbell_));
+    static_cast<void>(observer_.attach(pages_.fence_view()));
     state_ = State::established;
 }
 
@@ -90,7 +90,14 @@ Status GuestContext::tear_down()
     if (state_ != State::established && state_ != State::failed) return Status::invalid_state;
     submitter_.detach();
     observer_.detach();
-    state_ = sequence_.begin_teardown() == Status::ok ? State::tearing_down : State::torn_down;
+    if (sequence_.begin_teardown() == Status::ok) {
+        state_ = State::tearing_down;
+        return Status::ok;
+    }
+    /* The device holds nothing of a setup refused at its first step; the
+     * finished sequence still has to go idle for the next setup to begin. */
+    sequence_.abandon();
+    state_ = State::torn_down;
     return Status::ok;
 }
 
@@ -110,26 +117,25 @@ Status GuestContext::release()
     platform_.require_irql_at_most(Irql::passive, "GuestContext::release");
     if (state_ == State::idle) return Status::ok;
     if (state_ != State::torn_down) return Status::invalid_state;
-    memory_.release();
+    pages_ = ContextPages();
     state_ = State::idle;
     return Status::ok;
 }
 
 GuestContext::State GuestContext::state() const { return state_; }
-uint8_t            *GuestContext::ring() const { return memory_.ring(); }
-uint8_t            *GuestContext::reply() const { return memory_.reply(); }
-const uint8_t      *GuestContext::fence_page() const { return memory_.fence_page(); }
+uint8_t            *GuestContext::ring() const { return pages_.ring_view(); }
+const uint8_t      *GuestContext::fence_page() const { return pages_.fence_view(); }
 uint64_t            GuestContext::tail() const { return submitter_.tail(); }
 uint64_t            GuestContext::completed() const { return observer_.completed(); }
 bool                GuestContext::faulted() const { return observer_.faulted(); }
 uint32_t            GuestContext::fault_code() const { return observer_.fault_code(); }
 
-/* Memory exists from setup until release, and an established context has
+/* Pages are held from setup until release, and an established context has
  * both its ring and its page to work on. */
 bool GuestContext::invariants_hold() const
 {
-    if (state_ == State::idle) return !memory_.allocated();
-    return memory_.allocated() && (state_ != State::established || (submitter_.attached() && observer_.attached()));
+    if (state_ == State::idle) return !pages_.complete();
+    return pages_.complete() && (state_ != State::established || (submitter_.attached() && observer_.attached()));
 }
 
 }  // namespace av

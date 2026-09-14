@@ -16,7 +16,7 @@ constexpr std::uint32_t resources_per_context = 10u;
 
 LoopbackRig::LoopbackRig(const std::uint8_t *gpu)
     : platform_(), device_(platform_, gpu), driver_(platform_, device_), query_(platform_),
-      first_(platform_, device_.doorbells()), second_(platform_, device_.doorbells()) {}
+      first_memory_(platform_), second_memory_(platform_), first_(platform_, device_.doorbells()), second_(platform_, device_.doorbells()) {}
 
 LoopbackRig::~LoopbackRig() { device_.device().reset(); }
 
@@ -24,6 +24,7 @@ MockPlatform   &LoopbackRig::platform() { return platform_; }
 LoopbackDevice &LoopbackRig::device() { return device_; }
 LoopbackDriver &LoopbackRig::driver() { return driver_; }
 GuestContext   &LoopbackRig::context(std::uint32_t index) { return index == 0u ? first_ : second_; }
+ContextMemory  &LoopbackRig::memory(std::uint32_t index) { return index == 0u ? first_memory_ : second_memory_; }
 std::uint32_t   LoopbackRig::line(std::uint32_t index) const { return index + 1u; }
 
 const CapsetInfo &LoopbackRig::capset() const { return query_.capset(); }
@@ -35,7 +36,14 @@ Status LoopbackRig::set_up(std::uint32_t index)
     const std::uint32_t base = (index + 1u) * resources_per_context;
     const ContextSetup  setup(ProtocolVersion(1u, 0u), SubApi::vulkan, base, ring_order, base + 1u, line(index),
                               base + 2u);
-    return context(index).set_up(query_.capset(), index + 1u, setup);
+    /* A context that is not idle refuses the setup before it looks at the
+     * pages, so only an idle one's memory is replaced with a fresh ring. */
+    if (context(index).state() == GuestContext::State::idle) {
+        memory(index).release();
+        const Status allocated = memory(index).allocate(ring_order);
+        if (allocated != Status::ok) return allocated;
+    }
+    return context(index).set_up(query_.capset(), index + 1u, setup, memory(index).pages());
 }
 
 bool LoopbackRig::establish(std::uint32_t index)

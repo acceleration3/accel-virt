@@ -8,15 +8,16 @@
 namespace av {
 
 RvkContextBinding::RvkContextBinding(Platform &platform, RegisterWindow &doorbells,
-                                     const RvkContextRecord &record, uint32_t context_id, uint32_t doorbell)
+                                     const RvkContextRecord &record, uint32_t context_id, uint32_t doorbell,
+                                     uint32_t first_resource_id)
     : context_(platform, doorbells), record_(record), context_id_(context_id), doorbell_(doorbell),
-      request_{}, answer_{} {}
+      first_resource_id_(first_resource_id), request_{}, answer_{} {}
 
-Status RvkContextBinding::set_up(VirtioGpuDevice &device, const CapsetInfo &capset)
+Status RvkContextBinding::set_up(VirtioGpuDevice &device, const CapsetInfo &capset, const ContextPages &pages)
 {
-    const ContextSetup setup(capset.version(), record_.sub_api(), record_.ring(), record_.ring_order(),
-                             record_.fence(), doorbell_, record_.reply());
-    const Status begun = context_.set_up(capset, context_id_, setup);
+    const ContextSetup setup(capset.version(), record_.sub_api(), first_resource_id_, record_.ring_order(),
+                             first_resource_id_ + 1u, doorbell_, first_resource_id_ + 2u);
+    const Status begun = context_.set_up(capset, context_id_, setup, pages);
     if (begun != Status::ok) return begun;
     run_sequence(device);
     return context_.state() == GuestContext::State::established ? Status::ok : Status::not_supported;

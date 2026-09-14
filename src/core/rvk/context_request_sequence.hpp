@@ -1,6 +1,6 @@
 /* One context's setup or teardown on the device, as the requests it takes in
  * order (docs/protocol.md): CTX_CREATE, a guest blob each for the ring, fence
- * page and reply slot, then the setup; or CTX_DESTROY and an unref for each
+ * page and reply slot - one memory entry per run of adjacent pages - then the setup; or CTX_DESTROY and an unref for each
  * blob. One request and one answer at a time. A refused setup stops; a
  * teardown releases exactly what the setup created - counting a request whose
  * answer was unreadable as done, since the device may have acted on it - and
@@ -9,6 +9,7 @@
 #define AV_CONTEXT_REQUEST_SEQUENCE_HPP
 
 #include "core/platform/platform.hpp"
+#include "core/rvk/context_pages.hpp"
 #include "core/support/status.hpp"
 #include "proto/context/context_setup.hpp"
 
@@ -17,7 +18,6 @@
 
 namespace av {
 
-class ContextMemory;
 struct ContextRequestSequenceProbe;
 
 class ContextRequestSequence {
@@ -25,8 +25,8 @@ public:
     explicit ContextRequestSequence(Platform &platform);
 
     /* invalid_state unless idle - nothing set up, or all of it torn down; invalid_parameter
-     * for memory not held. */
-    [[nodiscard]] Status begin_setup(uint32_t context_id, const ContextSetup &setup, const ContextMemory &memory);
+     * for pages not complete. The pages' frames must outlive the setup requests. */
+    [[nodiscard]] Status begin_setup(uint32_t context_id, const ContextSetup &setup, const ContextPages &pages);
     /* invalid_state while a sequence runs or when nothing was created. */
     [[nodiscard]] Status begin_teardown();
     /* The next request into `bytes`. invalid_state while an answer is awaited
@@ -38,7 +38,8 @@ public:
     /* DISPATCH. The device reset: it holds nothing any request created. */
     void                 abandon();
     bool                 finished() const;
-    /* Whether any answer was not OK_NODATA, and the first such answer's type. */
+    /* Whether any answer since the last setup began was not OK_NODATA, and the
+     * first such answer's type. */
     bool                 refused() const;
     uint32_t             refusal() const;
 
@@ -63,8 +64,7 @@ private:
     Phase        phase_;
     ContextSetup setup_;
     uint32_t     context_id_;
-    uint64_t     addresses_[blob_count];
-    uint32_t     lengths_[blob_count];
+    ContextPages pages_;
     uint32_t     step_;
     bool         awaiting_;
     bool         context_created_;

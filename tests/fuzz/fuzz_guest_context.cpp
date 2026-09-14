@@ -8,6 +8,7 @@
  * next request with the bytes, 1 writes the ring's head, 2 writes the fence
  * page, 3 submits the next batch of `count` bytes, 4 serves, 5 answers OK. */
 #include "core/platform/platform.hpp"
+#include "core/rvk/context_memory.hpp"
 #include "core/rvk/guest_context.hpp"
 #include "core/support/status.hpp"
 #include "harness/device/fake_doorbell_pages.hpp"
@@ -38,11 +39,14 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
 {
     av::MockPlatform      platform;
     av::FakeDoorbellPages doorbells;
+    av::ContextMemory     memory(platform);
     av::GuestContext      context(platform, doorbells);
     const av::CapsetInfo  capset(av::ProtocolVersion(1u, 0u), 1u, 64u, 12u, 24u, 0u,
                                  av::GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
-    if (context.set_up(capset, 1u, av::ContextSetup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 2u, 12u, 3u,
-                                                    0u, 4u)) != av::Status::ok)
+    if (memory.allocate(12u) != av::Status::ok ||
+        context.set_up(capset, 1u,
+                       av::ContextSetup(av::ProtocolVersion(1u, 0u), av::SubApi::vulkan, 2u, 12u, 3u, 0u, 4u),
+                       memory.pages()) != av::Status::ok)
         __builtin_trap();
     std::uint8_t  request[av::RvkRequestWriter::max_request_size] = {};
     std::size_t   length = 0u;
