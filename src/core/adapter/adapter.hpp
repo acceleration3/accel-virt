@@ -28,6 +28,8 @@
 #include "core/scheduling/device_table.hpp"
 #include "core/adapter/power_transition.hpp"
 #include "core/rvk/device_identity.hpp"
+#include "core/rvk/rvk_context_table.hpp"
+#include "core/pci/mapped_register_window.hpp"
 #include "core/scheduling/context_loss.hpp"
 #include "core/scheduling/engine_progress.hpp"
 #include "core/scheduling/execution_node.hpp"
@@ -100,6 +102,8 @@ struct DxgkargEscapeRecord;
 struct DxgkargQueryAdapterInfoRecord;
 struct LinkedDeviceRecord;
 struct AdapterProbe;
+class Context;
+class PciBaseAddresses;
 
 class Adapter {
 public:
@@ -253,8 +257,22 @@ private:
      * raises when the driver was granted one per source. */
     static constexpr uint8_t  isr_configuration_changed = 0x2u;
     static constexpr uint32_t config_message = 0u;
+    /* The shared memory capability locating virtio-gpu-rvk-pci's doorbell
+     * pages on BAR 0 (docs/protocol.md). */
+    static constexpr uint8_t  doorbell_region = 0x72u;
 
     [[nodiscard]] Status discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface);
+    /* The doorbell pages, when the device has them: a device without them is
+     * one no rvk context can run on, and runs everything else as before. */
+    [[nodiscard]] Status map_doorbells(const PciBaseAddresses &bars);
+    /* CreateContext for a context that asked with a record: the host context
+     * set up on the process's own memory (feature 043). */
+    [[nodiscard]] Status bind_rvk(Context &context);
+    /* The device a teardown can still ask, or null when it cannot. */
+    VirtioGpuDevice     *answering_device();
+    /* SubmitCommandVirtual for an rvk context: published, rung, and held on
+     * the node until the fence page says the host finished it. */
+    [[nodiscard]] Status submit_rvk(const DxgkargSubmitCommandVirtualRecord &request);
     /* StartDevice: which device this adapter is running on, so the one it wakes
      * up to can be told apart from it. A device that will not say leaves
      * nothing to compare, and the adapter runs as it did before. */
@@ -312,6 +330,7 @@ private:
     BarMappings                    mappings_;
     VirtioPciLayout                layout_;
     ObjectStorage<VirtioGpuDevice> device_;
+    ObjectStorage<MappedRegisterWindow> doorbells_;
     DriverCapabilities             capabilities_;
     GpuMmuGeometry                 geometry_;
     ApertureSegment                segment_;
@@ -325,6 +344,7 @@ private:
     AllocationTable                allocations_;
     DeviceTable                    devices_;
     ContextTable                   contexts_;
+    RvkContextTable                rvk_contexts_;
     HwQueueTable                   hw_queues_;
     HwQueueSubmissions             hw_submissions_;
     ExecutionNode                  node_;

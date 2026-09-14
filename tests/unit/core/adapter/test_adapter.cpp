@@ -82,6 +82,9 @@
 #include "harness/platform/violation.hpp"
 #include "harness/vidpn/fake_vidpn.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/context/rvk_context_record.hpp"
+#include "proto/submission/fence_page.hpp"
+#include "proto/submission/submission_descriptor.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -189,6 +192,10 @@ constexpr std::uint32_t create_blob = 0x010Cu;       /* VIRTIO_GPU_CMD_RESOURCE_
 constexpr std::uint32_t map_blob = 0x0208u;          /* VIRTIO_GPU_CMD_RESOURCE_MAP_BLOB */
 constexpr std::uint32_t get_capset_info = 0x0108u;   /* VIRTIO_GPU_CMD_GET_CAPSET_INFO */
 constexpr std::uint32_t get_capset = 0x0109u;        /* VIRTIO_GPU_CMD_GET_CAPSET */
+constexpr std::uint32_t resource_unref = 0x0102u;    /* VIRTIO_GPU_CMD_RESOURCE_UNREF */
+constexpr std::uint32_t ctx_create = 0x0200u;        /* VIRTIO_GPU_CMD_CTX_CREATE */
+constexpr std::uint32_t ctx_destroy = 0x0201u;       /* VIRTIO_GPU_CMD_CTX_DESTROY */
+constexpr std::uint32_t submit_3d = 0x0207u;         /* VIRTIO_GPU_CMD_SUBMIT_3D */
 constexpr std::uint64_t host_region_address = 0x4000000000ull;
 constexpr std::uint64_t host_region_bytes = 16u << 20u;
 constexpr std::uint8_t  first_gpu[av::GpuIdentity::uuid_bytes] = {3};
@@ -228,6 +235,10 @@ public:
     enum class Answer { display_info, none, wrong_type, no_scanout };
     void answer_with(Answer answer) { answer_ = answer; }
 
+    /* The host answers whatever the adapter asks from here on, as it does
+     * during StartDevice. */
+    void answer_asks() { platform_.on_stall(&Fixture::answer_display_info, this); }
+
     /* The host answering a later ask, for a test that changes the display. */
     static void answer_display_info_from(void *context) { answer_display_info(context); }
 
@@ -254,6 +265,10 @@ public:
     void                   refuse_the_blob() { refuse_blob_ = true; }
     bool                   created_blob() const { return created_blob_; }
     bool                   mapped_region() const { return mapped_region_; }
+    /* A device that stops answering what it is. */
+    void                   ignore_capset() { ignore_capset_ = true; }
+    /* CTX_CREATE, CTX_DESTROY, SUBMIT_3D and RESOURCE_UNREF the device answered. */
+    std::uint32_t          context_requests() const { return context_requests_; }
 
     MockPlatform          &platform() { return platform_; }
     FakeVirtioGpuFunction &function() { return function_; }
@@ -290,6 +305,7 @@ private:
                                                              static_cast<std::uint32_t>(answer.length())));
             return;
         }
+        if ((asked == get_capset_info || asked == get_capset) && fixture->ignore_capset_) return;
         if (asked == get_capset_info || asked == get_capset) {
             av::GpuResponse answer;
             if (asked == get_capset_info)
@@ -298,6 +314,12 @@ private:
                 answer.set_capset(fixture->capset_);
             static_cast<void>(fixture->control().respond_all(answer.bytes(),
                                                              static_cast<std::uint32_t>(answer.length())));
+            return;
+        }
+        /* An rvk context's setup and teardown (feature 043). */
+        if (asked == ctx_create || asked == ctx_destroy || asked == submit_3d || asked == resource_unref) {
+            fixture->context_requests_++;
+            static_cast<void>(fixture->control().respond_all(0x1100u));   /* OK_NODATA */
             return;
         }
         if (fixture->answer_ == Answer::none) return;
@@ -319,6 +341,8 @@ private:
     bool                  refuse_blob_ = false;
     bool                  created_blob_ = false;
     bool                  mapped_region_ = false;
+    std::uint32_t         context_requests_ = 0u;
+    bool                  ignore_capset_ = false;
     Answer                answer_ = Answer::display_info;
     std::optional<av::FakeVirtqueueDevice> control_;
     std::uint32_t         sources_;
@@ -2926,3 +2950,251 @@ TEST(adapter_start_device, a_region_the_device_refuses_leaves_the_adapter_withou
   /* And the segment is not offered: a segment with no storage behind it is one
    * VidMm places allocations in and then writes into nothing. */
   CHECK_EQ(out.NbSegment, 1u); }
+
+/* ---- rvk contexts (feature 043) ------------------------------------------------- */
+
+namespace {
+
+/* A process's transport allocation: created through the DDI, given its D3DKMT
+ * handle, and mapped into the aperture over guest memory by BuildPagingBuffer,
+ * as VidMm does when the process makes it resident. */
+class TransportAllocation {
+public:
+    TransportAllocation(Fixture &fixture, av::FakeHandleTable &handles, av::AllocationKind kind,
+                        std::uint64_t bytes, std::uint64_t offset_in_pages)
+        : fixture_(fixture), bytes_(bytes), block_(nullptr), frames_{}, encoded_{}, handle_(nullptr), kmt_handle_(0u)
+    {
+        const av::AllocationDescriptor descriptor(kind, true, av::SurfaceLayout(), bytes, av::ScanoutTarget());
+        CHECK_STATUS(descriptor.encode(encoded_, sizeof encoded_), av::Status::ok);
+        av::DxgkAllocationInfoRecord info = {};
+        info.pPrivateDriverData = encoded_;
+        info.PrivateDriverDataSize = av::AllocationDescriptor::encoded_size;
+        av::DxgkargCreateAllocationRecord create = {};
+        create.NumAllocations = 1u;
+        create.pAllocationInfo = &info;
+        CHECK_EQ(nt(fixture.adapter().create_allocation(&create)), success);
+        handle_ = info.hAllocation;
+        kmt_handle_ = handles.insert(handle_);
+        block_ = static_cast<std::uint8_t *>(fixture.platform().allocate_contiguous(bytes));
+        std::memset(block_, 0, bytes);
+        const auto pages = static_cast<std::uint32_t>(bytes / 0x1000u);
+        for (std::uint32_t index = 0u; index < pages; index++)
+            frames_[index] = fixture.platform().physical_address(block_) + index * 0x1000u;
+        av::DxgkBuildPagingBufferMapApertureSegmentRecord mapping = {};
+        mapping.hAllocation = handle_;
+        mapping.SegmentId = av::ApertureSegment::segment_id;
+        mapping.OffsetInPages = offset_in_pages;
+        mapping.NumberOfPages = pages;
+        mapping.pMdl = fixture.platform().attach_page_frames(frames_, pages);
+        std::uint8_t                       dma[64] = {};
+        av::DxgkargBuildPagingBufferRecord paging = {};
+        paging.pDmaBuffer = dma;
+        paging.DmaSize = sizeof dma;
+        paging.Operation = 5;   /* DXGK_OPERATION_MAP_APERTURE_SEGMENT */
+        std::memcpy(paging.Reserved, &mapping, sizeof mapping);
+        CHECK_EQ(nt(fixture.adapter().build_paging_buffer(&paging)), success);
+    }
+    ~TransportAllocation() { fixture_.platform().release_contiguous(block_, bytes_); }
+
+    std::uint32_t kmt_handle() const { return kmt_handle_; }
+    void         *handle() const { return handle_; }
+    std::uint8_t *bytes() const { return block_; }
+    std::uint32_t destroy()
+    {
+        av::DxgkargDestroyAllocationRecord destroy = {};
+        destroy.NumAllocations = 1u;
+        destroy.pAllocationList = &handle_;
+        return nt(fixture_.adapter().destroy_allocation(&destroy));
+    }
+
+private:
+    Fixture      &fixture_;
+    std::uint64_t bytes_;
+    std::uint8_t *block_;
+    std::uint64_t frames_[4];
+    std::uint8_t  encoded_[av::AllocationDescriptor::encoded_size];
+    void         *handle_;
+    std::uint32_t kmt_handle_;
+};
+
+/* One process's rvk transport as the adapter sees it: its device, its ring,
+ * fence page and reply slot, and the record naming them. */
+class RvkProcess {
+public:
+    RvkProcess(Fixture &fixture, av::FakeHandleTable &handles)
+        : fixture_((fixture.answer_asks(), fixture)), device_{},
+          ring_(fixture, handles, av::AllocationKind::context_ring, 0x2000u, 10u),
+          fence_(fixture, handles, av::AllocationKind::fence_page, 0x1000u, 20u),
+          reply_(fixture, handles, av::AllocationKind::reply_slot, 0x1000u, 30u), record_bytes_{}
+    {
+        CHECK_EQ(nt(fixture.adapter().create_device(&device_)), success);
+        const av::RvkContextRecord record(av::SubApi::vulkan, 12u, ring_.kmt_handle(), fence_.kmt_handle(),
+                                          reply_.kmt_handle());
+        CHECK_STATUS(record.encode(record_bytes_, sizeof record_bytes_), av::Status::ok);
+    }
+
+    std::uint32_t create_context(av::DxgkargCreateContextRecord &request)
+    {
+        request.Flags = 0x4u;   /* VirtualAddressing */
+        request.pPrivateDriverData = record_bytes_;
+        request.PrivateDriverDataSize = sizeof record_bytes_;
+        return nt(fixture_.adapter().create_context(device_.hDevice, &request));
+    }
+    std::uint32_t submit(void *context, std::uint32_t fence_id, const av::SubmissionDescriptor &descriptor)
+    {
+        static_cast<void>(descriptor.encode(descriptor_bytes_, sizeof descriptor_bytes_));
+        av::DxgkargSubmitCommandVirtualRecord submit = {};
+        submit.hContext = context;
+        submit.DmaBufferVirtualAddress = 0x8000000000ull;
+        submit.DmaBufferSize = 32u;
+        submit.pDmaBufferPrivateData = descriptor_bytes_;
+        submit.DmaBufferPrivateDataSize = sizeof descriptor_bytes_;
+        submit.SubmissionFenceId = fence_id;
+        return nt(fixture_.adapter().submit_command_virtual(&submit));
+    }
+    /* What the host writes once it finishes batches through `completed`. */
+    void host_completes(std::uint64_t completed)
+    {
+        static_cast<void>(av::FencePage(completed, completed).encode(fence_.bytes(), 32u));
+    }
+    TransportAllocation &ring() { return ring_; }
+    void                *device() const { return device_.hDevice; }
+    std::uint8_t        *record_bytes() { return record_bytes_; }
+
+private:
+    Fixture                      &fixture_;
+    av::DxgkargCreateDeviceRecord device_;
+    TransportAllocation           ring_;
+    TransportAllocation           fence_;
+    TransportAllocation           reply_;
+    std::uint8_t                  record_bytes_[av::RvkContextRecord::encoded_size];
+    std::uint8_t                  descriptor_bytes_[av::SubmissionDescriptor::encoded_size] = {};
+};
+
+}  // namespace
+
+/* SC-001's driver half: a process's context is set up on the host over its own
+ * memory, a batch it describes rings the doorbell, and the submission fence
+ * dxgkrnl waits on completes only when the host's fence page says so. */
+TEST(adapter_rvk_context, a_process_s_batch_completes_when_the_host_says_it_did)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  CHECK(context.hContext != nullptr);
+  CHECK_EQ(context.ContextInfoDmaBufferPrivateDataSize, 32u);
+  CHECK(fixture.platform().logged_line("rvk context on doorbell 0 message 0 status 0x00000000"));
+  CHECK_EQ(fixture.context_requests(), 2u);   /* CTX_CREATE and the setup */
+  CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
+  CHECK_EQ(fixture.function().doorbells().rings(0u), 1u);
+  const std::uint32_t before = fixture.dxgkrnl().interrupts();
+  process.host_completes(0u);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before);   /* nothing finished on the host yet */
+  process.host_completes(1u);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.adapter().dpc_routine();
+  fixture.platform().set_irql(Irql::passive);
+  CHECK_EQ(fixture.dxgkrnl().interrupts(), before + 1u);
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before).InterruptType, 1);   /* DMA_COMPLETED */
+  CHECK_EQ(fixture.dxgkrnl().interrupt(before).FenceId, 1u);
+  /* Private data that is not a descriptor of this ring publishes nothing. */
+  CHECK_EQ(process.submit(context.hContext, 2u, av::SubmissionDescriptor(2u, 32u, 9000u)), invalid_parameter);
+  CHECK_EQ(fixture.function().doorbells().rings(0u), 1u);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(fixture.context_requests(), 6u);   /* and CTX_DESTROY and an unref per blob */
+  CHECK(fixture.adapter().invariants_hold());
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* The pages a context runs on cannot be freed under it: freeing its ring first
+ * destroys the host context, so the device writes nothing into pages that are
+ * no longer the process's. */
+TEST(adapter_rvk_context, freeing_memory_a_context_runs_on_destroys_the_host_context_first)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  const std::uint32_t requests = fixture.context_requests();
+  CHECK_EQ(process.ring().destroy(), success);
+  CHECK_EQ(fixture.context_requests(), requests + 4u);   /* CTX_DESTROY and the unrefs before the free */
+  CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(fixture.context_requests(), requests + 4u);   /* nothing more to destroy */
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* A record is honoured only where it can run: a device with no doorbell pages,
+ * or a record naming memory the process does not have, fails the creation and
+ * leaves no context behind. */
+TEST(adapter_rvk_context, a_record_that_cannot_run_fails_the_creation_and_leaves_nothing)
+{ Fixture stock; av::FakeHandleTable handles;
+  CHECK_EQ(stock.start(), success);
+  { RvkProcess process(stock, handles);
+    av::DxgkargCreateContextRecord context = {};
+    CHECK_EQ(process.create_context(context), invalid_parameter);
+    CHECK(context.hContext == nullptr);
+    CHECK_EQ(stock.context_requests(), 0u);
+    CHECK_EQ(nt(stock.adapter().destroy_device(process.device())), success); }
+
+  Fixture rvk;
+  rvk.function().add_doorbell_region();
+  CHECK_EQ(rvk.start(), success);
+  RvkProcess process(rvk, handles);
+  const std::uint32_t nobody = 0x7777u;
+  std::memcpy(process.record_bytes() + 12u, &nobody, sizeof nobody);   /* the ring's handle */
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), invalid_parameter);
+  CHECK(context.hContext == nullptr);
+  CHECK_EQ(nt(rvk.adapter().destroy_device(process.device())), success); }
+
+/* A device that goes through D3 destroys every host context: the process's
+ * context submits nothing more, and destroying it asks the device nothing. */
+TEST(adapter_rvk_context, a_power_transition_abandons_the_host_contexts)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  CHECK_EQ(nt(fixture.adapter().set_power_state(adapter_uid, power_d3, 0)), success);
+  fixture.forget_control();
+  const std::uint32_t requests = fixture.context_requests();
+  CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(fixture.context_requests(), requests);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* Everything that stops a record from running fails the creation, as a context
+ * this adapter cannot create at all always did. */
+TEST(adapter_rvk_context, a_device_that_is_gone_or_silent_runs_no_record)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord bad_node = {};
+  bad_node.NodeOrdinal = 1u;
+  CHECK_EQ(process.create_context(bad_node), invalid_parameter);
+  CHECK(bad_node.hContext == nullptr);
+  fixture.ignore_capset();
+  av::DxgkargCreateContextRecord silent = {};
+  CHECK_EQ(process.create_context(silent), invalid_parameter);
+  CHECK(silent.hContext == nullptr);
+  CHECK_EQ(nt(fixture.adapter().notify_surprise_removal(1)), success);
+  av::DxgkargCreateContextRecord removed = {};
+  CHECK_EQ(process.create_context(removed), invalid_parameter);
+  CHECK_EQ(fixture.context_requests(), 0u);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* A device whose doorbell pages cannot be mapped is not started half-way. */
+TEST(adapter_start_device, doorbell_pages_that_cannot_be_mapped_fail_the_start)
+{ Fixture fixture;
+  fixture.function().add_doorbell_region();
+  fixture.dxgkrnl().refuse_map(2u, 0xC000009Au);
+  CHECK_EQ(fixture.start(), no_space);
+  CHECK_EQ(fixture.dxgkrnl().live_mappings(), 0u);
+  CHECK(fixture.adapter().invariants_hold()); }

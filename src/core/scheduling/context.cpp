@@ -2,6 +2,7 @@
 
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/memory/aperture_segment.hpp"
+#include "proto/submission/submission_descriptor.hpp"
 
 namespace av {
 
@@ -52,7 +53,8 @@ void Context::report_to(DxgkargCreateContextRecord &request)
     request.hContext = this;
     request.ContextInfoDmaBufferSize = dma_buffer_bytes;
     request.ContextInfoDmaBufferSegmentSet = ApertureSegment::segment_set;
-    request.ContextInfoDmaBufferPrivateDataSize = 0u;
+    request.ContextInfoDmaBufferPrivateDataSize =
+        is_rvk_ ? static_cast<uint32_t>(SubmissionDescriptor::encoded_size) : 0u;
     request.ContextInfoAllocationListSize = allocation_list_entries;
     request.ContextInfoPatchLocationListSize = patch_location_entries;
     request.ContextInfoReserved = 0u;

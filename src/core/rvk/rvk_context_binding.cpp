@@ -8,10 +8,11 @@
 namespace av {
 
 RvkContextBinding::RvkContextBinding(Platform &platform, RegisterWindow &doorbells,
-                                     const RvkContextRecord &record, uint32_t context_id, uint32_t doorbell,
-                                     uint32_t first_resource_id)
-    : context_(platform, doorbells), record_(record), context_id_(context_id), doorbell_(doorbell),
-      first_resource_id_(first_resource_id), request_{}, answer_{} {}
+                                     const RvkContextRecord &record, uint32_t slot, uint8_t *request,
+                                     size_t capacity)
+    : context_(platform, doorbells), record_(record), context_id_(slot + 1u), doorbell_(slot),
+      first_resource_id_(first_resource_id + resources_per_context * slot), request_(request), capacity_(capacity),
+      answer_{} {}
 
 Status RvkContextBinding::set_up(VirtioGpuDevice &device, const CapsetInfo &capset, const ContextPages &pages)
 {
@@ -31,6 +32,13 @@ Status RvkContextBinding::tear_down(VirtioGpuDevice &device)
     return context_.release();
 }
 
+void RvkContextBinding::abandon()
+{
+    context_.abandon();
+    /* Abandoned, the context is torn down, which release always accepts. */
+    static_cast<void>(context_.release());
+}
+
 Status RvkContextBinding::submit(const SubmissionDescriptor &submission)
 {
     return context_.submit(submission);
@@ -45,7 +53,7 @@ void RvkContextBinding::run_sequence(VirtioGpuDevice &device)
 {
     for (;;) {
         size_t       length = 0u;
-        const Status next = context_.next_request(request_, sizeof request_, length);
+        const Status next = context_.next_request(request_, capacity_, length);
         if (next != Status::ok) break;
         uint32_t     written = 0u;
         const Status asked = device.ask_control(request_, length, answer_, sizeof answer_, written);
@@ -59,7 +67,6 @@ bool                RvkContextBinding::established() const { return context_.sta
 uint32_t            RvkContextBinding::context_id() const { return context_id_; }
 uint64_t            RvkContextBinding::completed() const { return context_.completed(); }
 bool                RvkContextBinding::faulted() const { return context_.faulted(); }
-const uint8_t      *RvkContextBinding::fence_page() const { return context_.fence_page(); }
 
 bool RvkContextBinding::invariants_hold() const { return context_.invariants_hold(); }
 

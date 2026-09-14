@@ -133,8 +133,8 @@ public:
 private:
     static constexpr std::uint32_t max_live = 4096u;
     static constexpr std::uint32_t max_contiguous = 256u;
-    static constexpr std::uint32_t max_page_frames = 16u;
-    static constexpr std::uint32_t max_frame_views = 64u;
+    static constexpr std::uint32_t max_page_frames = 256u;
+    static constexpr std::uint32_t max_frame_views = 256u;
     static constexpr std::uint64_t first_physical_address = 0x100000000ull;
     static constexpr std::uint32_t violation_kinds =
         static_cast<std::uint32_t>(Violation::count);

@@ -71,6 +71,7 @@
 #include "core/vidpn/vidpn_commit.hpp"
 #include "core/vidpn/vidpn_support_check.hpp"
 #include "core/virtio/virtio_capability_walk.hpp"
+#include "core/virtio/virtio_region.hpp"
 
 namespace av {
 
@@ -90,11 +91,12 @@ enum : int32_t {
 
 Adapter::Adapter(Platform &platform, void *physical_device_object)
     : platform_(platform), budget_(platform), physical_device_object_(physical_device_object), dxgkrnl_(platform),
-      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), capabilities_(platform), geometry_(platform),
+      resources_(platform), mappings_(platform, dxgkrnl_), layout_(), device_(), doorbells_(), capabilities_(platform), geometry_(platform),
       segment_(platform), host_visible_(platform), region_blob_(platform),
       memory_(platform, segment_, host_visible_),
       display_info_(), modes_(), edid_(platform, modes_.preferred()), sources_(platform),
       allocations_(platform, segment_, memory_), devices_(platform, allocations_, dxgkrnl_), contexts_(platform, devices_, geometry_),
+      rvk_contexts_(platform, dxgkrnl_, allocations_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), losses_(platform), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u),
       display_changed_(0u), started_(false), present_(true) {}
@@ -119,10 +121,20 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
     if (status == Status::ok) status = VirtioCapabilityWalk(config, config_space_bytes).walk(layout_);
     if (status == Status::ok)
         status = mappings_.map(PciBaseAddresses(config, config_space_bytes), resources_, layout_);
+    if (status == Status::ok) status = map_doorbells(PciBaseAddresses(config, config_space_bytes));
     /* Where the device's host-visible region is, if it presents one; whether it
      * is offered waits for the capset (feature 041, FR-001). */
     if (status == Status::ok) host_visible_.discover(PciBaseAddresses(config, config_space_bytes), layout_);
     return status;
+}
+
+Status Adapter::map_doorbells(const PciBaseAddresses &bars)
+{
+    const VirtioRegion region = layout_.shared_memory(doorbell_region);
+    if (!region.present()) return Status::ok;
+    const Status mapped = mappings_.map_region(bars, resources_, region);
+    if (mapped != Status::ok) return mapped;
+    return doorbells_.construct(platform_, mappings_.address_of(region), region.length());
 }
 
 void Adapter::remember_device()
@@ -175,6 +187,7 @@ void Adapter::judge_device()
      * owner is told now rather than left waiting for a fence nobody will
      * signal. The display is not this - it is the scanout the transition
      * restored - and keeps working. */
+    rvk_contexts_.abandon_all();
     void          *owner = nullptr;
     const uint32_t aborted = node_.abort_pending(owner);
     if (owner == nullptr) return;
@@ -203,6 +216,8 @@ Status Adapter::power_up()
 Status Adapter::power_down()
 {
     if (!device_.constructed()) return Status::ok;
+    /* A reset destroys every host context, and the device object goes with it. */
+    rvk_contexts_.abandon_all();
     const Status status = present_ ? device_.object().stop() : Status::ok;
     device_.destroy();
     return status;
@@ -221,6 +236,7 @@ int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_inte
         cursor_.release();
         scanout_.release();
         vsync_.destroy();
+        doorbells_.destroy();
         mappings_.unmap_all();
     });
     Status status = discover_and_map(dxgkrnl_interface);
@@ -258,6 +274,7 @@ int32_t Adapter::stop_device()
     const Status status = power_down();
     scanout_.release();
     cursor_.release();
+    doorbells_.destroy();
     mappings_.unmap_all();
     identity_.forget();
     close_region();
@@ -306,6 +323,7 @@ void Adapter::dpc_routine()
         platform_.log("rvkgpu: control queue harvest failed in the DPC");
     if (harvest && device_.object().harvest_cursor(completed) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: cursor queue harvest failed in the DPC");
+    rvk_contexts_.serve(node_);
     if (node_.complete(notification_) != Status::ok && budget_.allows())
         platform_.log("rvkgpu: a completion was refused in the DPC");
     if (hw_submissions_.complete(notification_) != Status::ok && budget_.allows())
@@ -535,8 +553,14 @@ int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *reques
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (request->pAllocationList != nullptr)
-        for (uint32_t index = 0u; index < request->NumAllocations; index++)
+        for (uint32_t index = 0u; index < request->NumAllocations; index++) {
             sources_.forget_primary(request->pAllocationList[index]);
+            /* The device writes a context's fence page and reads its ring
+             * until the context is destroyed on it; pages freed first would be
+             * written after they are someone else's. */
+            void *const user = rvk_contexts_.user_of(allocations_.find(request->pAllocationList[index]));
+            if (user != nullptr) static_cast<void>(rvk_contexts_.unbind(user, answering_device()));
+        }
     return NtStatus(allocations_.destroy(*request)).value();
 }
 
@@ -590,7 +614,32 @@ int32_t Adapter::create_context(void *device, DxgkargCreateContextRecord *reques
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     /* Nothing new runs on a device this adapter did not start on. */
     if (identity_.changed()) return NtStatus(Status::not_supported).value();
-    return NtStatus(contexts_.create(device, *request)).value();
+    const Status created = contexts_.create(device, *request);
+    Context *const context = created == Status::ok ? contexts_.find(request->hContext) : nullptr;
+    if (context == nullptr || !context->is_rvk()) return NtStatus(created).value();
+    const Status bound = bind_rvk(*context);
+    if (bound == Status::ok) return NtStatus(Status::ok).value();
+    static_cast<void>(contexts_.destroy(request->hContext));
+    request->hContext = nullptr;
+    /* dxgkrnl passes a CreateContext status it does not expect straight to the
+     * process and logs it as invalid; the reason is in the driver's log. */
+    return NtStatus(Status::invalid_parameter).value();
+}
+
+Status Adapter::bind_rvk(Context &context)
+{
+    if (!doorbells_.constructed() || answering_device() == nullptr) return Status::not_supported;
+    CapsetInfo     capset;
+    CapsetExchange exchange(platform_, device_.object());
+    const Status   read = exchange.read(capset);
+    if (read != Status::ok) return read;
+    return rvk_contexts_.bind(&context, context.rvk_record(), device_.object(), doorbells_.object(), capset);
+}
+
+VirtioGpuDevice *Adapter::answering_device()
+{
+    /* A device is only ever constructed running: power_up destroys one whose start failed. */
+    return device_.constructed() && present_ ? &device_.object() : nullptr;
 }
 
 int32_t Adapter::destroy_context(void *context)
@@ -598,6 +647,8 @@ int32_t Adapter::destroy_context(void *context)
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_context");
     /* DXGCONTEXT::DestroyContext destroys a context's queues first. */
     if (hw_queues_.serves(context)) return NtStatus(Status::invalid_parameter).value();
+    const Context *const found = contexts_.find(context);
+    if (found != nullptr && found->is_rvk()) static_cast<void>(rvk_contexts_.unbind(context, answering_device()));
     return NtStatus(contexts_.destroy(context)).value();
 }
 
@@ -1161,9 +1212,23 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
         report_losses("rvkgpu: submission on a changed device");
         return NtStatus(Status::ok).value();
     }
-    const Status status = node_.submit(request->SubmissionFenceId, request->hContext);
+    const Status status = context->is_rvk() ? submit_rvk(*request)
+                                            : node_.submit(request->SubmissionFenceId, request->hContext);
     if (status == Status::ok) static_cast<void>(dxgkrnl_.queue_dpc());
-    return NtStatus(status).value();
+    return NtStatus(status == Status::ok ? Status::ok : Status::invalid_parameter).value();
+}
+
+/* The host may finish the batch before its packet is queued; the DPC queued
+ * after both serves what the fence page already says, so nothing waits for an
+ * interrupt that came first. */
+Status Adapter::submit_rvk(const DxgkargSubmitCommandVirtualRecord &request)
+{
+    uint64_t             awaited = 0u;
+    const Status published = rvk_contexts_.submit(request.hContext,
+                                                  static_cast<const uint8_t *>(request.pDmaBufferPrivateData),
+                                                  request.DmaBufferPrivateDataSize, awaited);
+    if (published != Status::ok) return published;
+    return node_.submit(request.SubmissionFenceId, request.hContext, awaited);
 }
 
 void Adapter::set_root_page_table(const DxgkargSetRootPageTableRecord *request)

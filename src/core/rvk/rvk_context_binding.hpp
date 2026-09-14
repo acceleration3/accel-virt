@@ -28,14 +28,24 @@ struct RvkContextBindingProbe;
 
 class RvkContextBinding {
 public:
-    /* The ring, fence and reply blobs, in that order, from `first_resource_id`. */
+    /* The ring, fence and reply blobs, in that order, per slot. */
     static constexpr uint32_t resources_per_context = 3u;
+    /* Above the cursor's, every scanout's and host-visible memory's resource
+     * ids, so a context's blob never takes one another subsystem uses. */
+    static constexpr uint32_t first_resource_id = 0x00100000u;
+    /* What a request must have room for: a blob over a scattered ring is as
+     * wide as a primary's backing, and goes to the same wide control slot. */
+    static constexpr size_t   request_bytes = GpuRequestWriter::max_backing_request_size;
 
-    /* The blobs are named by ids the driver assigns, not by the record's
-     * allocation handles: those are per process, and two processes' handles
-     * would collide on the one device. */
-    RvkContextBinding(Platform &platform, RegisterWindow &doorbells, const RvkContextRecord &record,
-                      uint32_t context_id, uint32_t doorbell, uint32_t first_resource_id);
+    /* Slot `slot` of the adapter's contexts: doorbell `slot`, host context
+     * `slot` + 1, and blobs from first_resource_id + 3 * `slot`. The blobs are
+     * named by ids the driver assigns, not by the record's allocation handles:
+     * those are per process, and two processes' handles would collide on the
+     * one device. `request` is `capacity` bytes the setup and teardown write
+     * their requests into, lent by the owner, which serializes them: a request
+     * buffer per context would be tens of kilobytes each. */
+    RvkContextBinding(Platform &platform, RegisterWindow &doorbells, const RvkContextRecord &record, uint32_t slot,
+                      uint8_t *request, size_t capacity);
     RvkContextBinding(const RvkContextBinding &) = delete;
     RvkContextBinding &operator=(const RvkContextBinding &) = delete;
 
@@ -48,6 +58,9 @@ public:
     /* PASSIVE. Drives CTX_DESTROY and a blob unref for each blob, then lets go
      * of the pages. invalid_state unless established or failed. */
     [[nodiscard]] Status tear_down(VirtioGpuDevice &device);
+    /* PASSIVE. The device was reset or is gone: it holds nothing of this
+     * context, so the pages are let go of without a request. */
+    void                 abandon();
     /* DISPATCH. Hands the context a batch its ring submitter rings the doorbell
      * for. invalid_state unless established. */
     [[nodiscard]] Status submit(const SubmissionDescriptor &submission);
@@ -59,18 +72,12 @@ public:
     uint32_t            context_id() const;
     uint64_t            completed() const;
     bool                faulted() const;
-    /* The fence page the device writes and the serve reads; the route hands the
-     * ISR nothing else about a context. */
-    const uint8_t      *fence_page() const;
 
     bool invariants_hold() const;
 
 private:
     void run_sequence(VirtioGpuDevice &device);
 
-    /* A blob over a scattered ring is as wide as a primary's backing, and goes
-     * to the same wide control slot. */
-    static constexpr size_t request_bytes = GpuRequestWriter::max_backing_request_size;
     static constexpr size_t answer_bytes  = 64u;
 
     GuestContext     context_;
@@ -78,7 +85,8 @@ private:
     uint32_t         context_id_;
     uint32_t         doorbell_;
     uint32_t         first_resource_id_;
-    uint8_t          request_[request_bytes];
+    uint8_t         *request_;
+    size_t           capacity_;
     uint8_t          answer_[answer_bytes];
 
     friend struct RvkContextBindingProbe;

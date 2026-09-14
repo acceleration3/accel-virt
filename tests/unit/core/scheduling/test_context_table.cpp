@@ -176,13 +176,18 @@ TEST(context_table_create, a_valid_record_makes_an_rvk_context)
   CHECK(context->is_rvk());
   CHECK_EQ(context->rvk_record().sub_api(), SubApi::vulkan);
   CHECK_EQ(context->rvk_record().ring(), 2u);
+  /* Its submissions carry their descriptor as private data, which VidSch
+   * refuses past the size the context reports (DXGCONTEXT::SubmitCommand,
+   * dxgkrnl.sys @1402d7720). */
+  CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, 32u);
   CHECK(fixture.contexts().invariants_hold()); }
 
 TEST(context_table_create, a_context_with_no_private_data_is_not_rvk)
 { Fixture fixture;
   DxgkargCreateContextRecord request = {};
   CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::ok);
-  CHECK(!fixture.contexts().find(request.hContext)->is_rvk()); }
+  CHECK(!fixture.contexts().find(request.hContext)->is_rvk());
+  CHECK_EQ(request.ContextInfoDmaBufferPrivateDataSize, 0u); }
 
 /* Private data the size of a record but not a valid one is refused, and no
  * context is left behind. */

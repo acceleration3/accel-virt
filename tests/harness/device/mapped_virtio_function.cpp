@@ -25,6 +25,7 @@ Status MappedVirtioFunction::map()
 }
 
 MockPlatform          &MappedVirtioFunction::platform() { return platform_; }
+DxgkrnlInterface      &MappedVirtioFunction::interface() { return interface_; }
 FakeVirtioGpuFunction &MappedVirtioFunction::function() { return function_; }
 FakeCommonConfig      &MappedVirtioFunction::common() { return function_.common(); }
 BarMappings           &MappedVirtioFunction::mappings() { return mappings_; }

@@ -29,6 +29,8 @@ public:
     FakeVirtioGpuFunction &function();
     FakeCommonConfig      &common();
     BarMappings           &mappings();
+    /* dxgkrnl's callbacks as the driver reaches them. */
+    DxgkrnlInterface      &interface();
     const VirtioPciLayout &layout() const;
     /* The device side of an activated queue. */
     FakeVirtqueueDevice    queue_device(std::uint16_t index);
