@@ -37,11 +37,18 @@ public:
     [[nodiscard]] Status encode(uint8_t *bytes, size_t capacity) const;
     /* A request only; unchanged unless ok. */
     [[nodiscard]] Status decode(const uint8_t *bytes, size_t length);
+    /* The kernel's answer to this request, read back from the bytes the process
+     * sent it in: the same request with, for a bind, a resource and a page
+     * count, which this record then carries; an unbind answers itself.
+     * malformed for anything else, and unchanged unless ok. */
+    [[nodiscard]] Status accept_answer(const uint8_t *bytes, size_t length);
 
 private:
     static constexpr uint16_t version = 1u;
 
     bool is_request() const;
+    /* Every field from the bytes, judging only what no record may carry. */
+    [[nodiscard]] Status read(const uint8_t *bytes, size_t length);
 
     uint16_t operation_;
     uint32_t allocation_;

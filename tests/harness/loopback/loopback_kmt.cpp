@@ -216,6 +216,12 @@ Status LoopbackKmt::wait_for_context(std::uint32_t, std::uint32_t context)
 
 Status LoopbackKmt::wait_for_vertical_blank(std::uint32_t, std::uint32_t, std::uint32_t) { return Status::ok; }
 
+/* No driver stands behind this D3DKMT to answer an escape. */
+Status LoopbackKmt::escape(std::uint32_t, std::uint32_t, std::uint32_t, std::uint8_t *, std::uint32_t)
+{
+    return Status::not_supported;
+}
+
 std::uint64_t LoopbackKmt::performance_counter(std::uint64_t &frequency) const
 {
     frequency = 10000000u;

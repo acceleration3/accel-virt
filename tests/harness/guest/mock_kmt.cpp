@@ -8,6 +8,10 @@
 #include "proto/submission/ring_header.hpp"
 #include "proto/submission/reply_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
+#include "proto/resources/allocation_kind.hpp"
+#include "proto/resources/host_visible_bind_record.hpp"
+
+#include <sys/mman.h>
 
 namespace av {
 
@@ -22,12 +26,21 @@ constexpr std::uint32_t io_timeout = 0xC00000B5u;
 
 MockKmt::MockKmt()
     : identities_{}, versions_{}, adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{},
-      zeroing_{}, calls_{}, objects_{}, views_{}, locked_{}, private_{}, private_size_(0u), submission_{}, submission_size_(0u), next_handle_(first_handle),
+      zeroing_{}, calls_{}, objects_{}, views_{}, locked_{}, large_views_{}, large_bytes_{}, escape_{},
+      escape_size_(0u), escape_answer_{}, escape_answer_size_(0u), escape_scripted_(false), bound_resources_{},
+      bound_history_{}, binds_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
+      private_size_(0u), submission_{}, submission_size_(0u), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
       answer_{}, answer_size_(0u), answering_(false), queued_{}, queued_sizes_{}, queued_count_(0u),
       queued_taken_(0u), withheld_countdown_(0u), journal_ids_{}, journal_sizes_{}, journal_bytes_{},
       journal_count_(0u) {}
+
+MockKmt::~MockKmt()
+{
+    for (std::uint32_t slot = 0u; slot < max_locks; slot++)
+        if (large_views_[slot] != nullptr) munmap(large_views_[slot], large_bytes_[slot]);
+}
 
 bool MockKmt::begin(Call call)
 {
@@ -194,8 +207,17 @@ Status MockKmt::lock(std::uint32_t device, std::uint32_t allocation, void *&view
     if (zeroed(Call::lock)) return succeed();
     for (std::uint32_t slot = 0u; slot < max_locks; slot++)
         if (locked_[slot] == 0u) {
+            const std::uint64_t bytes = object->pages * page_bytes;
+            if (bytes > view_capacity) {
+                /* Anonymous pages are zero and cost nothing until touched, so a
+                 * 64 MiB chunk's view is only what a test writes into it. */
+                void *const mapped = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+                if (mapped == MAP_FAILED) return refuse(invalid_parameter);
+                large_views_[slot] = static_cast<std::uint8_t *>(mapped);
+                large_bytes_[slot] = bytes;
+            }
             locked_[slot] = allocation;
-            view = views_[slot];
+            view = view_of(allocation);
             return succeed();
         }
     return misuse();   /* more views held than this mock owns */
@@ -210,6 +232,9 @@ Status MockKmt::unlock(std::uint32_t device, std::uint32_t allocation)
     for (std::uint32_t slot = 0u; slot < max_locks; slot++)
         if (locked_[slot] == allocation) {
             locked_[slot] = 0u;
+            if (large_views_[slot] != nullptr) munmap(large_views_[slot], large_bytes_[slot]);
+            large_views_[slot] = nullptr;
+            large_bytes_[slot] = 0u;
             return succeed();
         }
     return misuse();
@@ -342,6 +367,7 @@ Status MockKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
     if (find(Kind::device, device) == nullptr || object == nullptr || object->owner != device) return misuse();
     ticks_ += wait_cost_;
     if (slow_nth_ != 0u && calls_[static_cast<unsigned>(Call::wait_for_context)] % slow_nth_ == 0u) ticks_ += slow_ticks_;
+    if (played()) play_(play_context_);
     if (!withheld()) write_answer(*object);
     consume(*object);
     return succeed();
@@ -416,6 +442,94 @@ Status MockKmt::wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t dev
     if (slip_nth_ != 0u && calls_[static_cast<unsigned>(Call::wait_for_vertical_blank)] % slip_nth_ == 0u)
         ticks_ += slip_ticks_;
     return succeed();
+}
+
+Status MockKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
+                       std::uint32_t size)
+{
+    if (!begin(Call::escape)) return refuse(last_code_);
+    const Object *const owner = find(Kind::device, device);
+    const Object *const on = find(Kind::context, context);
+    if (find(Kind::adapter, adapter) == nullptr || owner == nullptr || owner->owner != adapter || on == nullptr ||
+        on->owner != device || data == nullptr || size == 0u)
+        return misuse();
+    escape_size_ = size < max_private ? size : max_private;
+    for (std::uint32_t i = 0u; i < escape_size_; i++) escape_[i] = data[i];
+    if (zeroed(Call::escape)) return succeed();
+    if (escape_scripted_) {
+        escape_scripted_ = false;
+        for (std::uint32_t i = 0u; i < escape_answer_size_ && i < size; i++) data[i] = escape_answer_[i];
+        return succeed();
+    }
+    return bind_chunk(device, data, size);
+}
+
+/* The driver's own refusals are all STATUS_INVALID_PARAMETER; only data that is
+ * not its record at all is not supported. */
+Status MockKmt::bind_chunk(std::uint32_t device, std::uint8_t *data, std::uint32_t size)
+{
+    HostVisibleBindRecord record;
+    std::uint32_t         magic = 0u;
+    for (std::uint32_t i = 0u; i < sizeof magic && i < size; i++) magic |= std::uint32_t{data[i]} << (8u * i);
+    if (magic != HostVisibleBindRecord::magic) return refuse(not_supported);
+    if (size != HostVisibleBindRecord::encoded_size || record.decode(data, size) != Status::ok)
+        return refuse(invalid_parameter);
+    if (!record.binds()) {
+        for (std::uint32_t &resource : bound_resources_)
+            if (resource == record.resource_id()) {
+                resource = 0u;
+                return succeed();
+            }
+        return refuse(invalid_parameter);
+    }
+    const Object *const chunk = find(Kind::allocation, record.allocation());
+    if (chunk == nullptr || chunk->owner != device ||
+        chunk->allocation_kind != static_cast<std::uint16_t>(AllocationKind::host_visible_memory))
+        return refuse(invalid_parameter);
+    for (std::uint32_t &resource : bound_resources_) {
+        if (resource != 0u) continue;
+        resource = first_chunk_resource + binds_;
+        if (binds_ < max_bindings) bound_history_[binds_] = record.allocation();
+        binds_++;
+        static_cast<void>(record.answered(resource, chunk->pages).encode(data, size));
+        return succeed();
+    }
+    return refuse(invalid_parameter);
+}
+
+bool MockKmt::played()
+{
+    if (play_countdown_ == 0u) return false;
+    return --play_countdown_ == 0u;
+}
+
+void MockKmt::play_at_wait(std::uint32_t nth, void (*play)(void *context), void *context)
+{
+    play_countdown_ = nth;
+    play_ = play;
+    play_context_ = context;
+}
+
+void MockKmt::answer_next_escape(const std::uint8_t *answer, std::uint32_t size)
+{
+    escape_answer_size_ = size < max_private ? size : max_private;
+    for (std::uint32_t i = 0u; i < escape_answer_size_; i++) escape_answer_[i] = answer[i];
+    escape_scripted_ = true;
+}
+
+const std::uint8_t *MockKmt::last_escape() const { return escape_; }
+std::uint32_t       MockKmt::last_escape_size() const { return escape_size_; }
+
+std::uint32_t MockKmt::bindings() const
+{
+    std::uint32_t bound = 0u;
+    for (const std::uint32_t resource : bound_resources_) bound += resource != 0u ? 1u : 0u;
+    return bound;
+}
+
+std::uint32_t MockKmt::bound_allocation(std::uint32_t index) const
+{
+    return index < binds_ && index < max_bindings ? bound_history_[index] : 0u;
 }
 
 std::uint64_t MockKmt::performance_counter(std::uint64_t &frequency) const
@@ -531,7 +645,7 @@ bool MockKmt::is_locked(std::uint32_t allocation) const
 std::uint8_t *MockKmt::view_of(std::uint32_t allocation)
 {
     for (std::uint32_t slot = 0u; slot < max_locks; slot++)
-        if (locked_[slot] == allocation) return views_[slot];
+        if (locked_[slot] == allocation) return large_views_[slot] != nullptr ? large_views_[slot] : views_[slot];
     return nullptr;
 }
 

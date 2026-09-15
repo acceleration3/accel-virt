@@ -61,6 +61,10 @@ public:
      * frame pacing waits on, and the only way in to see the rate the driver
      * reports. */
     virtual Status   wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32_t source) = 0;
+    /* D3DKMTEscape with driver-private data on `context` of `device`: the
+     * miniport reads the `size` bytes and may write its answer back into them,
+     * which the caller finds in `data` on return. The status is the driver's. */
+    virtual Status   escape(uint32_t adapter, uint32_t device, uint32_t context, uint8_t *data, uint32_t size) = 0;
     /* The system's performance counter and its frequency: a vertical blank
      * carries no timestamp, so a rate is measured against this. */
     virtual uint64_t performance_counter(uint64_t &frequency) const = 0;

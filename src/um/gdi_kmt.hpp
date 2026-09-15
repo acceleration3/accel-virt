@@ -50,6 +50,7 @@ public:
                     uint32_t private_size) override;
     Status   wait_for_context(uint32_t device, uint32_t context) override;
     Status   wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32_t source) override;
+    Status   escape(uint32_t adapter, uint32_t device, uint32_t context, uint8_t *data, uint32_t size) override;
     uint64_t performance_counter(uint64_t &frequency) const override;
     uint32_t last_code() const override;
 

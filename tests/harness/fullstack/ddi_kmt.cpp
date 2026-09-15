@@ -11,6 +11,7 @@
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/ddi/dxgkarg_create_device_record.hpp"
 #include "core/ddi/dxgkarg_destroy_allocation_record.hpp"
+#include "core/ddi/dxgkarg_escape_record.hpp"
 #include "core/ddi/dxgkarg_open_allocation_record.hpp"
 #include "core/ddi/dxgkarg_set_root_page_table_record.hpp"
 #include "core/ddi/dxgkarg_submit_command_virtual_record.hpp"
@@ -24,6 +25,7 @@
 #include "harness/fullstack/interrupt_pump.hpp"
 #include "harness/platform/mock_platform.hpp"
 
+#include <cstdlib>
 #include <cstring>
 #include <sched.h>
 #include <time.h>
@@ -241,6 +243,12 @@ Status DdiKmt::admit(Allocation &slot, std::uint32_t device, void *driver_device
         slot.block = static_cast<std::uint8_t *>(platform_.allocate_contiguous(slot.bytes));
         status = slot.block != nullptr ? Status::ok : Status::no_memory;
     }
+    /* The frame list outlives the paging call that attaches it: the MDL the
+     * driver keeps names it until the allocation is freed. */
+    if (status == Status::ok) {
+        slot.frames = static_cast<std::uint64_t *>(std::malloc(pages * sizeof *slot.frames));
+        status = slot.frames != nullptr ? Status::ok : Status::no_memory;
+    }
     if (status == Status::ok) {
         platform_.zero(slot.block, slot.bytes);
         const std::uint64_t physical = platform_.physical_address(slot.block);
@@ -286,6 +294,7 @@ void DdiKmt::release(Allocation &slot)
     }
     if (slot.handle != 0u) handles_.remove(slot.handle);
     if (slot.block != nullptr) platform_.release_contiguous(slot.block, slot.bytes);
+    std::free(slot.frames);
     std::memset(static_cast<void *>(&slot), 0, sizeof slot);
 }
 
@@ -558,6 +567,30 @@ Status DdiKmt::wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t devi
         return Status::not_found;
     }
     return disabled;
+}
+
+/* D3DKMTEscape as dxgkrnl makes it: the handles translated to the driver's, the
+ * data copied into the kernel and the copy copied back out whatever the driver
+ * answered, as DxgkEscape does. */
+Status DdiKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
+                      std::uint32_t size)
+{
+    const Device *const  owner = find_device(device);
+    const Context *const found = find_context(context);
+    if (adapter != adapter_handle || owner == nullptr || found == nullptr || found->device != device ||
+        data == nullptr || size == 0u || size > max_private_data)
+        return refuse(Status::invalid_parameter);
+    std::memcpy(kernel_copy_, data, size);
+    DxgkargEscapeRecord request = {};
+    request.hDevice = owner->driver;
+    request.pPrivateDriverData = kernel_copy_;
+    request.PrivateDriverDataSize = size;
+    request.hContext = found->driver;
+    const Status escaped = answer(routine<std::int32_t (*)(void *, const DxgkargEscapeRecord *)>(
+        DdiSlot::DxgkDdiEscape)(fdo_.context(), &request));
+    std::memcpy(data, kernel_copy_, size);
+    pump_.deliver();
+    return escaped;
 }
 
 std::uint64_t DdiKmt::performance_counter(std::uint64_t &frequency) const

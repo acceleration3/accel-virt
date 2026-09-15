@@ -12,6 +12,7 @@ D3DKMTDestroyDevice
 D3DKMTDestroyPagingQueue
 D3DKMTDestroySynchronizationObject
 D3DKMTEnumAdapters2
+D3DKMTEscape
 D3DKMTFreeGpuVirtualAddress
 D3DKMTLock2
 D3DKMTMakeResident

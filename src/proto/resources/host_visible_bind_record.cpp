@@ -46,20 +46,43 @@ bool HostVisibleBindRecord::is_request() const
     return operation_ == static_cast<uint16_t>(Operation::unbind) && resource_id_ != 0u;
 }
 
-Status HostVisibleBindRecord::decode(const uint8_t *bytes, size_t length)
+Status HostVisibleBindRecord::read(const uint8_t *bytes, size_t length)
 {
     WireReader     reader(bytes, length);
     const uint32_t found_magic = reader.read_u32();
     const uint16_t found_version = reader.read_u16();
-    HostVisibleBindRecord candidate;
-    candidate.operation_ = reader.read_u16();
-    candidate.allocation_ = reader.read_u32();
-    candidate.resource_id_ = reader.read_u32();
-    candidate.pages_ = reader.read_u64();
+    operation_ = reader.read_u16();
+    allocation_ = reader.read_u32();
+    resource_id_ = reader.read_u32();
+    pages_ = reader.read_u64();
     reader.expect_zero(8u);
     if (reader.status() != Status::ok) return reader.status();
-    if (found_magic != magic || found_version != version || !candidate.is_request()) return Status::malformed;
+    return found_magic == magic && found_version == version ? Status::ok : Status::malformed;
+}
+
+Status HostVisibleBindRecord::decode(const uint8_t *bytes, size_t length)
+{
+    HostVisibleBindRecord candidate;
+    const Status          read_back = candidate.read(bytes, length);
+    if (read_back != Status::ok) return read_back;
+    if (!candidate.is_request()) return Status::malformed;
     *this = candidate;
+    return Status::ok;
+}
+
+/* The kernel owns only the resource and the pages; every other byte must be
+ * the request's own. */
+Status HostVisibleBindRecord::accept_answer(const uint8_t *bytes, size_t length)
+{
+    HostVisibleBindRecord answer;
+    const Status          read_back = answer.read(bytes, length);
+    if (read_back != Status::ok) return read_back;
+    if (!is_request() || answer.operation_ != operation_ || answer.allocation_ != allocation_)
+        return Status::malformed;
+    const bool answered = binds() ? answer.resource_id_ != 0u && answer.pages_ != 0u
+                                  : answer.resource_id_ == resource_id_ && answer.pages_ == 0u;
+    if (!answered) return Status::malformed;
+    *this = answer;
     return Status::ok;
 }
 

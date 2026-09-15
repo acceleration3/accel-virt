@@ -8,7 +8,9 @@
  * transport's context can find a scripted answer in its reply slot - one for
  * every wait, or a queue of them, one per wait - with the ring consumed up to
  * the last submission, as a device that finished it would. Every command a
- * transport's submission carried is journalled by id and size. */
+ * transport's submission carried is journalled by id and size. An escape binds
+ * and unbinds host-visible chunks as the driver does, and a test can run its
+ * own callback at a chosen wait to play the host's work on the views. */
 #ifndef AV_MOCK_KMT_HPP
 #define AV_MOCK_KMT_HPP
 
@@ -44,6 +46,7 @@ public:
         submit,
         wait_for_context,
         wait_for_vertical_blank,
+        escape,
         count
     };
     static constexpr std::uint32_t max_objects = 32u;
@@ -52,14 +55,22 @@ public:
     static constexpr std::uint64_t page_bytes = 4096u;
     /* The performance counter this answers, in the 100ns units Windows uses. */
     static constexpr std::uint64_t ticks_per_second = 10000000u;
-    /* The memory each lock addresses; several may be held at once. */
+    /* The memory each lock of an allocation up to this size addresses; several
+     * may be held at once. A larger allocation's lock addresses all of it. */
     static constexpr std::uint32_t view_capacity = 8192u;
     static constexpr std::uint32_t max_locks = 4u;
-    /* The largest context private data this records for a test to read back. */
+    /* The largest context or escape private data this records for a test to
+     * read back. */
     static constexpr std::uint32_t max_private = 64u;
-    /* The largest answer a test scripts for a transport's context: room for
-     * an OpenCL read of 64 floats and its framing. */
-    static constexpr std::uint32_t max_answer = 512u;
+    /* The largest answer a test scripts for a transport's context: room for a
+     * Vulkan device's memory properties and their framing. */
+    static constexpr std::uint32_t max_answer = 1024u;
+    /* Host-visible chunks bound at once, and the resource the first bind
+     * answers: a context's first chunk slot after its three transport
+     * resources. */
+    static constexpr std::uint32_t max_bindings = 8u;
+    static constexpr std::uint32_t first_chunk_resource = 0x00100003u;
+    static constexpr std::uint32_t not_supported = 0xC00000BBu;
     /* Answers a test can queue, and commands the journal keeps. */
     static constexpr std::uint32_t max_queued = 160u;
     static constexpr std::uint32_t max_journal = 128u;
@@ -67,6 +78,9 @@ public:
     static constexpr std::uint32_t journal_bytes = 128u;
 
     MockKmt();
+    ~MockKmt();
+    MockKmt(const MockKmt &) = delete;
+    MockKmt &operator=(const MockKmt &) = delete;
 
     Status        enumerate_adapters(std::uint32_t *adapters, std::uint32_t capacity, std::uint32_t &count) override;
     Status        query_identity(std::uint32_t adapter, PciIdentity &identity) override;
@@ -94,6 +108,11 @@ public:
                          const std::uint8_t *private_data, std::uint32_t private_size) override;
     Status        wait_for_context(std::uint32_t device, std::uint32_t context) override;
     Status        wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
+    /* As the driver answers a HostVisibleBindRecord: a bind of a host-visible
+     * allocation of `device` answers first_chunk_resource + the binds so far
+     * and the allocation's pages; an unbind names a resource still bound. */
+    Status        escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
+                         std::uint32_t size) override;
     std::uint64_t performance_counter(std::uint64_t &frequency) const override;
     std::uint32_t last_code() const override;
 
@@ -134,6 +153,20 @@ public:
      * process, since the driver completes what it queued and never reports
      * DMA_FAULTED, which bugchecks the guest. */
     void          withhold_answer_at(std::uint32_t nth);
+    /* The Nth wait for a context from now (1-based) runs `play(context)` before
+     * any answer is written: how a test plays work the host does between a
+     * submission and its wait, such as a GPU copy between two locked views. */
+    void          play_at_wait(std::uint32_t nth, void (*play)(void *context), void *context);
+    /* The next escape that names its handles rightly succeeds with these bytes
+     * (cut to the escape's size) written over its data, whatever it asked. */
+    void          answer_next_escape(const std::uint8_t *answer, std::uint32_t size);
+    /* The data of the last escape as it was sent, and its size. */
+    const std::uint8_t *last_escape() const;
+    std::uint32_t       last_escape_size() const;
+    /* Chunks bound and not yet unbound; the allocation the Nth bind (0-based)
+     * named, or 0. */
+    std::uint32_t       bindings() const;
+    std::uint32_t       bound_allocation(std::uint32_t index) const;
     /* Queued answers no wait has taken yet. */
     std::uint32_t queued_answers() const;
     /* Commands submitted on transports' rings, in order, and the id and size
@@ -196,6 +229,8 @@ private:
     void          write_bytes(const Object &context, const std::uint8_t *answer, std::uint32_t size);
     void          journal(const Object &context);
     void          consume(const Object &context);
+    bool          played();
+    Status        bind_chunk(std::uint32_t device, std::uint8_t *data, std::uint32_t size);
     Status        close(Kind kind, std::uint32_t handle);
     Status        misuse();
 
@@ -211,6 +246,19 @@ private:
     Object        objects_[max_objects];
     std::uint8_t  views_[max_locks][view_capacity];
     std::uint32_t locked_[max_locks];
+    std::uint8_t *large_views_[max_locks];
+    std::uint64_t large_bytes_[max_locks];
+    std::uint8_t  escape_[max_private];
+    std::uint32_t escape_size_;
+    std::uint8_t  escape_answer_[max_private];
+    std::uint32_t escape_answer_size_;
+    bool          escape_scripted_;
+    std::uint32_t bound_resources_[max_bindings];
+    std::uint32_t bound_history_[max_bindings];
+    std::uint32_t binds_;
+    std::uint32_t play_countdown_;
+    void        (*play_)(void *context);
+    void         *play_context_;
     std::uint8_t  private_[max_private];
     std::uint32_t private_size_;
     std::uint8_t  submission_[max_private];

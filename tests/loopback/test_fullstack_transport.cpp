@@ -16,6 +16,11 @@
 #include "harness/fullstack/full_stack_rig.hpp"
 #include "proto/client_transport.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/allocation_kind.hpp"
+#include "proto/resources/host_visible_bind_record.hpp"
+#include "proto/resources/scanout_target.hpp"
+#include "proto/resources/surface_layout.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -34,6 +39,7 @@ using av::DdiSlot;
 using av::DdiTable;
 using av::FullStackRig;
 using av::GuestConnection;
+using av::HostVisibleBindRecord;
 using av::KmtTransport;
 using av::KmtTransportProbe;
 using av::MockExecutorOps;
@@ -119,6 +125,66 @@ TEST(fullstack_transport, an_echo_crosses_the_real_driver_and_the_real_device_co
   CHECK_EQ(rig.device().device().contexts(), 0u);
   CHECK_EQ(rig.device().device().blobs(), 1u);
   CHECK_EQ(rig.device().host().live_guest_mappings(), 0u);
+  CHECK_EQ(kmt.open_objects(), 0u);
+  CHECK_EQ(kmt.handles().outstanding(), 0u); }
+
+/* DdiKmt's escape is DxgkDdiEscape as dxgkrnl calls it: the driver's device and
+ * context, a kernel copy of the record copied back out. A 64 MiB host-visible
+ * chunk of the process becomes a GUEST blob of the context's own range, the
+ * answer carries its resource and pages, and the unbind gives the blob back;
+ * handles the process never had, and data that is no record, are refused. */
+TEST(fullstack_transport, an_escape_binds_a_host_visible_chunk_through_the_real_driver)
+{ FullStackRig rig;
+  CHECK_EQ(rig.started(), 0);
+  DdiKmt &kmt = rig.kmt();
+  std::uint32_t adapter = 0u;
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(adapter), Status::ok);
+  KmtTransport transport(connection, SubApi::vulkan, ring_order);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  const std::uint64_t chunk_bytes = std::uint64_t{64} << 20u;
+  std::uint8_t descriptor[av::AllocationDescriptor::encoded_size] = {};
+  CHECK_STATUS(av::AllocationDescriptor(av::AllocationKind::host_visible_memory, true, av::SurfaceLayout(),
+                                        chunk_bytes, av::ScanoutTarget())
+                   .encode(descriptor, sizeof descriptor),
+               Status::ok);
+  std::uint32_t chunk = 0u;
+  CHECK_STATUS(kmt.create_allocation(connection.device(), descriptor, sizeof descriptor, chunk), Status::ok);
+  std::uint64_t fence = 0u;
+  CHECK_STATUS(kmt.make_resident(connection.queue(), chunk, fence), Status::ok);
+  CHECK_STATUS(kmt.wait_for_fence(connection.device(), connection.fence_object(), fence), Status::ok);
+
+  std::uint8_t bytes[HostVisibleBindRecord::encoded_size] = {};
+  HostVisibleBindRecord bind(HostVisibleBindRecord::Operation::bind, chunk, 0u);
+  CHECK_STATUS(bind.encode(bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context() + 1u, bytes, sizeof bytes),
+               Status::invalid_parameter);
+  CHECK_STATUS(kmt.escape(adapter, connection.device() + 1u, transport.context(), bytes, sizeof bytes),
+               Status::invalid_parameter);
+  CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), nullptr, sizeof bytes),
+               Status::invalid_parameter);
+  CHECK_EQ(rig.device().device().blobs(), 4u);
+  CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(bind.accept_answer(bytes, sizeof bytes), Status::ok);
+  CHECK_EQ(bind.pages(), chunk_bytes / 4096u);
+  CHECK(bind.resource_id() != 0u);
+  CHECK_EQ(rig.device().device().blobs(), 5u);
+
+  std::uint8_t foreign[HostVisibleBindRecord::encoded_size] = {'N', 'O', 'P', 'E'};
+  CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), foreign, sizeof foreign),
+               Status::not_supported);
+  HostVisibleBindRecord unbind(HostVisibleBindRecord::Operation::unbind, 0u, bind.resource_id());
+  CHECK_STATUS(unbind.encode(bytes, sizeof bytes), Status::ok);
+  CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes), Status::ok);
+  CHECK_EQ(rig.device().device().blobs(), 4u);
+  CHECK_STATUS(kmt.escape(adapter, connection.device(), transport.context(), bytes, sizeof bytes),
+               Status::invalid_parameter);
+  CHECK_STATUS(kmt.destroy_allocation(connection.device(), chunk), Status::ok);
+  transport.teardown();
+  connection.close();
+  CHECK_EQ(rig.device().device().blobs(), 1u);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.handles().outstanding(), 0u); }
 

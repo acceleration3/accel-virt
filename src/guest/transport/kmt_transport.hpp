@@ -50,6 +50,9 @@ public:
     /* A device-side failure (a refused submission, a faulted wait, a bad reply)
      * loses the context: every later send fails until it is torn down. */
     bool                 faulted() const;
+    /* The virtual context's D3DKMT handle, for a call the driver takes beside
+     * the transport - an escape on this context; 0 unless established. */
+    uint32_t             context() const;
 
     /* A round trip of the transport's own no-op (feature 044), which the
      * device answers itself: ok when answered with nothing; invalid_state when

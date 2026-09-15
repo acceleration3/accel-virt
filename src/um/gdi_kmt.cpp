@@ -26,6 +26,10 @@ static_assert(__builtin_offsetof(D3DKMT_UNLOCK2, hAllocation) == 0x04u);
 static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, hAdapter) == 0x00u);
 static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, hDevice) == 0x04u);
 static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, VidPnSourceId) == 0x08u);
+static_assert(__builtin_offsetof(D3DKMT_ESCAPE, Type) == 0x08u);
+static_assert(__builtin_offsetof(D3DKMT_ESCAPE, pPrivateDriverData) == 0x10u);
+static_assert(__builtin_offsetof(D3DKMT_ESCAPE, PrivateDriverDataSize) == 0x18u);
+static_assert(__builtin_offsetof(D3DKMT_ESCAPE, hContext) == 0x1Cu);
 
 namespace av {
 
@@ -331,6 +335,20 @@ Status GdiKmt::wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32
     wait.hDevice = device;
     wait.VidPnSourceId = source;
     return answer(D3DKMTWaitForVerticalBlankEvent(&wait));
+}
+
+/* dxgkrnl copies the data into the kernel, hands the copy to DxgkDdiEscape and
+ * copies it back out, so an answer the driver wrote lands in `data`. */
+Status GdiKmt::escape(uint32_t adapter, uint32_t device, uint32_t context, uint8_t *data, uint32_t size)
+{
+    D3DKMT_ESCAPE request = {};
+    request.hAdapter = adapter;
+    request.hDevice = device;
+    request.Type = D3DKMT_ESCAPE_DRIVERPRIVATE;
+    request.pPrivateDriverData = data;
+    request.PrivateDriverDataSize = size;
+    request.hContext = context;
+    return answer(D3DKMTEscape(&request));
 }
 
 uint64_t GdiKmt::performance_counter(uint64_t &frequency) const

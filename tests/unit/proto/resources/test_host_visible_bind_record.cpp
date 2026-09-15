@@ -139,3 +139,85 @@ TEST(host_visible_bind_record, a_byte_flip_sweep_decodes_only_what_the_bytes_say
           CHECK_EQ(decoded.allocation(), allocation);
       }
   } }
+
+/* The process reads the kernel's answer back from the bytes it sent: the same
+ * request with a resource and the pages for a bind, and the record then says
+ * them; an unbind is answered with itself. */
+TEST(host_visible_bind_record, accept_answer_takes_the_resource_and_pages_the_kernel_wrote)
+{ HostVisibleBindRecord request(Operation::bind, chunk, 0u);
+  Bytes bytes(request.answered(resource, 16384u));
+  CHECK_STATUS(request.accept_answer(bytes.data(), HostVisibleBindRecord::encoded_size), Status::ok);
+  CHECK(request.binds());
+  CHECK_EQ(request.allocation(), chunk);
+  CHECK_EQ(request.resource_id(), resource);
+  CHECK_EQ(request.pages(), 16384u);
+  HostVisibleBindRecord unbind(Operation::unbind, 0u, resource);
+  Bytes echoed(unbind);
+  CHECK_STATUS(unbind.accept_answer(echoed.data(), HostVisibleBindRecord::encoded_size), Status::ok);
+  CHECK_EQ(unbind.resource_id(), resource);
+  CHECK_EQ(unbind.pages(), 0u); }
+
+/* An answer that does not answer this request is refused and the record is left
+ * as it was: another request's fields, a bind the kernel did not fill in, an
+ * unbind that changed, and anything the contract fixes. */
+TEST(host_visible_bind_record, accept_answer_refuses_what_does_not_answer_the_request)
+{ struct Case { const char *what; Operation operation; std::size_t at; std::uint8_t width; std::uint64_t value; };
+  const Case cases[] = {
+      {"magic", Operation::bind, 0u, 4u, 0x544B5652u},
+      {"version", Operation::bind, 4u, 2u, 2u},
+      {"operation", Operation::bind, 6u, 2u, 2u},
+      {"another allocation", Operation::bind, 8u, 4u, chunk + 4u},
+      {"no resource", Operation::bind, 12u, 4u, 0u},
+      {"no pages", Operation::bind, 16u, 8u, 0u},
+      {"reserved", Operation::bind, 24u, 8u, 1u},
+      {"unbind of another resource", Operation::unbind, 12u, 4u, resource + 1u},
+      {"unbind with pages", Operation::unbind, 16u, 8u, 1u},
+      {"unbind turned bind", Operation::unbind, 6u, 2u, 1u},
+  };
+  for (const Case &one : cases) {
+      const bool binding = one.operation == Operation::bind;
+      HostVisibleBindRecord request(one.operation, binding ? chunk : 0u, binding ? 0u : resource);
+      Bytes bytes(binding ? request.answered(resource, 16384u) : request);
+      if (one.width == 2u) bytes.put_u16(one.at, static_cast<std::uint16_t>(one.value));
+      if (one.width == 4u) bytes.put_u32(one.at, static_cast<std::uint32_t>(one.value));
+      if (one.width == 8u) bytes.put_u64(one.at, one.value);
+      CHECK_STATUS(request.accept_answer(bytes.data(), HostVisibleBindRecord::encoded_size), Status::malformed);
+      CHECK_EQ(request.resource_id(), binding ? 0u : resource);
+      CHECK_EQ(request.pages(), 0u);
+  }
+  /* A record that is no request has no answer, even to its own bytes. */
+  HostVisibleBindRecord nothing;
+  Bytes own(nothing);
+  CHECK_STATUS(nothing.accept_answer(own.data(), HostVisibleBindRecord::encoded_size), Status::malformed);
+  HostVisibleBindRecord request(Operation::bind, chunk, 0u);
+  Bytes answer(request.answered(resource, 1u));
+  for (std::size_t length = 0u; length < HostVisibleBindRecord::encoded_size; length++)
+      CHECK(request.accept_answer(answer.data(), length) != Status::ok);
+  CHECK(request.accept_answer(nullptr, HostVisibleBindRecord::encoded_size) != Status::ok);
+  CHECK_EQ(request.resource_id(), 0u);
+  CHECK_STATUS(request.accept_answer(answer.data(), HostVisibleBindRecord::encoded_size), Status::ok);
+  CHECK_EQ(request.pages(), 1u); }
+
+/* One bit of a valid answer flipped anywhere: accepted only where the kernel's
+ * own fields are, and then saying exactly what the bytes say. */
+TEST(host_visible_bind_record, accept_answer_byte_flip_sweep_takes_only_the_kernels_fields)
+{ for (std::size_t byte = 0u; byte < HostVisibleBindRecord::encoded_size; byte++) {
+      for (unsigned bit = 0u; bit < 8u; bit++) {
+          HostVisibleBindRecord request(Operation::bind, chunk, 0u);
+          Bytes bytes(request.answered(resource, 16384u));
+          bytes.data()[byte] = static_cast<std::uint8_t>(bytes.data()[byte] ^ (1u << bit));
+          if (request.accept_answer(bytes.data(), HostVisibleBindRecord::encoded_size) != Status::ok) {
+              /* Inside the kernel's fields only the bit that empties the pages. */
+              CHECK(byte < 12u || byte >= 24u || (byte == 17u && bit == 6u));
+              CHECK_EQ(request.resource_id(), 0u);
+              continue;
+          }
+          CHECK(byte >= 12u && byte < 24u);
+          std::uint32_t written_resource = 0u;
+          std::uint64_t written_pages = 0u;
+          std::memcpy(&written_resource, bytes.data() + 12u, sizeof written_resource);
+          std::memcpy(&written_pages, bytes.data() + 16u, sizeof written_pages);
+          CHECK_EQ(request.resource_id(), written_resource);
+          CHECK_EQ(request.pages(), written_pages);
+      }
+  } }

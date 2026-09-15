@@ -133,6 +133,7 @@ void KmtTransport::teardown()
 
 bool KmtTransport::established() const { return context_ != 0u; }
 bool KmtTransport::faulted() const { return faulted_; }
+uint32_t KmtTransport::context() const { return context_; }
 
 WireWriter KmtTransport::request_writer()
 {

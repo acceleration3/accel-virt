@@ -40,7 +40,8 @@ public:
     static constexpr std::uint32_t max_allocations = 32u;
     static constexpr std::uint32_t max_contexts = NodeFences::max_contexts;
     static constexpr std::uint32_t max_queues = 8u;
-    static constexpr std::uint32_t max_pages = 256u;
+    /* A host-visible chunk of 64 MiB (feature 045). */
+    static constexpr std::uint32_t max_pages = 16384u;
     static constexpr std::uint32_t max_private_data = 256u;
     /* How long a wait on a context lasts before it is a timeout, as LoopbackDevice's. */
     static constexpr std::uint32_t patience_ms = 5000u;
@@ -79,6 +80,8 @@ public:
                     const std::uint8_t *private_data, std::uint32_t private_size) override;
     Status   wait_for_context(std::uint32_t device, std::uint32_t context) override;
     Status   wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
+    Status   escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
+                    std::uint32_t size) override;
     std::uint64_t performance_counter(std::uint64_t &frequency) const override;
     std::uint32_t last_code() const override;
 
@@ -112,7 +115,7 @@ private:
         bool          resident;
         std::uint64_t offset_in_pages;
         std::uint64_t gpu_address;
-        std::uint64_t frames[max_pages];
+        std::uint64_t *frames;
         std::uint8_t  private_data[max_private_data];
     };
     struct Context {

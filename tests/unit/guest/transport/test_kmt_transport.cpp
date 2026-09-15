@@ -87,6 +87,26 @@ TEST(kmt_transport, is_unestablished_until_initialized)
   CHECK(!transport.established());
   CHECK(transport.invariants_hold()); }
 
+/* The D3DKMT handle of the virtual context, which a process names to the driver
+ * beside the transport - an escape binding a chunk to it (feature 045) - and
+ * nothing before it exists or after it is gone. */
+TEST(kmt_transport, context_is_the_virtual_context_while_established)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  CHECK_EQ(transport.context(), 0u);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  const std::uint32_t context = transport.context();
+  CHECK(context != 0u);
+  CHECK_STATUS(fixture.kmt().wait_for_context(fixture.connection().device(), context), Status::ok);
+  CHECK_EQ(fixture.kmt().misuses(), 0u);
+  transport.teardown();
+  CHECK_EQ(transport.context(), 0u);
+  CHECK(transport.invariants_hold());
+  /* The handle it answered was that context's: gone with it. */
+  CHECK_STATUS(fixture.kmt().wait_for_context(fixture.connection().device(), context), Status::invalid_parameter);
+  CHECK_EQ(fixture.kmt().misuses(), 1u); }
+
 TEST(kmt_transport, initialize_maps_the_ring_and_creates_the_virtual_context)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
