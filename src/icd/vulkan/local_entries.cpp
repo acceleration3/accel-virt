@@ -29,6 +29,16 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vk_icdEnumerateAdapterPhysicalDevices(VkIns
 { return icd_binding.root().enumerate_adapter_physical_devices(instance, adapterLUID, pPhysicalDeviceCount,
                                                                 pPhysicalDevices); }
 
+VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice,
+                                                                          const char *pLayerName,
+                                                                          uint32_t *pPropertyCount,
+                                                                          VkExtensionProperties *pProperties)
+{ return icd_binding.root().enumerate_device_extensions(physicalDevice, pLayerName, pPropertyCount, pProperties); }
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
+                                                    const VkAllocationCallbacks *pAllocator, VkDevice *pDevice)
+{ return icd_binding.root().create_device(physicalDevice, pCreateInfo, pAllocator, pDevice); }
+
 VKAPI_ATTR void VKAPI_CALL local_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator)
 { icd_binding.root().destroy_device(device, pAllocator); }
 

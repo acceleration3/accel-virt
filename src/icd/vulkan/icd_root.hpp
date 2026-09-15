@@ -18,6 +18,7 @@
 #include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/entry_points.hpp"
+#include "icd/vulkan/extension_policy.hpp"
 #include "icd/vulkan/handle_registry.hpp"
 #include "icd/vulkan/loader_handle.hpp"
 
@@ -66,6 +67,14 @@ public:
                                        VkInstance *instance);
     VkResult           enumerate_adapter_physical_devices(VkInstance instance, uint64_t luid, uint32_t *count,
                                                           VkPhysicalDevice *physical_devices);
+    /* The host's list filtered by the extension policy; the host is asked how
+     * many it has, then for all of them. */
+    VkResult           enumerate_device_extensions(VkPhysicalDevice physical_device, const char *layer,
+                                                   uint32_t *count, VkExtensionProperties *properties);
+    /* A device naming an extension the policy would not report is refused
+     * before the host sees it; one made is parented to its physical device. */
+    VkResult           create_device(VkPhysicalDevice physical_device, const VkDeviceCreateInfo *create,
+                                     const VkAllocationCallbacks *allocator, VkDevice *device);
     void               destroy_device(VkDevice device, const VkAllocationCallbacks *allocator);
     void               physical_device_properties(VkPhysicalDevice physical_device,
                                                   VkPhysicalDeviceProperties *properties);
@@ -114,7 +123,7 @@ private:
     void                 note(const char *what, uint64_t value);
     LoaderHandle        *wrap_under(LoaderHandle::Kind kind, uint64_t host, Connection *connection,
                                     LoaderHandle *parent);
-    void                *wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &device);
+    void                *wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &parent);
     LoaderHandle        *handle_of(void *handle, LoaderHandle::Kind kind);
     LoaderHandle        *child_of(const LoaderHandle &parent, LoaderHandle::Kind kind, uint32_t index);
     uint32_t             handles_on_connections() const;
@@ -128,6 +137,7 @@ private:
     uint32_t               api_version_;
     EntryPoints            before_instance_;
     EntryPoints            entry_points_;
+    ExtensionPolicy        extensions_;
     /* Before the handles: a command buffer's handle destroys its batch in this
      * pool, so the pool outlives every handle. */
     ObjectPool<CommandBatch> batches_;

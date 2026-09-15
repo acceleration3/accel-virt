@@ -447,7 +447,7 @@ if(AV_FUZZ)
     add_executable(${name} ${src})
     target_link_libraries(${name} PRIVATE av_harness)
     # The ICD's target links its core, as the ICD's unit tests do.
-    if(name STREQUAL "fuzz_physical_device_view")
+    if(name STREQUAL "fuzz_physical_device_view" OR name STREQUAL "fuzz_extension_policy")
       target_link_libraries(${name} PRIVATE av_icd)
     endif()
     target_compile_options(${name} PRIVATE -fsanitize=fuzzer)

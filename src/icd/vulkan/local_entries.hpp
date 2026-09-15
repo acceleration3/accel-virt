@@ -27,6 +27,12 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL local_vk_icdGetPhysicalDeviceProcAddr(V
 VKAPI_ATTR VkResult VKAPI_CALL local_vk_icdEnumerateAdapterPhysicalDevices(VkInstance instance, uint64_t adapterLUID,
                                                                            uint32_t *pPhysicalDeviceCount,
                                                                            VkPhysicalDevice *pPhysicalDevices);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice,
+                                                                          const char *pLayerName,
+                                                                          uint32_t *pPropertyCount,
+                                                                          VkExtensionProperties *pProperties);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
+                                                    const VkAllocationCallbacks *pAllocator, VkDevice *pDevice);
 VKAPI_ATTR void VKAPI_CALL local_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator);
 VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice,
                                                                VkPhysicalDeviceProperties *pProperties);

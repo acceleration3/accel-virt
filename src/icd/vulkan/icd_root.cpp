@@ -34,6 +34,9 @@ const Entry        local_rows[] = {
     {"vk_icdEnumerateAdapterPhysicalDevices",
             reinterpret_cast<PFN_vkVoidFunction>(&local_vk_icdEnumerateAdapterPhysicalDevices), Level::global},
     {"vkDestroyDevice", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyDevice), Level::device},
+    {"vkEnumerateDeviceExtensionProperties",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkEnumerateDeviceExtensionProperties), Level::physical_device},
+    {"vkCreateDevice", reinterpret_cast<PFN_vkVoidFunction>(&local_vkCreateDevice), Level::physical_device},
     {"vkGetPhysicalDeviceProperties", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceProperties), Level::physical_device},
     {"vkGetPhysicalDeviceProperties2", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceProperties2), Level::physical_device},
     {"vkGetDeviceQueue", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetDeviceQueue), Level::device},
@@ -53,6 +56,15 @@ constexpr uint32_t local_row_count = sizeof local_rows / sizeof local_rows[0];
 /* VK_API_VERSION_1_3, spelled without the header macro's C casts. */
 constexpr uint32_t vulkan_1_3 = (1u << 22u) | (3u << 12u);
 constexpr size_t   line_bytes = 160u;
+/* The device extensions this ICD reports (research.md §9), each with the test
+ * that exercises it through the ICD; tools/check_extension_policy.py holds every
+ * row to a test that exists and a name the generator implemented. No extension
+ * is proven through the ICD yet, so none is reported: VK_EXT_memory_budget
+ * arrives with T035's test, and the probe's with T037. */
+constexpr const ExtensionPolicy::Row *reported_extensions = nullptr;
+constexpr uint32_t                    reported_extension_count = 0u;
+/* More than any GPU driver lists: a host claiming more is not asked for them. */
+constexpr uint32_t max_host_extensions = 1024u;
 /* The most command buffers one vkAllocateCommandBuffers stages the host's
  * handles for, on the stack; the generated wrappers hold the same bound. */
 constexpr uint32_t max_allocated_at_once = 1024u;
@@ -63,7 +75,8 @@ IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &se
                  IcdBinding &binding)
     : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), log_(log), binding_(binding),
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
-      entry_points_(local_rows, local_row_count), batches_(memory), handles_(memory), connections_(memory), pending_(nullptr)
+      entry_points_(local_rows, local_row_count),
+      extensions_(reported_extensions, reported_extension_count), batches_(memory), handles_(memory), connections_(memory), pending_(nullptr)
 {
     binding_.bind(*this);
 }
@@ -177,6 +190,65 @@ VkResult IcdRoot::enumerate_adapter_physical_devices(VkInstance instance, uint64
     return result;
 }
 
+VkResult IcdRoot::enumerate_device_extensions(VkPhysicalDevice physical_device, const char *layer, uint32_t *count,
+                                              VkExtensionProperties *properties)
+{
+    LoaderHandle *const made = handle_of(physical_device, LoaderHandle::Kind::physical_device);
+    if (made == nullptr) {
+        log_.write("rvkvk: vkEnumerateDeviceExtensionProperties on a physical device this driver did not make");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    if (layer != nullptr) {
+        log_.write("rvkvk: device extensions of a layer asked for; this driver is no layer");
+        return VK_ERROR_LAYER_NOT_PRESENT;
+    }
+    ClientTransport &transport = made->connection()->transport();
+    uint32_t         listed = 0u;
+    VkResult result = vkproto::rvk_vkEnumerateDeviceExtensionProperties(transport, physical_device, nullptr, &listed,
+                                                                        nullptr);
+    if (result != VK_SUCCESS) return result;
+    if (listed == 0u) return extensions_.report(nullptr, 0u, count, properties);
+    if (listed > max_host_extensions) {
+        note("vkEnumerateDeviceExtensionProperties: the host lists more device extensions than 1024:", listed);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    auto *const host =
+        static_cast<VkExtensionProperties *>(memory_.allocate(listed * sizeof(VkExtensionProperties), Pool::paged));
+    if (host == nullptr) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    ScopeExit released([&] { memory_.release(host); });
+    result = vkproto::rvk_vkEnumerateDeviceExtensionProperties(transport, physical_device, nullptr, &listed, host);
+    if (result != VK_SUCCESS && result != VK_INCOMPLETE) return result;
+    return extensions_.report(host, listed, count, properties);
+}
+
+VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDeviceCreateInfo *create,
+                                const VkAllocationCallbacks *allocator, VkDevice *device)
+{
+    LoaderHandle *const made = handle_of(physical_device, LoaderHandle::Kind::physical_device);
+    if (made == nullptr) {
+        log_.write("rvkvk: vkCreateDevice on a physical device this driver did not make");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    const uint32_t refused = extensions_.first_refused(create->ppEnabledExtensionNames, create->enabledExtensionCount);
+    if (refused != create->enabledExtensionCount) {
+        const char *const name = create->ppEnabledExtensionNames[refused];
+        char              line[line_bytes] = {};
+        TextBuffer        text(line, sizeof line);
+        text.append("rvkvk: vkCreateDevice names an extension this driver does not report: ");
+        text.append(name != nullptr ? name : "(null)");
+        log_.write(text.text());
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+    uint64_t       host = 0u;
+    const VkResult result =
+        vkproto::rvk_vkCreateDevice(made->connection()->transport(), physical_device, create, allocator, &host);
+    if (result != VK_SUCCESS) return result;
+    *device = static_cast<VkDevice>(wrap_child(LoaderHandle::Kind::device, host, *made));
+    /* Without a handle the host's device cannot be named to destroy it; it
+     * goes when the instance's context closes. */
+    return *device != VK_NULL_HANDLE ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
+}
+
 void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *allocator)
 {
     if (connection_of(device, LoaderHandle::Kind::device) == nullptr) return;
@@ -245,12 +317,12 @@ LoaderHandle *IcdRoot::wrap_under(LoaderHandle::Kind kind, uint64_t host, Connec
     return handle;
 }
 
-/* The registry refuses a device destroyed since it was looked up. */
-void *IcdRoot::wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &device)
+/* The registry refuses a parent destroyed since it was looked up. */
+void *IcdRoot::wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &parent)
 {
     lock_.acquire();
     ScopeExit release([&] { lock_.release(); });
-    return wrap_under(kind, host, device.connection(), &device);
+    return wrap_under(kind, host, parent.connection(), &parent);
 }
 
 LoaderHandle *IcdRoot::handle_of(void *handle, LoaderHandle::Kind kind)

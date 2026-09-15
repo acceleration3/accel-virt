@@ -198,7 +198,8 @@ TEST(icd_root, an_instance_it_made_answers_every_entry_point_with_its_own_rows_f
       "vkCreateInstance", "vkDestroyDevice", "vkGetPhysicalDeviceProperties", "vkGetPhysicalDeviceProperties2",
       "vkGetDeviceQueue", "vkGetDeviceQueue2", "vkAllocateCommandBuffers", "vkFreeCommandBuffers",
       "vkBeginCommandBuffer", "vkEndCommandBuffer", "vkResetCommandBuffer", "vkWaitForFences", "vkWaitSemaphores",
-      "vkWaitSemaphoresKHR", "vkQueueWaitIdle", "vkDeviceWaitIdle"};
+      "vkWaitSemaphoresKHR", "vkQueueWaitIdle", "vkDeviceWaitIdle", "vkEnumerateDeviceExtensionProperties",
+      "vkCreateDevice"};
   std::uint32_t wrappers = 0u;
   for (const av::vkicd::generated::Entry &row : av::vkicd::generated::wrapper_entries()) {
       const PFN_vkVoidFunction found = root.instance_proc_addr(instance, row.name);
