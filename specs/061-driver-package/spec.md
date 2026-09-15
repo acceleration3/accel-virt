@@ -198,3 +198,13 @@ logged reason and a Code 10 instead of starting and failing later.
 - An installer executable or Windows Update distribution.
 - ARM64 guests.
 - Removing registrations other products left behind.
+
+## Moved here from 045
+
+- **The 32-bit Vulkan ICD** (`VulkanDriverNameWow`, `%13%\WoW64\rvkvk32.json`):
+  an x86 build of `rvkvk.dll` with `__stdcall` exports named through a `.def`, and
+  host-visible chunks mapped below 4 GiB for WoW64 processes (VidMm places the view;
+  041 T023). 045 ships the 64-bit ICD only (045 research §11). **Acceptance:** a
+  32-bit probe lists the rvk device with the adapter's LUID and maps host-visible
+  memory.
+

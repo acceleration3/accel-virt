@@ -41,7 +41,22 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `IcdRoot` | system (guest UM) | the instance pool, the entry table, the injected seams | Answer the loader's entry points |
+| `EntryTable` | system | name to function pointer rows: generated wrappers and ICD-local entries | Resolve a Vulkan entry point by name |
+| `Connection` | object | one adapter, `GuestConnection`, `KmtTransport`, a lock | Carry one instance's commands to its rvk context |
+| `LoaderHandle` | object | loader magic, the host handle, its connection, its kind | Be one dispatchable object the loader can dispatch through |
+| `HandleRegistry` | system | the pool of `LoaderHandle`s | Wrap host handles into loader handles |
+| `CommandBatch` | object | framed commands of one command buffer, their chunks | Record a command buffer's commands until it ends |
+| `MemoryTypeTable` | object | the guest's memory types and heaps | Translate host memory types into the adapter's |
+| `HostVisibleChunk` | object | one `host_visible_memory` allocation, its view, its blob, its import | Back host-visible device memory with guest RAM |
+| `ChunkAllocator` | system | the chunks of one device and their free ranges | Place a host-visible allocation in a chunk |
+| `ExtensionPolicy` | object | the table of reportable extensions and their tests | Decide which host extensions the guest sees |
+| `SlicedWait` | object | the deadline, the slice, the clock | Bound one host wait under TdrDelay |
+| `ProcessHeap` | object (um shim) | the process heap handle | Give the ICD memory from the Windows heap |
+| `HostVisibleBinding` | object (KMD) | the chunk's allocation, its resource id | Publish a chunk's guest pages to the device |
+| `BlobImportCommand` | object (device) | the batch's blob table and executor | Import a guest blob into the context's executor |
+| `GuestPageAlias` | object (device) | a reserved host range and its per-run mappings | Present a blob's guest pages as one host range |
+| `VulkanProbe` | object (guest suite) | the Vulkan objects one run makes | Prove an instance, device, memory and workload through the loader |
 
 ### Test requirements
 
