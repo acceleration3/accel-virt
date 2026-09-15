@@ -390,6 +390,10 @@ add_test(NAME check_spirv
 add_test(NAME protocol_ids
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_protocol_ids.py)
 
+# ---- constitution VI for the Vulkan ICD: every reported extension is tested (045)
+add_test(NAME extension_policy
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_extension_policy.py ${CMAKE_SOURCE_DIR})
+
 # ---- constitution III and IV.5 --------------------------------------------
 add_test(NAME design_rules
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_design.py ${CMAKE_SOURCE_DIR})
