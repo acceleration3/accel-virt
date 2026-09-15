@@ -20,6 +20,11 @@ uint32_t VulkanHostImport::importable_types(VkDevice device, void *pointer)
     return host.memoryTypeBits;
 }
 
+bool VulkanHostImport::imports(VkDevice device)
+{
+    return ::vkGetDeviceProcAddr(device, "vkGetMemoryHostPointerPropertiesEXT") != nullptr;
+}
+
 bool VulkanHostImport::import(VkDevice device, void *pointer, uint64_t size, uint32_t memory_type,
                               uint64_t &memory)
 {
@@ -45,6 +50,49 @@ void VulkanHostImport::release(VkDevice device, uint64_t memory)
 {
     ::vkFreeMemory(device, reinterpret_cast<VkDeviceMemory>(memory), nullptr);
     held_--;
+}
+
+VkExternalMemoryHandleTypeFlags VulkanHostImport::buffer_host_types(VkPhysicalDevice physical,
+                                                                   const VkBufferCreateInfo &create)
+{
+    if (physical == VK_NULL_HANDLE) return 0u;
+    VkPhysicalDeviceExternalBufferInfo buffer = {};
+    buffer.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO;
+    buffer.flags = create.flags;
+    buffer.usage = create.usage;
+    buffer.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+    VkExternalBufferProperties answer = {};
+    answer.sType = VK_STRUCTURE_TYPE_EXTERNAL_BUFFER_PROPERTIES;
+    ::vkGetPhysicalDeviceExternalBufferProperties(physical, &buffer, &answer);
+    return (answer.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) != 0u
+               ? VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT
+               : 0u;
+}
+
+VkExternalMemoryHandleTypeFlags VulkanHostImport::image_host_types(VkPhysicalDevice physical,
+                                                                  const VkImageCreateInfo &create)
+{
+    if (physical == VK_NULL_HANDLE) return 0u;
+    VkPhysicalDeviceExternalImageFormatInfo external = {};
+    external.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO;
+    external.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+    VkPhysicalDeviceImageFormatInfo2 format = {};
+    format.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
+    format.pNext = &external;
+    format.format = create.format;
+    format.type = create.imageType;
+    format.tiling = create.tiling;
+    format.usage = create.usage;
+    format.flags = create.flags;
+    VkExternalImageFormatProperties answer = {};
+    answer.sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES;
+    VkImageFormatProperties2 properties = {};
+    properties.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
+    properties.pNext = &answer;
+    if (::vkGetPhysicalDeviceImageFormatProperties2(physical, &format, &properties) != VK_SUCCESS) return 0u;
+    return (answer.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) != 0u
+               ? VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT
+               : 0u;
 }
 
 uint32_t VulkanHostImport::held() const { return held_; }

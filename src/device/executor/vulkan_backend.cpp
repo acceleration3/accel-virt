@@ -40,7 +40,7 @@ bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
 }  // namespace
 
 VulkanBackend::VulkanBackend()
-    : gpu_(nullptr), listed_(), extensions_(), instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), handles_(),
+    : gpu_(nullptr), listed_(), extensions_(), instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE), host_import_(false), handles_(),
       adopted_(), import_(), parent_(0u), ran_(0u), lost_(false)
 {}
 
@@ -194,8 +194,49 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
     /* Kept because a VkDeviceMemory belongs to a device and an import arrives
      * out of band with no command to carry one. A context makes one device; a
      * second replaces the first, which is what the guest sees too. */
-    if (result == VK_SUCCESS) device_ = *pDevice;
+    if (result == VK_SUCCESS) {
+        device_ = *pDevice;
+        physical_ = physicalDevice;
+        /* Asked of the device rather than of the list: whichever create made
+         * it, the loader answers the entry point only when it was enabled. */
+        host_import_ = import_.imports(device_);
+    }
     return result;
+}
+
+bool VulkanBackend::backs_with_host(VkDevice device, const void *next, VkStructureType external,
+                                    VkExternalMemoryHandleTypeFlags host_types) const
+{
+    if (!host_import_ || device != device_ || host_types == 0u) return false;
+    for (auto *structure = static_cast<const VkBaseInStructure *>(next); structure != nullptr;
+         structure = structure->pNext) {
+        if (structure->sType == external) return false;
+    }
+    return true;
+}
+
+VkResult VulkanBackend::on_vkCreateBuffer(VkDevice device, const VkBufferCreateInfo *pCreateInfo,
+                                          const VkAllocationCallbacks *, VkBuffer *pBuffer)
+{
+    VkBufferCreateInfo               create = *pCreateInfo;
+    VkExternalMemoryBufferCreateInfo external = {};
+    external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO;
+    external.pNext = create.pNext;
+    external.handleTypes = import_.buffer_host_types(physical_, create);
+    if (backs_with_host(device, create.pNext, external.sType, external.handleTypes)) create.pNext = &external;
+    return RealVulkanDispatch::on_vkCreateBuffer(device, &create, nullptr, pBuffer);
+}
+
+VkResult VulkanBackend::on_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
+                                         const VkAllocationCallbacks *, VkImage *pImage)
+{
+    VkImageCreateInfo               create = *pCreateInfo;
+    VkExternalMemoryImageCreateInfo external = {};
+    external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+    external.pNext = create.pNext;
+    external.handleTypes = import_.image_host_types(physical_, create);
+    if (backs_with_host(device, create.pNext, external.sType, external.handleTypes)) create.pNext = &external;
+    return RealVulkanDispatch::on_vkCreateImage(device, &create, nullptr, pImage);
 }
 
 void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *)

@@ -792,3 +792,151 @@ TEST(vulkan_backend_device, a_buffer_of_a_destroyed_device_is_refused)
       CHECK(!made.backend().knows_handle(made.physical()));
   }
 }
+
+namespace {
+
+VkExternalMemoryBufferCreateInfo host_buffer()
+{ VkExternalMemoryBufferCreateInfo external = {};
+  external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO;
+  external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+  return external; }
+
+VkBufferCreateInfo storage_buffer()
+{ VkBufferCreateInfo create = {};
+  create.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  create.size = page;
+  create.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  return create; }
+
+VkImageCreateInfo colour_image()
+{ VkImageCreateInfo create = {};
+  create.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  create.imageType = VK_IMAGE_TYPE_2D;
+  create.format = VK_FORMAT_R8G8B8A8_UNORM;
+  create.extent = {64u, 64u, 1u};
+  create.mipLevels = 1u;
+  create.arrayLayers = 1u;
+  create.samples = VK_SAMPLE_COUNT_1_BIT;
+  create.tiling = VK_IMAGE_TILING_OPTIMAL;
+  create.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  return create; }
+
+/* The memory types the driver itself answers for `create` on `device`, made
+ * directly rather than through the backend: the reference a guest's buffer is
+ * judged against. */
+std::uint32_t driver_buffer_types(std::uint64_t device, const VkBufferCreateInfo &create)
+{ const VkDevice host = as_handle<VkDevice>(device);
+  VkBuffer buffer = VK_NULL_HANDLE;
+  if (::vkCreateBuffer(host, &create, nullptr, &buffer) != VK_SUCCESS) return 0u;
+  VkMemoryRequirements requirements = {};
+  ::vkGetBufferMemoryRequirements(host, buffer, &requirements);
+  ::vkDestroyBuffer(host, buffer, nullptr);
+  return requirements.memoryTypeBits; }
+
+std::uint32_t driver_image_types(std::uint64_t device, const VkImageCreateInfo &create)
+{ const VkDevice host = as_handle<VkDevice>(device);
+  VkImage image = VK_NULL_HANDLE;
+  if (::vkCreateImage(host, &create, nullptr, &image) != VK_SUCCESS) return 0u;
+  VkMemoryRequirements requirements = {};
+  ::vkGetImageMemoryRequirements(host, image, &requirements);
+  ::vkDestroyImage(host, image, nullptr);
+  return requirements.memoryTypeBits; }
+
+/* Whether the driver says an image like `create` may live in host memory it
+ * imports: Intel's does not for an optimal colour image, NVIDIA's does. */
+bool driver_imports_image(std::uint64_t physical, const VkImageCreateInfo &create)
+{ VkPhysicalDeviceExternalImageFormatInfo external = {};
+  external.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO;
+  external.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+  VkPhysicalDeviceImageFormatInfo2 format = {};
+  format.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2;
+  format.pNext = &external;
+  format.format = create.format;
+  format.type = create.imageType;
+  format.tiling = create.tiling;
+  format.usage = create.usage;
+  VkExternalImageFormatProperties answer = {};
+  answer.sType = VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES;
+  VkImageFormatProperties2 properties = {};
+  properties.sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2;
+  properties.pNext = &answer;
+  if (::vkGetPhysicalDeviceImageFormatProperties2(as_handle<VkPhysicalDevice>(physical), &format, &properties) !=
+      VK_SUCCESS)
+      return false;
+  return (answer.externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT) != 0u; }
+
+std::uint32_t wire_buffer_types(BackendTransport &wire, std::uint64_t device, const VkBufferCreateInfo &create)
+{ const VkDevice host = as_handle<VkDevice>(device);
+  VkBuffer buffer = VK_NULL_HANDLE;
+  if (vkproto::rvk_vkCreateBuffer(wire, host, &create, nullptr, &buffer) != VK_SUCCESS) return 0u;
+  VkMemoryRequirements requirements = {};
+  vkproto::rvk_vkGetBufferMemoryRequirements(wire, host, buffer, &requirements);
+  vkproto::rvk_vkDestroyBuffer(wire, host, buffer, nullptr);
+  return requirements.memoryTypeBits; }
+
+std::uint32_t wire_image_types(BackendTransport &wire, std::uint64_t device, const VkImageCreateInfo &create)
+{ const VkDevice host = as_handle<VkDevice>(device);
+  VkImage image = VK_NULL_HANDLE;
+  if (vkproto::rvk_vkCreateImage(wire, host, &create, nullptr, &image) != VK_SUCCESS) return 0u;
+  VkMemoryRequirements requirements = {};
+  vkproto::rvk_vkGetImageMemoryRequirements(wire, host, image, &requirements);
+  vkproto::rvk_vkDestroyImage(wire, host, image, nullptr);
+  return requirements.memoryTypeBits; }
+
+}  // namespace
+
+/* A guest's ICD cannot know, when an application makes a buffer or an image,
+ * whether its memory will be a host-visible chunk the host imports, so the
+ * backend makes every one it can for host allocation (feature 045, T035). What
+ * the guest is answered is then the requirements of such a buffer: on NVIDIA its
+ * BAR type drops out of memoryTypeBits (0x3b becomes 0x1b), which is the type
+ * the ICD no longer calls host-visible. An image the driver will not import -
+ * Intel's optimal colour image - is made as the guest asked. A buffer that
+ * already names its external handle types is the guest's to decide. */
+TEST(vulkan_backend_device, buffers_and_images_are_made_for_host_allocation_where_the_driver_imports_them)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      GuestDevice made(host, i);
+      if (made.device() == 0u) continue;
+      BackendTransport wire(made.backend());
+      VkExternalMemoryBufferCreateInfo external = host_buffer();
+      VkBufferCreateInfo asked = storage_buffer();
+      VkBufferCreateInfo for_host = storage_buffer();
+      for_host.pNext = &external;
+      const std::uint32_t host_types = driver_buffer_types(made.device(), for_host);
+      CHECK(host_types != 0u);
+      CHECK_EQ(wire_buffer_types(wire, made.device(), asked), host_types);
+      CHECK_EQ(wire_buffer_types(wire, made.device(), for_host), host_types);
+
+      VkExternalMemoryImageCreateInfo image_external = {};
+      image_external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+      image_external.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
+      const VkImageCreateInfo image = colour_image();
+      VkImageCreateInfo image_for_host = colour_image();
+      image_for_host.pNext = &image_external;
+      const std::uint32_t expected = driver_imports_image(made.physical(), image)
+                                         ? driver_image_types(made.device(), image_for_host)
+                                         : driver_image_types(made.device(), image);
+      CHECK(expected != 0u);
+      CHECK_EQ(wire_image_types(wire, made.device(), image), expected);
+  }
+}
+
+/* A device the driver made without host import - the guest's list could not be
+ * widened - and a device the context has since replaced make buffers exactly as
+ * asked: nothing will ever be imported into either. */
+TEST(vulkan_backend_device, a_device_that_imports_nothing_makes_buffers_as_asked)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      GuestDevice made(host, i);
+      if (made.device() == 0u) continue;
+      BackendTransport wire(made.backend());
+      const VkBufferCreateInfo asked = storage_buffer();
+
+      const std::uint64_t replaced = made.device();
+      const std::uint64_t unsent = made.guest().create_device(made.physical(), 3u, nullptr);
+      CHECK(unsent != 0u);
+      CHECK_EQ(wire_buffer_types(wire, unsent, asked), driver_buffer_types(unsent, asked));
+      CHECK_EQ(wire_buffer_types(wire, replaced, asked), driver_buffer_types(replaced, asked));
+  }
+}

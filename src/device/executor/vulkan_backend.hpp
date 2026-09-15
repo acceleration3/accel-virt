@@ -55,6 +55,15 @@ public:
                                const VkAllocationCallbacks *pAllocator, VkDevice *pDevice) override;
     void     on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator) override;
 
+    /* Made for host allocation wherever the driver allows it, because the
+     * guest's ICD cannot know at create whether the memory bound later will be
+     * a chunk the host imports (feature 045, T035); the guest is answered the
+     * requirements of what was made. */
+    VkResult on_vkCreateBuffer(VkDevice device, const VkBufferCreateInfo *pCreateInfo,
+                               const VkAllocationCallbacks *pAllocator, VkBuffer *pBuffer) override;
+    VkResult on_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
+                              const VkAllocationCallbacks *pAllocator, VkImage *pImage) override;
+
     /* Memory an import made is the import's to release: freed here and again
      * when the device releases the blob would be a double free in the driver. */
     void on_vkFreeMemory(VkDevice device, VkDeviceMemory memory,
@@ -130,6 +139,12 @@ private:
      * extensions a device is made with, unless the guest named them or its
      * list has no room. */
     void enable_host_import(VkDeviceCreateInfo &create);
+    /* Whether something made on `device` with the chain at `next` gets
+     * `host_types` added as a structure of type `external`: only on the
+     * device imports go to, made able to import, with types the driver
+     * allows, and a chain that does not already say for itself. */
+    bool backs_with_host(VkDevice device, const void *next, VkStructureType external,
+                         VkExternalMemoryHandleTypeFlags host_types) const;
     /* Whether the driver imports the blob's pointer into the type it asks
      * for on the guest's device. */
     bool importable(const ImportedBlob &blob);
@@ -151,6 +166,9 @@ private:
     ExtensionList      extensions_;
     VkInstance     instance_;
     VkDevice         device_;
+    VkPhysicalDevice physical_;
+    /* The device imports go to was made with VK_EXT_external_memory_host. */
+    bool             host_import_;
     HandleRegistry   handles_;
     AdoptedBlobs     adopted_;
     VulkanHostImport import_;

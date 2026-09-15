@@ -25,11 +25,20 @@ public:
      * measured and 0x18 on the other, so never assumed. 0 when the device has
      * no such entry point or the driver refuses the pointer. */
     uint32_t           importable_types(VkDevice device, void *pointer);
+    /* Whether `device` was made with VK_EXT_external_memory_host. */
+    bool               imports(VkDevice device);
     /* `size` bytes at `pointer` as memory of `device` in `memory_type`, or
      * false. */
     [[nodiscard]] bool import(VkDevice device, void *pointer, uint64_t size, uint32_t memory_type,
                               uint64_t &memory);
     void               release(VkDevice device, uint64_t memory);
+    /* HOST_ALLOCATION when the driver says a buffer or an image made as
+     * `create` asks may be bound to memory imported from a host pointer, else
+     * 0: Intel's answer is no for an optimal colour image and for a sparse
+     * buffer, NVIDIA's yes for both (measured 2026-09-15). 0 with no physical
+     * device. */
+    VkExternalMemoryHandleTypeFlags buffer_host_types(VkPhysicalDevice physical, const VkBufferCreateInfo &create);
+    VkExternalMemoryHandleTypeFlags image_host_types(VkPhysicalDevice physical, const VkImageCreateInfo &create);
 
     /* Imports that succeeded and have not been released, which is what a test
      * or a teardown can ask about without a driver. */
