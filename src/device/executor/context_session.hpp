@@ -48,6 +48,10 @@ public:
     /* Drops one. Nothing for an id that was never imported, because the device
      * may release one whose import failed. */
     void     release_blob(uint64_t blob_id);
+    /* The number the guest names what the import of `blob_id` made by, or 0:
+     * for an id never imported, one released, and memory the guest already
+     * freed. */
+    uint64_t imported_handle(uint64_t blob_id);
     uint32_t imports() const;
 
     /* Commands this session refused because the block was too small rather

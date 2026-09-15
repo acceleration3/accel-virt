@@ -10,6 +10,8 @@
 #ifndef AV_VULKAN_BACKEND_HPP
 #define AV_VULKAN_BACKEND_HPP
 
+#include "device/executor/adopted_blobs.hpp"
+#include "device/executor/extension_list.hpp"
 #include "device/executor/handle_registry.hpp"
 #include "device/executor/session_backend.hpp"
 #include "device/shim/physical_device_list.hpp"
@@ -36,9 +38,6 @@ public:
                            WireArena &arena) override;
     bool lost() const override;
 
-    /* The two commands this backend interposes rather than forwards
-     * untouched: an imported blob has to become memory of some device, and
-     * nothing else says which. */
     /* The two commands whose results this backend keeps: the instance and the
      * device a dying context still owns, so shut_down can destroy them. */
     VkResult on_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
@@ -47,10 +46,19 @@ public:
     void     on_vkDestroyInstance(VkInstance instance,
                                   const VkAllocationCallbacks *pAllocator) override;
 
+    /* A device is made able to import a host pointer whether or not the guest
+     * asked, because every host-visible allocation the guest makes arrives as
+     * one (feature 045); a physical device that cannot is made the device the
+     * guest asked for. */
     VkResult on_vkCreateDevice(VkPhysicalDevice physicalDevice,
                                const VkDeviceCreateInfo *pCreateInfo,
                                const VkAllocationCallbacks *pAllocator, VkDevice *pDevice) override;
     void     on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator) override;
+
+    /* Memory an import made is the import's to release: freed here and again
+     * when the device releases the blob would be a double free in the driver. */
+    void on_vkFreeMemory(VkDevice device, VkDeviceMemory memory,
+                         const VkAllocationCallbacks *pAllocator) override;
 
     /* The physical device of the bound GPU and no other, as a list of one and
      * as a group of one: the host's own lists name every GPU it has, and a
@@ -64,6 +72,9 @@ public:
     VkResult on_vkEnumeratePhysicalDeviceGroupsKHR(VkInstance instance, uint32_t *pPhysicalDeviceGroupCount,
                                                    VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties) override;
 
+    /* Imports a host pointer into the guest's device as the memory type the
+     * blob asks for - refused for a type the driver will not import that
+     * pointer into - and makes the memory a handle the guest may name. */
     [[nodiscard]] bool adopt(ImportedBlob &blob) override;
     void abandon(ImportedBlob &blob) override;
 
@@ -115,6 +126,13 @@ private:
      * GPU. Enabling a promoted extension is valid at any version, and the
      * guest's own instance - in the guest - never sees it. */
     void enable_identity(VkInstanceCreateInfo &create);
+    /* Adds VK_KHR_external_memory and VK_EXT_external_memory_host to the
+     * extensions a device is made with, unless the guest named them or its
+     * list has no room. */
+    void enable_host_import(VkDeviceCreateInfo &create);
+    /* Whether the driver imports the blob's pointer into the type it asks
+     * for on the guest's device. */
+    bool importable(const ImportedBlob &blob);
     /* The bound GPU's physical device on `instance`, or VK_NULL_HANDLE. */
     VkPhysicalDevice bound_device(VkInstance instance);
 
@@ -122,19 +140,19 @@ private:
      * by API before calling, so anything else is the device disagreeing with
      * itself rather than a guest doing something. */
     static constexpr uint32_t vulkan_api = 1u;
-    /* Extensions a guest's instance can be made with and still have one added.
-     * Every instance extension the Vulkan registry defines is under a hundred. */
-    static constexpr uint32_t max_instance_extensions = 256u;
 
     /* The device the imports belong to. A VkDeviceMemory is a device's, and
      * the guest makes exactly one per context through vkCreateDevice, so this
      * is taken from the command that made it rather than guessed. */
     const HostGpu     *gpu_;
     PhysicalDeviceList listed_;
-    const char        *extensions_[max_instance_extensions];
+    /* The names the create being run is made with. One list serves instances
+     * and devices: a create is one command, and nothing reads it afterwards. */
+    ExtensionList      extensions_;
     VkInstance     instance_;
     VkDevice         device_;
     HandleRegistry   handles_;
+    AdoptedBlobs     adopted_;
     VulkanHostImport import_;
     uint64_t parent_;
     uint64_t ran_;

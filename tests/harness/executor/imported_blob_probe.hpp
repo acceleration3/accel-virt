@@ -16,6 +16,8 @@ struct ImportedBlobProbe {
     void set_size(uint64_t size);
     void set_pointer(void *pointer);
     void set_descriptor(int descriptor);
+    void set_memory_type(uint32_t type);
+    void set_wire_handle(uint64_t handle);
 
     ImportedBlob &blob;
 };

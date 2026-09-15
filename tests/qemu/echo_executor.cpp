@@ -136,6 +136,7 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION_MINIMUM,
                               execute,
                               nullptr,
                               nullptr,
+                              nullptr,
                               nullptr};
 
 }  // namespace

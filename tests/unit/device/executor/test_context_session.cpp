@@ -224,6 +224,29 @@ TEST(context_session_import, a_blob_the_backend_takes_is_held_until_released)
   CHECK_EQ(bound.backend().abandoned(), 1u);
   CHECK(bound.session().invariants_hold()); }
 
+/* The guest names imported memory by what the backend recorded for the guest,
+ * not by what the host API holds: an id never imported answers nothing, an
+ * import answers its own, and a released one nothing again. */
+TEST(context_session_import, answers_the_handle_the_guest_names_an_import_by)
+{ Bound bound;
+  CHECK_EQ(bound.session().imported_handle(5u), 0u);
+  CHECK_EQ(bound.session().import_blob(5u, blob_handle()), std::uint32_t{RVK_EXECUTED});
+  CHECK_EQ(bound.session().import_blob(6u, blob_handle()), std::uint32_t{RVK_EXECUTED});
+  CHECK_EQ(bound.session().imported_handle(5u), 5u + MockSessionBackend::wire_offset);
+  CHECK_EQ(bound.session().imported_handle(6u), 6u + MockSessionBackend::wire_offset);
+  CHECK_EQ(bound.session().imported_handle(7u), 0u);
+  CHECK(bound.session().invariants_hold());
+
+  bound.session().release_blob(5u);
+  CHECK_EQ(bound.session().imported_handle(5u), 0u);
+  CHECK_EQ(bound.session().imported_handle(6u), 6u + MockSessionBackend::wire_offset);
+
+  /* A refused import leaves nothing to name. */
+  bound.backend().set_adopts(false);
+  CHECK_EQ(bound.session().import_blob(8u, blob_handle()), std::uint32_t{RVK_UNDECODABLE});
+  CHECK_EQ(bound.session().imported_handle(8u), 0u);
+  CHECK(bound.session().invariants_hold()); }
+
 /* Release is idempotent: the device may release an id whose import failed. */
 TEST(context_session_import, releasing_one_it_never_took_is_nothing)
 { Bound bound;

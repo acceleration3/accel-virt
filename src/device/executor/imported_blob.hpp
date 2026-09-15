@@ -28,8 +28,10 @@ public:
 
     /* Takes `handle` for `blob_id`. invalid_parameter for a handle that breaks
      * any of the ABI's rules - no kind or two, a size that is not whole pages,
-     * a pointer or a descriptor where the kind says there should be none -
-     * and invalid_state for a slot already holding one. */
+     * a pointer or a descriptor where the kind says there should be none, a
+     * dma-buf with a reserved field - and invalid_state for a slot already
+     * holding one. A host pointer's reserved field is the memory type it asks
+     * to be imported into, which only the backend can judge. */
     [[nodiscard]] Status take(uint64_t blob_id, const RvkBlobHandle &handle);
     /* Gives the slot back. Safe on one that holds nothing. */
     void                 give_back();
@@ -41,12 +43,16 @@ public:
     uint64_t size() const;
     void    *pointer() const;
     int      descriptor() const;
+    uint32_t memory_type() const;
 
     /* What the host API made of it - a VkDeviceMemory, a GL memory object, a
-     * cl_mem - as the one number every API's handle fits in. The backend sets
-     * it when it adopts the blob and reads it when a command names it. */
-    void     set_object(uint64_t object);
+     * cl_mem - as the one number every API's handle fits in, and the number
+     * the guest names it by in that API's commands, 0 where it names it by
+     * nothing. The backend records both when it adopts the blob and records
+     * none when it gives them back. */
+    void     record(uint64_t object, uint64_t wire_handle);
     uint64_t object() const;
+    uint64_t wire_handle() const;
 
     bool invariants_hold() const;
 
@@ -58,7 +64,9 @@ private:
     uint64_t size_;
     void    *pointer_;
     int      descriptor_;
+    uint32_t memory_type_;
     uint64_t object_;
+    uint64_t wire_handle_;
     bool     live_;
 };
 

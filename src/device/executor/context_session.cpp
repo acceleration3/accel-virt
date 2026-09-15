@@ -99,6 +99,12 @@ void ContextSession::release_blob(uint64_t blob_id)
     blob->give_back();
 }
 
+uint64_t ContextSession::imported_handle(uint64_t blob_id)
+{
+    const ImportedBlob *const blob = imports_.find(blob_id);
+    return blob != nullptr ? blob->wire_handle() : 0u;
+}
+
 uint32_t ContextSession::imports() const { return imports_.count(); }
 
 size_t ContextSession::starved() const { return starved_; }

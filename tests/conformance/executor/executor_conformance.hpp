@@ -21,6 +21,11 @@ namespace av {
 class ExecutorConformance {
 public:
     static constexpr std::uint32_t max_findings = 64u;
+    /* The versions that added the memory channel and the imported handle. The
+     * header names only the newest, and a library of each is held to what its
+     * own version promised. */
+    static constexpr std::uint32_t memory_channel_version = 2u;
+    static constexpr std::uint32_t imported_handle_version = 3u;
 
     ExecutorConformance();
     ExecutorConformance(const ExecutorConformance &) = delete;
@@ -58,10 +63,36 @@ private:
     void check_execute(RvkExecutor *executor, std::uint32_t api);
     void check_reply_capacity(RvkExecutor *executor, std::uint32_t api);
     void check_memory_channel(RvkExecutor *executor);
+    /* Version 3: an import of real memory answers a handle the executor's own
+     * commands accept back. Needs a Vulkan device, so a real GPU. */
+    void check_imported_handle(RvkExecutor *executor);
     /* SC-002: something each API can actually be asked to do, rather than only
      * commands it refuses. A library that answers every malformed frame
      * correctly and runs nothing is not one the device can use. */
     void check_workload(RvkExecutor *executor, uint32_t sub_api);
+
+    /* A host page, the size every import is a whole number of, and the id the
+     * version 3 check imports one under. */
+    static constexpr std::uint64_t page_bytes = 4096u;
+    static constexpr std::uint64_t imported_blob = 0x45u;
+
+    /* Runs the `length` bytes in frame_ as `command`, answering into reply_. */
+    std::uint32_t send(RvkExecutor *executor, std::uint32_t command, std::size_t length);
+    /* The VkResult an answer in reply_ starts with, and the handle after it -
+     * 0 unless the result was success. */
+    std::int32_t  answered_result() const;
+    std::uint64_t answered_handle() const;
+    /* An instance, its first physical device and a device on it, as a guest
+     * makes them. False when the executor made no device. */
+    bool make_device(RvkExecutor *executor, std::uint64_t &instance, std::uint64_t &device);
+    /* A buffer a host allocation may back, and the memory types it accepts. */
+    std::uint64_t make_buffer(RvkExecutor *executor, std::uint64_t device);
+    std::uint32_t buffer_types(RvkExecutor *executor, std::uint64_t device, std::uint64_t buffer);
+    /* Imports `page` as the first of `types` the executor takes, answering
+     * the handle it names that memory by, or 0. */
+    std::uint64_t import_page(RvkExecutor *executor, void *page, std::uint32_t types);
+    void          destroy_handle(RvkExecutor *executor, std::uint32_t command, std::uint64_t parent,
+                                 std::uint64_t handle);
 
     /* Whether `result` is one of the four the ABI defines. */
     bool defined_result(std::uint32_t result) const;
@@ -82,6 +113,10 @@ private:
     /* Commands that ran rather than being refused, which is what says the
      * library does something. */
     std::uint32_t         worked_;
+    /* The frame being sent and its answer, for the checks that make a device. */
+    std::uint8_t          frame_[1024];
+    std::uint8_t          reply_[512];
+    std::size_t           produced_;
 };
 
 }  // namespace av

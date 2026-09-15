@@ -103,6 +103,11 @@ void ExecutorRoot::close(ContextSession *session)
     }
 }
 
+uint64_t ExecutorRoot::imported_handle(ContextSession *session, uint64_t blob_id)
+{
+    return owns(session) ? session->imported_handle(blob_id) : 0u;
+}
+
 uint32_t ExecutorRoot::live() const
 {
     uint32_t running = 0u;

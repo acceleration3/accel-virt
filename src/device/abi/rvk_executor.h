@@ -25,8 +25,9 @@ extern "C" {
  * are one command's payload, so a command naming a blob has nothing to name it
  * with. Version 2 adds the three operations that fix that and changes nothing
  * else; the device accepts both, and a version 1 library simply imports
- * nothing (feature 042). */
-#define RVK_EXECUTOR_ABI_VERSION 2u
+ * nothing (feature 042). Version 3 adds imported_handle, so the guest can name
+ * the memory an import made (feature 045). */
+#define RVK_EXECUTOR_ABI_VERSION 3u
 #define RVK_EXECUTOR_ABI_VERSION_MINIMUM 1u
 #define RVK_EXECUTOR_OPS_SYMBOL "rvk_executor_ops"
 
@@ -54,7 +55,8 @@ extern "C" {
  * property and an offset here would buy a capability flag per API for nothing. */
 typedef struct RvkBlobHandle {
     uint32_t kind;     /* exactly one RVK_BLOB_* value */
-    uint32_t reserved; /* 0 */
+    uint32_t reserved; /* RVK_BLOB_HOST_POINTER: the Vulkan memory type index to import
+                        * into (feature 045); 0 otherwise */
     void *pointer;     /* RVK_BLOB_HOST_POINTER; NULL otherwise */
     int fd;            /* RVK_BLOB_DMA_BUF; -1 otherwise */
     uint64_t size;     /* bytes, a whole number of host pages */
@@ -96,6 +98,8 @@ typedef struct RvkExecutorOps {
     /* Drops an import. A no-op for an id that was never imported; destroy
      * releases whatever is left. Runs on the context's worker. */
     void (*release_blob)(void *opaque, RvkExecutor *executor, uint64_t blob_id);
+    /* Version 3 onwards: the wire handle of the memory an import of `blob_id` made, 0 for none. Runs on the context's worker. */
+    uint64_t (*imported_handle)(void *opaque, RvkExecutor *executor, uint64_t blob_id);
 } RvkExecutorOps;
 
 typedef const RvkExecutorOps *(*RvkExecutorOpsFunction)(void);

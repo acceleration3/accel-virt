@@ -114,6 +114,11 @@ void release_blob(void *, RvkExecutor *executor, uint64_t blob_id)
     if (session != nullptr) session->release_blob(blob_id);
 }
 
+uint64_t imported_handle(void *, RvkExecutor *executor, uint64_t blob_id)
+{
+    return library.root().imported_handle(session_of(executor), blob_id);
+}
+
 const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
@@ -122,7 +127,8 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               execute,
                               import_kinds,
                               import_blob,
-                              release_blob};
+                              release_blob,
+                              imported_handle};
 
 }  // namespace
 

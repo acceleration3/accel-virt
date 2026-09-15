@@ -57,15 +57,16 @@ bool MockSessionBackend::adopt(ImportedBlob &blob)
 {
     if (!adopts_) return false;
     adopted_++;
-    /* Whatever this API holds memory as; a number is all the session keeps. */
-    blob.set_object(blob.id() + 0x1000u);
+    /* Whatever this API holds memory as, and a different number the guest
+     * names it by, so a test can tell which of the two it was answered. */
+    blob.record(blob.id() + 0x1000u, blob.id() + wire_offset);
     return true;
 }
 
 void MockSessionBackend::abandon(ImportedBlob &blob)
 {
     abandoned_++;
-    blob.set_object(0u);
+    blob.record(0u, 0u);
 }
 
 }  // namespace av

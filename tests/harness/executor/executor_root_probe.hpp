@@ -6,8 +6,11 @@
 
 #include "device/executor/executor_root.hpp"
 
+#include <stdint.h>
+
 namespace av {
 
+class ContextSession;
 class HostGpuSet;
 
 struct ExecutorRootProbe {
@@ -15,6 +18,7 @@ struct ExecutorRootProbe {
 
     HostGpuSet &gpus();
     void        forget_host();
+    ContextSession &session_at(uint32_t slot);
 
     ExecutorRoot &root;
 };

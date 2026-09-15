@@ -40,8 +40,8 @@ bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
 }  // namespace
 
 VulkanBackend::VulkanBackend()
-    : gpu_(nullptr), listed_(), extensions_{}, instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), handles_(), import_(), parent_(0u),
-      ran_(0u), lost_(false)
+    : gpu_(nullptr), listed_(), extensions_(), instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), handles_(),
+      adopted_(), import_(), parent_(0u), ran_(0u), lost_(false)
 {}
 
 void VulkanBackend::initialize(const HostGpu &gpu) { gpu_ = &gpu; }
@@ -113,16 +113,21 @@ VulkanBackend *VulkanBackend::deciding() { return inside; }
 void VulkanBackend::enable_identity(VkInstanceCreateInfo &create)
 {
     /* A list the loader will refuse anyway is left for it to refuse. */
-    if (create.enabledExtensionCount != 0u && create.ppEnabledExtensionNames == nullptr) return;
-    if (create.enabledExtensionCount >= max_instance_extensions) return;
-    for (uint32_t i = 0u; i < create.enabledExtensionCount; i++) {
-        if (strcmp(create.ppEnabledExtensionNames[i], VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) == 0)
-            return;
-        extensions_[i] = create.ppEnabledExtensionNames[i];
-    }
-    extensions_[create.enabledExtensionCount] = VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME;
-    create.ppEnabledExtensionNames = extensions_;
-    create.enabledExtensionCount++;
+    if (extensions_.take(create.enabledExtensionCount, create.ppEnabledExtensionNames) != Status::ok) return;
+    extensions_.add(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    create.ppEnabledExtensionNames = extensions_.names();
+    create.enabledExtensionCount = extensions_.count();
+}
+
+void VulkanBackend::enable_host_import(VkDeviceCreateInfo &create)
+{
+    if (extensions_.take(create.enabledExtensionCount, create.ppEnabledExtensionNames) != Status::ok) return;
+    /* VK_EXT_external_memory_host requires VK_KHR_external_memory, which is
+     * core from 1.1 and still valid to enable there. */
+    extensions_.add(VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME);
+    extensions_.add(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
+    create.ppEnabledExtensionNames = extensions_.names();
+    create.enabledExtensionCount = extensions_.count();
 }
 
 VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
@@ -176,8 +181,16 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
                                           const VkDeviceCreateInfo *pCreateInfo,
                                           const VkAllocationCallbacks *, VkDevice *pDevice)
 {
-    const VkResult result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, pCreateInfo,
-                                                                  nullptr, pDevice);
+    VkDeviceCreateInfo create = *pCreateInfo;
+    enable_host_import(create);
+    VkResult result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, &create, nullptr, pDevice);
+    /* Made as the guest asked when what was added is what the driver lacks:
+     * listing the physical device's extensions first would take a table of
+     * hundreds of names, and a refusal costs one more create. A guest naming
+     * one that does not exist is refused twice, the same way. */
+    if (result == VK_ERROR_EXTENSION_NOT_PRESENT &&
+        create.enabledExtensionCount != pCreateInfo->enabledExtensionCount)
+        result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, pCreateInfo, nullptr, pDevice);
     /* Kept because a VkDeviceMemory belongs to a device and an import arrives
      * out of band with no command to carry one. A context makes one device; a
      * second replaces the first, which is what the guest sees too. */
@@ -191,6 +204,27 @@ void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallba
     RealVulkanDispatch::on_vkDestroyDevice(device, nullptr);
 }
 
+void VulkanBackend::on_vkFreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *)
+{
+    ImportedBlob *const imported = adopted_.find(reinterpret_cast<uint64_t>(memory));
+    if (imported == nullptr) {
+        RealVulkanDispatch::on_vkFreeMemory(device, memory, nullptr);
+        return;
+    }
+    /* The blob stays the device's until it releases it; only what this
+     * library made of it goes, so that the release finds nothing to free. */
+    abandon(*imported);
+}
+
+bool VulkanBackend::importable(const ImportedBlob &blob)
+{
+    /* A type past every type a device can have is past the mask's width, and
+     * a shift by it is undefined; a type inside the width that this device
+     * does not have is never in the mask the driver answers. */
+    if (blob.memory_type() >= VK_MAX_MEMORY_TYPES) return false;
+    return (import_.importable_types(device_, blob.pointer()) & (1u << blob.memory_type())) != 0u;
+}
+
 bool VulkanBackend::adopt(ImportedBlob &blob)
 {
     /* Only a host pointer, because that is the only kind this backend offers
@@ -198,20 +232,33 @@ bool VulkanBackend::adopt(ImportedBlob &blob)
      * the host cannot map on one of the two GPUs measured. And only onto a
      * device the guest has made, because device memory belongs to one. */
     if (blob.kind() != RVK_BLOB_HOST_POINTER || device_ == VK_NULL_HANDLE) return false;
+    if (!importable(blob)) return false;
     uint64_t memory = 0u;
-    if (!import_.import(device_, blob.pointer(), blob.size(), memory)) return false;
-    blob.set_object(memory);
+    if (!import_.import(device_, blob.pointer(), blob.size(), blob.memory_type(), memory)) return false;
+    /* A non-dispatchable handle on the wire is the driver's own number, so the
+     * memory is what the guest names it by. */
+    blob.record(memory, memory);
+    /* Made through the device, so destroying the device ends it as the driver
+     * does. A registry with no room refuses the import rather than losing the
+     * device, as a command's handle would: the guest is copied through
+     * instead, and nothing it already has breaks. */
+    if (adopted_.add(blob) != Status::ok || !handles_.remember(memory, reinterpret_cast<uint64_t>(device_))) {
+        abandon(blob);
+        return false;
+    }
     return true;
 }
 
 void VulkanBackend::abandon(ImportedBlob &blob)
 {
+    adopted_.remove(blob);
     const uint64_t object = blob.object();
     if (object == 0u || device_ == VK_NULL_HANDLE) return;
     /* The pointer itself is the device's and stays mapped; what this made of
-     * it is this library's to free. */
+     * it is this library's to free, and no longer a handle the guest names. */
+    handles_.forget(object);
     import_.release(device_, object);
-    blob.set_object(0u);
+    blob.record(0u, 0u);
 }
 
 bool VulkanBackend::lost() const { return lost_; }
@@ -229,6 +276,7 @@ void VulkanBackend::shut_down()
         instance_ = VK_NULL_HANDLE;
     }
     handles_.forget_all();
+    adopted_.clear();
     gpu_ = nullptr;
     ran_ = 0u;
     lost_ = false;

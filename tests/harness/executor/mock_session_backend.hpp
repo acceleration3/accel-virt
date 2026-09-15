@@ -26,6 +26,8 @@ public:
     static constexpr std::uint32_t greedy_id = 0x10004u;
     /* Runs, and leaves the host device lost behind it. */
     static constexpr std::uint32_t lose_id = 0x10005u;
+    /* An adopted blob's wire handle is its id plus this. */
+    static constexpr std::uint64_t wire_offset = 0x2000u;
 
     MockSessionBackend();
 

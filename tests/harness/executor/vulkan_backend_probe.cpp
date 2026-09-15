@@ -10,4 +10,6 @@ bool VulkanBackendProbe::run_through(vkproto::ServerDispatch &driver, uint32_t c
 
 const HandleRegistry &VulkanBackendProbe::handles() const { return backend.handles_; }
 
+uint32_t VulkanBackendProbe::imports_held() const { return backend.import_.held(); }
+
 }  // namespace av

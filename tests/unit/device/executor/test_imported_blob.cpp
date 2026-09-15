@@ -104,12 +104,29 @@ TEST(imported_blob, a_kind_carrying_the_other_kind_s_field_is_refused)
   CHECK_STATUS(blob.take(1u, dma_buf(-1, ImportedBlob::page_bytes)), Status::invalid_parameter);
   CHECK(!blob.live()); }
 
-TEST(imported_blob, a_reserved_field_that_is_not_zero_is_refused)
+/* A host pointer's reserved field is the Vulkan memory type the guest asked
+ * for (feature 045), carried to the backend untouched: whether the type exists
+ * is the device's to answer, not the ABI's. Every value, the largest included. */
+TEST(imported_blob, a_host_pointer_carries_the_memory_type_it_was_asked_into)
+{ constexpr std::uint32_t types[] = {0u, 4u, 31u, 32u, 0xFFFFFFFFu};
+  for (const std::uint32_t type : types) {
+      ImportedBlob blob;
+      RvkBlobHandle handle = host_pointer(ImportedBlob::page_bytes);
+      handle.reserved = type;
+      CHECK_STATUS(blob.take(1u, handle), Status::ok);
+      CHECK_EQ(blob.memory_type(), type);
+      CHECK(blob.invariants_hold());
+  } }
+
+/* A dma-buf has no memory type to ask for, so anything in the field is a
+ * handle nobody can say the meaning of. */
+TEST(imported_blob, a_dma_buf_with_a_reserved_field_that_is_not_zero_is_refused)
 { ImportedBlob blob;
-  RvkBlobHandle handle = host_pointer(ImportedBlob::page_bytes);
+  RvkBlobHandle handle = dma_buf(11, ImportedBlob::page_bytes);
   handle.reserved = 1u;
   CHECK_STATUS(blob.take(1u, handle), Status::invalid_parameter);
-  CHECK(!blob.live()); }
+  CHECK(!blob.live());
+  CHECK_EQ(blob.memory_type(), 0u); }
 
 TEST(imported_blob, a_slot_already_holding_one_is_not_overwritten)
 { ImportedBlob blob;
@@ -120,23 +137,39 @@ TEST(imported_blob, a_slot_already_holding_one_is_not_overwritten)
 TEST(imported_blob, giving_it_back_leaves_nothing_behind)
 { ImportedBlob blob;
   CHECK_STATUS(blob.take(1u, host_pointer(ImportedBlob::page_bytes)), Status::ok);
-  blob.set_object(0x1234u);
+  RvkBlobHandle typed = host_pointer(ImportedBlob::page_bytes);
+  typed.reserved = 3u;
+  blob.give_back();
+  CHECK_STATUS(blob.take(1u, typed), Status::ok);
+  blob.record(0x1234u, 0x5678u);
   blob.give_back();
   CHECK(!blob.live());
   CHECK(!blob.holds(1u));
   CHECK(blob.pointer() == nullptr);
   CHECK_EQ(blob.descriptor(), -1);
   CHECK_EQ(blob.object(), 0u);
+  CHECK_EQ(blob.wire_handle(), 0u);
+  CHECK_EQ(blob.memory_type(), 0u);
   CHECK(blob.invariants_hold()); }
 
 /* What the host API made of it: a VkDeviceMemory, a GL memory object, a
- * cl_mem - all of them fit one number, and the backend is what puts it there. */
-TEST(imported_blob, remembers_what_the_host_api_made_of_it)
+ * cl_mem - all of them fit one number, and the backend is what puts it there -
+ * and the number the guest names it by, which is none for an API whose guest
+ * never names it. */
+TEST(imported_blob, remembers_what_the_host_api_made_of_it_and_what_the_guest_names)
 { ImportedBlob blob;
   CHECK_STATUS(blob.take(1u, host_pointer(ImportedBlob::page_bytes)), Status::ok);
   CHECK_EQ(blob.object(), 0u);
-  blob.set_object(0xDEADBEEFu);
+  CHECK_EQ(blob.wire_handle(), 0u);
+  blob.record(0xDEADBEEFu, 0xFEEDu);
   CHECK_EQ(blob.object(), 0xDEADBEEFu);
+  CHECK_EQ(blob.wire_handle(), 0xFEEDu);
+  CHECK(blob.invariants_hold());
+  blob.record(0xDEADBEEFu, 0u);
+  CHECK_EQ(blob.wire_handle(), 0u);
+  CHECK(blob.invariants_hold());
+  blob.record(0u, 0u);
+  CHECK_EQ(blob.object(), 0u);
   CHECK(blob.invariants_hold()); }
 
 /* An empty slot answers pointer() and descriptor() like any other, so anything
@@ -160,6 +193,38 @@ TEST(imported_blob_invariants, an_empty_slot_with_a_pointer_breaks_them)
 TEST(imported_blob_invariants, an_empty_slot_with_a_descriptor_breaks_them)
 { ImportedBlob blob;
   ImportedBlobProbe(blob).set_descriptor(11);
+  CHECK(!blob.invariants_hold()); }
+
+/* Memory a slot that holds nothing still names is memory a later import would
+ * be answered with, and a handle the guest would free twice. */
+TEST(imported_blob_invariants, an_empty_slot_with_an_object_breaks_them)
+{ ImportedBlob blob;
+  blob.record(0x1000u, 0u);
+  CHECK(!blob.invariants_hold()); }
+
+TEST(imported_blob_invariants, an_empty_slot_with_a_wire_handle_breaks_them)
+{ ImportedBlob blob;
+  ImportedBlobProbe(blob).set_wire_handle(0x1000u);
+  CHECK(!blob.invariants_hold()); }
+
+TEST(imported_blob_invariants, an_empty_slot_with_a_memory_type_breaks_them)
+{ ImportedBlob blob;
+  ImportedBlobProbe(blob).set_memory_type(2u);
+  CHECK(!blob.invariants_hold()); }
+
+/* A name the guest was given for nothing the host API made is a handle that
+ * frees nothing, or something else. */
+TEST(imported_blob_invariants, a_wire_handle_with_no_object_breaks_them)
+{ ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, host_pointer(ImportedBlob::page_bytes)), Status::ok);
+  blob.record(0u, 0x1000u);
+  CHECK(!blob.invariants_hold()); }
+
+/* A memory type on a dma-buf is one take would have refused. */
+TEST(imported_blob_invariants, a_dma_buf_blob_with_a_memory_type_breaks_them)
+{ ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, dma_buf(11, ImportedBlob::page_bytes)), Status::ok);
+  ImportedBlobProbe(blob).set_memory_type(1u);
   CHECK(!blob.invariants_hold()); }
 
 /* A live blob of no size, or of part of a page, is one no host API can map;

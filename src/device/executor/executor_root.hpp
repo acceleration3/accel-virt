@@ -62,6 +62,10 @@ public:
     /* Gives a session's slot and block back. Safe on a null, which is what the
      * device passes if it ever destroys twice. */
     void            close(ContextSession *session);
+    /* What `session` answers for `blob_id`, or 0 for a session this root
+     * never handed out - a null included - because the device's pointer is
+     * the only thing the ABI gives to tell them apart. */
+    uint64_t        imported_handle(ContextSession *session, uint64_t blob_id);
     uint32_t        live() const;
 
     bool invariants_hold() const;

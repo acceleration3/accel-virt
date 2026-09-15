@@ -22,6 +22,8 @@ struct VulkanBackendProbe {
     [[nodiscard]] bool run_through(vkproto::ServerDispatch &driver, uint32_t command_id,
                                    WireReader &payload, WireWriter &reply, WireArena &arena);
     const HandleRegistry &handles() const;
+    /* Host-pointer imports the driver made and was not yet asked to free. */
+    uint32_t              imports_held() const;
 
     VulkanBackend &backend;
 };

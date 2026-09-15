@@ -9,6 +9,7 @@
 #include "harness/executor/executor_root_probe.hpp"
 #include "harness/executor/host_gpu_probe.hpp"
 #include "harness/executor/host_gpu_set_probe.hpp"
+#include "harness/executor/mock_session_backend.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/generated/opengl/gl_protocol_ids.h"
 
@@ -20,6 +21,7 @@ using av::ExecutorRootProbe;
 using av::HostGpuProbe;
 using av::HostGpuSetProbe;
 using av::MockHostApis;
+using av::MockSessionBackend;
 using av::Status;
 
 /* The real-GPU test enumerates the host's own loaders, which allocate things
@@ -213,6 +215,44 @@ TEST(executor_root_open, a_session_it_never_handed_out_is_not_closed)
   opened.root().close(&stranger);
   opened.root().close(nullptr);
   CHECK_EQ(opened.root().live(), 0u); }
+
+/* The handle an import made, asked through the root the way the ABI asks: a
+ * session it handed out answers for its blobs - nothing for an id it never
+ * imported, the handle after an import, nothing after the release - and a
+ * pointer it never handed out answers nothing without being read. The session
+ * is bound to a mock backend in place of its own Vulkan one, which is the part
+ * of a real import only a GPU can do. */
+TEST(executor_root_open, a_session_s_imported_handle_is_answered_through_the_root)
+{ Opened opened;
+  ContextSession *const session = &ExecutorRootProbe(opened.root()).session_at(0u);
+  static std::uint8_t block[4096];
+  MockSessionBackend backend;
+  CHECK_STATUS(session->initialize(backend, block, sizeof block), Status::ok);
+  static std::uint8_t page[4096];
+  RvkBlobHandle handle = {};
+  handle.kind = RVK_BLOB_HOST_POINTER;
+  handle.pointer = page;
+  handle.fd = -1;
+  handle.size = sizeof page;
+
+  CHECK_EQ(opened.root().imported_handle(session, 9u), 0u);
+  CHECK_EQ(session->import_blob(9u, handle), std::uint32_t{RVK_EXECUTED});
+  CHECK_EQ(opened.root().imported_handle(session, 9u), 9u + MockSessionBackend::wire_offset);
+  CHECK_EQ(opened.root().imported_handle(session, 10u), 0u);
+
+  static std::uint8_t stranger_block[4096];
+  MockSessionBackend stranger_backend;
+  ContextSession stranger;
+  CHECK_STATUS(stranger.initialize(stranger_backend, stranger_block, sizeof stranger_block), Status::ok);
+  CHECK_EQ(stranger.import_blob(9u, handle), std::uint32_t{RVK_EXECUTED});
+  CHECK(stranger.imported_handle(9u) != 0u);
+  CHECK_EQ(opened.root().imported_handle(&stranger, 9u), 0u);
+  CHECK_EQ(opened.root().imported_handle(nullptr, 9u), 0u);
+  stranger.release();
+
+  session->release_blob(9u);
+  CHECK_EQ(opened.root().imported_handle(session, 9u), 0u);
+  session->release(); }
 
 /* Nothing is handed out before the host has been asked. */
 TEST(executor_root_open, opens_nothing_until_it_has_asked)
