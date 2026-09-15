@@ -362,6 +362,8 @@ TEST(allocation_report_to, the_transport_s_memory_is_pinned_in_the_aperture)
       AllocationDescriptor(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget()),
       AllocationDescriptor(AllocationKind::fence_page, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
       AllocationDescriptor(AllocationKind::reply_slot, true, SurfaceLayout(), 0x1000u, ScanoutTarget()),
+      /* Feature 045: a host-visible chunk is published the same way, and the host GPU imports it. */
+      AllocationDescriptor(AllocationKind::host_visible_memory, true, SurfaceLayout(), 0x40000u, ScanoutTarget()),
   };
   for (const AllocationDescriptor &descriptor : transport) {
       Allocation allocation(platform, segments.segments(), descriptor, descriptor.size());
@@ -372,6 +374,20 @@ TEST(allocation_report_to, the_transport_s_memory_is_pinned_in_the_aperture)
       CHECK_EQ(info.SupportedWriteSegmentSet, av::ApertureSegment::segment_set);
       CHECK_EQ(info.Flags, 0x8001u);   /* CpuVisible | AccessedPhysically */
   } }
+
+/* A chunk the host GPU imports is one process's memory: another device opening it
+ * would be a second process mapping memory the first process's context imported. */
+TEST(allocation_open, a_host_visible_chunk_belongs_to_the_device_that_opened_it)
+{ MockPlatform platform;
+  Segments segments(platform);
+  int first_device = 0;
+  int second_device = 0;
+  const AllocationDescriptor chunk(AllocationKind::host_visible_memory, true, SurfaceLayout(), 0x40000u,
+                                   ScanoutTarget());
+  Allocation allocation(platform, segments.segments(), chunk, 0x40000u);
+  CHECK_STATUS(allocation.open(&first_device), Status::ok);
+  CHECK_STATUS(allocation.open(&second_device), Status::invalid_parameter);
+  CHECK(allocation.invariants_hold()); }
 
 TEST(allocation_open, a_reply_slot_belongs_to_the_device_that_opened_it)
 { MockPlatform platform;

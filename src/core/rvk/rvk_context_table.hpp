@@ -4,7 +4,12 @@
  * and the kernel's own views of their fence page and ring header. A process's
  * submission, the DPC's serve and two contexts' creation or teardown can meet,
  * so a slot is claimed, made live and given back under a spin lock, and the
- * device is waited on outside it. A power transition or a reset, which abandon
+ * device is waited on outside it. dxgkrnl holds the adapter's DDI lock only
+ * shared around CreateContext, DestroyContext and Escape (dxgkrnl.sys
+ * DXGADAPTER::AcquireDdiSync @140028080, level 1 = ExAcquireResourceSharedLite),
+ * so every request sequence - and the request buffer and single control
+ * exchange they share - runs under a mutex that keeps PASSIVE, which a stall
+ * between the device's polls needs. A power transition or a reset, which abandon
  * every context, run under dxgkrnl's exclusive hold of the adapter and so never
  * meet a creation or a teardown. One per adapter. */
 #ifndef AV_RVK_CONTEXT_TABLE_HPP
@@ -12,6 +17,8 @@
 
 #include "core/platform/platform.hpp"
 #include "core/platform/spin_lock.hpp"
+#include "core/platform/wait_mutex.hpp"
+#include "core/rvk/host_visible_binding.hpp"
 #include "core/rvk/ring_submitter.hpp"
 #include "core/rvk/rvk_context_binding.hpp"
 #include "core/rvk/submission_reader.hpp"
@@ -29,6 +36,7 @@ class CapsetInfo;
 class DxgkrnlInterface;
 class ExecutionNode;
 class GuestPageList;
+class HostVisibleBindRecord;
 class RegisterWindow;
 class RvkContextRecord;
 class VirtioGpuDevice;
@@ -79,12 +87,21 @@ public:
     /* DISPATCH. The context whose record named `allocation`, or null: an
      * allocation a context runs on may not be freed under it. */
     void                *user_of(const Allocation *allocation);
+    /* PASSIVE, inside the Escape of the process that made the chunk (feature 045).
+     * A bind resolves `record`'s allocation in the calling process - a mapped
+     * host_visible_memory allocation no context uses - publishes it as a GUEST
+     * blob of the context's next free chunk resource, and answers the resource
+     * and page count in `record`. An unbind releases the chunk bound as that
+     * resource. invalid_parameter for a context not live, an allocation that is
+     * not such a chunk, or a resource not bound; no_space when every chunk slot
+     * is taken; the device's refusal otherwise. Nothing is bound on failure. */
+    [[nodiscard]] Status bind_chunk(void *context, HostVisibleBindRecord &record, VirtioGpuDevice &device);
     uint32_t             bound() const;
 
     bool invariants_hold() const;
 
 private:
-    enum : uint32_t { ring_role = 0u, fence_role = 1u, reply_role = 2u, roles = 3u };
+    enum : uint32_t { ring_role = 0u, fence_role = 1u, reply_role = 2u, roles = 3u, chunk_role = 3u };
     static constexpr uint32_t no_slot = max_contexts;
 
     uint32_t             slot_of(const void *context) const;
@@ -97,6 +114,10 @@ private:
     [[nodiscard]] Status set_up(uint32_t slot, const RvkContextRecord &record, VirtioGpuDevice &device,
                                 RegisterWindow &doorbells, const CapsetInfo &capset);
     void                 release(uint32_t slot);
+    /* Releases every chunk the slot holds, on `device` when it answers. */
+    void                 release_chunks(uint32_t slot, VirtioGpuDevice *device);
+    [[nodiscard]] Status publish_chunk(uint32_t slot, HostVisibleBindRecord &record, VirtioGpuDevice &device);
+    [[nodiscard]] Status unpublish_chunk(uint32_t slot, uint32_t resource_id, VirtioGpuDevice &device);
     void                 log_binding(uint32_t slot, uint32_t message, Status status);
 
     Platform                        &platform_;
@@ -107,6 +128,7 @@ private:
     ObjectStorage<RvkContextBinding> bindings_[max_contexts];
     void                            *contexts_[max_contexts];
     const Allocation                *uses_[max_contexts][roles];
+    HostVisibleBinding               chunks_[max_contexts][RvkContextBinding::chunk_slots];
     uint8_t                         *ring_views_[max_contexts];
     uint8_t                         *fence_views_[max_contexts];
     uint8_t                          orders_[max_contexts];
@@ -114,6 +136,7 @@ private:
     /* Lent to whichever binding is being set up or torn down: dxgkrnl creates
      * and destroys contexts one at a time under its adapter lock. */
     uint8_t                          request_[RvkContextBinding::request_bytes];
+    WaitMutex                        requests_;
 
     friend struct RvkContextTableProbe;
 };

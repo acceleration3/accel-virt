@@ -4,6 +4,9 @@
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/submission/submission_descriptor.hpp"
+#include "proto/virtio_gpu/gpu_response.hpp"
+#include "proto/virtio_gpu/gpu_response_reader.hpp"
+#include "proto/virtio_gpu/rvk_request_writer.hpp"
 
 namespace av {
 
@@ -60,6 +63,32 @@ void RvkContextBinding::run_sequence(VirtioGpuDevice &device)
         if (asked != Status::ok) break;
         static_cast<void>(context_.accept(answer_, written));
     }
+}
+
+uint32_t RvkContextBinding::chunk_resource(uint32_t index) const
+{
+    return first_resource_id_ + transport_resources + index;
+}
+
+Status RvkContextBinding::publish_chunk(VirtioGpuDevice &device, uint32_t resource_id, const GuestPageList &pages)
+{
+    RvkRequestWriter writer(request_, capacity_);
+    const Status     written = writer.guest_blob_pages(resource_id, pages);
+    if (written != Status::ok) return written;
+    uint32_t     answered = 0u;
+    const Status asked = device.ask_control(request_, writer.length(), answer_, sizeof answer_, answered);
+    if (asked != Status::ok) return asked;
+    GpuResponseReader answer;
+    if (answer.decode(answer_, answered) != Status::ok) return Status::malformed;
+    return answer.type() == GpuResponse::ok_nodata ? Status::ok : Status::not_supported;
+}
+
+void RvkContextBinding::release_chunk(VirtioGpuDevice &device, uint32_t resource_id)
+{
+    RvkRequestWriter writer(request_, capacity_);
+    if (writer.unref(resource_id) != Status::ok) return;
+    uint32_t answered = 0u;
+    static_cast<void>(device.ask_control(request_, writer.length(), answer_, sizeof answer_, answered));
 }
 
 GuestContext::State RvkContextBinding::state() const { return context_.state(); }

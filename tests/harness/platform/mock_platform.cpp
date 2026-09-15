@@ -301,6 +301,19 @@ void MockPlatform::release_mutex(void *, LockRank rank)
     if (pop_lock(rank)) irql_ = held_[held_count_].previous;
 }
 
+void MockPlatform::initialize_wait_mutex(void *) {}
+
+/* Blocks without raising the IRQL, so a holder may wait at PASSIVE. */
+void MockPlatform::acquire_wait_mutex(void *, LockRank rank)
+{
+    if (irql_ >= Irql::dispatch)
+        record(Violation::blocking_at_dispatch, "wait mutex rank %u acquired at IRQL %u",
+               static_cast<unsigned>(rank), static_cast<unsigned>(irql_));
+    push_lock(rank, irql_);
+}
+
+void MockPlatform::release_wait_mutex(void *, LockRank rank) { static_cast<void>(pop_lock(rank)); }
+
 std::uint64_t MockPlatform::interrupt_time() const { return now_; }
 
 /* A stall busy-waits in the kernel; here it only moves the clock. */

@@ -13,6 +13,8 @@ enum class LockRank : uint16_t {
     hw_queue_table = 80u,     /* HwQueueTable, which looks contexts up in ContextTable */
     context_table = 90u,      /* ContextTable, which looks devices up in DeviceTable */
     device_table = 100u,       /* DeviceTable, which calls into AllocationTable */
+    rvk_control_requests = 105u, /* wait mutex: an rvk context's setup, teardown or chunk request sequence,
+                                    which resolves its allocations in AllocationTable */
     allocation_table = 110u,
     rvk_context_slots = 190u,  /* spin lock: which rvk contexts are live, around a submission and the DPC's serve */
     execution_node = 200u,     /* spin lock: SubmitCommand, PreemptCommand and the DPC */

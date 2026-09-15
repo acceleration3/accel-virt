@@ -53,6 +53,9 @@ public:
     void     initialize_mutex(void *storage) override;
     void     acquire_mutex(void *storage, LockRank rank) override;
     void     release_mutex(void *storage, LockRank rank) override;
+    void     initialize_wait_mutex(void *storage) override;
+    void     acquire_wait_mutex(void *storage, LockRank rank) override;
+    void     release_wait_mutex(void *storage, LockRank rank) override;
     std::uint64_t interrupt_time() const override;
     /* The test clock, at 10 000 000 ticks per second. */
     std::uint64_t performance_counter(std::uint64_t &frequency) const override;

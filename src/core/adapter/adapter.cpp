@@ -24,6 +24,7 @@
 #include "core/ddi/dxgkarg_describe_allocation_record.hpp"
 #include "core/ddi/dxgkarg_destroy_allocation_record.hpp"
 #include "core/ddi/dxgkarg_escape_record.hpp"
+#include "proto/resources/host_visible_bind_record.hpp"
 #include "core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "core/ddi/dxgkarg_get_scan_line_record.hpp"
 #include "core/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
@@ -507,7 +508,27 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
     platform_.require_irql_at_most(Irql::passive, "Adapter::escape");
     if (escape == nullptr || escape->pPrivateDriverData == nullptr || escape->PrivateDriverDataSize == 0u)
         return NtStatus(Status::invalid_parameter).value();
-    return NtStatus(Status::not_supported).value();
+    return bind_chunk(*escape);
+}
+
+/* The one escape this driver defines: a process binding a host-visible chunk to
+ * its rvk context (feature 045). Every refusal is STATUS_INVALID_PARAMETER, a
+ * status dxgkrnl hands the caller as it is (feature 037). */
+int32_t Adapter::bind_chunk(const DxgkargEscapeRecord &escape)
+{
+    auto *const       bytes = static_cast<uint8_t *>(escape.pPrivateDriverData);
+    uint32_t          magic = 0u;
+    if (escape.PrivateDriverDataSize >= sizeof magic) platform_.copy(&magic, bytes, sizeof magic);
+    if (magic != HostVisibleBindRecord::magic || escape.hContext == nullptr)
+        return NtStatus(Status::not_supported).value();
+    HostVisibleBindRecord record;
+    VirtioGpuDevice *const device = answering_device();
+    if (escape.PrivateDriverDataSize != HostVisibleBindRecord::encoded_size ||
+        record.decode(bytes, escape.PrivateDriverDataSize) != Status::ok || device == nullptr ||
+        rvk_contexts_.bind_chunk(escape.hContext, record, *device) != Status::ok)
+        return NtStatus(Status::invalid_parameter).value();
+    static_cast<void>(record.encode(bytes, HostVisibleBindRecord::encoded_size));   /* the length was checked */
+    return NtStatus(Status::ok).value();
 }
 
 int32_t Adapter::collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect)

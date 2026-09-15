@@ -160,6 +160,11 @@ TEST(allocation_descriptor_decode, a_ring_is_a_power_of_two_of_pages_and_a_fence
       {AllocationKind::reply_slot, 0x3000u, false, Status::ok},
       {AllocationKind::reply_slot, 0x1800u, false, Status::malformed},     /* whole pages */
       {AllocationKind::reply_slot, 0x1000u, true, Status::malformed},
+      /* Feature 045: a host-visible chunk is any whole number of pages, never a surface. */
+      {AllocationKind::host_visible_memory, 0x1000u, false, Status::ok},
+      {AllocationKind::host_visible_memory, 0x4000000u, false, Status::ok},
+      {AllocationKind::host_visible_memory, 0x4000001u, false, Status::malformed},
+      {AllocationKind::host_visible_memory, 0x1000u, true, Status::malformed},
   };
   for (const Case &one : cases) {
       const SurfaceLayout layout = one.surface ? SurfaceLayout(8u, 8u, 21u, 32u) : SurfaceLayout();
@@ -176,7 +181,7 @@ TEST(allocation_descriptor_decode, a_kind_past_the_last_one_is_refused)
 { const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x1000u, ScanoutTarget());
   std::uint8_t bytes[AllocationDescriptor::encoded_size] = {};
   static_cast<void>(encoded(ring, bytes));
-  const std::uint16_t past = 20u;
+  const std::uint16_t past = 21u;
   std::memcpy(bytes + 4u, &past, sizeof past);
   AllocationDescriptor decoded;
   CHECK_STATUS(decoded.decode(bytes, sizeof bytes), Status::malformed); }

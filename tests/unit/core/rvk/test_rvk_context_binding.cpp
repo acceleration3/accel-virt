@@ -58,7 +58,8 @@ constexpr std::uint32_t unref_type = 0x0102u;
 constexpr std::uint32_t submit_3d_type = 0x0207u;
 /* Slot 2: host context 3, doorbell 2, and the three blobs after slots 0 and 1's. */
 constexpr std::uint32_t slot = 2u;
-constexpr std::uint32_t first_resource = 0x00100006u;
+/* Slot 2: past two slots of the three transport blobs and sixty-four chunks each. */
+constexpr std::uint32_t first_resource = 0x00100000u + 2u * 67u;
 /* The request buffer an adapter lends every binding. */
 std::uint8_t lent[RvkContextBinding::request_bytes];
 constexpr std::uint8_t  uuid[GpuIdentity::uuid_bytes] = {};
@@ -85,6 +86,8 @@ public:
 
     void refuse_at(int index) { refuse_at_ = index; }
     void answer_nothing() { silent_ = true; }
+    /* Answers with four bytes, which no virtio-gpu response is. */
+    void answer_short() { short_ = true; }
     FakeVirtqueueDevice &queue() { return queue_; }
     std::uint32_t count_of(std::uint32_t type) const
     {
@@ -111,6 +114,11 @@ private:
     {
         auto *const host = static_cast<Host *>(context);
         if (host->queue_.pending_type() == 0u || host->silent_) return;
+        if (host->short_) {
+            const std::uint8_t truncated[4] = {0x00u, 0x11u, 0u, 0u};
+            static_cast<void>(host->queue_.respond_all(truncated, sizeof truncated));
+            return;
+        }
         GpuResponse answer;
         if (static_cast<int>(host->answered_) == host->refuse_at_)
             answer.set(GpuResponse::err_invalid_parameter);
@@ -125,6 +133,7 @@ private:
     std::uint32_t       answered_ = 0u;
     int                 refuse_at_ = -1;
     bool                silent_ = false;
+    bool                short_ = false;
 };
 
 /* The memory stands in for the process's ring, fence and reply allocations. */
@@ -187,7 +196,7 @@ TEST(rvk_context_binding, names_the_blobs_by_the_ids_it_was_given)
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
   constexpr std::size_t blob_resource = 24u;
   constexpr std::size_t blob_first_address = 56u;
-  for (std::uint32_t blob = 0u; blob < RvkContextBinding::resources_per_context; blob++)
+  for (std::uint32_t blob = 0u; blob < RvkContextBinding::transport_resources; blob++)
       CHECK_EQ(host.field(create_blob_type, blob, blob_resource), first_resource + blob);
   CHECK(host.field(create_blob_type, 0u, blob_first_address) ==
         static_cast<std::uint32_t>(fixture.pages().ring().frame(0u)));
@@ -327,3 +336,52 @@ TEST(rvk_context_binding_abandon, lets_go_without_a_request_and_sets_up_again)
   binding.abandon();   /* idle: nothing */
   CHECK_STATUS(binding.set_up(fixture.device(), capset(), fixture.pages()), Status::ok);
   CHECK(binding.established()); }
+
+/* Feature 045: a chunk a process binds is a blob of the context's own range, past
+ * its three transport resources, over the pages the chunk has. */
+TEST(rvk_context_binding_chunks, a_chunk_is_a_blob_of_the_context_s_range)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  Host host(fixture.mapped());
+  RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+  CHECK_EQ(binding.chunk_resource(0u), first_resource + RvkContextBinding::transport_resources);
+  CHECK_EQ(binding.chunk_resource(RvkContextBinding::chunk_slots - 1u), first_resource + 66u);
+  /* The next slot's first resource is one past this slot's last chunk. */
+  RvkContextBinding next(fixture.mapped().platform(), fixture.doorbells(), record(), slot + 1u, lent, sizeof lent);
+  CHECK_EQ(next.chunk_resource(0u) - RvkContextBinding::transport_resources,
+           binding.chunk_resource(RvkContextBinding::chunk_slots - 1u) + 1u);
+  const av::GuestPageList pages = fixture.pages().reply();
+  CHECK_STATUS(binding.publish_chunk(fixture.device(), binding.chunk_resource(5u), pages), Status::ok);
+  CHECK_EQ(host.count_of(create_blob_type), 1u);
+  CHECK_EQ(host.field(create_blob_type, 0u, 24u), binding.chunk_resource(5u));
+  CHECK(host.field(create_blob_type, 0u, 56u) == static_cast<std::uint32_t>(pages.frame(0u)));
+  binding.release_chunk(fixture.device(), binding.chunk_resource(5u));
+  CHECK_EQ(host.count_of(unref_type), 1u);
+  CHECK_EQ(host.field(unref_type, 0u, 24u), binding.chunk_resource(5u)); }
+
+TEST(rvk_context_binding_chunks, a_refused_short_or_unanswered_blob_is_not_published)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.start(), Status::ok);
+  const av::GuestPageList pages = fixture.pages().reply();
+  { Host host(fixture.mapped());
+    RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+    host.refuse_at(0);
+    CHECK_STATUS(binding.publish_chunk(fixture.device(), binding.chunk_resource(0u), pages), Status::not_supported); }
+  { Host host(fixture.mapped());
+    RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+    host.answer_short();
+    CHECK_STATUS(binding.publish_chunk(fixture.device(), binding.chunk_resource(0u), pages), Status::malformed); }
+  { Host host(fixture.mapped());
+    RvkContextBinding binding(fixture.mapped().platform(), fixture.doorbells(), record(), slot, lent, sizeof lent);
+    host.answer_nothing();
+    CHECK(binding.publish_chunk(fixture.device(), binding.chunk_resource(0u), pages) != Status::ok);
+    /* A release the device does not answer is let go of all the same. */
+    binding.release_chunk(fixture.device(), binding.chunk_resource(0u)); }
+  /* A request buffer too small for the blob writes nothing and asks nothing. */
+  Host host(fixture.mapped());
+  std::uint8_t tiny[16] = {};
+  RvkContextBinding cramped(fixture.mapped().platform(), fixture.doorbells(), record(), slot, tiny, sizeof tiny);
+  CHECK(cramped.publish_chunk(fixture.device(), cramped.chunk_resource(0u), pages) != Status::ok);
+  cramped.release_chunk(fixture.device(), cramped.chunk_resource(0u));
+  CHECK_EQ(host.queue().requests(), 0u); }
+

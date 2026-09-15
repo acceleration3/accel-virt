@@ -20,6 +20,9 @@ enum class AllocationKind : uint16_t {
     fence_page = 18u,
     /* The slot a context's answers are written to (feature 043). */
     reply_slot = 19u,
+    /* Guest RAM the host GPU imports as host-visible Vulkan memory: a process
+     * binds it to its rvk context and maps it with no copy (feature 045). */
+    host_visible_memory = 20u,
 };
 
 }  // namespace av

@@ -30,6 +30,7 @@
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/host_visible_bind_record.hpp"
 #include "proto/submission/fence_page.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
@@ -44,6 +45,10 @@ namespace av {
 struct RvkContextTableProbe {
     static void set_live(RvkContextTable &table, std::uint32_t slot, bool live) { table.live_[slot] = live; }
     static void set_context(RvkContextTable &table, std::uint32_t slot, void *context) { table.contexts_[slot] = context; }
+    static HostVisibleBinding &chunk(RvkContextTable &table, std::uint32_t slot, std::uint32_t index)
+    {
+        return table.chunks_[slot][index];
+    }
     static const Allocation *swap_use(RvkContextTable &table, std::uint32_t slot, std::uint32_t role,
                                       const Allocation *use)
     {
@@ -550,6 +555,9 @@ TEST(rvk_context_table, runs_at_the_levels_it_declares)
   static_cast<void>(fixture.table().bind(&first_context, fixture.record(), fixture.device(),
                                          fixture.mapped().function().doorbells(), capset()));
   static_cast<void>(fixture.table().unbind(&first_context, nullptr));
+  av::HostVisibleBindRecord chunk(av::HostVisibleBindRecord::Operation::unbind, 0u, 1u);
+  static_cast<void>(fixture.table().bind_chunk(&first_context, chunk, fixture.device()));
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
   fixture.table().abandon_all();
   static_cast<void>(fixture.table().user_of(nullptr));
   fixture.platform().set_irql(Irql::isr);
@@ -728,3 +736,240 @@ TEST(rvk_context_table_serve, a_page_no_device_could_write_loses_the_context_too
   CHECK_EQ(fixture.node().current_fence(), 3u);
   CHECK_STATUS(fixture.submit(&first_context, SubmissionDescriptor(2u, 32u, 64u), awaited), Status::invalid_parameter);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* Feature 045: a process binds a host-visible chunk - guest RAM the host GPU
+ * imports - to its live rvk context by escape. The chunk becomes a GUEST blob of
+ * the context's own resource range, past its three transport resources. */
+namespace {
+
+using av::HostVisibleBindRecord;
+using BindOperation = av::HostVisibleBindRecord::Operation;
+
+constexpr std::uint32_t chunk_base = av::RvkContextBinding::first_resource_id + 3u;
+
+Status bind_chunk(Fixture &fixture, void *context, std::uint32_t allocation, HostVisibleBindRecord &answer)
+{
+    answer = HostVisibleBindRecord(BindOperation::bind, allocation, 0u);
+    return fixture.table().bind_chunk(context, answer, fixture.device());
+}
+
+Status unbind_chunk(Fixture &fixture, void *context, std::uint32_t resource)
+{
+    HostVisibleBindRecord record(BindOperation::unbind, 0u, resource);
+    return fixture.table().bind_chunk(context, record, fixture.device());
+}
+
+}  // namespace
+
+TEST(rvk_context_table_bind_chunk, a_mapped_chunk_becomes_a_blob_of_the_context_s_range)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
+                          AllocationKind::host_visible_memory, 4u * page);
+  chunk.map_into_aperture(40u);
+  HostVisibleBindRecord answer;
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
+  CHECK_EQ(answer.resource_id(), chunk_base);
+  CHECK_EQ(answer.pages(), 4u);
+  CHECK(fixture.table().invariants_hold());
+  /* The fourth blob: the chunk's pages, as one entry here since they are contiguous. */
+  CHECK_EQ(host.count_of(create_blob_type), 4u);
+  CHECK_EQ(host.field(create_blob_type, 3u, 24u), chunk_base);
+  CHECK_EQ(host.field(create_blob_type, 3u, 36u), 1u);
+  CHECK_EQ(host.field(create_blob_type, 3u, 56u),
+           static_cast<std::uint32_t>(fixture.platform().physical_address(chunk.bytes())));
+  CHECK(fixture.table().user_of(chunk.allocation()) == &first_context);
+  CHECK_EQ(fixture.handles().outstanding(), 0u);
+
+  /* A second chunk takes the next slot; unbinding the first frees it for the next bind. */
+  ProcessAllocation second(fixture.platform(), fixture.allocations(), fixture.handles(),
+                           AllocationKind::host_visible_memory, page);
+  second.map_into_aperture(50u);
+  HostVisibleBindRecord second_answer;
+  CHECK_STATUS(bind_chunk(fixture, &first_context, second.handle(), second_answer), Status::ok);
+  CHECK_EQ(second_answer.resource_id(), chunk_base + 1u);
+  /* The second is found past the first, which is still bound; then the first. */
+  CHECK_STATUS(unbind_chunk(fixture, &first_context, chunk_base + 1u), Status::ok);
+  CHECK_EQ(host.field(unref_type, 0u, 24u), chunk_base + 1u);
+  CHECK_STATUS(unbind_chunk(fixture, &first_context, chunk_base), Status::ok);
+  CHECK_EQ(host.count_of(unref_type), 2u);
+  CHECK_EQ(host.field(unref_type, 1u, 24u), chunk_base);
+  CHECK(fixture.table().user_of(chunk.allocation()) == nullptr);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
+  CHECK_EQ(answer.resource_id(), chunk_base);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* Each refusal sends the device nothing and binds nothing. */
+TEST(rvk_context_table_bind_chunk, refuses_what_is_not_the_process_s_mapped_chunk_on_a_live_context)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
+                          AllocationKind::host_visible_memory, 2u * page);
+  ProcessAllocation unmapped(fixture.platform(), fixture.allocations(), fixture.handles(),
+                             AllocationKind::host_visible_memory, page);
+  chunk.map_into_aperture(40u);
+  HostVisibleBindRecord answer;
+  /* No context bound yet. */
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::invalid_parameter);
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  const std::uint32_t asked = host.queue().requests();
+  CHECK_STATUS(bind_chunk(fixture, &second_context, chunk.handle(), answer), Status::invalid_parameter);
+  CHECK_STATUS(bind_chunk(fixture, &first_context, fixture.ring().handle(), answer), Status::invalid_parameter);
+  CHECK_STATUS(bind_chunk(fixture, &first_context, unmapped.handle(), answer), Status::invalid_parameter);
+  CHECK_STATUS(bind_chunk(fixture, &first_context, 0x7777u, answer), Status::invalid_parameter);
+  CHECK_STATUS(unbind_chunk(fixture, &first_context, chunk_base), Status::invalid_parameter);
+  CHECK_STATUS(unbind_chunk(fixture, &first_context, chunk_base + 5u), Status::invalid_parameter);
+  CHECK_EQ(host.queue().requests(), asked);
+  CHECK_EQ(answer.resource_id(), 0u);
+  /* The same chunk twice. */
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
+  const std::uint32_t after = host.queue().requests();
+  HostVisibleBindRecord again;
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), again), Status::invalid_parameter);
+  CHECK_EQ(host.queue().requests(), after);
+  CHECK_EQ(fixture.handles().outstanding(), 0u);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* A device refusing the blob leaves the slot free and the chunk unbound. */
+TEST(rvk_context_table_bind_chunk, a_blob_the_device_refuses_binds_nothing)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
+                          AllocationKind::host_visible_memory, page);
+  chunk.map_into_aperture(40u);
+  host.refuse_at(static_cast<int>(host.queue().requests()));
+  HostVisibleBindRecord answer;
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::not_supported);
+  CHECK(fixture.table().user_of(chunk.allocation()) == nullptr);
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
+  CHECK_EQ(answer.resource_id(), chunk_base);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* Every chunk slot taken refuses the next chunk without asking the device. */
+TEST(rvk_context_table_bind_chunk, the_context_s_chunk_slots_full_refuses_the_next)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  std::optional<ProcessAllocation> chunks[av::RvkContextBinding::chunk_slots + 1u];
+  for (std::uint32_t index = 0u; index <= av::RvkContextBinding::chunk_slots; index++) {
+      chunks[index].emplace(fixture.platform(), fixture.allocations(), fixture.handles(),
+                            AllocationKind::host_visible_memory, page);
+      chunks[index]->map_into_aperture(100u + index);
+  }
+  HostVisibleBindRecord answer;
+  for (std::uint32_t index = 0u; index < av::RvkContextBinding::chunk_slots; index++) {
+      CHECK_STATUS(bind_chunk(fixture, &first_context, chunks[index]->handle(), answer), Status::ok);
+      CHECK_EQ(answer.resource_id(), chunk_base + index);
+  }
+  const std::uint32_t asked = host.queue().requests();
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunks[av::RvkContextBinding::chunk_slots]->handle(), answer),
+               Status::no_space);
+  CHECK_EQ(host.queue().requests(), asked);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  /* Teardown released every chunk (the fake device logs only the first 64
+   * requests, so what is judged is that none is still named). */
+  for (std::uint32_t index = 0u; index <= av::RvkContextBinding::chunk_slots; index++)
+      CHECK(fixture.table().user_of(chunks[index]->allocation()) == nullptr);
+  CHECK(fixture.table().invariants_hold()); }
+
+/* A context torn down releases its chunks before its own blobs and its host
+ * context: the host may hold a chunk's pages imported until the context goes. A
+ * second context's chunks take its own range. */
+TEST(rvk_context_table_bind_chunk, teardown_releases_the_chunks_first_and_ranges_are_per_context)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
+                          AllocationKind::host_visible_memory, page);
+  chunk.map_into_aperture(40u);
+  HostVisibleBindRecord answer;
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  CHECK_EQ(host.field(unref_type, 0u, 24u), chunk_base);
+  /* The chunk went before the host context did. */
+  std::uint32_t first_unref = 0u;
+  std::uint32_t destroy = 0u;
+  for (std::uint32_t i = 0u; i < host.queue().requests(); i++) {
+      if (host.queue().request_type(i) == unref_type && first_unref == 0u) first_unref = i;
+      if (host.queue().request_type(i) == ctx_destroy_type) destroy = i;
+  }
+  CHECK(first_unref < destroy);
+  CHECK(fixture.table().user_of(chunk.allocation()) == nullptr);
+  CHECK(fixture.table().invariants_hold());
+
+  /* Slot 1 of the adapter: its chunks start past its own transport resources. */
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  ProcessAllocation ring(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::context_ring,
+                         2u * page);
+  ProcessAllocation fences(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::fence_page,
+                           page);
+  ProcessAllocation reply(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::reply_slot,
+                          page);
+  ring.map_into_aperture(60u);
+  fences.map_into_aperture(70u);
+  reply.map_into_aperture(80u);
+  CHECK_STATUS(fixture.bind(&second_context, RvkContextRecord(SubApi::vulkan, 12u, ring.handle(), fences.handle(),
+                                                              reply.handle())),
+               Status::ok);
+  CHECK_STATUS(bind_chunk(fixture, &second_context, chunk.handle(), answer), Status::ok);
+  CHECK_EQ(answer.resource_id(),
+           av::RvkContextBinding::first_resource_id + av::RvkContextBinding::resources_per_context + 3u);
+  CHECK_STATUS(fixture.table().unbind(&second_context, &fixture.device()), Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* Abandoned by a reset, a context's chunks are let go of without a request. */
+TEST(rvk_context_table_bind_chunk, an_abandoned_context_releases_its_chunks_silently)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
+                          AllocationKind::host_visible_memory, page);
+  chunk.map_into_aperture(40u);
+  HostVisibleBindRecord answer;
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
+  fixture.table().abandon_all();
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::invalid_parameter);
+  const std::uint32_t asked = host.queue().requests();
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  CHECK_EQ(host.queue().requests(), asked);
+  CHECK(fixture.table().user_of(chunk.allocation()) == nullptr);
+  CHECK(fixture.table().invariants_hold()); }
+
+/* A context the host faulted takes no chunk: it will never import one. */
+TEST(rvk_context_table_bind_chunk, a_context_the_host_faulted_is_refused)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
+                          AllocationKind::host_visible_memory, page);
+  chunk.map_into_aperture(40u);
+  fixture.complete_through(0u, 6u);
+  fixture.serve();
+  HostVisibleBindRecord answer;
+  const std::uint32_t asked = host.queue().requests();
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::invalid_parameter);
+  CHECK_EQ(host.queue().requests(), asked);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* A chunk slot naming an allocation with no resource, or a chunk on a slot no
+ * context holds, is a table that has lost track of what the device holds. */
+TEST(rvk_context_table_invariants, detect_a_broken_chunk_or_one_on_a_free_slot)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  av::HostVisibleBinding &held = RvkContextTableProbe::chunk(fixture.table(), 0u, 3u);
+  held.take(*fixture.ring().allocation(), 0u);
+  CHECK(!fixture.table().invariants_hold());
+  held.clear();
+  CHECK(fixture.table().invariants_hold());
+  av::HostVisibleBinding &stray = RvkContextTableProbe::chunk(fixture.table(), 5u, 0u);
+  stray.take(*fixture.ring().allocation(), 7u);
+  CHECK(!fixture.table().invariants_hold());
+  stray.clear();
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+

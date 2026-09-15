@@ -21,6 +21,7 @@ namespace av {
 
 class CapsetInfo;
 class ContextPages;
+class GuestPageList;
 class RegisterWindow;
 class SubmissionDescriptor;
 class VirtioGpuDevice;
@@ -28,8 +29,11 @@ struct RvkContextBindingProbe;
 
 class RvkContextBinding {
 public:
-    /* The ring, fence and reply blobs, in that order, per slot. */
-    static constexpr uint32_t resources_per_context = 3u;
+    /* The ring, fence and reply blobs, in that order, then the host-visible
+     * chunks a process binds (feature 045), per slot. */
+    static constexpr uint32_t transport_resources   = 3u;
+    static constexpr uint32_t chunk_slots           = 64u;
+    static constexpr uint32_t resources_per_context = transport_resources + chunk_slots;
     /* Above the cursor's, every scanout's and host-visible memory's resource
      * ids, so a context's blob never takes one another subsystem uses. */
     static constexpr uint32_t first_resource_id = 0x00100000u;
@@ -38,7 +42,7 @@ public:
     static constexpr size_t   request_bytes = GpuRequestWriter::max_backing_request_size;
 
     /* Slot `slot` of the adapter's contexts: doorbell `slot`, host context
-     * `slot` + 1, and blobs from first_resource_id + 3 * `slot`. The blobs are
+     * `slot` + 1, and blobs from first_resource_id + resources_per_context * `slot`. The blobs are
      * named by ids the driver assigns, not by the record's allocation handles:
      * those are per process, and two processes' handles would collide on the
      * one device. `request` is `capacity` bytes the setup and teardown write
@@ -66,6 +70,16 @@ public:
     [[nodiscard]] Status submit(const SubmissionDescriptor &submission);
     /* DISPATCH, from the DPC. Reads the fence page and advances what completed. */
     [[nodiscard]] Status serve();
+
+    /* The resource of the context's chunk slot `index`, below chunk_slots. */
+    uint32_t             chunk_resource(uint32_t index) const;
+    /* PASSIVE. A GUEST blob of `resource_id` over `pages`. ok when the device
+     * made it, not_supported when it refused, malformed for an answer no device
+     * sends. The request buffer is the owner's; it serializes. */
+    [[nodiscard]] Status publish_chunk(VirtioGpuDevice &device, uint32_t resource_id, const GuestPageList &pages);
+    /* PASSIVE. Drops the blob; the answer is the device's to give, and a chunk
+     * whose release was not answered is let go of all the same. */
+    void                 release_chunk(VirtioGpuDevice &device, uint32_t resource_id);
 
     GuestContext::State state() const;
     bool                established() const;

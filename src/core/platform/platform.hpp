@@ -72,6 +72,11 @@ public:
     virtual void initialize_mutex(void *storage) = 0;
     virtual void acquire_mutex(void *storage, LockRank rank) = 0;
     virtual void release_mutex(void *storage, LockRank rank) = 0;
+    /* A mutex held across waits at PASSIVE, in storage of at least
+     * WaitMutex::storage_bytes: holding it does not raise the IRQL. */
+    virtual void initialize_wait_mutex(void *storage) = 0;
+    virtual void acquire_wait_mutex(void *storage, LockRank rank) = 0;
+    virtual void release_wait_mutex(void *storage, LockRank rank) = 0;
 
     /* Monotonic, in 100 ns units. */
     virtual uint64_t interrupt_time() const = 0;

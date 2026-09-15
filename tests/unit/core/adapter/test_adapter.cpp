@@ -33,6 +33,8 @@
 #include "core/ddi/dxgkarg_destroy_allocation_record.hpp"
 #include "core/ddi/dxgkarg_enum_vidpn_cofunc_modality_record.hpp"
 #include "core/ddi/dxgkarg_escape_record.hpp"
+#include "core/rvk/rvk_context_binding.hpp"
+#include "proto/resources/host_visible_bind_record.hpp"
 #include "core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "core/ddi/dxgkarg_get_scan_line_record.hpp"
 #include "core/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
@@ -1822,7 +1824,7 @@ TEST(adapter_query_adapter_info, is_passive_only)
 
 /* ---- Escape ---------------------------------------------------------------- */
 
-TEST(adapter_escape, no_escape_is_defined_so_every_escape_is_not_supported)
+TEST(adapter_escape, an_escape_that_is_not_a_chunk_binding_is_not_supported)
 { Fixture fixture; std::uint8_t data[64] = {};
   DxgkargEscapeRecord escape = {};
   escape.pPrivateDriverData = data;
@@ -3360,3 +3362,99 @@ TEST(adapter_rvk_context, a_timeout_reset_loses_the_host_context_and_a_new_one_s
   CHECK_EQ(process.submit(again.hContext, 3u, av::SubmissionDescriptor(1u, 0u, 32u)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_context(again.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* Feature 045: a process binds a host-visible chunk to its rvk context by escape,
+ * and reads back the resource and page count the kernel wrote into the same
+ * bytes. Anything else about the escape is refused before a table is asked. */
+TEST(adapter_escape, a_chunk_bound_by_escape_answers_its_resource_in_the_private_data)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  TransportAllocation chunk(fixture, handles, av::AllocationKind::host_visible_memory, 0x4000u, 40u);
+  std::uint8_t data[av::HostVisibleBindRecord::encoded_size] = {};
+  const av::HostVisibleBindRecord bind(av::HostVisibleBindRecord::Operation::bind, chunk.kmt_handle(), 0u);
+  CHECK_STATUS(bind.encode(data, sizeof data), av::Status::ok);
+  DxgkargEscapeRecord escape = {};
+  escape.pPrivateDriverData = data;
+  escape.PrivateDriverDataSize = sizeof data;
+  escape.hContext = context.hContext;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
+  std::uint32_t resource = 0u;
+  std::uint64_t pages = 0u;
+  std::memcpy(&resource, data + 12u, sizeof resource);
+  std::memcpy(&pages, data + 16u, sizeof pages);
+  CHECK_EQ(resource, av::RvkContextBinding::first_resource_id + av::RvkContextBinding::transport_resources);
+  CHECK_EQ(pages, 4u);
+
+  /* The same record again is an answer, not a request. */
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  /* A chunk binding on no rvk context of this adapter. */
+  CHECK_STATUS(bind.encode(data, sizeof data), av::Status::ok);
+  int stranger = 0;
+  escape.hContext = &stranger;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  /* No context named: not a binding at all. */
+  escape.hContext = nullptr;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), not_supported);
+  /* The magic with the wrong length. */
+  escape.hContext = context.hContext;
+  escape.PrivateDriverDataSize = sizeof data - 1u;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  escape.PrivateDriverDataSize = 3u;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), not_supported);
+
+  /* Unbinding by resource, then destroying the context, sends what it must. */
+  const av::HostVisibleBindRecord unbind(av::HostVisibleBindRecord::Operation::unbind, 0u, resource);
+  CHECK_STATUS(unbind.encode(data, sizeof data), av::Status::ok);
+  escape.PrivateDriverDataSize = sizeof data;
+  const std::uint32_t before = fixture.context_requests();
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
+  CHECK_EQ(fixture.context_requests(), before + 1u);   /* the chunk's unref */
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);   /* no longer bound */
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* A chunk the process frees while bound takes its context with it, as a ring
+ * does: the host may still hold its pages imported. */
+TEST(adapter_escape, freeing_a_bound_chunk_destroys_its_context)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  TransportAllocation chunk(fixture, handles, av::AllocationKind::host_visible_memory, 0x1000u, 40u);
+  std::uint8_t data[av::HostVisibleBindRecord::encoded_size] = {};
+  CHECK_STATUS(av::HostVisibleBindRecord(av::HostVisibleBindRecord::Operation::bind, chunk.kmt_handle(), 0u)
+                   .encode(data, sizeof data),
+               av::Status::ok);
+  DxgkargEscapeRecord escape = {};
+  escape.pPrivateDriverData = data;
+  escape.PrivateDriverDataSize = sizeof data;
+  escape.hContext = context.hContext;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
+  const std::uint32_t before = fixture.context_requests();
+  CHECK_EQ(chunk.destroy(), success);
+  /* The chunk's unref, CTX_DESTROY and the three transport unrefs. */
+  CHECK_EQ(fixture.context_requests(), before + 5u);
+  CHECK_EQ(process.submit(context.hContext, 1u, av::SubmissionDescriptor(1u, 0u, 32u)), invalid_parameter);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(process.device())), success); }
+
+/* A binding with no device to publish on is refused, however well formed. */
+TEST(adapter_escape, a_chunk_binding_with_no_device_is_invalid)
+{ Fixture fixture;
+  std::uint8_t data[av::HostVisibleBindRecord::encoded_size] = {};
+  CHECK_STATUS(av::HostVisibleBindRecord(av::HostVisibleBindRecord::Operation::bind, 0x40000001u, 0u)
+                   .encode(data, sizeof data),
+               av::Status::ok);
+  DxgkargEscapeRecord escape = {};
+  escape.pPrivateDriverData = data;
+  escape.PrivateDriverDataSize = sizeof data;
+  int context = 0;
+  escape.hContext = &context;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter); }
+

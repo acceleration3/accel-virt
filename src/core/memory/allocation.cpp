@@ -33,10 +33,11 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
      * is the one this driver reports, and a primary pinned there arrives as an
      * address with pages behind it. */
     const bool scanned_out = descriptor_.kind() == AllocationKind::shared_primary;
-    /* A context's ring, fence page and reply slot are published as guest blobs
-     * over the pages the aperture mapping hands the driver, so they are pinned
-     * there for the same reason (feature 043). */
-    const bool pinned = scanned_out || the_transport_s();
+    /* A context's ring, fence page and reply slot (feature 043), and a
+     * host-visible chunk (045), are published as guest blobs over the pages the
+     * aperture mapping hands the driver, so they are pinned there for the same
+     * reason. */
+    const bool pinned = scanned_out || published_as_blob();
 
     /* Nothing is asked for in host memory yet, and the segment is reported all
      * the same. Three live experiments say VidMm refuses every allocation whose
@@ -70,7 +71,7 @@ Status Allocation::open(const void *device)
 {
     platform_.require_irql_at_most(Irql::apc, "Allocation::open");
     InvariantScope<Allocation> guard(platform_, *this, "open");
-    if (the_transport_s() && owner_ != nullptr && owner_ != device) return Status::invalid_parameter;
+    if (published_as_blob() && owner_ != nullptr && owner_ != device) return Status::invalid_parameter;
     if (opens_ == 0u) owner_ = device;
     opens_++;
     return Status::ok;
@@ -114,11 +115,11 @@ GuestPageList Allocation::pages() const
     return aperture_.whole();
 }
 
-bool Allocation::the_transport_s() const
+bool Allocation::published_as_blob() const
 {
     const AllocationKind kind = descriptor_.kind();
     return kind == AllocationKind::context_ring || kind == AllocationKind::fence_page ||
-           kind == AllocationKind::reply_slot;
+           kind == AllocationKind::reply_slot || kind == AllocationKind::host_visible_memory;
 }
 
 bool Allocation::invariants_hold() const

@@ -9,10 +9,12 @@ extern "C" {
 
 #include "core/miniport/ddi_table.hpp"
 #include "core/platform/mutex.hpp"
+#include "core/platform/wait_mutex.hpp"
 
 namespace av {
 
 static_assert(sizeof(FAST_MUTEX) <= Mutex::storage_bytes, "Mutex storage too small for FAST_MUTEX");
+static_assert(sizeof(KMUTEX) <= WaitMutex::storage_bytes, "WaitMutex storage too small for KMUTEX");
 static_assert(alignof(FAST_MUTEX) <= 8u, "Mutex storage alignment too weak for FAST_MUTEX");
 static_assert(sizeof(KSPIN_LOCK) == sizeof(uintptr_t), "SpinLock word is not a KSPIN_LOCK");
 static_assert(static_cast<unsigned>(Pool::non_paged) == 0u && static_cast<unsigned>(Pool::paged) == 1u,
@@ -147,6 +149,21 @@ void KernelPlatform::acquire_mutex(void *storage, LockRank)
 void KernelPlatform::release_mutex(void *storage, LockRank)
 {
     ExReleaseFastMutex(static_cast<PFAST_MUTEX>(storage));
+}
+
+void KernelPlatform::initialize_wait_mutex(void *storage)
+{
+    KeInitializeMutex(static_cast<PKMUTEX>(storage), 0u);
+}
+
+void KernelPlatform::acquire_wait_mutex(void *storage, LockRank)
+{
+    static_cast<void>(KeWaitForSingleObject(storage, Executive, KernelMode, FALSE, nullptr));
+}
+
+void KernelPlatform::release_wait_mutex(void *storage, LockRank)
+{
+    static_cast<void>(KeReleaseMutex(static_cast<PKMUTEX>(storage), FALSE));
 }
 
 uint64_t KernelPlatform::interrupt_time() const { return KeQueryInterruptTime(); }
