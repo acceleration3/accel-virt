@@ -18,8 +18,13 @@ string(JOIN " " CMAKE_CXX_FLAGS_INIT
 foreach(config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
   set(CMAKE_CXX_FLAGS_${config}_INIT "")
   set(CMAKE_EXE_LINKER_FLAGS_${config}_INIT "")
+  set(CMAKE_SHARED_LINKER_FLAGS_${config}_INIT "")
 endforeach()
 
 string(JOIN " " CMAKE_EXE_LINKER_FLAGS_INIT
   /SUBSYSTEM:CONSOLE /ENTRY:rvktest_entry /NODEFAULTLIB /MANIFEST:NO /OPT:REF /DEBUG)
+# A guest ICD is a DLL built the same way: no C runtime, so each DLL target
+# names its own entry and its exports through a .def (feature 045).
+string(JOIN " " CMAKE_SHARED_LINKER_FLAGS_INIT
+  /DLL /NODEFAULTLIB /MANIFEST:NO /OPT:REF /DEBUG)
 set(CMAKE_CXX_STANDARD_LIBRARIES_INIT "")

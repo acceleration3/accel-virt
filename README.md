@@ -152,7 +152,9 @@ src/core/                         portable driver logic — no platform headers
 src/km/                           Windows kernel shim — translation only; builds rvkgpu.sys and holds rvkgpu.inf
 src/guest/                        the in-guest D3DKMT suite — portable, tested on Linux over MockKmt
   kmt/  suite/                      the D3DKMT contract and PCI identity; scenarios, session, report
-src/um/                           Windows user-mode shim — translation only; builds rvktest.exe
+src/icd/                          guest user-mode ICDs' decisions — portable, tested on Linux over MockKmt
+  vulkan/                           rvkvk.dll: loader entry points, connections, command batches, memory types
+src/um/                           Windows user-mode shim — translation only; builds rvktest.exe and rvkvk.dll
 src/device/                       QEMU device core — freestanding C++23, librvk_device.a
   host/  abi/                       the Host contract; TableHost, rvk_device.h, the C entry points
   gpu/  threading/  context/        host GPU binding; per-context workers and doorbells; the context table
