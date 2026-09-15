@@ -131,6 +131,8 @@ def arguments():
     parser.add_argument("--qemu", default=str(ROOT / "build-qemu" / "qemu" / "qemu-system-x86_64"))
     parser.add_argument("--qemu-img", default="qemu-img")
     parser.add_argument("--executor", default=str(ROOT / "build-qemu" / "librvk_echo_executor.so"))
+    parser.add_argument("--host-gpu", default="auto",
+                        help="the device's host-gpu property: auto, or a Vulkan device UUID (tools/host/list_gpus.py)")
     parser.add_argument("--driver", default=str(ROOT / "build" / "driver" / "rvkgpu.sys"))
     parser.add_argument("--inf", default=str(ROOT / "src" / "km" / "rvkgpu.inf"))
     parser.add_argument("--test", default=str(ROOT / "build" / "guest" / "rvktest.exe"))
@@ -197,7 +199,7 @@ def arguments():
 def qemu_command(args, work, disk, rescue):
     """QEMU for a run; a rescue boot leaves the device out so the driver never loads."""
     suffix = "-rescue" if rescue else ""
-    properties = [f"virtio-gpu-rvk-pci,id={DISPLAY_DEVICE}", "host-gpu=auto", f"executor={args.executor}",
+    properties = [f"virtio-gpu-rvk-pci,id={DISPLAY_DEVICE}", f"host-gpu={args.host_gpu}", f"executor={args.executor}",
                   f"max_outputs={args.outputs}", f"vectors={FENCE_VECTORS}"]
     # The region exists only where it is asked for, and the capset's
     # host-visible bit follows the device's own hostmem size, so a run without
@@ -975,7 +977,7 @@ class GuestRun:
         """Feature 044: the rvk scenarios send real streams to the executor the
         device loaded, so which library and which GPU they ran on is part of the
         verdict, and the transport's no-op round trip is its latency."""
-        self.say(f"rvk: executor {self.args.executor}, host-gpu auto")
+        self.say(f"rvk: executor {self.args.executor}, host-gpu {self.args.host_gpu}")
         code, out, error = self.step("rvk", lambda: self.agent.run(GUEST_DIRECTORY + "\\rvktest.exe", ["rvk"],
                                                                    self.args.step_timeout))
         (self.work / "rvk.txt").write_bytes(out)

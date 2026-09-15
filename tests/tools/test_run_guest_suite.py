@@ -267,6 +267,18 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertIn("rvktest.exe rvk", self.journal.read_text())
         self.assertIn("rvk latency", (self.work / "verdict.txt").read_text())
 
+    def test_an_rvk_run_on_a_named_host_gpu_binds_the_device_to_it_and_says_so(self):
+        """Feature 045, T020: the host-visible import is proven on each host GPU,
+        so a run can name the one the device binds to; auto stays the default."""
+        report = "ok transport.nop\nrvktest: 2 passed, 0 failed\n"
+        self.script(outputs={"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                             "rvktest": report, "collect": COLLECTED})
+        uuid = "7b7ad2c5-4219-8c80-c4fd-a64b8775aedb"
+        result = self.run_suite("--rvk", "--host-gpu", uuid)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"host-gpu={uuid}", self.journal.read_text())
+        self.assertIn(f"guest: rvk: executor /nowhere/librvk_echo_executor.so, host-gpu {uuid}", result.stdout)
+
     def test_a_quick_run_installs_checks_and_runs_the_suite_without_the_slow_scenarios(self):
         """Feature 044: an iteration run leaves the display, power and sleep
         scenarios - minutes of waiting - to the gate."""
