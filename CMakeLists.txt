@@ -351,6 +351,10 @@ add_test(NAME tools_tests
 add_test(NAME generated_sources
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_generated.py)
 
+# ---- the committed SPIR-V is what its GLSL compiles to (045) ----------------
+add_test(NAME check_spirv
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/gen_spirv.py --check)
+
 # ---- the documented id space and the generator's id files agree (FR-007) ----
 add_test(NAME protocol_ids
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_protocol_ids.py)

@@ -1,0 +1,15 @@
+#version 450
+// VulkanProbe's compute step: every element of the buffer doubled in place.
+
+layout(local_size_x = 16) in;
+
+layout(set = 0, binding = 0) buffer Elements {
+    uint elements[];
+};
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index < uint(elements.length())) {
+        elements[index] *= 2u;
+    }
+}
