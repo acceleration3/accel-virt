@@ -80,13 +80,15 @@ TEST(transport_scenario, a_no_op_the_device_answers_empty_passes_and_reports_its
                     "ok transport.connection\n"
                     "ok transport.initialize\n"
                     "ok transport.nop 0\n"
-                    "ok transport.latency 250\n") == 0);
+                    "ok transport.latency 250\n"
+                    "ok transport.warm_nop 0\n"
+                    "ok transport.warm_latency 250\n") == 0);
   CHECK_EQ(report.failed(), 0u);
   /* The connection used the adapter the search kept, never enumerating again. */
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::enumerate_adapters), 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), 1u);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), 1u);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), 1u);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), 2u);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), 2u);
   CHECK(report.invariants_hold());
   rig.check_nothing_left_but_the_adapter(); }
 
@@ -135,6 +137,37 @@ TEST(transport_scenario, a_failure_at_each_step_is_reported_and_later_steps_skip
       rig.check_nothing_left_but_the_adapter();
   } }
 
+/* The warm no-op is the same context's second: what a command costs once the
+ * host's backend exists, apart from the first no-op, which also waits for the
+ * host to open the context. Each is timed on its own, and a warm no-op the
+ * device answers with bytes, or never answers, fails only that step. */
+TEST(transport_scenario, the_warm_no_op_is_timed_apart_from_the_first)
+{ Rig rig;
+  const std::uint8_t cold_answer[1] = {};
+  rig.kmt().queue_answer(cold_answer, 0u);
+  const std::uint8_t warm_answer[4] = {};
+  rig.kmt().queue_answer(warm_answer, sizeof warm_answer);
+  rig.kmt().spend_on_wait(50000u);
+  GuestReport report;
+  TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
+  scenario.run();
+  CHECK(has_line(report, "ok transport.latency 5000\n"));
+  CHECK(has_line(report, "FAIL transport.warm_nop status=9 4\n"));
+  CHECK(!has_line(report, "transport.warm_latency"));
+  CHECK_EQ(report.failed(), 1u);
+  rig.check_nothing_left_but_the_adapter();
+
+  Rig second;
+  second.kmt().answer_waits(nullptr, 0u);
+  second.kmt().fail_at(MockKmt::Call::wait_for_context, 2u, unsuccessful);
+  GuestReport lost;
+  TransportScenario again(second.kmt(), lost, second.search(), av::SubApi::vulkan, "transport");
+  again.run();
+  CHECK(has_line(lost, "ok transport.latency 0\n"));
+  CHECK(has_line(lost, "FAIL transport.warm_nop status=7"));
+  CHECK_EQ(lost.failed(), 1u);
+  second.check_nothing_left_but_the_adapter(); }
+
 /* A clock that cannot say how long its ticks are gives a latency of 0 rather
  * than a division by nothing; the no-op is still judged. */
 TEST(transport_scenario, a_clock_without_a_frequency_reports_no_latency)
@@ -147,6 +180,7 @@ TEST(transport_scenario, a_clock_without_a_frequency_reports_no_latency)
   scenario.run();
   CHECK(has_line(report, "ok transport.nop 0\n"));
   CHECK(has_line(report, "ok transport.latency 0\n"));
+  CHECK(has_line(report, "ok transport.warm_latency 0\n"));
   CHECK_EQ(report.failed(), 0u);
   rig.check_nothing_left_but_the_adapter(); }
 

@@ -3,7 +3,8 @@
  * transport of the sub-API asked for - its setup is the host opening that API's
  * backend on its GPU - and a synchronous transport no-op the device answers
  * itself with an empty reply - so it passes whichever executor the host loaded,
- * and its round trip is the transport's own latency. The transport and the
+ * and its round trip is the transport's own latency - then a second, whose
+ * round trip is a command's once the host's backend is open. The transport and the
  * connection are torn down whatever failed. */
 #ifndef AV_TRANSPORT_SCENARIO_HPP
 #define AV_TRANSPORT_SCENARIO_HPP
@@ -32,6 +33,9 @@ public:
     void run();
 
 private:
+    /* One synchronous no-op, judged as `nop` and timed as `latency`. */
+    [[nodiscard]] Status round_trip(const char *nop, const char *latency);
+
     Kmt              &kmt_;
     ScenarioSteps     steps_;
     ScenarioTransport link_;

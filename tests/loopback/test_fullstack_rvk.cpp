@@ -158,7 +158,7 @@ TEST(fullstack_rvk, the_rvk_run_passes_every_step_on_the_host_gpu)
     failed = suite.run_rvk(); }
   if (failed != 0u) print(report);
   CHECK_EQ(failed, 0u);
-  CHECK(reported(report, "rvktest: 45 passed, 0 failed"));
+  CHECK(reported(report, "rvktest: 49 passed, 0 failed"));
   CHECK(reported(report, "ok transport.nop 0"));
   CHECK(reported(report, "ok vulkan.destroy"));
   CHECK(reported(report, "ok opencl.sum 64"));

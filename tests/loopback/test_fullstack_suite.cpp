@@ -51,8 +51,8 @@ TEST(fullstack_suite, the_in_guest_suite_passes_over_the_real_driver)
     failed = suite.run(); }
   if (failed != 0u) print(report);
   CHECK_EQ(failed, 0u);
-  CHECK_EQ(report.passed(), 41u);
-  CHECK(reported(report, "rvktest: 41 passed, 0 failed"));
+  CHECK_EQ(report.passed(), 43u);
+  CHECK(reported(report, "rvktest: 43 passed, 0 failed"));
   CHECK(reported(report, "ok adapter.driver_version"));
   CHECK(reported(report, "ok allocation.refuse_hostile"));
   CHECK(reported(report, "ok mapping.map"));

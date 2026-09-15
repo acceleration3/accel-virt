@@ -103,8 +103,10 @@ TEST(guest_suite, a_driver_that_does_everything_right_passes_every_step)
                     "ok transport.initialize\n"
                     "ok transport.nop 0\n"
                     "ok transport.latency 0\n"
+                    "ok transport.warm_nop 0\n"
+                    "ok transport.warm_latency 0\n"
                     "ok suite.close_adapter\n"
-                    "rvktest: 41 passed, 0 failed\n") == 0);
+                    "rvktest: 43 passed, 0 failed\n") == 0);
   CHECK_EQ(kmt.open_objects(), 0u);
   CHECK_EQ(kmt.misuses(), 0u);
   CHECK(report.invariants_hold()); }
@@ -728,12 +730,15 @@ TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_ad
 { MockKmt kmt;
   kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
   av::ScriptedHost host(kmt);
+  /* Each transport scenario sends its no-op twice, cold and warm. */
+  host.nop();
   host.nop();
   host.vulkan_run();
   host.opencl_run();
   host.nop();
+  host.nop();
   host.healthy_context();
-  const std::uint32_t before_fault = 1u + av::ScriptedHost::vulkan_waits + av::ScriptedHost::opencl_waits + 1u +
+  const std::uint32_t before_fault = 2u + av::ScriptedHost::vulkan_waits + av::ScriptedHost::opencl_waits + 2u +
                                      av::ScriptedHost::isolation_waits_before_fault;
   kmt.withhold_answer_at(before_fault + 1u);
   host.healthy_context();
@@ -744,7 +749,7 @@ TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_ad
   CHECK_EQ(failed, 0u);
   const char *const order[] = {"ok adapter.find\n", "ok transport.nop 0\n", "ok vulkan.bind\n",
                                "ok opencl.sum 64\n", "ok opengl.nop 0\n", "ok isolation.relink\n",
-                               "ok suite.close_adapter\n", "rvktest: 45 passed, 0 failed\n"};
+                               "ok suite.close_adapter\n", "rvktest: 49 passed, 0 failed\n"};
   const char *at = report.text();
   for (const char *line : order) {
       const char *const found = std::strstr(at, line);
