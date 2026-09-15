@@ -1,0 +1,13 @@
+# The Windows x64 Vulkan runtime the guest proof runs against, pinned by URL
+# and hash: LunarG's runtime components archive, which carries the Khronos
+# loader (vulkan-1.dll) and vulkaninfo.exe. Windows installs no loader without a
+# vendor driver (045 research §10).
+#
+# The URL names a version, never `latest`. Each file is pinned as well as the
+# archive, so --check can say whether what is on disk is what was pinned.
+#
+#   archive <url> <sha256>
+#   <file> <path inside the archive's top directory> <sha256>
+archive https://sdk.lunarg.com/sdk/download/1.4.357.0/windows/VulkanRT-X64-1.4.357.0-Components.zip a14672efed15aafc7f5a16572d35cd3a3416eadf670aeee3cdf50ee32d5fbf83
+vulkan-1.dll x64/vulkan-1.dll cd862090370454630b31b174e3d4eb474fda38ea034998d1fe1767b0c99a8696
+vulkaninfo.exe x64/vulkaninfo.exe cfb03f77c07707ba11e01d1510c24a19c956625ff0535186cadf80e829e4ed2c
