@@ -9,7 +9,7 @@ import os
 import re
 from dataclasses import dataclass, field
 
-SOURCE_DIRECTORIES = ("src/core", "src/device", "src/proto", "src/guest")
+SOURCE_DIRECTORIES = ("src/core", "src/device", "src/proto", "src/guest", "src/icd")
 # What a generator wrote is not this project's design and is not judged as such:
 # the registries decide its shape, `tools/check_generated.py` decides that it is
 # what the generator would write, and the compiler judges it like any other

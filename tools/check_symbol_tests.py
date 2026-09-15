@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Gate for constitution Principle IV.5: no class or public method in
-src/core, src/device, src/proto or src/guest without a test that names it.
+src/core, src/device, src/proto, src/guest or src/icd without a test that names
+it.
 
 Private methods are covered through the public surface; requiring a test to
 name them would test the shape of the implementation instead of its behaviour.

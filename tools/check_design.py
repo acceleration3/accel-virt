@@ -2,7 +2,8 @@
 """Gate for constitution Principle III: every unit of behaviour is a class that
 owns state. Reports static member functions and classes with no data members,
 and any new or delete expression - objects are constructed in place only by
-ObjectStorage and ObjectPool - in src/core, src/device, src/proto and src/guest.
+ObjectStorage and ObjectPool - in src/core, src/device, src/proto, src/guest and
+src/icd.
 
   check_design.py [repository root]
 """
