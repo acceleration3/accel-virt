@@ -55,6 +55,10 @@ public:
     /* With no instance, only what the loader may ask before one exists; with an
      * instance this made, every entry point; with anything else, null. */
     PFN_vkVoidFunction instance_proc_addr(VkInstance instance, const char *name);
+    /* Only an entry point the loader dispatches on a physical device: it names
+     * no instance, and answering it anything else would have the loader call
+     * that function with the wrong object. */
+    PFN_vkVoidFunction physical_device_proc_addr(const char *name) const;
     VkResult           enumerate_instance_extensions(const char *layer, uint32_t *count,
                                                      VkExtensionProperties *properties);
     VkResult           enumerate_instance_version(uint32_t *version);

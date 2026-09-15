@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..ir import Command, Param, Registry
+from ..ir import Command, Param, Registry, StructMember
 from . import classify
 from .common import GENERATED_BANNER, header_guard, write
 
@@ -69,6 +69,32 @@ def _is_recordable(cmd: Command, parent: Param) -> bool:
 
 
 # ---- Helpers ---------------------------------------------------------------
+
+
+# The object the loader dispatches a command on, which is its first
+# parameter's type in vk.xml. The loader asks an ICD's
+# vk_icdGetPhysicalDeviceProcAddr only for physical-device commands, and
+# answering it a device-level function would have the loader call that
+# function with a physical device, so the table has to say which is which.
+# A command whose first parameter is no dispatchable handle
+# (vkCreateInstance, the instance-less enumerations) is global.
+_DISPATCH_LEVELS = {
+    "VkInstance": "instance",
+    "VkPhysicalDevice": "physical_device",
+    "VkDevice": "device",
+    "VkQueue": "device",
+    "VkCommandBuffer": "device",
+}
+
+
+def dispatch_level(cmd: Command) -> str:
+    """The DispatchLevel enumerator naming ``cmd``'s dispatch level."""
+    if not cmd.params:
+        return "global"
+    first = cmd.params[0].type
+    if first.pointer_depth != 0 or first.fixed_dim is not None:
+        return "global"
+    return _DISPATCH_LEVELS.get(first.base, "global")
 
 
 def _is_count_array_pair(params: list[Param], i: int) -> bool:
@@ -205,7 +231,42 @@ def _staging_array(cmd: Command, name: str, count_expr: str) -> list[str]:
     ]
 
 
-def _emit_default_body(cmd: Command) -> list[str]:
+def _handle_array_member(reg: Registry, struct_name: str) -> StructMember | None:
+    """The fixed array of dispatchable handles a structure holds, with its
+    length member (``VkPhysicalDeviceGroupProperties::physicalDevices``)."""
+    struct = reg.structs.get(struct_name)
+    if struct is None:
+        return None
+    return next(
+        (m for m in struct.members
+         if m.type.base in DISPATCHABLE_HANDLES and m.type.fixed_dim is not None
+         and m.type.pointer_depth == 0 and m.len_expr is not None),
+        None,
+    )
+
+
+def _wrap_member_handles(array: str, count_expr: str, member: StructMember) -> list[str]:
+    """Wrap the host handles the decoder left in each element's handle array.
+
+    The length member bounds the loop because the decoder already refused a
+    length past the array (serialize.py's check on a len-bounded fixed array).
+    A handle that cannot be wrapped leaves the application nothing it could
+    dispatch through, so the call answers out of memory rather than a null.
+    """
+    return [
+        f"    for (uint32_t k = 0; k < {count_expr}; ++k) {{",
+        f"        for (uint32_t j = 0; j < {array}[k].{member.len_expr}; ++j) {{",
+        f"            {array}[k].{member.name}[j] = ::av::icd::wrap_server_handle<{member.type.base}>("
+        f"reinterpret_cast<uint64_t>({array}[k].{member.name}[j]), conn);",
+        f"            if ({array}[k].{member.name}[j] == VK_NULL_HANDLE) {{",
+        "                return VK_ERROR_OUT_OF_HOST_MEMORY;",
+        "            }",
+        "        }",
+        "    }",
+    ]
+
+
+def _emit_default_body(cmd: Command, reg: Registry) -> list[str]:
     """Generic wrapper: unwrap input handles, call, wrap output handles."""
     is_void = cmd.return_type.base == "void"
     pre_call: list[str] = []
@@ -280,6 +341,24 @@ def _emit_default_body(cmd: Command) -> list[str]:
                     f"::av::icd::wrap_server_handle<{arr.type.base}>({vec_name}[k], conn);"
                 )
                 post_call.append("    }")
+                has_handle_array_out = True
+            elif _handle_array_member(reg, arr.type.base) is not None:
+                # An array of structures each holding dispatchable handles
+                # (vkEnumeratePhysicalDeviceGroups): the decoder writes the
+                # host's handles into the application's structures, and each
+                # is replaced by the ICD's wrapper, as the plain array is.
+                member = _handle_array_member(reg, arr.type.base)
+                pre_call.append(f"    if ({arr.name} == nullptr) {{")
+                pre_call.append(
+                    f"        return ::av::vkproto::rvk_{cmd.name}("
+                    + transport + ", "
+                    + ", ".join("nullptr" if q.name == arr.name else q.name for q in cmd.params)
+                    + ");"
+                )
+                pre_call.append("    }")
+                call_args.append(count.name)
+                call_args.append(arr.name)
+                post_call.extend(_wrap_member_handles(arr.name, f"*{count.name}", member))
                 has_handle_array_out = True
             else:
                 # Plain count_array_pair, no special handling.
@@ -358,12 +437,12 @@ def _emit_default_body(cmd: Command) -> list[str]:
     return body
 
 
-def _emit_wrapper_body(cmd: Command) -> list[str]:
+def _emit_wrapper_body(cmd: Command, reg: Registry) -> list[str]:
     if cmd.name == "vkCreateInstance":
         return _emit_create_instance(cmd)
     if cmd.name == "vkDestroyInstance":
         return _emit_destroy_instance(cmd)
-    return _emit_default_body(cmd)
+    return _emit_default_body(cmd, reg)
 
 
 # ---- Output ---------------------------------------------------------------
@@ -394,10 +473,16 @@ def emit(reg: Registry, out_dir: Path) -> None:
     for cmd in cmds:
         h.append(_signature(cmd) + ";")
     h.append("")
+    h.append("// The object the loader dispatches a command on, from its first")
+    h.append("// parameter in vk.xml: a global command takes no dispatchable handle,")
+    h.append("// and a queue or command buffer dispatches as its device.")
+    h.append("enum class DispatchLevel : uint8_t { global, instance, physical_device, device };")
+    h.append("")
     h.append("// Name -> function-pointer entries for vk_icdGetInstanceProcAddr.")
     h.append("struct Entry {")
     h.append("    const char* name;")
     h.append("    PFN_vkVoidFunction fn;")
+    h.append("    DispatchLevel level;")
     h.append("};")
     h.append("")
     h.append("// The generated entries and how many there are. Not a std::span:")
@@ -447,7 +532,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
     ]
     for cmd in cmds:
         s.append(_signature(cmd) + " {")
-        s.extend(_emit_wrapper_body(cmd))
+        s.extend(_emit_wrapper_body(cmd, reg))
         s.append("}")
         s.append("")
 
@@ -458,7 +543,8 @@ def emit(reg: Registry, out_dir: Path) -> None:
     for cmd in cmds:
         s.append(
             f'    Entry{{ "{cmd.name}", '
-            f"reinterpret_cast<PFN_vkVoidFunction>(&Wrap_{cmd.name}) }},"
+            f"reinterpret_cast<PFN_vkVoidFunction>(&Wrap_{cmd.name}), "
+            f"DispatchLevel::{dispatch_level(cmd)} }},"
         )
     s.append("};")
     s.append("}  // namespace")

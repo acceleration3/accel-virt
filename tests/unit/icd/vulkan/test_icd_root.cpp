@@ -24,6 +24,7 @@
 #include "proto/icd_connection.hpp"
 #include "proto/icd_handle_registry.hpp"
 #include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
 #include "proto/submission/command_header.hpp"
 
 #include <cstdint>
@@ -265,12 +266,25 @@ TEST(icd_root, reports_vulkan_1_3)
   CHECK_EQ(rig.root().enumerate_instance_version(&version), VK_SUCCESS);
   CHECK_EQ(version, vulkan_1_3); }
 
-TEST(icd_root, answers_no_physical_device_level_entry_point_it_cannot_tell_from_a_device_level_one)
+/* The loader dispatches whatever this answers on a physical device: a device or
+ * instance command answered here would be called with the wrong object. */
+TEST(icd_root, answers_only_physical_device_level_entry_points_to_get_physical_device_proc_addr)
 { IcdRig rig;
   const VkInstance instance = rig.create_instance();
   const PhysicalProcAddr proc_addr = rig.entry<PhysicalProcAddr>(VK_NULL_HANDLE, "vk_icdGetPhysicalDeviceProcAddr");
-  CHECK(proc_addr(instance, "vkGetPhysicalDeviceFeatures") == nullptr);
-  CHECK(proc_addr(instance, "vkCreateBuffer") == nullptr);
+  CHECK(proc_addr(instance, "vkGetPhysicalDeviceFeatures") ==
+        entry_of(&av::vkicd::generated::Wrap_vkGetPhysicalDeviceFeatures));
+  CHECK(proc_addr(instance, "vkGetPhysicalDeviceProperties2") ==
+        entry_of(&av::icd::local_vkGetPhysicalDeviceProperties2));
+  CHECK(proc_addr(VK_NULL_HANDLE, "vkGetPhysicalDeviceProperties") ==
+        entry_of(&av::icd::local_vkGetPhysicalDeviceProperties));
+  const char *const other_levels[] = {"vkCreateBuffer", "vkDestroyDevice", "vkQueueWaitIdle", "vkCmdDraw",
+                                      "vkEnumeratePhysicalDevices", "vkCreateInstance",
+                                      "vk_icdEnumerateAdapterPhysicalDevices", "vkNotAnEntryPoint", "", nullptr};
+  for (const char *name : other_levels) CHECK(proc_addr(instance, name) == nullptr);
+  CHECK(rig.root().physical_device_proc_addr("vkGetPhysicalDeviceMemoryProperties") ==
+        entry_of(&av::vkicd::generated::Wrap_vkGetPhysicalDeviceMemoryProperties));
+  CHECK(rig.root().physical_device_proc_addr("vkAllocateMemory") == nullptr);
   rig.destroy_instance(instance); }
 
 TEST(icd_root, create_instance_opens_its_own_connection_and_wraps_the_hosts_instance)
@@ -428,6 +442,91 @@ TEST(icd_root, the_adapters_luid_answers_the_same_physical_device_enumeration_do
   CHECK_EQ(sent.read_u64(), ScriptedHost::vk_instance);
   rig.destroy_instance(instance);
   CHECK(rig.root().invariants_hold()); }
+
+namespace {
+
+/* A host's answer to vkEnumeratePhysicalDeviceGroups: the result, the count and
+ * one group naming `named` devices from vk_physical_device on, claiming
+ * `claimed` of them. */
+void queue_group(MockKmt &kmt, std::uint32_t claimed, std::uint32_t named)
+{
+    std::uint8_t    answer[MockKmt::max_answer] = {};
+    av::WireWriter  writer(answer, sizeof answer);
+    VkPhysicalDeviceGroupProperties group = {};
+    group.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES;
+    group.physicalDeviceCount = claimed;
+    for (std::uint32_t index = 0u; index < named; index++)
+        group.physicalDevices[index] = reinterpret_cast<VkPhysicalDevice>(ScriptedHost::vk_physical_device + index);
+    writer.write_pod<std::int32_t>(VK_SUCCESS);
+    writer.write_pod<std::uint32_t>(1u);
+    av::vkproto::serialize_VkPhysicalDeviceGroupProperties(writer, group);
+    CHECK_STATUS(writer.status(), Status::ok);
+    kmt.queue_answer(answer, static_cast<std::uint32_t>(writer.offset()));
+}
+
+}  // namespace
+
+TEST(icd_root, a_device_groups_physical_device_is_the_handle_enumeration_answered)
+{ IcdRig rig;
+  const VkInstance instance = rig.create_instance();
+  const VkPhysicalDevice physical_device = rig.physical_device(instance);
+  using EnumerateGroups = VkResult (*)(VkInstance, std::uint32_t *, VkPhysicalDeviceGroupProperties *);
+  const char *const spellings[] = {"vkEnumeratePhysicalDeviceGroups", "vkEnumeratePhysicalDeviceGroupsKHR"};
+  for (const char *name : spellings) {
+      VkPhysicalDeviceGroupProperties groups[1] = {};
+      std::uint32_t count = 1u;
+      queue_group(rig.kmt(), 1u, 1u);
+      CHECK_EQ(rig.entry<EnumerateGroups>(instance, name)(instance, &count, groups), VK_SUCCESS);
+      CHECK(rig.root().invariants_hold());
+      CHECK_EQ(count, 1u);
+      CHECK_EQ(groups[0].physicalDeviceCount, 1u);
+      CHECK(groups[0].physicalDevices[0] == physical_device);
+      CHECK(groups[0].physicalDevices[1] == VK_NULL_HANDLE);
+  }
+  rig.destroy_instance(instance); }
+
+/* A full group has every one of its devices wrapped and nothing after it
+ * touched; a group claiming more than the array holds is a reply the decoder
+ * refuses, with the application's structures left unwrapped. */
+TEST(icd_root, a_full_device_group_is_wrapped_and_an_overfull_one_refused)
+{ IcdRig rig;
+  const VkInstance instance = rig.create_instance();
+  using EnumerateGroups = VkResult (*)(VkInstance, std::uint32_t *, VkPhysicalDeviceGroupProperties *);
+  const EnumerateGroups enumerate = rig.entry<EnumerateGroups>(instance, "vkEnumeratePhysicalDeviceGroups");
+  VkPhysicalDeviceGroupProperties groups[2] = {};
+  groups[1].physicalDeviceCount = 0xC0FFEEu;
+  std::uint32_t count = 1u;
+  queue_group(rig.kmt(), VK_MAX_DEVICE_GROUP_SIZE, VK_MAX_DEVICE_GROUP_SIZE);
+  CHECK_EQ(enumerate(instance, &count, groups), VK_SUCCESS);
+  CHECK(rig.root().invariants_hold());
+  for (std::uint32_t index = 0u; index < VK_MAX_DEVICE_GROUP_SIZE; index++) {
+      CHECK(av::icd::connection_of(groups[0].physicalDevices[index]) != nullptr);
+      CHECK_EQ(av::vkproto::handle_to_wire(groups[0].physicalDevices[index]), ScriptedHost::vk_physical_device + index);
+  }
+  CHECK_EQ(groups[1].physicalDeviceCount, 0xC0FFEEu);
+  CHECK(groups[1].physicalDevices[0] == VK_NULL_HANDLE);
+  VkPhysicalDeviceGroupProperties overfull[1] = {};
+  count = 1u;
+  queue_group(rig.kmt(), VK_MAX_DEVICE_GROUP_SIZE + 1u, 1u);
+  CHECK_EQ(enumerate(instance, &count, overfull), VK_ERROR_DEVICE_LOST);
+  CHECK(overfull[0].physicalDevices[0] == VK_NULL_HANDLE);
+  /* A device the host names 0 has no handle to be: the call fails rather than
+   * hand the application a null. */
+  count = 1u;
+  queue_group(rig.kmt(), 2u, 1u);
+  CHECK_EQ(enumerate(instance, &count, groups), VK_ERROR_OUT_OF_HOST_MEMORY);
+  /* Asking only how many wraps nothing. */
+  count = 0u;
+  rig.host().vk_count(VK_SUCCESS, 1u);
+  CHECK_EQ(enumerate(instance, &count, nullptr), VK_SUCCESS);
+  CHECK_EQ(count, 1u);
+  /* A refusal is passed on with nothing wrapped. */
+  count = 1u;
+  rig.host().vk_count(vk_error_initialization_failed, 0u);
+  CHECK_EQ(enumerate(instance, &count, groups), vk_error_initialization_failed);
+  CHECK(rig.root().invariants_hold());
+  rig.destroy_instance(instance);
+  CHECK_EQ(rig.platform().live_allocations(), 0u); }
 
 TEST(icd_root, another_adapters_luid_answers_no_physical_device_without_asking_the_host)
 { IcdRig rig;

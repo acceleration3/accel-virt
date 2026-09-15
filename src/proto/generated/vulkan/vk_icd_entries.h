@@ -402,10 +402,16 @@ VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkImportFenceFdKHR(VkDevice device, const Vk
 VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkImportSemaphoreFdKHR(VkDevice device, const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo);
 VKAPI_ATTR VkResult VKAPI_CALL Wrap_vkUnmapMemory2KHR(VkDevice device, const VkMemoryUnmapInfo* pMemoryUnmapInfo);
 
+// The object the loader dispatches a command on, from its first
+// parameter in vk.xml: a global command takes no dispatchable handle,
+// and a queue or command buffer dispatches as its device.
+enum class DispatchLevel : uint8_t { global, instance, physical_device, device };
+
 // Name -> function-pointer entries for vk_icdGetInstanceProcAddr.
 struct Entry {
     const char* name;
     PFN_vkVoidFunction fn;
+    DispatchLevel level;
 };
 
 // The generated entries and how many there are. Not a std::span:

@@ -28,11 +28,15 @@ public:
     /* Only the local row of that name, or null: what the loader may ask for
      * before any instance exists has no generated wrapper to fall back to. */
     PFN_vkVoidFunction find_local(const char *name) const;
+    /* What find answers, when the row of that name is one the loader dispatches
+     * on a physical device; null for any other level. */
+    PFN_vkVoidFunction find_physical_device_level(const char *name) const;
 
     bool invariants_hold() const;
 
 private:
-    PFN_vkVoidFunction find_generated(const char *name) const;
+    const vkicd::generated::Entry *local_row(const char *name) const;
+    const vkicd::generated::Entry *row(const char *name) const;
 
     const vkicd::generated::Entry *local_;
     uint32_t                       local_count_;

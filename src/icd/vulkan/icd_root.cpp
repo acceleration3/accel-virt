@@ -14,24 +14,25 @@ namespace av::icd {
 namespace {
 
 using Entry = vkicd::generated::Entry;
+using Level = vkicd::generated::DispatchLevel;
 
 /* The first rows are what the loader may ask for with no instance
  * (loader_interface.md); the rest answer only through an instance. */
 constexpr uint32_t before_instance_rows = 6u;
 const Entry        local_rows[] = {
-    {"vkCreateInstance", reinterpret_cast<PFN_vkVoidFunction>(&local_vkCreateInstance)},
+    {"vkCreateInstance", reinterpret_cast<PFN_vkVoidFunction>(&local_vkCreateInstance), Level::global},
     {"vkEnumerateInstanceExtensionProperties",
-            reinterpret_cast<PFN_vkVoidFunction>(&local_vkEnumerateInstanceExtensionProperties)},
-    {"vkEnumerateInstanceVersion", reinterpret_cast<PFN_vkVoidFunction>(&local_vkEnumerateInstanceVersion)},
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkEnumerateInstanceExtensionProperties), Level::global},
+    {"vkEnumerateInstanceVersion", reinterpret_cast<PFN_vkVoidFunction>(&local_vkEnumerateInstanceVersion), Level::global},
     {"vk_icdNegotiateLoaderICDInterfaceVersion",
-            reinterpret_cast<PFN_vkVoidFunction>(&local_vk_icdNegotiateLoaderICDInterfaceVersion)},
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vk_icdNegotiateLoaderICDInterfaceVersion), Level::global},
     {"vk_icdGetPhysicalDeviceProcAddr",
-            reinterpret_cast<PFN_vkVoidFunction>(&local_vk_icdGetPhysicalDeviceProcAddr)},
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vk_icdGetPhysicalDeviceProcAddr), Level::global},
     {"vk_icdEnumerateAdapterPhysicalDevices",
-            reinterpret_cast<PFN_vkVoidFunction>(&local_vk_icdEnumerateAdapterPhysicalDevices)},
-    {"vkDestroyDevice", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyDevice)},
-    {"vkGetPhysicalDeviceProperties", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceProperties)},
-    {"vkGetPhysicalDeviceProperties2", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceProperties2)},
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vk_icdEnumerateAdapterPhysicalDevices), Level::global},
+    {"vkDestroyDevice", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyDevice), Level::device},
+    {"vkGetPhysicalDeviceProperties", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceProperties), Level::physical_device},
+    {"vkGetPhysicalDeviceProperties2", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceProperties2), Level::physical_device},
 };
 constexpr uint32_t local_row_count = sizeof local_rows / sizeof local_rows[0];
 /* VK_API_VERSION_1_3, spelled without the header macro's C casts. */
@@ -80,6 +81,11 @@ PFN_vkVoidFunction IcdRoot::instance_proc_addr(VkInstance instance, const char *
 {
     if (instance == VK_NULL_HANDLE) return before_instance_.find_local(name);
     return connection_of(instance, LoaderHandle::Kind::instance) != nullptr ? entry_points_.find(name) : nullptr;
+}
+
+PFN_vkVoidFunction IcdRoot::physical_device_proc_addr(const char *name) const
+{
+    return entry_points_.find_physical_device_level(name);
 }
 
 VkResult IcdRoot::enumerate_instance_extensions(const char *layer, uint32_t *count, VkExtensionProperties *)

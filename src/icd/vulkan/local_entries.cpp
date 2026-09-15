@@ -20,13 +20,8 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumerateInstanceExtensionProperties(cons
 VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumerateInstanceVersion(uint32_t *pApiVersion)
 { return icd_binding.root().enumerate_instance_version(pApiVersion); }
 
-/* The loader asks this only for a physical-device command it does not know
- * itself, to learn whether to dispatch it by physical device. Whether a
- * generated wrapper is one is not something the 063 table records, and naming a
- * device-level function here would have the loader dispatch it on the wrong
- * object, so the honest answer is none (integration point: an emitter change). */
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL local_vk_icdGetPhysicalDeviceProcAddr(VkInstance, const char *)
-{ return nullptr; }
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL local_vk_icdGetPhysicalDeviceProcAddr(VkInstance, const char *pName)
+{ return icd_binding.root().physical_device_proc_addr(pName); }
 
 VKAPI_ATTR VkResult VKAPI_CALL local_vk_icdEnumerateAdapterPhysicalDevices(VkInstance instance, uint64_t adapterLUID,
                                                                            uint32_t *pPhysicalDeviceCount,
