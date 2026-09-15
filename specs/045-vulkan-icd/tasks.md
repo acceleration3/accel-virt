@@ -1,0 +1,156 @@
+---
+
+description: "Tasks: Vulkan - the ICD on rvkgpu"
+---
+
+# Tasks: Vulkan - the ICD on rvkgpu
+
+**Input**: Design documents from `/specs/045-vulkan-icd/`
+
+**Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/loader_interface.md, contracts/host_visible_memory.md, quickstart.md
+
+**Tests**: Required, and written first (constitution IV). Every new class gets its test before its body, `invariants_hold()` checked after every mutation, and hostile-input tables plus a fuzz target for anything reading bytes it did not write.
+
+**Organization**: setup, then the host-visible import proven live before anything is built on it, then one phase per user story. Each `**Checkpoint**` is a commit once `ctest --test-dir build -E tools_tests` passes there; run the coverage build before committing a new class ([[fast-test-loop]]).
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[Story]**: US1 (the loader finds the adapter's ICD), US2 (a Vulkan device runs on the host GPU), US3 (only what is real is reported)
+
+---
+
+## Phase 1: Setup - the tools the ICD and its proof need
+
+- [ ] T001 [P] `cmake/windows_user_flags.cmake` and `src/um/CMakeLists.txt`: a DLL link configuration (`/DLL /ENTRY:<name> /NODEFAULTLIB /MANIFEST:NO /OPT:REF /DEBUG`, exports from a `.def`) beside the existing executable one, so a second target in the `rvktest` ExternalProject can link a freestanding DLL; an empty placeholder target is not added - the first DLL target arrives with T040
+- [ ] T002 [P] `tools/check_guest_image.py` learns `--dll`: machine AMD64, `IMAGE_FILE_DLL` set, subsystem `WINDOWS_GUI` or `WINDOWS_CUI` accepted, imports only gdi32/kernel32/ntdll, and `--require-export NAME` (repeatable) with `--only-exports` refusing any export not named; tests in `tests/tools/test_check_guest_image.py` over synthetic PE files for each refusal (not a DLL, wrong machine, a fourth import, a missing export, an extra export)
+- [ ] T003 [P] `tools/fetch_vulkan_runtime.py`: downloads the Khronos Vulkan runtime for Windows x64 pinned by URL and SHA-256 in `tools/vulkan_runtime_pins.txt`, extracts `vulkan-1.dll` and `vulkaninfo.exe` into `third_party/vulkan-runtime/` (git-ignored), refuses a hash mismatch; `--check` reports whether the pinned files are present; tests in `tests/tools/test_fetch_vulkan_runtime.py` over a local fixture archive (hash match, mismatch, missing member)
+- [ ] T004 [P] `tools/gen_spirv.py`: compiles every `src/guest/suite/shaders/*.comp|*.vert|*.frag` with `glslangValidator -V` into `src/guest/suite/shaders/<name>_spv.hpp` (a `constexpr uint32_t` array and its word count in `namespace av`), `--check` fails when a committed header differs or `glslangValidator` is absent with a message saying which; ctest `check_spirv` in `CMakeLists.txt`; tests in `tests/tools/test_gen_spirv.py`
+- [ ] T005 `.specify/memory/constitution.md` (PATCH, 2.5.2) and `CLAUDE.md`: the list of process-lifetime state gains the Vulkan ICD's root behind `vk_icdGetInstanceProcAddr`, one `ObjectStorage` in the exports' translation unit (plan.md Complexity Tracking); `README.md` layout lists `src/icd/` and `src/um/vulkan/`
+
+**Checkpoint**: the tools exist and are tested. Commit.
+
+---
+
+## Phase 2: Foundational - host-visible memory the host GPU imports, proven live first
+
+**Purpose**: research.md §7 design A is inference until a real guest process's scattered pages are imported by a real host GPU. Nothing of the ICD's memory model is built until T020 passes.
+
+### KMD: the allocation kind and the bind escape
+
+- [ ] T006 [P] Write `tests/unit/proto/resources/test_host_visible_bind_record.cpp` first: encode/decode round trip; refusal of wrong magic (`RVKH` = `0x484B5652`), version other than 1, operation other than 1 (bind) or 2 (unbind), non-zero reserved field, and a buffer shorter than 32 bytes at every length; byte-flip sweep of a valid record
+- [ ] T007 [P] `HostVisibleBindRecord` in `src/proto/resources/host_visible_bind_record.{hpp,cpp}` per contracts/host_visible_memory.md §1 (32 bytes: magic, u16 version, u16 operation, u32 allocation, u32 resource_id, u64 pages, u64 reserved); `tests/fuzz/fuzz_host_visible_bind_record.cpp` with a committed corpus in `tests/corpus/host_visible_bind_record/`
+- [ ] T008 Write `tests/unit/core/memory/test_allocation.cpp` cases first: an allocation described with the new `AllocationKind::host_visible_memory` is pinned in the aperture segment, `AccessedPhysically`, with any whole page count, exactly as `context_ring` is; then add the kind to `src/proto/resources/allocation_kind.hpp` and the pinning rule to `src/core/memory/allocation.cpp`
+- [ ] T009 Write `tests/unit/core/rvk/test_rvk_context_table.cpp` cases first (over the fake dxgkrnl's handle table): a bind escape on a live rvk context resolves the allocation in the calling process, requires kind `host_visible_memory` and complete pages, sends `RESOURCE_CREATE_BLOB` GUEST with the pages as memory entries, answers the resource id and page count; refusals (unknown context, allocation of another kind, of another process, incomplete pages, the context's 64 chunk slots full, a resource id not bound on unbind) answer `STATUS_INVALID_PARAMETER` and send nothing; unbind sends `RESOURCE_UNREF`; tearing the context down unbinds every chunk before its own three resources; freeing a bound allocation is refused as a transport allocation in use is
+- [ ] T010 `HostVisibleBinding` (object class) in `src/core/rvk/host_visible_binding.{hpp,cpp}` and its slots on `RvkContextTable` (`resources_per_context` becomes 3 + 64 in `src/core/rvk/rvk_context_binding.hpp`); `Adapter::escape` in `src/core/adapter/adapter.cpp` routes a record with magic `RVKH` and a non-null `hContext` to the table; every other escape keeps `STATUS_NOT_SUPPORTED`; `tests/unit/scenarios/` gains the escape through the DDI table
+
+### Device: the contiguous host view and IMPORT_BLOB
+
+- [ ] T011 [P] Write `tests/unit/device/memory/test_guest_page_alias.cpp` first over `MockHost`: a blob of scattered guest extents becomes one host range whose bytes at every offset are the extent's bytes; adjacent extents merge into one mapping; a blob with more runs than the host's mapping limit is refused; a host that cannot reserve or map refuses and releases what it made; destroying releases every mapping; invariants after each
+- [ ] T012 [P] `Host` gains `reserve_range`, `alias_guest_run(address, pages, at)` and `release_range` in `src/device/host/host.hpp`, implemented in `tests/harness/host/mock_host.*` (backed by the mock's own guest memory) and in `src/device/qemu/virtio-gpu-rvk-host.c` (`mmap(PROT_NONE)` reserve; per run `memory_region_from_host` / `qemu_ram_block_from_host` for the RAM block, its fd and offset, then `mmap(MAP_SHARED|MAP_FIXED)`; a region with no fd refuses); `GuestPageAlias` (object class) in `src/device/memory/guest_page_alias.{hpp,cpp}`
+- [ ] T013 Write `tests/unit/device/execution/test_blob_import_command.cpp` first: `IMPORT_BLOB` (`0x00000002`, body u32 resource_id, u32 reserved, u64 offset, u64 size, u32 memory_type, u32 reserved) on a GUEST blob of the context answers status 0 and the executor's handle; refusals answer non-zero status without faulting the context - a resource not a GUEST blob, not in this context's range, `offset + size` past the blob or overflowing, offset or size not whole pages, a non-zero reserved field, a body of the wrong length (which is command framing, fault 5, as for NOP), an executor that refuses the import; `RELEASE_BLOB` (`0x00000003`, u64 device_memory) releases an import and answers empty, and answers empty for one never imported; the alias is built once per blob and released when its last import is
+- [ ] T014 `BlobImportCommand` (object class) in `src/device/execution/blob_import_command.{hpp,cpp}`, reached from `TransportCommand` for ids 2 and 3; `CommandHeader` ids in `src/proto/submission/command_header.hpp`; `docs/protocol.md` "Transport commands (API 0)" gains both rows; `tests/fuzz/fuzz_blob_import.cpp` with a corpus; `tests/qemu/test_virtio_gpu_execution.py` imports a blob under the echo executor (which answers the import with its own handle)
+- [ ] T015 `rvk_echo_executor` (`tests/qemu/echo_executor.cpp`) answers `import_blob`/`release_blob` by recording them, so qtest can judge the device's side without a GPU
+
+### Executor: import the type the guest asked for, and let the guest name it
+
+- [ ] T016 Write `tests/unit/device/executor/test_vulkan_backend_device.cpp` cases first (real GPU, returning without judging on a host with none): after a guest-made device, `adopt` of a page-aligned host pointer with a requested memory type imports into that type when it is in the host-pointer import mask and refuses one that is not; the resulting `VkDeviceMemory` is a handle the backend knows; `vkFreeMemory` of it through the wire releases the import once (the pointer's pages are not freed and a second free is refused); a device the guest made without asking for `VK_EXT_external_memory_host` still imports, because the backend enables it
+- [ ] T017 `VulkanBackend` in `src/device/executor/vulkan_backend.{hpp,cpp}` and `VulkanHostImport` in `src/device/shim/vulkan_host_import.{hpp,cpp}`: `adopt` takes the memory type from the `ImportedBlob`, registers the handle with `made()`, `on_vkFreeMemory` routes a registered import to `abandon`; `on_vkCreateDevice` adds `VK_KHR_external_memory` and `VK_EXT_external_memory_host` to the extensions a device is made with (as T034 added the properties extension to instances); `ImportedBlob` gains `memory_type` and `wire_handle`; the executor ABI's `RvkBlobHandle` carries the type in its reserved field (`src/device/abi/rvk_executor.h`, version stays 2, documented)
+- [ ] T018 `tests/conformance/executor/executor_conformance.cpp`: an import through the ABI answers a handle `execute` accepts back in `vkBindBufferMemory`
+
+### The live experiment
+
+- [ ] T019 `HostVisibleScenario` extended in `src/guest/suite/host_visible_scenario.{hpp,cpp}` (test first in `tests/unit/guest/suite/test_host_visible_scenario.cpp` over `MockKmt`): on an rvk Vulkan transport, a 64 MiB `host_visible_memory` chunk is allocated, made resident, locked, bound by escape (`Kmt` gains `escape(adapter, context, data, size)`; `GdiKmt`, `MockKmt`, `DdiKmt` implement it), imported with `IMPORT_BLOB` as a host-visible type, bound to a buffer; a second chunk is bound the same way to a second buffer; the guest writes a pattern into the first chunk's view, the host copies the first buffer into the second with `vkCmdCopyBuffer` in a submitted command buffer (the scenario makes the command pool, command buffer, fence and queue submit through the generated client, the fence waited in 500 ms slices), and the guest reads the second chunk's view - so the host GPU has read guest-written pages and written guest-read ones; the steps report the pages scattered (runs) and the bytes that matched in each direction; `GuestSuite::run_rvk` runs it; the full-stack rig runs it with the real executor (`tests/loopback/test_fullstack_rvk.cpp`)
+- [ ] T020 Live: `tools/guest/run_guest_suite.py --rvk --executor build-qemu/librvk_executor.so` on both host GPUs (`host-gpu=` each UUID); record in this task's *As built* the runs per chunk, the bytes matched both ways on each GPU, and what failed. **If the import through the alias fails, stop and revise research.md §7 before Phase 3.**
+
+**Checkpoint**: a guest process's memory is the host GPU's memory, proven on real hardware. Commit.
+
+---
+
+## Phase 3: US1 - The loader finds the adapter's ICD (Priority: P1) 🎯 MVP
+
+**Goal**: the Windows Vulkan loader loads `rvkvk.dll` from the adapter's registration and lists one physical device with the adapter's LUID.
+
+**Independent test**: in the guest, with no Khronos global key and no environment variable, `vulkaninfo --summary` lists one rvk device whose `deviceLUID` is the adapter's.
+
+### Seams
+
+- [ ] T021 [P] `Kmt` in `src/guest/kmt/kmt.hpp` gains `adapter_luid(adapter, luid)` (from `D3DKMT_ENUMADAPTERS2`'s `AdapterLuid`) and `query_video_memory(adapter, segment_group, budget, usage)` (`D3DKMTQueryVideoMemoryInfo`, local and non-local); tests first in `tests/unit/harness/guest/test_mock_kmt.cpp`; `GdiKmt` (`src/um/gdi_kmt.cpp`, `src/um/imports/gdi32.def` gains `D3DKMTQueryVideoMemoryInfo`), `MockKmt` (scriptable LUID, budget, usage, failures) and `DdiKmt` (budget and usage from the driver's reported segments) implement them
+- [ ] T022 [P] `IcdMemory` interface in `src/icd/vulkan/icd_memory.hpp` (allocate bytes aligned, release; protected non-virtual destructor) with `MockIcdMemory` in `tests/harness/icd/mock_icd_memory.{hpp,cpp}` (counts, leaks reported, the Nth allocation failed on request); `Lock` interface in `src/icd/vulkan/icd_lock.hpp` with `RecordingLock` in `tests/harness/icd/` (acquire/release order recorded, a recursive acquire recorded as a violation); `LogSink` interface in `src/icd/vulkan/log_sink.hpp` with `RecordingLog`
+- [ ] T023 `KmtTransport` in `src/guest/transport/kmt_transport.{hpp,cpp}` takes ring order, command limit and reply size at construction (the 044 constants stay the suite's defaults), stages commands in memory the caller provides, and gains `send_batch(bytes, length)` for pre-framed commands with the batch's last reply-generating command answering; tests first in `tests/unit/guest/transport/test_kmt_transport.cpp` (a 256 KiB command crosses; one past the limit is refused; a batch of framed commands publishes once; a malformed batch is refused before publishing)
+
+### ICD core, each test first
+
+- [ ] T024 [P] [US1] `EntryTable` (system) in `src/icd/vulkan/entry_table.{hpp,cpp}`: the generated `wrapper_entries()` plus ICD-local rows; lookup by name answers the row or null; a local row overrides a generated one of the same name; `physical_device_level(name)` answers only physical-device-level entries; test `tests/unit/icd/vulkan/test_entry_table.cpp` (every name in `kManualEntryPoints` resolves locally, an unknown name is null, lookup of an empty or null name is null)
+- [ ] T025 [P] [US1] `LoaderHandle` (object) in `src/icd/vulkan/loader_handle.{hpp,cpp}` and `HandleRegistry` (system) in `src/icd/vulkan/handle_registry.{hpp,cpp}` over `ObjectPool<LoaderHandle>` and `IcdMemory`: `wrap(kind, host, connection, parent)` answers a handle whose first pointer-sized field is `0x01CDC0DE`; `made(pointer)` answers whether this ICD made it (a stack address, a freed handle and a handle of another kind answer no); destroying a device destroys its queues and command buffers; allocation failure answers null with nothing leaked; test `tests/unit/icd/vulkan/test_handle_registry.cpp` with the allocation-failure sweep; `src/proto/icd_handle_registry.hpp` (063 contract §F: `wrap_server_handle<H>`, `connection_of`, `destroy_wrapper`, `record_target`) forwards to the registry of the current root, and `handle_to_wire` for the five dispatchable types is defined in `src/icd/vulkan/handle_hooks.cpp` for the ICD's link (the defaults stay for the suite's)
+- [ ] T026 [US1] `Connection` (object) in `src/icd/vulkan/connection.{hpp,cpp}` and `src/proto/icd_connection.hpp`: `open()` finds the rvkgpu adapter (`AdapterSearch` over PCI identity), reads its LUID, opens `GuestConnection` and a Vulkan `KmtTransport` (ring order 20, 256 KiB commands, 64 KiB replies); a capset without Vulkan or no rvkgpu adapter answers `not_supported`; every transport call runs under the lock; a transport failure makes the connection faulted, after which it answers failure without calling the Kmt; `close()` tears down; test `tests/unit/icd/vulkan/test_connection.cpp` over `MockKmt`, `MockIcdMemory` and `RecordingLock`
+- [ ] T027 [US1] `IcdRoot` (system) in `src/icd/vulkan/icd_root.{hpp,cpp}` per contracts/loader_interface.md: negotiation (a request of 7 or more answers 7; 5 or 6 answer themselves; below 5 or null answers `VK_ERROR_INCOMPATIBLE_DRIVER`), `get_instance_proc_addr` (null instance: the six global names; an instance this ICD made: the table; anything else: null), `vkEnumerateInstanceExtensionProperties` (zero; a layer name answers `VK_ERROR_LAYER_NOT_PRESENT`), `vkEnumerateInstanceVersion` (1.3), `vkCreateInstance` (connection opened, host instance created, a handle wrapped; no adapter answers `VK_ERROR_INCOMPATIBLE_DRIVER`; any failure releases what it made), `vk_icdEnumerateAdapterPhysicalDevices` (the instance's physical device for its adapter's LUID, 0 for any other LUID, the same handles `vkEnumeratePhysicalDevices` answers, count/array semantics of the API); test `tests/unit/icd/vulkan/test_icd_root.cpp` scripting the host's replies with `ScriptedHost`
+- [ ] T028 [US1] Physical-device properties in `src/icd/vulkan/physical_device_view.{hpp,cpp}` (object: the host's answers and the adapter's LUID): `vkGetPhysicalDeviceProperties(2)` forwarded, then `apiVersion` = min(host, 1.3), and in a `VkPhysicalDeviceIDProperties` in the chain `deviceLUID` = the adapter's with `deviceLUIDValid` = `VK_TRUE`; a host reply cut short answers the properties cleared as the generated client leaves them; test `tests/unit/icd/vulkan/test_physical_device_view.cpp` including a host claiming 1.4 and one claiming 1.1
+
+### The DLL and its registration
+
+- [ ] T029 [US1] `src/um/vulkan/`: `rvkvk_exports.cpp` (the two exports, each one line into the root in `ObjectStorage`, and the DLL entry doing nothing at attach or detach), `process_heap.{hpp,cpp}` (`ProcessHeap` over `GetProcessHeap`/`HeapAlloc`/`HeapFree`), `srw_lock.{hpp,cpp}` over `AcquireSRWLockExclusive`, `file_log.{hpp,cpp}` appending to `C:\ProgramData\rvk\rvkvk-<pid>.log`, `rvkvk.def` (exactly the two exports), `rvkvk.json` (contracts/loader_interface.md); `src/um/imports/kernel32.def` gains what these call; `src/um/CMakeLists.txt` builds `rvkvk.dll` with `src/icd`, the generated `vk_icd_entries.cpp`, `vk_dispatch_client.cpp` and the ICD's `handle_to_wire` (the default handle file is not linked); ctest `rvkvk_image` runs `check_guest_image.py --dll --only-exports --require-export vk_icdNegotiateLoaderICDInterfaceVersion --require-export vk_icdGetInstanceProcAddr`
+- [ ] T030 [US1] `src/km/rvkgpu.inf`: `rvkvk.dll` and `rvkvk.json` copied to DIRID 13; `HKR,, VulkanDriverName, 0x00010000, "%13%\rvkvk.json"` in `[Rvkgpu_SoftwareSettings]`; `tools/check_driver_image.py` or a new `tools/check_inf.py` test asserts the value and that no `HKLM` Khronos key is written
+
+**Checkpoint**: the ICD answers the loader's calls over MockKmt, and a DLL exporting exactly two entry points builds. Commit.
+
+---
+
+## Phase 4: US2 - A Vulkan device runs on the host GPU (Priority: P1)
+
+**Goal**: devices, memory of every type (host-visible with no copy), command buffers, waits and device loss work through the loader in the guest.
+
+**Independent test**: `rvkvkprobe.exe` in the guest creates a device, runs a compute dispatch and an offscreen draw whose results it reads through `vkMapMemory`, and a forced context fault answers `VK_ERROR_DEVICE_LOST` with a recreated device working.
+
+- [ ] T031 [P] [US2] `CommandBatch` (object) in `src/icd/vulkan/command_batch.{hpp,cpp}`: a `ClientTransport` whose `request_writer` appends a framed command into chunks from `IcdMemory`, `send_async` keeps it, `send_sync` refuses (a recorded command never answers); begin drops what was recorded; end ships every recorded command through `Connection::send_batch` in one publish; a batch past the command limit answers `VK_ERROR_OUT_OF_HOST_MEMORY` at end; test `tests/unit/icd/vulkan/test_command_batch.cpp` (1000 `vkCmd*` commands cost one submit; framing of the shipped batch decodes command by command; allocation failure mid-recording)
+- [ ] T032 [P] [US2] `SlicedWait` (object) in `src/icd/vulkan/sliced_wait.{hpp,cpp}`: from a timeout in nanoseconds and the performance counter, answers the next slice (at most 500 ms) or that the deadline passed; `UINT64_MAX` never passes; test `tests/unit/icd/vulkan/test_sliced_wait.cpp` over a scripted clock (a 1.2 s timeout is three slices, 0 is one zero-length slice, wrap-free arithmetic at the counter's maximum); the ICD-local `vkWaitForFences`, `vkWaitSemaphores`, `vkQueueWaitIdle`, `vkDeviceWaitIdle` loop over it in `src/icd/vulkan/wait_entries.cpp` and answer `VK_TIMEOUT` when the deadline passes (test over `ScriptedHost` answering `VK_TIMEOUT` for each slice)
+- [ ] T033 [US2] `MemoryTypeTable` (object) in `src/icd/vulkan/memory_type_table.{hpp,cpp}`: from the host's `VkPhysicalDeviceMemoryProperties`, the host-pointer import mask (answered by a new ICD query command or derived from `VK_EXT_external_memory_host` properties of a host buffer) and `query_video_memory`: types keep `HOST_VISIBLE` only in the import mask, heap sizes are the adapter's budgets, types are never added; test `tests/unit/icd/vulkan/test_memory_type_table.cpp` with the two measured hosts (Intel mask `0x7f`, NVIDIA `0x18` with type 5 losing `HOST_VISIBLE`) and a hostile host (32 types, heap index past the heaps, mask naming a type that does not exist)
+- [ ] T034 [US2] `HostVisibleChunk` (object) and `ChunkAllocator` (system) in `src/icd/vulkan/host_visible_chunk.{hpp,cpp}`, `src/icd/vulkan/chunk_allocator.{hpp,cpp}`: a chunk is allocated (`host_visible_memory`, 64 MiB or the request's size if larger), made resident, locked, bound by escape and imported with `IMPORT_BLOB`; placements are first-fit page-aligned ranges answering `(chunk, offset)`; freeing a placement returns its range and a chunk with none is released (unbind, unlock, destroy); any step's failure answers `VK_ERROR_OUT_OF_DEVICE_MEMORY` and undoes the steps before it; tests `tests/unit/icd/vulkan/test_host_visible_chunk.cpp`, `test_chunk_allocator.cpp` (failure at each step, fragmentation, a request of exactly a chunk, one byte more)
+- [ ] T035 [US2] ICD-local memory entries in `src/icd/vulkan/memory_entries.cpp`: `vkGetPhysicalDeviceMemoryProperties(2)` from the table (with `VkPhysicalDeviceMemoryBudgetProperties` answered from `query_video_memory`), `vkAllocateMemory` (host-visible types through the chunk allocator; others forwarded), `vkFreeMemory`, `vkMapMemory` (the chunk's view plus offset; a device-local type answers `VK_ERROR_MAP_FAILED`; offset + size past the allocation answers `VK_ERROR_MAP_FAILED`), `vkUnmapMemory`, `vkFlushMappedMemoryRanges` and `vkInvalidateMappedMemoryRanges` (`VK_SUCCESS`: the memory is the same bytes); buffers and images on host-visible types are created with `VkExternalMemoryBufferCreateInfo`/`ImageCreateInfo` of `HOST_ALLOCATION` added by the executor (T017 path, extended to buffers and images, test first in `test_vulkan_backend_device.cpp`); test `tests/unit/icd/vulkan/test_memory_entries.cpp`
+- [ ] T036 [US2] Device loss in `src/icd/vulkan/`: after the connection faults every entry point that returns `VkResult` answers `VK_ERROR_DEVICE_LOST` without a Kmt call, mapped views stay readable until unmap, destroy calls succeed locally; a new instance opens a new connection; test `tests/unit/icd/vulkan/test_device_loss.cpp` over `MockKmt::withhold_answer_at`
+- [ ] T037 [US2] `VulkanProbe` (object) in `src/guest/suite/vulkan_probe.{hpp,cpp}` over the Vulkan C API (portable: on Linux it is linked against the ICD's `EntryTable` through a `VulkanEntry` seam, in the guest against `vulkan-1.dll`): steps instance, physical_device (reports the LUID's low part), device, compute (a 256-element doubling shader from `src/guest/suite/shaders/double.comp`, result read through `vkMapMemory`), draw (a full-screen triangle into a 64×64 `R8G8B8A8_UNORM` image, copied to a host-visible buffer and read back: every pixel the fragment shader's colour), lost (a forced fault - a truncated `vkCreateInstance` frame sent on the instance's own transport through a probe-only hook - answers `VK_ERROR_DEVICE_LOST`), recreated (a new instance and device run the compute step again); test first `tests/unit/guest/suite/test_vulkan_probe.cpp` over a scripted `VulkanEntry`
+- [ ] T038 [US2] `tests/loopback/test_fullstack_vulkan_icd.cpp`: the probe through the ICD's entry table over `FullStackRig` with `rvk_executor_ops()` bound to `WidestHostGpu`; every step passes on this machine; a host without Vulkan returns without judging
+- [ ] T039 [US2] `src/um/probe/`: `rvkvkprobe.exe` (freestanding, imports `vulkan-1.dll` through an import library built from `src/um/imports/vulkan-1.def`, plus gdi32/kernel32/ntdll), running `VulkanProbe` and printing the report; `check_guest_image.py` gains `--allow-import vulkan-1.dll` for it; ctest `rvkvkprobe_image`
+- [ ] T040 [US2] `tools/guest/run_guest_suite.py --vulkan`: pushes `rvkvk.dll`, `rvkvk.json` in the package (the catalog covers them), `vulkan-1.dll`, `vulkaninfo.exe` and `rvkvkprobe.exe` to `C:\rvk`; checks `reg query HKLM\SOFTWARE\Khronos\Vulkan\Drivers` has no rvk entry; runs `vulkaninfo --summary` and requires one rvk device whose LUID matches `D3DKMTEnumAdapters2`'s for the adapter (the probe prints both); runs `rvkvkprobe.exe` and judges its report; pulls `C:\ProgramData\rvk\*.log` into `diag/`; tests in `tests/tools/test_run_guest_suite.py` against the fake guest; `tools/gate.sh` runs it as a third boot after `--rvk` when the runtime is fetched
+
+**Checkpoint**: the probe passes through the ICD on the rig and in the guest. Commit.
+
+---
+
+## Phase 5: US3 - Only what is real is reported (Priority: P1)
+
+**Goal**: the guest sees exactly the extensions this path implements and tests.
+
+**Independent test**: enumerated device extensions equal the host's ∩ the allowlist ∩ `ExtensionPolicy`; each reported one is enabled and exercised by a test; WSI is absent.
+
+- [ ] T041 [P] [US3] `ExtensionPolicy` (object) in `src/icd/vulkan/extension_policy.{hpp,cpp}`: rows `{name, spec_version, test}` - for 045 `VK_EXT_memory_budget` (T035's test) and the extensions the probe enables; `vkEnumerateDeviceExtensionProperties` (ICD-local in `src/icd/vulkan/extension_entries.cpp`) answers the host's list ∩ `kImplementedDeviceExtensions` ∩ the policy, with the host's `specVersion` capped at the policy's; `vkCreateDevice` naming an extension outside that answers `VK_ERROR_EXTENSION_NOT_PRESENT` before any host call; `VK_KHR_surface`, `VK_KHR_win32_surface`, `VK_KHR_swapchain` and `VK_EXT_external_memory_host` are never reported (a test asserts each absent even when the host reports it); test `tests/unit/icd/vulkan/test_extension_policy.cpp` including a host listing 512 extensions and one listing a name with no terminator
+- [ ] T042 [US3] `tools/check_extension_policy.py` (ctest `extension_policy`): every policy row names a test that exists in `tests/`; every policy name is in `vk_supported_extensions.h`
+
+**Checkpoint**: the reported surface is exactly what is tested. Commit.
+
+---
+
+## Phase 6: Polish, the guest proof and the merge
+
+- [ ] T043 `docs/testing.md` "As built" describes the ICD's layers (MockKmt units, the full-stack probe, the `--vulkan` boot); `docs/protocol.md` the bind escape and `IMPORT_BLOB`; `docs/kb/07-usermode.md` gains the loader's discovery (research.md §1) as the knowledge base's record
+- [ ] T044 Coverage build: every new file under `src/icd`, `src/core`, `src/device`, `src/proto` at 100% branches (`ctest --test-dir build-coverage -R coverage_gate`)
+- [ ] T045 `AV_GUEST_IMAGE=... tools/gate.sh` passes with all three boots; merge to `master`; push
+
+---
+
+## Dependencies & Execution Order
+
+- Phase 1 has no dependencies; its four tool tasks are independent.
+- Phase 2 blocks Phase 4's memory work (T033-T035) and gates the design: **T020 must pass before T033**. Phase 2's KMD (T006-T010), device (T011-T015) and executor (T016-T018) groups touch disjoint directories.
+- Phase 3 needs T021-T023; US1's ICD tasks T024-T025 are independent of each other; T026 needs T025; T027 needs T024-T026; T029 needs T027 and T001.
+- Phase 4 needs Phase 3 and T020; T031-T032 are independent; T037-T040 come last.
+- Phase 5 needs T027; it can run beside Phase 4.
+
+### Parallel opportunities
+
+- Setup: T001-T004 by four builders in disjoint directories (`cmake/`+`src/um`, `tools/` ×3 - Python only, no C++ build collision).
+- Phase 2: the KMD (`src/core`, `src/proto/resources`), device (`src/device/memory`, `src/device/execution`, `src/device/qemu`) and executor (`src/device/executor`, `src/device/shim`) groups, one C++ builder at a time per build directory.
+- Phase 3: T024, T025, T028 are independent test files.
+
+## Implementation Strategy
+
+**Proof first**: Phase 2 - the one decision that is inference - is proven live before the ICD is built on it. **MVP**: Phases 1-3, the loader lists the rvk device with its LUID. **Then** US2's memory, workloads and device loss, US3's policy, and the third guest boot.
