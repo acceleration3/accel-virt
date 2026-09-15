@@ -28,6 +28,9 @@ public:
     Status   query_identity(uint32_t adapter, PciIdentity &identity) override;
     Status   query_driver_version(uint32_t adapter, uint32_t &version) override;
     Status   close_adapter(uint32_t adapter) override;
+    Status   adapter_luid(uint32_t adapter, uint64_t &luid) override;
+    Status   query_video_memory(uint32_t adapter, MemorySegmentGroup group, uint64_t &budget,
+                                uint64_t &usage) override;
     Status   create_device(uint32_t adapter, uint32_t &device) override;
     Status   destroy_device(uint32_t device) override;
     Status   create_allocation(uint32_t device, const uint8_t *descriptor, uint32_t size,
@@ -58,8 +61,14 @@ private:
     Status answer(int32_t code);
     Status await_event();
 
+    /* D3DKMT_ENUMADAPTERS2's limit on what one enumeration answers. */
+    static constexpr uint32_t max_adapters = 16u;
+
     void    *event_;
     uint32_t last_code_;
+    uint32_t known_adapters_[max_adapters];
+    uint64_t known_luids_[max_adapters];
+    uint32_t known_;
 };
 
 }  // namespace av

@@ -47,6 +47,8 @@ public:
         wait_for_context,
         wait_for_vertical_blank,
         escape,
+        adapter_luid,
+        query_video_memory,
         count
     };
     static constexpr std::uint32_t max_objects = 32u;
@@ -71,6 +73,11 @@ public:
     static constexpr std::uint32_t max_bindings = 8u;
     static constexpr std::uint32_t first_chunk_resource = 0x00100003u;
     static constexpr std::uint32_t not_supported = 0xC00000BBu;
+    /* The LUID the Nth adapter added answers until a test sets another:
+     * first_luid + N. */
+    static constexpr std::uint64_t first_luid = 0x0000000100000000ull;
+    static constexpr std::uint64_t default_local_budget = std::uint64_t{256} << 20u;
+    static constexpr std::uint64_t default_non_local_budget = std::uint64_t{1} << 30u;
     /* Answers a test can queue, and commands the journal keeps. */
     static constexpr std::uint32_t max_queued = 160u;
     static constexpr std::uint32_t max_journal = 128u;
@@ -86,6 +93,9 @@ public:
     Status        query_identity(std::uint32_t adapter, PciIdentity &identity) override;
     Status        query_driver_version(std::uint32_t adapter, std::uint32_t &version) override;
     Status        close_adapter(std::uint32_t adapter) override;
+    Status        adapter_luid(std::uint32_t adapter, std::uint64_t &luid) override;
+    Status        query_video_memory(std::uint32_t adapter, MemorySegmentGroup group, std::uint64_t &budget,
+                                     std::uint64_t &usage) override;
     Status        create_device(std::uint32_t adapter, std::uint32_t &device) override;
     Status        destroy_device(std::uint32_t device) override;
     Status        create_allocation(std::uint32_t device, const std::uint8_t *descriptor, std::uint32_t size,
@@ -118,6 +128,12 @@ public:
 
     /* An adapter enumeration opens; up to eight. */
     void          add_adapter(const PciIdentity &identity, std::uint32_t driver_version);
+    /* The LUID of the adapter added `index`th (0-based); past the adapters
+     * kept, nothing. */
+    void          set_adapter_luid(std::uint32_t index, std::uint64_t luid);
+    /* What a video memory query of `group` answers for every adapter; a group
+     * D3DKMT does not define is not kept. */
+    void          set_video_memory(MemorySegmentGroup group, std::uint64_t budget, std::uint64_t usage);
     /* The next enumeration claims this many adapters, whatever the capacity. */
     void          claim_adapters(std::uint32_t count);
     /* The Nth `call` from now (1-based) answers `code`; a success code answers success. */
@@ -217,6 +233,7 @@ private:
         std::uint32_t ring;
     };
     static constexpr std::uint32_t max_adapters = 8u;
+    static constexpr std::uint32_t segment_groups = 2u;
     static constexpr std::uint64_t first_address = 0x100000000ull;
 
     bool          begin(Call call);
@@ -239,6 +256,9 @@ private:
 
     PciIdentity   identities_[max_adapters];
     std::uint32_t versions_[max_adapters];
+    std::uint64_t luids_[max_adapters];
+    std::uint64_t budgets_[segment_groups];
+    std::uint64_t usages_[segment_groups];
     std::uint32_t adapter_count_;
     std::uint32_t claimed_;
     bool          claim_;

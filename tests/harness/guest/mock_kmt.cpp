@@ -25,7 +25,8 @@ constexpr std::uint32_t io_timeout = 0xC00000B5u;
 }  // namespace
 
 MockKmt::MockKmt()
-    : identities_{}, versions_{}, adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{},
+    : identities_{}, versions_{}, luids_{}, budgets_{default_local_budget, default_non_local_budget}, usages_{},
+      adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{},
       zeroing_{}, calls_{}, objects_{}, views_{}, locked_{}, large_views_{}, large_bytes_{}, escape_{},
       escape_size_(0u), escape_answer_{}, escape_answer_size_(0u), escape_scripted_(false), bind_pages_(0u), bound_resources_{},
       bound_history_{}, binds_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
@@ -149,6 +150,44 @@ Status MockKmt::close_adapter(std::uint32_t adapter)
 {
     if (!begin(Call::close_adapter)) return refuse(last_code_);
     return close(Kind::adapter, adapter);
+}
+
+Status MockKmt::adapter_luid(std::uint32_t adapter, std::uint64_t &luid)
+{
+    luid = 0u;
+    if (!begin(Call::adapter_luid)) return refuse(last_code_);
+    const Object *const object = find(Kind::adapter, adapter);
+    if (object == nullptr) return misuse();
+    if (!zeroed(Call::adapter_luid) && object->owner < adapter_count_) luid = luids_[object->owner];
+    return succeed();
+}
+
+Status MockKmt::query_video_memory(std::uint32_t adapter, MemorySegmentGroup group, std::uint64_t &budget,
+                                   std::uint64_t &usage)
+{
+    budget = 0u;
+    usage = 0u;
+    if (!begin(Call::query_video_memory)) return refuse(last_code_);
+    if (find(Kind::adapter, adapter) == nullptr) return misuse();
+    const auto index = static_cast<std::uint32_t>(group);
+    if (index >= segment_groups) return refuse(invalid_parameter);
+    if (zeroed(Call::query_video_memory)) return succeed();
+    budget = budgets_[index];
+    usage = usages_[index];
+    return succeed();
+}
+
+void MockKmt::set_adapter_luid(std::uint32_t index, std::uint64_t luid)
+{
+    if (index < max_adapters) luids_[index] = luid;
+}
+
+void MockKmt::set_video_memory(MemorySegmentGroup group, std::uint64_t budget, std::uint64_t usage)
+{
+    const auto index = static_cast<std::uint32_t>(group);
+    if (index >= segment_groups) return;
+    budgets_[index] = budget;
+    usages_[index] = usage;
 }
 
 Status MockKmt::create_device(std::uint32_t adapter, std::uint32_t &device)
@@ -595,6 +634,7 @@ void MockKmt::add_adapter(const PciIdentity &identity, std::uint32_t driver_vers
     if (adapter_count_ == max_adapters) return;
     identities_[adapter_count_] = identity;
     versions_[adapter_count_] = driver_version;
+    luids_[adapter_count_] = first_luid + adapter_count_;
     adapter_count_++;
 }
 

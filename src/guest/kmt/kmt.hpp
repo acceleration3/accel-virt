@@ -7,6 +7,7 @@
 #define AV_KMT_HPP
 
 #include "core/support/status.hpp"
+#include "guest/kmt/memory_segment_group.hpp"
 
 #include <stdint.h>
 
@@ -22,6 +23,14 @@ public:
     /* KMT_DRIVERVERSION: 3200 for WDDM 3.2. */
     virtual Status   query_driver_version(uint32_t adapter, uint32_t &version) = 0;
     virtual Status   close_adapter(uint32_t adapter) = 0;
+    /* The adapter's LUID as enumeration reports it, LowPart in the low 32 bits
+     * and HighPart in the high: what the Vulkan loader matches an ICD's
+     * physical device against. */
+    virtual Status   adapter_luid(uint32_t adapter, uint64_t &luid) = 0;
+    /* D3DKMTQueryVideoMemoryInfo for this process: how much of `group` it may
+     * use, and how much its devices use now. */
+    virtual Status   query_video_memory(uint32_t adapter, MemorySegmentGroup group, uint64_t &budget,
+                                        uint64_t &usage) = 0;
     virtual Status   create_device(uint32_t adapter, uint32_t &device) = 0;
     virtual Status   destroy_device(uint32_t device) = 0;
     virtual Status   create_allocation(uint32_t device, const uint8_t *descriptor, uint32_t size,

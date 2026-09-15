@@ -74,6 +74,20 @@ Status LoopbackKmt::query_driver_version(std::uint32_t, std::uint32_t &version)
 }
 
 Status LoopbackKmt::close_adapter(std::uint32_t) { return Status::ok; }
+
+Status LoopbackKmt::adapter_luid(std::uint32_t, std::uint64_t &answered)
+{
+    answered = luid;
+    return Status::ok;
+}
+
+Status LoopbackKmt::query_video_memory(std::uint32_t, MemorySegmentGroup, std::uint64_t &answered_budget,
+                                       std::uint64_t &usage)
+{
+    answered_budget = budget;
+    usage = 0u;
+    return Status::ok;
+}
 Status LoopbackKmt::create_device(std::uint32_t, std::uint32_t &device) { device = next_handle_++; return Status::ok; }
 Status LoopbackKmt::destroy_device(std::uint32_t) { return Status::ok; }
 

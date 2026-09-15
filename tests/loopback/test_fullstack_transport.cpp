@@ -9,6 +9,7 @@
 #include "core/miniport/ddi_table.hpp"
 #include "core/platform/platform.hpp"
 #include "core/support/status.hpp"
+#include "guest/kmt/memory_segment_group.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -93,6 +94,48 @@ TEST(fullstack_adapter, starts_on_the_real_device_core_with_its_capset_and_doorb
   /* BAR 0's doorbell pages, the virtio BAR and the MSI-X table stay mapped. */
   CHECK(rig.dxgkrnl().live_mappings() >= 2u);
   CHECK_EQ(rig.device().doorbells().stores(), 0u); }
+
+/* What a Vulkan ICD sizes its heaps and names its adapter by: the rig's LUID,
+ * and budgets that are the driver's own segments - the host-visible segment
+ * over the 64 MiB hostmem region is local, the aperture over the guest's 8 GiB
+ * of system memory is not - with this process's allocations counted where they
+ * live. */
+TEST(fullstack_adapter, the_luid_and_the_video_memory_budgets_are_the_drivers_segments)
+{ FullStackRig rig;
+  CHECK_EQ(rig.started(), 0);
+  DdiKmt &kmt = rig.kmt();
+  std::uint32_t adapter = 0u;
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
+  std::uint64_t luid = 0u;
+  CHECK_STATUS(kmt.adapter_luid(adapter, luid), Status::ok);
+  CHECK_EQ(luid, DdiKmt::rig_luid);
+  CHECK_STATUS(kmt.adapter_luid(adapter + 1u, luid), Status::invalid_parameter);
+  CHECK_EQ(luid, 0u);
+  std::uint64_t budget = 0u;
+  std::uint64_t usage = 1u;
+  CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::local, budget, usage), Status::ok);
+  CHECK_EQ(budget, FullStackRig::hostmem_bytes);
+  CHECK_EQ(usage, 0u);
+  CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::non_local, budget, usage), Status::ok);
+  CHECK_EQ(budget, std::uint64_t{8} << 30u);
+  CHECK_EQ(usage, 0u);
+  GuestConnection connection(kmt);
+  CHECK_STATUS(connection.open(adapter), Status::ok);
+  KmtTransport transport(connection, SubApi::vulkan, ring_order);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::non_local, budget, usage), Status::ok);
+  CHECK_EQ(usage, 8192u + 3u * 4096u);   /* the ring's two pages, the fence page, reply slot and DMA buffer */
+  CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::local, budget, usage), Status::ok);
+  CHECK_EQ(usage, 0u);
+  CHECK_STATUS(kmt.query_video_memory(adapter + 1u, av::MemorySegmentGroup::local, budget, usage),
+               Status::invalid_parameter);
+  CHECK_STATUS(kmt.query_video_memory(adapter, static_cast<av::MemorySegmentGroup>(2u), budget, usage),
+               Status::invalid_parameter);
+  CHECK(budget == 0u && usage == 0u);
+  transport.teardown();
+  connection.close();
+  CHECK_EQ(kmt.open_objects(), 0u); }
 
 TEST(fullstack_transport, an_echo_crosses_the_real_driver_and_the_real_device_core)
 { FullStackRig rig;

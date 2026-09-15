@@ -37,6 +37,7 @@ class MockPlatform;
 class DdiKmt final : public Kmt {
 public:
     static constexpr std::uint32_t adapter_handle = 0x00000100u;
+    static constexpr std::uint64_t rig_luid = 0x0000000100000100ull;
     static constexpr std::uint32_t max_devices = 8u;
     static constexpr std::uint32_t max_allocations = 32u;
     static constexpr std::uint32_t max_contexts = NodeFences::max_contexts;
@@ -64,6 +65,15 @@ public:
     Status   query_identity(std::uint32_t adapter, PciIdentity &identity) override;
     Status   query_driver_version(std::uint32_t adapter, std::uint32_t &version) override;
     Status   close_adapter(std::uint32_t adapter) override;
+    /* rig_luid, the one adapter's. */
+    Status   adapter_luid(std::uint32_t adapter, std::uint64_t &luid) override;
+    /* The budget is the size of the segments the driver reports in the group,
+     * asked through QUERYSEGMENT4 as VidMm asks: local those that are neither
+     * an aperture nor populated from system memory, non-local the rest. The
+     * usage is what this process holds there: every allocation lives in the
+     * aperture or VidMm's system memory segment, so all of it is non-local. */
+    Status   query_video_memory(std::uint32_t adapter, MemorySegmentGroup group, std::uint64_t &budget,
+                                std::uint64_t &usage) override;
     Status   create_device(std::uint32_t adapter, std::uint32_t &device) override;
     Status   destroy_device(std::uint32_t device) override;
     Status   create_allocation(std::uint32_t device, const std::uint8_t *descriptor, std::uint32_t size,

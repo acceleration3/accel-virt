@@ -26,6 +26,11 @@ static_assert(__builtin_offsetof(D3DKMT_UNLOCK2, hAllocation) == 0x04u);
 static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, hAdapter) == 0x00u);
 static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, hDevice) == 0x04u);
 static_assert(__builtin_offsetof(D3DKMT_WAITFORVERTICALBLANKEVENT, VidPnSourceId) == 0x08u);
+static_assert(__builtin_offsetof(D3DKMT_ADAPTERINFO, AdapterLuid) == 0x04u);
+static_assert(__builtin_offsetof(D3DKMT_QUERYVIDEOMEMORYINFO, hAdapter) == 0x08u);
+static_assert(__builtin_offsetof(D3DKMT_QUERYVIDEOMEMORYINFO, MemorySegmentGroup) == 0x0Cu);
+static_assert(__builtin_offsetof(D3DKMT_QUERYVIDEOMEMORYINFO, Budget) == 0x10u);
+static_assert(__builtin_offsetof(D3DKMT_QUERYVIDEOMEMORYINFO, CurrentUsage) == 0x18u);
 static_assert(__builtin_offsetof(D3DKMT_ESCAPE, Type) == 0x08u);
 static_assert(__builtin_offsetof(D3DKMT_ESCAPE, pPrivateDriverData) == 0x10u);
 static_assert(__builtin_offsetof(D3DKMT_ESCAPE, PrivateDriverDataSize) == 0x18u);
@@ -35,7 +40,6 @@ namespace av {
 
 namespace {
 
-constexpr uint32_t max_adapters = 16u;
 constexpr uint64_t page_bytes = 4096u;
 constexpr size_t   max_descriptor_bytes = 256u;
 /* STATUS_IO_TIMEOUT: a failure, where STATUS_TIMEOUT would read as success. */
@@ -43,7 +47,7 @@ constexpr uint32_t timed_out = 0xC00000B5u;
 
 }  // namespace
 
-GdiKmt::GdiKmt() : event_(nullptr), last_code_(0u) {}
+GdiKmt::GdiKmt() : event_(nullptr), last_code_(0u), known_adapters_{}, known_luids_{}, known_(0u) {}
 
 GdiKmt::~GdiKmt()
 {
@@ -79,8 +83,39 @@ Status GdiKmt::enumerate_adapters(uint32_t *adapters, uint32_t capacity, uint32_
     enumeration.pAdapters = infos;
     const Status status = answer(D3DKMTEnumAdapters2(&enumeration));
     count = status == Status::ok ? enumeration.NumAdapters : 0u;
-    for (uint32_t index = 0u; index < count && index < capacity && index < max_adapters; index++)
-        adapters[index] = infos[index].hAdapter;
+    known_ = 0u;
+    for (uint32_t index = 0u; index < count && index < max_adapters; index++) {
+        const uint64_t luid = static_cast<uint64_t>(static_cast<uint32_t>(infos[index].AdapterLuid.HighPart)) << 32u |
+                              infos[index].AdapterLuid.LowPart;
+        known_adapters_[known_] = infos[index].hAdapter;
+        known_luids_[known_] = luid;
+        known_++;
+        if (index < capacity) adapters[index] = infos[index].hAdapter;
+    }
+    return status;
+}
+
+/* D3DKMTQueryAdapterInfo has no LUID query for an open adapter, so the LUID is
+ * the one the enumeration that opened the handle reported. */
+Status GdiKmt::adapter_luid(uint32_t adapter, uint64_t &luid)
+{
+    luid = 0u;
+    for (uint32_t index = 0u; index < known_; index++) {
+        if (known_adapters_[index] != adapter) continue;
+        luid = known_luids_[index];
+        return answer(0);
+    }
+    return answer(NtStatus(Status::invalid_parameter).value());
+}
+
+Status GdiKmt::query_video_memory(uint32_t adapter, MemorySegmentGroup group, uint64_t &budget, uint64_t &usage)
+{
+    D3DKMT_QUERYVIDEOMEMORYINFO query = {};
+    query.hAdapter = adapter;
+    query.MemorySegmentGroup = static_cast<D3DKMT_MEMORY_SEGMENT_GROUP>(group);
+    const Status status = answer(D3DKMTQueryVideoMemoryInfo(&query));
+    budget = status == Status::ok ? query.Budget : 0u;
+    usage = status == Status::ok ? query.CurrentUsage : 0u;
     return status;
 }
 

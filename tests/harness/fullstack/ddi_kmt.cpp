@@ -26,6 +26,7 @@
 #include "harness/dxgkrnl/fake_dxgkrnl_fdo.hpp"
 #include "harness/fullstack/interrupt_pump.hpp"
 #include "harness/host/mock_host.hpp"
+#include "harness/vidmm/fake_vidmm.hpp"
 #include "harness/platform/mock_platform.hpp"
 
 #include <cstdlib>
@@ -42,6 +43,8 @@ constexpr std::int32_t  unmap_aperture_segment = 6;   /* DXGK_OPERATION_UNMAP_AP
 constexpr std::uint32_t accessed_physically = 0x8000u; /* DXGK_ALLOCATIONINFOFLAGS */
 constexpr std::uint32_t virtual_addressing = 0x4u;     /* DXGK_CREATECONTEXTFLAGS */
 constexpr std::uint32_t first_engine = 1u;
+constexpr std::uint32_t segment_aperture = 0x1u;              /* DXGK_SEGMENTFLAGS */
+constexpr std::uint32_t segment_from_system_memory = 0x40u;
 /* VidSch's root for a context: the implicit system memory segment, one page
  * of 512 entries (FakeVidSch::set_root_page_table). */
 constexpr std::uint32_t root_segment = 2u;
@@ -177,6 +180,33 @@ Status DdiKmt::query_driver_version(std::uint32_t adapter, std::uint32_t &versio
 Status DdiKmt::close_adapter(std::uint32_t adapter)
 {
     return refuse(adapter == adapter_handle ? Status::ok : Status::invalid_parameter);
+}
+
+Status DdiKmt::adapter_luid(std::uint32_t adapter, std::uint64_t &luid)
+{
+    luid = adapter == adapter_handle ? rig_luid : 0u;
+    return refuse(adapter == adapter_handle ? Status::ok : Status::invalid_parameter);
+}
+
+Status DdiKmt::query_video_memory(std::uint32_t adapter, MemorySegmentGroup group, std::uint64_t &budget,
+                                  std::uint64_t &usage)
+{
+    budget = 0u;
+    usage = 0u;
+    const bool local = group == MemorySegmentGroup::local;
+    if (adapter != adapter_handle || (!local && group != MemorySegmentGroup::non_local))
+        return refuse(Status::invalid_parameter);
+    FakeVidMm          segments(fdo_.dxgadapter());
+    const std::int32_t queried = segments.create_segments(fdo_.context());
+    if (queried < 0) return answer(queried);
+    for (std::uint32_t index = 0u; index < segments.answer().NbSegment; index++) {
+        const DxgkSegmentDescriptor4Record descriptor = segments.segment(index);
+        const bool in_system_memory = (descriptor.Flags & (segment_aperture | segment_from_system_memory)) != 0u;
+        if (in_system_memory != local) budget += descriptor.Size;
+    }
+    if (!local)
+        for (const Allocation &slot : allocations_) usage += slot.handle != 0u ? slot.bytes : 0u;
+    return refuse(Status::ok);
 }
 
 Status DdiKmt::create_device(std::uint32_t adapter, std::uint32_t &device)

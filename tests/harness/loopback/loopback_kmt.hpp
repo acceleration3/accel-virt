@@ -23,6 +23,9 @@ public:
     static constexpr std::uint32_t max_allocations = 32u;
     static constexpr std::uint32_t max_contexts    = 8u;
     static constexpr std::uint32_t first_resource  = 0x00100000u;
+    /* What the one adapter answers, whatever is asked. */
+    static constexpr std::uint64_t luid            = 0x0000000100000001ull;
+    static constexpr std::uint64_t budget          = std::uint64_t{64} << 20u;
 
     LoopbackKmt(MockPlatform &platform, LoopbackDevice &device);
 
@@ -30,6 +33,9 @@ public:
     Status   query_identity(std::uint32_t adapter, PciIdentity &identity) override;
     Status   query_driver_version(std::uint32_t adapter, std::uint32_t &version) override;
     Status   close_adapter(std::uint32_t adapter) override;
+    Status   adapter_luid(std::uint32_t adapter, std::uint64_t &luid) override;
+    Status   query_video_memory(std::uint32_t adapter, MemorySegmentGroup group, std::uint64_t &budget,
+                                std::uint64_t &usage) override;
     Status   create_device(std::uint32_t adapter, std::uint32_t &device) override;
     Status   destroy_device(std::uint32_t device) override;
     Status   create_allocation(std::uint32_t device, const std::uint8_t *descriptor, std::uint32_t size,

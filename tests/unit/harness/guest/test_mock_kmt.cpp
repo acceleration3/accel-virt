@@ -1,6 +1,7 @@
 /* The mock is the in-guest suite's only oracle on Linux: its bookkeeping is
  * tested like any other code. */
 #include "core/support/status.hpp"
+#include "guest/kmt/memory_segment_group.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/client_descriptor.hpp"
 #include "guest/transport/guest_connection.hpp"
@@ -36,6 +37,7 @@ using av::Status;
 namespace {
 
 const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
+constexpr std::uint32_t refused_code = 0xC0000001u;
 
 }  // namespace
 
@@ -782,6 +784,106 @@ TEST(mock_kmt_play_at_wait, runs_the_callback_at_the_nth_wait_only)
   CHECK_EQ(played.times, 1u);
   CHECK_STATUS(kmt.wait_for_context(rig.device(), context), Status::ok);
   CHECK_EQ(played.times, 2u); }
+
+/* Each adapter answers the LUID a test gave it - by default one of its own -
+ * whichever handle an enumeration opened it as; an adapter the enumeration
+ * claimed but was never added answers 0. */
+TEST(mock_kmt_adapter_luid, answers_each_adapters_luid_by_the_order_it_was_added)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  kmt.add_adapter(PciIdentity(0x1414u, 0x008Cu, 0u, 0u), 3100u);
+  kmt.set_adapter_luid(1u, 0x0000000200000034ull);
+  std::uint32_t adapters[3] = {};
+  std::uint32_t count = 0u;
+  kmt.claim_adapters(3u);
+  CHECK_STATUS(kmt.enumerate_adapters(adapters, 3u, count), Status::ok);
+  std::uint64_t luid = 1u;
+  CHECK_STATUS(kmt.adapter_luid(adapters[0], luid), Status::ok);
+  CHECK_EQ(luid, MockKmt::first_luid);
+  CHECK_STATUS(kmt.adapter_luid(adapters[1], luid), Status::ok);
+  CHECK_EQ(luid, 0x0000000200000034ull);
+  CHECK_STATUS(kmt.adapter_luid(adapters[2], luid), Status::ok);
+  CHECK_EQ(luid, 0u);
+  /* Past the adapters the mock keeps, a LUID is not kept. */
+  kmt.set_adapter_luid(8u, 9u);
+  std::uint32_t again[1] = {};
+  CHECK_STATUS(kmt.enumerate_adapters(again, 1u, count), Status::ok);
+  CHECK_STATUS(kmt.adapter_luid(again[0], luid), Status::ok);
+  CHECK_EQ(luid, MockKmt::first_luid);
+  CHECK_EQ(kmt.calls(MockKmt::Call::adapter_luid), 4u);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
+TEST(mock_kmt_adapter_luid, a_handle_it_never_gave_a_failure_and_a_zero_answer)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  std::uint32_t adapter = 0u;
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
+  std::uint64_t luid = 7u;
+  CHECK_STATUS(kmt.adapter_luid(adapter + 4u, luid), Status::invalid_parameter);
+  CHECK_EQ(luid, 0u);
+  CHECK_EQ(kmt.misuses(), 1u);
+  kmt.fail_at(MockKmt::Call::adapter_luid, 1u, refused_code);
+  luid = 7u;
+  CHECK_STATUS(kmt.adapter_luid(adapter, luid), Status::invalid_state);
+  CHECK_EQ(luid, 0u);
+  CHECK_EQ(kmt.last_code(), refused_code);
+  kmt.zero_next(MockKmt::Call::adapter_luid);
+  CHECK_STATUS(kmt.adapter_luid(adapter, luid), Status::ok);
+  CHECK_EQ(luid, 0u);
+  CHECK_STATUS(kmt.adapter_luid(adapter, luid), Status::ok);
+  CHECK_EQ(luid, MockKmt::first_luid); }
+
+/* The budget and usage of each segment group are what a test scripts, by
+ * default the mock's own; a group D3DKMT does not define is refused. */
+TEST(mock_kmt_query_video_memory, answers_the_scripted_budget_and_usage_of_each_group)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  std::uint32_t adapter = 0u;
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
+  std::uint64_t budget = 0u;
+  std::uint64_t usage = 1u;
+  CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::local, budget, usage), Status::ok);
+  CHECK_EQ(budget, MockKmt::default_local_budget);
+  CHECK_EQ(usage, 0u);
+  CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::non_local, budget, usage), Status::ok);
+  CHECK_EQ(budget, MockKmt::default_non_local_budget);
+  kmt.set_video_memory(av::MemorySegmentGroup::non_local, 1u << 30u, 1u << 20u);
+  CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::non_local, budget, usage), Status::ok);
+  CHECK_EQ(budget, 1u << 30u);
+  CHECK_EQ(usage, 1u << 20u);
+  CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::local, budget, usage), Status::ok);
+  CHECK_EQ(budget, MockKmt::default_local_budget);   /* the other group is untouched */
+  kmt.set_video_memory(static_cast<av::MemorySegmentGroup>(2u), 5u, 5u);
+  CHECK_STATUS(kmt.query_video_memory(adapter, static_cast<av::MemorySegmentGroup>(2u), budget, usage),
+               Status::invalid_parameter);
+  CHECK_EQ(budget, 0u);
+  CHECK_EQ(usage, 0u);
+  CHECK_EQ(kmt.last_code(), MockKmt::invalid_parameter);
+  CHECK_EQ(kmt.misuses(), 0u);
+  CHECK_EQ(kmt.calls(MockKmt::Call::query_video_memory), 5u); }
+
+TEST(mock_kmt_query_video_memory, a_handle_it_never_gave_a_failure_and_a_zero_answer)
+{ MockKmt kmt;
+  kmt.add_adapter(rvk, 3200u);
+  std::uint32_t adapter = 0u;
+  std::uint32_t count = 0u;
+  CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
+  std::uint64_t budget = 9u;
+  std::uint64_t usage = 9u;
+  CHECK_STATUS(kmt.query_video_memory(0u, av::MemorySegmentGroup::local, budget, usage), Status::invalid_parameter);
+  CHECK(budget == 0u && usage == 0u);
+  CHECK_EQ(kmt.misuses(), 1u);
+  kmt.fail_at(MockKmt::Call::query_video_memory, 1u, refused_code);
+  CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::local, budget, usage), Status::invalid_state);
+  CHECK_EQ(kmt.last_code(), refused_code);
+  kmt.zero_next(MockKmt::Call::query_video_memory);
+  budget = 9u;
+  usage = 9u;
+  CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::local, budget, usage), Status::ok);
+  CHECK(budget == 0u && usage == 0u);
+  CHECK_EQ(kmt.misuses(), 1u); }
 
 /* A lock of an allocation larger than the views the mock keeps inline addresses
  * the whole allocation, zeroed, until it is unlocked. */

@@ -18,6 +18,7 @@ D3DKMTLock2
 D3DKMTMakeResident
 D3DKMTMapGpuVirtualAddress
 D3DKMTQueryAdapterInfo
+D3DKMTQueryVideoMemoryInfo
 D3DKMTSignalSynchronizationObjectFromGpu2
 D3DKMTSubmitCommand
 D3DKMTUnlock2
