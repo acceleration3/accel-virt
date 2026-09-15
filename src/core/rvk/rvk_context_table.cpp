@@ -144,10 +144,12 @@ Status RvkContextTable::unbind(void *context, VirtioGpuDevice *device)
     RvkContextBinding &binding = bindings_[slot].object();
     const bool held = binding.state() == GuestContext::State::established ||
                       binding.state() == GuestContext::State::failed;
-    /* The chunks first: the host may hold their pages imported until the
-     * context's executor goes, which its teardown below makes happen. */
-    release_chunks(slot, held ? device : nullptr);
-    if (!held || device == nullptr || binding.tear_down(*device) != Status::ok) binding.abandon();
+    /* The context before its chunks: the device keeps a chunk it holds imported
+     * and refuses to release it, and destroying the context is what ends every
+     * import it made. */
+    const bool torn_down = held && device != nullptr && binding.tear_down(*device) == Status::ok;
+    release_chunks(slot, torn_down ? device : nullptr);
+    if (!torn_down) binding.abandon();
     release(slot);
     return Status::ok;
 }

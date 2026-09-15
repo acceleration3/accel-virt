@@ -876,10 +876,11 @@ TEST(rvk_context_table_bind_chunk, the_context_s_chunk_slots_full_refuses_the_ne
       CHECK(fixture.table().user_of(chunks[index]->allocation()) == nullptr);
   CHECK(fixture.table().invariants_hold()); }
 
-/* A context torn down releases its chunks before its own blobs and its host
- * context: the host may hold a chunk's pages imported until the context goes. A
- * second context's chunks take its own range. */
-TEST(rvk_context_table_bind_chunk, teardown_releases_the_chunks_first_and_ranges_are_per_context)
+/* A context torn down is destroyed on the device before its chunks are
+ * released: the device refuses to release a chunk it still holds imported, and
+ * destroying the context ends its imports. A second context's chunks take its
+ * own range. */
+TEST(rvk_context_table_bind_chunk, teardown_destroys_the_context_before_its_chunks_and_ranges_are_per_context)
 { Fixture fixture;
   Host host(fixture.mapped());
   CHECK_STATUS(fixture.bind(&first_context), Status::ok);
@@ -889,15 +890,15 @@ TEST(rvk_context_table_bind_chunk, teardown_releases_the_chunks_first_and_ranges
   HostVisibleBindRecord answer;
   CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
-  CHECK_EQ(host.field(unref_type, 0u, 24u), chunk_base);
-  /* The chunk went before the host context did. */
-  std::uint32_t first_unref = 0u;
+  /* CTX_DESTROY, then the three transport unrefs, then the chunk's. */
+  std::uint32_t chunk_unref = 0u;
   std::uint32_t destroy = 0u;
   for (std::uint32_t i = 0u; i < host.queue().requests(); i++) {
-      if (host.queue().request_type(i) == unref_type && first_unref == 0u) first_unref = i;
+      if (host.queue().request_type(i) == unref_type) chunk_unref = i;
       if (host.queue().request_type(i) == ctx_destroy_type) destroy = i;
   }
-  CHECK(first_unref < destroy);
+  CHECK(destroy < chunk_unref);
+  CHECK_EQ(host.field(unref_type, 3u, 24u), chunk_base);
   CHECK(fixture.table().user_of(chunk.allocation()) == nullptr);
   CHECK(fixture.table().invariants_hold());
 
