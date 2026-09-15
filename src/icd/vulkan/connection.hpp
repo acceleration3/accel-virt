@@ -59,6 +59,11 @@ public:
     /* What the generated wrappers send through, only while open: the root
      * closes a connection only as it destroys it. */
     ClientTransport     &transport();
+    /* `length` bytes of commands a CommandBatch framed, published as one
+     * submission under the lock, only while open; failed for a batch the
+     * transport refuses whole or a faulted transport. None of them asks for an
+     * answer, so none is waited for. */
+    [[nodiscard]] TransportResult send_batch(const uint8_t *framed, size_t length);
 
     bool invariants_hold() const;
 

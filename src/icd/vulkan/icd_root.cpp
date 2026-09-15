@@ -7,6 +7,7 @@
 #include "icd/vulkan/log_sink.hpp"
 #include "icd/vulkan/physical_device_view.hpp"
 #include "icd/vulkan/thread_lock.hpp"
+#include "proto/generated/vulkan/vk_dispatch_client.h"
 #include "proto/generated/vulkan/vk_icd_entries.h"
 
 namespace av::icd {
@@ -33,11 +34,21 @@ const Entry        local_rows[] = {
     {"vkDestroyDevice", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyDevice), Level::device},
     {"vkGetPhysicalDeviceProperties", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceProperties), Level::physical_device},
     {"vkGetPhysicalDeviceProperties2", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceProperties2), Level::physical_device},
+    {"vkGetDeviceQueue", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetDeviceQueue), Level::device},
+    {"vkGetDeviceQueue2", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetDeviceQueue2), Level::device},
+    {"vkAllocateCommandBuffers", reinterpret_cast<PFN_vkVoidFunction>(&local_vkAllocateCommandBuffers), Level::device},
+    {"vkFreeCommandBuffers", reinterpret_cast<PFN_vkVoidFunction>(&local_vkFreeCommandBuffers), Level::device},
+    {"vkBeginCommandBuffer", reinterpret_cast<PFN_vkVoidFunction>(&local_vkBeginCommandBuffer), Level::device},
+    {"vkEndCommandBuffer", reinterpret_cast<PFN_vkVoidFunction>(&local_vkEndCommandBuffer), Level::device},
+    {"vkResetCommandBuffer", reinterpret_cast<PFN_vkVoidFunction>(&local_vkResetCommandBuffer), Level::device},
 };
 constexpr uint32_t local_row_count = sizeof local_rows / sizeof local_rows[0];
 /* VK_API_VERSION_1_3, spelled without the header macro's C casts. */
 constexpr uint32_t vulkan_1_3 = (1u << 22u) | (3u << 12u);
 constexpr size_t   line_bytes = 160u;
+/* The most command buffers one vkAllocateCommandBuffers stages the host's
+ * handles for, on the stack; the generated wrappers hold the same bound. */
+constexpr uint32_t max_allocated_at_once = 1024u;
 
 }  // namespace
 
@@ -45,7 +56,7 @@ IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &se
                  IcdBinding &binding)
     : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), log_(log), binding_(binding),
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
-      entry_points_(local_rows, local_row_count), handles_(memory), connections_(memory), pending_(nullptr)
+      entry_points_(local_rows, local_row_count), batches_(memory), handles_(memory), connections_(memory), pending_(nullptr)
 {
     binding_.bind(*this);
 }
@@ -199,12 +210,47 @@ void IcdRoot::release_connection(Connection *connection)
 void *IcdRoot::wrap(LoaderHandle::Kind kind, uint64_t host, Connection *connection)
 {
     lock_.acquire();
-    ScopeExit     release([&] { lock_.release(); });
-    LoaderHandle *parent = kind == LoaderHandle::Kind::instance ? nullptr : handles_.instance_of(connection);
+    ScopeExit           release([&] { lock_.release(); });
+    LoaderHandle *const parent = kind == LoaderHandle::Kind::instance ? nullptr : handles_.instance_of(connection);
+    return wrap_under(kind, host, connection, parent);
+}
+
+/* Under the root's lock. A command buffer is not a handle without its batch:
+ * every vkCmd* on it records there. */
+LoaderHandle *IcdRoot::wrap_under(LoaderHandle::Kind kind, uint64_t host, Connection *connection,
+                                  LoaderHandle *parent)
+{
     LoaderHandle *handle = nullptr;
     const Status  status = handles_.wrap(kind, host, connection, parent, handle);
-    if (status != Status::ok) note("no handle for host object, status", static_cast<uint64_t>(status));
+    if (status != Status::ok) {
+        note("no handle for host object, status", static_cast<uint64_t>(status));
+        return nullptr;
+    }
+    if (kind != LoaderHandle::Kind::command_buffer || handle->batch() != nullptr) return handle;
+    CommandBatch *batch = nullptr;
+    if (batches_.create(batch, memory_, *connection) != Status::ok) {
+        note("no batch for host command buffer", host);
+        /* The handle was made just now, so the registry cannot refuse it. */
+        static_cast<void>(handles_.destroy(handle));
+        return nullptr;
+    }
+    handle->record_into(batches_, *batch);
     return handle;
+}
+
+/* The registry refuses a device destroyed since it was looked up. */
+void *IcdRoot::wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &device)
+{
+    lock_.acquire();
+    ScopeExit release([&] { lock_.release(); });
+    return wrap_under(kind, host, device.connection(), &device);
+}
+
+LoaderHandle *IcdRoot::handle_of(void *handle, LoaderHandle::Kind kind)
+{
+    lock_.acquire();
+    ScopeExit release([&] { lock_.release(); });
+    return handles_.made(handle, kind);
 }
 
 Connection *IcdRoot::connection_of(void *handle, LoaderHandle::Kind kind)
@@ -231,11 +277,97 @@ void IcdRoot::destroy_wrapper(void *handle, LoaderHandle::Kind kind)
         log_.write("rvkvk: destroy of a handle this driver did not make");
 }
 
-/* The loader reached this through the command buffer's own dispatch table, so
- * it is a handle this ICD made. */
-ClientTransport &IcdRoot::record_target(VkCommandBuffer command_buffer)
+CommandBatch &IcdRoot::record_target(VkCommandBuffer command_buffer)
 {
-    return connection_of(command_buffer, LoaderHandle::Kind::command_buffer)->transport();
+    lock_.acquire();
+    ScopeExit release([&] { lock_.release(); });
+    return *handles_.made(command_buffer, LoaderHandle::Kind::command_buffer)->batch();
+}
+
+void IcdRoot::device_queue(VkDevice device, uint32_t family, uint32_t index, VkQueue *queue)
+{
+    LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
+    if (made == nullptr) return;
+    uint64_t host = 0u;
+    vkproto::rvk_vkGetDeviceQueue(made->connection()->transport(), device, family, index, &host);
+    *queue = static_cast<VkQueue>(wrap_child(LoaderHandle::Kind::queue, host, *made));
+}
+
+void IcdRoot::device_queue2(VkDevice device, const VkDeviceQueueInfo2 *info, VkQueue *queue)
+{
+    LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
+    if (made == nullptr) return;
+    uint64_t host = 0u;
+    vkproto::rvk_vkGetDeviceQueue2(made->connection()->transport(), device, info, &host);
+    *queue = static_cast<VkQueue>(wrap_child(LoaderHandle::Kind::queue, host, *made));
+}
+
+VkResult IcdRoot::allocate_command_buffers(VkDevice device, const VkCommandBufferAllocateInfo *info,
+                                           VkCommandBuffer *command_buffers)
+{
+    LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
+    if (made == nullptr) {
+        log_.write("rvkvk: vkAllocateCommandBuffers on a device this driver did not make");
+        return VK_ERROR_DEVICE_LOST;
+    }
+    const uint32_t count = info->commandBufferCount;
+    if (count > max_allocated_at_once) {
+        note("vkAllocateCommandBuffers: more command buffers at once than", max_allocated_at_once);
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    uint64_t       hosts[max_allocated_at_once] = {};
+    const VkResult result = vkproto::rvk_vkAllocateCommandBuffers(made->connection()->transport(), device, info, hosts);
+    if (result != VK_SUCCESS) return result;
+    for (uint32_t wrapped = 0u; wrapped < count; wrapped++) {
+        command_buffers[wrapped] =
+            static_cast<VkCommandBuffer>(wrap_child(LoaderHandle::Kind::command_buffer, hosts[wrapped], *made));
+        if (command_buffers[wrapped] != VK_NULL_HANDLE) continue;
+        /* The ones already handed out go back; the host's others stay in their
+         * pool until it is reset or destroyed, with no handle to name them by. */
+        free_command_buffers(device, info->commandPool, wrapped, command_buffers);
+        note("vkAllocateCommandBuffers: host command buffers left in their pool:", count - wrapped);
+        for (uint32_t cleared = 0u; cleared < count; cleared++) command_buffers[cleared] = VK_NULL_HANDLE;
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    return VK_SUCCESS;
+}
+
+void IcdRoot::free_command_buffers(VkDevice device, VkCommandPool pool, uint32_t count,
+                                   const VkCommandBuffer *command_buffers)
+{
+    Connection *const connection = connection_of(device, LoaderHandle::Kind::device);
+    if (connection == nullptr) return;
+    vkproto::rvk_vkFreeCommandBuffers(connection->transport(), device, pool, count, command_buffers);
+    for (uint32_t index = 0u; index < count; index++)
+        if (command_buffers[index] != VK_NULL_HANDLE)
+            destroy_wrapper(command_buffers[index], LoaderHandle::Kind::command_buffer);
+}
+
+VkResult IcdRoot::begin_command_buffer(VkCommandBuffer command_buffer, const VkCommandBufferBeginInfo *info)
+{
+    CommandBatch &batch = record_target(command_buffer);
+    batch.discard();
+    if (vkproto::rvk_vkBeginCommandBuffer(batch, command_buffer, info) == VK_SUCCESS) return VK_SUCCESS;
+    log_.write("rvkvk: vkBeginCommandBuffer: no memory to record into");
+    return VK_ERROR_OUT_OF_HOST_MEMORY;
+}
+
+/* A command that could not be recorded, End's own included, is latched in the
+ * batch, so what end() answers is the whole recording's answer. */
+VkResult IcdRoot::end_command_buffer(VkCommandBuffer command_buffer)
+{
+    CommandBatch  &batch = record_target(command_buffer);
+    const VkResult recorded = vkproto::rvk_vkEndCommandBuffer(batch, command_buffer);
+    const Status   shipped = batch.end();
+    if (shipped == Status::ok) return recorded;
+    note("vkEndCommandBuffer: batch not shipped, status", static_cast<uint64_t>(shipped));
+    return shipped == Status::no_memory ? VK_ERROR_OUT_OF_HOST_MEMORY : VK_ERROR_DEVICE_LOST;
+}
+
+VkResult IcdRoot::reset_command_buffer(VkCommandBuffer command_buffer, VkCommandBufferResetFlags flags)
+{
+    record_target(command_buffer).discard();
+    return vkicd::generated::Wrap_vkResetCommandBuffer(command_buffer, flags);
 }
 
 uint32_t IcdRoot::handles_on_connections() const
@@ -253,6 +385,8 @@ bool IcdRoot::invariants_hold() const
     /* The entry point tables are constant: a row named twice is a build
      * mistake the root's tests see as a wrong answer, not a state it reaches. */
     if (pending_ != nullptr || !handles_.invariants_hold() || handles_on_connections() != handles_.live()) return false;
+    if (!batches_.invariants_hold() || batches_.live() != handles_.batches()) return false;
+    if (!batches_.all_of([](const CommandBatch &batch) { return batch.invariants_hold(); })) return false;
     return connections_.all_of([](const Connection &connection) {
         return connection.opened() && connection.invariants_hold();
     });

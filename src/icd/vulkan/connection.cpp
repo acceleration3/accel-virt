@@ -5,6 +5,7 @@
 #include "guest/kmt/kmt.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
+#include "icd/vulkan/thread_lock.hpp"
 #include "proto/context/sub_api.hpp"
 
 namespace av::icd {
@@ -52,6 +53,14 @@ bool             Connection::opened() const { return locked_.constructed(); }
 bool             Connection::faulted() const { return opened() && transport_.object().faulted(); }
 uint64_t         Connection::luid() const { return luid_; }
 ClientTransport &Connection::transport() { return locked_.object(); }
+
+TransportResult Connection::send_batch(const uint8_t *framed, size_t length)
+{
+    lock_.acquire();
+    ScopeExit  release([&] { lock_.release(); });
+    WireReader unanswered(nullptr, 0u);
+    return transport_.object().send_batch(framed, length, unanswered);
+}
 
 bool Connection::invariants_hold() const
 {

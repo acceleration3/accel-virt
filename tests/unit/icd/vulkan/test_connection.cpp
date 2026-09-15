@@ -21,6 +21,7 @@
 #include "proto/context/sub_api.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
+#include "proto/submission/command_header.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -332,3 +333,43 @@ TEST(connection, invariants_see_a_half_open_connection)
   connection.close();
   CHECK(connection.invariants_hold());
   CHECK_EQ(rig.platform().live_allocations(), 0u); }
+
+namespace {
+
+/* `count` framed commands of eight bytes of body each, numbered from `id`. */
+std::size_t frame(std::uint8_t *bytes, std::uint32_t id, std::uint32_t count)
+{
+    for (std::uint32_t index = 0u; index < count; index++)
+        CHECK_STATUS(av::CommandHeader(id + index, 16u, 0u).encode(bytes + 16u * index, 8u), Status::ok);
+    return 16u * count;
+}
+
+}  // namespace
+
+TEST(connection, a_batch_of_framed_commands_is_one_submission_under_the_lock)
+{ Rig rig;
+  CHECK_STATUS(rig.connection().open(), Status::ok);
+  std::uint8_t framed[48] = {};
+  const std::size_t length = frame(framed, av::vkproto::kCmd_vkCmdDraw, 3u);
+  const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);
+  CHECK(rig.connection().send_batch(framed, length) == av::TransportResult::ok);
+  CHECK(rig.connection().invariants_hold());
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted + 1u);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), 0u);
+  CHECK_EQ(rig.kmt().commands(), 1u);
+  CHECK_EQ(rig.kmt().command_id(0u), static_cast<std::uint32_t>(av::vkproto::kCmd_vkCmdDraw));
+  CHECK_EQ(rig.kmt().command_size(0u), 16u);
+  CHECK(std::strcmp(rig.trace().text(), "Ss") == 0); }
+
+TEST(connection, a_batch_that_does_not_frame_is_refused_before_it_is_published)
+{ Rig rig;
+  CHECK_STATUS(rig.connection().open(), Status::ok);
+  std::uint8_t framed[48] = {};
+  const std::size_t length = frame(framed, av::vkproto::kCmd_vkCmdDraw, 3u);
+  CHECK(rig.connection().send_batch(framed, length - 1u) == av::TransportResult::failed);
+  CHECK(rig.connection().send_batch(framed, 0u) == av::TransportResult::failed);
+  CHECK(rig.connection().invariants_hold());
+  CHECK(!rig.connection().faulted());
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), 0u);
+  CHECK(!rig.lock().held());
+  CHECK(std::strcmp(rig.trace().text(), "SsSs") == 0); }

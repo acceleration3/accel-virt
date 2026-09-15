@@ -44,8 +44,8 @@ Connection *connection_of(VkCommandBuffer command_buffer);
 /* The instance's handle and everything made through it. */
 void destroy_wrapper(VkInstance instance);
 
-/* Where a command buffer's commands go. Integration point: T031 answers the
- * command buffer's own CommandBatch; until then its connection's transport. */
+/* Where a command buffer's commands go: its own CommandBatch, which ships them
+ * when the command buffer ends. */
 ClientTransport &record_target(VkCommandBuffer command_buffer);
 
 }  // namespace av::icd

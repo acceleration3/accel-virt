@@ -1,10 +1,29 @@
 #include "icd/vulkan/loader_handle.hpp"
 
+#include "core/support/object_pool.hpp"
+#include "icd/vulkan/command_batch.hpp"
+
 namespace av::icd {
 
 LoaderHandle::LoaderHandle(Kind kind, uint64_t host, Connection *connection, LoaderHandle *parent)
     : loader_data_(reinterpret_cast<void *>(loader_magic)), host_(host), connection_(connection), kind_(kind),
-      parent_(parent) {}
+      parent_(parent), batches_(nullptr), batch_(nullptr) {}
+
+LoaderHandle::~LoaderHandle()
+{
+    if (batch_ == nullptr) return;
+    /* A batch is only ever taken from the pool it names, and only this handle
+     * destroys it. */
+    static_cast<void>(batches_->destroy(batch_));
+}
+
+void LoaderHandle::record_into(ObjectPool<CommandBatch> &batches, CommandBatch &batch)
+{
+    batches_ = &batches;
+    batch_ = &batch;
+}
+
+CommandBatch *LoaderHandle::batch() const { return batch_; }
 
 LoaderHandle::Kind LoaderHandle::kind() const { return kind_; }
 uint64_t           LoaderHandle::host() const { return host_; }
@@ -26,6 +45,8 @@ bool LoaderHandle::descends_from(const LoaderHandle &ancestor) const
 bool LoaderHandle::invariants_hold() const
 {
     if (host_ == 0u || connection_ == nullptr) return false;
+    if ((batch_ == nullptr) != (batches_ == nullptr)) return false;
+    if (batch_ != nullptr && kind_ != Kind::command_buffer) return false;
     if (kind_ == Kind::instance) return parent_ == nullptr;
     return parent_ != nullptr && parent_->kind_ < kind_ && parent_->connection_ == connection_;
 }

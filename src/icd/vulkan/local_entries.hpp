@@ -32,6 +32,21 @@ VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceProperties(VkPhysicalDevice 
                                                                VkPhysicalDeviceProperties *pProperties);
 VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
                                                                 VkPhysicalDeviceProperties2 *pProperties);
+VKAPI_ATTR void VKAPI_CALL local_vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex,
+                                                  VkQueue *pQueue);
+VKAPI_ATTR void VKAPI_CALL local_vkGetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2 *pQueueInfo,
+                                                   VkQueue *pQueue);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkAllocateCommandBuffers(VkDevice device,
+                                                              const VkCommandBufferAllocateInfo *pAllocateInfo,
+                                                              VkCommandBuffer *pCommandBuffers);
+VKAPI_ATTR void VKAPI_CALL local_vkFreeCommandBuffers(VkDevice device, VkCommandPool commandPool,
+                                                      uint32_t commandBufferCount,
+                                                      const VkCommandBuffer *pCommandBuffers);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkBeginCommandBuffer(VkCommandBuffer commandBuffer,
+                                                          const VkCommandBufferBeginInfo *pBeginInfo);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkEndCommandBuffer(VkCommandBuffer commandBuffer);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkResetCommandBuffer(VkCommandBuffer commandBuffer,
+                                                          VkCommandBufferResetFlags flags);
 
 }  // namespace av::icd
 

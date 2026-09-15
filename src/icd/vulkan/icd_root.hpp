@@ -15,6 +15,7 @@
 
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
+#include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/entry_points.hpp"
 #include "icd/vulkan/handle_registry.hpp"
@@ -70,6 +71,20 @@ public:
                                                   VkPhysicalDeviceProperties *properties);
     void               physical_device_properties2(VkPhysicalDevice physical_device,
                                                    VkPhysicalDeviceProperties2 *properties);
+    /* Queues and command buffers are made through their device, so destroying
+     * the device destroys their handles and every command buffer's batch. */
+    void               device_queue(VkDevice device, uint32_t family, uint32_t index, VkQueue *queue);
+    void               device_queue2(VkDevice device, const VkDeviceQueueInfo2 *info, VkQueue *queue);
+    VkResult           allocate_command_buffers(VkDevice device, const VkCommandBufferAllocateInfo *info,
+                                                VkCommandBuffer *command_buffers);
+    void               free_command_buffers(VkDevice device, VkCommandPool pool, uint32_t count,
+                                            const VkCommandBuffer *command_buffers);
+    /* Begin drops what the batch held and records into it; end ships it in one
+     * publish; reset drops it and goes to the host at once, since a buffer
+     * reset may never be recorded into again. */
+    VkResult           begin_command_buffer(VkCommandBuffer command_buffer, const VkCommandBufferBeginInfo *info);
+    VkResult           end_command_buffer(VkCommandBuffer command_buffer);
+    VkResult           reset_command_buffer(VkCommandBuffer command_buffer, VkCommandBufferResetFlags flags);
 
     /* What the generated wrappers' hooks forward to (icd_hooks.cpp). */
     Connection      *acquire_connection();
@@ -78,15 +93,21 @@ public:
     Connection      *connection_of(void *handle, LoaderHandle::Kind kind);
     uint64_t         wire(void *handle, LoaderHandle::Kind kind);
     void             destroy_wrapper(void *handle, LoaderHandle::Kind kind);
-    ClientTransport &record_target(VkCommandBuffer command_buffer);
+    /* The loader reached this through the command buffer's own dispatch table,
+     * so it is a command buffer this ICD made. */
+    CommandBatch    &record_target(VkCommandBuffer command_buffer);
 
-    /* Every connection open, every handle on a live connection, and nothing
-     * pending outside vkCreateInstance. */
+    /* Every connection open, every handle on a live connection, every batch
+     * owned by a command buffer, and nothing pending outside vkCreateInstance. */
     bool invariants_hold() const;
 
 private:
     [[nodiscard]] Status open_connection(Connection *&opened);
     void                 note(const char *what, uint64_t value);
+    LoaderHandle        *wrap_under(LoaderHandle::Kind kind, uint64_t host, Connection *connection,
+                                    LoaderHandle *parent);
+    void                *wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &device);
+    LoaderHandle        *handle_of(void *handle, LoaderHandle::Kind kind);
     uint32_t             handles_on_connections() const;
 
     BlockSource           &memory_;
@@ -98,6 +119,9 @@ private:
     uint32_t               api_version_;
     EntryPoints            before_instance_;
     EntryPoints            entry_points_;
+    /* Before the handles: a command buffer's handle destroys its batch in this
+     * pool, so the pool outlives every handle. */
+    ObjectPool<CommandBatch> batches_;
     HandleRegistry         handles_;
     ObjectPool<Connection> connections_;
     Connection            *pending_;

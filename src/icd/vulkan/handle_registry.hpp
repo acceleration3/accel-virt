@@ -49,6 +49,8 @@ public:
     uint32_t             live() const;
     /* How many of them send through `connection`. */
     uint32_t             live_on(const Connection *connection) const;
+    /* How many command buffers own a batch. */
+    uint32_t             batches() const;
 
     bool invariants_hold() const;
 

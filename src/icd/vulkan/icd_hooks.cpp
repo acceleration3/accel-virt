@@ -8,6 +8,7 @@
  * library links av_core and defines its own. They sit beside hooks every
  * wrapper references, so the object is always pulled into a link that uses the
  * wrappers, and the weak defaults never win there. */
+#include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "icd/vulkan/loader_handle.hpp"

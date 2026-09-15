@@ -6,6 +6,13 @@
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
+#include "core/support/object_pool.hpp"
+#include "guest/transport/kmt_transport.hpp"
+#include "harness/guest/mock_kmt.hpp"
+#include "harness/icd/lock_trace.hpp"
+#include "harness/icd/recording_thread_lock.hpp"
+#include "icd/vulkan/command_batch.hpp"
+#include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/handle_registry.hpp"
 #include "icd/vulkan/loader_handle.hpp"
 
@@ -27,6 +34,13 @@ struct LoaderHandleProbe {
     static void        set_parent(LoaderHandle &handle, LoaderHandle *parent) { handle.parent_ = parent; }
     static void        set_host(LoaderHandle &handle, std::uint64_t host) { handle.host_ = host; }
     static void        set_kind(LoaderHandle &handle, Kind kind) { handle.kind_ = kind; }
+    static ObjectPool<CommandBatch> *forget_pool(LoaderHandle &handle)
+    {
+        ObjectPool<CommandBatch> *const pool = handle.batches_;
+        handle.batches_ = nullptr;
+        return pool;
+    }
+    static void restore_pool(LoaderHandle &handle, ObjectPool<CommandBatch> *pool) { handle.batches_ = pool; }
 };
 
 struct HandleRegistryProbe {
@@ -406,3 +420,75 @@ TEST(handle_registry, invariants_see_a_dangling_parent_and_a_duplicate)
   CHECK(!registry.invariants_hold());
   ObjectPoolProbe::miscount(HandleRegistryProbe::pool(registry), -1);
   CHECK(registry.invariants_hold()); }
+
+namespace {
+
+/* A connection a batch can name: a batch records into memory and reaches its
+ * connection only at end, which these tests never call. */
+class BatchSource {
+public:
+    BatchSource() : lock_(trace_, 'S'), connection_(kmt_, platform_, lock_), batches_(platform_) {}
+
+    MockPlatform                          &platform() { return platform_; }
+    av::ObjectPool<av::icd::CommandBatch> &batches() { return batches_; }
+
+    av::icd::CommandBatch &make()
+    {
+        av::icd::CommandBatch *batch = nullptr;
+        CHECK_STATUS(batches_.create(batch, platform_, connection_), Status::ok);
+        return *batch;
+    }
+
+private:
+    av::MockKmt                           kmt_;
+    MockPlatform                          platform_;
+    av::LockTrace                         trace_;
+    av::RecordingThreadLock               lock_;
+    Connection                            connection_;
+    av::ObjectPool<av::icd::CommandBatch> batches_;
+};
+
+}  // namespace
+
+TEST(loader_handle, a_command_buffer_owns_its_batch_until_it_is_destroyed)
+{ BatchSource source;
+  {
+      LoaderHandle instance(Kind::instance, instance_host, first, nullptr);
+      LoaderHandle command_buffer(Kind::command_buffer, 0x5500u, first, &instance);
+      CHECK(command_buffer.batch() == nullptr);
+      av::icd::CommandBatch &batch = source.make();
+      command_buffer.record_into(source.batches(), batch);
+      CHECK(command_buffer.invariants_hold());
+      CHECK(command_buffer.batch() == &batch);
+      CHECK_EQ(source.batches().live(), 1u);
+  }
+  CHECK_EQ(source.batches().live(), 0u);
+  CHECK_EQ(source.platform().live_allocations(), 0u); }
+
+TEST(handle_registry, destroying_a_device_takes_its_command_buffers_batches_and_counts_them)
+{ MockPlatform platform;
+  BatchSource source;
+  HandleRegistry registry(platform);
+  Tree tree(registry);
+  CHECK_EQ(registry.batches(), 0u);
+  tree.command_buffer->record_into(source.batches(), source.make());
+  CHECK(registry.invariants_hold());
+  CHECK_EQ(registry.batches(), 1u);
+  CHECK_STATUS(registry.destroy(tree.device), Status::ok);
+  CHECK(registry.invariants_hold());
+  CHECK_EQ(registry.batches(), 0u);
+  CHECK_EQ(source.batches().live(), 0u); }
+
+TEST(loader_handle, invariants_refuse_a_batch_on_anything_but_a_command_buffer_or_without_its_pool)
+{ BatchSource source;
+  LoaderHandle instance(Kind::instance, instance_host, first, nullptr);
+  LoaderHandle device(Kind::device, device_host, first, &instance);
+  av::icd::CommandBatch &batch = source.make();
+  device.record_into(source.batches(), batch);
+  CHECK(!device.invariants_hold());
+  LoaderHandleProbe::set_kind(device, Kind::command_buffer);
+  CHECK(device.invariants_hold());
+  av::ObjectPool<av::icd::CommandBatch> *const pool = LoaderHandleProbe::forget_pool(device);
+  CHECK(!device.invariants_hold());
+  LoaderHandleProbe::restore_pool(device, pool);
+  CHECK(device.invariants_hold()); }

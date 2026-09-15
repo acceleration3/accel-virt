@@ -81,6 +81,16 @@ uint32_t HandleRegistry::live_on(const Connection *connection) const
     return counted;
 }
 
+uint32_t HandleRegistry::batches() const
+{
+    uint32_t counted = 0u;
+    static_cast<void>(pool_.all_of([&](const LoaderHandle &handle) {
+        if (handle.batch() != nullptr) counted++;
+        return true;
+    }));
+    return counted;
+}
+
 bool HandleRegistry::unique(const LoaderHandle &handle) const
 {
     uint32_t sharing = 0u;

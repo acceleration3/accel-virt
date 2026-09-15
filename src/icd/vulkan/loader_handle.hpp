@@ -7,14 +7,22 @@
  * virtual function to put a vtable pointer in front of it, and nothing here reads
  * it again. Everything after it is the ICD's: the host's handle for the object,
  * the connection its commands cross, and the handle it was made through, whose
- * kind is always a lower one - which is what makes a chain of parents finite. */
+ * kind is always a lower one - which is what makes a chain of parents finite. A command buffer also owns the
+ * batch its commands record into, which goes when the handle does, however it
+ * is destroyed: by itself, or with its device or instance. */
 #ifndef AV_ICD_LOADER_HANDLE_HPP
 #define AV_ICD_LOADER_HANDLE_HPP
 
 #include <stdint.h>
 
+namespace av {
+template <typename T>
+class ObjectPool;
+}
+
 namespace av::icd {
 
+class CommandBatch;
 class Connection;
 struct LoaderHandleProbe;
 
@@ -26,6 +34,8 @@ public:
     static constexpr uintptr_t loader_magic = 0x01CDC0DEu;
 
     LoaderHandle(Kind kind, uint64_t host, Connection *connection, LoaderHandle *parent);
+    /* Destroys the batch it owns in the pool it came from. */
+    ~LoaderHandle();
     LoaderHandle(const LoaderHandle &) = delete;
     LoaderHandle &operator=(const LoaderHandle &) = delete;
 
@@ -37,9 +47,15 @@ public:
     bool          names(Kind kind, uint64_t host, const Connection *connection) const;
     /* Whether `ancestor` is on the chain of parents above this. */
     bool          descends_from(const LoaderHandle &ancestor) const;
+    /* Takes `batch`, made in `batches`, as the batch this command buffer's
+     * commands record into. */
+    void          record_into(ObjectPool<CommandBatch> &batches, CommandBatch &batch);
+    /* The batch it owns; null for anything but a command buffer given one. */
+    CommandBatch *batch() const;
 
     /* An instance has no parent and anything else has one of a lower kind on
-     * the same connection; the host never names an object 0. */
+     * the same connection; the host never names an object 0; only a command
+     * buffer owns a batch, together with the pool it came from. */
     bool invariants_hold() const;
 
 private:
@@ -48,6 +64,8 @@ private:
     Connection   *connection_;
     Kind          kind_;
     LoaderHandle *parent_;
+    ObjectPool<CommandBatch> *batches_;
+    CommandBatch             *batch_;
 
     friend struct LoaderHandleProbe;
 };

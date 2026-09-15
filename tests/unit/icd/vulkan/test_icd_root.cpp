@@ -87,6 +87,7 @@ using QueueWaitIdle = VkResult (*)(VkQueue);
 using AllocateCommandBuffers = VkResult (*)(VkDevice, const VkCommandBufferAllocateInfo *, VkCommandBuffer *);
 using CmdDraw = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
 using ResetCommandBuffer = VkResult (*)(VkCommandBuffer, VkCommandBufferResetFlags);
+using EndCommandBuffer = VkResult (*)(VkCommandBuffer);
 using Properties = void (*)(VkPhysicalDevice, VkPhysicalDeviceProperties *);
 using Properties2 = void (*)(VkPhysicalDevice, VkPhysicalDeviceProperties2 *);
 
@@ -193,14 +194,21 @@ TEST(icd_root, an_instance_it_made_answers_every_entry_point_with_its_own_rows_f
   const VkInstance instance = rig.create_instance();
   CHECK(instance != VK_NULL_HANDLE);
   IcdRoot &root = rig.root();
+  /* The generated commands the ICD answers itself. */
+  const char *const overridden[] = {
+      "vkCreateInstance", "vkDestroyDevice", "vkGetPhysicalDeviceProperties", "vkGetPhysicalDeviceProperties2",
+      "vkGetDeviceQueue", "vkGetDeviceQueue2", "vkAllocateCommandBuffers", "vkFreeCommandBuffers",
+      "vkBeginCommandBuffer", "vkEndCommandBuffer", "vkResetCommandBuffer"};
   std::uint32_t wrappers = 0u;
   for (const av::vkicd::generated::Entry &row : av::vkicd::generated::wrapper_entries()) {
       const PFN_vkVoidFunction found = root.instance_proc_addr(instance, row.name);
       CHECK(found != nullptr);
+      bool local = false;
+      for (const char *name : overridden) local = local || std::strcmp(name, row.name) == 0;
+      CHECK((found == row.fn) != local);
       if (found == row.fn) wrappers++;
   }
-  /* Four wrappers are overridden: vkCreateInstance, vkDestroyDevice and both property queries. */
-  CHECK_EQ(wrappers, av::vkicd::generated::wrapper_entries().size() - 4u);
+  CHECK_EQ(wrappers, av::vkicd::generated::wrapper_entries().size() - sizeof overridden / sizeof overridden[0]);
   CHECK(root.instance_proc_addr(instance, "vkDestroyDevice") == entry_of(&av::icd::local_vkDestroyDevice));
   CHECK(root.instance_proc_addr(instance, "vkCreateInstance") == entry_of(&av::icd::local_vkCreateInstance));
   CHECK(root.instance_proc_addr(instance, "vkGetPhysicalDeviceProperties2") ==
@@ -659,13 +667,17 @@ TEST(icd_root, queues_and_command_buffers_cross_as_the_hosts_handles)
            VK_SUCCESS);
   CHECK(rig.root().invariants_hold());
   CHECK_EQ(av::vkproto::handle_to_wire(command_buffer), command_buffer_host);
+  /* A recorded command crosses in its batch, at the end. */
+  const std::uint32_t sent = rig.kmt().commands();
   rig.entry<CmdDraw>(instance, "vkCmdDraw")(command_buffer, 3u, 1u, 0u, 0u);
+  CHECK_EQ(rig.kmt().commands(), sent);
+  CHECK_EQ(rig.entry<EndCommandBuffer>(instance, "vkEndCommandBuffer")(command_buffer), VK_SUCCESS);
   WireReader drawn = body_of(rig.kmt(), rig.kmt().commands() - 1u);
   CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), static_cast<std::uint32_t>(kCmd_vkCmdDraw));
   CHECK_EQ(drawn.read_u64(), command_buffer_host);
   CHECK_EQ(drawn.read_u32(), 3u);
-  rig.host().vk_result(VK_SUCCESS);
   CHECK_EQ(rig.entry<ResetCommandBuffer>(instance, "vkResetCommandBuffer")(command_buffer, 0u), VK_SUCCESS);
+  CHECK_EQ(rig.kmt().command_id(rig.kmt().commands() - 1u), static_cast<std::uint32_t>(kCmd_vkResetCommandBuffer));
   CHECK(av::icd::connection_of(command_buffer) == av::icd::connection_of(instance));
   rig.destroy_instance(instance);
   CHECK(rig.root().invariants_hold()); }
