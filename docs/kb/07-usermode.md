@@ -74,6 +74,41 @@ Even the vkd3d path reaches the kernel, because a Windows Vulkan ICD must:
 `d3dkmthk.h` in the SDK is the complete list. Every one of those lands in your
 KMD as a DDI call. That is the contract that actually matters for this project.
 
+## How the Vulkan loader finds an ICD on a WDDM adapter
+
+Read from Khronos Vulkan-Loader `bde79ad2dd83` for feature 045; it is the record
+`src/km/rvkgpu.inf` and `rvkvk.dll` are written against.
+
+- **Discovery is per adapter.** `windows_read_manifest_from_d3d_adapters`
+  (`loader_windows.c:499`) enumerates adapters with `D3DKMTEnumAdapters2` and
+  reads each one's `VulkanDriverName` from the adapter's software key through
+  `D3DKMTQueryAdapterInfo(KMTQAITYPE_QUERYREGISTRY, D3DDDI_QUERYREGISTRY_ADAPTERKEY)`,
+  as `REG_MULTI_SZ` then `REG_SZ` (`REG_EXPAND_SZ` is refused). So the INF writes
+  `HKR,, VulkanDriverName, 0x00010000, "%13%\rvkvk.json"` in the software
+  settings and nothing under `HKLM\SOFTWARE\Khronos\Vulkan\Drivers`, which the
+  loader reads additively and would list the device twice from.
+- **The manifest's library path.** A relative `library_path` is joined to the
+  manifest's directory only when it contains a backslash (`loader.c:2460`):
+  `.\\rvkvk.dll`, not `rvkvk.dll`.
+- **Interface version 7.** Only `vk_icdGetInstanceProcAddr` must be exported;
+  `vk_icdNegotiateLoaderICDInterfaceVersion` is exported too, and
+  `vkCreateInstance`, `vkEnumerateInstanceExtensionProperties`,
+  `vk_icdGetPhysicalDeviceProcAddr` and `vk_icdEnumerateAdapterPhysicalDevices`
+  are answered through `vk_icdGetInstanceProcAddr(NULL, name)` (`loader.c:2112`).
+- **Adapters by LUID.** The loader calls `vk_icdEnumerateAdapterPhysicalDevices`
+  with each DXGI adapter's LUID (`loader_windows.c:853`); the ICD answers its
+  physical device only for its own adapter's LUID, and the same handle
+  `vkEnumeratePhysicalDevices` answers, since the loader de-duplicates by handle.
+  `VkPhysicalDeviceIDProperties.deviceLUID` is that LUID.
+- **Dispatchable objects** are plain structures whose first pointer-sized field
+  the ICD sets to `ICD_LOADER_MAGIC` (`0x01CDC0DE`) and the loader overwrites
+  with its dispatch table.
+- **Load and unload.** The DLL is loaded, freed and loaded again while drivers
+  are scanned, and `DllMain` runs under the OS loader lock, so attach and detach
+  do nothing; the loader holds its own `loader_lock` around the scan and around
+  `vkCreateInstance`, which is what lets an ICD construct its state on the first
+  call without racing.
+
 ## Presenting from Vulkan
 
 `VK_KHR_win32_surface` + `VK_KHR_swapchain` on Windows are implemented by the

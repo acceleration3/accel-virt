@@ -417,6 +417,38 @@ fence-page interrupt (see Fence page). A reply-generating command's answer is in
 the reply slot before the fence completes, so a process that waited reads a
 finished answer.
 
+## Host-visible bind record (user mode -> guest driver, escape)
+
+The private data of one `D3DKMTEscape` whose `hContext` names a live rvk
+context (feature 045). A process binds a chunk of its host-visible memory - an
+allocation of kind `host_visible_memory`, resident and locked - to the context,
+and the miniport publishes the chunk's pages as a `GUEST` blob in one of the
+context's 64 chunk slots, which IMPORT_BLOB then names. The miniport decodes it
+at `PASSIVE` and treats every byte as hostile; it writes the answer back into the
+same bytes. 32 bytes.
+
+| Offset | Type | Field | Rule |
+|--:|---|---|---|
+| 0 | u32 | magic | `RVKH` = `0x484B5652` |
+| 4 | u16 | version | 1 |
+| 6 | u16 | operation | 1 bind, 2 unbind |
+| 8 | u32 | allocation | the chunk's D3DKMT handle in the calling process |
+| 12 | u32 | resource_id | bind: 0 in, the chunk's resource out; unbind: the resource to release |
+| 16 | u64 | pages | 0 in; bind: the chunk's page count out |
+| 24 | u64 | reserved | 0 |
+
+An escape whose data is not this record, or that names no context, answers
+`STATUS_NOT_SUPPORTED` as every other escape does. After that every refusal is
+`STATUS_INVALID_PARAMETER` and sends nothing: a wrong version, operation or
+reserved field; an allocation not of this process or not of kind
+`host_visible_memory`; pages not complete; the context's chunk slots full; an
+unbind of a resource not bound on the context. A bind sends
+`RESOURCE_CREATE_BLOB` (`GUEST`, the pages as memory entries); an unbind sends
+`RESOURCE_UNREF`, which the device refuses while an import holds the blob.
+Tearing a context down unbinds its chunks before its own three resources, and a
+chunk freed while bound destroys its context, as a freed ring does: the host may
+still hold the pages imported.
+
 ## Present command (guest driver -> device, in a DMA buffer)
 
 What `DxgkDdiPresent` writes at the start of the DMA buffer dxgkrnl gives it,
