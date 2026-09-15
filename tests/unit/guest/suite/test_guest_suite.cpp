@@ -10,6 +10,7 @@
 #include "guest/suite/gpu_mapping_scenario.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/guest_suite.hpp"
+#include "guest/suite/host_visible_import_scenario.hpp"
 #include "guest/suite/host_visible_scenario.hpp"
 #include "guest/suite/submission_scenario.hpp"
 #include "guest/suite/timeout_scenario.hpp"
@@ -29,6 +30,7 @@ using av::FenceStressScenario;
 using av::GpuMappingScenario;
 using av::GuestReport;
 using av::GuestSuite;
+using av::HostVisibleImportScenario;
 using av::HostVisibleScenario;
 using av::MockKmt;
 using av::PciIdentity;
@@ -725,8 +727,9 @@ TEST(timeout_scenario, a_setup_that_fails_stops_the_run_where_it_failed)
 
 /* Feature 044: a run whose device loaded the real executor asks only for the
  * scenarios that send it work - the transport's no-op, the Vulkan chain, vector
- * add, an OpenGL context and fault isolation, in that order - and none of the
- * WDDM scenarios the echo run already covers. */
+ * add, the host GPU's copy between two imported chunks (045), an OpenGL context
+ * and fault isolation, in that order - and none of the WDDM scenarios the echo
+ * run already covers. */
 TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_adapter)
 { MockKmt kmt;
   kmt.add_adapter(rvk, AdapterScenario::wddm_3_2);
@@ -734,10 +737,19 @@ TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_ad
   host.transport_run();
   host.vulkan_run();
   host.opencl_run();
+  host.host_visible_import_run();
   host.transport_run();
   host.healthy_context();
-  const std::uint32_t before_fault = 2u * av::ScriptedHost::transport_waits + av::ScriptedHost::vulkan_waits +
-                                     av::ScriptedHost::opencl_waits + av::ScriptedHost::isolation_waits_before_fault;
+  const std::uint32_t before_import =
+      av::ScriptedHost::transport_waits + av::ScriptedHost::vulkan_waits + av::ScriptedHost::opencl_waits;
+  /* The host GPU's copy, played on the chunks' views at the import's fence wait. */
+  kmt.play_at_wait(before_import + av::ScriptedHost::host_visible_import_copy_wait, [](void *played) {
+      MockKmt &mock = *static_cast<MockKmt *>(played);
+      std::memcpy(mock.view_of(mock.bound_allocation(1u)), mock.view_of(mock.bound_allocation(0u)),
+                  HostVisibleImportScenario::copy_bytes);
+  }, &kmt);
+  const std::uint32_t before_fault = before_import + av::ScriptedHost::host_visible_import_waits +
+                                     av::ScriptedHost::transport_waits + av::ScriptedHost::isolation_waits_before_fault;
   kmt.withhold_answer_at(before_fault + 1u);
   host.healthy_context();
   host.nop();
@@ -746,8 +758,9 @@ TEST(guest_suite_run_rvk, runs_only_the_rvk_scenarios_in_order_and_closes_the_ad
   const std::uint32_t failed = suite.run_rvk();
   CHECK_EQ(failed, 0u);
   const char *const order[] = {"ok adapter.find\n", "ok transport.nop 0\n", "ok vulkan.bind\n",
-                               "ok opencl.sum 64\n", "ok opengl.nop 0\n", "ok isolation.relink\n",
-                               "ok suite.close_adapter\n", "rvktest: 51 passed, 0 failed\n"};
+                               "ok opencl.sum 64\n", "ok import.copied 1048576\n", "ok import.release\n",
+                               "ok opengl.nop 0\n", "ok isolation.relink\n",
+                               "ok suite.close_adapter\n", "rvktest: 82 passed, 0 failed\n"};
   const char *at = report.text();
   for (const char *line : order) {
       const char *const found = std::strstr(at, line);
@@ -766,9 +779,10 @@ TEST(guest_suite_run_rvk, without_the_adapter_every_rvk_scenario_fails_at_its_fi
 { MockKmt kmt;
   GuestReport report;
   GuestSuite suite(kmt, report, 0u);
-  CHECK_EQ(suite.run_rvk(), 6u);
+  CHECK_EQ(suite.run_rvk(), 7u);
   const char *const lines[] = {"FAIL adapter.find", "FAIL transport.adapter status=3",
                                "FAIL vulkan.adapter status=3", "FAIL opencl.adapter status=3",
-                               "FAIL opengl.adapter status=3", "FAIL isolation.adapter status=3"};
+                               "FAIL import.adapter status=3", "FAIL opengl.adapter status=3",
+                               "FAIL isolation.adapter status=3"};
   for (const char *line : lines) CHECK(std::strstr(report.text(), line) != nullptr);
   CHECK_EQ(kmt.calls(MockKmt::Call::create_device), 0u); }

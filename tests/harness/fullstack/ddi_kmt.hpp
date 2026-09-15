@@ -31,6 +31,7 @@ class FakeDxgkrnlAdapter;
 class FakeDxgkrnlFdo;
 class FakeVirtioGpuFunction;
 class InterruptPump;
+class MockHost;
 class MockPlatform;
 
 class DdiKmt final : public Kmt {
@@ -48,8 +49,13 @@ public:
     /* STATUS_IO_TIMEOUT, what GdiKmt reports for a wait that expired. */
     static constexpr std::uint32_t timed_out = 0xC00000B5u;
 
+    /* Host-visible chunks live in file-backed guest RAM of `host` at this
+     * address, far from the platform's own physical addresses. */
+    static constexpr std::uint64_t chunk_ram_address = 0x6000000000ull;
+    static constexpr std::uint64_t chunk_ram_bytes = std::uint64_t{256} << 20u;
+
     DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fdo, FakeDxgkrnlAdapter &dxgkrnl,
-           FakeVirtioGpuFunction &function, InterruptPump &pump);
+           FakeVirtioGpuFunction &function, InterruptPump &pump, MockHost &host);
     ~DdiKmt();
     DdiKmt(const DdiKmt &) = delete;
     DdiKmt &operator=(const DdiKmt &) = delete;
@@ -116,6 +122,8 @@ private:
         std::uint64_t offset_in_pages;
         std::uint64_t gpu_address;
         std::uint64_t *frames;
+        /* The guest-RAM address of a chunk's pages; 0 for platform memory. */
+        std::uint64_t  guest_ram;
         std::uint8_t  private_data[max_private_data];
     };
     struct Context {
@@ -145,6 +153,7 @@ private:
     /* The rest of create_allocation once the driver has answered: pages, a
      * handle and the open, or everything undone. */
     Status admit(Allocation &slot, std::uint32_t device, void *driver_device);
+    Status back(Allocation &slot);
     Status open_on(Allocation &slot, void *driver_device);
     Status page(Allocation &slot, std::int32_t operation);
     Status create_context_on(std::uint32_t device, const std::uint8_t *private_data, std::uint32_t size,
@@ -157,6 +166,7 @@ private:
     FakeDxgkrnlAdapter          &dxgkrnl_;
     FakeVirtioGpuFunction       &function_;
     InterruptPump               &pump_;
+    MockHost                    &host_;
     FakeHandleTable              handles_;
     NodeFences                   fences_;
     Device                       devices_[max_devices];
@@ -168,6 +178,7 @@ private:
     std::uint64_t                next_aperture_page_;
     std::uint64_t                next_gpu_address_;
     std::uint64_t                paging_fence_;
+    std::uint64_t                next_chunk_address_;
     std::uint32_t                last_code_;
 };
 

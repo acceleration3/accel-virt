@@ -14,6 +14,7 @@
 #include "guest/suite/adapter_search.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/guest_suite.hpp"
+#include "guest/suite/host_visible_import_scenario.hpp"
 #include "guest/suite/isolation_scenario.hpp"
 #include "guest/suite/opencl_scenario.hpp"
 #include "guest/suite/vulkan_scenario.hpp"
@@ -129,6 +130,26 @@ TEST(fullstack_rvk, vector_add_runs_on_the_host_gpu)
   CHECK(reported(report, "ok opencl.sum 64"));
   CHECK(reported(report, "ok opencl.release")); }
 
+/* Feature 045's experiment through the real driver, device and executor: two
+ * 64 MiB host-visible chunks bound by escape and imported with IMPORT_BLOB into
+ * the host GPU's device, the source's pattern copied into the destination by a
+ * submitted vkCmdCopyBuffer, and read back exactly through the guest's view -
+ * the host GPU read and wrote the guest's own pages. */
+TEST(fullstack_rvk, the_host_gpu_copies_between_two_imported_guest_chunks)
+{ const WidestHostGpu gpu;
+  if ((gpu.sub_apis() & RVK_EXECUTOR_SUB_API_VULKAN) == 0u) return;
+  FullStackRig rig(*rvk_executor_ops(), gpu.uuid());
+  CHECK_EQ(rig.started(), 0);
+  GuestReport report;
+  run_alone<av::HostVisibleImportScenario>(rig, report);
+  CHECK_EQ(report.failed(), 0u);
+  CHECK(reported(report, "ok import.src_pages 16384"));
+  CHECK(reported(report, "ok import.wait 1"));
+  CHECK(reported(report, "ok import.copied 1048576"));
+  CHECK(reported(report, "ok import.guest_saw_host_write 0"));
+  CHECK(reported(report, "ok import.release"));
+  CHECK_EQ(rig.device().device().blobs(), 1u); }
+
 /* The host refuses the truncated create-info before any ICD sees it, the
  * driver completes that context's work with no reply and refuses its next
  * submission - never DMA_FAULTED, which the fake dxgkrnl fails as the real one
@@ -158,7 +179,8 @@ TEST(fullstack_rvk, the_rvk_run_passes_every_step_on_the_host_gpu)
     failed = suite.run_rvk(); }
   if (failed != 0u) print(report);
   CHECK_EQ(failed, 0u);
-  CHECK(reported(report, "rvktest: 51 passed, 0 failed"));
+  CHECK(reported(report, "rvktest: 82 passed, 0 failed"));
+  CHECK(reported(report, "ok import.copied 1048576"));
   CHECK(reported(report, "ok transport.nop 0"));
   CHECK(reported(report, "ok vulkan.destroy"));
   CHECK(reported(report, "ok opencl.sum 64"));

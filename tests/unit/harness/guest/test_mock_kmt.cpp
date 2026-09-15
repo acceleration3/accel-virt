@@ -649,7 +649,15 @@ TEST(mock_kmt_escape, a_bind_answers_the_next_chunk_resource_and_the_pages)
   CHECK_STATUS(rig.escape(record), Status::invalid_parameter);   /* already unbound */
   CHECK_EQ(kmt.last_code(), MockKmt::invalid_parameter);
   CHECK_EQ(kmt.bound_allocation(0u), rig.chunk());   /* history, not what is live */
-  CHECK_EQ(kmt.calls(MockKmt::Call::escape), 4u);
+  /* A miscounted answer, for the next bind only. */
+  kmt.answer_next_bind_pages(2u);
+  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
+  CHECK_STATUS(rig.escape(record), Status::ok);
+  CHECK_EQ(u64_at(record, 16u), 2u);
+  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
+  CHECK_STATUS(rig.escape(record), Status::ok);
+  CHECK_EQ(u64_at(record, 16u), 3u);
+  CHECK_EQ(kmt.calls(MockKmt::Call::escape), 6u);
   CHECK_EQ(kmt.misuses(), 0u); }
 
 /* What the driver refuses, every refusal STATUS_INVALID_PARAMETER as the

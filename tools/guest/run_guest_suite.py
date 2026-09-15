@@ -248,7 +248,7 @@ def fingerprint(path):
 
 def host_visible_pattern(count):
     """The bytes the guest's host-visible scenario writes through the view
-    D3DKMTLock2 gave it (src/guest/suite/host_visible_scenario.hpp): the byte at
+    D3DKMTLock2 gave it (src/guest/suite/guest_pattern.hpp): the byte at
     offset n is 1 + (n * 7) % 251, so none is zero and no page of it repeats
     another - what the region held before the guest wrote cannot be mistaken for
     it. The run looks for them anywhere in the region, because VidMm chooses

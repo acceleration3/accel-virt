@@ -160,6 +160,9 @@ public:
     /* The next escape that names its handles rightly succeeds with these bytes
      * (cut to the escape's size) written over its data, whatever it asked. */
     void          answer_next_escape(const std::uint8_t *answer, std::uint32_t size);
+    /* The next bind answers `pages` rather than the allocation's own count, as
+     * a driver that miscounted would. */
+    void          answer_next_bind_pages(std::uint64_t pages);
     /* The data of the last escape as it was sent, and its size. */
     const std::uint8_t *last_escape() const;
     std::uint32_t       last_escape_size() const;
@@ -253,6 +256,7 @@ private:
     std::uint8_t  escape_answer_[max_private];
     std::uint32_t escape_answer_size_;
     bool          escape_scripted_;
+    std::uint64_t bind_pages_;
     std::uint32_t bound_resources_[max_bindings];
     std::uint32_t bound_history_[max_bindings];
     std::uint32_t binds_;

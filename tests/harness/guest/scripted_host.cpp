@@ -12,6 +12,7 @@ constexpr std::uint64_t memory_size = 8192u;
 constexpr std::uint64_t memory_alignment = 4096u;
 constexpr std::uint32_t two_physical_devices = 2u;
 constexpr std::int32_t  cl_device_not_found = -1;
+constexpr std::uint64_t memory_heap_bytes = std::uint64_t{1} << 30u;
 
 }  // namespace
 
@@ -74,6 +75,31 @@ void ScriptedHost::vk_memory_requirements(std::uint32_t memory_types)
     requirements.memoryTypeBits = memory_types;
     writer.write_pod<std::int32_t>(0);
     vkproto::serialize_VkMemoryRequirements(writer, requirements);
+    queue(writer);
+}
+
+void ScriptedHost::vk_memory_properties(std::uint32_t count, std::uint32_t host_visible)
+{
+    WireWriter                       writer(answer_, sizeof answer_);
+    VkPhysicalDeviceMemoryProperties properties = {};
+    properties.memoryTypeCount = count;
+    for (std::uint32_t type = 0u; type < count && type < VK_MAX_MEMORY_TYPES; type++)
+        properties.memoryTypes[type].propertyFlags = (host_visible >> type & 1u) != 0u
+                                                         ? VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                                                         : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    properties.memoryHeapCount = 1u;
+    properties.memoryHeaps[0].size = memory_heap_bytes;
+    writer.write_pod<std::int32_t>(0);
+    vkproto::serialize_VkPhysicalDeviceMemoryProperties(writer, properties);
+    queue(writer);
+}
+
+void ScriptedHost::blob_import(std::uint32_t status, std::uint64_t memory)
+{
+    WireWriter writer(answer_, sizeof answer_);
+    writer.write_u32(status);
+    writer.write_u32(0u);
+    writer.write_u64(memory);
     queue(writer);
 }
 
@@ -185,6 +211,48 @@ void ScriptedHost::healthy_context()
     nop();
     vk_handle(0, vk_instance);
     nop();
+}
+
+void ScriptedHost::host_visible_import_device()
+{
+    vk_handle(0, vk_instance);
+    vk_count(0, two_physical_devices);
+    vk_physical_devices(0, two_physical_devices);
+    vk_handle(0, vk_device);
+    vk_memory_properties(vk_host_memory_types, vk_host_visible_types);
+}
+
+void ScriptedHost::host_visible_import_side(std::uint32_t side)
+{
+    vk_handle(0, vk_buffer + side);
+    vk_memory_requirements(vk_importable_types);
+    blob_import(0u, vk_memory + side);
+    vk_result(0);
+}
+
+void ScriptedHost::host_visible_import_copy()
+{
+    vk_handle(0, vk_command_pool);
+    vk_handle(0, vk_command_buffer);
+    vk_handle(0, vk_queue);
+    vk_handle(0, vk_fence);
+    vk_result(0);
+}
+
+void ScriptedHost::host_visible_import_releases()
+{
+    nop();
+    nop();
+    nop();
+}
+
+void ScriptedHost::host_visible_import_run()
+{
+    host_visible_import_device();
+    host_visible_import_side(0u);
+    host_visible_import_side(1u);
+    host_visible_import_copy();
+    host_visible_import_releases();
 }
 
 }  // namespace av

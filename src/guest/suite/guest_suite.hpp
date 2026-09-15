@@ -8,6 +8,7 @@
 #include "guest/suite/allocation_scenario.hpp"
 #include "guest/suite/fence_stress_scenario.hpp"
 #include "guest/suite/gpu_mapping_scenario.hpp"
+#include "guest/suite/host_visible_import_scenario.hpp"
 #include "guest/suite/host_visible_scenario.hpp"
 #include "guest/suite/isolation_scenario.hpp"
 #include "guest/suite/opencl_scenario.hpp"
@@ -59,6 +60,7 @@ private:
     TransportScenario   opengl_;
     VulkanScenario      vulkan_;
     OpenClScenario      opencl_;
+    HostVisibleImportScenario host_import_;
     IsolationScenario   isolation_;
 };
 

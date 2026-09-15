@@ -27,7 +27,7 @@ constexpr std::uint32_t io_timeout = 0xC00000B5u;
 MockKmt::MockKmt()
     : identities_{}, versions_{}, adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{},
       zeroing_{}, calls_{}, objects_{}, views_{}, locked_{}, large_views_{}, large_bytes_{}, escape_{},
-      escape_size_(0u), escape_answer_{}, escape_answer_size_(0u), escape_scripted_(false), bound_resources_{},
+      escape_size_(0u), escape_answer_{}, escape_answer_size_(0u), escape_scripted_(false), bind_pages_(0u), bound_resources_{},
       bound_history_{}, binds_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
       private_size_(0u), submission_{}, submission_size_(0u), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
@@ -491,7 +491,9 @@ Status MockKmt::bind_chunk(std::uint32_t device, std::uint8_t *data, std::uint32
         resource = first_chunk_resource + binds_;
         if (binds_ < max_bindings) bound_history_[binds_] = record.allocation();
         binds_++;
-        static_cast<void>(record.answered(resource, chunk->pages).encode(data, size));
+        const std::uint64_t pages = bind_pages_ != 0u ? bind_pages_ : chunk->pages;
+        bind_pages_ = 0u;
+        static_cast<void>(record.answered(resource, pages).encode(data, size));
         return succeed();
     }
     return refuse(invalid_parameter);
@@ -516,6 +518,8 @@ void MockKmt::answer_next_escape(const std::uint8_t *answer, std::uint32_t size)
     for (std::uint32_t i = 0u; i < escape_answer_size_; i++) escape_answer_[i] = answer[i];
     escape_scripted_ = true;
 }
+
+void MockKmt::answer_next_bind_pages(std::uint64_t pages) { bind_pages_ = pages; }
 
 const std::uint8_t *MockKmt::last_escape() const { return escape_; }
 std::uint32_t       MockKmt::last_escape_size() const { return escape_size_; }

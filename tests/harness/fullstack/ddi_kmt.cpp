@@ -19,10 +19,13 @@
 #include "core/miniport/ddi_table.hpp"
 #include "core/support/nt_status.hpp"
 #include "guest/kmt/pci_identity.hpp"
+#include "proto/resources/allocation_descriptor.hpp"
+#include "proto/resources/allocation_kind.hpp"
 #include "harness/device/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_fdo.hpp"
 #include "harness/fullstack/interrupt_pump.hpp"
+#include "harness/host/mock_host.hpp"
 #include "harness/platform/mock_platform.hpp"
 
 #include <cstdlib>
@@ -69,12 +72,13 @@ std::uint16_t config_u16(const std::uint8_t *config, std::uint16_t offset)
 }  // namespace
 
 DdiKmt::DdiKmt(MockPlatform &platform, const DdiTable &table, FakeDxgkrnlFdo &fdo, FakeDxgkrnlAdapter &dxgkrnl,
-               FakeVirtioGpuFunction &function, InterruptPump &pump)
-    : platform_(platform), table_(table), fdo_(fdo), dxgkrnl_(dxgkrnl), function_(function), pump_(pump),
+               FakeVirtioGpuFunction &function, InterruptPump &pump, MockHost &host)
+    : platform_(platform), table_(table), fdo_(fdo), dxgkrnl_(dxgkrnl), function_(function), pump_(pump), host_(host),
       handles_(), fences_(), devices_{}, allocations_{}, contexts_{}, queues_{}, kernel_copy_{},
       next_handle_(first_handle), next_aperture_page_(0u), next_gpu_address_(first_gpu_address), paging_fence_(0u),
-      last_code_(0u)
+      next_chunk_address_(chunk_ram_address), last_code_(0u)
 {
+    host_.add_guest_ram(chunk_ram_address, chunk_ram_bytes);
     dxgkrnl_.on_interrupt(
         [](void *context, const DxgkargcbNotifyInterruptDataRecord &data) {
             static_cast<DdiKmt *>(context)->fences_.observe(data);
@@ -239,10 +243,7 @@ Status DdiKmt::admit(Allocation &slot, std::uint32_t device, void *driver_device
     const std::uint64_t pages = slot.bytes / page_bytes;
     Status status = slot.bytes == 0u || slot.bytes % page_bytes != 0u || pages > max_pages ? Status::no_memory
                                                                                            : Status::ok;
-    if (status == Status::ok) {
-        slot.block = static_cast<std::uint8_t *>(platform_.allocate_contiguous(slot.bytes));
-        status = slot.block != nullptr ? Status::ok : Status::no_memory;
-    }
+    if (status == Status::ok) status = back(slot);
     /* The frame list outlives the paging call that attaches it: the MDL the
      * driver keeps names it until the allocation is freed. */
     if (status == Status::ok) {
@@ -250,8 +251,8 @@ Status DdiKmt::admit(Allocation &slot, std::uint32_t device, void *driver_device
         status = slot.frames != nullptr ? Status::ok : Status::no_memory;
     }
     if (status == Status::ok) {
-        platform_.zero(slot.block, slot.bytes);
-        const std::uint64_t physical = platform_.physical_address(slot.block);
+        if (slot.guest_ram == 0u) platform_.zero(slot.block, slot.bytes);
+        const std::uint64_t physical = slot.guest_ram != 0u ? slot.guest_ram : platform_.physical_address(slot.block);
         for (std::uint64_t index = 0u; index < pages; index++) slot.frames[index] = physical + index * page_bytes;
         slot.handle = handles_.insert(slot.driver);
         status = slot.handle != 0u ? Status::ok : Status::no_space;
@@ -263,6 +264,27 @@ Status DdiKmt::admit(Allocation &slot, std::uint32_t device, void *driver_device
     if (status == Status::ok) return refuse(Status::ok);
     release(slot);
     return refuse(status);
+}
+
+/* The host GPU imports a host-visible chunk through a second mapping of its
+ * pages, which only file-backed guest RAM allows - what the runner's shared
+ * memory backend gives QEMU. Every other allocation stays in the platform's
+ * memory, where the other tests read it. Chunk RAM is handed out once and never
+ * reused, so it is still the zero pages the file began as. */
+Status DdiKmt::back(Allocation &slot)
+{
+    AllocationDescriptor descriptor;
+    const bool chunk = descriptor.decode(slot.private_data, AllocationDescriptor::encoded_size) == Status::ok &&
+                       descriptor.kind() == AllocationKind::host_visible_memory;
+    if (!chunk) {
+        slot.block = static_cast<std::uint8_t *>(platform_.allocate_contiguous(slot.bytes));
+        return slot.block != nullptr ? Status::ok : Status::no_memory;
+    }
+    if (slot.bytes > chunk_ram_address + chunk_ram_bytes - next_chunk_address_) return Status::no_memory;
+    slot.guest_ram = next_chunk_address_;
+    slot.block = host_.guest_ram(slot.guest_ram);
+    next_chunk_address_ += slot.bytes;
+    return Status::ok;
 }
 
 Status DdiKmt::open_on(Allocation &slot, void *driver_device)
@@ -293,7 +315,7 @@ void DdiKmt::release(Allocation &slot)
             DdiSlot::DxgkDdiDestroyAllocation)(fdo_.context(), &request));
     }
     if (slot.handle != 0u) handles_.remove(slot.handle);
-    if (slot.block != nullptr) platform_.release_contiguous(slot.block, slot.bytes);
+    if (slot.block != nullptr && slot.guest_ram == 0u) platform_.release_contiguous(slot.block, slot.bytes);
     std::free(slot.frames);
     std::memset(static_cast<void *>(&slot), 0, sizeof slot);
 }

@@ -11,6 +11,7 @@
 #include "core/support/status.hpp"
 #include "guest/suite/scenario_steps.hpp"
 #include "guest/suite/scenario_transport.hpp"
+#include "guest/suite/vulkan_device_chain.hpp"
 
 #include <stdint.h>
 #include <vulkan/vulkan_core.h>
@@ -32,12 +33,6 @@ public:
     void run();
 
 private:
-    /* Twice the host GPUs the executor keeps (HostGpuSet::max_gpus); the
-     * first device is the one used. */
-    static constexpr uint32_t max_physical_devices = 16u;
-
-    [[nodiscard]] Status make_device();
-    [[nodiscard]] Status find_physical_device();
     [[nodiscard]] Status bind_buffer();
     [[nodiscard]] Status allocate_memory();
     /* The no-op's status after every destroy was sent. */
@@ -45,9 +40,7 @@ private:
 
     ScenarioSteps     steps_;
     ScenarioTransport link_;
-    uint64_t          instance_;
-    uint64_t          physical_device_;
-    uint64_t          device_;
+    VulkanDeviceChain chain_;
     VkBuffer          buffer_;
     VkDeviceMemory    memory_;
 };

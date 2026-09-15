@@ -23,6 +23,17 @@ public:
     static constexpr std::uint64_t vk_memory = 0x5500u;
     /* A buffer that can live in memory types 3 and 5: the lowest is 3. */
     static constexpr std::uint32_t vk_memory_types = 0x28u;
+    static constexpr std::uint64_t vk_command_pool = 0x7100u;
+    static constexpr std::uint64_t vk_command_buffer = 0x7200u;
+    static constexpr std::uint64_t vk_queue = 0x7300u;
+    static constexpr std::uint64_t vk_fence = 0x7400u;
+    /* The host's memory types for an import: four, of which 1 and 2 are host
+     * visible, and a buffer that can live in 0 to 2 - so the first host-visible
+     * type it can live in is 1. The device memory each import answers is
+     * vk_memory numbered on by side. */
+    static constexpr std::uint32_t vk_host_memory_types = 4u;
+    static constexpr std::uint32_t vk_host_visible_types = 0x6u;
+    static constexpr std::uint32_t vk_importable_types = 0x7u;
     static constexpr std::uint64_t cl_cpu_platform = 0x6100u;
     static constexpr std::uint64_t cl_gpu_platform = 0x6200u;
     static constexpr std::uint64_t cl_device = 0x6300u;
@@ -38,6 +49,10 @@ public:
     static constexpr std::uint32_t vulkan_waits = 9u;
     static constexpr std::uint32_t opencl_waits = 24u;
     static constexpr std::uint32_t isolation_waits_before_fault = 3u;
+    /* The import scenario's waits, and the one of them that waits for the fence
+     * of the submitted copy - where a test plays the host GPU's copy. */
+    static constexpr std::uint32_t host_visible_import_waits = 21u;
+    static constexpr std::uint32_t host_visible_import_copy_wait = 18u;
 
     explicit ScriptedHost(MockKmt &kmt);
     ScriptedHost(const ScriptedHost &) = delete;
@@ -54,6 +69,12 @@ public:
     /* `count` devices numbered from vk_physical_device. */
     void vk_physical_devices(std::int32_t result, std::uint32_t count);
     void vk_memory_requirements(std::uint32_t memory_types);
+    /* `count` memory types, those whose bit is set in `host_visible` host
+     * visible, as a void command answers: a zero, then the structure. */
+    void vk_memory_properties(std::uint32_t count, std::uint32_t host_visible);
+    /* IMPORT_BLOB's answer: the host's status, a reserved word and the device
+     * memory. */
+    void blob_import(std::uint32_t status, std::uint64_t memory);
     /* `count` queue families, each with `count` graphics queues: a void
      * command's zero, the count, and the structures. */
     void vk_queue_families(std::uint32_t count);
@@ -79,9 +100,18 @@ public:
     void opencl_run();
     /* The healthy context's no-op, instance and no-op. */
     void healthy_context();
+    /* Through the instance, physical devices, device and memory types; then
+     * one side's buffer, requirements, import and bind. */
+    void host_visible_import_device();
+    void host_visible_import_side(std::uint32_t side);
+    /* Pool, command buffer, queue, fence and the fence wait; then both
+     * releases and the no-op. */
+    void host_visible_import_copy();
+    void host_visible_import_releases();
+    void host_visible_import_run();
 
 private:
-    static constexpr std::uint32_t answer_bytes = 512u;
+    static constexpr std::uint32_t answer_bytes = 1024u;
     static constexpr std::uint32_t cl_releases = 7u;
 
     static constexpr std::uint32_t uncut = ~std::uint32_t{0};
