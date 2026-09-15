@@ -28,6 +28,11 @@ void ScriptedHost::cut_next(std::uint32_t bytes) { cut_ = bytes; }
 
 void ScriptedHost::nop() { kmt_.queue_answer(nullptr, 0u); }
 
+void ScriptedHost::transport_run()
+{
+    for (std::uint32_t wait = 0u; wait < transport_waits; wait++) nop();
+}
+
 void ScriptedHost::vk_result(std::int32_t result)
 {
     WireWriter writer(answer_, sizeof answer_);

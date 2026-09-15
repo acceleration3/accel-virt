@@ -81,14 +81,15 @@ TEST(transport_scenario, a_no_op_the_device_answers_empty_passes_and_reports_its
                     "ok transport.initialize\n"
                     "ok transport.nop 0\n"
                     "ok transport.latency 250\n"
-                    "ok transport.warm_nop 0\n"
-                    "ok transport.warm_latency 250\n") == 0);
+                    "ok transport.warm_nop 31\n"
+                    "ok transport.warm_median 250\n"
+                    "ok transport.warm_fastest 250\n") == 0);
   CHECK_EQ(report.failed(), 0u);
   /* The connection used the adapter the search kept, never enumerating again. */
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::enumerate_adapters), 1u);
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_context_virtual), 1u);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), 2u);
-  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), 2u);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), 32u);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), 32u);
   CHECK(report.invariants_hold());
   rig.check_nothing_left_but_the_adapter(); }
 
@@ -137,14 +138,40 @@ TEST(transport_scenario, a_failure_at_each_step_is_reported_and_later_steps_skip
       rig.check_nothing_left_but_the_adapter();
   } }
 
-/* The warm no-op is the same context's second: what a command costs once the
- * host's backend exists, apart from the first no-op, which also waits for the
- * host to open the context. Each is timed on its own, and a warm no-op the
- * device answers with bytes, or never answers, fails only that step. */
-TEST(transport_scenario, the_warm_no_op_is_timed_apart_from_the_first)
+/* The warm no-ops are the same context's next 31: what a command costs once the
+ * host's backend exists, apart from the first, which also waits for the host to
+ * open the context. A single sample on a busy host moves by milliseconds, so the
+ * report is their median and the fastest: a slow minority moves neither, a slow
+ * majority moves the median and not the fastest. */
+TEST(transport_scenario, the_warm_no_ops_report_their_median_and_fastest)
+{ struct Case { std::uint32_t slow_nth; const char *median; const char *fastest; const char *first; };
+  /* Waits are counted from the first no-op, so every 2nd slow is 16 of the 31
+   * warm ones and every 3rd is 10; the first is never slow here. */
+  const Case cases[] = {{3u, "ok transport.warm_median 1000\n", "ok transport.warm_fastest 1000\n",
+                         "ok transport.latency 1000\n"},
+                        {2u, "ok transport.warm_median 6000\n", "ok transport.warm_fastest 1000\n",
+                         "ok transport.latency 1000\n"}};
+  for (const Case &one : cases) {
+      Rig rig;
+      rig.kmt().answer_waits(nullptr, 0u);
+      rig.kmt().spend_on_wait(10000u);
+      rig.kmt().slow_every(one.slow_nth, 50000u);
+      GuestReport report;
+      TransportScenario scenario(rig.kmt(), report, rig.search(), av::SubApi::vulkan, "transport");
+      scenario.run();
+      CHECK(has_line(report, one.first));
+      CHECK(has_line(report, "ok transport.warm_nop 31\n"));
+      CHECK(has_line(report, one.median));
+      CHECK(has_line(report, one.fastest));
+      CHECK_EQ(report.failed(), 0u);
+      rig.check_nothing_left_but_the_adapter();
+  } }
+
+/* A warm no-op the device answers with bytes, or whose wait fails, fails the
+ * warm step at that no-op and reports no median or fastest. */
+TEST(transport_scenario, a_warm_no_op_that_fails_stops_the_warm_rounds)
 { Rig rig;
-  const std::uint8_t cold_answer[1] = {};
-  rig.kmt().queue_answer(cold_answer, 0u);
+  rig.kmt().queue_answer(nullptr, 0u);
   const std::uint8_t warm_answer[4] = {};
   rig.kmt().queue_answer(warm_answer, sizeof warm_answer);
   rig.kmt().spend_on_wait(50000u);
@@ -153,18 +180,20 @@ TEST(transport_scenario, the_warm_no_op_is_timed_apart_from_the_first)
   scenario.run();
   CHECK(has_line(report, "ok transport.latency 5000\n"));
   CHECK(has_line(report, "FAIL transport.warm_nop status=9 4\n"));
-  CHECK(!has_line(report, "transport.warm_latency"));
+  CHECK(!has_line(report, "transport.warm_median"));
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::wait_for_context), 2u);
   CHECK_EQ(report.failed(), 1u);
   rig.check_nothing_left_but_the_adapter();
 
   Rig second;
   second.kmt().answer_waits(nullptr, 0u);
-  second.kmt().fail_at(MockKmt::Call::wait_for_context, 2u, unsuccessful);
+  second.kmt().fail_at(MockKmt::Call::wait_for_context, 7u, unsuccessful);
   GuestReport lost;
   TransportScenario again(second.kmt(), lost, second.search(), av::SubApi::vulkan, "transport");
   again.run();
   CHECK(has_line(lost, "ok transport.latency 0\n"));
   CHECK(has_line(lost, "FAIL transport.warm_nop status=7"));
+  CHECK(!has_line(lost, "transport.warm_fastest"));
   CHECK_EQ(lost.failed(), 1u);
   second.check_nothing_left_but_the_adapter(); }
 
@@ -180,7 +209,7 @@ TEST(transport_scenario, a_clock_without_a_frequency_reports_no_latency)
   scenario.run();
   CHECK(has_line(report, "ok transport.nop 0\n"));
   CHECK(has_line(report, "ok transport.latency 0\n"));
-  CHECK(has_line(report, "ok transport.warm_latency 0\n"));
+  CHECK(has_line(report, "ok transport.warm_median 0\n"));
   CHECK_EQ(report.failed(), 0u);
   rig.check_nothing_left_but_the_adapter(); }
 

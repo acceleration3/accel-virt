@@ -34,6 +34,7 @@ public:
     static constexpr std::uint64_t cl_kernel = 0x6800u;
     static constexpr std::uint32_t cl_elements = 64u;
     /* Waits a whole successful run of each scenario takes. */
+    static constexpr std::uint32_t transport_waits = 32u;   /* the first no-op and 31 warm ones */
     static constexpr std::uint32_t vulkan_waits = 9u;
     static constexpr std::uint32_t opencl_waits = 24u;
     static constexpr std::uint32_t isolation_waits_before_fault = 3u;
@@ -44,6 +45,8 @@ public:
 
     /* The transport's no-op: nothing. */
     void nop();
+    /* A whole transport scenario's no-ops. */
+    void transport_run();
     void vk_result(std::int32_t result);
     void vk_handle(std::int32_t result, std::uint64_t handle);
     /* How many physical devices, for the call that asks only that. */

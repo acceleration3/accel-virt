@@ -61,7 +61,7 @@ public:
      * an OpenCL read of 64 floats and its framing. */
     static constexpr std::uint32_t max_answer = 512u;
     /* Answers a test can queue, and commands the journal keeps. */
-    static constexpr std::uint32_t max_queued = 64u;
+    static constexpr std::uint32_t max_queued = 160u;
     static constexpr std::uint32_t max_journal = 128u;
     /* The leading bytes of each journalled command a test can read back. */
     static constexpr std::uint32_t journal_bytes = 128u;
@@ -112,6 +112,9 @@ public:
     /* A wait for a context costs this many ticks, as waiting for real work
      * does; 0 (the default) leaves the clock where it was. */
     void          spend_on_wait(std::uint64_t ticks);
+    /* Every `nth` wait for a context costs `ticks` more, as one the host was
+     * slow to answer does: what a latency's median and fastest are judged by. */
+    void          slow_every(std::uint32_t nth, std::uint64_t ticks);
     /* The frequency the performance counter answers; ticks_per_second until
      * set, and 0 is a clock that cannot say how long a tick is. */
     void          set_frequency(std::uint64_t frequency);
@@ -223,6 +226,8 @@ private:
     std::uint32_t slip_nth_;
     std::uint64_t slip_ticks_;
     std::uint64_t wait_cost_;
+    std::uint32_t slow_nth_;
+    std::uint64_t slow_ticks_;
     std::uint64_t frequency_;
     std::uint8_t  answer_[max_answer];
     std::uint32_t answer_size_;
