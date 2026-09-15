@@ -41,9 +41,9 @@ constexpr size_t   line_bytes = 160u;
 
 }  // namespace
 
-IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, AdapterLuids &luids, ThreadLock &lock, ThreadLock &send_lock,
-                 LogSink &log, IcdBinding &binding)
-    : kmt_(kmt), luids_(luids), lock_(lock), send_lock_(send_lock), log_(log), binding_(binding),
+IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, LogSink &log,
+                 IcdBinding &binding)
+    : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), log_(log), binding_(binding),
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
       entry_points_(local_rows, local_row_count), handles_(memory), connections_(memory), pending_(nullptr)
 {
@@ -108,7 +108,7 @@ Status IcdRoot::open_connection(Connection *&opened)
 {
     lock_.acquire();
     ScopeExit release([&] { lock_.release(); });
-    const Status made = connections_.create(opened, kmt_, luids_, send_lock_);
+    const Status made = connections_.create(opened, kmt_, memory_, send_lock_);
     if (made != Status::ok) return made;
     const Status status = opened->open();
     if (status == Status::ok) return Status::ok;

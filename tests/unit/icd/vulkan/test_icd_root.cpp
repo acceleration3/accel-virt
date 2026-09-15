@@ -11,7 +11,6 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/icd_rig.hpp"
-#include "harness/icd/scripted_adapter_luids.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/icd_root.hpp"
@@ -33,7 +32,6 @@
 using av::CommandHeader;
 using av::IcdRig;
 using av::MockKmt;
-using av::ScriptedAdapterLuids;
 using av::ScriptedHost;
 using av::Status;
 using av::WireReader;
@@ -302,7 +300,7 @@ TEST(icd_root, create_instance_opens_its_own_connection_and_wraps_the_hosts_inst
   CHECK(std::strcmp(rig.trace().text(), "HhSsHh") == 0);
   const Connection *const connection = av::icd::connection_of(instance);
   CHECK(connection != nullptr && connection->opened());
-  CHECK_EQ(connection->luid(), ScriptedAdapterLuids::default_luid);
+  CHECK_EQ(connection->luid(), IcdRig::adapter_luid);
   CHECK_EQ(av::vkproto::handle_to_wire(instance), ScriptedHost::vk_instance);
   rig.destroy_instance(instance);
   CHECK(rig.root().invariants_hold());
@@ -341,18 +339,17 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
   for (const Refusal &refusal : refusals) {
       av::MockPlatform platform;
       MockKmt kmt;
-      ScriptedAdapterLuids luids;
       av::LockTrace trace;
       av::RecordingThreadLock lock(trace, 'H');
       av::RecordingThreadLock send_lock(trace, 'S');
       av::RecordingLog log;
-      IcdRoot root(platform, kmt, luids, lock, send_lock, log, av::icd::icd_binding);
+      IcdRoot root(platform, kmt, lock, send_lock, log, av::icd::icd_binding);
       if (!refusal.no_adapter) {
           kmt.add_adapter(av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
                                           av::AdapterScenario::virtio_vendor, av::AdapterScenario::rvk_subsystem),
                           av::AdapterScenario::wddm_3_2);
       }
-      if (refusal.no_luid) luids.refuse();
+      if (refusal.no_luid) kmt.fail_at(MockKmt::Call::adapter_luid, 1u, MockKmt::invalid_parameter);
       if (refusal.call != MockKmt::Call::count) kmt.fail_at(refusal.call, 1u, MockKmt::invalid_parameter);
       VkInstanceCreateInfo info = {};
       info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -384,24 +381,30 @@ TEST(icd_root, create_instance_passes_on_the_hosts_refusal_and_closes_the_connec
   CHECK_EQ(rig.log().holding("the host refused, result 4294967293"), 1u);
   CHECK_EQ(rig.platform().live_allocations(), 0u); }
 
+/* The connection's pool chunk, then its 256 KiB of staging. */
 TEST(icd_root, create_instance_with_no_memory_for_its_connection_answers_out_of_host_memory)
-{ IcdRig rig;
-  rig.platform().fail_allocation_at(1u);
-  VkInstanceCreateInfo info = {};
-  info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-  VkInstance instance = VK_NULL_HANDLE;
-  CHECK_EQ(rig.entry<CreateInstance>(VK_NULL_HANDLE, "vkCreateInstance")(&info, nullptr, &instance),
-           VK_ERROR_OUT_OF_HOST_MEMORY);
-  CHECK(rig.root().invariants_hold());
-  CHECK_EQ(rig.kmt().open_objects(), 0u);
-  CHECK_EQ(rig.kmt().commands(), 0u);
-  CHECK_EQ(rig.log().holding("status 2"), 1u); }
+{ for (std::uint32_t refused = 1u; refused <= 2u; refused++) {
+      IcdRig rig;
+      rig.platform().fail_allocation_at(refused);
+      VkInstanceCreateInfo info = {};
+      info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+      VkInstance instance = VK_NULL_HANDLE;
+      CHECK_EQ(rig.entry<CreateInstance>(VK_NULL_HANDLE, "vkCreateInstance")(&info, nullptr, &instance),
+               VK_ERROR_OUT_OF_HOST_MEMORY);
+      CHECK(rig.root().invariants_hold());
+      CHECK(instance == VK_NULL_HANDLE);
+      CHECK_EQ(rig.kmt().open_objects(), 0u);
+      CHECK_EQ(rig.kmt().commands(), 0u);
+      CHECK_EQ(rig.log().holding("status 2"), 1u);
+      CHECK_EQ(rig.platform().live_allocations(), 0u);
+  }
+}
 
 /* The host made an instance, but no handle could be made for it: the context,
  * and with it the host's instance, is closed rather than leaked. */
 TEST(icd_root, create_instance_with_no_memory_for_its_handle_closes_the_hosts_instance)
 { IcdRig rig;
-  rig.platform().fail_allocation_at(2u);
+  rig.platform().fail_allocation_at(3u);
   VkInstanceCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   VkInstance instance = VK_NULL_HANDLE;
@@ -420,12 +423,12 @@ TEST(icd_root, the_adapters_luid_answers_the_same_physical_device_enumeration_do
   const EnumerateAdapter by_luid = rig.entry<EnumerateAdapter>(VK_NULL_HANDLE, "vk_icdEnumerateAdapterPhysicalDevices");
   std::uint32_t count = 0u;
   rig.host().vk_count(0, 1u);
-  CHECK_EQ(by_luid(instance, ScriptedAdapterLuids::default_luid, &count, nullptr), VK_SUCCESS);
+  CHECK_EQ(by_luid(instance, IcdRig::adapter_luid, &count, nullptr), VK_SUCCESS);
   CHECK_EQ(count, 1u);
   rig.trace().clear();
   VkPhysicalDevice physical_device = VK_NULL_HANDLE;
   rig.host().vk_physical_devices(0, 1u);
-  CHECK_EQ(by_luid(instance, ScriptedAdapterLuids::default_luid, &count, &physical_device), VK_SUCCESS);
+  CHECK_EQ(by_luid(instance, IcdRig::adapter_luid, &count, &physical_device), VK_SUCCESS);
   /* The instance is unwrapped under the root's lock inside the send lock, never
    * the other way round. */
   CHECK(std::strcmp(rig.trace().text(), "HhHhSHhsHh") == 0);
@@ -545,7 +548,7 @@ TEST(icd_root, enumerating_adapters_on_an_instance_it_did_not_make_is_refused)
   int stack = 0;
   std::uint32_t count = 1u;
   const EnumerateAdapter by_luid = rig.entry<EnumerateAdapter>(VK_NULL_HANDLE, "vk_icdEnumerateAdapterPhysicalDevices");
-  CHECK_EQ(by_luid(reinterpret_cast<VkInstance>(&stack), ScriptedAdapterLuids::default_luid, &count, nullptr),
+  CHECK_EQ(by_luid(reinterpret_cast<VkInstance>(&stack), IcdRig::adapter_luid, &count, nullptr),
            VK_ERROR_INITIALIZATION_FAILED);
   CHECK_EQ(count, 1u);
   CHECK_EQ(rig.log().holding("did not make"), 1u); }
@@ -557,13 +560,13 @@ TEST(icd_root, enumerating_adapters_passes_on_the_hosts_answer)
   VkPhysicalDevice physical_devices[1] = {};
   std::uint32_t count = 1u;
   rig.host().vk_physical_devices(vk_error_initialization_failed, 0u);
-  CHECK_EQ(by_luid(instance, ScriptedAdapterLuids::default_luid, &count, physical_devices),
+  CHECK_EQ(by_luid(instance, IcdRig::adapter_luid, &count, physical_devices),
            vk_error_initialization_failed);
   CHECK(physical_devices[0] == VK_NULL_HANDLE);
   /* Room for one of two: the one there is, and VK_INCOMPLETE. */
   count = 1u;
   rig.host().vk_physical_devices(VK_INCOMPLETE, 1u);
-  CHECK_EQ(by_luid(instance, ScriptedAdapterLuids::default_luid, &count, physical_devices), VK_INCOMPLETE);
+  CHECK_EQ(by_luid(instance, IcdRig::adapter_luid, &count, physical_devices), VK_INCOMPLETE);
   CHECK(physical_devices[0] != VK_NULL_HANDLE);
   CHECK(rig.root().invariants_hold());
   rig.destroy_instance(instance); }
@@ -580,7 +583,7 @@ TEST(icd_root, a_physical_device_no_handle_could_be_made_for_answers_out_of_host
   VkPhysicalDevice physical_device = VK_NULL_HANDLE;
   rig.host().vk_physical_devices(0, 1u);
   const EnumerateAdapter by_luid = rig.entry<EnumerateAdapter>(VK_NULL_HANDLE, "vk_icdEnumerateAdapterPhysicalDevices");
-  CHECK_EQ(by_luid(instance, ScriptedAdapterLuids::default_luid, &count, &physical_device), VK_ERROR_OUT_OF_HOST_MEMORY);
+  CHECK_EQ(by_luid(instance, IcdRig::adapter_luid, &count, &physical_device), VK_ERROR_OUT_OF_HOST_MEMORY);
   CHECK(rig.root().invariants_hold());
   rig.destroy_instance(instance);
   CHECK_EQ(rig.platform().live_allocations(), 0u); }
@@ -669,7 +672,7 @@ TEST(icd_root, queues_and_command_buffers_cross_as_the_hosts_handles)
 
 TEST(icd_root, properties_through_the_root_carry_the_adapters_luid)
 { IcdRig rig;
-  rig.luids().answer(0x0000000300000077ull);
+  rig.kmt().set_adapter_luid(0u, 0x0000000300000077ull);
   const VkInstance instance = rig.create_instance();
   const EnumerateAdapter by_luid = rig.entry<EnumerateAdapter>(VK_NULL_HANDLE, "vk_icdEnumerateAdapterPhysicalDevices");
   std::uint32_t count = 1u;
@@ -770,9 +773,10 @@ TEST(icd_root, invariants_see_a_connection_left_pending_closed_or_unowned_and_a_
   CHECK(!rig.root().invariants_hold());
   GuestConnectionProbe::set_queue(guest, queue);
   CHECK(rig.root().invariants_hold());
-  /* Closed under the root: every command it would send fails, and the root
-   * says so. */
+  /* Closed under the root, which never leaves one closed: the root says so. */
   connection->close();
   CHECK(!rig.root().invariants_hold());
+  CHECK_STATUS(connection->open(), Status::ok);
+  CHECK(rig.root().invariants_hold());
   rig.destroy_instance(instance);
   CHECK(rig.root().invariants_hold()); }

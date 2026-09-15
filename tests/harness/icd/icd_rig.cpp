@@ -13,16 +13,16 @@ const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio
 }  // namespace
 
 IcdRig::IcdRig()
-    : platform_(), kmt_(), host_(kmt_), luids_(), trace_(), lock_(trace_, 'H'), send_lock_(trace_, 'S'), log_(),
-      root_(platform_, kmt_, luids_, lock_, send_lock_, log_, icd::icd_binding)
+    : platform_(), kmt_(), host_(kmt_), trace_(), lock_(trace_, 'H'), send_lock_(trace_, 'S'), log_(),
+      root_(platform_, kmt_, lock_, send_lock_, log_, icd::icd_binding)
 {
     kmt_.add_adapter(rvkgpu, AdapterScenario::wddm_3_2);
+    kmt_.set_adapter_luid(0u, adapter_luid);
 }
 
 MockPlatform         &IcdRig::platform() { return platform_; }
 MockKmt              &IcdRig::kmt() { return kmt_; }
 ScriptedHost         &IcdRig::host() { return host_; }
-ScriptedAdapterLuids &IcdRig::luids() { return luids_; }
 LockTrace            &IcdRig::trace() { return trace_; }
 RecordingThreadLock  &IcdRig::lock() { return lock_; }
 RecordingThreadLock  &IcdRig::send_lock() { return send_lock_; }
@@ -47,7 +47,7 @@ VkPhysicalDevice IcdRig::physical_device(VkInstance instance)
     std::uint32_t    count = 1u;
     VkPhysicalDevice physical_device = VK_NULL_HANDLE;
     host_.vk_physical_devices(0, 1u);
-    const VkResult result = enumerate(instance, luids_.default_luid, &count, &physical_device);
+    const VkResult result = enumerate(instance, adapter_luid, &count, &physical_device);
     return result == VK_SUCCESS && count == 1u ? physical_device : VK_NULL_HANDLE;
 }
 

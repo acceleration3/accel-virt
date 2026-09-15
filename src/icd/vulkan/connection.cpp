@@ -1,17 +1,17 @@
 #include "icd/vulkan/connection.hpp"
 
+#include "core/platform/block_source.hpp"
 #include "core/support/scope_exit.hpp"
+#include "guest/kmt/kmt.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
-#include "icd/vulkan/adapter_luids.hpp"
 #include "proto/context/sub_api.hpp"
 
 namespace av::icd {
 
-Connection::Connection(Kmt &kmt, AdapterLuids &luids, ThreadLock &lock)
-    : luids_(luids), search_(kmt), connection_(kmt), staging_{},
-      transport_(connection_, SubApi::vulkan, ring_order, reply_bytes, staging_, sizeof staging_),
-      locked_(transport_, lock), luid_(0u) {}
+Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock)
+    : kmt_(kmt), memory_(memory), lock_(lock), search_(kmt), connection_(kmt), staging_(nullptr), transport_(),
+      locked_(), luid_(0u) {}
 
 Connection::~Connection() { close(); }
 
@@ -22,32 +22,43 @@ Status Connection::open()
     const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
                              AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
     if (search_.find(rvkgpu) != Status::ok) return Status::not_supported;
-    if (luids_.adapter_luid(search_.adapter(), luid_) != Status::ok) return Status::not_supported;
+    if (kmt_.adapter_luid(search_.adapter(), luid_) != Status::ok) return Status::not_supported;
     if (connection_.open(search_.adapter()) != Status::ok) return Status::not_supported;
-    if (transport_.initialize() != Status::ok) return Status::not_supported;
+    staging_ = static_cast<uint8_t *>(memory_.allocate(command_bytes, Pool::paged));
+    if (staging_ == nullptr) return Status::no_memory;
+    /* Neither storage holds an object here: close() empties both on every way
+     * out, and an open connection was refused above. */
+    static_cast<void>(transport_.construct(connection_, SubApi::vulkan, ring_order, reply_bytes, staging_,
+                                           command_bytes));
+    if (transport_.object().initialize() != Status::ok) return Status::not_supported;
+    static_cast<void>(locked_.construct(transport_.object(), lock_));
     undo.dismiss();
     return Status::ok;
 }
 
 void Connection::close()
 {
-    transport_.teardown();
+    locked_.destroy();
+    transport_.destroy();
+    if (staging_ != nullptr) memory_.release(staging_);
+    staging_ = nullptr;
     connection_.close();
     /* Nothing is left to report a failed close to: the instance is gone. */
     static_cast<void>(search_.close());
     luid_ = 0u;
 }
 
-bool             Connection::opened() const { return transport_.established(); }
-bool             Connection::faulted() const { return transport_.faulted(); }
+bool             Connection::opened() const { return locked_.constructed(); }
+bool             Connection::faulted() const { return opened() && transport_.object().faulted(); }
 uint64_t         Connection::luid() const { return luid_; }
-ClientTransport &Connection::transport() { return locked_; }
+ClientTransport &Connection::transport() { return locked_.object(); }
 
 bool Connection::invariants_hold() const
 {
-    if (!connection_.invariants_hold() || !transport_.invariants_hold()) return false;
-    if (!opened()) return !connection_.opened() && !search_.found();
-    return connection_.opened() && search_.found() && connection_.adapter() == search_.adapter();
+    if (!connection_.invariants_hold()) return false;
+    if (!opened()) return !transport_.constructed() && staging_ == nullptr && !connection_.opened() && !search_.found();
+    if (!transport_.constructed() || !transport_.object().invariants_hold()) return false;
+    return staging_ != nullptr && connection_.opened() && search_.found() && connection_.adapter() == search_.adapter();
 }
 
 }  // namespace av::icd

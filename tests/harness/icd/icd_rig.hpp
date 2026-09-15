@@ -1,5 +1,5 @@
 /* An IcdRoot as the loader finds it, over MockKmt with the rvkgpu adapter
- * present: the test plays the host through ScriptedHost, the root's two locks
+ * present under IcdRig::adapter_luid: the test plays the host through ScriptedHost, the root's two locks
  * record their order in one trace, and its log is kept. The root binds itself
  * for the rig's life, so the generated wrappers' hooks reach it. The rig reaches
  * the ICD only through the entry points the root hands out, as the loader does. */
@@ -11,7 +11,6 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
-#include "harness/icd/scripted_adapter_luids.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/vulkan/icd_root.hpp"
 
@@ -23,6 +22,10 @@ namespace av {
 
 class IcdRig {
 public:
+    /* The rvkgpu adapter's LUID: both halves non-zero and different, so a half
+     * dropped or swapped shows. */
+    static constexpr std::uint64_t adapter_luid = 0x0000000200001234ull;
+
     IcdRig();
     IcdRig(const IcdRig &) = delete;
     IcdRig &operator=(const IcdRig &) = delete;
@@ -30,7 +33,6 @@ public:
     MockPlatform         &platform();
     MockKmt              &kmt();
     ScriptedHost         &host();
-    ScriptedAdapterLuids &luids();
     LockTrace            &trace();
     RecordingThreadLock  &lock();
     RecordingThreadLock  &send_lock();
@@ -57,7 +59,6 @@ private:
     MockPlatform         platform_;
     MockKmt              kmt_;
     ScriptedHost         host_;
-    ScriptedAdapterLuids luids_;
     LockTrace            trace_;
     RecordingThreadLock  lock_;
     RecordingThreadLock  send_lock_;

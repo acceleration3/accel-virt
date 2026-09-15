@@ -1,5 +1,5 @@
 /* The ICD's test seams are the oracles every ICD test judges locking, logging
- * and the adapter's LUID by, so their own rules are tested: a recursive acquire
+ by, so their own rules are tested: a recursive acquire
  * and a stray release are violations a test must claim, a lock left held fails
  * the test, the trace keeps the order, the log keeps and counts lines. */
 #include "core/support/status.hpp"
@@ -7,8 +7,6 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
-#include "harness/icd/scripted_adapter_luids.hpp"
-#include "icd/vulkan/adapter_luids.hpp"
 #include "icd/vulkan/log_sink.hpp"
 #include "icd/vulkan/thread_lock.hpp"
 
@@ -18,7 +16,6 @@
 using av::LockTrace;
 using av::RecordingLog;
 using av::RecordingThreadLock;
-using av::ScriptedAdapterLuids;
 using av::Status;
 
 TEST(recording_thread_lock, traces_acquire_and_release_of_each_lock_in_order)
@@ -106,20 +103,3 @@ TEST(recording_log, counts_lines_past_its_bound_and_cuts_long_ones)
   CHECK_EQ(log.lines(), RecordingLog::max_lines + 2u);
   CHECK_EQ(log.holding("again"), RecordingLog::max_lines - 1u);
   CHECK(std::strcmp(log.line(RecordingLog::max_lines), "") == 0); }
-
-TEST(scripted_adapter_luids, answers_the_scripted_luid_for_the_adapter_asked_or_refuses)
-{ ScriptedAdapterLuids luids;
-  av::icd::AdapterLuids &seam = luids;
-  std::uint64_t luid = 0u;
-  CHECK_EQ(luids.asked(), 0u);
-  CHECK_STATUS(seam.adapter_luid(7u, luid), Status::ok);
-  CHECK_EQ(luid, ScriptedAdapterLuids::default_luid);
-  CHECK_EQ(luids.asked(), 7u);
-  luids.answer(0x99ull);
-  CHECK_STATUS(seam.adapter_luid(8u, luid), Status::ok);
-  CHECK_EQ(luid, 0x99u);
-  luids.refuse();
-  luid = 5u;
-  CHECK_STATUS(seam.adapter_luid(9u, luid), Status::not_found);
-  CHECK_EQ(luid, 5u);
-  CHECK_EQ(luids.asked(), 9u); }

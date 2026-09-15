@@ -22,7 +22,8 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumerateInstanceVersion(uint32_t *pApiVe
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL local_vk_icdGetPhysicalDeviceProcAddr(VkInstance instance,
                                                                                const char *pName);
 /* The loader passes a LUID structure by value: 8 bytes, which the x64 calling
- * conventions carry exactly as a 64-bit integer (adapter_luids.hpp). */
+ * conventions carry exactly as a 64-bit integer: LowPart in its low half, as
+ * Kmt::adapter_luid answers it. */
 VKAPI_ATTR VkResult VKAPI_CALL local_vk_icdEnumerateAdapterPhysicalDevices(VkInstance instance, uint64_t adapterLUID,
                                                                            uint32_t *pPhysicalDeviceCount,
                                                                            VkPhysicalDevice *pPhysicalDevices);

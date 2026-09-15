@@ -55,7 +55,8 @@ void PhysicalDeviceView::write_luid()
     for (uint32_t index = 1u; index < remembered_; index++) {
         if (types_[index] != VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES) continue;
         auto *identity = reinterpret_cast<VkPhysicalDeviceIDProperties *>(nodes_[index]);
-        /* A LUID's bytes are its 64-bit value's, little-endian (adapter_luids.hpp). */
+        /* A LUID's bytes are its 64-bit value's, little-endian: LowPart, then
+         * HighPart (Kmt::adapter_luid). */
         __builtin_memcpy(identity->deviceLUID, &luid_, sizeof identity->deviceLUID);
         identity->deviceLUIDValid = VK_TRUE;
     }

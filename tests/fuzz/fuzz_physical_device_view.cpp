@@ -13,7 +13,6 @@
  * before it; bit 3, a point-clipping node, the smallest a relabelling could aim
  * the LUID at - and then the reply, exactly as the transport hands it over. */
 #include "harness/icd/icd_rig.hpp"
-#include "harness/icd/scripted_adapter_luids.hpp"
 #include "harness/transport/mock_transport.hpp"
 #include "icd/vulkan/physical_device_view.hpp"
 
@@ -50,7 +49,7 @@ public:
     void run(std::uint8_t flags, const std::uint8_t *reply, std::size_t length)
     {
         transport_.set_reply(reply, length);
-        av::icd::PhysicalDeviceView view(transport_, av::ScriptedAdapterLuids::default_luid, vulkan_1_3, rig_.log());
+        av::icd::PhysicalDeviceView view(transport_, av::IcdRig::adapter_luid, vulkan_1_3, rig_.log());
         if ((flags & first_form) != 0u) {
             VkPhysicalDeviceProperties properties = {};
             view.properties(physical_device_, &properties);
@@ -91,7 +90,7 @@ private:
         require(label.sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES && label.pNext == nullptr);
         for (std::size_t offset = sizeof label; offset < sizeof clipping; offset++) require(clipping[offset] == canary);
         if ((flags & identity_node) == 0u) return;
-        const std::uint64_t luid = av::ScriptedAdapterLuids::default_luid;
+        const std::uint64_t luid = av::IcdRig::adapter_luid;
         require(std::memcmp(identity.deviceLUID, &luid, sizeof luid) == 0 && identity.deviceLUIDValid == VK_TRUE);
     }
 

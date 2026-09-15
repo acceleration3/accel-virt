@@ -32,7 +32,6 @@ class Kmt;
 
 namespace av::icd {
 
-class AdapterLuids;
 class IcdBinding;
 class LogSink;
 class ThreadLock;
@@ -45,8 +44,8 @@ public:
     static constexpr uint32_t oldest_interface = 5u;
 
     /* Binds itself into `binding` until destroyed. */
-    IcdRoot(BlockSource &memory, Kmt &kmt, AdapterLuids &luids, ThreadLock &lock, ThreadLock &send_lock,
-            LogSink &log, IcdBinding &binding);
+    IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, LogSink &log,
+            IcdBinding &binding);
     ~IcdRoot();
     IcdRoot(const IcdRoot &) = delete;
     IcdRoot &operator=(const IcdRoot &) = delete;
@@ -90,8 +89,8 @@ private:
     void                 note(const char *what, uint64_t value);
     uint32_t             handles_on_connections() const;
 
+    BlockSource           &memory_;
     Kmt                   &kmt_;
-    AdapterLuids          &luids_;
     ThreadLock            &lock_;
     ThreadLock            &send_lock_;
     LogSink               &log_;
