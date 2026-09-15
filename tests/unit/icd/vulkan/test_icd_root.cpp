@@ -83,7 +83,6 @@ using CreateDevice = VkResult (*)(VkPhysicalDevice, const VkDeviceCreateInfo *, 
                                   VkDevice *);
 using DestroyDevice = void (*)(VkDevice, const VkAllocationCallbacks *);
 using GetDeviceQueue = void (*)(VkDevice, std::uint32_t, std::uint32_t, VkQueue *);
-using QueueWaitIdle = VkResult (*)(VkQueue);
 using AllocateCommandBuffers = VkResult (*)(VkDevice, const VkCommandBufferAllocateInfo *, VkCommandBuffer *);
 using CmdDraw = void (*)(VkCommandBuffer, std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t);
 using ResetCommandBuffer = VkResult (*)(VkCommandBuffer, VkCommandBufferResetFlags);
@@ -198,7 +197,8 @@ TEST(icd_root, an_instance_it_made_answers_every_entry_point_with_its_own_rows_f
   const char *const overridden[] = {
       "vkCreateInstance", "vkDestroyDevice", "vkGetPhysicalDeviceProperties", "vkGetPhysicalDeviceProperties2",
       "vkGetDeviceQueue", "vkGetDeviceQueue2", "vkAllocateCommandBuffers", "vkFreeCommandBuffers",
-      "vkBeginCommandBuffer", "vkEndCommandBuffer", "vkResetCommandBuffer"};
+      "vkBeginCommandBuffer", "vkEndCommandBuffer", "vkResetCommandBuffer", "vkWaitForFences", "vkWaitSemaphores",
+      "vkWaitSemaphoresKHR", "vkQueueWaitIdle", "vkDeviceWaitIdle"};
   std::uint32_t wrappers = 0u;
   for (const av::vkicd::generated::Entry &row : av::vkicd::generated::wrapper_entries()) {
       const PFN_vkVoidFunction found = root.instance_proc_addr(instance, row.name);
@@ -654,10 +654,6 @@ TEST(icd_root, queues_and_command_buffers_cross_as_the_hosts_handles)
   const VkQueue queue = get_queue(rig, instance, device);
   CHECK_EQ(av::vkproto::handle_to_wire(queue), queue_host);
   CHECK(av::icd::connection_of(queue) == av::icd::connection_of(device));
-  rig.host().vk_result(VK_SUCCESS);
-  CHECK_EQ(rig.entry<QueueWaitIdle>(instance, "vkQueueWaitIdle")(queue), VK_SUCCESS);
-  WireReader waited = body_of(rig.kmt(), rig.kmt().commands() - 1u);
-  CHECK_EQ(waited.read_u64(), queue_host);
   VkCommandBufferAllocateInfo allocate = {};
   allocate.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   allocate.commandBufferCount = 1u;

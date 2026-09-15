@@ -85,6 +85,14 @@ public:
     VkResult           begin_command_buffer(VkCommandBuffer command_buffer, const VkCommandBufferBeginInfo *info);
     VkResult           end_command_buffer(VkCommandBuffer command_buffer);
     VkResult           reset_command_buffer(VkCommandBuffer command_buffer, VkCommandBufferResetFlags flags);
+    /* Every host wait is a slice of at most 500 ms (SlicedWait). A queue waits
+     * idle on a fence submitted with nothing, which completes after all prior
+     * work on the queue; a device waits idle on each queue it handed out. */
+    VkResult           wait_for_fences(VkDevice device, uint32_t count, const VkFence *fences, VkBool32 wait_all,
+                                       uint64_t timeout);
+    VkResult           wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *info, uint64_t timeout);
+    VkResult           queue_wait_idle(VkQueue queue);
+    VkResult           device_wait_idle(VkDevice device);
 
     /* What the generated wrappers' hooks forward to (icd_hooks.cpp). */
     Connection      *acquire_connection();
@@ -108,6 +116,7 @@ private:
                                     LoaderHandle *parent);
     void                *wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &device);
     LoaderHandle        *handle_of(void *handle, LoaderHandle::Kind kind);
+    LoaderHandle        *child_of(const LoaderHandle &parent, LoaderHandle::Kind kind, uint32_t index);
     uint32_t             handles_on_connections() const;
 
     BlockSource           &memory_;

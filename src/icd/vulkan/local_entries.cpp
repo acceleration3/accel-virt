@@ -69,4 +69,17 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkResetCommandBuffer(VkCommandBuffer comman
                                                           VkCommandBufferResetFlags flags)
 { return icd_binding.root().reset_command_buffer(commandBuffer, flags); }
 
+VKAPI_ATTR VkResult VKAPI_CALL local_vkWaitForFences(VkDevice device, uint32_t fenceCount, const VkFence *pFences,
+                                                     VkBool32 waitAll, uint64_t timeout)
+{ return icd_binding.root().wait_for_fences(device, fenceCount, pFences, waitAll, timeout); }
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkWaitSemaphores(VkDevice device, const VkSemaphoreWaitInfo *pWaitInfo,
+                                                      uint64_t timeout)
+{ return icd_binding.root().wait_semaphores(device, pWaitInfo, timeout); }
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkQueueWaitIdle(VkQueue queue) { return icd_binding.root().queue_wait_idle(queue); }
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkDeviceWaitIdle(VkDevice device)
+{ return icd_binding.root().device_wait_idle(device); }
+
 }  // namespace av::icd

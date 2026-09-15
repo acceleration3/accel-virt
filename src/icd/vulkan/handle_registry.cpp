@@ -45,6 +45,19 @@ LoaderHandle *HandleRegistry::made(void *pointer, LoaderHandle::Kind kind) const
     return handle != nullptr && handle->kind() == kind ? handle : nullptr;
 }
 
+LoaderHandle *HandleRegistry::child(const LoaderHandle &parent, LoaderHandle::Kind kind, uint32_t index) const
+{
+    LoaderHandle *found = nullptr;
+    uint32_t      skipped = 0u;
+    static_cast<void>(pool_.all_of([&](const LoaderHandle &handle) {
+        if (handle.kind() != kind || handle.parent() != &parent) return true;
+        if (skipped++ != index) return true;
+        found = const_cast<LoaderHandle *>(&handle);
+        return false;
+    }));
+    return found;
+}
+
 LoaderHandle *HandleRegistry::instance_of(const Connection *connection) const
 {
     LoaderHandle *found = nullptr;

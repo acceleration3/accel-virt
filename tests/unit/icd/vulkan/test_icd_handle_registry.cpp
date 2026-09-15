@@ -492,3 +492,28 @@ TEST(loader_handle, invariants_refuse_a_batch_on_anything_but_a_command_buffer_o
   CHECK(!device.invariants_hold());
   LoaderHandleProbe::restore_pool(device, pool);
   CHECK(device.invariants_hold()); }
+
+TEST(handle_registry, child_answers_each_live_handle_of_a_kind_made_through_a_parent_once)
+{ MockPlatform platform;
+  HandleRegistry registry(platform);
+  Tree tree(registry);
+  LoaderHandle *second_queue = nullptr;
+  CHECK_STATUS(registry.wrap(Kind::queue, 0x4401u, first, tree.device, second_queue), Status::ok);
+  /* A queue of the instance is not the device's. */
+  LoaderHandle *elsewhere = nullptr;
+  CHECK_STATUS(registry.wrap(Kind::queue, 0x4402u, first, tree.instance, elsewhere), Status::ok);
+  CHECK(registry.invariants_hold());
+  const LoaderHandle *const found[] = {registry.child(*tree.device, Kind::queue, 0u),
+                                       registry.child(*tree.device, Kind::queue, 1u)};
+  CHECK(found[0] != found[1]);
+  CHECK(found[0] == tree.queue || found[0] == second_queue);
+  CHECK(found[1] == tree.queue || found[1] == second_queue);
+  CHECK(registry.child(*tree.device, Kind::queue, 2u) == nullptr);
+  CHECK(registry.child(*tree.device, Kind::command_buffer, 0u) == tree.command_buffer);
+  CHECK(registry.child(*tree.device, Kind::command_buffer, 1u) == nullptr);
+  CHECK(registry.child(*tree.instance, Kind::queue, 0u) == elsewhere);
+  CHECK(registry.child(*tree.physical_device, Kind::queue, 0u) == nullptr);
+  CHECK_STATUS(registry.destroy(second_queue), Status::ok);
+  CHECK(registry.invariants_hold());
+  CHECK(registry.child(*tree.device, Kind::queue, 0u) == tree.queue);
+  CHECK(registry.child(*tree.device, Kind::queue, 1u) == nullptr); }

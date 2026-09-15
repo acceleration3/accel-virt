@@ -41,6 +41,9 @@ public:
     /* The live handle of `kind` at `pointer`, or null: a stack address, a
      * destroyed handle and a handle of another kind are not one. */
     LoaderHandle *made(void *pointer, LoaderHandle::Kind kind) const;
+    /* The `index`th live handle of `kind` made through `parent`, in the order
+     * the pool keeps them, or null past the last. */
+    LoaderHandle *child(const LoaderHandle &parent, LoaderHandle::Kind kind, uint32_t index) const;
     /* The live instance on `connection`, or null. */
     LoaderHandle *instance_of(const Connection *connection) const;
     /* Destroys `handle` and every handle made through it, at any depth.

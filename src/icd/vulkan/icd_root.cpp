@@ -2,10 +2,12 @@
 
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
+#include "guest/kmt/kmt.hpp"
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/local_entries.hpp"
 #include "icd/vulkan/log_sink.hpp"
 #include "icd/vulkan/physical_device_view.hpp"
+#include "icd/vulkan/sliced_wait.hpp"
 #include "icd/vulkan/thread_lock.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 #include "proto/generated/vulkan/vk_icd_entries.h"
@@ -41,6 +43,11 @@ const Entry        local_rows[] = {
     {"vkBeginCommandBuffer", reinterpret_cast<PFN_vkVoidFunction>(&local_vkBeginCommandBuffer), Level::device},
     {"vkEndCommandBuffer", reinterpret_cast<PFN_vkVoidFunction>(&local_vkEndCommandBuffer), Level::device},
     {"vkResetCommandBuffer", reinterpret_cast<PFN_vkVoidFunction>(&local_vkResetCommandBuffer), Level::device},
+    {"vkWaitForFences", reinterpret_cast<PFN_vkVoidFunction>(&local_vkWaitForFences), Level::device},
+    {"vkWaitSemaphores", reinterpret_cast<PFN_vkVoidFunction>(&local_vkWaitSemaphores), Level::device},
+    {"vkWaitSemaphoresKHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkWaitSemaphores), Level::device},
+    {"vkQueueWaitIdle", reinterpret_cast<PFN_vkVoidFunction>(&local_vkQueueWaitIdle), Level::device},
+    {"vkDeviceWaitIdle", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDeviceWaitIdle), Level::device},
 };
 constexpr uint32_t local_row_count = sizeof local_rows / sizeof local_rows[0];
 /* VK_API_VERSION_1_3, spelled without the header macro's C casts. */
@@ -253,6 +260,13 @@ LoaderHandle *IcdRoot::handle_of(void *handle, LoaderHandle::Kind kind)
     return handles_.made(handle, kind);
 }
 
+LoaderHandle *IcdRoot::child_of(const LoaderHandle &parent, LoaderHandle::Kind kind, uint32_t index)
+{
+    lock_.acquire();
+    ScopeExit release([&] { lock_.release(); });
+    return handles_.child(parent, kind, index);
+}
+
 Connection *IcdRoot::connection_of(void *handle, LoaderHandle::Kind kind)
 {
     lock_.acquire();
@@ -368,6 +382,84 @@ VkResult IcdRoot::reset_command_buffer(VkCommandBuffer command_buffer, VkCommand
 {
     record_target(command_buffer).discard();
     return vkicd::generated::Wrap_vkResetCommandBuffer(command_buffer, flags);
+}
+
+VkResult IcdRoot::wait_for_fences(VkDevice device, uint32_t count, const VkFence *fences, VkBool32 wait_all,
+                                  uint64_t timeout)
+{
+    LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
+    if (made == nullptr) {
+        log_.write("rvkvk: vkWaitForFences on a device this driver did not make");
+        return VK_ERROR_DEVICE_LOST;
+    }
+    uint64_t       frequency = 0u;
+    const uint64_t start = kmt_.performance_counter(frequency);
+    SlicedWait     wait(timeout, start, frequency);
+    uint64_t       slice = 0u;
+    while (wait.next(kmt_.performance_counter(frequency), slice)) {
+        const VkResult result = vkproto::rvk_vkWaitForFences(made->connection()->transport(), device, count, fences,
+                                                             wait_all, slice);
+        if (result != VK_TIMEOUT) return result;
+    }
+    return VK_TIMEOUT;
+}
+
+VkResult IcdRoot::wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *info, uint64_t timeout)
+{
+    LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
+    if (made == nullptr) {
+        log_.write("rvkvk: vkWaitSemaphores on a device this driver did not make");
+        return VK_ERROR_DEVICE_LOST;
+    }
+    uint64_t       frequency = 0u;
+    const uint64_t start = kmt_.performance_counter(frequency);
+    SlicedWait     wait(timeout, start, frequency);
+    uint64_t       slice = 0u;
+    while (wait.next(kmt_.performance_counter(frequency), slice)) {
+        const VkResult result = vkproto::rvk_vkWaitSemaphores(made->connection()->transport(), device, info, slice);
+        if (result != VK_TIMEOUT) return result;
+    }
+    return VK_TIMEOUT;
+}
+
+/* The host's own vkQueueWaitIdle has no timeout, so it could hold the context's
+ * worker past TdrDelay; a fence on an empty submission can be waited for in
+ * slices instead. */
+VkResult IcdRoot::queue_wait_idle(VkQueue queue)
+{
+    LoaderHandle *const made = handle_of(queue, LoaderHandle::Kind::queue);
+    if (made == nullptr || made->parent()->kind() != LoaderHandle::Kind::device) {
+        log_.write("rvkvk: vkQueueWaitIdle on a queue this driver did not make through a device");
+        return VK_ERROR_DEVICE_LOST;
+    }
+    const auto        device = static_cast<VkDevice>(static_cast<void *>(made->parent()));
+    ClientTransport  &transport = made->connection()->transport();
+    VkFenceCreateInfo info = {};
+    info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    VkFence        fence = VK_NULL_HANDLE;
+    const VkResult created = vkproto::rvk_vkCreateFence(transport, device, &info, nullptr, &fence);
+    if (created != VK_SUCCESS) return created;
+    ScopeExit      destroyed([&] { vkproto::rvk_vkDestroyFence(transport, device, fence, nullptr); });
+    const VkResult submitted = vkproto::rvk_vkQueueSubmit(transport, queue, 0u, nullptr, fence);
+    if (submitted != VK_SUCCESS) return submitted;
+    return wait_for_fences(device, 1u, &fence, VK_TRUE, SlicedWait::forever);
+}
+
+/* An application may submit only through a queue it was handed, so the queues
+ * this ICD handed out are every queue with work on it. */
+VkResult IcdRoot::device_wait_idle(VkDevice device)
+{
+    LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
+    if (made == nullptr) {
+        log_.write("rvkvk: vkDeviceWaitIdle on a device this driver did not make");
+        return VK_ERROR_DEVICE_LOST;
+    }
+    for (uint32_t index = 0u;; index++) {
+        LoaderHandle *const queue = child_of(*made, LoaderHandle::Kind::queue, index);
+        if (queue == nullptr) return VK_SUCCESS;
+        const VkResult idle = queue_wait_idle(static_cast<VkQueue>(static_cast<void *>(queue)));
+        if (idle != VK_SUCCESS) return idle;
+    }
 }
 
 uint32_t IcdRoot::handles_on_connections() const
