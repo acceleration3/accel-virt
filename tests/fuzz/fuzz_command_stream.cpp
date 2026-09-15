@@ -8,10 +8,12 @@
 #include "device/abi/rvk_executor.h"
 #include "device/execution/batch_executor.hpp"
 #include "device/execution/batch_staging.hpp"
+#include "device/execution/blob_imports.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
+#include "device/memory/blob_table.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/ring/ring_window.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -60,7 +62,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     if (staging.allocate(capacity, with_reply ? reply_length - 32u : 0u) != av::Status::ok) __builtin_trap();
     av::FenceInterrupts interrupts(host);
     av::FenceReporter   fences(host, interrupts);
-    av::BatchExecutor batches(host, executor, staging, fences);
+    av::BlobTable       blobs(host);
+    av::BlobImports     imports(host, blobs, executor);
+    av::BatchExecutor batches(host, executor, imports, staging, fences);
     batches.prepare(with_reply ? av::BlobWindow(&reply_pointer, &reply_bytes, 1u, reply_bytes) : av::BlobWindow());
     if (batches.start() != av::Status::ok) __builtin_trap();
     const av::RingWindow ring_window(av::BlobWindow(&ring_pointer, &ring_length, 1u, ring_length), 12u);

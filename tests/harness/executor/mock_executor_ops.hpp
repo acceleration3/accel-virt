@@ -60,12 +60,33 @@ public:
      * the guest never did. */
     std::uint32_t imported();
     std::uint32_t released();
+    /* The Nth import_blob from now answers RVK_UNDECODABLE and records nothing. */
+    void          refuse_import_at(std::uint32_t nth);
+    /* The Nth imported_handle from now answers 0, a library that imported and
+     * cannot say what it made. */
+    void          withhold_handle_at(std::uint32_t nth);
+    /* Every imported_handle answers `handle` instead of its own - one handle
+     * for two imports is a library breaking the ABI; 0 goes back to its own. */
+    void          answer_handle(std::uint64_t handle);
+    /* What a live import was handed, by the id the device chose: false when
+     * there is none. */
+    bool          import_of(std::uint64_t blob_id, RvkBlobHandle &handle);
+    std::uint32_t live_imports();
+    /* The handle imported_handle answers for a live import of `blob_id`, unless
+     * a test scripted another. */
+    static constexpr std::uint64_t handle_bit = 0x4000000000000000u;
 
 private:
     struct Executor {
         pthread_t thread;
         bool      live;
     };
+    struct Import {
+        std::uint64_t blob_id;
+        RvkBlobHandle handle;
+        bool          live;
+    };
+    static constexpr std::uint32_t max_imports = 512u;
 
     Executor *executor_of(RvkExecutor *executor);
 
@@ -88,6 +109,10 @@ private:
     std::uint32_t              last_sub_api_;
     std::uint8_t               last_uuid_byte_;
     std::atomic<std::uint32_t> misuses_;
+    Import                     imports_[max_imports];
+    std::uint32_t              refuse_import_;
+    std::uint32_t              withhold_handle_;
+    std::uint64_t              answered_handle_;
 };
 
 }  // namespace av

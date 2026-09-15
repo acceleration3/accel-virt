@@ -59,10 +59,12 @@ TEST(executor_library_accept, version_one_is_still_a_library_that_imports_nothin
   table.import_kinds = nullptr;
   table.import_blob = nullptr;
   table.release_blob = nullptr;
+  table.imported_handle = nullptr;
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&table), Status::ok);
   CHECK(library.available());
   CHECK(!library.imports());
+  CHECK(!library.names_imports());
   CHECK_EQ(library.import_kinds(SubApi::vulkan, nullptr), 0u); }
 
 TEST(executor_library_accept, version_two_without_its_operations_is_refused)
@@ -103,3 +105,52 @@ TEST(executor_library_import_kinds, a_device_with_no_library_imports_nothing)
 { ExecutorLibrary library;
   CHECK(!library.imports());
   CHECK_EQ(library.import_kinds(SubApi::vulkan, nullptr), 0u); }
+
+/* Version 2 still loads after version 3 exists: it imports, and names nothing
+ * it imported (feature 045). */
+TEST(executor_library_accept, version_two_is_a_library_that_imports_and_names_nothing)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  RvkExecutorOps &table = ops.editable();
+  table.abi_version = RVK_EXECUTOR_ABI_VERSION_IMPORTS;
+  table.imported_handle = nullptr;
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&table), Status::ok);
+  CHECK(library.imports());
+  CHECK(!library.names_imports()); }
+
+TEST(executor_library_accept, version_three_without_imported_handle_is_refused)
+{ CHECK_EQ(RVK_EXECUTOR_ABI_VERSION, 3u);
+  CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_HANDLES, 3u);
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ops.editable().imported_handle = nullptr;
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::invalid_parameter);
+  CHECK(!library.available());
+  CHECK(!library.names_imports()); }
+
+TEST(executor_library_import_blob, forwards_the_import_its_release_and_the_handle_it_made)
+{ const std::uint8_t uuid[16] = {};
+  std::uint8_t        page[4096] = {};
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK(library.names_imports());
+  RvkExecutor *const executor = library.create(SubApi::vulkan, uuid);
+  RvkBlobHandle handle = {};
+  handle.kind = RVK_BLOB_HOST_POINTER;
+  handle.reserved = 4u;
+  handle.pointer = page;
+  handle.fd = -1;
+  handle.size = sizeof page;
+  CHECK_EQ(library.imported_handle(executor, 0x21u), 0u);
+  CHECK_EQ(library.import_blob(executor, 0x21u, handle), std::uint32_t{RVK_EXECUTED});
+  CHECK_EQ(library.imported_handle(executor, 0x21u), 0x21u | MockExecutorOps::handle_bit);
+  RvkBlobHandle seen = {};
+  CHECK(ops.import_of(0x21u, seen));
+  CHECK(seen.pointer == page);
+  CHECK_EQ(seen.reserved, 4u);
+  library.release_blob(executor, 0x21u);
+  CHECK_EQ(library.imported_handle(executor, 0x21u), 0u);
+  CHECK_EQ(ops.released(), 1u);
+  library.destroy(executor);
+  CHECK_EQ(ops.misuses(), 0u); }

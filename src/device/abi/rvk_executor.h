@@ -24,11 +24,16 @@ extern "C" {
 /* Version 1 has no memory channel at all: the only bytes an executor can see
  * are one command's payload, so a command naming a blob has nothing to name it
  * with. Version 2 adds the three operations that fix that and changes nothing
- * else; the device accepts both, and a version 1 library simply imports
- * nothing (feature 042). Version 3 adds imported_handle, so the guest can name
- * the memory an import made (feature 045). */
+ * else (feature 042). Version 3 adds imported_handle, so an import can become
+ * memory the guest names in its own commands (feature 045). The device accepts
+ * all three: a version 1 library imports nothing, and a version 2 library
+ * imports nothing a guest can name. */
 #define RVK_EXECUTOR_ABI_VERSION 3u
 #define RVK_EXECUTOR_ABI_VERSION_MINIMUM 1u
+/* The versions that brought each part of the table, which the device reads no
+ * further than a library's abi_version allows. */
+#define RVK_EXECUTOR_ABI_VERSION_IMPORTS 2u
+#define RVK_EXECUTOR_ABI_VERSION_HANDLES 3u
 #define RVK_EXECUTOR_OPS_SYMBOL "rvk_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -55,8 +60,11 @@ extern "C" {
  * property and an offset here would buy a capability flag per API for nothing. */
 typedef struct RvkBlobHandle {
     uint32_t kind;     /* exactly one RVK_BLOB_* value */
-    uint32_t reserved; /* RVK_BLOB_HOST_POINTER: the Vulkan memory type index to import
-                        * into (feature 045); 0 otherwise */
+    /* RVK_BLOB_HOST_POINTER: the memory type the guest asked the import to be
+     * made as (IMPORT_BLOB, feature 045) - an index into the memory properties
+     * of the device the executor's guest made. 0 for RVK_BLOB_DMA_BUF. The name
+     * stays so version 2 libraries keep compiling. */
+    uint32_t reserved;
     void *pointer;     /* RVK_BLOB_HOST_POINTER; NULL otherwise */
     int fd;            /* RVK_BLOB_DMA_BUF; -1 otherwise */
     uint64_t size;     /* bytes, a whole number of host pages */
@@ -98,7 +106,15 @@ typedef struct RvkExecutorOps {
     /* Drops an import. A no-op for an id that was never imported; destroy
      * releases whatever is left. Runs on the context's worker. */
     void (*release_blob)(void *opaque, RvkExecutor *executor, uint64_t blob_id);
-    /* Version 3 onwards: the wire handle of the memory an import of `blob_id` made, 0 for none. Runs on the context's worker. */
+
+    /* Version 3 onwards. A version 2 table ends above. */
+
+    /* The wire handle the import made under `blob_id` answers to in this
+     * executor's commands - for Vulkan the VkDeviceMemory the guest binds and
+     * frees - or 0 when `blob_id` made none. import_blob answers only whether
+     * it imported, and the guest needs the handle the import became, so this
+     * asks it once the import is made. The device chooses every blob_id and
+     * never reuses one while its import lives. Runs on the context's worker. */
     uint64_t (*imported_handle)(void *opaque, RvkExecutor *executor, uint64_t blob_id);
 } RvkExecutorOps;
 

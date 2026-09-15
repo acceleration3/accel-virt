@@ -13,8 +13,9 @@
 
 namespace av {
 
-BatchExecutor::BatchExecutor(Host &host, ContextExecutor &executor, BatchStaging &staging, FenceReporter &fences)
-    : host_(host), executor_(executor), staging_(staging), fences_(fences), fault_(FaultCode::none), reply_(),
+BatchExecutor::BatchExecutor(Host &host, ContextExecutor &executor, BlobImports &imports, BatchStaging &staging,
+                             FenceReporter &fences)
+    : host_(host), executor_(executor), imports_(imports), staging_(staging), fences_(fences), fault_(FaultCode::none), reply_(),
       batches_(0u), commands_(0u), skipped_(0u) {}
 
 void BatchExecutor::prepare(const BlobWindow &reply)
@@ -101,13 +102,14 @@ Status BatchExecutor::run_command(const CommandHeader &header, const uint8_t *pa
         skipped_++;
         return Status::ok;
     }
-    const bool   replying = header.generates_reply();
-    size_t       produced = 0u;
-    const Status status =
-        transport ? TransportCommand(header).run()
-                  : executor_.execute(header.id(), payload, header.size() - CommandHeader::encoded_size,
-                                      replying ? staging_.reply() : nullptr,
-                                      replying ? staging_.reply_capacity() : 0u, produced);
+    const bool     replying = header.generates_reply();
+    uint8_t *const reply = replying ? staging_.reply() : nullptr;
+    const size_t   capacity = replying ? staging_.reply_capacity() : 0u;
+    size_t         produced = 0u;
+    const Status   status =
+        transport ? TransportCommand(imports_, header, payload).run(reply, capacity, produced)
+                  : executor_.execute(header.id(), payload, header.size() - CommandHeader::encoded_size, reply,
+                                      capacity, produced);
     if (status == Status::not_found) {
         skipped_++;
         return Status::ok;

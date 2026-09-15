@@ -1,16 +1,19 @@
 /* One context's batches run through its executor on its worker: in order,
- * unknown commands skipped, the transport's NOP answered without it, the last
+ * unknown commands skipped, the transport's NOP and blob commands answered
+ * without it, the last
  * answer asked for written to the reply slot, and every stream no producer
  * could frame refused. */
 #include "core/support/status.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/execution/batch_executor.hpp"
 #include "device/execution/batch_staging.hpp"
+#include "device/execution/blob_imports.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/fence/fence_window.hpp"
+#include "device/memory/blob_table.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/ring/ring_window.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
@@ -20,6 +23,8 @@
 #include "harness/ring/guest_ring.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/submission/batch_header.hpp"
+#include "proto/submission/blob_import_answer.hpp"
+#include "proto/submission/blob_import_request.hpp"
 #include "proto/submission/command_header.hpp"
 #include "proto/submission/fault_code.hpp"
 #include "proto/submission/fence_page.hpp"
@@ -71,6 +76,13 @@ public:
         size_ += 8u + payload_bytes;
         return *this;
     }
+    Commands &add_body(std::uint32_t id, const std::uint8_t *body, std::uint32_t length, std::uint8_t flags)
+    {
+        static_cast<void>(CommandHeader(id, 8u + length, flags).encode(bytes_ + size_, 8u));
+        std::memcpy(bytes_ + size_ + 8u, body, length);
+        size_ += 8u + length;
+        return *this;
+    }
     Commands &tail(std::uint32_t count)
     {
         size_ += count;
@@ -96,8 +108,9 @@ public:
     explicit Fixture(std::uint32_t slot_bytes = 32u + reply_bytes)
         : ring_bytes_{}, ring_pointer_(ring_bytes_), ring_length_(sizeof ring_bytes_), guest_(ring_bytes_, 12u),
           reply_{}, reply_pointer_(reply_), reply_length_(slot_bytes), page_{}, page_pointer_(page_),
-          page_length_(sizeof page_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), executor_(host_, library_),
-          staging_(host_), interrupts_(host_), fences_(host_, interrupts_), batches_(host_, executor_, staging_, fences_)
+          page_length_(sizeof page_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), executor_(host_, library_), blobs_(host_),
+          imports_(host_, blobs_, executor_), staging_(host_), interrupts_(host_), fences_(host_, interrupts_),
+          batches_(host_, executor_, imports_, staging_, fences_)
     {
         std::memset(reply_, 0xEE, sizeof reply_);
         static_cast<void>(library_.accept(&ops_.table()));
@@ -175,6 +188,8 @@ private:
     MockExecutorOps ops_;
     ExecutorLibrary library_;
     ContextExecutor executor_;
+    av::BlobTable   blobs_;
+    av::BlobImports imports_;
     BatchStaging    staging_;
     av::FenceInterrupts interrupts_;
     av::FenceReporter   fences_;
@@ -294,7 +309,7 @@ TEST(batch_executor_run, another_transport_id_is_skipped_like_one_the_executor_d
 { Fixture fixture;
   Commands commands;
   commands.add(0x00000000u, 0u, CommandHeader::generate_reply)
-          .add(0x00000002u, 0u, CommandHeader::generate_reply)
+          .add(0x00000004u, 0u, CommandHeader::generate_reply)
           .add(0x0000FFFFu, 12u, CommandHeader::generate_reply);
   CHECK_STATUS(fixture.run(1u, commands), Status::ok);
   CHECK_EQ(fixture.ops().executed(), 0u);
@@ -470,3 +485,37 @@ TEST(batch_executor_run, a_ring_the_blob_cannot_hold_is_refused_before_anything_
   CHECK_STATUS(call.status, Status::malformed);
   CHECK(fixture.batches().fault() == FaultCode::command_framing);
   CHECK_EQ(fixture.ops().executed(), 0u); }
+
+/* An import the device refuses is an answer in the reply slot, not a fault: the
+ * batch completes, the executor never sees it, and the context runs on. */
+TEST(batch_executor_run, a_refused_import_is_answered_in_the_slot_and_the_context_runs_on)
+{ Fixture fixture;
+  std::uint8_t body[av::BlobImportRequest::encoded_size] = {};
+  CHECK_STATUS(av::BlobImportRequest(77u, 0u, 4096u, 0u).encode(body, sizeof body), Status::ok);
+  Commands commands;
+  commands.add_body(CommandHeader::import_blob_id, body, sizeof body, CommandHeader::generate_reply)
+          .add(CommandHeader::release_blob_id, 8u);
+  CHECK_STATUS(fixture.run(3u, commands), Status::ok);
+  CHECK(fixture.batches().fault() == FaultCode::none);
+  CHECK_EQ(fixture.batches().commands(), 2u);
+  CHECK_EQ(fixture.ops().executed(), 0u);
+  CHECK_EQ(fixture.ops().imported(), 0u);
+  const ReplyHeader header = fixture.reply_header();
+  CHECK_EQ(header.fence_id(), 3u);
+  CHECK_EQ(header.size(), av::BlobImportAnswer::encoded_size);
+  av::BlobImportAnswer answer;
+  CHECK_STATUS(answer.decode(fixture.reply() + 32u, av::BlobImportAnswer::encoded_size), Status::ok);
+  CHECK_EQ(answer.status(), av::BlobImportAnswer::unknown_resource);
+  CHECK_EQ(fixture.progress(), 2u); }
+
+TEST(batch_executor_run, a_blob_command_framed_with_the_wrong_body_faults_the_context_as_misframed)
+{ const std::uint32_t bodies[][2] = {{CommandHeader::import_blob_id, 24u}, {CommandHeader::import_blob_id, 40u},
+                                     {CommandHeader::release_blob_id, 0u}, {CommandHeader::release_blob_id, 16u}};
+  for (const auto &body : bodies) {
+      Fixture fixture;
+      Commands commands;
+      commands.add(body[0], body[1], CommandHeader::generate_reply);
+      CHECK_STATUS(fixture.run(1u, commands), Status::malformed);
+      CHECK(fixture.batches().fault() == FaultCode::command_framing);
+      CHECK_EQ(fixture.reply()[0], 0xEEu);
+  } }

@@ -9,6 +9,7 @@
 #include "core/support/status.hpp"
 #include "device/context/context_binding.hpp"
 #include "device/execution/batch_executor.hpp"
+#include "device/execution/blob_imports.hpp"
 #include "device/execution/batch_staging.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/fence/fence_reporter.hpp"
@@ -52,6 +53,9 @@ private:
     uint32_t       id_;
     ContextBinding binding_;
     FenceReporter   fences_;
+    /* Before the executor: an import points into an alias until the executor
+     * that holds it is gone. */
+    BlobImports     imports_;
     ContextExecutor executor_;
     BatchStaging    staging_;
     BatchExecutor   batches_;

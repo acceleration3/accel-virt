@@ -8,8 +8,24 @@
 //   0x10004 count        the answer is u64 commands this executor ran before
 //                        it, then u32 1 when every call so far came from the
 //                        thread that created it
+//   0x10005 peek         payload u64 handle, u64 offset, u32 count: the answer
+//                        is the import's u32 memory type, u32 imports this
+//                        executor holds, u64 size, then `count` bytes read at
+//                        `offset` of the pointer it was handed - only the 16
+//                        bytes, zeroed, for a handle it does not hold or a range
+//                        past the import
+//   0x10006 poke         payload u64 handle, u64 offset, then bytes written at
+//                        `offset` of the import's pointer, as a host GPU would
+//                        write them: the answer is u32 1 when they were written
 //
 // Anything else is RVK_UNKNOWN. With RVK_ECHO_FAIL_CREATE set, create fails.
+//
+// It is a version 3 library (feature 045): import_blob records a host pointer
+// the device hands it, imported_handle answers blob_id | 0x4000000000000000 for
+// one it holds, and release_blob forgets it - so qtest can judge the device's
+// side of IMPORT_BLOB, reading and writing the guest's pages through the
+// pointer, without a GPU. With RVK_ECHO_ABI_VERSION_1 set it answers the
+// version 1 table instead, a library that imports nothing.
 //
 // Two controls make a real timeout happen without rebuilding anything
 // (feature 040, FR-006), read from the environment at load:
@@ -36,6 +52,19 @@ constexpr std::uint32_t echo = 0x10001u;
 constexpr std::uint32_t undecodable = 0x10002u;
 constexpr std::uint32_t lose_device = 0x10003u;
 constexpr std::uint32_t count = 0x10004u;
+constexpr std::uint32_t peek = 0x10005u;
+constexpr std::uint32_t poke = 0x10006u;
+constexpr std::uint64_t handle_bit = 0x4000000000000000u;
+constexpr std::uint64_t page = 4096u;
+constexpr std::size_t   max_imports = 16u;
+
+struct Import {
+    std::uint64_t  blob_id;
+    std::uint8_t  *pointer;
+    std::uint64_t  size;
+    std::uint32_t  memory_type;
+    bool           live;
+};
 
 struct Executor {
     pthread_t     thread;
@@ -44,7 +73,69 @@ struct Executor {
      * what RVK_ECHO_ONLY_NTH names. */
     std::uint64_t ordinal;
     bool          one_thread;
+    Import        imports[max_imports];
 };
+
+Executor *executor_of(RvkExecutor *handle) { return static_cast<Executor *>(static_cast<void *>(handle)); }
+
+Import *import_named(Executor *executor, std::uint64_t handle)
+{
+    for (Import &import : executor->imports)
+        if (import.live && (import.blob_id | handle_bit) == handle) return &import;
+    return nullptr;
+}
+
+std::uint32_t live_imports(const Executor *executor)
+{
+    std::uint32_t live = 0u;
+    for (const Import &import : executor->imports) live += import.live ? 1u : 0u;
+    return live;
+}
+
+/* The import `handle` names and the `length` bytes at `offset` of it, or null
+ * for a range it does not hold. */
+std::uint8_t *range_of(Executor *executor, const std::uint8_t *payload, std::size_t size, std::size_t length,
+                       Import *&import)
+{
+    std::uint64_t handle = 0u;
+    std::uint64_t offset = 0u;
+    if (size < 16u) return nullptr;
+    std::memcpy(&handle, payload, 8u);
+    std::memcpy(&offset, payload + 8u, 8u);
+    import = import_named(executor, handle);
+    if (import == nullptr || offset > import->size || length > import->size - offset) return nullptr;
+    return import->pointer + offset;
+}
+
+void answer_peek(Executor *executor, const std::uint8_t *payload, std::size_t size, std::uint8_t *reply,
+                 std::size_t capacity, std::size_t *reply_size)
+{
+    std::uint32_t wanted = 0u;
+    if (size >= 20u) std::memcpy(&wanted, payload + 16u, 4u);
+    Import *import = nullptr;
+    const std::uint8_t *const bytes = range_of(executor, payload, size, wanted, import);
+    *reply_size = 16u + (bytes != nullptr ? wanted : 0u);
+    if (capacity < *reply_size) return;
+    std::memset(reply, 0, 16u);
+    if (import == nullptr) return;
+    const std::uint32_t live = live_imports(executor);
+    std::memcpy(reply, &import->memory_type, 4u);
+    std::memcpy(reply + 4u, &live, 4u);
+    std::memcpy(reply + 8u, &import->size, 8u);
+    if (bytes != nullptr && wanted != 0u) std::memcpy(reply + 16u, bytes, wanted);
+}
+
+void answer_poke(Executor *executor, const std::uint8_t *payload, std::size_t size, std::uint8_t *reply,
+                 std::size_t capacity, std::size_t *reply_size)
+{
+    Import *import = nullptr;
+    const std::size_t          length = size > 16u ? size - 16u : 0u;
+    std::uint8_t *const        bytes = range_of(executor, payload, size, length, import);
+    const std::uint32_t        written = bytes != nullptr ? 1u : 0u;
+    if (bytes != nullptr && length != 0u) std::memcpy(bytes, payload + 16u, length);
+    *reply_size = 4u;
+    if (capacity >= 4u) std::memcpy(reply, &written, 4u);
+}
 
 std::uint64_t created = 0u;
 
@@ -109,6 +200,8 @@ std::uint32_t execute(void *, RvkExecutor *handle, std::uint32_t id, const std::
         break;
     case undecodable: return RVK_UNDECODABLE;
     case lose_device: return RVK_DEVICE_LOST;
+    case peek: answer_peek(executor, payload, size, reply, capacity, reply_size); break;
+    case poke: answer_poke(executor, payload, size, reply, capacity, reply_size); break;
     case count: {
         const std::uint32_t flag = executor->one_thread ? 1u : 0u;
         *reply_size = 12u;
@@ -124,20 +217,61 @@ std::uint32_t execute(void *, RvkExecutor *handle, std::uint32_t id, const std::
     return RVK_EXECUTED;
 }
 
-/* Deliberately version 1, and deliberately carrying none of version 2's memory
- * operations: the device must keep accepting a library that imports nothing,
- * and a test suite whose only library is the newest version never proves it
- * (feature 042). */
-const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION_MINIMUM,
+/* Copy at the boundary: the capset the echo executor's device describes stays
+ * what it was before the library imported anything. IMPORT_BLOB does not ask. */
+std::uint32_t import_kinds(void *, std::uint32_t, const std::uint8_t *) { return 0u; }
+
+/* A host pointer of whole pages and nothing else: a dma-buf's fd would be the
+ * callee's to close, and nothing here would use it. */
+std::uint32_t import_blob(void *, RvkExecutor *handle, std::uint64_t blob_id, const RvkBlobHandle *blob)
+{
+    Executor *const executor = executor_of(handle);
+    if (blob == nullptr || blob->kind != RVK_BLOB_HOST_POINTER || blob->pointer == nullptr || blob->size == 0u ||
+        blob->size % page != 0u)
+        return RVK_UNDECODABLE;
+    for (Import &import : executor->imports) {
+        if (import.live) continue;
+        import = Import{blob_id, static_cast<std::uint8_t *>(blob->pointer), blob->size, blob->reserved, true};
+        return RVK_EXECUTED;
+    }
+    return RVK_UNDECODABLE;
+}
+
+void release_blob(void *, RvkExecutor *handle, std::uint64_t blob_id)
+{
+    for (Import &import : executor_of(handle)->imports)
+        if (import.live && import.blob_id == blob_id) import.live = false;
+}
+
+std::uint64_t imported_handle(void *, RvkExecutor *handle, std::uint64_t blob_id)
+{
+    return import_named(executor_of(handle), blob_id | handle_bit) != nullptr ? blob_id | handle_bit : 0u;
+}
+
+const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               nullptr,
                               sub_apis,
                               create,
                               destroy,
                               execute,
-                              nullptr,
-                              nullptr,
-                              nullptr,
-                              nullptr};
+                              import_kinds,
+                              import_blob,
+                              release_blob,
+                              imported_handle};
+
+/* Version 1, carrying none of the memory operations: the device must keep
+ * accepting a library that imports nothing, and a suite whose only library is
+ * the newest version never proves it (feature 042). */
+const RvkExecutorOps version_1_table = {RVK_EXECUTOR_ABI_VERSION_MINIMUM,
+                                        nullptr,
+                                        sub_apis,
+                                        create,
+                                        destroy,
+                                        execute,
+                                        nullptr,
+                                        nullptr,
+                                        nullptr,
+                                        nullptr};
 
 }  // namespace
 
@@ -145,6 +279,6 @@ extern "C" {
 
 __attribute__((visibility("default")))
 const RvkExecutorOps *rvk_executor_ops(void)
-{ return &table; }
+{ return std::getenv("RVK_ECHO_ABI_VERSION_1") != nullptr ? &version_1_table : &table; }
 
 }

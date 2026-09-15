@@ -1,26 +1,36 @@
 /* One command of API 0, the transport's own (docs/protocol.md, "Execution"),
  * which the device answers itself rather than handing to the executor
- * library: a NOP runs and its answer is empty, whichever library is loaded. */
+ * library: a NOP runs and its answer is empty, whichever library is loaded,
+ * and the blob pair imports a context's guest memory into its executor. */
 #ifndef AV_TRANSPORT_COMMAND_HPP
 #define AV_TRANSPORT_COMMAND_HPP
 
 #include "core/support/status.hpp"
 #include "proto/submission/command_header.hpp"
 
+#include <stddef.h>
+#include <stdint.h>
+
 namespace av {
+
+class BlobImports;
 
 class TransportCommand {
 public:
-    explicit TransportCommand(const CommandHeader &header);
+    /* `body` is what follows the header, as the stream framed it. */
+    TransportCommand(BlobImports &imports, const CommandHeader &header, const uint8_t *body);
 
-    /* ok for a NOP, whose answer is empty; malformed for a NOP of any size but
-     * its header, since no producer frames a body on it; not_found for any
-     * other transport id, which the batch skips as it skips an id the
-     * executor does not know. */
-    [[nodiscard]] Status run() const;
+    /* Worker. ok for a NOP, whose answer is empty; malformed for a NOP of any
+     * size but its header, since no producer frames a body on it; the blob
+     * command's answer for IMPORT_BLOB and RELEASE_BLOB; not_found for any
+     * other transport id, which the batch skips as it skips an id the executor
+     * does not know. `produced` and `reply` as the executor's are. */
+    [[nodiscard]] Status run(uint8_t *reply, size_t capacity, size_t &produced);
 
 private:
-    CommandHeader header_;
+    BlobImports   &imports_;
+    CommandHeader  header_;
+    const uint8_t *body_;
 };
 
 }  // namespace av

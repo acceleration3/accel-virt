@@ -1,0 +1,63 @@
+#include "device/execution/blob_import_command.hpp"
+
+#include "device/execution/blob_imports.hpp"
+#include "proto/submission/blob_import_answer.hpp"
+#include "proto/submission/blob_import_request.hpp"
+#include "proto/wire/wire_reader.hpp"
+
+namespace av {
+
+BlobImportCommand::BlobImportCommand(BlobImports &imports, const CommandHeader &header, const uint8_t *body)
+    : imports_(imports), header_(header), body_(body) {}
+
+Status BlobImportCommand::run(uint8_t *reply, size_t capacity, size_t &produced)
+{
+    produced = 0u;
+    switch (header_.id()) {
+    case CommandHeader::import_blob_id: return import(reply, capacity, produced);
+    case CommandHeader::release_blob_id: return release();
+    default: return Status::not_found;
+    }
+}
+
+size_t BlobImportCommand::body_size() const
+{
+    return header_.size() - CommandHeader::encoded_size;
+}
+
+Status BlobImportCommand::import(uint8_t *reply, size_t capacity, size_t &produced)
+{
+    BlobImportRequest request;
+    const Status      decoded = request.decode(body_, body_size());
+    if (decoded == Status::malformed) return Status::malformed;
+    uint64_t     device_memory = 0u;
+    const Status imported = decoded == Status::ok ? imports_.import(request.resource_id(), request.offset(),
+                                                                    request.size(), request.memory_type(),
+                                                                    device_memory)
+                                                  : Status::invalid_parameter;
+    uint32_t answer = BlobImportAnswer::executor_refused;
+    switch (imported) {
+    case Status::ok: answer = BlobImportAnswer::imported; break;
+    case Status::invalid_parameter: answer = BlobImportAnswer::refused_request; break;
+    case Status::not_found: answer = BlobImportAnswer::unknown_resource; break;
+    case Status::too_large: answer = BlobImportAnswer::outside_blob; break;
+    case Status::no_memory: answer = BlobImportAnswer::unmappable_pages; break;
+    case Status::no_space: answer = BlobImportAnswer::no_room; break;
+    default: break;
+    }
+    produced = BlobImportAnswer::encoded_size;
+    /* A slot too small for the answer is written nothing, as the executor ABI
+     * leaves it, and the reply header says how much was needed. */
+    static_cast<void>(BlobImportAnswer(answer, device_memory).encode(reply, capacity));
+    return Status::ok;
+}
+
+Status BlobImportCommand::release()
+{
+    if (body_size() != release_body_size) return Status::malformed;
+    WireReader reader(body_, release_body_size);
+    imports_.release(reader.read_u64());
+    return Status::ok;
+}
+
+}  // namespace av

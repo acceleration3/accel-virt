@@ -17,8 +17,8 @@ public:
     ExecutorLibrary();
 
     /* Null leaves the device without an executor. invalid_parameter for a
-     * table of another ABI version or missing an operation; invalid_state once
-     * a table is accepted. */
+     * table of another ABI version or missing an operation its version has;
+     * invalid_state once a table is accepted. */
     [[nodiscard]] Status accept(const RvkExecutorOps *ops);
     bool                 available() const;
     /* The sub-APIs the library offers that the protocol knows; 0 without one. */
@@ -34,6 +34,13 @@ public:
     /* Which RVK_BLOB_* kinds `api` imports on the GPU `gpu_uuid` names, or 0.
      * Asked on the main loop while the capset is being described. */
     uint32_t             import_kinds(SubApi api, const uint8_t *gpu_uuid) const;
+    /* Whether the library answers the wire handle an import made (version 3),
+     * without which a guest has nothing to name an import by. */
+    bool                 names_imports() const;
+    /* Only on a library that names imports. */
+    uint32_t             import_blob(RvkExecutor *executor, uint64_t blob_id, const RvkBlobHandle &handle) const;
+    void                 release_blob(RvkExecutor *executor, uint64_t blob_id) const;
+    uint64_t             imported_handle(RvkExecutor *executor, uint64_t blob_id) const;
 
 private:
     static constexpr uint32_t known_sub_apis = 7u;

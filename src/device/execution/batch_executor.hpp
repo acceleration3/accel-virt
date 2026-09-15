@@ -19,6 +19,7 @@ namespace av {
 
 class BatchHeader;
 class BatchStaging;
+class BlobImports;
 class CommandHeader;
 class ContextExecutor;
 class FenceReporter;
@@ -28,7 +29,8 @@ struct BatchExecutorProbe;
 
 class BatchExecutor {
 public:
-    BatchExecutor(Host &host, ContextExecutor &executor, BatchStaging &staging, FenceReporter &fences);
+    BatchExecutor(Host &host, ContextExecutor &executor, BlobImports &imports, BatchStaging &staging,
+                  FenceReporter &fences);
     BatchExecutor(const BatchExecutor &) = delete;
     BatchExecutor &operator=(const BatchExecutor &) = delete;
 
@@ -68,6 +70,7 @@ private:
 
     Host            &host_;
     ContextExecutor &executor_;
+    BlobImports     &imports_;
     BatchStaging    &staging_;
     FenceReporter   &fences_;
     FaultCode        fault_;

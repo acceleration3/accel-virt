@@ -14,9 +14,12 @@ Status ExecutorLibrary::accept(const RvkExecutorOps *ops)
         return Status::invalid_parameter;
     /* Version 2 is all three memory operations or none of them: a table that
      * claims the version and carries half of it would be found out one blob
-     * later, on a worker, with a guest waiting. */
-    if (ops->abi_version >= RVK_EXECUTOR_ABI_VERSION &&
+     * later, on a worker, with a guest waiting. Version 3's one operation the
+     * same. */
+    if (ops->abi_version >= RVK_EXECUTOR_ABI_VERSION_IMPORTS &&
         (ops->import_kinds == nullptr || ops->import_blob == nullptr || ops->release_blob == nullptr))
+        return Status::invalid_parameter;
+    if (ops->abi_version >= RVK_EXECUTOR_ABI_VERSION_HANDLES && ops->imported_handle == nullptr)
         return Status::invalid_parameter;
     ops_ = ops;
     return Status::ok;
@@ -24,7 +27,27 @@ Status ExecutorLibrary::accept(const RvkExecutorOps *ops)
 
 bool ExecutorLibrary::imports() const
 {
-    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION;
+    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_IMPORTS;
+}
+
+bool ExecutorLibrary::names_imports() const
+{
+    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_HANDLES;
+}
+
+uint32_t ExecutorLibrary::import_blob(RvkExecutor *executor, uint64_t blob_id, const RvkBlobHandle &handle) const
+{
+    return ops_->import_blob(ops_->opaque, executor, blob_id, &handle);
+}
+
+void ExecutorLibrary::release_blob(RvkExecutor *executor, uint64_t blob_id) const
+{
+    ops_->release_blob(ops_->opaque, executor, blob_id);
+}
+
+uint64_t ExecutorLibrary::imported_handle(RvkExecutor *executor, uint64_t blob_id) const
+{
+    return ops_->imported_handle(ops_->opaque, executor, blob_id);
 }
 
 uint32_t ExecutorLibrary::import_kinds(SubApi api, const uint8_t *gpu_uuid) const

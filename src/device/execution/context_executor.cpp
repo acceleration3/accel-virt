@@ -55,6 +55,25 @@ Status ContextExecutor::execute(uint32_t command_id, const uint8_t *payload, siz
     }
 }
 
+Status ContextExecutor::import(uint64_t blob_id, const RvkBlobHandle &handle, uint64_t &device_memory)
+{
+    host_.require_worker("ContextExecutor::import");
+    device_memory = 0u;
+    if (executor_ == nullptr) return Status::invalid_state;
+    if (!library_.names_imports() || library_.import_blob(executor_, blob_id, handle) != RVK_EXECUTED)
+        return Status::not_supported;
+    device_memory = library_.imported_handle(executor_, blob_id);
+    if (device_memory != 0u) return Status::ok;
+    library_.release_blob(executor_, blob_id);
+    return Status::not_supported;
+}
+
+void ContextExecutor::release(uint64_t blob_id)
+{
+    host_.require_worker("ContextExecutor::release");
+    if (executor_ != nullptr) library_.release_blob(executor_, blob_id);
+}
+
 uint16_t ContextExecutor::command_api() const
 {
     switch (api_) {

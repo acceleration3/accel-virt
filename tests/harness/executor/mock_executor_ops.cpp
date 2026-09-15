@@ -23,7 +23,8 @@ private:
 
 MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
     : table_{}, sub_apis_(sub_apis), import_kinds_(0u), imported_(0u), released_blobs_(0u), lock_(), released_(), held_(false), waiting_(0u), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u),
-      executed_(0u), ids_{}, sizes_{}, last_sub_api_(0u), last_uuid_byte_(0u), misuses_(0u)
+      executed_(0u), ids_{}, sizes_{}, last_sub_api_(0u), last_uuid_byte_(0u), misuses_(0u), imports_{},
+      refuse_import_(0u), withhold_handle_(0u), answered_handle_(0u)
 {
     pthread_mutex_init(&lock_, nullptr);
     pthread_cond_init(&released_, nullptr);
@@ -33,19 +34,38 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
     table_.import_kinds = [](void *opaque, std::uint32_t, const std::uint8_t *) {
         return mock_of(opaque).import_kinds_;
     };
-    table_.import_blob = [](void *opaque, RvkExecutor *handle, std::uint64_t,
+    table_.import_blob = [](void *opaque, RvkExecutor *handle, std::uint64_t blob_id,
                             const RvkBlobHandle *blob) -> std::uint32_t {
         MockExecutorOps &mock = mock_of(opaque);
-        Lock lock(mock.lock_);
         if (mock.executor_of(handle) == nullptr || blob == nullptr) return RVK_UNDECODABLE;
+        Lock lock(mock.lock_);
+        if (mock.refuse_import_ != 0u && --mock.refuse_import_ == 0u) return RVK_UNDECODABLE;
+        for (Import &import : mock.imports_) {
+            if (import.live) continue;
+            import = Import{blob_id, *blob, true};
+            break;
+        }
         mock.imported_++;
         return RVK_EXECUTED;
     };
-    table_.release_blob = [](void *opaque, RvkExecutor *handle, std::uint64_t) {
+    table_.release_blob = [](void *opaque, RvkExecutor *handle, std::uint64_t blob_id) {
         MockExecutorOps &mock = mock_of(opaque);
-        Lock lock(mock.lock_);
         if (mock.executor_of(handle) == nullptr) return;
+        Lock lock(mock.lock_);
         mock.released_blobs_++;
+        for (Import &import : mock.imports_)
+            if (import.live && import.blob_id == blob_id) import.live = false;
+    };
+    table_.imported_handle = [](void *opaque, RvkExecutor *handle, std::uint64_t blob_id) -> std::uint64_t {
+        MockExecutorOps &mock = mock_of(opaque);
+        if (mock.executor_of(handle) == nullptr) return 0u;
+        Lock lock(mock.lock_);
+        if (mock.withhold_handle_ != 0u && --mock.withhold_handle_ == 0u) return 0u;
+        for (const Import &import : mock.imports_) {
+            if (!import.live || import.blob_id != blob_id) continue;
+            return mock.answered_handle_ != 0u ? mock.answered_handle_ : blob_id | handle_bit;
+        }
+        return 0u;
     };
     table_.create = [](void *opaque, std::uint32_t sub_api, const std::uint8_t *uuid) -> RvkExecutor * {
         MockExecutorOps &mock = mock_of(opaque);
@@ -68,6 +88,8 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
         Lock lock(mock.lock_);
         executor->live = false;
         mock.destroyed_++;
+        /* Destroy releases whatever the device never did (rvk_executor.h). */
+        for (Import &import : mock.imports_) import.live = false;
     };
     table_.execute = [](void *opaque, RvkExecutor *handle, std::uint32_t id, const std::uint8_t *payload,
                         std::size_t size, std::uint8_t *reply, std::size_t capacity,
@@ -157,6 +179,33 @@ std::uint32_t MockExecutorOps::released()
 {
     Lock lock(lock_);
     return released_blobs_;
+}
+
+}  // namespace av
+
+namespace av {
+
+void MockExecutorOps::refuse_import_at(std::uint32_t nth) { Lock lock(lock_); refuse_import_ = nth; }
+void MockExecutorOps::withhold_handle_at(std::uint32_t nth) { Lock lock(lock_); withhold_handle_ = nth; }
+void MockExecutorOps::answer_handle(std::uint64_t handle) { Lock lock(lock_); answered_handle_ = handle; }
+
+bool MockExecutorOps::import_of(std::uint64_t blob_id, RvkBlobHandle &handle)
+{
+    Lock lock(lock_);
+    for (const Import &import : imports_) {
+        if (!import.live || import.blob_id != blob_id) continue;
+        handle = import.handle;
+        return true;
+    }
+    return false;
+}
+
+std::uint32_t MockExecutorOps::live_imports()
+{
+    Lock lock(lock_);
+    std::uint32_t count = 0u;
+    for (const Import &import : imports_) count += import.live ? 1u : 0u;
+    return count;
 }
 
 }  // namespace av

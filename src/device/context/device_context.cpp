@@ -14,8 +14,8 @@ namespace av {
 
 DeviceContext::DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts,
                              const ExecutorLibrary &library, uint32_t id)
-    : id_(id), binding_(host, blobs), fences_(host, interrupts), executor_(host, library), staging_(host),
-      batches_(host, executor_, staging_, fences_), ring_(host, fences_, batches_), worker_(host, ring_) {}
+    : id_(id), binding_(host, blobs), fences_(host, interrupts), imports_(host, blobs, executor_),
+      executor_(host, library), staging_(host), batches_(host, executor_, imports_, staging_, fences_), ring_(host, fences_, batches_), worker_(host, ring_) {}
 
 Status DeviceContext::start()
 {
@@ -48,6 +48,7 @@ Status DeviceContext::bind(const ContextSetup &setup, const CapsetInfo &capset)
     status = staging_.allocate(uint64_t{1} << setup.ring_order(), answer_bytes);
     if (status != Status::ok) return status;
     executor_.configure(setup.sub_api(), capset.gpu().uuid());
+    imports_.configure(setup.ring_resource());
     batches_.prepare(reply);
     status = worker_.connect_doorbell(setup.doorbell());
     if (status != Status::ok) return status;

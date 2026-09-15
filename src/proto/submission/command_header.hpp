@@ -19,9 +19,12 @@ public:
     /* The producer waits for this command's answer. */
     static constexpr uint8_t  generate_reply = 1u;
     static constexpr uint16_t transport_api  = 0u;
-    /* API 0's only command: the device answers it itself, so a guest can time
-     * a round trip through the transport alone (feature 044). */
-    static constexpr uint32_t nop_id         = 0x00000001u;
+    /* API 0's commands, which the device answers itself. A NOP lets a guest
+     * time a round trip through the transport alone (feature 044); the blob
+     * pair hands a context's guest pages to its executor and back (045). */
+    static constexpr uint32_t nop_id          = 0x00000001u;
+    static constexpr uint32_t import_blob_id  = 0x00000002u;
+    static constexpr uint32_t release_blob_id = 0x00000003u;
 
     CommandHeader();
     CommandHeader(uint32_t id, uint32_t size, uint8_t flags);
