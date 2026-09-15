@@ -1,6 +1,8 @@
-/* One batch's commands (docs/protocol.md), read from the staged copy of its
- * payload: each header is checked against what is left of the copy before its
- * payload is handed on. Once malformed, it stays malformed. Any thread. */
+/* One batch's commands (docs/protocol.md), read from bytes the reader did not
+ * frame - the device's staged copy of a ring batch, or a batch a process framed
+ * itself before its transport publishes it: each header is checked against what
+ * is left before its payload is handed on. Once malformed, it stays malformed.
+ * Any thread. */
 #ifndef AV_COMMAND_STREAM_HPP
 #define AV_COMMAND_STREAM_HPP
 

@@ -8,6 +8,7 @@
 #include "proto/resources/scanout_target.hpp"
 #include "proto/resources/surface_layout.hpp"
 #include "proto/submission/command_header.hpp"
+#include "proto/submission/command_stream.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 
@@ -15,13 +16,16 @@ namespace av {
 
 namespace {
 constexpr uint64_t page_bytes = 4096u;
+/* A ring counts a batch's bytes in 32 bits. */
+constexpr size_t   max_batch = 0xFFFFFFFFu;
 }  // namespace
 
-KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t ring_order)
-    : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), allocations_{}, locked_{}, dma_address_(0u),
-      context_(0u), ring_(), reply_(), fences_(), faulted_(false),
-      decode_arena_(nullptr, 0u), blobs_(),
-      staging_{} {}
+KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t ring_order, uint32_t reply_bytes,
+                           uint8_t *staging, size_t staging_bytes)
+    : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
+      staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{}, locked_{},
+      dma_address_(0u), context_(0u), ring_(), reply_(), fences_(), faulted_(false), decode_arena_(nullptr, 0u),
+      blobs_() {}
 
 KmtTransport::~KmtTransport() { teardown(); }
 
@@ -63,6 +67,7 @@ Status KmtTransport::setup_allocation(uint32_t index, AllocationKind kind, uint6
 Status KmtTransport::initialize()
 {
     if (context_ != 0u) return Status::invalid_state;
+    if (staging_bytes_ <= CommandHeader::encoded_size) return Status::invalid_parameter;
     ScopeExit undo([&] { teardown(); });
     uint8_t      *ring_view = nullptr;
     uint8_t      *reply_view = nullptr;
@@ -78,7 +83,7 @@ Status KmtTransport::initialize()
     const Status fence_ready = setup_allocation(fence_index, AllocationKind::fence_page, page_bytes, false, false,
                                                 unlocked, unused);
     if (fence_ready != Status::ok) return fence_ready;
-    const Status reply_ready = setup_allocation(reply_index, AllocationKind::reply_slot, reply_bytes, false, true,
+    const Status reply_ready = setup_allocation(reply_index, AllocationKind::reply_slot, reply_bytes_, false, true,
                                                 reply_view, unused);
     if (reply_ready != Status::ok) return reply_ready;
     /* The DMA buffer is only what dxgkrnl insists a submission names; the
@@ -88,7 +93,7 @@ Status KmtTransport::initialize()
     if (dma_ready != Status::ok) return dma_ready;
     const Status ring_bound = ring_.initialize(ring_view, ring_order_);
     if (ring_bound != Status::ok) return ring_bound;
-    reply_ = ReplyReader(reply_view, reply_bytes);
+    reply_ = ReplyReader(reply_view, reply_bytes_);
     /* The record names the ring, fence and reply by the handles just allocated,
      * so the miniport publishes exactly this context's memory. */
     const RvkContextRecord record(sub_api_, ring_order_, allocations_[ring_index], allocations_[fence_index],
@@ -137,7 +142,8 @@ uint32_t KmtTransport::context() const { return context_; }
 
 WireWriter KmtTransport::request_writer()
 {
-    return WireWriter(staging_ + CommandHeader::encoded_size, sizeof staging_ - CommandHeader::encoded_size);
+    if (staging_bytes_ <= CommandHeader::encoded_size) return WireWriter(nullptr, 0u);
+    return WireWriter(staging_ + CommandHeader::encoded_size, staging_bytes_ - CommandHeader::encoded_size);
 }
 
 TransportResult KmtTransport::publish(uint32_t command_id, WireWriter &writer, uint8_t flags, uint64_t &fence)
@@ -148,11 +154,16 @@ TransportResult KmtTransport::publish(uint32_t command_id, WireWriter &writer, u
     const uint32_t command_size = static_cast<uint32_t>(CommandHeader::encoded_size) + body;
     static_cast<void>(CommandHeader(command_id, command_size, flags).encode(staging_,
                                                                             CommandHeader::encoded_size));
+    return publish_batch(staging_, command_size, fence);
+}
+
+TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence)
+{
     const uint64_t next = fences_.peek();
     if (next == 0u) return TransportResult::failed;
     uint64_t     begin = 0u;
     uint64_t     end = 0u;
-    const Status written = ring_.write_batch(staging_, command_size, next, begin, end);
+    const Status written = ring_.write_batch(batch, length, next, begin, end);
     if (written != Status::ok) return TransportResult::failed;
     fence = fences_.open();
     uint8_t      descriptor[SubmissionDescriptor::encoded_size] = {};
@@ -179,6 +190,31 @@ TransportResult KmtTransport::send_sync(uint32_t command_id, WireWriter &writer,
     uint64_t              fence = 0u;
     const TransportResult sent = publish(command_id, writer, CommandHeader::generate_reply, fence);
     if (sent != TransportResult::ok) return sent;
+    return await(fence, reply);
+}
+
+/* The batch is judged whole before a byte reaches the ring: a frame the device
+ * would fault the context for is the caller's mistake, not the context's. */
+TransportResult KmtTransport::send_batch(const uint8_t *framed, size_t length, WireReader &reply)
+{
+    reply = WireReader(nullptr, 0u);
+    if (faulted_ || !established() || framed == nullptr || length == 0u || length > max_batch)
+        return TransportResult::failed;
+    CommandStream  stream(framed, length);
+    CommandHeader  header;
+    const uint8_t *payload = nullptr;
+    bool           replying = false;
+    Status         framing = Status::ok;
+    while ((framing = stream.next(header, payload)) == Status::ok) replying = replying || header.generates_reply();
+    if (framing != Status::no_space) return TransportResult::failed;
+    uint64_t              fence = 0u;
+    const TransportResult sent = publish_batch(framed, static_cast<uint32_t>(length), fence);
+    if (sent != TransportResult::ok || !replying) return sent;
+    return await(fence, reply);
+}
+
+TransportResult KmtTransport::await(uint64_t fence, WireReader &reply)
+{
     const Status waited = connection_.kmt().wait_for_context(connection_.device(), context_);
     if (waited != Status::ok) {
         faulted_ = true;

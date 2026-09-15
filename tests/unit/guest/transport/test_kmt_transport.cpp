@@ -16,6 +16,7 @@
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
@@ -53,6 +54,10 @@ using av::KmtTransportProbe;
 
 namespace {
 
+/* The rvk suite's transport: 1 KiB commands and a page of reply (feature 044). */
+constexpr std::size_t   staging_bytes = 1024u;
+constexpr std::uint32_t reply_bytes = 4096u;
+
 const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 
 
@@ -83,7 +88,9 @@ private:
 TEST(kmt_transport, is_unestablished_until_initialized)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK(!transport.established());
   CHECK(transport.invariants_hold()); }
 
@@ -93,7 +100,9 @@ TEST(kmt_transport, is_unestablished_until_initialized)
 TEST(kmt_transport, context_is_the_virtual_context_while_established)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_EQ(transport.context(), 0u);
   CHECK_STATUS(transport.initialize(), Status::ok);
   const std::uint32_t context = transport.context();
@@ -110,7 +119,9 @@ TEST(kmt_transport, context_is_the_virtual_context_while_established)
 TEST(kmt_transport, initialize_maps_the_ring_and_creates_the_virtual_context)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK(transport.established());
   /* The record was carried as private data. */
@@ -137,7 +148,9 @@ TEST(kmt_transport, initialize_maps_the_ring_and_creates_the_virtual_context)
 TEST(kmt_transport, an_async_command_lands_a_batch_and_a_submission)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   WireWriter writer = transport.request_writer();
   writer.write_u32(0xCAFEu);
@@ -163,10 +176,12 @@ TEST(kmt_transport, an_async_command_lands_a_batch_and_a_submission)
 TEST(kmt_transport, an_overflowed_writer_is_refused)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   WireWriter writer = transport.request_writer();
-  writer.write_zeros(KmtTransport::max_command + 1u);
+  writer.write_zeros(staging_bytes + 1u);
   CHECK_STATUS(writer.status(), Status::too_large);
   CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed); }
 
@@ -174,7 +189,9 @@ TEST(kmt_transport, an_overflowed_writer_is_refused)
 TEST(kmt_transport, a_sync_command_reads_the_reply_the_device_wrote)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   /* Play the device: the first sync command takes fence 1, so write its answer
    * into the reply slot before the call reads it. */
@@ -194,7 +211,9 @@ TEST(kmt_transport, a_sync_command_reads_the_reply_the_device_wrote)
 TEST(kmt_transport, before_setup_and_the_refusing_arenas)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   WireWriter writer = transport.request_writer();
   writer.write_u32(1u);
   CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed);
@@ -211,7 +230,8 @@ void refuse_setup(MockKmt::Call call, std::uint32_t nth)
     GuestConnection connection(kmt);
     CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
     kmt.fail_at(call, nth, MockKmt::invalid_parameter);
-    KmtTransport transport(connection, SubApi::vulkan, 12u);
+    std::uint8_t transport_staging[staging_bytes] = {};
+    KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
     CHECK(transport.initialize() != Status::ok);
     CHECK(!transport.established());
     CHECK(transport.invariants_hold());
@@ -238,7 +258,8 @@ TEST(kmt_transport, a_failed_mapping_wait_leaves_it_unestablished)
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
-  KmtTransport counted(connection, SubApi::vulkan, 12u);
+  std::uint8_t counted_staging[staging_bytes] = {};
+  KmtTransport counted(connection, SubApi::vulkan, 12u, reply_bytes, counted_staging, sizeof counted_staging);
   CHECK_STATUS(counted.initialize(), Status::ok);
   const std::uint32_t waits = kmt.calls(MockKmt::Call::wait_for_fence);
   counted.teardown();
@@ -247,7 +268,8 @@ TEST(kmt_transport, a_failed_mapping_wait_leaves_it_unestablished)
   GuestConnection other(fresh);
   CHECK_STATUS(other.open(found_adapter(fresh)), Status::ok);
   fresh.fail_at(MockKmt::Call::wait_for_fence, waits, MockKmt::invalid_parameter);
-  KmtTransport transport(other, SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(other, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
   CHECK(transport.initialize() != Status::ok);
   CHECK(!transport.established()); }
 
@@ -257,7 +279,9 @@ TEST(kmt_transport, a_failed_mapping_wait_leaves_it_unestablished)
 TEST(kmt_transport, a_torn_down_transport_initializes_again)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   std::uint32_t answered = 0u;
   fixture.kmt().answer_waits(nullptr, 0u);
@@ -288,7 +312,8 @@ TEST(kmt_transport, a_null_ring_view_is_refused)
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
   kmt.zero_next(MockKmt::Call::lock);   /* the ring lock returns no view */
-  KmtTransport transport(connection, SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
   CHECK(transport.initialize() != Status::ok);
   CHECK(!transport.established()); }
 
@@ -298,7 +323,8 @@ TEST(kmt_transport, a_refused_submission_fails_the_send)
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
-  KmtTransport transport(connection, SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   kmt.fail_at(MockKmt::Call::submit, 1u, MockKmt::invalid_parameter);
   WireWriter writer = transport.request_writer();
@@ -311,7 +337,8 @@ TEST(kmt_transport, a_full_fence_table_refuses_the_next_send)
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
-  KmtTransport transport(connection, SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   for (std::uint32_t i = 0u; i < 64u; i++) {
       WireWriter writer = transport.request_writer();
@@ -328,7 +355,8 @@ TEST(kmt_transport, a_full_ring_refuses_the_send)
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
-  KmtTransport transport(connection, SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   bool refused = false;
   for (std::uint32_t i = 0u; i < 64u && !refused; i++) {
@@ -345,7 +373,8 @@ TEST(kmt_transport, send_sync_failure_paths)
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
-  KmtTransport transport(connection, SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
   /* Before setup: nothing to publish. */
   WireWriter early = transport.request_writer();
   early.write_u32(1u);
@@ -364,7 +393,8 @@ TEST(kmt_transport, a_wait_the_device_refuses_fails_the_sync)
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
-  KmtTransport transport(connection, SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   kmt.fail_at(MockKmt::Call::wait_for_context, 1u, MockKmt::invalid_parameter);
   WireWriter w1 = transport.request_writer();
@@ -377,7 +407,9 @@ TEST(kmt_transport, a_wait_the_device_refuses_fails_the_sync)
 TEST(kmt_transport, teardown_unlocks_only_the_views_it_holds)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK_EQ(fixture.kmt().calls(MockKmt::Call::lock), 2u);
   transport.teardown();
@@ -397,7 +429,9 @@ TEST(kmt_transport, teardown_unlocks_only_the_views_it_holds)
 TEST(kmt_transport, the_invariant_catches_a_view_of_no_allocation)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK(transport.invariants_hold());
   KmtTransportProbe::phantom_view(transport);
   CHECK(!transport.invariants_hold()); }
@@ -407,7 +441,8 @@ TEST(kmt_transport, the_invariant_catches_an_established_context_with_no_buffer)
   kmt.add_adapter(rvk, 3200u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(found_adapter(kmt)), Status::ok);
-  KmtTransport transport(connection, SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
   KmtTransportProbe::orphan(transport);
   CHECK(!transport.invariants_hold()); }
 
@@ -416,7 +451,9 @@ TEST(kmt_transport, the_invariant_catches_an_established_context_with_no_buffer)
 TEST(kmt_transport, a_fault_loses_the_context_for_every_later_send)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK(!transport.faulted());
   /* The device refuses the submission: the context is lost. */
@@ -438,7 +475,9 @@ TEST(kmt_transport, a_fault_loses_the_context_for_every_later_send)
 TEST(kmt_transport, a_faulted_wait_loses_the_context)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   fixture.kmt().fail_at(MockKmt::Call::wait_for_context, 1u, MockKmt::invalid_parameter);
   WireWriter w1 = transport.request_writer();
@@ -456,7 +495,9 @@ TEST(kmt_transport, a_faulted_wait_loses_the_context)
 TEST(kmt_transport_nop, passes_only_an_empty_answer_and_says_how_many_bytes_came_back)
 { Fixture fixture;
   CHECK_STATUS(fixture.open(), Status::ok);
-  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   const std::uint8_t three[3] = {1u, 2u, 3u};
   fixture.kmt().queue_answer(nullptr, 0u);
@@ -476,3 +517,245 @@ TEST(kmt_transport_nop, passes_only_an_empty_answer_and_says_how_many_bytes_came
   CHECK_EQ(answered, 0u);
   CHECK(transport.faulted());
   CHECK(transport.invariants_hold()); }
+
+namespace {
+
+/* An ICD's transport (feature 045): an order-20 ring, 256 KiB commands and a
+ * 64 KiB reply slot. */
+constexpr std::uint8_t  icd_ring_order = 20u;
+constexpr std::size_t   icd_command_bytes = std::size_t{256} << 10u;
+constexpr std::uint32_t icd_reply_bytes = std::uint32_t{64} << 10u;
+
+/* Commands framed one after another into `bytes`, as a caller batching its own
+ * calls frames them. */
+class Framer {
+public:
+    Framer() : bytes_{}, length_(0u) {}
+
+    Framer &add(std::uint32_t id, std::uint32_t payload, std::uint8_t flags = 0u)
+    {
+        const auto size = static_cast<std::uint32_t>(CommandHeader::encoded_size + payload);
+        CHECK_STATUS(CommandHeader(id, size, flags).encode(bytes_ + length_, sizeof bytes_ - length_), Status::ok);
+        for (std::uint32_t i = 0u; i < payload; i++)
+            bytes_[length_ + CommandHeader::encoded_size + i] = static_cast<std::uint8_t>(id + i);
+        length_ += size;
+        return *this;
+    }
+    Framer &raw(const std::uint8_t *source, std::size_t count)
+    {
+        std::memcpy(bytes_ + length_, source, count);
+        length_ += count;
+        return *this;
+    }
+
+    std::uint8_t       *bytes() { return bytes_; }
+    std::size_t         length() const { return length_; }
+
+private:
+    std::uint8_t bytes_[512];
+    std::size_t  length_;
+};
+
+}  // namespace
+
+/* The limits come from the caller: a command of the whole 256 KiB staging
+ * crosses an order-20 ring into a 64 KiB reply slot, and one byte more does not
+ * leave the process. */
+TEST(kmt_transport_limits, a_256_kib_command_crosses_and_one_past_the_staging_is_refused)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  static std::uint8_t staging[icd_command_bytes];
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, icd_ring_order, icd_reply_bytes, staging,
+                         sizeof staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  CHECK_EQ(fixture.kmt().allocation_pages(KmtTransportProbe::ring_allocation(transport)), 512u);
+  CHECK_EQ(fixture.kmt().allocation_pages(KmtTransportProbe::reply_allocation(transport)), 16u);
+  std::uint8_t answer[MockKmt::max_answer] = {};
+  answer[MockKmt::max_answer - 1u] = 0x5Au;
+  fixture.kmt().queue_answer(answer, sizeof answer);
+  WireWriter writer = transport.request_writer();
+  for (std::size_t i = 0u; i < icd_command_bytes - CommandHeader::encoded_size; i++)
+      writer.write_u8(static_cast<std::uint8_t>(i * 13u));
+  CHECK_STATUS(writer.status(), Status::ok);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_sync(0x10007u, writer, reply) == TransportResult::ok);
+  CHECK_EQ(reply.remaining(), static_cast<std::size_t>(MockKmt::max_answer));
+  CHECK_EQ(fixture.kmt().command_id(0u), 0x10007u);
+  CHECK_EQ(fixture.kmt().command_size(0u), static_cast<std::uint32_t>(icd_command_bytes));
+  CHECK_EQ(fixture.kmt().command_bytes(0u)[CommandHeader::encoded_size + 1u], 13u);
+  const std::uint32_t submits = fixture.kmt().calls(MockKmt::Call::submit);
+  WireWriter too_big = transport.request_writer();
+  too_big.write_zeros(icd_command_bytes - CommandHeader::encoded_size + 1u);
+  CHECK(transport.send_async(0x10007u, too_big) == TransportResult::failed);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), submits);
+  CHECK(transport.invariants_hold()); }
+
+/* A command the caller's staging holds but the ring cannot: refused unsent. */
+TEST(kmt_transport_limits, a_command_larger_than_the_ring_is_refused_without_a_submission)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t staging[8192] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, staging, sizeof staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  WireWriter writer = transport.request_writer();
+  writer.write_zeros(4096u);
+  CHECK(transport.send_async(0x10001u, writer) == TransportResult::failed);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), 0u); }
+
+/* Staging with no room past a command header is refused before any allocation. */
+TEST(kmt_transport_limits, staging_with_no_room_for_a_payload_is_refused_at_initialize)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t staging[CommandHeader::encoded_size + 1u] = {};
+  const std::uint32_t allocations = fixture.kmt().calls(MockKmt::Call::create_allocation);
+  { KmtTransport header_only(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, staging,
+                             CommandHeader::encoded_size);
+    CHECK_STATUS(header_only.initialize(), Status::invalid_parameter);
+    CHECK(!header_only.established()); }
+  { KmtTransport none(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, nullptr, sizeof staging);
+    CHECK_STATUS(none.initialize(), Status::invalid_parameter);
+    WireWriter writer = none.request_writer();
+    writer.write_u8(1u);
+    CHECK_STATUS(writer.status(), Status::too_large); }
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::create_allocation), allocations);
+  KmtTransport smallest(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, staging, sizeof staging);
+  CHECK_STATUS(smallest.initialize(), Status::ok); }
+
+/* Framed commands go out as one batch: one submission whose ring bytes are the
+ * caller's frames, and the answer of the command that asked for one. */
+TEST(kmt_transport_send_batch, publishes_the_framed_commands_once_and_reads_the_answer)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, staging, sizeof staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  Framer framed;
+  framed.add(0x10001u, 4u).add(0x10002u, 8u, CommandHeader::generate_reply).add(0x10003u, 0u);
+  const std::uint8_t answer[4] = {9u, 8u, 7u, 6u};
+  fixture.kmt().queue_answer(answer, sizeof answer);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_batch(framed.bytes(), framed.length(), reply) == TransportResult::ok);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), 1u);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 1u);
+  CHECK_EQ(reply.remaining(), 4u);
+  CHECK_EQ(reply.read_u8(), 9u);
+  const std::uint8_t *const ring = fixture.kmt().view_of(KmtTransportProbe::ring_allocation(transport));
+  BatchHeader batch;
+  CHECK_STATUS(batch.decode(ring + 32u, BatchHeader::encoded_size), Status::ok);
+  CHECK_EQ(batch.fence_id(), 1u);
+  CHECK_EQ(batch.length(), framed.length());
+  CHECK(std::memcmp(ring + 32u + BatchHeader::encoded_size, framed.bytes(), framed.length()) == 0);
+  CHECK(!transport.faulted());
+  CHECK(transport.invariants_hold()); }
+
+/* A batch no command of which asks for an answer is published without a wait,
+ * and its reply is empty. */
+TEST(kmt_transport_send_batch, a_batch_asking_for_no_answer_does_not_wait)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, staging, sizeof staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  Framer framed;
+  framed.add(0x10001u, 16u).add(0x10001u, 3u);
+  const std::uint8_t leftover[2] = {1u, 2u};
+  WireReader reply(leftover, sizeof leftover);
+  CHECK(transport.send_batch(framed.bytes(), framed.length(), reply) == TransportResult::ok);
+  CHECK_EQ(reply.remaining(), 0u);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), 1u);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 0u); }
+
+/* A batch that does not frame exactly is refused before anything is written or
+ * submitted, and the context is not lost for it. */
+TEST(kmt_transport_send_batch, a_malformed_batch_is_refused_before_publishing)
+{ struct Case { const char *what; std::uint32_t script; };
+  /* 0 no bytes, 1 null, 2 a header cut short, 3 a size past the batch, 4 a size
+   * below the header, 5 trailing bytes, 6 an unknown flag, 7 too large a batch
+   * for the ring, 8 a length no ring counts */
+  const Case cases[] = {{"empty", 0u},         {"null", 1u},     {"cut header", 2u}, {"size past", 3u},
+                        {"size below header", 4u}, {"trailing", 5u}, {"flag", 6u},     {"too large", 7u},
+                        {"past 32 bits", 8u}};
+  for (const Case &one : cases) {
+      Fixture fixture;
+      CHECK_STATUS(fixture.open(), Status::ok);
+      std::uint8_t staging[staging_bytes] = {};
+      KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, staging, sizeof staging);
+      CHECK_STATUS(transport.initialize(), Status::ok);
+      Framer framed;
+      framed.add(0x10001u, 4u, CommandHeader::generate_reply);
+      const std::uint8_t *bytes = framed.bytes();
+      std::size_t         length = framed.length();
+      std::uint8_t        big[8192] = {};
+      if (one.script == 0u) length = 0u;
+      if (one.script == 1u) bytes = nullptr;
+      if (one.script == 2u) length = CommandHeader::encoded_size - 1u;
+      if (one.script == 3u) length -= 1u;
+      if (one.script == 4u) {
+          const std::uint32_t tiny = 4u;
+          std::memcpy(framed.bytes() + 4u, &tiny, sizeof tiny);
+      }
+      if (one.script == 5u) {
+          const std::uint8_t tail[3] = {1u, 2u, 3u};
+          framed.raw(tail, sizeof tail);
+          length = framed.length();
+      }
+      if (one.script == 6u) framed.bytes()[7] = 0x80u;
+      if (one.script == 8u) length = std::size_t{1} << 32u;   /* judged by its length, never read */
+      if (one.script == 7u) {
+          CHECK_STATUS(CommandHeader(0x10001u, sizeof big, 0u).encode(big, sizeof big), Status::ok);
+          bytes = big;
+          length = sizeof big;
+      }
+      std::memset(staging, 0xEE, sizeof staging);
+      WireReader reply(nullptr, 0u);
+      CHECK(transport.send_batch(bytes, length, reply) == TransportResult::failed);
+      CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), 0u);
+      CHECK_EQ(fixture.kmt().calls(MockKmt::Call::wait_for_context), 0u);
+      const std::uint8_t *const ring = fixture.kmt().view_of(KmtTransportProbe::ring_allocation(transport));
+      BatchHeader batch;
+      CHECK(batch.decode(ring + 32u, BatchHeader::encoded_size) != Status::ok);   /* nothing was written */
+      CHECK(!transport.faulted());
+      fixture.kmt().queue_answer(nullptr, 0u);
+      std::uint32_t answered = 0u;
+      CHECK_STATUS(transport.nop(answered), Status::ok);
+  } }
+
+/* A batch on a context not set up, or lost, is refused unsent; a replying
+ * batch whose wait fails loses the context, as a synchronous send does. */
+TEST(kmt_transport_send_batch, an_unset_or_lost_context_refuses_and_a_failed_wait_loses_it)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, staging, sizeof staging);
+  Framer framed;
+  framed.add(0x10002u, 8u, CommandHeader::generate_reply);
+  WireReader reply(nullptr, 0u);
+  CHECK(transport.send_batch(framed.bytes(), framed.length(), reply) == TransportResult::failed);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  fixture.kmt().fail_at(MockKmt::Call::wait_for_context, 1u, MockKmt::invalid_parameter);
+  CHECK(transport.send_batch(framed.bytes(), framed.length(), reply) == TransportResult::failed);
+  CHECK(transport.faulted());
+  const std::uint32_t submits = fixture.kmt().calls(MockKmt::Call::submit);
+  CHECK(transport.send_batch(framed.bytes(), framed.length(), reply) == TransportResult::failed);
+  CHECK_EQ(fixture.kmt().calls(MockKmt::Call::submit), submits);
+  CHECK(transport.invariants_hold()); }
+
+/* A submission the driver refuses loses the context, and an answer that is not
+ * for the batch's fence fails the call. */
+TEST(kmt_transport_send_batch, a_refused_submission_or_a_stale_answer_fails)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::vulkan, 12u, reply_bytes, staging, sizeof staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  Framer framed;
+  framed.add(0x10002u, 8u, CommandHeader::generate_reply);
+  WireReader reply(nullptr, 0u);
+  /* The wait succeeds, but nothing was written to the reply slot for this fence. */
+  CHECK(transport.send_batch(framed.bytes(), framed.length(), reply) == TransportResult::failed);
+  CHECK(transport.faulted());
+  transport.teardown();
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  fixture.kmt().fail_at(MockKmt::Call::submit, 1u, MockKmt::invalid_parameter);
+  CHECK(transport.send_batch(framed.bytes(), framed.length(), reply) == TransportResult::failed);
+  CHECK(transport.faulted()); }

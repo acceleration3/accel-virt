@@ -8,7 +8,7 @@ namespace av {
 namespace {
 
 /* Short enough that the program's command - source, count and handles - stays
- * far under KmtTransport::max_command. */
+ * far under ScenarioTransport::command_bytes. */
 constexpr char vector_add_source[] =
     "__kernel void vector_add(__global const float *a, __global const float *b, __global float *c)\n"
     "{\n"

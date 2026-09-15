@@ -6,7 +6,8 @@
 namespace av {
 
 ScenarioTransport::ScenarioTransport(Kmt &kmt, const AdapterSearch &search, ScenarioSteps &steps, SubApi sub_api)
-    : search_(search), steps_(steps), connection_(kmt), transport_(connection_, sub_api, ring_order) {}
+    : search_(search), steps_(steps), connection_(kmt), staging_{},
+      transport_(connection_, sub_api, ring_order, reply_bytes, staging_, sizeof staging_) {}
 
 ScenarioTransport::~ScenarioTransport() { close(); }
 

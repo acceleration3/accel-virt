@@ -22,6 +22,8 @@
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 
 using av::ClientDescriptor;
@@ -35,6 +37,10 @@ using av::SubmissionDescriptor;
 using av::Status;
 
 namespace {
+
+/* The rvk suite's transport: 1 KiB commands and a page of reply (feature 044). */
+constexpr std::size_t   staging_bytes = 1024u;
+constexpr std::uint32_t reply_bytes = 4096u;
 
 const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 constexpr std::uint32_t refused_code = 0xC0000001u;
@@ -525,7 +531,8 @@ TEST(mock_kmt_journal, records_each_command_and_a_wait_frees_the_ring)
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
   av::GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(adapter), Status::ok);
-  av::KmtTransport transport(connection, SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  av::KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   kmt.answer_waits(nullptr, 0u);
   for (std::uint32_t i = 0u; i < 20u; i++) {

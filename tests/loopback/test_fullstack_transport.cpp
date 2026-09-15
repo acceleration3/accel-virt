@@ -25,6 +25,7 @@
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
+#include <cstddef>
 #include <cstdint>
 
 namespace av {
@@ -51,6 +52,10 @@ using av::WireReader;
 using av::WireWriter;
 
 namespace {
+
+/* The rvk suite's transport: 1 KiB commands and a page of reply (feature 044). */
+constexpr std::size_t   staging_bytes = 1024u;
+constexpr std::uint32_t reply_bytes = 4096u;
 
 /* The command TransportScenario sends; MockExecutorOps echoes every payload it
  * does not script, as tests/qemu/echo_executor.cpp does for this one. */
@@ -122,7 +127,9 @@ TEST(fullstack_adapter, the_luid_and_the_video_memory_budgets_are_the_drivers_se
   CHECK_EQ(usage, 0u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(adapter), Status::ok);
-  KmtTransport transport(connection, SubApi::vulkan, ring_order);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, ring_order,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK_STATUS(kmt.query_video_memory(adapter, av::MemorySegmentGroup::non_local, budget, usage), Status::ok);
   CHECK_EQ(usage, 8192u + 3u * 4096u);   /* the ring's two pages, the fence page, reply slot and DMA buffer */
@@ -147,7 +154,9 @@ TEST(fullstack_transport, an_echo_crosses_the_real_driver_and_the_real_device_co
   CHECK_EQ(count, 1u);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(adapters[0]), Status::ok);
-  KmtTransport transport(connection, SubApi::vulkan, ring_order);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, ring_order,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK(transport.established());
   CHECK(rig.platform().logged_line("rvkgpu: rvk context on doorbell 0 message 3 status 0x00000000"));
@@ -185,7 +194,9 @@ TEST(fullstack_transport, an_escape_binds_a_host_visible_chunk_through_the_real_
   CHECK_STATUS(kmt.enumerate_adapters(&adapter, 1u, count), Status::ok);
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(adapter), Status::ok);
-  KmtTransport transport(connection, SubApi::vulkan, ring_order);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, ring_order,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   const std::uint64_t chunk_bytes = std::uint64_t{64} << 20u;
   std::uint8_t descriptor[av::AllocationDescriptor::encoded_size] = {};
@@ -241,7 +252,9 @@ TEST(fullstack_transport, a_batch_the_host_finishes_later_completes_on_its_fence
   DdiKmt &kmt = rig.kmt();
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(DdiKmt::adapter_handle), Status::ok);
-  KmtTransport transport(connection, SubApi::vulkan, ring_order);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, ring_order,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
 
   rig.device().executor().hold();
@@ -276,8 +289,10 @@ TEST(fullstack_transport, a_faulted_context_fails_its_wait_and_its_neighbour_sti
   DdiKmt &kmt = rig.kmt();
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(DdiKmt::adapter_handle), Status::ok);
-  KmtTransport doomed(connection, SubApi::vulkan, ring_order);
-  KmtTransport healthy(connection, SubApi::vulkan, ring_order);
+  std::uint8_t doomed_staging[staging_bytes] = {};
+  KmtTransport doomed(connection, SubApi::vulkan, ring_order, reply_bytes, doomed_staging, sizeof doomed_staging);
+  std::uint8_t healthy_staging[staging_bytes] = {};
+  KmtTransport healthy(connection, SubApi::vulkan, ring_order, reply_bytes, healthy_staging, sizeof healthy_staging);
   CHECK_STATUS(doomed.initialize(), Status::ok);
   CHECK_STATUS(healthy.initialize(), Status::ok);
   CHECK(rig.platform().logged_line("rvkgpu: rvk context on doorbell 1 message 4 status 0x00000000"));
@@ -316,7 +331,8 @@ TEST(fullstack_transport, a_power_cycle_loses_the_context_and_a_new_one_echoes)
   CHECK_EQ(rig.started(), 0);
   GuestConnection connection(rig.kmt());
   CHECK_STATUS(connection.open(DdiKmt::adapter_handle), Status::ok);
-  KmtTransport before(connection, SubApi::vulkan, ring_order);
+  std::uint8_t before_staging[staging_bytes] = {};
+  KmtTransport before(connection, SubApi::vulkan, ring_order, reply_bytes, before_staging, sizeof before_staging);
   CHECK_STATUS(before.initialize(), Status::ok);
   CHECK(echoes(before, echo_payload));
 
@@ -331,7 +347,8 @@ TEST(fullstack_transport, a_power_cycle_loses_the_context_and_a_new_one_echoes)
   CHECK(before.faulted());
   before.teardown();
 
-  KmtTransport after(connection, SubApi::vulkan, ring_order);
+  std::uint8_t after_staging[staging_bytes] = {};
+  KmtTransport after(connection, SubApi::vulkan, ring_order, reply_bytes, after_staging, sizeof after_staging);
   CHECK_STATUS(after.initialize(), Status::ok);
   CHECK(echoes(after, echo_payload));
   after.teardown();
@@ -346,7 +363,8 @@ TEST(fullstack_transport, a_timeout_reset_loses_the_context_and_the_restart_runs
   CHECK_EQ(rig.started(), 0);
   GuestConnection connection(rig.kmt());
   CHECK_STATUS(connection.open(DdiKmt::adapter_handle), Status::ok);
-  KmtTransport before(connection, SubApi::vulkan, ring_order);
+  std::uint8_t before_staging[staging_bytes] = {};
+  KmtTransport before(connection, SubApi::vulkan, ring_order, reply_bytes, before_staging, sizeof before_staging);
   CHECK_STATUS(before.initialize(), Status::ok);
   CHECK(echoes(before, echo_payload));
 
@@ -364,7 +382,8 @@ TEST(fullstack_transport, a_timeout_reset_loses_the_context_and_the_restart_runs
   CHECK(!echoes(before, echo_payload));
   before.teardown();
 
-  KmtTransport after(connection, SubApi::vulkan, ring_order);
+  std::uint8_t after_staging[staging_bytes] = {};
+  KmtTransport after(connection, SubApi::vulkan, ring_order, reply_bytes, after_staging, sizeof after_staging);
   CHECK_STATUS(after.initialize(), Status::ok);
   CHECK(echoes(after, echo_payload));
   after.teardown();
@@ -378,7 +397,8 @@ TEST(fullstack_transport, a_stop_and_start_under_a_live_transport_leaves_room_fo
   CHECK_EQ(rig.started(), 0);
   GuestConnection connection(rig.kmt());
   CHECK_STATUS(connection.open(DdiKmt::adapter_handle), Status::ok);
-  KmtTransport before(connection, SubApi::vulkan, ring_order);
+  std::uint8_t before_staging[staging_bytes] = {};
+  KmtTransport before(connection, SubApi::vulkan, ring_order, reply_bytes, before_staging, sizeof before_staging);
   CHECK_STATUS(before.initialize(), Status::ok);
   CHECK(echoes(before, echo_payload));
 
@@ -391,7 +411,8 @@ TEST(fullstack_transport, a_stop_and_start_under_a_live_transport_leaves_room_fo
   CHECK(!echoes(before, echo_payload));
   before.teardown();
 
-  KmtTransport after(connection, SubApi::vulkan, ring_order);
+  std::uint8_t after_staging[staging_bytes] = {};
+  KmtTransport after(connection, SubApi::vulkan, ring_order, reply_bytes, after_staging, sizeof after_staging);
   CHECK_STATUS(after.initialize(), Status::ok);
   CHECK(echoes(after, echo_payload));
   after.teardown();
@@ -405,7 +426,9 @@ TEST(fullstack_transport, the_smallest_ring_wraps_many_times_and_every_echo_retu
   constexpr std::uint32_t batches = 3000u;
   GuestConnection connection(rig.kmt());
   CHECK_STATUS(connection.open(DdiKmt::adapter_handle), Status::ok);
-  KmtTransport transport(connection, SubApi::vulkan, ring_order);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, ring_order,
+                         reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   std::uint32_t returned = 0u;
   for (std::uint32_t batch = 0u; batch < batches; batch++)
@@ -424,11 +447,16 @@ TEST(fullstack_transport, five_transports_interleave_and_a_freed_doorbell_is_reu
   constexpr std::uint32_t rounds = 50u;
   GuestConnection connection(rig.kmt());
   CHECK_STATUS(connection.open(DdiKmt::adapter_handle), Status::ok);
-  KmtTransport first(connection, SubApi::vulkan, ring_order);
-  KmtTransport second(connection, SubApi::vulkan, ring_order);
-  KmtTransport third(connection, SubApi::vulkan, ring_order);
-  KmtTransport fourth(connection, SubApi::vulkan, ring_order);
-  KmtTransport fifth(connection, SubApi::vulkan, ring_order);
+  std::uint8_t first_staging[staging_bytes] = {};
+  KmtTransport first(connection, SubApi::vulkan, ring_order, reply_bytes, first_staging, sizeof first_staging);
+  std::uint8_t second_staging[staging_bytes] = {};
+  KmtTransport second(connection, SubApi::vulkan, ring_order, reply_bytes, second_staging, sizeof second_staging);
+  std::uint8_t third_staging[staging_bytes] = {};
+  KmtTransport third(connection, SubApi::vulkan, ring_order, reply_bytes, third_staging, sizeof third_staging);
+  std::uint8_t fourth_staging[staging_bytes] = {};
+  KmtTransport fourth(connection, SubApi::vulkan, ring_order, reply_bytes, fourth_staging, sizeof fourth_staging);
+  std::uint8_t fifth_staging[staging_bytes] = {};
+  KmtTransport fifth(connection, SubApi::vulkan, ring_order, reply_bytes, fifth_staging, sizeof fifth_staging);
   KmtTransport *const all[transports] = {&first, &second, &third, &fourth, &fifth};
   for (KmtTransport *transport : all) CHECK_STATUS(transport->initialize(), Status::ok);
   CHECK(rig.platform().logged_line("rvkgpu: rvk context on doorbell 4 message 7 status 0x00000000"));
@@ -439,7 +467,8 @@ TEST(fullstack_transport, five_transports_interleave_and_a_freed_doorbell_is_reu
   CHECK_EQ(returned, transports * rounds);
 
   third.teardown();
-  KmtTransport reused(connection, SubApi::vulkan, ring_order);
+  std::uint8_t reused_staging[staging_bytes] = {};
+  KmtTransport reused(connection, SubApi::vulkan, ring_order, reply_bytes, reused_staging, sizeof reused_staging);
   CHECK_STATUS(reused.initialize(), Status::ok);
   CHECK_EQ(rig.device().host().live_doorbells(), transports);
   CHECK(echoes(reused, echo_payload));
@@ -454,7 +483,9 @@ TEST(fullstack_teardown, a_process_that_exits_holding_a_context_leaves_nothing_b
     CHECK_EQ(rig.started(), 0);
     GuestConnection connection(rig.kmt());
     CHECK_STATUS(connection.open(DdiKmt::adapter_handle), Status::ok);
-    KmtTransport transport(connection, SubApi::vulkan, ring_order);
+    std::uint8_t transport_staging[staging_bytes] = {};
+    KmtTransport transport(connection, SubApi::vulkan, ring_order,
+                           reply_bytes, transport_staging, sizeof transport_staging);
     CHECK_STATUS(transport.initialize(), Status::ok);
     CHECK(echoes(transport, echo_payload));
     CHECK(rig.kmt().open_objects() >= 6u);   /* a device, four allocations and a context */

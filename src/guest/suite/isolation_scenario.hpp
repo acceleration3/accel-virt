@@ -38,6 +38,8 @@ private:
 
     ScenarioSteps     steps_;
     ScenarioTransport link_;
+    /* The doomed context's commands, then the relinked one's: never both live. */
+    uint8_t           staging_[ScenarioTransport::command_bytes];
 };
 
 }  // namespace av

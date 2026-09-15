@@ -9,6 +9,7 @@
 #include "guest/suite/adapter_search.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/opencl_scenario.hpp"
+#include "guest/suite/scenario_transport.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -229,7 +230,7 @@ TEST(opencl_scenario, sends_the_handles_and_inputs_the_host_needs)
     CHECK_EQ(value, 0u);
     CHECK(body.read_varint(value));
     CHECK_EQ(value, elements * sizeof(float)); }
-  CHECK(rig.kmt().command_size(8u) <= CommandHeader::encoded_size + av::KmtTransport::max_command);
+  CHECK(rig.kmt().command_size(8u) <= av::ScenarioTransport::command_bytes);
   rig.check_nothing_left_but_the_adapter(); }
 
 /* Each element is judged: three wrong answers leave 61 matched, which the step

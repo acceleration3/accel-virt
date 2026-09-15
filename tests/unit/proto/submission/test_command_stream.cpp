@@ -1,7 +1,7 @@
 /* A batch payload split into commands: every header checked against the
  * staged copy before its payload is handed on. */
 #include "core/support/status.hpp"
-#include "device/execution/command_stream.hpp"
+#include "proto/submission/command_stream.hpp"
 #include "harness/framework/hostile_sweep.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/submission/command_header.hpp"

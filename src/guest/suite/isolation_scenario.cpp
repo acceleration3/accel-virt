@@ -10,7 +10,7 @@
 namespace av {
 
 IsolationScenario::IsolationScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
-    : steps_(kmt, report, "isolation"), link_(kmt, search, steps_, SubApi::vulkan) {}
+    : steps_(kmt, report, "isolation"), link_(kmt, search, steps_, SubApi::vulkan), staging_{} {}
 
 void IsolationScenario::run()
 {
@@ -18,7 +18,8 @@ void IsolationScenario::run()
     if (link_.open() != Status::ok) return;
     if (steps_.check("healthy_before", exercise_healthy()) != Status::ok) return;
     {
-        KmtTransport doomed(link_.connection(), SubApi::vulkan, ScenarioTransport::ring_order);
+        KmtTransport doomed(link_.connection(), SubApi::vulkan, ScenarioTransport::ring_order,
+                            ScenarioTransport::reply_bytes, staging_, sizeof staging_);
         if (steps_.check("fault", fault(doomed)) != Status::ok) return;
         uint32_t answered = 0u;
         /* The transport refuses every send once a call has failed, so this
@@ -26,7 +27,8 @@ void IsolationScenario::run()
         steps_.check_refused("faulted_send", doomed.nop(answered));
     }
     if (steps_.check("healthy_after", exercise_healthy()) != Status::ok) return;
-    KmtTransport relinked(link_.connection(), SubApi::vulkan, ScenarioTransport::ring_order);
+    KmtTransport relinked(link_.connection(), SubApi::vulkan, ScenarioTransport::ring_order,
+                          ScenarioTransport::reply_bytes, staging_, sizeof staging_);
     Status       relink = relinked.initialize();
     uint32_t     answered = 0u;
     if (relink == Status::ok) relink = relinked.nop(answered);

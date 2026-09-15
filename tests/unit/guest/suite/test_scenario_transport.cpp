@@ -13,6 +13,7 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "proto/context/rvk_context_record.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
@@ -28,6 +29,10 @@ using av::Status;
 using av::SubApi;
 
 namespace {
+
+/* The rvk suite's transport: 1 KiB commands and a page of reply (feature 044). */
+constexpr std::size_t   staging_bytes = 1024u;
+constexpr std::uint32_t reply_bytes = 4096u;
 
 const PciIdentity rvk(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
                       AdapterScenario::virtio_vendor, AdapterScenario::rvk_subsystem);
@@ -51,7 +56,9 @@ TEST(scenario_transport, opens_a_context_of_its_sub_api_on_the_adapter_found)
   CHECK(record.sub_api() == SubApi::opencl);
   CHECK_EQ(record.ring_order(), ScenarioTransport::ring_order);
   /* A second context on the same connection is on the same device. */
-  KmtTransport second(link.connection(), SubApi::vulkan, ScenarioTransport::ring_order);
+  std::uint8_t second_staging[staging_bytes] = {};
+  KmtTransport second(link.connection(), SubApi::vulkan, ScenarioTransport::ring_order,
+                      reply_bytes, second_staging, sizeof second_staging);
   CHECK_STATUS(second.initialize(), Status::ok);
   CHECK_EQ(kmt.calls(MockKmt::Call::create_device), 1u);
   second.teardown();

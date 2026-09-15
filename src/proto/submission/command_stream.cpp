@@ -1,4 +1,4 @@
-#include "device/execution/command_stream.hpp"
+#include "proto/submission/command_stream.hpp"
 
 #include "proto/submission/command_header.hpp"
 

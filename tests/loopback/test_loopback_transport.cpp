@@ -11,6 +11,7 @@
 #include "proto/context/sub_api.hpp"
 #include "vk_dispatch_client.h"
 
+#include <cstddef>
 #include <cstdint>
 
 using av::GuestConnection;
@@ -21,6 +22,10 @@ using av::Status;
 using av::SubApi;
 
 namespace {
+
+/* The rvk suite's transport: 1 KiB commands and a page of reply (feature 044). */
+constexpr std::size_t   staging_bytes = 1024u;
+constexpr std::uint32_t reply_bytes = 4096u;
 
 /* The one adapter LoopbackKmt enumerates. */
 constexpr std::uint32_t loopback_adapter = 1u;
@@ -33,7 +38,8 @@ TEST(loopback_transport, a_vulkan_command_crosses_the_transport_and_comes_back)
   LoopbackKmt  kmt(rig.platform(), rig.device());
   GuestConnection connection(kmt);
   CHECK_STATUS(connection.open(loopback_adapter), Status::ok);
-  KmtTransport transport(connection, SubApi::vulkan, 12u);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(connection, SubApi::vulkan, 12u, reply_bytes, transport_staging, sizeof transport_staging);
   CHECK_STATUS(transport.initialize(), Status::ok);
   CHECK(transport.established());
 

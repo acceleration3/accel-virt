@@ -51,6 +51,7 @@ namespace {
 
 const PciIdentity rvk(0x1AF4u, 0x1050u, 0x1AF4u, 0x5256u);
 constexpr std::uint64_t chunk_bytes = std::uint64_t{64} << 20u;
+constexpr std::uint32_t reply_bytes = 4096u;
 constexpr std::uint32_t refused = 0xC0000001u;
 /* The connection's device and queue, the transport's four allocations, its DMA
  * mapping and its context, with the adapter. */
@@ -58,7 +59,9 @@ constexpr std::uint32_t link_objects = 9u;
 
 class Rig {
 public:
-    Rig() : adapter_(0u), connection_(kmt_), transport_(connection_, SubApi::vulkan, 12u)
+    Rig()
+        : adapter_(0u), connection_(kmt_), staging_{},
+          transport_(connection_, SubApi::vulkan, 12u, reply_bytes, staging_, sizeof staging_)
     {
         kmt_.add_adapter(rvk, 3200u);
         std::uint32_t count = 0u;
@@ -83,6 +86,7 @@ private:
     MockKmt         kmt_;
     std::uint32_t   adapter_;
     GuestConnection connection_;
+    std::uint8_t    staging_[1024];
     KmtTransport    transport_;
 };
 

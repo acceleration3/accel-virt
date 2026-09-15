@@ -1,7 +1,7 @@
 #include "device/execution/batch_executor.hpp"
 
 #include "device/execution/batch_staging.hpp"
-#include "device/execution/command_stream.hpp"
+#include "proto/submission/command_stream.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/transport_command.hpp"
 #include "device/fence/fence_reporter.hpp"
