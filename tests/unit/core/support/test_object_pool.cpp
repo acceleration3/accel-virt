@@ -4,7 +4,9 @@
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
 
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 
 namespace av {
 
@@ -234,3 +236,57 @@ TEST(object_pool_invariants, a_retained_empty_chunk_is_detected)
   pool.destroy_all();
   CHECK_STATUS(pool.create(object, destroyed, 2u), Status::ok);
   CHECK(pool.invariants_hold()); }
+
+/* Feature 045: a pool takes its chunks from any block source, not only a
+ * kernel platform - the Vulkan ICD keeps its dispatchable objects in one over
+ * the process heap. Every chunk it asks for it gives back, and a source that
+ * refuses a chunk is a pool that refuses the object. */
+namespace {
+
+class CountingSource final : public av::BlockSource {
+public:
+    void *allocate(std::size_t bytes, av::Pool) override
+    {
+        if (refuse_) return nullptr;
+        allocated_++;
+        return std::malloc(bytes);
+    }
+    void release(void *block) override
+    {
+        released_++;
+        std::free(block);
+    }
+    void require_irql_at_most(Irql, const char *) override { asked_++; }
+
+    void          refuse() { refuse_ = true; }
+    std::uint32_t allocated() const { return allocated_; }
+    std::uint32_t released() const { return released_; }
+    std::uint32_t asked() const { return asked_; }
+
+private:
+    std::uint32_t allocated_ = 0u;
+    std::uint32_t released_ = 0u;
+    std::uint32_t asked_ = 0u;
+    bool          refuse_ = false;
+};
+
+}  // namespace
+
+TEST(object_pool_create, takes_its_chunks_from_any_block_source)
+{ CountingSource source; int destroyed = 0;
+  { ObjectPool<Tracked> pool(source);
+    Tracked *objects[ObjectPool<Tracked>::chunk_slots + 1u] = {};
+    for (Tracked *&object : objects) CHECK_STATUS(pool.create(object, destroyed, 7u), Status::ok);
+    CHECK_EQ(source.allocated(), 2u);
+    CHECK(source.asked() > 0u);
+    CHECK(pool.find(objects[0]) == objects[0]);
+    CHECK_STATUS(pool.destroy(objects[ObjectPool<Tracked>::chunk_slots]), Status::ok);
+    CHECK_EQ(source.released(), 1u); }
+  CHECK_EQ(source.released(), 2u);
+  CHECK_EQ(destroyed, static_cast<int>(ObjectPool<Tracked>::chunk_slots) + 1);
+  CountingSource empty;
+  empty.refuse();
+  ObjectPool<Tracked> refused(empty);
+  Tracked *object = nullptr;
+  CHECK_STATUS(refused.create(object, destroyed, 1u), Status::no_memory);
+  CHECK(object == nullptr); }

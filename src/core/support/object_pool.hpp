@@ -11,7 +11,7 @@
 #ifndef AV_OBJECT_POOL_HPP
 #define AV_OBJECT_POOL_HPP
 
-#include "core/platform/platform.hpp"
+#include "core/platform/block_source.hpp"
 #include "core/support/status.hpp"
 
 #include <new>
@@ -27,7 +27,7 @@ class ObjectPool {
 public:
     static constexpr uint32_t chunk_slots = 64u;
 
-    explicit ObjectPool(Platform &platform) : platform_(platform), chunks_(nullptr), live_(0u) {}
+    explicit ObjectPool(BlockSource &platform) : platform_(platform), chunks_(nullptr), live_(0u) {}
     ~ObjectPool() { destroy_all(); }
     ObjectPool(const ObjectPool &) = delete;
     ObjectPool &operator=(const ObjectPool &) = delete;
@@ -120,7 +120,7 @@ public:
 private:
     struct Chunk;
 
-    Platform &platform_;
+    BlockSource &platform_;
     Chunk    *chunks_;
     uint32_t  live_;
 

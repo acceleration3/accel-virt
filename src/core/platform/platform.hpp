@@ -8,6 +8,7 @@
 #ifndef AV_PLATFORM_HPP
 #define AV_PLATFORM_HPP
 
+#include "core/platform/block_source.hpp"
 #include "core/platform/lock_rank.hpp"
 #include "core/support/status.hpp"
 
@@ -18,23 +19,16 @@ namespace av {
 
 class DdiTable;
 
-enum class Irql : unsigned { passive = 0, apc = 1, dispatch = 2, isr = 3 };
-enum class Pool : unsigned { non_paged = 0, paged = 1 };
 
 /* What a platform timer calls at DISPATCH: the timer, and the context it was
  * created with. The signature is the kernel's EXT_CALLBACK. */
 using TimerCallback = void (*)(void *timer, void *context);
 
-class Platform {
+class Platform : public BlockSource {
 public:
     Platform() = default;
     Platform(const Platform &) = delete;
     Platform &operator=(const Platform &) = delete;
-
-    /* Never at DISPATCH or above, and never with zero bytes. */
-    virtual void *allocate(size_t bytes, Pool pool) = 0;
-    /* Never null: the kernel bugchecks on it. */
-    virtual void  release(void *block) = 0;
 
     /* Physically contiguous memory a device can address; never at DISPATCH.
      * Not zero-filled. Released with the same size. */
@@ -62,7 +56,6 @@ public:
     virtual void copy(void *dst, const void *src, size_t bytes) = 0;
 
     virtual Irql current_irql() const = 0;
-    virtual void require_irql_at_most(Irql ceiling, const char *function) = 0;
 
     /* Raises to DISPATCH and returns the level to restore. */
     virtual Irql acquire_spin_lock(uintptr_t &word, LockRank rank) = 0;
