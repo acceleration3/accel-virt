@@ -17,6 +17,7 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "icd/vulkan/locked_transport.hpp"
 
+#include <stddef.h>
 #include <stdint.h>
 
 namespace av {
@@ -35,7 +36,9 @@ public:
     /* The ring the transport is set up with. Integration point: T023 gives
      * KmtTransport a ring order, command limit and reply size at construction,
      * and this becomes order 20 with 256 KiB commands and 64 KiB replies. */
-    static constexpr uint8_t ring_order = 12u;
+    static constexpr uint8_t  ring_order = 12u;
+    static constexpr uint32_t reply_bytes = 4096u;
+    static constexpr size_t   command_bytes = 1024u;
 
     Connection(Kmt &kmt, AdapterLuids &luids, ThreadLock &lock);
     ~Connection();
@@ -61,6 +64,7 @@ private:
     AdapterLuids   &luids_;
     AdapterSearch   search_;
     GuestConnection connection_;
+    uint8_t         staging_[command_bytes];
     KmtTransport    transport_;
     LockedTransport locked_;
     uint64_t        luid_;

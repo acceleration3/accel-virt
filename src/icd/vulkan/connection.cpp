@@ -9,7 +9,8 @@
 namespace av::icd {
 
 Connection::Connection(Kmt &kmt, AdapterLuids &luids, ThreadLock &lock)
-    : luids_(luids), search_(kmt), connection_(kmt), transport_(connection_, SubApi::vulkan, ring_order),
+    : luids_(luids), search_(kmt), connection_(kmt), staging_{},
+      transport_(connection_, SubApi::vulkan, ring_order, reply_bytes, staging_, sizeof staging_),
       locked_(transport_, lock), luid_(0u) {}
 
 Connection::~Connection() { close(); }
