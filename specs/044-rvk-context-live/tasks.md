@@ -107,7 +107,7 @@ description: "Tasks: rvk contexts in a real guest"
 - [X] T022 `tools/gate.sh`: when `AV_GUEST_IMAGE` is set and `build-qemu/librvk_executor.so` exists, a second guest boot runs `--rvk --executor build-qemu/librvk_executor.so` after the suite
 - [X] T023 The moved scope is recorded where it lands: `specs/045-vulkan-icd/spec.md` (the host-visible pattern round trip), `specs/050-opengl-icd/spec.md` (clear and read-back), `specs/052-opencl-icd/spec.md` (host-visible buffers); `specs/044-rvk-context-live/spec.md` marks US1.2-US1.4 and US3.1 with what moved
 - [X] T024 `docs/testing.md` "As built" describes the rvk scenarios, the NOP and the second boot; `docs/protocol.md` the NOP
-- [ ] T025 `AV_GUEST_IMAGE=... tools/gate.sh` passes with both boots; merge to `master`; push
+- [X] T025 `AV_GUEST_IMAGE=... tools/gate.sh` passes with both boots; merge to `master`; push *As built:* 2026-09-15, every configuration: default 228, coverage 230 (100% branches), fuzz 253, qemu 2; the echo boot's suite with its one expected black-screen live dump, and the rvk boot 45 of 45 with `transport.latency` 656 us and `opengl.latency` 4429 us
 
 ---
 
