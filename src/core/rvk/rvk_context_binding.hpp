@@ -11,6 +11,7 @@
 #include "core/platform/platform.hpp"
 #include "core/rvk/guest_context.hpp"
 #include "core/support/status.hpp"
+#include "proto/context/context_resources.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
 
@@ -31,9 +32,9 @@ class RvkContextBinding {
 public:
     /* The ring, fence and reply blobs, in that order, then the host-visible
      * chunks a process binds (feature 045), per slot. */
-    static constexpr uint32_t transport_resources   = 3u;
-    static constexpr uint32_t chunk_slots           = 64u;
-    static constexpr uint32_t resources_per_context = transport_resources + chunk_slots;
+    static constexpr uint32_t transport_resources   = ContextResources::transport_resources;
+    static constexpr uint32_t chunk_slots           = ContextResources::chunk_slots;
+    static constexpr uint32_t resources_per_context = ContextResources::per_context;
     /* Above the cursor's, every scanout's and host-visible memory's resource
      * ids, so a context's blob never takes one another subsystem uses. */
     static constexpr uint32_t first_resource_id = 0x00100000u;

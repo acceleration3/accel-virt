@@ -78,6 +78,13 @@ def guest_blob(resource, address, size):
         struct.pack("<QI4x", address, size)
 
 
+def guest_blob_pages(resource, addresses):
+    """A GUEST blob over one page at each of `addresses`, in that order."""
+    return header(CMD_RESOURCE_CREATE_BLOB) + struct.pack("<IIIIQQ", resource, BLOB_MEM_GUEST, 0, len(addresses), 0,
+                                                          PAGE * len(addresses)) + \
+        b"".join(struct.pack("<QI4x", address, PAGE) for address in addresses)
+
+
 def map_blob(resource, offset):
     return header(CMD_RESOURCE_MAP_BLOB) + struct.pack("<I4xQ", resource, offset)
 
@@ -91,10 +98,14 @@ def ring_header(order, tail=0, head=0):
 
 
 NOP = 0x00000001
+IMPORT_BLOB = 0x00000002
+RELEASE_BLOB = 0x00000003
 ECHO = 0x10001
 UNDECODABLE = 0x10002
 LOSE_DEVICE = 0x10003
 COUNT = 0x10004
+PEEK = 0x10005
+POKE = 0x10006
 GENERATE_REPLY = 1
 
 

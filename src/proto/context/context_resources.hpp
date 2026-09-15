@@ -17,11 +17,9 @@ public:
     static constexpr uint32_t chunk_slots = 64u;
     static constexpr uint32_t per_context = transport_resources + chunk_slots;
 
+    /* A context whose ring, the first of its resources, is `first`. */
     explicit ContextResources(uint32_t first);
 
-    uint32_t ring() const;
-    uint32_t fence() const;
-    uint32_t reply() const;
     /* The id of chunk slot `slot`, which the caller keeps below chunk_slots. */
     uint32_t chunk(uint32_t slot) const;
     /* Which chunk slot `id` is, or chunk_slots for an id that is none of this

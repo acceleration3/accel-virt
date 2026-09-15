@@ -4,10 +4,6 @@ namespace av {
 
 ContextResources::ContextResources(uint32_t first) : first_(first) {}
 
-uint32_t ContextResources::ring() const  { return first_; }
-uint32_t ContextResources::fence() const { return first_ + 1u; }
-uint32_t ContextResources::reply() const { return first_ + 2u; }
-
 uint32_t ContextResources::chunk(uint32_t slot) const
 {
     return first_ + transport_resources + slot;

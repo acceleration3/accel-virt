@@ -17,10 +17,14 @@
 #include "harness/host/mock_request.hpp"
 #include "harness/ring/guest_ring.hpp"
 #include "proto/context/capset_info.hpp"
+#include "proto/context/context_resources.hpp"
 #include "proto/context/context_setup.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/sub_api.hpp"
+#include "proto/submission/blob_import_answer.hpp"
+#include "proto/submission/blob_import_request.hpp"
+#include "proto/submission/command_header.hpp"
 #include "proto/submission/fence_page.hpp"
 #include "proto/submission/reply_header.hpp"
 
@@ -260,3 +264,39 @@ TEST(device_context, destroying_a_bound_context_disconnects_before_the_worker_go
   /* The mock fails the test if the context's event is destroyed while its
    * doorbell is connected, or a doorbell outlives the context. */
 }
+
+/* The setup names the context's resources from its ring, so the chunk three ids
+ * past it is the context's to import - and a guest blob there imports through
+ * the ring like any command (feature 045). */
+TEST(device_context_bind, a_bound_context_imports_the_chunk_after_its_transport_resources)
+{ Fixture fixture;
+  constexpr std::uint64_t chunk_ram = 0x400000u;
+  fixture.host().add_guest_ram(chunk_ram, 0x1000u);
+  GpuRequestBuilder entries(0u);
+  entries.u64(chunk_ram).u32(0x1000u).u32(0u);
+  MockRequest    mock(entries.bytes(), entries.size());
+  ControlRequest request(fixture.host(), &mock);
+  const std::uint32_t chunk = av::ContextResources(ring).chunk(0u);
+  CHECK_STATUS(fixture.blobs().create_guest(chunk, 0x1000u, request, 24u, 1u), Status::ok);
+  GuestRing guest = fixture.guest();
+  CHECK_STATUS(fixture.context().bind(setup(3u, reply), capset()), Status::ok);
+  std::uint8_t batch[8u + av::BlobImportRequest::encoded_size] = {};
+  CHECK_STATUS(av::CommandHeader(av::CommandHeader::import_blob_id, sizeof batch, av::CommandHeader::generate_reply)
+                   .encode(batch, 8u),
+               Status::ok);
+  CHECK_STATUS(av::BlobImportRequest(chunk, 0u, 0x1000u, 2u).encode(batch + 8u, av::BlobImportRequest::encoded_size),
+               Status::ok);
+  guest.write_batch(1u, batch, sizeof batch);
+  guest.publish();
+  CHECK(fixture.host().ring_doorbell(3u));
+  CHECK(fixture.published(guest.tail()));
+  av::BlobWindow window;
+  CHECK_STATUS(fixture.blobs().window(reply, window), Status::ok);
+  std::uint8_t answer[32u + av::BlobImportAnswer::encoded_size] = {};
+  CHECK_STATUS(window.read(0u, answer, sizeof answer), Status::ok);
+  av::BlobImportAnswer imported;
+  CHECK_STATUS(imported.decode(answer + 32u, av::BlobImportAnswer::encoded_size), Status::ok);
+  CHECK_EQ(imported.status(), av::BlobImportAnswer::imported);
+  CHECK_EQ(imported.device_memory(), 1u | av::MockExecutorOps::handle_bit);
+  CHECK_EQ(fixture.ops().live_imports(), 1u);
+  CHECK_STATUS(fixture.blobs().release(chunk), Status::invalid_state); }

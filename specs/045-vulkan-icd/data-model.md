@@ -67,10 +67,18 @@ operation or non-zero reserved field.
 **BlobImportCommand** - the transport command handler for ids 2 and 3; validates
 resource, range and alignment, answers the 16-byte reply.
 
-**GuestPageAlias** - one per imported GUEST blob.
-- Fields: the reserved host range, its length, the per-run mappings.
-- Rule: built on the main loop when the first import names the blob, destroyed
-  when the blob is unreferenced and no import holds it.
+**GuestPageAlias** - one per imported GUEST blob, in its `BlobResource`.
+- Fields: the reserved host range, its length, the runs mapped into it.
+- Rule: built on the context's worker, under the blob table's lock, when the
+  first import names the blob; released after the last import holding it. A
+  blob whose alias is held is not unreferenced (as built, T012: a worker cannot
+  wait on the main loop, which joins it on `CTX_DESTROY`).
+
+**BlobImports** - one per context: its imports (handle, executor blob id,
+resource), at most 256, in host memory the first import allocates.
+
+**ContextResources** (`src/proto/context`) - a context's resource ids from its
+ring: 3 transport resources, then 64 chunk slots; shared by the KMD and device.
 
 ## Executor (`src/device/executor`)
 

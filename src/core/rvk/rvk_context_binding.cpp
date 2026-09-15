@@ -67,7 +67,7 @@ void RvkContextBinding::run_sequence(VirtioGpuDevice &device)
 
 uint32_t RvkContextBinding::chunk_resource(uint32_t index) const
 {
-    return first_resource_id_ + transport_resources + index;
+    return ContextResources(first_resource_id_).chunk(index);
 }
 
 Status RvkContextBinding::publish_chunk(VirtioGpuDevice &device, uint32_t resource_id, const GuestPageList &pages)

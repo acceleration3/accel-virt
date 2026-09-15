@@ -292,6 +292,12 @@ TEST(guest_page_alias_invariants, each_rule_is_detected)
   av::GuestPageAliasProbe::overcount_runs(alias);
   CHECK(!alias.invariants_hold());
   av::GuestPageAliasProbe::repair(alias, mutable_base, length, runs);
+  /* Every run a page long, and one run more than an alias may spend. */
+  av::GuestPageAliasProbe::repair(alias, mutable_base, (GuestPageAlias::max_runs + 1u) * page, GuestPageAlias::max_runs + 1u);
+  CHECK(!alias.invariants_hold());
+  av::GuestPageAliasProbe::repair(alias, mutable_base, GuestPageAlias::max_runs * page, GuestPageAlias::max_runs);
+  CHECK(alias.invariants_hold());
+  av::GuestPageAliasProbe::repair(alias, mutable_base, length, runs);
   CHECK(alias.invariants_hold());
   CHECK(alias.base() == base);
   alias.release();

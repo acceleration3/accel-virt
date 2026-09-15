@@ -2,7 +2,8 @@
 command through the executor library the device loaded - here the echo
 executor (echo_executor.cpp) - and the last answer asked for lands in the
 context's reply slot before head passes the batch. The transport's NOP is
-answered by the device, under the echo executor and this project's own.
+answered by the device, under the echo executor and this project's own, and
+IMPORT_BLOB hands the echo executor a guest chunk's pages as one host pointer.
 
 Run by the qemu_virtio_gpu ctest in the qemu configuration, which sets
 AV_QEMU_BUILD and AV_EXECUTOR.
@@ -13,15 +14,18 @@ import time
 import unittest
 
 import virtio_qtest
-from rvk_context import (COUNT, DOORBELL_SHM_ID, ECHO, EXECUTOR, FEATURE_CONTEXT_INIT, GENERATE_REPLY, LOSE_DEVICE,
-                         NOP, PAGE, REAL_EXECUTOR, RESP_ERR_INVALID_PARAMETER, RESP_ERR_INVALID_RESOURCE_ID,
-                         RESP_OK_NODATA, UNDECODABLE, GuestRing, command, create_context, guest_blob, host_blob,
-                         response_type, rvk_device, setup, submit)
+from rvk_context import (COUNT, DOORBELL_SHM_ID, ECHO, EXECUTOR, FEATURE_CONTEXT_INIT, GENERATE_REPLY,
+                         IMPORT_BLOB, LOSE_DEVICE, NOP, PAGE, PEEK, POKE, REAL_EXECUTOR, RELEASE_BLOB,
+                         RESP_ERR_INVALID_PARAMETER, RESP_ERR_INVALID_RESOURCE_ID, RESP_OK_NODATA, UNDECODABLE,
+                         GuestRing, command, create_context, guest_blob, guest_blob_pages, host_blob, response_type,
+                         rvk_device, setup, submit, unref)
 
 BUILD = os.environ.get("AV_QEMU_BUILD", "")
 WANTED = virtio_qtest.FEATURE_VERSION_1 | virtio_qtest.FEATURE_EDID | FEATURE_CONTEXT_INIT
 REPLY_MAGIC = 0x594B5652
 STATUS_OK, STATUS_TOO_LARGE = 0, 1
+HANDLE_BIT = 0x4000000000000000
+IMPORTED, REFUSED_REQUEST, UNKNOWN_RESOURCE, OUTSIDE_BLOB, UNMAPPABLE_PAGES, EXECUTOR_REFUSED = range(6)
 
 
 def wait_for(condition, seconds=10.0):
@@ -37,6 +41,7 @@ class Context:
     """A context with a guest-backed ring, fence page and, if asked, reply slot."""
 
     def __init__(self, test, gpu, context, doorbell, reply_bytes=PAGE):
+        self.ring_resource = 200 + 3 * context
         self.test = test
         self.gpu = gpu
         self.doorbell = doorbell
@@ -71,10 +76,18 @@ class Context:
         return header[1:5], self.gpu.qtest.read_bytes(self.reply + 32, header[3]) if header[3] else b""
 
 
+def import_body(resource, offset, size, memory_type=0, reserved=0):
+    return struct.pack("<IIQQII", resource, reserved, offset, size, memory_type, 0)
+
+
+def peek_body(handle, offset, count):
+    return struct.pack("<QQI", handle, offset, count)
+
+
 @unittest.skipUnless(BUILD and EXECUTOR, "run by the qemu_virtio_gpu ctest")
 class VirtioGpuExecution(unittest.TestCase):
-    def open(self, device=rvk_device()):
-        qtest = virtio_qtest.Qtest(BUILD, device)
+    def open(self, device=rvk_device(), shared_ram=False):
+        qtest = virtio_qtest.Qtest(BUILD, device, shared_ram)
         self.addCleanup(qtest.close)
         return virtio_qtest.VirtioGpu(qtest, WANTED)
 
@@ -194,6 +207,103 @@ class VirtioGpuExecution(unittest.TestCase):
             with self.subTest(reply=reply):
                 self.expect(gpu, submit(1, setup(10, 11, 12, 0)[:-4] + struct.pack("<I", reply)), answer)
         self.expect(gpu, submit(1, setup(10, 11, 12, 0)), RESP_OK_NODATA)
+
+
+    def chunk(self, gpu, context, pages):
+        """Guest pages allocated with a page between each, written 0xA0 + their
+        index, as one GUEST blob in the context's first chunk slot, listed last
+        page first: the resource id and the pages' addresses, in blob order."""
+        addresses = [gpu.device.memory.allocate(2 * PAGE) for _ in range(pages)][::-1]
+        for index, address in enumerate(addresses):
+            gpu.qtest.write_bytes(address, bytes([0xA0 + index]) * PAGE)
+        resource = context.ring_resource + 3
+        self.expect(gpu, guest_blob_pages(resource, addresses), RESP_OK_NODATA)
+        return resource, addresses
+
+    def imported(self, context, *import_arguments):
+        """(status, device_memory) IMPORT_BLOB answered, the context still running."""
+        self.assertTrue(context.run(command(IMPORT_BLOB, import_body(*import_arguments), GENERATE_REPLY)))
+        (status, _, size, _), answer = context.answer()
+        self.assertEqual((status, size), (STATUS_OK, 16))
+        code, reserved, handle = struct.unpack("<IIQ", answer)
+        self.assertEqual(reserved, 0)
+        return code, handle
+
+    def test_a_guest_chunk_imports_as_one_pointer_over_the_guests_own_pages(self):
+        gpu = self.open(shared_ram=True)
+        context = Context(self, gpu, 1, 9)
+        resource, addresses = self.chunk(gpu, context, 3)
+        self.assertEqual(self.imported(context, resource, PAGE, 2 * PAGE, 5), (IMPORTED, 1 | HANDLE_BIT))
+        handle = 1 | HANDLE_BIT
+        # The executor reads, through the pointer it was handed, what the guest wrote at the second and third pages.
+        self.assertTrue(context.run(command(PEEK, peek_body(handle, PAGE - 4, 8), GENERATE_REPLY)))
+        memory_type, live, size = struct.unpack("<IIQ", context.answer()[1][:16])
+        self.assertEqual((memory_type, live, size), (5, 1, 2 * PAGE))
+        self.assertEqual(context.answer()[1][16:], bytes([0xA1]) * 4 + bytes([0xA2]) * 4)
+        # And the guest reads what the executor writes, on its own page.
+        self.assertTrue(context.run(command(POKE, struct.pack("<QQ", handle, PAGE + 3) + b"host gpu", GENERATE_REPLY)))
+        self.assertEqual(context.answer()[1], struct.pack("<I", 1))
+        self.assertEqual(gpu.qtest.read_bytes(addresses[2] + 3, 8), b"host gpu")
+        # A second import of the same chunk shares its pages; the blob is kept while either holds it.
+        self.assertEqual(self.imported(context, resource, 0, PAGE, 1), (IMPORTED, 2 | HANDLE_BIT))
+        self.expect(gpu, unref(resource), RESP_ERR_INVALID_PARAMETER)
+        self.assertTrue(context.run(command(RELEASE_BLOB, struct.pack("<Q", handle), GENERATE_REPLY)))
+        self.assertEqual(context.answer()[0][2], 0)
+        self.assertTrue(context.run(command(PEEK, peek_body(handle, 0, 1), GENERATE_REPLY)))
+        self.assertEqual(context.answer()[1], bytes(16))   # released: the executor holds nothing under it
+        self.assertTrue(context.run(command(RELEASE_BLOB, struct.pack("<Q", 2 | HANDLE_BIT)),
+                                    command(RELEASE_BLOB, struct.pack("<Q", 0x1234))))
+        self.expect(gpu, unref(resource), RESP_OK_NODATA)
+        self.assertNotIn("context faulted", gpu.qtest.printed())
+
+    def test_every_refused_import_is_an_answer_and_the_context_runs_on(self):
+        gpu = self.open(shared_ram=True)
+        context = Context(self, gpu, 1, 10)
+        resource, _ = self.chunk(gpu, context, 2)
+        self.expect(gpu, host_blob(resource + 1, PAGE), RESP_OK_NODATA)
+        refusals = {
+            "a reserved field": ((resource, 0, PAGE, 0, 1), REFUSED_REQUEST),
+            "an offset inside a page": ((resource, 1, PAGE), REFUSED_REQUEST),
+            "no size": ((resource, 0, 0), REFUSED_REQUEST),
+            "the ring": ((context.ring_resource, 0, PAGE), UNKNOWN_RESOURCE),
+            "the reply slot": ((context.ring_resource + 2, 0, PAGE), UNKNOWN_RESOURCE),
+            "past the last chunk slot": ((context.ring_resource + 67, 0, PAGE), UNKNOWN_RESOURCE),
+            "a host blob in a chunk slot": ((resource + 1, 0, PAGE), UNKNOWN_RESOURCE),
+            "past the blob": ((resource, PAGE, 2 * PAGE), OUTSIDE_BLOB),
+        }
+        for name, (arguments, expected) in refusals.items():
+            with self.subTest(name):
+                self.assertEqual(self.imported(context, *arguments), (expected, 0))
+        self.assertEqual(self.imported(context, resource, 0, 2 * PAGE)[0], IMPORTED)
+        self.assertNotIn("context faulted", gpu.qtest.printed())
+
+    def test_blob_commands_framed_with_the_wrong_body_fault_the_context(self):
+        for name, framed in {"a short import": command(IMPORT_BLOB, bytes(24), GENERATE_REPLY),
+                             "a long release": command(RELEASE_BLOB, bytes(16))}.items():
+            with self.subTest(name):
+                gpu = self.open(shared_ram=True)
+                context = Context(self, gpu, 1, 11)
+                self.assertFalse(context.run(framed))
+                self.assertTrue(wait_for(lambda: "context faulted" in gpu.qtest.printed()))
+
+    def test_guest_ram_with_no_file_behind_it_cannot_be_imported(self):
+        gpu = self.open()
+        context = Context(self, gpu, 1, 12)
+        resource, _ = self.chunk(gpu, context, 1)
+        self.assertEqual(self.imported(context, resource, 0, PAGE), (UNMAPPABLE_PAGES, 0))
+        self.expect(gpu, unref(resource), RESP_OK_NODATA)   # a refused import holds nothing
+
+    def test_a_version_1_library_is_refused_the_import_and_runs_on(self):
+        os.environ["RVK_ECHO_ABI_VERSION_1"] = "1"
+        try:
+            gpu = self.open(shared_ram=True)
+        finally:
+            del os.environ["RVK_ECHO_ABI_VERSION_1"]
+        context = Context(self, gpu, 1, 13)
+        resource, _ = self.chunk(gpu, context, 1)
+        self.assertEqual(self.imported(context, resource, 0, PAGE), (EXECUTOR_REFUSED, 0))
+        self.assertTrue(context.run(command(ECHO, b"still", GENERATE_REPLY)))
+        self.assertEqual(context.answer()[1], b"still")
 
 
 if __name__ == "__main__":

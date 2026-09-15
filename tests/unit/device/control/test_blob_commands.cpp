@@ -4,6 +4,7 @@
 #include "device/control/blob_commands.hpp"
 #include "device/control/control_request.hpp"
 #include "device/memory/blob_table.hpp"
+#include "device/memory/guest_page_alias.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/mock_host.hpp"
@@ -220,3 +221,20 @@ TEST(blob_commands, create_2d_on_a_blob_id_is_refused_and_everything_else_is_the
   CHECK_EQ(fixture.send(other_2d), 0u);
   CHECK_EQ(fixture.send(GpuRequestBuilder(BlobCommands::set_scanout_blob)), err_invalid_parameter);
   CHECK_EQ(fixture.send_type(0x0100u, GpuRequestBuilder(0x0100u)), 0u); }
+
+/* The chunk a guest process bound and imported: its pages are in a host API's
+ * hands, and freeing them under it would hand the next blob's id the old pages. */
+TEST(blob_commands_unref, a_blob_an_import_holds_is_refused_and_kept)
+{ Fixture fixture;
+  GpuRequestBuilder request = create_blob(4u, guest, 0u, 1u, 0u, 0x1000u);
+  request.u64(ram).u32(0x1000u).u32(0u);
+  CHECK_EQ(fixture.send(request), ok_nodata);
+  const av::GuestPageAlias *alias = nullptr;
+  CHECK_STATUS(fixture.blobs().hold_alias(4u, alias), Status::ok);
+  GpuRequestBuilder unref(BlobCommands::resource_unref);
+  unref.u32(4u).u32(0u);
+  CHECK_EQ(fixture.send(unref), err_invalid_parameter);
+  CHECK(fixture.blobs().contains(4u));
+  fixture.blobs().release_alias(4u);
+  CHECK_EQ(fixture.send(unref), ok_nodata);
+  CHECK(!fixture.blobs().contains(4u)); }

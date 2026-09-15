@@ -21,14 +21,14 @@ public:
         /* A reserved field, an offset or size that is not whole pages, no size,
          * or a range past 2^64. */
         refused_request = 1u,
-        /* Not a guest blob in one of the context's chunk slots, or an id whose
-         * earlier blob an import still holds. */
+        /* Not a guest blob in one of the context's chunk slots. */
         unknown_resource = 2u,
         outside_blob = 3u,
         /* The host cannot make one range of the blob's pages. */
         unmappable_pages = 4u,
         /* No executor, a library that cannot name an import, or a refusal. */
         executor_refused = 5u,
+        /* Every import the context may hold, or no host memory to hold them in. */
         no_room = 6u,
     };
 

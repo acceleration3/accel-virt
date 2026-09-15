@@ -134,6 +134,7 @@ its worker.
 | a setup naming a ring, fence or reply resource that is not a blob | `ERR_INVALID_RESOURCE_ID` |
 | `size` not 32, the buffer short or malformed, a setup the capset does not allow, a blob too small for its role, a ring header that is not fresh, a doorbell another context holds, or a context already set up | `ERR_INVALID_PARAMETER` |
 | `RESOURCE_UNREF` of a blob a context is bound to | `ERR_INVALID_PARAMETER`, the blob kept |
+| `RESOURCE_UNREF` of a blob an IMPORT_BLOB still holds | `ERR_INVALID_PARAMETER`, the blob kept |
 
 A device reset destroys every context, then releases every blob.
 
@@ -214,10 +215,41 @@ whichever library is loaded, so they behave the same under every executor.
 | Id | Command | Body | Answer |
 |--:|---|---|---|
 | `0x00000001` | NOP | none | empty: with *generate reply*, a reply of size 0 for the batch's fence |
+| `0x00000002` | IMPORT_BLOB | 32 bytes: u32 resource_id, u32 reserved, u64 offset, u64 size, u32 memory_type, u32 reserved | 16 bytes: u32 status, u32 reserved, u64 device_memory |
+| `0x00000003` | RELEASE_BLOB | 8 bytes: u64 device_memory | empty |
 
 A NOP does nothing but complete, which makes it the round trip a guest times to
 measure the transport alone rather than a backend (feature 044). It moves the
 context's progress like any command run.
+
+IMPORT_BLOB hands `size` bytes at `offset` of one of the context's guest blobs
+to its executor as memory of type `memory_type`, and answers the wire handle -
+for Vulkan the `VkDeviceMemory` - the guest names that memory by from then on
+(feature 045). A context's resources are laid out from its ring: the ring, the
+fence page and the reply slot, then 64 chunk slots, so the resource must be one
+of the ids `ring_resource + 3` to `ring_resource + 66`, and a `GUEST` blob.
+The device maps the blob's scattered pages again, in order, as one host range
+(the pages themselves, not a copy), and the executor imports `offset` bytes into
+that range as a host pointer; one range serves every import of the blob and
+goes with the last of them. While any import holds a blob, `RESOURCE_UNREF` of
+it answers `ERR_INVALID_PARAMETER`, so its id is never re-created over other
+pages under a live import.
+
+A body of any length but its command's is command framing, fault 5, as for a
+NOP with a body. Every other refusal is an answer, and the context runs on:
+
+| status | IMPORT_BLOB refused because |
+|--:|---|
+| 0 | not refused: `device_memory` names the import, never 0 |
+| 1 | a reserved field is not 0, `offset` or `size` is not a whole number of 4096-byte pages, `size` is 0, or `offset + size` passes 2^64 |
+| 2 | the resource is not a `GUEST` blob in one of the context's chunk slots |
+| 3 | `offset + size` is past the blob |
+| 4 | the host cannot map the blob's pages as one range (RAM with no file behind it, pages that are not whole, more than 16384 runs) |
+| 5 | the context has no executor, its library is older than ABI version 3, or the library refused the import |
+| 6 | the context holds 256 imports, or the host has no memory for the table of them |
+
+A refused import answers `device_memory` 0. RELEASE_BLOB of a handle the context
+never imported, or already released, answers empty and does nothing.
 
 ### Reply slot (device -> guest)
 
@@ -241,7 +273,7 @@ Every call must return: `CTX_DESTROY` and a reset wait for a worker's call to
 finish.
 
 
-`src/device/abi/rvk_executor.h`, now version 2, is what runs a context's commands on
+`src/device/abi/rvk_executor.h`, now version 3, is what runs a context's commands on
 the host's API: `sub_apis`, `create(sub_api, gpu_uuid)`, `destroy`, and
 `execute(id, payload, size, reply, capacity, &reply_size)` answering executed,
 unknown, undecodable or device lost. The QEMU device loads the library its
@@ -260,6 +292,18 @@ nothing to name it with. It adds `import_kinds`, `import_blob` and
 version 1 library simply imports nothing; a table claiming version 2 and
 carrying only part of it is refused at realize rather than found out one blob
 later on a worker.
+
+**Version 3 adds `imported_handle(executor, blob_id)`**, because `import_blob`
+answers only whether it imported and IMPORT_BLOB's guest needs the handle the
+import became. The device chooses every `blob_id` - a per-context count, never
+reused - calls `import_blob` with an `RVK_BLOB_HOST_POINTER` handle whose
+`reserved` field carries the memory type the guest asked for, then asks
+`imported_handle` for the wire handle; 0 means the import made nothing a guest
+can name, and the device releases it and answers status 5. Two imports
+answering to one handle are refused the same way, since RELEASE_BLOB of one
+would release both. A version 2 library still loads and still imports for the
+capset's purposes, but the device never asks it for an IMPORT_BLOB; a table
+claiming version 3 without `imported_handle` fails realize.
 
 A blob crosses as a tagged handle - a host pointer or a dma-buf, whichever the
 API can take without a copy - with no offset, because the device hands over a

@@ -262,6 +262,9 @@ TEST(blob_imports_import, a_held_chunk_is_not_released_and_its_successor_is_impo
 
 TEST(blob_imports_release, a_handle_this_context_never_made_releases_nothing)
 { ImportRig rig;
+  release(rig, 1u | MockExecutorOps::handle_bit);   /* before any import: there is no table to look in */
+  CHECK_EQ(rig.imports().imports(), 0u);
+  CHECK_EQ(rig.host().live_allocations(), 0u);
   const std::uint32_t pages[] = {90u};
   CHECK_STATUS(rig.create_guest_blob(rig.chunk(7u), pages, 1u), Status::ok);
   std::uint64_t device_memory = 0u;
