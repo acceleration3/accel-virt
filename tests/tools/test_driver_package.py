@@ -2,6 +2,7 @@
 installs, the PCI identity QEMU gives virtio-gpu-rvk-pci, and the interrupt
 properties the driver's message-signalled path needs."""
 import configparser
+import json
 import re
 import unittest
 
@@ -10,6 +11,8 @@ from tool_run import ROOT
 INF = ROOT / "src" / "km" / "rvkgpu.inf"
 DEVICE = ROOT / "src" / "device" / "qemu" / "virtio-gpu-pci-rvk.c"
 DRIVER_BUILD = ROOT / "src" / "km" / "CMakeLists.txt"
+MANIFEST = ROOT / "src" / "um" / "vulkan" / "rvkvk.json"
+PACKAGE_FILES = ("rvkgpu.sys", "rvkvk.dll", "rvkvk.json")
 REDHAT_QUMRANET = 0x1AF4
 VIRTIO_GPU = 0x1050
 
@@ -22,7 +25,7 @@ class DriverPackage(unittest.TestCase):
         cls.inf = configparser.RawConfigParser(strict=False, comment_prefixes=(";",), delimiters=("=",))
         cls.inf.optionxform = str
         cls.inf.read_string("\n".join(line for line in text.splitlines()
-                                      if not line.startswith("HKR") and line.strip() != "rvkgpu.sys"))
+                                      if not line.startswith("HKR") and line.strip() not in PACKAGE_FILES))
 
     def test_is_a_display_class_package_with_a_catalog(self):
         version = self.inf["Version"]
@@ -62,6 +65,32 @@ class DriverPackage(unittest.TestCase):
             rf"\[{re.escape(software)}\][\s\S]*?HKR,+\s*UserModeDriverName,\s*0x00010000,\s*\"?rvkumd\.dll",
             "rvkgpu.inf must add UserModeDriverName (REG_MULTI_SZ) under the install section's AddReg")
 
+    def test_registers_the_vulkan_icd_through_the_adapter_and_nowhere_else(self):
+        """Feature 045, contracts/loader_interface.md: the Windows Vulkan loader
+        reads VulkanDriverName from each adapter's software key through
+        D3DKMTQueryAdapterInfo(KMTQAITYPE_QUERYREGISTRY, ADAPTERKEY), as
+        REG_MULTI_SZ or REG_SZ - never REG_EXPAND_SZ - and takes it as an
+        absolute manifest path; a global Khronos key would list the device
+        twice."""
+        software = self.inf["Rvkgpu_Install"]["AddReg"]
+        section = re.search(rf"\[{re.escape(software)}\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
+        self.assertRegex(section, r'HKR,+\s*VulkanDriverName,\s*0x00010000,\s*"%13%\\rvkvk\.json"')
+        self.assertNotIn("Khronos", self.text)
+        self.assertNotIn("HKLM", self.text)
+        for image in ("rvkvk.dll", "rvkvk.json"):
+            self.assertIn(f"{image} = 1", self.text)
+            files = re.search(r"\[Rvkgpu_Files\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
+            self.assertIn(image, files.split())
+
+    def test_the_manifest_names_the_icd_beside_it(self):
+        """A relative library_path is joined to the manifest's directory only
+        when it holds a backslash (Vulkan-Loader loader.c:2460)."""
+        manifest = json.loads(MANIFEST.read_text())
+        self.assertEqual(manifest["file_format_version"], "1.0.1")
+        self.assertEqual(manifest["ICD"]["library_path"], ".\\rvkvk.dll")
+        self.assertEqual(manifest["ICD"]["library_arch"], "64")
+        self.assertEqual(manifest["ICD"]["api_version"], "1.3.0")
+
     def test_asks_for_message_signalled_interrupts(self):
         self.assertIn('"Interrupt Management\\MessageSignaledInterruptProperties", MSISupported, 0x00010001, 1',
                       self.text)
@@ -91,3 +120,28 @@ class Provisioning(unittest.TestCase):
         self.assertEqual(sorted(called), sorted(name.strip(" '\n") for name in offered.split(",")))
         self.assertIn("-CatalogFilePath \"$Package\\rvkgpu.cat\"", script)
         self.assertIn('PACKAGE_DIRECTORY = GUEST_DIRECTORY + "\\\\package"', runner)
+
+    def test_the_runner_stages_every_file_the_package_names_where_the_catalog_covers_it(self):
+        """pnputil /add-driver refuses a package whose INF names a file the
+        directory does not hold ("The system cannot find the file specified"),
+        and the sign stage catalogs the whole directory, so a file staged
+        anywhere else would install uncovered. Every run installs the package,
+        so this holds for every mode, not only --vulkan (feature 045)."""
+        text = INF.read_text()
+        section = re.search(r"\[SourceDisksFiles\]([\s\S]*?)(?:\n\[|\Z)", text).group(1)
+        named = {line.split("=")[0].strip() for line in section.splitlines()
+                 if "=" in line and not line.lstrip().startswith(";")}
+        runner = (ROOT / "tools" / "guest" / "run_guest_suite.py").read_text()
+        staged = set(re.findall(r'PACKAGE_DIRECTORY \+ "\\\\([\w.]+)"', runner))
+        self.assertEqual(named, {"rvkgpu.sys", "rvkvk.dll", "rvkvk.json"})
+        self.assertEqual(staged, named | {"rvkgpu.inf"})
+        script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
+        self.assertIn("New-FileCatalog -Path $Package ", script)
+
+    def test_collects_the_icd_log_with_the_guest_s_diagnostics(self):
+        """FR-007: whatever the run did, the ICD's own log (src/um/vulkan's
+        FileLog, one file per process) is among the files the runner pulls."""
+        script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
+        collect = script[script.index("'collect' {"):]
+        copied = collect.index("Copy-Item 'C:\\ProgramData\\rvk\\*.log' $Diagnostics")
+        self.assertLess(copied, collect.index("Get-ChildItem $Diagnostics -File"))

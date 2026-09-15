@@ -6,10 +6,12 @@ log, and answers guest-exec and guest-file-read from a script.
 
 The script is JSON at $FAKE_GUEST_SCRIPT:
   stages     {"sign": [3010, 0], ...}: exit codes of successive calls of a stage
-  outputs    {"check": "...", "rvktest": "..."}: standard output by stage
+  outputs    {"check": "...", "rvktest": "..."}: standard output by stage, or by
+             program for the ones in PROGRAMS
   files      {"C:\\guest\\path": "content"}: what guest-file-read returns, byte
              per character (latin-1), so a dump's binary header can be scripted
-  rvktest    exit code of rvktest.exe
+  rvktest, rvkvkprobe, vulkaninfo, reg
+             exit code of that program
   panic      {"during": stage, "code": n, "loop": bool}: the guest bugchecks when
              the stage runs, then reboots; with loop, it bugchecks on every boot
              until QEMU is started again without virtio-gpu-rvk-pci
@@ -41,6 +43,8 @@ HOSTMEM_BAR = 4
 HOSTMEM_BASE = 0xC0000000
 """Where this fake's guest programmed that BAR."""
 MODERN_BAR_BASE = 0xB0000000
+PROGRAMS = ("rvktest", "rvkvkprobe", "vulkaninfo", "reg")
+"""The programs the runner starts itself rather than through provision.ps1."""
 
 
 def option(argv, flag, kind=None):
@@ -134,7 +138,8 @@ class Guest:
         return 0, "set: 0\n"
 
     def process(self, path, arguments):
-        name = "rvktest" if path.endswith("rvktest.exe") else None
+        program = path.rsplit("\\", 1)[-1].lower().removesuffix(".exe")
+        name = program if program in PROGRAMS else None
         if "-Stage" in arguments:
             name = arguments[arguments.index("-Stage") + 1]
         self.note(f"exec {path} {' '.join(arguments)}")
@@ -164,8 +169,8 @@ class Guest:
             code, text = self.mode_stage(name, arguments)
             return {"exited": True, "exitcode": code,
                     "out-data": base64.b64encode(text.encode()).decode(), "err-data": ""}
-        if name == "rvktest":
-            code = self.script.get("rvktest", 0)
+        if name in PROGRAMS:
+            code = self.script.get(name, 0)
         else:
             codes = self.script.get("stages", {}).get(name, [0])
             code = codes[min(count, len(codes) - 1)]

@@ -500,6 +500,18 @@ can leave the guest with no display.
   and OpenCL clients build freestanding into the program for them. It is portable and held to the same gates as `src/core`: on Linux,
   `MockKmt` (`tests/harness/guest/`) scripts every call's failure, zero handles
   and hostile enumerations, at 100% branch coverage.
+- **The Vulkan run** (feature 045) is `--vulkan`, a third boot on the real
+  executor: the pinned Khronos loader and `vulkaninfo` from
+  `third_party/vulkan-runtime/` (refused unless `tools/fetch_vulkan_runtime.py`
+  put the pinned files there) and `rvkvkprobe.exe` beside them in `C:\rvk`. The
+  runner fails a global `HKLM\SOFTWARE\Khronos\Vulkan\Drivers` value naming
+  rvk, reads `vulkaninfo`'s full output (`--summary` prints no LUID) and requires
+  exactly one `GPUn:` section whose `deviceLUID` LowPart is the one the probe
+  printed as `vulkan.adapter_luid`, requires every probe step (`instance`,
+  `adapter_luid`, `physical_device`, `device`, `compute`, `draw`, `lost`,
+  `recreated`) and `rvkvkprobe: N passed, 0 failed`, and requires
+  `vulkan.physical_device` to equal `vulkan.adapter_luid`. The collect stage
+  copies the ICD's `C:\ProgramData\rvk\*.log` into `diag/` on every run.
 - **The program** is `src/um/`: `GdiKmt` translates `Kmt` into gdi32's D3DKMT
   functions with every wait bounded by an event and a timeout, and
   `GuestProgram` writes one line per step, then `rvktest: P passed, F failed`,
@@ -508,7 +520,9 @@ can leave the guest with no display.
   and ntdll.
 - **The package** is `src/km/rvkgpu.inf`, test-signed in the guest by
   `tools/guest/provision.ps1` with PowerShell's own certificate, catalog and
-  Authenticode cmdlets.
+  Authenticode cmdlets. It carries the Vulkan ICD (`rvkvk.dll`, `rvkvk.json`)
+  for every run, because the INF names them and pnputil refuses a package
+  without a file it names.
 - **The runner** is `tools/guest/run_guest_suite.py`. The snapshot is a qcow2
   overlay of the prepared image, created before QEMU starts and deleted after
   it stops; the image is only ever a backing file. It boots the overlay with

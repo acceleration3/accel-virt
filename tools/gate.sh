@@ -10,6 +10,9 @@
 #   qemu      build-qemu/      QEMU patched with the device, and qemu_smoke
 #   guest     build-guest/     the in-guest suite in the image $AV_GUEST_IMAGE names,
 #                              skipped when it names none
+#   guest rvk build-guest-rvk/ the rvk scenarios on the real executor, after it
+#   guest vulkan build-guest-vulkan/  the ICD through the Khronos loader, after
+#                              that, when tools/fetch_vulkan_runtime.py has run
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -56,6 +59,19 @@ if [ -n "${AV_GUEST_IMAGE:-}" ]; then
     else
         echo "gate: guest rvk skipped: build-qemu/librvk_executor.so was not built" >&2
         exit 1
+    fi
+    # The Vulkan ICD through the Khronos loader, which Windows does not ship:
+    # the runtime is fetched by pin, never committed, so a checkout without it
+    # says so instead of failing (feature 045).
+    if python3 -B tools/fetch_vulkan_runtime.py --check >/dev/null 2>&1; then
+        echo "== gate: guest vulkan (third_party/vulkan-runtime)"
+        if ! python3 -B tools/guest/run_guest_suite.py --image "$AV_GUEST_IMAGE" --work build-guest-vulkan --vulkan \
+                --executor build-qemu/librvk_executor.so; then
+            echo "gate: guest vulkan failed" >&2
+            exit 1
+        fi
+    else
+        echo "gate: guest vulkan skipped: the Vulkan runtime is not fetched (tools/fetch_vulkan_runtime.py)" >&2
     fi
 else
     echo "gate: guest skipped: AV_GUEST_IMAGE names no prepared image (docs/testing.md, L5)"

@@ -21,6 +21,8 @@ DefaultDestDir = 13
 
 [SourceDisksFiles]
 rvkgpu.sys = 1
+rvkvk.dll = 1
+rvkvk.json = 1
 
 ; WDDM 3.2 arrived in Windows 11 24H2, build 26100.
 [Manufacturer]
@@ -42,9 +44,15 @@ AddReg       = Rvkgpu_SoftwareSettings
 ; feature 055 builds it.
 [Rvkgpu_SoftwareSettings]
 HKR,, UserModeDriverName, 0x00010000, "rvkumd.dll"
+; The Vulkan ICD, found by the loader through this adapter alone (feature 045):
+; it reads the value with D3DKMTQueryAdapterInfo(KMTQAITYPE_QUERYREGISTRY) as
+; REG_MULTI_SZ or REG_SZ - never REG_EXPAND_SZ - and takes it as an absolute path.
+HKR,, VulkanDriverName, 0x00010000, "%13%\rvkvk.json"
 
 [Rvkgpu_Files]
 rvkgpu.sys
+rvkvk.dll
+rvkvk.json
 
 ; One message for each of the device's own sources - control, cursor and
 ; configuration changes - and eight the rvk contexts' fence queues share

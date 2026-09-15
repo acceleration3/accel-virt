@@ -3,6 +3,7 @@ every step, reboot, timeout and misbehaving agent; bugchecks named, their dumps
 pulled after a reboot or from a rescue boot; image preparation; holding a guest
 for debugging; and the promise that the base image is never written and the
 overlay never outlives the run."""
+import hashlib
 import json
 import os
 import pathlib
@@ -16,7 +17,7 @@ import unittest
 from tool_run import ROOT
 
 sys.path.insert(0, str(ROOT / "tools" / "guest"))
-from run_guest_suite import Screendump, StepFailed, describe_panic  # noqa: E402
+from run_guest_suite import Screendump, StepFailed, describe_panic, luid_low_part, vulkaninfo_devices  # noqa: E402
 
 RUNNER = ROOT / "tools" / "guest" / "run_guest_suite.py"
 FAKES = ROOT / "tests" / "tools" / "fake_guest"
@@ -48,6 +49,35 @@ TIMEOUT_EVENTS = "timeout: 2026-09-13T10:00:00 Display driver rvkgpu stopped res
                  "recovered.\r\ntimeouts: 1\r\n"
 """What the guest says event 4101 looks like (feature 040, US3)."""
 WITH_MEMORY_DUMP = COLLECTED + "dump C:\\Windows\\MEMORY.DMP\r\n"
+ADAPTER_LUID = 0xD3A1
+"""The rvkgpu adapter's LUID LowPart in these scripts; vulkaninfo prints the
+LUID structure's eight bytes, LowPart first and little-endian."""
+
+
+def vulkaninfo_gpu(index, luid_bytes="a1d30000-00000000", name="rvk (NVIDIA GeForce RTX 4090)"):
+    """One physical device as vulkaninfo's full text output prints it
+    (Vulkan-Tools DumpGpu and DumpVkPhysicalDeviceIDProperties): a GPUn header,
+    then its property structures, the LUID only while deviceLUIDValid."""
+    luid = f"\tdeviceLUID      = {luid_bytes}\r\n" if luid_bytes is not None else ""
+    return (f"GPU{index}:\r\nVkPhysicalDeviceProperties:\r\n---------------------------\r\n"
+            f"\tapiVersion        = 1.3.290 (4206882)\r\n\tdeviceName        = {name}\r\n\r\n"
+            "VkPhysicalDeviceIDProperties:\r\n-----------------------------\r\n"
+            "\tdeviceUUID      = 7b7ad2c5-4219-8c80-c4fd-a64b8775aedb\r\n"
+            "\tdriverUUID      = 414d442d-5749-4e2d-4452-560000000000\r\n"
+            f"{luid}\tdeviceNodeMask  = 1\r\n\tdeviceLUIDValid = {'true' if luid_bytes else 'false'}\r\n\r\n")
+
+
+VULKANINFO_HEAD = ("==========\r\nVULKANINFO\r\n==========\r\n\r\nVulkan Instance Version: 1.4.357\r\n\r\n"
+                   "Device Groups:\r\n==============\r\nGroup 0:\r\n\tProperties:\r\n"
+                   "\t\tphysicalDevices: count = 1\r\n\t\t\trvk (ID: 0)\r\n\r\n"
+                   "Device Properties and Extensions:\r\n=================================\r\n")
+VULKANINFO = VULKANINFO_HEAD + vulkaninfo_gpu(0)
+PROBE_REPORT = (f"ok vulkan.instance\r\nok vulkan.adapter_luid {ADAPTER_LUID}\r\n"
+                f"ok vulkan.physical_device {ADAPTER_LUID}\r\nok vulkan.device\r\nok vulkan.compute\r\n"
+                "ok vulkan.draw\r\nok vulkan.lost\r\nok vulkan.recreated\r\nrvkvkprobe: 8 passed, 0 failed\r\n")
+"""What rvkvkprobe.exe prints when every step of feature 045's proof passed."""
+KEY_ABSENT = "ERROR: The system was unable to find the specified registry key or value.\r\n"
+ICD_LOG = "C:\\ProgramData\\rvk\\rvkvk-4242.log"
 
 
 class GuestSuiteRun(unittest.TestCase):
@@ -57,7 +87,8 @@ class GuestSuiteRun(unittest.TestCase):
         self.image = self.scratch / "windows.qcow2"
         self.image.write_bytes(b"prepared image")
         self.os_stat = os.stat(self.image)
-        for name in ("rvkgpu.sys", "rvkgpu.pdb", "rvktest.exe", "OVMF_VARS.fd", "OVMF_CODE.fd"):
+        for name in ("rvkgpu.sys", "rvkgpu.pdb", "rvkvk.dll", "rvkvk.json", "rvktest.exe", "rvkvkprobe.exe",
+                     "OVMF_VARS.fd", "OVMF_CODE.fd"):
             (self.scratch / name).write_bytes(name.encode() * 100)
         self.work = self.scratch / "work"
         self.journal = self.scratch / "journal.txt"
@@ -78,6 +109,7 @@ class GuestSuiteRun(unittest.TestCase):
                      "--qemu", FAKES / "fake_qemu.py",
                      "--qemu-img", FAKES / "fake_qemu_img.py", "--executor", "/nowhere/librvk_echo_executor.so",
                      "--driver", self.scratch / "rvkgpu.sys", "--test", self.scratch / "rvktest.exe",
+                     "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
         return subprocess.run([sys.executable, "-B", str(RUNNER), *map(str, arguments)], capture_output=True,
@@ -116,10 +148,15 @@ class GuestSuiteRun(unittest.TestCase):
                           "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800",
                           "monitortimeout -Minutes 1", "monitortimeout -Minutes 0",
                           "sleepstates", "check", "collect"])
-        self.assertEqual(events.count("file"), 4)
+        self.assertEqual(events.count("file"), 6)
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.sys 1000", lines)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.inf", "\n".join(lines))
+        # The INF names the ICD whatever the run is for, and pnputil refuses a
+        # package missing a file it names (feature 045).
+        self.assertIn("file C:\\rvk\\package\\rvkvk.dll 900", lines)
+        self.assertIn("file C:\\rvk\\package\\rvkvk.json 1000", lines)
+        self.assertNotIn("vulkaninfo", "\n".join(lines))
         order = [line for line in lines
                  if line in ("reboot", "powerdown") or (line.startswith("exec") and ("-Stage" in line or "rvktest" in line))]
         self.assertEqual([o if o in ("reboot", "powerdown") else o.split()[-1] for o in order],
@@ -315,6 +352,164 @@ class GuestSuiteRun(unittest.TestCase):
         result = self.run_suite("--rvk")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("guest: rvk failed: no summary line", result.stdout)
+
+    def vulkan_runtime(self, **contents):
+        """A fetched runtime and the pins it was fetched by, as
+        tools/fetch_vulkan_runtime.py leaves them; `contents` replaces a file's
+        bytes after pinning, or with None leaves it out."""
+        runtime = self.scratch / "vulkan-runtime"
+        runtime.mkdir(exist_ok=True)
+        pins = ["archive file:///nowhere/runtime.zip " + "0" * 64]
+        for name in ("vulkan-1.dll", "vulkaninfo.exe"):
+            pinned = name.encode() * 50
+            pins.append(f"{name} x64/{name} {hashlib.sha256(pinned).hexdigest()}")
+            replaced = contents.get(name.replace("-", "_").replace(".", "_"), pinned)
+            if replaced is not None:
+                (runtime / name).write_bytes(replaced)
+        (self.scratch / "pins.txt").write_text("\n".join(pins) + "\n")
+        return ("--vulkan-runtime", runtime, "--vulkan-pins", self.scratch / "pins.txt",
+                "--probe", self.scratch / "rvkvkprobe.exe")
+
+    def vulkan_script(self, **behaviour):
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                   "reg": KEY_ABSENT, "vulkaninfo": VULKANINFO, "rvkvkprobe": PROBE_REPORT,
+                   "collect": COLLECTED + f"file {ICD_LOG}\r\n"}
+        outputs.update(behaviour.pop("outputs", {}))
+        exits = {"reg": 1}
+        exits.update(behaviour.pop("exits", {}))
+        self.script(outputs=outputs, files=dict(GUEST_FILES, **{ICD_LOG: "rvkvk: loader interface negotiation\r\n"}),
+                    **exits, **behaviour)
+
+    def test_a_vulkan_run_finds_the_icd_through_the_adapter_alone_and_runs_the_probe(self):
+        """Feature 045, SC-001 to SC-003: no global Khronos key, vulkaninfo lists
+        exactly the one device whose LUID is the adapter's, the probe's steps
+        all pass, and the ICD's log is in diag/."""
+        self.vulkan_script()
+        result = self.run_suite("--vulkan", "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        lines = self.journal_lines()
+        for pushed in ("C:\\rvk\\vulkan-1.dll 600", "C:\\rvk\\vulkaninfo.exe 700", "C:\\rvk\\rvkvkprobe.exe 1400",
+                       "C:\\rvk\\package\\rvkvk.dll 900", "C:\\rvk\\package\\rvkvk.json 1000"):
+            self.assertIn(f"file {pushed}", lines)
+        programs = [line.split()[1] for line in lines if line.startswith("exec") and "powershell" not in line]
+        self.assertEqual(programs, ["C:\\Windows\\System32\\reg.exe", "C:\\rvk\\vulkaninfo.exe",
+                                    "C:\\rvk\\rvkvkprobe.exe"])
+        self.assertIn("exec C:\\Windows\\System32\\reg.exe query HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers", lines)
+        self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
+        self.assertIn("guest: vulkan: executor /nowhere/librvk_executor.so, host-gpu auto", result.stdout)
+        self.assertIn("guest: khronos ok: no HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers key", result.stdout)
+        self.assertIn(f"guest: vulkaninfo ok: one physical device, LUID LowPart {ADAPTER_LUID}", result.stdout)
+        self.assertIn("guest: vulkan ok: 8 passed", result.stdout)
+        self.assertIn(f"guest: luid ok: the adapter, the probe's physical device and vulkaninfo's all "
+                      f"{ADAPTER_LUID}", result.stdout)
+        self.assertNotIn("guest: report ok", result.stdout)
+        self.assertEqual((self.work / "vulkaninfo.txt").read_text(newline=""), VULKANINFO)
+        self.assertEqual((self.work / "vulkan.txt").read_text(newline=""), PROBE_REPORT)
+        self.assertEqual((self.work / "diag" / "rvkvk-4242.log").read_text(newline=""),
+                         "rvkvk: loader interface negotiation\r\n")
+        self.assertIn("vulkaninfo ok", (self.work / "verdict.txt").read_text())
+        self.assert_clean()
+
+    def test_a_khronos_key_that_lists_no_rvk_driver_is_left_alone(self):
+        listed = ("\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\Khronos\\Vulkan\\Drivers\r\n"
+                  "    C:\\Windows\\System32\\DriverStore\\FileRepository\\nv_dispi.inf_amd64\\nv-vk64.json"
+                  "    REG_DWORD    0x0\r\n")
+        self.vulkan_script(outputs={"reg": listed}, exits={"reg": 0})
+        result = self.run_suite("--vulkan", *self.vulkan_runtime())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("guest: khronos ok: the key lists no rvk driver", result.stdout)
+
+    def test_an_rvk_driver_in_the_global_khronos_key_fails_before_vulkaninfo_runs(self):
+        """FR-001: a global value would make the loader list the device twice,
+        and would hide whether the adapter's own value works."""
+        listed = ("\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\Khronos\\Vulkan\\Drivers\r\n"
+                  "    C:\\Windows\\System32\\DriverStore\\FileRepository\\rvkgpu.inf_amd64_1\\rvkvk.json"
+                  "    REG_DWORD    0x0\r\n")
+        self.vulkan_script(outputs={"reg": listed}, exits={"reg": 0})
+        result = self.run_suite("--vulkan", *self.vulkan_runtime())
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("guest: khronos failed: the global key lists C:\\Windows\\System32\\DriverStore\\"
+                      "FileRepository\\rvkgpu.inf_amd64_1\\rvkvk.json", result.stdout)
+        self.assertNotIn("vulkaninfo.exe", "\n".join(line for line in self.journal_lines() if line.startswith("exec")))
+        self.assertIn("collect", self.stage_calls())
+
+    def test_a_registry_query_that_fails_for_another_reason_is_not_taken_for_an_absent_key(self):
+        self.vulkan_script(outputs={"reg": "ERROR: Invalid syntax.\r\nType \"REG QUERY /?\" for usage.\r\n"})
+        result = self.run_suite("--vulkan", *self.vulkan_runtime())
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("guest: khronos failed: reg query exited 1: ERROR: Invalid syntax.", result.stdout)
+
+    def test_vulkaninfo_must_list_exactly_one_physical_device_with_the_adapter_s_luid(self):
+        cases = {
+            "two": (VULKANINFO + vulkaninfo_gpu(1, "0b5e0100-00000000", "llvmpipe"), 0,
+                    "vulkaninfo failed: 2 physical devices listed, not one: GPU0 LUID LowPart 54177, "
+                    "GPU1 LUID LowPart 89611"),
+            "none": (VULKANINFO_HEAD, 0, "vulkaninfo failed: 0 physical devices listed, not one"),
+            "invalid": (VULKANINFO_HEAD + vulkaninfo_gpu(0, None), 0,
+                        "vulkaninfo failed: GPU0 has no valid deviceLUID"),
+            "other": (VULKANINFO_HEAD + vulkaninfo_gpu(0, "a2d30000-00000000"), 0,
+                      "luid failed: vulkaninfo's physical device has LUID LowPart 54178, not the adapter's 54177"),
+            "unreadable": (VULKANINFO_HEAD + vulkaninfo_gpu(0, "a1d3"), 0,
+                           "vulkaninfo failed: GPU0 has a deviceLUID that is not eight bytes: a1d3"),
+            "exit": (VULKANINFO, 1, "vulkaninfo failed: exited 1; see vulkaninfo.txt"),
+        }
+        for case, (listing, code, reason) in cases.items():
+            with self.subTest(case):
+                self.vulkan_script(outputs={"vulkaninfo": listing}, exits={"vulkaninfo": code})
+                result = self.run_suite("--vulkan", *self.vulkan_runtime())
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"guest: {reason}", result.stdout)
+                self.assertEqual((self.work / "vulkaninfo.txt").read_text(newline=""), listing)
+
+    def test_the_probe_s_report_is_judged_step_by_step(self):
+        cases = {
+            "failed": (PROBE_REPORT.replace("ok vulkan.draw", "FAIL vulkan.draw VK_ERROR_DEVICE_LOST")
+                       .replace("8 passed, 0", "7 passed, 1"), 1,
+                       "vulkan failed: 1 step(s) failed, exit 1; see vulkan.txt"),
+            "exit": (PROBE_REPORT, 3, "vulkan failed: 0 step(s) failed, exit 3; see vulkan.txt"),
+            "summary": (PROBE_REPORT.replace("rvkvkprobe: 8 passed, 0 failed\r\n", ""), 0,
+                        "vulkan failed: no summary line (exit 0)"),
+            "skipped": (PROBE_REPORT.replace("ok vulkan.lost\r\nok vulkan.recreated\r\n", "")
+                        .replace("8 passed", "6 passed"), 0,
+                        "vulkan failed: the probe reported no lost, recreated; see vulkan.txt"),
+            "rvktest": (PROBE_REPORT.replace("rvkvkprobe:", "rvktest:"), 0, "vulkan failed: no summary line"),
+            "mismatch": (PROBE_REPORT.replace(f"physical_device {ADAPTER_LUID}", "physical_device 7"), 0,
+                         f"luid failed: the probe's physical device has LUID LowPart 7, not the adapter's "
+                         f"{ADAPTER_LUID}"),
+            "no value": (PROBE_REPORT.replace(f"adapter_luid {ADAPTER_LUID}", "adapter_luid"), 0,
+                         "luid failed: the probe printed adapter_luid '', not a decimal LowPart"),
+        }
+        for case, (report, code, reason) in cases.items():
+            with self.subTest(case):
+                self.vulkan_script(outputs={"rvkvkprobe": report}, exits={"rvkvkprobe": code})
+                result = self.run_suite("--vulkan", *self.vulkan_runtime())
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"guest: {reason}", result.stdout)
+                self.assertEqual((self.work / "vulkan.txt").read_text(newline=""), report)
+
+    def test_a_vulkan_run_without_the_pinned_runtime_or_the_probe_is_refused_before_qemu(self):
+        self.vulkan_script()
+        absent = self.run_suite("--vulkan", *self.vulkan_runtime(vulkaninfo_exe=None))
+        self.assertEqual(absent.returncode, 1)
+        self.assertIn(f"guest: prepare failed: --vulkan needs the pinned Vulkan runtime in "
+                      f"{self.scratch / 'vulkan-runtime'} (vulkaninfo.exe missing): run tools/fetch_vulkan_runtime.py",
+                      absent.stdout)
+        tampered = self.run_suite("--vulkan", *self.vulkan_runtime(vulkan_1_dll=b"not the loader"))
+        self.assertEqual(tampered.returncode, 1)
+        self.assertIn("(vulkan-1.dll sha256 ", tampered.stdout)
+        unpinned = self.run_suite("--vulkan", *self.vulkan_runtime(), "--vulkan-pins", self.scratch / "absent.txt")
+        self.assertEqual(unpinned.returncode, 1)
+        self.assertIn("guest: prepare failed: --vulkan: no pins: ", unpinned.stdout)
+        unbuilt = self.run_suite("--vulkan", *self.vulkan_runtime(), "--probe", self.scratch / "absent-probe.exe")
+        self.assertEqual(unbuilt.returncode, 1)
+        self.assertIn("absent-probe.exe does not exist", unbuilt.stdout)
+        self.assertEqual(self.journal_lines(), [])
+        self.assert_clean()
+
+    def test_rvk_and_vulkan_are_separate_boots(self):
+        result = self.run_suite("--rvk", "--vulkan")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--rvk and --vulkan are separate boots", result.stderr)
 
     def test_a_run_that_injects_a_stall_runs_the_timeout_scenario_alone(self):
         """US3: with the host holding one context, every other scenario would be
@@ -606,6 +801,10 @@ class GuestSuiteRun(unittest.TestCase):
         missing = self.run_suite("--test", self.scratch / "absent.exe")
         self.assertEqual(missing.returncode, 1)
         self.assertIn("absent.exe does not exist", missing.stdout)
+        unbuilt = self.run_suite("--icd", self.scratch / "absent.dll")
+        self.assertEqual(unbuilt.returncode, 1)
+        self.assertIn("guest: prepare failed: " + str(self.scratch / "absent.dll") + " does not exist", unbuilt.stdout)
+        self.assertEqual(self.journal_lines(), [])
         self.assert_clean()
 
     def test_the_display_step_asserts_the_host_scans_out_the_guest_s_primary(self):
@@ -895,6 +1094,40 @@ class GuestSuiteRun(unittest.TestCase):
                                 text=True, env=environment)
         self.assertEqual(result.returncode, 2)
         self.assertIn("no image: pass --image or set AV_GUEST_IMAGE", result.stderr)
+
+
+class VulkaninfoListing(unittest.TestCase):
+    """What the runner reads out of vulkaninfo: tolerant of how the text is
+    laid out, never of how many devices it names."""
+
+    def test_each_physical_device_section_carries_its_own_luid(self):
+        listing = VULKANINFO + vulkaninfo_gpu(1, "0b5e0100-00000000", "llvmpipe")
+        self.assertEqual(vulkaninfo_devices(listing), {0: ["a1d30000-00000000"], 1: ["0b5e0100-00000000"]})
+
+    def test_layout_may_change_without_changing_what_is_read(self):
+        listing = ("Device Properties and Extensions:\n  GPU0:  \n    VkPhysicalDeviceIDProperties:\n"
+                   "        deviceLUID: \"a1-d3-00-00-00-00-00-00\"\n        deviceLUIDValid: true\n")
+        devices = vulkaninfo_devices(listing)
+        self.assertEqual(list(devices), [0])
+        self.assertEqual(luid_low_part(devices[0][0]), ADAPTER_LUID)
+
+    def test_lines_that_only_mention_a_gpu_are_not_devices(self):
+        """Device groups and presentable surfaces name devices by id; a device
+        section header is the name alone on its line."""
+        listing = ("Presentable Surfaces:\r\n\tGPU id : 0 (rvk) :\r\n\tGPU0 (rvk) (ID: 0)\r\n"
+                   "\tdeviceLUIDValid = true\r\n" + vulkaninfo_gpu(0))
+        self.assertEqual(vulkaninfo_devices(listing), {0: ["a1d30000-00000000"]})
+
+    def test_a_device_named_twice_is_one_device(self):
+        listing = VULKANINFO + "Devices:\r\n========\r\nGPU0:\r\n\tdeviceName = rvk\r\n"
+        self.assertEqual(vulkaninfo_devices(listing), {0: ["a1d30000-00000000"]})
+
+    def test_a_luid_is_eight_bytes_lowpart_first(self):
+        self.assertEqual(luid_low_part("a1d30000-00000000"), 0xD3A1)
+        self.assertEqual(luid_low_part("78563412-ffffffff"), 0x12345678)
+        self.assertIsNone(luid_low_part("a1d30000"))
+        self.assertIsNone(luid_low_part("a1d30000-0000000000"))
+        self.assertIsNone(luid_low_part("g1d30000-00000000"))
 
 
 if __name__ == "__main__":

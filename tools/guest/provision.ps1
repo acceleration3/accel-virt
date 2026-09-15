@@ -364,6 +364,9 @@ switch ($Stage) {
         SaveEvents 'Microsoft-Windows-Kernel-PnP/Configuration' 200 'kernel-pnp.txt'
         SaveEvents 'Microsoft-Windows-CodeIntegrity/Operational' 200 'code-integrity.txt'
         Copy-Item 'C:\Windows\INF\setupapi.dev.log' "$Diagnostics\setupapi.dev.log" -ErrorAction SilentlyContinue
+        # The Vulkan ICD's log, one file per process that loaded it (feature
+        # 045, FR-007); none when nothing did.
+        Copy-Item 'C:\ProgramData\rvk\*.log' $Diagnostics -ErrorAction SilentlyContinue
         & {
             Get-PnpDevice -Class Display | Format-List FriendlyName, InstanceId, Status, Problem
             $device = RvkDevice

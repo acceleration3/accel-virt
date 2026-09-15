@@ -43,7 +43,8 @@ AV_GUEST_IMAGE=... tools/guest/run_guest_suite.py --vulkan --executor build-qemu
 
 The runner installs the package (with `rvkvk.dll`, `rvkvk.json` and the
 `VulkanDriverName` value), checks that no Khronos global key exists, runs
-`vulkaninfo --summary` (the rvk device with the adapter's LUID, SC-001), then
+`vulkaninfo` - its full output, since `--summary` prints no LUID - and requires
+exactly one physical device, with the adapter's LUID (SC-001), then
 `rvkvkprobe.exe` (SC-002, SC-003), and pulls the ICD's log into `diag/`.
 
 `AV_GUEST_IMAGE=... tools/gate.sh` runs this as a third guest boot.

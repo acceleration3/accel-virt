@@ -37,6 +37,8 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from fetch_vulkan_runtime import Refused, pins_from, problems_on_disk  # noqa: E402
 from guest_agent import AgentError, Qmp, wait_for_agent  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -62,6 +64,27 @@ STRESS_WORST = re.compile(rb"^ok stress\.worst_wait_us (\d+)\r?$", re.M)
 # see the second segment: the list itself never leaves dxgkrnl.
 REGION_LINE = re.compile(r"^rvkgpu: host-visible region status 0x([0-9a-fA-F]{8})\r?$", re.M)
 HOST_VISIBLE_WRITTEN = re.compile(rb"^ok host_visible\.pattern (\d+)\r?$", re.M)
+PROBE_SUMMARY = re.compile(rb"^rvkvkprobe: (\d+) passed, (\d+) failed\r?$", re.M)
+PROBE_STEP = re.compile(rb"^ok vulkan\.(\w+)(?: (\S+))?\r?$", re.M)
+# Every step of feature 045's proof, in the probe's order: a probe that stops
+# printing one has not proven it, whatever its summary counts.
+PROBE_STEPS = ("instance", "adapter_luid", "physical_device", "device", "compute", "draw", "lost", "recreated")
+# A physical device's section in vulkaninfo's full text output (Vulkan-Tools
+# DumpGpu) starts with its name alone on a line. Device groups and presentable
+# surfaces name devices too, always with more on the line. --summary prints no
+# LUID, so the full output is what is read.
+VULKANINFO_DEVICE = re.compile(r"^[ \t]*GPU(\d+):[ \t]*\r?$", re.M)
+# DumpVkPhysicalDeviceIDProperties prints deviceLUID only while
+# deviceLUIDValid, as the structure's eight bytes in hex.
+VULKANINFO_LUID = re.compile(r"deviceLUID[ \t]*[=:][ \t]*\"?([0-9A-Fa-f][0-9A-Fa-f :-]*)")
+LUID_HEX_DIGITS = 16
+LUID_LOW_PART_BYTES = 4
+KHRONOS_DRIVERS = "HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers"
+REG = "C:\\Windows\\System32\\reg.exe"
+# reg.exe answers 1 for every failure and says which in English on this image:
+# only the one naming a missing key is an absent key.
+REG_FAILED = 1
+REG_NO_KEY = "unable to find the specified registry key"
 MANIFEST = re.compile(r"^(file|dump) (.+?)\r?$", re.M)
 # The enlightenments Windows expects of KVM, and hv-crash: Windows writes its
 # bugcheck code and parameters to the crash MSRs, which QEMU reports as
@@ -136,6 +159,9 @@ def arguments():
     parser.add_argument("--driver", default=str(ROOT / "build" / "driver" / "rvkgpu.sys"))
     parser.add_argument("--inf", default=str(ROOT / "src" / "km" / "rvkgpu.inf"))
     parser.add_argument("--test", default=str(ROOT / "build" / "guest" / "rvktest.exe"))
+    parser.add_argument("--icd", default=str(ROOT / "build" / "guest" / "rvkvk.dll"),
+                        help="the Vulkan ICD the package installs beside rvkgpu.sys (feature 045)")
+    parser.add_argument("--icd-manifest", default=str(ROOT / "src" / "um" / "vulkan" / "rvkvk.json"))
     parser.add_argument("--provision", default=str(ROOT / "tools" / "guest" / "provision.ps1"))
     parser.add_argument("--firmware", default="/usr/share/edk2/x64/OVMF_CODE.4m.fd")
     parser.add_argument("--firmware-vars", default="/usr/share/edk2/x64/OVMF_VARS.4m.fd")
@@ -174,6 +200,13 @@ def arguments():
     parser.add_argument("--rvk", action="store_true",
                         help="run rvktest.exe's rvk scenarios - real Vulkan, OpenCL and OpenGL work on the host GPU "
                              "- instead of the suite; needs --executor naming the real library (feature 044)")
+    parser.add_argument("--vulkan", action="store_true",
+                        help="find the Vulkan ICD through the Khronos loader and run rvkvkprobe.exe instead of the "
+                             "suite; needs the fetched runtime and --executor naming the real library (feature 045)")
+    parser.add_argument("--probe", default=str(ROOT / "build" / "guest" / "rvkvkprobe.exe"))
+    parser.add_argument("--vulkan-runtime", default=str(ROOT / "third_party" / "vulkan-runtime"),
+                        help="where tools/fetch_vulkan_runtime.py put vulkan-1.dll and vulkaninfo.exe")
+    parser.add_argument("--vulkan-pins", default=str(ROOT / "tools" / "vulkan_runtime_pins.txt"))
     parser.add_argument("--stress-minutes", type=float, default=0.0,
                         help="minutes of fences awaited while the blank's interrupt is masked and unmasked "
                              "(feature 039, US3); 0 leaves the long run out")
@@ -193,6 +226,8 @@ def arguments():
     parsed = parser.parse_args()
     if not parsed.image:
         parser.error("no image: pass --image or set AV_GUEST_IMAGE")
+    if parsed.rvk and parsed.vulkan:
+        parser.error("--rvk and --vulkan are separate boots: pass one")
     return parsed
 
 
@@ -256,6 +291,31 @@ def host_visible_pattern(count):
     it. The run looks for them anywhere in the region, because VidMm chooses
     where in the segment an allocation lands and never tells the driver."""
     return bytes(1 + (index * 7) % 251 for index in range(count))
+
+
+def luid_low_part(printed):
+    """The LowPart of a LUID vulkaninfo printed as its eight bytes, which are
+    the LUID structure's - LowPart first, little-endian - or None when what was
+    printed is not eight bytes."""
+    digits = re.sub(r"[ :-]", "", printed)
+    if len(digits) != LUID_HEX_DIGITS or re.fullmatch(r"[0-9A-Fa-f]+", digits) is None:
+        return None
+    return int.from_bytes(bytes.fromhex(digits)[:LUID_LOW_PART_BYTES], "little")
+
+
+def vulkaninfo_devices(listing):
+    """{GPU index: every distinct deviceLUID printed in that device's
+    sections}. A device printed twice is one device; a LUID outside any device
+    is nobody's."""
+    devices = {}
+    headers = list(VULKANINFO_DEVICE.finditer(listing))
+    for number, header in enumerate(headers):
+        end = headers[number + 1].start() if number + 1 < len(headers) else len(listing)
+        luids = devices.setdefault(int(header.group(1)), [])
+        for luid in VULKANINFO_LUID.findall(listing, header.end(), end):
+            if luid.strip() not in luids:
+                luids.append(luid.strip())
+    return devices
 
 
 def describe_panic(data):
@@ -398,10 +458,14 @@ class GuestRun:
     def prepare(self):
         required = [self.args.image, self.args.provision]
         if not self.args.prepare_image:
-            required += [self.args.driver, self.args.inf, self.args.test]
+            required += [self.args.driver, self.args.inf, self.args.icd, self.args.icd_manifest, self.args.test]
+        if self.args.vulkan:
+            required.append(self.args.probe)
         for path in required:
             if not os.path.isfile(path):
                 raise StepFailed("prepare", f"{path} does not exist")
+        if self.args.vulkan:
+            self.vulkan_runtime()
         for stale in ("overlay.qcow2", "vars.fd", "agent.sock", "qmp.sock", "rvkgpu.log", "rvkgpu-rescue.log",
                       "qemu-rescue.log", "panic.txt", "hostmem.bin"):
             (self.work / stale).unlink(missing_ok=True)
@@ -419,6 +483,23 @@ class GuestRun:
         if created.returncode != 0:
             raise StepFailed("overlay", created.stderr.strip() or f"qemu-img exited {created.returncode}")
         self.say("overlay ok")
+
+    def vulkan_runtime(self):
+        """The loader and vulkaninfo a --vulkan run pushes, as they were pinned:
+        a runtime nobody fetched, or one that is not the pinned one, is refused
+        before anything boots."""
+        try:
+            _url, _digest, pinned = pins_from(pathlib.Path(self.args.vulkan_pins))
+        except OSError as error:
+            raise StepFailed("prepare", f"--vulkan: no pins: {error}")
+        except Refused as refused:
+            raise StepFailed("prepare", f"--vulkan: {refused}")
+        runtime = pathlib.Path(self.args.vulkan_runtime)
+        problems = problems_on_disk(runtime, pinned)
+        if problems:
+            listed = ", ".join(f"{name} {problem}" for name, problem in sorted(problems.items()))
+            raise StepFailed("prepare", f"--vulkan needs the pinned Vulkan runtime in {runtime} ({listed}): "
+                                        "run tools/fetch_vulkan_runtime.py")
 
     def keep_symbols(self):
         """The driver under test and its PDB beside the dumps it produces: a rebuild replaces both."""
@@ -478,9 +559,21 @@ class GuestRun:
     def push(self):
         files = [(self.args.provision, GUEST_DIRECTORY + "\\provision.ps1")]
         if not self.args.prepare_image:
+            # The INF names the ICD whatever the run is for, pnputil refuses a
+            # package missing a file it names, and the sign stage catalogs the
+            # package's whole directory (feature 045).
             files += [(self.args.driver, PACKAGE_DIRECTORY + "\\rvkgpu.sys"),
                       (self.args.inf, PACKAGE_DIRECTORY + "\\rvkgpu.inf"),
+                      (self.args.icd, PACKAGE_DIRECTORY + "\\rvkvk.dll"),
+                      (self.args.icd_manifest, PACKAGE_DIRECTORY + "\\rvkvk.json"),
                       (self.args.test, GUEST_DIRECTORY + "\\rvktest.exe")]
+        if self.args.vulkan:
+            # The loader beside the programs that import it, where Windows
+            # looks first.
+            runtime = pathlib.Path(self.args.vulkan_runtime)
+            files += [(runtime / "vulkan-1.dll", GUEST_DIRECTORY + "\\vulkan-1.dll"),
+                      (runtime / "vulkaninfo.exe", GUEST_DIRECTORY + "\\vulkaninfo.exe"),
+                      (self.args.probe, GUEST_DIRECTORY + "\\rvkvkprobe.exe")]
 
         def send():
             make = f"New-Item -ItemType Directory -Force -Path {PACKAGE_DIRECTORY}"
@@ -996,6 +1089,92 @@ class GuestRun:
         if microseconds > RVK_LATENCY_LIMIT_US:
             raise StepFailed("rvk", f"a no-op took {microseconds} us, past the {RVK_LATENCY_LIMIT_US} us threshold")
 
+    def vulkan(self):
+        """Feature 045: the Khronos loader finds rvkvk.dll through the adapter's
+        VulkanDriverName alone, vulkaninfo lists the one device that gives it,
+        and the probe proves a device, its work and its loss through the loader
+        on the host GPU the executor runs on."""
+        self.say(f"vulkan: executor {self.args.executor}, host-gpu {self.args.host_gpu}")
+        self.khronos_key()
+        listed = self.vulkaninfo()
+        steps = self.probe()
+        adapter = self.probed_luid(steps, "adapter_luid")
+        device = self.probed_luid(steps, "physical_device")
+        if device != adapter:
+            raise StepFailed("luid", f"the probe's physical device has LUID LowPart {device}, not the adapter's "
+                                     f"{adapter}")
+        if listed != adapter:
+            raise StepFailed("luid", f"vulkaninfo's physical device has LUID LowPart {listed}, not the adapter's "
+                                     f"{adapter}")
+        self.say(f"luid ok: the adapter, the probe's physical device and vulkaninfo's all {adapter}")
+
+    def khronos_key(self):
+        """FR-001: no global registration. A value there would make the loader
+        list the device twice, and would hide whether the adapter's own value
+        is what found it."""
+        code, out, error = self.step("khronos", lambda: self.agent.run(REG, ["query", KHRONOS_DRIVERS],
+                                                                       self.args.step_timeout))
+        text = (out + error).decode(errors="replace")
+        if code == REG_FAILED and REG_NO_KEY in text:
+            self.say(f"khronos ok: no {KHRONOS_DRIVERS} key")
+            return
+        if code != 0:
+            raise StepFailed("khronos", f"reg query exited {code}: {text.strip()[-300:]}")
+        registered = [line.strip() for line in text.splitlines() if "rvk" in line.lower()]
+        if registered:
+            raise StepFailed("khronos", f"the global key lists {registered[0]}: the ICD must be found through "
+                                        "the adapter alone")
+        self.say("khronos ok: the key lists no rvk driver")
+
+    def vulkaninfo(self):
+        """SC-001: the loader, asked by a program that knows nothing of rvk,
+        lists exactly one physical device and that device's LUID; its LowPart."""
+        code, out, _error = self.step("vulkaninfo", lambda: self.agent.run(GUEST_DIRECTORY + "\\vulkaninfo.exe", [],
+                                                                         self.args.step_timeout))
+        (self.work / "vulkaninfo.txt").write_bytes(out)
+        if code != 0:
+            raise StepFailed("vulkaninfo", f"exited {code}; see vulkaninfo.txt")
+        devices = vulkaninfo_devices(out.decode(errors="replace"))
+        if len(devices) != 1:
+            named = ", ".join(f"GPU{index} LUID LowPart {' and '.join(str(luid_low_part(luid)) for luid in luids)}"
+                              for index, luids in sorted(devices.items()))
+            raise StepFailed("vulkaninfo", f"{len(devices)} physical devices listed, not one"
+                                           + (f": {named}" if named else ""))
+        index, luids = next(iter(devices.items()))
+        if not luids:
+            raise StepFailed("vulkaninfo", f"GPU{index} has no valid deviceLUID")
+        if len(luids) != 1 or luid_low_part(luids[0]) is None:
+            raise StepFailed("vulkaninfo", f"GPU{index} has a deviceLUID that is not eight bytes: "
+                                           f"{' and '.join(luids)}")
+        low_part = luid_low_part(luids[0])
+        self.say(f"vulkaninfo ok: one physical device, LUID LowPart {low_part}")
+        return low_part
+
+    def probe(self):
+        """SC-002 and SC-003: rvkvkprobe.exe's report, every step of it; the
+        values the steps printed, by step."""
+        code, out, error = self.step("rvkvkprobe", lambda: self.agent.run(GUEST_DIRECTORY + "\\rvkvkprobe.exe", [],
+                                                                         self.args.step_timeout))
+        (self.work / "vulkan.txt").write_bytes(out)
+        summary = PROBE_SUMMARY.search(out)
+        if summary is None:
+            raise StepFailed("vulkan", f"no summary line (exit {code}): {error.decode(errors='replace')[-200:]}")
+        failed = int(summary.group(2))
+        if failed != 0 or code != 0:
+            raise StepFailed("vulkan", f"{failed} step(s) failed, exit {code}; see vulkan.txt")
+        steps = {name.decode(): value.decode() for name, value in PROBE_STEP.findall(out)}
+        missing = [name for name in PROBE_STEPS if name not in steps]
+        if missing:
+            raise StepFailed("vulkan", f"the probe reported no {', '.join(missing)}; see vulkan.txt")
+        self.say(f"vulkan ok: {int(summary.group(1))} passed")
+        return steps
+
+    def probed_luid(self, steps, name):
+        """A LUID LowPart the probe printed, in decimal."""
+        if not steps[name].isdigit():
+            raise StepFailed("luid", f"the probe printed {name} {steps[name]!r}, not a decimal LowPart")
+        return int(steps[name])
+
     def timeout_events(self):
         """Event 4101 is dxgkrnl saying it reset a driver that stopped
         responding. Without it nothing timed out, and whatever the guest saw was
@@ -1013,9 +1192,12 @@ class GuestRun:
             self.reboot("install")
         self.check_monitors(self.stage_output("check", saved="device.txt"))
         self.segments()
+        # The display and power scenarios are the echo run's; these boots are
+        # for the work the real executor does (features 044 and 045).
+        if self.args.vulkan:
+            self.vulkan()
+            return
         if self.args.rvk:
-            # The display and power scenarios are the echo run's; this boot is
-            # for the work the real executor does (feature 044).
             self.rvk()
             return
         if self.args.quick:
