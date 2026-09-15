@@ -332,3 +332,63 @@ TEST(mock_host_fence_interrupts, counts_raises_while_connected_and_catches_misus
   CHECK(mock.claim(HostViolation::main_loop_required));
   CHECK(mock.claim(HostViolation::fence_misuse));
   mock.disconnect_fence_interrupts(); }
+
+/* The alias GuestPageAlias builds on: the same guest pages at a second address,
+ * so a byte written through either is the byte read through the other. */
+TEST(mock_host_alias_guest_run, a_second_mapping_shares_the_guest_pages_both_ways)
+{ MockHost host;
+  host.add_guest_ram(0x100000u, 0x4000u);
+  std::uint64_t length = 0x2000u;
+  bool          direct = false;
+  void *const   run = host.map_guest(0x101000u, length, direct);
+  CHECK(run != nullptr && direct && length == 0x2000u);
+  void *base = nullptr;
+  CHECK_STATUS(host.reserve_range(0x3000u, base), Status::ok);
+  CHECK(base != nullptr);
+  CHECK_EQ(host.live_ranges(), 1u);
+  const auto *const at = static_cast<std::uint8_t *>(base) + 0x1000u;
+  CHECK_STATUS(host.alias_guest_run(run, 0x2000u, static_cast<std::uint8_t *>(base) + 0x1000u), Status::ok);
+  CHECK_EQ(host.live_aliases(), 1u);
+  host.guest_ram(0x101FFFu)[0] = 0xC3u;
+  CHECK_EQ(at[0xFFFu], 0xC3u);
+  static_cast<std::uint8_t *>(base)[0x2ABCu] = 0x7Eu;
+  CHECK_EQ(host.guest_ram(0x102ABCu)[0], 0x7Eu);
+  host.release_range(base, 0x3000u);
+  CHECK_EQ(host.live_ranges(), 0u);
+  CHECK_EQ(host.live_aliases(), 0u);
+  CHECK_EQ(host.guest_ram(0x102ABCu)[0], 0x7Eu);   /* releasing the alias leaves the guest's pages */
+  host.unmap_guest(run, length); }
+
+TEST(mock_host_alias_guest_run, refuses_what_it_cannot_map_twice_and_catches_a_range_it_never_made)
+{ MockHost host;
+  host.add_guest_ram(0x100000u, 0x2000u);
+  std::uint64_t length = 0x2000u;
+  bool          direct = false;
+  void *const   run = host.map_guest(0x100000u, length, direct);
+  void *base = nullptr;
+  CHECK_STATUS(host.reserve_range(0x4000u, base), Status::ok);
+  std::uint8_t outside[0x1000] = {};
+  CHECK_STATUS(host.alias_guest_run(outside, 0x1000u, base), Status::not_supported);      /* no file behind it */
+  CHECK_STATUS(host.alias_guest_run(run, 0x3000u, base), Status::not_supported);          /* past the region */
+  CHECK_STATUS(host.alias_guest_run(run, 0x800u, base), Status::not_supported);           /* not whole pages */
+  CHECK_STATUS(host.alias_guest_run(static_cast<std::uint8_t *>(run) + 1, 0x1000u, base), Status::not_supported);
+  CHECK_STATUS(host.alias_guest_run(run, 0x1000u, static_cast<std::uint8_t *>(base) + 0x4000u),
+               Status::invalid_parameter);
+  CHECK(host.claim(HostViolation::unknown_handle));
+  host.fail_alias_at(1u);
+  CHECK_STATUS(host.alias_guest_run(run, 0x1000u, base), Status::not_supported);
+  CHECK_STATUS(host.alias_guest_run(run, 0x1000u, base), Status::ok);
+  CHECK_EQ(host.live_aliases(), 1u);
+  host.release_range(base, 0x1000u);
+  CHECK(host.claim(HostViolation::unknown_handle));
+  host.release_range(base, 0x4000u);
+  host.release_range(base, 0x4000u);
+  CHECK(host.claim(HostViolation::unknown_handle));
+  host.fail_reserve_at(2u);
+  CHECK_STATUS(host.reserve_range(0x1000u, base), Status::ok);
+  void *refused = &host;
+  CHECK_STATUS(host.reserve_range(0x1000u, refused), Status::no_memory);
+  CHECK(refused == nullptr);
+  host.release_range(base, 0x1000u);
+  CHECK_EQ(host.live_ranges(), 0u);
+  host.unmap_guest(run, length); }

@@ -1,6 +1,9 @@
 /* A device's blob resources, by the resource ids the guest gives them. The
  * table keeps ids unique and host-visible mappings apart inside the hostmem
- * region; the protocol rules in front of it are BlobCommands'. Main loop. */
+ * region; the protocol rules in front of it are BlobCommands'. Main loop,
+ * except that a worker may hold a guest blob's alias: one lock holds that apart
+ * from every creation and release, so a blob is never released under a worker
+ * reading its pages, nor while a host API has them (feature 045). */
 #ifndef AV_BLOB_TABLE_HPP
 #define AV_BLOB_TABLE_HPP
 
@@ -16,6 +19,7 @@ namespace av {
 
 class BlobWindow;
 class ControlRequest;
+class GuestPageAlias;
 class Host;
 struct BlobTableProbe;
 
@@ -28,8 +32,11 @@ public:
     BlobTable(const BlobTable &) = delete;
     BlobTable &operator=(const BlobTable &) = delete;
 
-    /* conflict for a live id, no_space when full, or the backing's failure,
-     * leaving no blob behind. */
+    /* Main loop. no_memory when the host has no lock to give; invalid_state
+     * once done. */
+    [[nodiscard]] Status initialize();
+    /* invalid_state before initialize; conflict for a live id, no_space when
+     * full, or the backing's failure, leaving no blob behind. */
     [[nodiscard]] Status create_guest(uint32_t id, uint64_t size, ControlRequest &request, size_t offset,
                                       uint32_t entries);
     [[nodiscard]] Status create_host(uint32_t id, uint64_t size);
@@ -45,11 +52,18 @@ public:
     /* not_found for an unknown id; invalid_state unless pinned, since a
      * window outlives nothing it does not pin. */
     [[nodiscard]] Status window(uint32_t id, BlobWindow &window);
-    /* not_found for an unknown id; invalid_state while pinned. */
+    /* not_found for an unknown id; invalid_state while pinned or aliased. */
     [[nodiscard]] Status release(uint32_t id);
     /* Pinned or not: a reset. */
     void                 release_all();
     bool                 contains(uint32_t id);
+    /* Any thread. Guest blob `id`'s pages as one host range, valid until the
+     * hold is let go: not_found for no blob `id`, and the blob's answer
+     * otherwise. */
+    [[nodiscard]] Status hold_alias(uint32_t id, const GuestPageAlias *&alias);
+    /* Any thread. A hold taken by hold_alias; an unknown id is ignored, as
+     * reset releases aliased blobs. */
+    void                 release_alias(uint32_t id);
     uint32_t             live() const;
 
     bool invariants_hold() const;
@@ -60,6 +74,7 @@ private:
 
     Host                       &host_;
     HostmemSpace                space_;
+    void                       *lock_;
     ObjectStorage<BlobResource> slots_[max_blobs];
 
     friend struct BlobTableProbe;

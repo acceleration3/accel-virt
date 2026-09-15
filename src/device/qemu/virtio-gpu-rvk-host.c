@@ -16,11 +16,13 @@
 #include "qemu/aio.h"
 #include "qemu/iov.h"
 #include "qemu/memfd.h"
+#include "qemu/rcu.h"
 #include "qemu/event_notifier.h"
 #include "qapi/error.h"
 #include "system/dma.h"
 #include "system/memory.h"
 #include "system/address-spaces.h"
+#include "system/ramblock.h"
 #include "hw/virtio/virtio-gpu-bswap.h"
 #include "hw/virtio/virtio-bus.h"
 #include "hw/virtio/virtio-gpu-rvk.h"
@@ -51,11 +53,15 @@ static int rvk_main_loop_held(void *opaque)
     return bql_locked();
 }
 
+/* A worker aliases guest RAM, and finding a pointer's RAM block is an RCU read
+ * that only a registered thread may take. */
 static void *rvk_thread_main(void *opaque)
 {
     VirtIOGPURvkThread *t = opaque;
 
+    rcu_register_thread();
     t->entry(t->context);
+    rcu_unregister_thread();
     return NULL;
 }
 
@@ -201,6 +207,36 @@ static void rvk_unmap_guest(void *opaque, void *pointer, uint64_t length)
     VirtIOGPURvk *r = opaque;
 
     dma_memory_unmap(rvk_address_space(r), pointer, length, DMA_DIRECTION_TO_DEVICE, 0);
+}
+
+static void *rvk_reserve_range(void *opaque, uint64_t size)
+{
+    void *base = mmap(NULL, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+
+    return base == MAP_FAILED ? NULL : base;
+}
+
+/* The same pages again, from the file behind the guest's RAM backend (feature
+ * 045, research.md section 7): anonymous RAM has no file to map twice, and a run
+ * leaving its block would need a second file. */
+static int rvk_alias_guest_run(void *opaque, void *run, uint64_t size, void *at)
+{
+    ram_addr_t offset;
+    RAMBlock *block;
+    int fd;
+
+    RCU_READ_LOCK_GUARD();
+    block = qemu_ram_block_from_host(run, false, &offset);
+    if (!block || (fd = qemu_ram_get_fd(block)) < 0 || offset + size > qemu_ram_get_used_length(block)) {
+        return 1;
+    }
+    return mmap(at, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd,
+                (off_t)(qemu_ram_get_fd_offset(block) + offset)) == MAP_FAILED;
+}
+
+static void rvk_release_range(void *opaque, void *base, uint64_t size)
+{
+    munmap(base, size);
 }
 
 static void *rvk_create_host_memory(void *opaque, uint64_t size, void **pointer)
@@ -703,6 +739,9 @@ void virtio_gpu_rvk_host_init(VirtIOGPURvk *r)
         .release = rvk_release,
         .map_guest = rvk_map_guest,
         .unmap_guest = rvk_unmap_guest,
+        .reserve_range = rvk_reserve_range,
+        .alias_guest_run = rvk_alias_guest_run,
+        .release_range = rvk_release_range,
         .create_host_memory = rvk_create_host_memory,
         .destroy_host_memory = rvk_destroy_host_memory,
         .hostmem_size = rvk_hostmem_size,

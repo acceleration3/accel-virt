@@ -8,6 +8,8 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <sys/mman.h>
+#include <unistd.h>
 
 namespace av {
 
@@ -36,7 +38,8 @@ MockHost::MockHost()
       splits_{}, split_count_(0u),
       guest_mappings_(static_cast<GuestMapping *>(std::calloc(max_guest_mappings, sizeof(GuestMapping)))),
       host_blocks_{}, hostmem_size_(0u), resources_{}, resource_count_(0u), doorbells_{}, translate_(nullptr), translate_context_(nullptr), fence_connected_(false), fail_fence_connect_(0u), raised_{}, refuse_import_read_(0u), empty_export_(0u), refuse_hostmem_read_(0u), clock_(0u), clock_step_(0u), corrupt_hostmem_read_(0u), fail_bind_gpu_(0u), bound_gpu_(no_gpu), refuse_export_(0u), export_error_(0),
-      refuse_import_(0u), import_error_(0), corrupt_import_read_(0u), imports_{}
+      refuse_import_(0u), import_error_(0), corrupt_import_read_(0u), imports_{}, ranges_{},
+      fail_reserve_(0u), fail_alias_(0u)
 {
     pthread_mutex_init(&state_, nullptr);
     pthread_cond_init(&work_queued_, nullptr);
@@ -69,11 +72,19 @@ MockHost::~MockHost()
     if (fence_connected_) registry.record_failure(__FILE__, __LINE__, "fence interrupts left connected");
     if (live_doorbells() != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u doorbell(s) left connected", live_doorbells());
+    if (live_ranges() != 0u)
+        registry.record_failure(__FILE__, __LINE__, "%u reserved range(s) never released", live_ranges());
+    for (Range &range : ranges_)
+        if (range.base != nullptr) munmap(range.base, range.bytes);
     for (void *block : allocations_) std::free(block);
     for (std::uint32_t index = 0u; index < max_guest_mappings; index++)
         if (guest_mappings_[index].bounce) std::free(guest_mappings_[index].pointer);
     std::free(guest_mappings_);
-    for (std::uint32_t index = 0u; index < region_count_; index++) std::free(regions_[index].bytes);
+    for (std::uint32_t index = 0u; index < region_count_; index++) {
+        if (regions_[index].bytes == nullptr) continue;
+        munmap(regions_[index].bytes, regions_[index].mapped + page);
+        close(regions_[index].fd);
+    }
     for (HostBlock &block : host_blocks_)
         if (block.live) std::free(block.pointer);
     pthread_cond_destroy(&work_queued_);
@@ -669,6 +680,107 @@ void MockHost::unmap_guest(void *pointer, std::uint64_t length)
     record(HostViolation::unknown_handle, "MockHost::unmap_guest");
 }
 
+Status MockHost::reserve_range(std::uint64_t bytes, void *&base)
+{
+    StateLock lock(state_);
+    base = nullptr;
+    if (fail_now(fail_reserve_)) return Status::no_memory;
+    for (Range &range : ranges_) {
+        if (range.base != nullptr) continue;
+        void *const reserved = mmap(nullptr, bytes, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+        if (reserved == MAP_FAILED) return Status::no_memory;
+        range = Range{reserved, bytes, 0u};
+        base = reserved;
+        return Status::ok;
+    }
+    return Status::no_memory;
+}
+
+MockHost::GuestRegion *MockHost::region_holding(void *pointer, std::uint64_t bytes)
+{
+    const auto *const byte = static_cast<std::uint8_t *>(pointer);
+    for (std::uint32_t index = 0u; index < region_count_; index++) {
+        GuestRegion &region = regions_[index];
+        if (region.bytes == nullptr || byte < region.bytes) continue;
+        const std::uint64_t offset = static_cast<std::uint64_t>(byte - region.bytes);
+        if (offset < region.mapped && bytes <= region.mapped - offset) return &region;
+    }
+    return nullptr;
+}
+
+MockHost::Range *MockHost::range_holding(void *at, std::uint64_t bytes)
+{
+    const auto *const byte = static_cast<std::uint8_t *>(at);
+    for (Range &range : ranges_) {
+        const auto *const base = static_cast<std::uint8_t *>(range.base);
+        if (range.base == nullptr || byte < base) continue;
+        const std::uint64_t offset = static_cast<std::uint64_t>(byte - base);
+        if (offset < range.bytes && bytes <= range.bytes - offset) return &range;
+    }
+    return nullptr;
+}
+
+/* Memory the loopback suite translates is the guest harness's own, with no file
+ * behind it: refused, as QEMU refuses RAM with no fd. */
+Status MockHost::alias_guest_run(void *run, std::uint64_t bytes, void *at)
+{
+    if (!holds_range(at, bytes)) {
+        record(HostViolation::unknown_handle, "MockHost::alias_guest_run");
+        return Status::invalid_parameter;
+    }
+    StateLock lock(state_);
+    if (fail_now(fail_alias_)) return Status::not_supported;
+    Range *const range = range_holding(at, bytes);
+    GuestRegion *const region = region_holding(run, bytes);
+    if (region == nullptr || bytes == 0u || bytes % page != 0u) return Status::not_supported;
+    const std::uint64_t offset = static_cast<std::uint64_t>(static_cast<std::uint8_t *>(run) - region->bytes);
+    if (offset % page != 0u ||
+        mmap(at, bytes, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, region->fd, static_cast<off_t>(offset)) ==
+            MAP_FAILED)
+        return Status::not_supported;
+    range->aliases++;
+    return Status::ok;
+}
+
+void MockHost::release_range(void *base, std::uint64_t bytes)
+{
+    {
+        StateLock lock(state_);
+        for (Range &range : ranges_) {
+            if (range.base != base || base == nullptr || range.bytes != bytes) continue;
+            munmap(base, bytes);
+            range = Range{};
+            return;
+        }
+    }
+    record(HostViolation::unknown_handle, "MockHost::release_range");
+}
+
+bool MockHost::holds_range(void *at, std::uint64_t bytes)
+{
+    StateLock lock(state_);
+    return range_holding(at, bytes) != nullptr;
+}
+
+void MockHost::fail_reserve_at(std::uint32_t nth) { StateLock lock(state_); fail_reserve_ = nth; }
+void MockHost::fail_alias_at(std::uint32_t nth) { StateLock lock(state_); fail_alias_ = nth; }
+
+std::uint32_t MockHost::live_ranges()
+{
+    StateLock lock(state_);
+    std::uint32_t count = 0u;
+    for (const Range &range : ranges_) count += range.base != nullptr ? 1u : 0u;
+    return count;
+}
+
+std::uint32_t MockHost::live_aliases()
+{
+    StateLock lock(state_);
+    std::uint32_t count = 0u;
+    for (const Range &range : ranges_) count += range.aliases;
+    return count;
+}
+
 MockHost::HostBlock *MockHost::block_of(void *memory)
 {
     for (HostBlock &block : host_blocks_)
@@ -778,10 +890,18 @@ void MockHost::refuse_import_at(std::uint32_t nth, std::int32_t host_error)
 { StateLock lock(state_); refuse_import_ = nth; import_error_ = host_error; }
 void MockHost::corrupt_import_read_at(std::uint32_t nth) { StateLock lock(state_); corrupt_import_read_ = nth; }
 
+/* A test that cannot get a file or an address to put guest RAM at has no guest
+ * to test, so it fails here rather than in whatever it was about to prove. */
 void MockHost::add_guest_ram(std::uint64_t base, std::size_t size)
 {
     StateLock lock(state_);
-    regions_[region_count_++] = GuestRegion{base, size, static_cast<std::uint8_t *>(std::calloc(1u, size))};
+    const std::uint64_t mapped = (size + page - 1u) / page * page;
+    const int           fd = memfd_create("mock guest ram", MFD_CLOEXEC);
+    void *const reserved = mmap(nullptr, mapped + page, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (fd < 0 || ftruncate(fd, static_cast<off_t>(mapped)) != 0 || reserved == MAP_FAILED ||
+        mmap(reserved, mapped, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0) == MAP_FAILED)
+        std::abort();
+    regions_[region_count_++] = GuestRegion{base, size, static_cast<std::uint8_t *>(reserved), fd, mapped};
 }
 
 void MockHost::split_guest_memory_at(std::uint64_t address)
@@ -793,7 +913,7 @@ void MockHost::split_guest_memory_at(std::uint64_t address)
 void MockHost::add_bounce_region(std::uint64_t base, std::uint64_t size)
 {
     StateLock lock(state_);
-    regions_[region_count_++] = GuestRegion{base, size, nullptr};
+    regions_[region_count_++] = GuestRegion{base, size, nullptr, -1, 0u};
 }
 
 std::uint8_t *MockHost::guest_ram(std::uint64_t address)

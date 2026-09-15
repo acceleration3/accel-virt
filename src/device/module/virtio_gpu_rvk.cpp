@@ -37,6 +37,11 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
         host_.log(message.text());
         return Status::no_memory;
     }
+    if (blobs_.initialize() == Status::no_memory) {
+        message.append("virtio-gpu-rvk: the host has no mutex for the blob table");
+        host_.log(message.text());
+        return Status::no_memory;
+    }
     const Status status = binding_.bind(host_gpu, message);
     if (status != Status::ok) return status;
     /* What this host can actually do, asked once, on the GPU just bound: a

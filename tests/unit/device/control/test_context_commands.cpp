@@ -99,6 +99,7 @@ public:
         : blobs_(host_), interrupts_(host_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(),
           contexts_(host_, blobs_, interrupts_, library_), capset_(host_), commands_(host_, contexts_, capset_)
     {
+        static_cast<void>(blobs_.initialize());
         static_cast<void>(library_.accept(&ops_.table()));
         host_.add_gpu(uuid);
         host_.set_hostmem_size(0x10000u);

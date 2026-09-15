@@ -97,6 +97,7 @@ TEST(device_context_table_destroy, stops_the_worker_once)
 TEST(device_context_table_holds_doorbell, only_a_bound_context_holds_its_doorbell)
 { MockHost host; BlobTable blobs(host); FenceInterrupts interrupts(host); ExecutorLibrary library; DeviceContextTable table(host, blobs, interrupts, library);
   host.set_hostmem_size(0x10000u);
+  CHECK_STATUS(blobs.initialize(), Status::ok);
   CHECK_STATUS(blobs.create_host(1u, 0x2000u), Status::ok);
   CHECK_STATUS(blobs.create_host(2u, 0x1000u), Status::ok);
   av::RingBlobWriter(blobs).write_header(1u, 12u);

@@ -12,6 +12,17 @@ uint64_t BlobWindow::length() const
     return length_;
 }
 
+uint32_t BlobWindow::extents() const
+{
+    return extents_;
+}
+
+void *BlobWindow::extent(uint32_t index, uint64_t &bytes) const
+{
+    bytes = index < extents_ ? lengths_[index] : 0u;
+    return index < extents_ ? pointers_[index] : nullptr;
+}
+
 bool BlobWindow::contains(uint64_t offset, size_t count) const
 {
     return offset <= length_ && count <= length_ - offset;

@@ -123,6 +123,22 @@ void TableHost::unmap_guest(void *pointer, uint64_t length)
     ops_.unmap_guest(ops_.opaque, pointer, length);
 }
 
+Status TableHost::reserve_range(uint64_t bytes, void *&base)
+{
+    base = ops_.reserve_range(ops_.opaque, bytes);
+    return base != nullptr ? Status::ok : Status::no_memory;
+}
+
+Status TableHost::alias_guest_run(void *run, uint64_t bytes, void *at)
+{
+    return ops_.alias_guest_run(ops_.opaque, run, bytes, at) == 0 ? Status::ok : Status::not_supported;
+}
+
+void TableHost::release_range(void *base, uint64_t bytes)
+{
+    ops_.release_range(ops_.opaque, base, bytes);
+}
+
 void *TableHost::create_host_memory(uint64_t size, void *&pointer)
 {
     pointer = nullptr;

@@ -2,6 +2,7 @@
 #include "device/control/control_request.hpp"
 #include "device/memory/blob_resource.hpp"
 #include "device/memory/blob_window.hpp"
+#include "device/memory/guest_page_alias.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/host/gpu_request_builder.hpp"
 #include "harness/host/host_violation.hpp"
@@ -168,3 +169,61 @@ TEST(blob_resource_pin, counts_pins_until_the_last_is_let_go)
   CHECK(blob.pinned());
   blob.unpin();
   CHECK(!blob.pinned()); }
+
+/* The pages at 0x100000 and 0x102000 entries() names: two runs in one range. */
+TEST(blob_resource_hold_alias, maps_its_guest_pages_for_the_first_holder_and_unmaps_after_the_last)
+{ MockHost host;
+  host.add_guest_ram(ram, 0x10000u);
+  const GpuRequestBuilder bytes = entries(2u);
+  MockRequest mock(bytes.bytes(), bytes.size());
+  ControlRequest request(host, &mock);
+  BlobResource blob(host, 7u);
+  CHECK_STATUS(blob.back_with_guest(request, entries_at, 2u, 0x2000u), Status::ok);
+  host.guest_ram(ram + 0x2010u)[0] = 0x9Du;
+  CHECK(!blob.aliased());
+  const av::GuestPageAlias *first = nullptr;
+  CHECK_STATUS(blob.hold_alias(first), Status::ok);
+  CHECK(blob.aliased());
+  CHECK(first != nullptr);
+  CHECK_EQ(first->runs(), 2u);
+  CHECK_EQ(first->length(), 0x2000u);
+  CHECK_EQ(static_cast<std::uint8_t *>(first->base())[0x1010u], 0x9Du);
+  const av::GuestPageAlias *second = nullptr;
+  CHECK_STATUS(blob.hold_alias(second), Status::ok);
+  CHECK(second == first);
+  CHECK_EQ(host.live_ranges(), 1u);   /* made once, however many hold it */
+  blob.release_alias();
+  CHECK(blob.aliased());
+  CHECK_EQ(host.live_ranges(), 1u);
+  blob.release_alias();
+  CHECK(!blob.aliased());
+  CHECK_EQ(host.live_ranges(), 0u);
+  blob.release_alias();   /* no holder: nothing */
+  CHECK(!blob.aliased());
+  CHECK_EQ(host.unclaimed_violations(), 0u);
+  CHECK_STATUS(blob.hold_alias(first), Status::ok);   /* and made again for the next */
+  CHECK_EQ(host.live_ranges(), 1u); }
+
+TEST(blob_resource_hold_alias, a_host_block_has_no_guest_pages_and_pages_the_host_cannot_alias_hold_nothing)
+{ MockHost host;
+  host.add_guest_ram(ram, 0x10000u);
+  host.set_hostmem_size(0x10000u);
+  BlobResource block(host, 1u);
+  CHECK_STATUS(block.back_with_host(0x1000u), Status::ok);
+  const av::GuestPageAlias stale(host);
+  const av::GuestPageAlias *alias = &stale;
+  CHECK_STATUS(block.hold_alias(alias), Status::invalid_parameter);
+  CHECK(alias == nullptr);
+  CHECK(!block.aliased());
+  const GpuRequestBuilder bytes = entries(1u);
+  MockRequest mock(bytes.bytes(), bytes.size());
+  ControlRequest request(host, &mock);
+  BlobResource guest(host, 2u);
+  CHECK_STATUS(guest.back_with_guest(request, entries_at, 1u, 0x1000u), Status::ok);
+  host.fail_reserve_at(1u);
+  CHECK_STATUS(guest.hold_alias(alias), Status::no_memory);
+  CHECK(!guest.aliased());
+  BlobResource unbacked(host, 3u);
+  CHECK_STATUS(unbacked.hold_alias(alias), Status::malformed);
+  CHECK(!unbacked.aliased());
+  CHECK_EQ(host.live_ranges(), 0u); }

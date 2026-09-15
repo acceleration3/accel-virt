@@ -59,6 +59,14 @@ MockHostOps::MockHostOps(MockHost &host) : table_{}
         return pointer;
     };
     table_.unmap_guest = [](void *opaque, void *pointer, std::uint64_t length) { host_of(opaque).unmap_guest(pointer, length); };
+    table_.reserve_range = [](void *opaque, std::uint64_t size) -> void * {
+        void *base = nullptr;
+        return host_of(opaque).reserve_range(size, base) == Status::ok ? base : nullptr;
+    };
+    table_.alias_guest_run = [](void *opaque, void *run, std::uint64_t size, void *at) {
+        return host_of(opaque).alias_guest_run(run, size, at) == Status::ok ? 0 : 1;
+    };
+    table_.release_range = [](void *opaque, void *base, std::uint64_t size) { host_of(opaque).release_range(base, size); };
     table_.create_host_memory = [](void *opaque, std::uint64_t size, void **pointer) {
         void *view = nullptr;
         void *const memory = host_of(opaque).create_host_memory(size, view);

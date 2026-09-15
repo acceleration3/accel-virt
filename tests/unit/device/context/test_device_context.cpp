@@ -83,6 +83,7 @@ public:
         : blobs_(host_), interrupts_(host_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(),
           context_(host_, blobs_, interrupts_, library_, 5u)
     {
+        static_cast<void>(blobs_.initialize());
         static_cast<void>(library_.accept(&ops_.table()));
         host_.add_guest_ram(ram, 0x2000u);
         GpuRequestBuilder entries(0u);

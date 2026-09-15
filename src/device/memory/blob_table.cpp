@@ -1,13 +1,25 @@
 #include "device/memory/blob_table.hpp"
 
 #include "device/host/host.hpp"
+#include "core/support/scope_exit.hpp"
 #include "device/memory/blob_window.hpp"
 
 namespace av {
 
-BlobTable::BlobTable(Host &host) : host_(host), space_(host), slots_{} {}
+BlobTable::BlobTable(Host &host) : host_(host), space_(host), lock_(nullptr), slots_{} {}
 
-BlobTable::~BlobTable() { release_all(); }
+BlobTable::~BlobTable()
+{
+    release_all();
+    if (lock_ != nullptr) host_.destroy_mutex(lock_);
+}
+
+Status BlobTable::initialize()
+{
+    host_.require_main_loop("BlobTable::initialize");
+    if (lock_ != nullptr) return Status::invalid_state;
+    return host_.create_mutex(lock_) == Status::ok ? Status::ok : Status::no_memory;
+}
 
 ObjectStorage<BlobResource> *BlobTable::slot_of(uint32_t id)
 {
@@ -19,7 +31,10 @@ ObjectStorage<BlobResource> *BlobTable::slot_of(uint32_t id)
 Status BlobTable::create_guest(uint32_t id, uint64_t size, ControlRequest &request, size_t offset, uint32_t entries)
 {
     host_.require_main_loop("BlobTable::create_guest");
+    if (lock_ == nullptr) return Status::invalid_state;
     if (slot_of(id) != nullptr) return Status::conflict;
+    host_.lock_mutex(lock_);
+    ScopeExit unlock([this] { host_.unlock_mutex(lock_); });
     for (ObjectStorage<BlobResource> &slot : slots_) {
         if (slot.construct(host_, id) != Status::ok) continue;   /* occupied */
         const Status status = slot.object().back_with_guest(request, offset, entries, size);
@@ -32,7 +47,10 @@ Status BlobTable::create_guest(uint32_t id, uint64_t size, ControlRequest &reque
 Status BlobTable::create_host(uint32_t id, uint64_t size)
 {
     host_.require_main_loop("BlobTable::create_host");
+    if (lock_ == nullptr) return Status::invalid_state;
     if (slot_of(id) != nullptr) return Status::conflict;
+    host_.lock_mutex(lock_);
+    ScopeExit unlock([this] { host_.unlock_mutex(lock_); });
     for (ObjectStorage<BlobResource> &slot : slots_) {
         if (slot.construct(host_, id) != Status::ok) continue;   /* occupied */
         const Status status = slot.object().back_with_host(size);
@@ -98,21 +116,47 @@ Status BlobTable::release(uint32_t id)
     host_.require_main_loop("BlobTable::release");
     ObjectStorage<BlobResource> *const slot = slot_of(id);
     if (slot == nullptr) return Status::not_found;
-    if (slot->object().pinned()) return Status::invalid_state;
-    slot->destroy();
-    return Status::ok;
+    host_.lock_mutex(lock_);
+    ScopeExit    unlock([this] { host_.unlock_mutex(lock_); });
+    const bool   held = slot->object().pinned() || slot->object().aliased();
+    if (!held) slot->destroy();
+    return held ? Status::invalid_state : Status::ok;
 }
 
 void BlobTable::release_all()
 {
     host_.require_main_loop("BlobTable::release_all");
+    if (lock_ == nullptr) return;
+    host_.lock_mutex(lock_);
     for (ObjectStorage<BlobResource> &slot : slots_) slot.destroy();
+    host_.unlock_mutex(lock_);
 }
 
 bool BlobTable::contains(uint32_t id)
 {
     host_.require_main_loop("BlobTable::contains");
     return slot_of(id) != nullptr;
+}
+
+/* The lookup takes the lock too: a creation on the main loop writes the slot a
+ * worker would otherwise be reading. */
+Status BlobTable::hold_alias(uint32_t id, const GuestPageAlias *&alias)
+{
+    alias = nullptr;
+    if (lock_ == nullptr) return Status::not_found;
+    host_.lock_mutex(lock_);
+    ScopeExit                          unlock([this] { host_.unlock_mutex(lock_); });
+    ObjectStorage<BlobResource> *const slot = slot_of(id);
+    return slot != nullptr ? slot->object().hold_alias(alias) : Status::not_found;
+}
+
+void BlobTable::release_alias(uint32_t id)
+{
+    if (lock_ == nullptr) return;
+    host_.lock_mutex(lock_);
+    ObjectStorage<BlobResource> *const slot = slot_of(id);
+    if (slot != nullptr) slot->object().release_alias();
+    host_.unlock_mutex(lock_);
 }
 
 uint32_t BlobTable::live() const
@@ -122,9 +166,11 @@ uint32_t BlobTable::live() const
     return count;
 }
 
-/* Ids are unique, and no two mappings share a byte of the region. */
+/* Ids are unique, no two mappings share a byte of the region, and no blob
+ * lives that a worker's alias could not be held apart from. */
 bool BlobTable::invariants_hold() const
 {
+    if (lock_ == nullptr && live() != 0u) return false;
     for (uint32_t first = 0u; first < max_blobs; first++) {
         if (!slots_[first].constructed()) continue;
         const BlobResource &blob = slots_[first].object();

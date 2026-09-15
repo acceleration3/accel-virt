@@ -64,6 +64,17 @@ public:
     virtual void *map_guest(uint64_t address, uint64_t &length, bool &direct) = 0;
     virtual void  unmap_guest(void *pointer, uint64_t length) = 0;
 
+    /* Any thread. `bytes` of address space nothing else may be mapped into and
+     * nothing may touch until aliased: its `base`, or no_memory. */
+    [[nodiscard]] virtual Status reserve_range(uint64_t bytes, void *&base) = 0;
+    /* Any thread. The `bytes` of guest RAM at `run` - a direct mapping
+     * map_guest answered, whole pages, still mapped - mapped a second time at
+     * `at` inside a reserved range, so both addresses are the same pages:
+     * not_supported for RAM the host cannot map twice (no file behind it). */
+    [[nodiscard]] virtual Status alias_guest_run(void *run, uint64_t bytes, void *at) = 0;
+    /* Any thread. The reserved range and every alias inside it. */
+    virtual void                 release_range(void *base, uint64_t bytes) = 0;
+
     /* Main loop. A zeroed host-visible block of `size` bytes, a page multiple:
      * its handle, or null. `pointer` is the device's own view of it. */
     virtual void *create_host_memory(uint64_t size, void *&pointer) = 0;

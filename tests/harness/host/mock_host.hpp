@@ -52,6 +52,9 @@ public:
     void     release(void *block) override;
     void    *map_guest(std::uint64_t address, std::uint64_t &length, bool &direct) override;
     void     unmap_guest(void *pointer, std::uint64_t length) override;
+    Status   reserve_range(std::uint64_t bytes, void *&base) override;
+    Status   alias_guest_run(void *run, std::uint64_t bytes, void *at) override;
+    void     release_range(void *base, std::uint64_t bytes) override;
     void    *create_host_memory(std::uint64_t size, void *&pointer) override;
     void     destroy_host_memory(void *memory) override;
     std::uint64_t hostmem_size() override;
@@ -111,14 +114,19 @@ public:
     /* The Nth guest mapping from now answers a pointer with nothing mapped, a
      * host that says yes and means no. */
     void empty_mapping_at(std::uint32_t nth);
+    /* The Nth range reservation, or alias of a guest run, from now is refused. */
+    void fail_reserve_at(std::uint32_t nth);
+    void fail_alias_at(std::uint32_t nth);
 
     /* Guest memory another harness owns (the guest's MockPlatform in the
      * loopback suite): `translate` answers the host pointer of `length` bytes
      * at `address`, or null, and is asked before any guest RAM region. */
     using GuestTranslator = void *(*)(void *context, std::uint64_t address, std::uint64_t length);
     void          translate_guest_with(GuestTranslator translate, void *context);
-    /* Guest RAM at [base, base + size), backed by the mock. A mapping stops at
-     * a region's end and at every split, as QEMU's does at a region boundary. */
+    /* Guest RAM at [base, base + size), backed by the mock with a file, as a
+     * shared memory backend is, so a run of it can be aliased; a page nothing
+     * may map follows it, so no other region is ever adjacent. A mapping stops
+     * at a region's end and at every split, as QEMU's does at a region boundary. */
     void          add_guest_ram(std::uint64_t base, std::size_t size);
     void          split_guest_memory_at(std::uint64_t address);
     /* Guest addresses QEMU would only reach through a bounce buffer. */
@@ -162,6 +170,9 @@ public:
     std::uint32_t live_imports();
     std::uint32_t live_placements();
     std::uint32_t live_doorbells();
+    /* Ranges reserved and not released, and the runs aliased into them. */
+    std::uint32_t live_ranges();
+    std::uint32_t live_aliases();
 
 private:
     static constexpr std::uint32_t violation_kinds = static_cast<std::uint32_t>(HostViolation::count);
@@ -194,11 +205,15 @@ private:
     static constexpr std::uint32_t max_host_memory = 64u;
     static constexpr std::uint32_t max_imports = 16u;
     static constexpr std::uint32_t max_resources = 64u;
+    static constexpr std::uint32_t max_ranges = 128u;
+    static constexpr std::uint64_t page = 4096u;
 
     struct GuestRegion {
         std::uint64_t base;
         std::uint64_t size;
         std::uint8_t *bytes;   /* null for a bounce region */
+        int           fd;
+        std::uint64_t mapped;  /* the file's size, whole pages */
     };
     struct GuestMapping {
         void         *pointer;
@@ -213,6 +228,11 @@ private:
         std::uint64_t offset;
         bool          exported;   /* from the host GPU, released by release_gpu_memory */
     };
+    struct Range {
+        void         *base;
+        std::uint64_t bytes;
+        std::uint32_t aliases;
+    };
     struct Import {
         std::uint8_t *pointer;
         std::uint64_t size;
@@ -221,6 +241,10 @@ private:
 
     void    record(HostViolation kind, const char *function);
     GuestRegion *region_of(std::uint64_t address);
+    /* The file-backed region holding all of [pointer, pointer + bytes), or null. */
+    GuestRegion *region_holding(void *pointer, std::uint64_t bytes);
+    Range       *range_holding(void *at, std::uint64_t bytes);
+    bool         holds_range(void *at, std::uint64_t bytes);
     HostBlock   *block_of(void *memory);
     bool    fail_now(std::uint32_t &countdown);
     Thread *thread_of(void *thread);
@@ -280,6 +304,9 @@ private:
     std::int32_t    import_error_;
     std::uint32_t   corrupt_import_read_;
     Import          imports_[max_imports];
+    Range           ranges_[max_ranges];
+    std::uint32_t   fail_reserve_;
+    std::uint32_t   fail_alias_;
 };
 
 }  // namespace av

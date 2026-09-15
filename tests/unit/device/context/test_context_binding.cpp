@@ -53,6 +53,7 @@ class Fixture {
 public:
     Fixture() : blobs_(host_), binding_(host_, blobs_)
     {
+        static_cast<void>(blobs_.initialize());
         host_.add_guest_ram(0x100000u, 0x1000u);
         static_cast<void>(blobs_.create_host(ring, 0x2000u));
         static_cast<void>(blobs_.create_host(fence, 0x1000u));
@@ -162,6 +163,7 @@ TEST(context_binding_bind, a_missing_or_undersized_reply_slot_pins_nothing)
 TEST(context_binding, lets_go_of_its_blobs_when_destroyed)
 { MockHost host;
   BlobTable blobs(host);
+  CHECK_STATUS(blobs.initialize(), Status::ok);
   CHECK_STATUS(blobs.create_host(ring, 0x2000u), Status::ok);
   CHECK_STATUS(blobs.create_host(fence, 0x1000u), Status::ok);
   { ContextBinding binding(host, blobs);

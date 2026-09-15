@@ -6,7 +6,8 @@
 namespace av {
 
 BlobResource::BlobResource(Host &host, uint32_t id)
-    : host_(host), id_(id), guest_(host), block_(host), offset_(0u), mapped_(false), pins_(0u) {}
+    : host_(host), id_(id), guest_(host), block_(host), offset_(0u), mapped_(false), pins_(0u), alias_(host),
+      alias_holds_(0u) {}
 
 /* A mapping is removed before its block is destroyed. */
 BlobResource::~BlobResource()
@@ -91,6 +92,29 @@ bool BlobResource::pinned() const
 BlobWindow BlobResource::window() const
 {
     return block_.created() ? block_.window() : guest_.window();
+}
+
+Status BlobResource::hold_alias(const GuestPageAlias *&alias)
+{
+    alias = nullptr;
+    if (block_.created()) return Status::invalid_parameter;
+    const Status status = alias_.mapped() ? Status::ok : alias_.map(guest_.window());
+    if (status != Status::ok) return status;
+    alias_holds_++;
+    alias = &alias_;
+    return Status::ok;
+}
+
+void BlobResource::release_alias()
+{
+    if (alias_holds_ == 0u) return;
+    alias_holds_--;
+    if (alias_holds_ == 0u) alias_.release();
+}
+
+bool BlobResource::aliased() const
+{
+    return alias_holds_ != 0u;
 }
 
 }  // namespace av

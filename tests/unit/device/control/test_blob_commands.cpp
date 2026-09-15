@@ -40,6 +40,7 @@ class Fixture {
 public:
     Fixture() : blobs_(host_), commands_(host_, blobs_)
     {
+        static_cast<void>(blobs_.initialize());
         host_.add_guest_ram(ram, 0x10000u);
         host_.add_bounce_region(0x800000u, 0x1000u);
         host_.set_hostmem_size(0x10000u);

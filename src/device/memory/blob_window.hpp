@@ -20,6 +20,10 @@ public:
     BlobWindow(void *const *pointers, const uint64_t *lengths, uint32_t extents, uint64_t length);
 
     uint64_t length() const;
+    uint32_t extents() const;
+    /* Extent `index`'s memory, with `bytes` its length: null and 0 past the
+     * last, so a walk over them cannot read beyond the table. */
+    void    *extent(uint32_t index, uint64_t &bytes) const;
     /* invalid_parameter, copying nothing, unless [offset, offset + count) lies
      * inside the blob. */
     [[nodiscard]] Status read(uint64_t offset, uint8_t *bytes, size_t count) const;

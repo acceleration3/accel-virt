@@ -213,3 +213,25 @@ TEST(table_host, forwards_fence_interrupts)
   CHECK(!mock.fence_interrupts_connected());
   mock.fail_fence_connect_at(1u);
   CHECK_STATUS(host.connect_fence_interrupts(), Status::no_memory); }
+
+TEST(table_host, forwards_ranges_and_aliases_and_reads_their_refusals)
+{ MockHost mock; MockHostOps ops(mock); TableHost host(ops.table());
+  mock.add_guest_ram(0x1000u, 0x1000u);
+  std::uint64_t length = 0x1000u;
+  bool          direct = false;
+  void *const   run = host.map_guest(0x1000u, length, direct);
+  void *base = nullptr;
+  CHECK_STATUS(host.reserve_range(0x2000u, base), Status::ok);
+  CHECK(base != nullptr);
+  CHECK_STATUS(host.alias_guest_run(run, 0x1000u, static_cast<std::uint8_t *>(base) + 0x1000u), Status::ok);
+  static_cast<std::uint8_t *>(run)[0x10] = 0x44u;
+  CHECK_EQ(static_cast<std::uint8_t *>(base)[0x1010], 0x44u);
+  mock.fail_alias_at(1u);
+  CHECK_STATUS(host.alias_guest_run(run, 0x1000u, base), Status::not_supported);
+  host.release_range(base, 0x2000u);
+  CHECK_EQ(mock.live_ranges(), 0u);
+  mock.fail_reserve_at(1u);
+  void *refused = &mock;
+  CHECK_STATUS(host.reserve_range(0x1000u, refused), Status::no_memory);
+  CHECK(refused == nullptr);
+  host.unmap_guest(run, length); }

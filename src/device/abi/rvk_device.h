@@ -66,6 +66,14 @@ typedef struct RvkHostOps {
      * *length at a region boundary; *direct is 0 for a bounce buffer. */
     void *(*map_guest)(void *opaque, uint64_t address, uint64_t *length, int *direct);
     void (*unmap_guest)(void *opaque, void *pointer, uint64_t length);
+    /* Any thread. `size` bytes of address space reserved inaccessible: NULL on failure. */
+    void *(*reserve_range)(void *opaque, uint64_t size);
+    /* Any thread. The `size` bytes of guest RAM at `run` (a direct map_guest
+     * mapping) mapped again at `at`, inside a reservation, sharing their pages:
+     * nonzero when the RAM has no file descriptor or the mapping fails. */
+    int (*alias_guest_run)(void *opaque, void *run, uint64_t size, void *at);
+    /* Any thread. Unmaps the reservation and every alias inside it. */
+    void (*release_range)(void *opaque, void *base, uint64_t size);
     /* A zeroed shareable block of `size` bytes: its handle, or NULL; *pointer is the device's view. */
     void *(*create_host_memory)(void *opaque, uint64_t size, void **pointer);
     void (*destroy_host_memory)(void *opaque, void *memory);

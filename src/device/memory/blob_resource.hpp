@@ -4,6 +4,7 @@
 #define AV_BLOB_RESOURCE_HPP
 
 #include "core/support/status.hpp"
+#include "device/memory/guest_page_alias.hpp"
 #include "device/memory/guest_page_mapping.hpp"
 #include "device/memory/host_memory_block.hpp"
 
@@ -46,6 +47,17 @@ public:
     bool     pinned() const;
     /* The blob's memory for a worker: valid while pinned. */
     BlobWindow window() const;
+    /* Any thread, while nothing can release it: its guest pages as one host
+     * range, made for the first holder and shared by the rest. invalid_parameter
+     * for a blob the host backs; the alias's answer when it cannot be made,
+     * holding nothing. */
+    [[nodiscard]] Status hold_alias(const GuestPageAlias *&alias);
+    /* Any thread, under the same rule. One hold let go; the range goes with
+     * the last, and a blob no one holds is left as it is. */
+    void                 release_alias();
+    /* An aliased blob, like a pinned one, is not released: its pages are in a
+     * host API's hands. */
+    bool                 aliased() const;
 
 private:
     Host            &host_;
@@ -55,6 +67,8 @@ private:
     uint64_t         offset_;
     bool             mapped_;
     uint32_t         pins_;
+    GuestPageAlias   alias_;
+    uint32_t         alias_holds_;
 };
 
 }  // namespace av

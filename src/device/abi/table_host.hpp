@@ -32,6 +32,9 @@ public:
     void     release(void *block) override;
     void    *map_guest(uint64_t address, uint64_t &length, bool &direct) override;
     void     unmap_guest(void *pointer, uint64_t length) override;
+    Status   reserve_range(uint64_t bytes, void *&base) override;
+    Status   alias_guest_run(void *run, uint64_t bytes, void *at) override;
+    void     release_range(void *base, uint64_t bytes) override;
     void    *create_host_memory(uint64_t size, void *&pointer) override;
     void     destroy_host_memory(void *memory) override;
     uint64_t hostmem_size() override;

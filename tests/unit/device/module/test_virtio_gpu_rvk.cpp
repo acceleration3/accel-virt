@@ -311,6 +311,21 @@ TEST(virtio_gpu_rvk_realize, a_host_without_a_mutex_for_fence_interrupts_is_refu
   /* The refusal, and one line for each probe realize ran. */
   CHECK_EQ(host.logged(), 3u); }
 
+TEST(virtio_gpu_rvk_realize, a_host_without_a_mutex_for_the_blob_table_is_refused)
+{ MockHost host;
+  host.add_gpu(first);
+  VirtioGpuRvk device(host);
+  char bytes[96];
+  TextBuffer message(bytes, sizeof bytes);
+  host.fail_mutex_at(2u);
+  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::no_memory);
+  CHECK(std::strstr(message.text(), "no mutex for the blob table") != nullptr);
+  CHECK(!device.realized());
+  TextBuffer again(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, nullptr, again), Status::ok);
+  CHECK(device.invariants_hold());
+  device.reset(); }
+
 /* The stress probe is a measurement, not a capability: a host that has no
  * mutex left for it realizes anyway, with nothing counting interrupts. */
 TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_the_stress_probe_still_realizes)
@@ -319,7 +334,7 @@ TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_the_stress_probe_still_rea
   VirtioGpuRvk device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  host.fail_mutex_at(2u);   /* the fence interrupts take the first */
+  host.fail_mutex_at(3u);   /* the fence interrupts take the first, the blob table the second */
   CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::ok);
   CHECK(device.realized());
   CHECK(device.invariants_hold());
@@ -344,10 +359,10 @@ TEST(virtio_gpu_rvk, lifecycle_is_main_loop_only)
                    &device, thread),
                Status::ok);
   host.join_thread(thread);
-  /* realize, its fence interrupts and its binding, reset, both tables, the
-   * status and the interrupts under it, create, destroy and its table, and
-   * control, which an unrealized device answers no further */
-  for (int violation = 0; violation < 12; violation++) CHECK(host.claim(HostViolation::main_loop_required));
+  /* realize, its fence interrupts, its blob table and its binding, reset, both
+   * tables, the status and the interrupts under it, create, destroy and its
+   * table, and control, which an unrealized device answers no further */
+  for (int violation = 0; violation < 13; violation++) CHECK(host.claim(HostViolation::main_loop_required));
   CHECK_EQ(host.unclaimed_violations(), 0u);
   CHECK_EQ(host.logged(), 1u); }
 

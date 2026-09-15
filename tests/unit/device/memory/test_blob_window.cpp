@@ -102,3 +102,27 @@ TEST(blob_window_invariants, a_length_other_than_the_extents_sum_is_detected)
   BlobWindow lengthless = extents.window();
   av::BlobWindowProbe::lose_lengths(lengthless);
   CHECK(!lengthless.invariants_hold()); }
+
+TEST(blob_window_extent, answers_each_extent_in_order_and_nothing_past_the_last)
+{ const Extents extents;
+  const BlobWindow window = extents.window();
+  CHECK_EQ(window.extents(), 3u);
+  const std::uint64_t lengths[] = {3u, 1u, 4u};
+  const std::uint8_t  first_bytes[] = {0u, 3u, 4u};
+  for (std::uint32_t index = 0u; index < 3u; index++) {
+      std::uint64_t bytes = 0u;
+      const void *const pointer = window.extent(index, bytes);
+      CHECK_EQ(bytes, lengths[index]);
+      CHECK(pointer != nullptr);
+      CHECK_EQ(static_cast<const std::uint8_t *>(pointer)[0], first_bytes[index]);
+  }
+  const std::uint32_t past[] = {3u, 4u, 0xFFFFFFFFu};
+  for (const std::uint32_t index : past) {
+      std::uint64_t bytes = 99u;
+      CHECK(window.extent(index, bytes) == nullptr);
+      CHECK_EQ(bytes, 0u);
+  }
+  std::uint64_t bytes = 99u;
+  CHECK_EQ(BlobWindow().extents(), 0u);
+  CHECK(BlobWindow().extent(0u, bytes) == nullptr);
+  CHECK_EQ(bytes, 0u); }
