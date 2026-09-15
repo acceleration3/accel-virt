@@ -29,6 +29,21 @@ uint16_t VirtioGpuDevice::vector_for(uint16_t source, uint32_t message_interrupt
     return message_interrupts >= source_count ? source : 0u;
 }
 
+uint16_t VirtioGpuDevice::fence_vector_for(uint32_t doorbell, uint32_t message_interrupts) const
+{
+    if (message_interrupts <= source_count) return 0u;
+    return static_cast<uint16_t>(source_count + doorbell % (message_interrupts - source_count));
+}
+
+void VirtioGpuDevice::assign_fence_vectors(uint32_t message_interrupts)
+{
+    if (message_interrupts == 0u) return;
+    const uint16_t queues = transport_.queue_count();
+    for (uint16_t queue = first_fence_queue; queue < queues; queue++)
+        static_cast<void>(transport_.assign_queue_vector(queue, fence_vector_for(queue - first_fence_queue,
+                                                                                  message_interrupts)));
+}
+
 Status VirtioGpuDevice::start(uint32_t message_interrupts)
 {
     platform_.require_irql_at_most(Irql::passive, "VirtioGpuDevice::start");
@@ -43,6 +58,7 @@ Status VirtioGpuDevice::start(uint32_t message_interrupts)
     if (status == Status::ok)
         status = control_.activate(vector_for(control_source, message_interrupts));
     if (status == Status::ok) status = cursor_.activate(vector_for(cursor_source, message_interrupts));
+    if (status == Status::ok) assign_fence_vectors(message_interrupts);
     if (status == Status::ok) status = transport_.start();
     if (status != Status::ok) return status;
     /* The displays the device has: the driver offers a VidPn source for each,
@@ -145,8 +161,9 @@ Status VirtioGpuDevice::connect_fence_queue(uint32_t doorbell, uint32_t &message
     if (doorbell > uint32_t{0xFFFFu} - first_fence_queue) return Status::not_found;
     const auto queue = static_cast<uint16_t>(first_fence_queue + doorbell);
     if (message_interrupts_ == 0u) return queue < transport_.queue_count() ? Status::ok : Status::not_found;
-    if (message_interrupts_ > source_count)
-        message = source_count + doorbell % (message_interrupts_ - source_count);
+    message = fence_vector_for(doorbell, message_interrupts_);
+    /* Written again, to the value start wrote: unchanged, QEMU keeps the irqfd
+     * it attached then, and a device that refused it at start refuses here. */
     return transport_.assign_queue_vector(queue, static_cast<uint16_t>(message));
 }
 

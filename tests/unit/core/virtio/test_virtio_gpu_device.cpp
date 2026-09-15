@@ -358,6 +358,62 @@ TEST(virtio_gpu_device_connect_fence_queue, shares_vector_zero_or_assigns_nothin
       CHECK_STATUS(device.connect_fence_queue(64u, message), Status::not_found);
   } }
 
+namespace {
+
+/* Every fence queue's vector as the device held it when DRIVER_OK was written. */
+struct VectorsAtDriverOk {
+    const av::FakeCommonConfig *common = nullptr;
+    std::uint16_t vectors[av::FakeCommonConfig::max_queues] = {};
+    bool          seen = false;
+
+    static void record(void *context, std::uint8_t status)
+    { auto *self = static_cast<VectorsAtDriverOk *>(context);
+      if ((status & 0x04u) == 0u || self->seen) return;
+      self->seen = true;
+      for (std::uint16_t queue = 0u; queue < av::FakeCommonConfig::max_queues; queue++)
+          self->vectors[queue] = self->common->queue(queue).vector; }
+};
+
+}  // namespace
+
+/* QEMU attaches a queue's irqfd when its vector is set before DRIVER_OK, or on an
+ * MSI-X unmask. A vector written after DRIVER_OK on a message Windows already
+ * unmasked gets a route and never an irqfd (virtio-pci.c
+ * kvm_virtio_pci_vector_use_one, for a device with no guest_notifier_mask), so
+ * a fence interrupt raised on it is lost and the packet completes only when an
+ * unrelated DPC serves it - 2 to 3 s later, past TdrDelay under load (044).
+ * So every fence queue already has its message when DRIVER_OK is written: its
+ * own while the grant lasts, shared round the doorbells past it, vector zero
+ * with too few, and none at all on a line interrupt. */
+TEST(virtio_gpu_device_start, gives_every_fence_queue_its_message_before_driver_ok)
+{ struct Grant { std::uint32_t messages; std::uint16_t first; std::uint16_t spread; };
+  const Grant grants[] = {{6u, 3u, 3u}, {11u, 3u, 8u}, {3u, 0u, 1u}, {1u, 0u, 1u}};
+  for (const Grant &grant : grants) {
+      MappedFunction mapped;
+      mapped.function().add_doorbell_region();
+      CHECK_STATUS(mapped.map(), Status::ok);
+      VectorsAtDriverOk seen;
+      seen.common = &mapped.common();
+      mapped.common().on_status(&VectorsAtDriverOk::record, &seen);
+      VirtioGpuDevice device(mapped.platform(), mapped.mappings(), mapped.layout());
+      CHECK_STATUS(device.start(grant.messages), Status::ok);
+      CHECK(seen.seen);
+      for (std::uint16_t doorbell = 0u; doorbell < 64u; doorbell++) {
+          const std::uint16_t expected = grant.first == 0u ? 0u : static_cast<std::uint16_t>(grant.first + doorbell % grant.spread);
+          CHECK_EQ(seen.vectors[2u + doorbell], expected);
+      }
+      /* And a context set up later is told the same message. */
+      std::uint32_t message = 99u;
+      CHECK_STATUS(device.connect_fence_queue(63u, message), Status::ok);
+      CHECK_EQ(message, std::uint32_t{seen.vectors[65u]});
+  }
+  MappedFunction lines;
+  lines.function().add_doorbell_region();
+  CHECK_STATUS(lines.map(), Status::ok);
+  VirtioGpuDevice device(lines.platform(), lines.mappings(), lines.layout());
+  CHECK_STATUS(device.start(0u), Status::ok);
+  for (std::uint16_t queue = 2u; queue < 66u; queue++) CHECK_EQ(lines.common().queue(queue).vector, no_vector); }
+
 TEST(virtio_gpu_device_connect_fence_queue, a_refused_vector_is_no_space)
 { MappedFunction mapped;
   mapped.function().add_doorbell_region();

@@ -639,3 +639,14 @@ through the queue's guest notifier, connected when the driver sets
 virtio-pci (a masked vector's pending bit is set); without MSI-X, the ISR's
 queue bit and INTx. A reset destroys every context before the notifiers are
 released. Nothing is raised before `DRIVER_OK`; the page is still written.
+
+The driver MUST write every fence queue's `queue_msix_vector` before `DRIVER_OK`.
+The device has no `guest_notifier_mask`, so QEMU attaches a queue's irqfd only
+when its vector is set before `DRIVER_OK` or when that MSI-X entry is unmasked; a
+vector written later, to an entry the guest already unmasked, gets a route and
+no irqfd, and every interrupt on it is lost (`hw/virtio/virtio-pci.c`,
+`kvm_virtio_pci_vector_use_one`). `rvkgpu.sys` assigns them all at start and
+writes the same value again when a context is set up. Feature 044 found this
+live: each packet after a context's first completed only when an unrelated DPC
+served it, 2-3 s later, past TdrDelay under load; qtest has no irqfd and could
+not show it.

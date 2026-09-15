@@ -77,6 +77,16 @@ private:
     static constexpr uint64_t num_scanouts_offset = 8u;   /* struct virtio_gpu_config */
 
     uint16_t vector_for(uint16_t source, uint32_t message_interrupts) const;
+    uint16_t fence_vector_for(uint32_t doorbell, uint32_t message_interrupts) const;
+    /* Writes every fence queue's message before DRIVER_OK. QEMU attaches a
+     * queue's irqfd when its vector is set before DRIVER_OK or when the MSI-X
+     * entry is unmasked; one set later, on an entry Windows already unmasked,
+     * gets a route and no irqfd, and every fence interrupt on it is lost
+     * (qemu hw/virtio/virtio-pci.c kvm_virtio_pci_vector_use_one, for a device
+     * with no guest_notifier_mask; feature 044). A refusal is not judged here:
+     * the display needs no fence queue, and connect_fence_queue refuses the
+     * context that would have used it. */
+    void     assign_fence_vectors(uint32_t message_interrupts);
     [[nodiscard]] Status harvest(GpuCommandQueue &queue, uint32_t &completed, const char *refusal);
 
     Platform            &platform_;
