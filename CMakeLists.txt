@@ -254,6 +254,32 @@ foreach(t av_core av_harness)
   target_link_options(${t} PUBLIC ${AV_TEST_FLAGS})
 endforeach()
 
+# ---- the Vulkan ICD's portable core: src/icd over the generated wrappers ------
+# Not in av_core: the ICD defines the strong handle_to_wire hooks that unwrap a
+# dispatchable handle, and the executor library, which links av_core, defines
+# its own (feature 045). Only what links this sees the ICD's. The DLL itself is
+# src/um's (T029); on Linux this is what the ICD's unit tests and the full-stack
+# rig link.
+if(AV_GENERATED)
+  file(GLOB_RECURSE AV_ICD_SOURCES CONFIGURE_DEPENDS src/icd/*.cpp)
+  # The client dispatch and the weak handle defaults are av_core's too, and are
+  # compiled again here on purpose. A link reads archives in order: with them in
+  # this archive, every handle_to_wire the wrappers reach is resolved here - the
+  # ICD's five strong ones and the identity for the rest - before av_core is
+  # read, so the executor's own strong definitions in vulkan_backend.cpp are
+  # never pulled into an ICD link to collide with them.
+  add_library(av_icd STATIC ${AV_ICD_SOURCES}
+    ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_icd_entries.cpp
+    ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_client.cpp
+    ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp)
+  target_link_libraries(av_icd PUBLIC av_core)
+  # The generated wrappers include their siblings by the names the generator
+  # gives them.
+  target_include_directories(av_icd PRIVATE ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan)
+  target_compile_options(av_icd PRIVATE ${AV_TEST_FLAGS})
+  target_link_options(av_icd PUBLIC ${AV_TEST_FLAGS})
+endif()
+
 # ---- unit tests: one binary per module, so a crash isolates -----------------
 enable_testing()
 if(AV_COVERAGE)
@@ -279,6 +305,11 @@ foreach(src ${AV_UNIT_TESTS})
   # this machine's GPU (feature 044, T028).
   if(name STREQUAL "test_fullstack_rvk")
     target_sources(${name} PRIVATE ${AV_EXECUTOR_ENTRY})
+  endif()
+  # The ICD's tests link its core, which no other test may: its hooks replace
+  # the generated defaults every other binary relies on.
+  if(src MATCHES "/tests/unit/icd/")
+    target_link_libraries(${name} PRIVATE av_icd)
   endif()
   if(name STREQUAL "test_generated_clients" OR name STREQUAL "test_loopback_transport")
     target_include_directories(${name} PRIVATE
@@ -415,6 +446,10 @@ if(AV_FUZZ)
     get_filename_component(name ${src} NAME_WE)
     add_executable(${name} ${src})
     target_link_libraries(${name} PRIVATE av_harness)
+    # The ICD's target links its core, as the ICD's unit tests do.
+    if(name STREQUAL "fuzz_physical_device_view")
+      target_link_libraries(${name} PRIVATE av_icd)
+    endif()
     target_compile_options(${name} PRIVATE -fsanitize=fuzzer)
     target_link_options(${name} PRIVATE -fsanitize=fuzzer)
     # New units land in the build tree; the committed seed corpus is read only.

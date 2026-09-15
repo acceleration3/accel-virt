@@ -1,0 +1,37 @@
+/* The entry points the ICD answers itself rather than through a generated
+ * wrapper (contracts/loader_interface.md). The loader calls each through a bare
+ * function pointer with Vulkan's arguments and nothing else, so each is the ABI
+ * boundary CLAUDE.md permits: one line into the bound IcdRoot, no logic.
+ * IcdRoot's table names them. */
+#ifndef AV_ICD_LOCAL_ENTRIES_HPP
+#define AV_ICD_LOCAL_ENTRIES_HPP
+
+#include <stdint.h>
+
+#include <vulkan/vulkan_core.h>
+
+namespace av::icd {
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t *pSupportedVersion);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
+                                                      const VkAllocationCallbacks *pAllocator, VkInstance *pInstance);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumerateInstanceExtensionProperties(const char *pLayerName,
+                                                                            uint32_t *pPropertyCount,
+                                                                            VkExtensionProperties *pProperties);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumerateInstanceVersion(uint32_t *pApiVersion);
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL local_vk_icdGetPhysicalDeviceProcAddr(VkInstance instance,
+                                                                               const char *pName);
+/* The loader passes a LUID structure by value: 8 bytes, which the x64 calling
+ * conventions carry exactly as a 64-bit integer (adapter_luids.hpp). */
+VKAPI_ATTR VkResult VKAPI_CALL local_vk_icdEnumerateAdapterPhysicalDevices(VkInstance instance, uint64_t adapterLUID,
+                                                                           uint32_t *pPhysicalDeviceCount,
+                                                                           VkPhysicalDevice *pPhysicalDevices);
+VKAPI_ATTR void VKAPI_CALL local_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator);
+VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice,
+                                                               VkPhysicalDeviceProperties *pProperties);
+VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
+                                                                VkPhysicalDeviceProperties2 *pProperties);
+
+}  // namespace av::icd
+
+#endif  // AV_ICD_LOCAL_ENTRIES_HPP

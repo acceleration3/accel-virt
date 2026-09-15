@@ -61,7 +61,8 @@ twice); `VK_DRIVER_FILES` (per-process).
 **Decision.**
 - `src/icd/vulkan/` - the ICD's decisions, portable C++23 under the same rules as
   `src/guest`: dispatchable objects, the connection, command-buffer batches,
-  memory types, the extension policy, waits. It compiles into `av_core` and is
+  memory types, the extension policy, waits. It compiles into `av_icd`, not `av_core` - its strong
+  `handle_to_wire` hooks would collide with the executor's - and is
   tested on Linux over `MockKmt` and, end to end, over the full-stack rig with
   the real executor.
 - `src/um/vulkan/` - the Windows shim, translation only: the two DLL exports

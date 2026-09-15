@@ -1,6 +1,6 @@
 # accel-virt Constitution
 
-**Version**: 2.5.2 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-15
+**Version**: 2.5.3 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-15
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
 display miniport (`rvkgpu.sys`), a custom in-process QEMU device
@@ -62,7 +62,7 @@ and libFuzzer call. The DDI entry points live in core, over mirror types whose
 layout `src/km` proves against the WDK, so the L2 harness drives the same entry
 points `dxgkrnl` calls.
 
-Five pieces of process-lifetime state exist because the ABI leaves no
+Six pieces of process-lifetime state exist because the ABI leaves no
 alternative, and nothing else may: `DxgkDdiAddDevice` and `DxgkDdiUnload`
 receive no context, so they reach the driver's root through the single pointer
 `MiniportBinding` holds; the kernel runs no global constructors, so
@@ -74,7 +74,10 @@ executor library's `rvk_executor_ops()` takes no argument, so its root lives in
 that entry point's translation unit (`src/device/shim/executor_ops.cpp`); and the
 Windows Vulkan loader calls `vk_icdGetInstanceProcAddr(NULL, ...)` with no
 context, so the Vulkan ICD's root lives in its exports' translation unit
-(`src/um/vulkan/rvkvk_exports.cpp`, feature 045). An object whose
+(`src/um/vulkan/rvkvk_exports.cpp`, feature 045), and the generated wrappers'
+hooks and the ICD's own entry points, which are handed no context either, reach
+it through the single pointer `IcdBinding` holds (`src/icd/vulkan/icd_hooks.cpp`).
+An object whose
 lifetime cannot be a scope is held in `ObjectStorage<T>`; an object whose count
 has no fixed bound - a device, an allocation - lives in an `ObjectPool<T>`,
 which constructs it in platform-allocated chunks at an address that stays valid

@@ -111,7 +111,7 @@ specs/045-vulkan-icd/
 ### Source Code
 
 ```text
-src/icd/vulkan/                   # NEW: the ICD's decisions, portable, in av_core
+src/icd/vulkan/                   # NEW: the ICD's decisions, portable, in av_icd
 src/proto/icd_connection.hpp      # NEW: 063 contract §F (Connection, acquire/release)
 src/proto/icd_handle_registry.hpp # NEW: 063 contract §F (wrap, connection_of, record_target)
 src/um/vulkan/                    # NEW: rvkvk.dll exports, ProcessHeap, SRW lock, file log, .def, rvkvk.json
