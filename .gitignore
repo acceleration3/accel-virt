@@ -16,6 +16,6 @@ __pycache__/
 third_party/windows-kit/
 third_party/khronos/
 third_party/.cache/
-re/
+/re/
 third_party/qemu/
 third_party/vulkan-runtime/

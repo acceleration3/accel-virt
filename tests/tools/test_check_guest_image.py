@@ -250,6 +250,20 @@ class SyntheticDllCheck(unittest.TestCase):
         result = self.check(image, *self.exactly_the_icd(), "--allow-import", "vulkan-2.dll")
         self.assertEqual(self.refusals(result), ["imports Vulkan-1.dll, not a module every guest has"])
 
+    def test_the_opengl_icds_user32_and_opengl32_imports_are_accepted_only_when_allowed(self):
+        # rvkgl.dll presents through user32 (050 research.md §6); its probe imports opengl32.
+        image = self.icd(imports={**GUEST_IMPORTS, "user32.dll": ["WindowFromDC", "GetClientRect"],
+                                  "opengl32.dll": ["wglCreateContext"]})
+        result = self.check(image, *self.exactly_the_icd(), "--require-import", "WindowFromDC")
+        self.assertEqual(self.refusals(result), ["imports user32.dll, not a module every guest has",
+                                                 "imports opengl32.dll, not a module every guest has"])
+        result = self.check(image, *self.exactly_the_icd(), "--allow-import", "user32.dll")
+        self.assertEqual(self.refusals(result), ["imports opengl32.dll, not a module every guest has"])
+        result = self.check(image, *self.exactly_the_icd(), "--allow-import", "user32.dll",
+                            "--allow-import", "opengl32.dll", "--require-import", "WindowFromDC",
+                            "--require-import", "wglCreateContext")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_a_delay_loaded_module_is_still_a_module_the_guest_must_have(self):
         result = self.check(self.icd(delay_imports={"d3d12.dll": ["D3D12CreateDevice"]}),
                             *self.exactly_the_icd(), "--require-import", "D3D12CreateDevice")

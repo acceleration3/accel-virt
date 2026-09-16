@@ -100,6 +100,13 @@ Read from Khronos Vulkan-Loader `bde79ad2dd83` for feature 045; it is the record
   physical device only for its own adapter's LUID, and the same handle
   `vkEnumeratePhysicalDevices` answers, since the loader de-duplicates by handle.
   `VkPhysicalDeviceIDProperties.deviceLUID` is that LUID.
+- **Entry points the loader requires.** Through an instance the ICD must answer
+  every name `loader_icd_init_entries` looks up with `LOOKUP_REQUIRED_GIPA` -
+  `vkDestroyInstance`, `vkEnumeratePhysicalDevices`, the seven 1.0
+  `vkGetPhysicalDevice*` queries, `vkGetDeviceProcAddr`, `vkCreateDevice` and
+  `vkEnumerateDeviceExtensionProperties` - or the loader skips the driver after
+  its `vkCreateInstance` succeeded (found live in 045: a null
+  `vkGetDeviceProcAddr` left `vulkaninfo` with no device).
 - **Dispatchable objects** are plain structures whose first pointer-sized field
   the ICD sets to `ICD_LOADER_MAGIC` (`0x01CDC0DE`) and the loader overwrites
   with its dispatch table.
@@ -108,6 +115,68 @@ Read from Khronos Vulkan-Loader `bde79ad2dd83` for feature 045; it is the record
   do nothing; the loader holds its own `loader_lock` around the scan and around
   `vkCreateInstance`, which is what lets an ICD construct its state on the first
   call without racing.
+
+## How opengl32 finds an ICD on a WDDM adapter
+
+Read from the system `opengl32.dll` (10.0.26100.5074, pinned in
+`tools/re/binaries.txt`) and `dxgkrnl.sys` for feature 050; it is the record
+`src/km/rvkgpu.inf` and `rvkgl.dll` are written against. The adapter's software
+key carries `OpenGLDriverName` (`REG_MULTI_SZ`, `%13%\rvkgl.dll`),
+`OpenGLVersion` (`REG_DWORD` 2) and `OpenGLFlags` (`REG_DWORD` 1); nothing is
+written under `HKLM\...\OpenGLDrivers`.
+
+**What opengl32 does** (`LoadAvailableDrivers` @18006d410, once per process,
+under `semLocal`, at the first pixel-format or context call on a DC):
+
+1. `bGetLDDMDriverInfoFromHdc` @180046648: `D3DKMTOpenAdapterFromHdc(hdc)`. If
+   that fails it tries `CreateDCA` on each `EnumDisplayDevicesA` entry with the
+   primary flag, and failing that `bGetLDDMDriverInfoNoHdc` @18006dac8 takes the
+   **first** adapter `D3DKMTEnumAdapters2` lists.
+2. `bGetLDDMDriverInfo` @1800466b0 (hybrid and preferred-GPU logic aside, which
+   an adapter without `KMTQAITYPE_...` hybrid flags skips) calls
+   `D3DKMTQueryAdapterInfo(KMTQAITYPE_UMOPENGLINFO = 2, 0x210 bytes)` into
+   `D3DKMT_OPENGLINFO {WCHAR UmdOpenGlIcdFileName[260]; ULONG Version; ULONG Flags}`
+   and copies name, `Version` and `Flags` into its driver record, with its own
+   record version 2.
+3. `pgldrvLoadAndAllocDriverInfo` @18003f568: `LoadLibraryExW(name,
+   LOAD_WITH_ALTERED_SEARCH_PATH)`, then `GetProcAddress` of
+   `DrvValidateVersion`, `DrvSetCallbackProcs` and the 18 names of the table at
+   @1800cdf20, in this order: `DrvCreateContext`, `DrvDeleteContext`,
+   `DrvSetContext`, `DrvReleaseContext`, `DrvCopyContext`,
+   `DrvCreateLayerContext`, `DrvShareLists`, `DrvGetProcAddress`,
+   `DrvDescribeLayerPlane`, `DrvSetLayerPaletteEntries`,
+   `DrvGetLayerPaletteEntries`, `DrvRealizeLayerPalette`, `DrvSwapLayerBuffers`,
+   `DrvSwapMultipleBuffers`, `DrvDescribePixelFormat`, `DrvSetPixelFormat`,
+   `DrvSwapBuffers`, `DrvPresentBuffers`.
+   The driver is **refused** unless (`DrvCreateContext` or
+   `DrvCreateLayerContext`), `DrvDeleteContext`, `DrvSetContext` and
+   `DrvReleaseContext` exist; when `Flags & 1`, also `DrvDescribePixelFormat`,
+   `DrvSetPixelFormat` and `DrvSwapBuffers`; and `DrvValidateVersion(Version)`
+   must answer non-zero. It then calls `DrvSetCallbackProcs(9, procs)` with
+   `wglCbSetCurrentValue`, `wglCbGetCurrentValue`, `wglCbGetDhglrc`,
+   `wglCbGetDdHandle`, `wglCbPresentBuffers`, `wglCbGetAdapterLuid`,
+   `wglCbCheckFullscreenSupport`, `wglCbPresentToRedirectionSurface`,
+   `wglCbSubmitPresentToRedirectionSurface` (table @1800e1630).
+
+**What dxgkrnl does** (`DpiGetAdapterInfo` @dxgkrnl, the strings at line 0x548
+of its source): opens the adapter's `PLUGPLAY_REGKEY_DRIVER` key
+(`DpiOpenPnpRegistryKey(..., 2, ...)`) - the same software key 045's
+`VulkanDriverName` lives in - reads `OpenGLDriverName` and
+`OpenGLDriverNameWow` as strings, and `OpenGLVersion`, `OpenGLFlags`,
+`OpenGLVersionWow`, `OpenGLFlagsWow` as type-checked `REG_DWORD`s. A name
+beginning `#` is redirected to an `OpenGL\DriverName` subkey (not used here).
+`PostProcessUMDFileName` translates the name for a process in a VM container
+and requires the caller's buffer to be at least 0x210 bytes.
+
+**Consequences.** `OpenGLFlags` must be 1: without it opengl32 describes pixel
+formats itself (GDI's generic formats) and never asks the ICD. The ICD exports
+the three `Flags & 1` entries, the four context entries, `DrvShareLists`,
+`DrvGetProcAddress`, `DrvCopyContext`, `DrvCreateLayerContext` (layer 0 only),
+`DrvDescribeLayerPlane` (answers no planes), `DrvSwapLayerBuffers` (main plane
+only), `DrvValidateVersion` and `DrvSetCallbackProcs` - 14 exports, each one
+line. The palette entries, `DrvSwapMultipleBuffers` and `DrvPresentBuffers` are
+not exported: opengl32 tolerates their absence. The choice is made once per
+process, so a probe that fails to load the ICD has to be a new process.
 
 ## Presenting from Vulkan
 
