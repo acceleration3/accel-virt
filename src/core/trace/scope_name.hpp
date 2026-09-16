@@ -1,0 +1,33 @@
+/* A function's name as AV_SCOPE writes it, and the 32-bit id a trace table
+ * stores for it: FNV-1a over the name's bytes, computed while compiling, so a
+ * reader holding only the table maps an id back by hashing the names in the
+ * source tree (docs/trace.md). Constexpr, so its body is here. */
+#ifndef AV_SCOPE_NAME_HPP
+#define AV_SCOPE_NAME_HPP
+
+#include <stdint.h>
+
+namespace av {
+
+class ScopeName {
+public:
+    constexpr explicit ScopeName(const char *text) : text_(text), id_(fnv_offset)
+    {
+        for (const char *cursor = text; cursor != nullptr && *cursor != '\0'; ++cursor)
+            id_ = (id_ ^ static_cast<uint8_t>(*cursor)) * fnv_prime;
+    }
+
+    constexpr const char *text() const { return text_; }
+    constexpr uint32_t    id() const { return id_; }
+
+private:
+    static constexpr uint32_t fnv_offset = 2166136261u;
+    static constexpr uint32_t fnv_prime = 16777619u;
+
+    const char *text_;
+    uint32_t    id_;
+};
+
+}  // namespace av
+
+#endif  // AV_SCOPE_NAME_HPP

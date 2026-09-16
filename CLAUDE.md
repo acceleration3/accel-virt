@@ -32,7 +32,8 @@ libFuzzer and QEMU call. No logic lives in either. `MiniportBinding`'s pointer,
 the kernel shim's static storage for the root, the device module's
 `DeviceModule`, the executor library's root behind `rvk_executor_ops()`, the
 Vulkan ICD's root behind `vk_icdGetInstanceProcAddr` and `IcdBinding`'s pointer to
-it are the only process-lifetime state (constitution III). Each is a C entry point with
+it, and `scope_binding`'s pointer to the binary's trace table are the only
+process-lifetime state (constitution III). Each is a C entry point with
 nowhere to put a `this`, and each is one `ObjectStorage` in the single
 translation unit defining those entry points.
 
@@ -80,6 +81,12 @@ workaround with its link, a tradeoff, an invariant not in the type. No
 restating the next line, no section banners, no Doxygen echoing parameter
 names, no "Step 1/2/3" narration. Unclear code gets a better name or a split.
 Never leave commented-out code; git has it.
+
+**Every function opens with its trace scope**: `AV_SCOPE("Class::method");`
+as the first line of every function definition in `src/`, naming the function
+as written (docs/trace.md). `tools/scope_marks.py --apply` writes them;
+`ctest -R scope_marks` fails a definition without one. The exceptions are the
+one-line ABI entry points, `constexpr` functions, and `src/core/trace/` itself.
 
 **Names**: classes `PascalCase`, methods and locals `snake_case`, private data
 members trailing underscore. No `Manager`, `Helper`, `Utils`, `Handler`,
