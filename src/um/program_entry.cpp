@@ -45,10 +45,21 @@ static av::GuestProgram::Run rvktest_run(const wchar_t *line)
     return av::GuestProgram::Run::suite;
 }
 
+/* rvktest's trace root: the one piece of process-lifetime state this program
+ * has, since its unhandled-exception filter is handed no context
+ * (constitution III). */
+static constinit av::ObjectStorage<av::ProcessTrace> rvktest_trace;
+
+static long WINAPI rvktest_crashed(void *pointers)
+{
+    AV_SCOPE("rvktest_crashed");
+    return rvktest_trace.object().crashed(pointers);
+}
+
 extern "C" void rvktest_entry()
 {
     const wchar_t *const line = GetCommandLineW();
-    ExitProcess(av::GuestProgram(rvktest_stress_seconds(line), rvktest_run(line)).run());
+    ExitProcess(av::GuestProgram(rvktest_stress_seconds(line), rvktest_run(line), rvktest_trace, &rvktest_crashed).run());
 }
 
 extern "C" int _purecall() { ExitProcess(STATUS_ASSERTION_FAILURE); }

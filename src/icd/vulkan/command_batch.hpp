@@ -25,6 +25,7 @@
 
 namespace av {
 class BlockSource;
+class StateWriter;
 }
 
 namespace av::icd {
@@ -63,6 +64,9 @@ public:
     /* The recording fits a block no larger than the command limit and its last
      * command ends where the recording does; the only failure latched is
      * no_memory. */
+    /* The bytes recorded and held, and whether a command failed to record. */
+    void report(StateWriter &writer) const;
+
     bool invariants_hold() const;
 
 private:

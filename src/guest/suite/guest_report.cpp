@@ -1,6 +1,7 @@
 #include "guest/suite/guest_report.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 
 namespace av {
 
@@ -16,7 +17,8 @@ GuestReport::GuestReport() : GuestReport("rvktest")
 }
 
 GuestReport::GuestReport(const char *program)
-    : program_(program), text_{}, buffer_(text_, capacity), passed_(0u), failed_(0u)
+    : program_(program), text_{}, buffer_(text_, capacity), passed_(0u), failed_(0u), last_scenario_(""),
+      last_step_(""), finished_(false)
     {
         AV_SCOPE("GuestReport::GuestReport");
     }
@@ -37,6 +39,8 @@ void GuestReport::measure(const char *scenario, const char *step, Status status,
 {
     AV_SCOPE("GuestReport::measure");
     const bool passed = status == Status::ok;
+    last_scenario_ = scenario;
+    last_step_ = step;
     buffer_.append(passed ? "ok " : "FAIL ");
     buffer_.append(scenario);
     buffer_.append(".");
@@ -55,6 +59,8 @@ void GuestReport::measure(const char *scenario, const char *step, Status status,
 void GuestReport::line(const char *scenario, const char *step, bool passed, Status status, uint32_t code)
 {
     AV_SCOPE("GuestReport::line");
+    last_scenario_ = scenario;
+    last_step_ = step;
     buffer_.append(passed ? "ok " : "FAIL ");
     buffer_.append(scenario);
     buffer_.append(".");
@@ -73,6 +79,7 @@ void GuestReport::line(const char *scenario, const char *step, bool passed, Stat
 void GuestReport::finish()
 {
     AV_SCOPE("GuestReport::finish");
+    finished_ = true;
     buffer_.append(program_);
     buffer_.append(": ");
     buffer_.append_decimal(passed_);
@@ -103,6 +110,19 @@ uint32_t    GuestReport::failed() const
 }
 
 /* The terminator always fits inside the storage. */
+void GuestReport::report(StateWriter &writer) const
+{
+    AV_SCOPE("GuestReport::report");
+    writer.open("report", 0u);
+    writer.text("program", program_);
+    writer.number("passed", passed_);
+    writer.number("failed", failed_);
+    writer.text("last_scenario", last_scenario_);
+    writer.text("last_step", last_step_);
+    writer.flag("finished", finished_);
+    writer.close();
+}
+
 bool GuestReport::invariants_hold() const
 {
     AV_SCOPE("GuestReport::invariants_hold");

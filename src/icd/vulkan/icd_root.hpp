@@ -21,6 +21,7 @@
 
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
+#include "core/trace/state_reporter.hpp"
 #include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/device_memory.hpp"
@@ -47,7 +48,7 @@ class MemoryTypeTable;
 class ThreadLock;
 struct IcdRootProbe;
 
-class IcdRoot {
+class IcdRoot final : public StateReporter {
 public:
     /* The loader-ICD interface versions this answers (loader_interface.md). */
     static constexpr uint32_t latest_interface = 7u;
@@ -158,6 +159,11 @@ public:
      * owned by a command buffer, every device memory by a device, and nothing
      * pending outside vkCreateInstance. */
     bool invariants_hold() const;
+
+    /* `root/0` with the counts, then each connection with its handles
+     * (docs/trace.md). Never waits: with the root's lock held elsewhere only
+     * `root/0 busy=true` is written. */
+    void report(StateWriter &writer) override;
 
 private:
     [[nodiscard]] Status open_connection(Connection *&opened);

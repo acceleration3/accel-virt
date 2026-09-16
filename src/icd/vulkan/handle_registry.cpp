@@ -1,11 +1,16 @@
 #include "icd/vulkan/handle_registry.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
+#include "icd/vulkan/command_batch.hpp"
+#include "icd/vulkan/device_memory.hpp"
 
 namespace av::icd {
 
 namespace {
 
+/* LoaderHandle::Kind's names, in its order. */
+constexpr const char *kind_names[] = {"instance", "physical_device", "device", "queue", "command_buffer"};
 constexpr LoaderHandle::Kind deepest_kind = LoaderHandle::Kind::command_buffer;
 
 }  // namespace
@@ -142,6 +147,46 @@ bool HandleRegistry::unique(const LoaderHandle &handle) const
         return true;
     }));
     return sharing == 1u;
+}
+
+void HandleRegistry::report(StateWriter &writer, const Connection *connection) const
+{
+    AV_SCOPE("HandleRegistry::report");
+    uint32_t number = 0u;
+    static_cast<void>(pool_.all_of([&](const LoaderHandle &handle) {
+        const uint32_t own = number++;
+        if (handle.connection() != connection) return true;
+        writer.open("handle", own);
+        writer.text("kind", kind_names[static_cast<uint32_t>(handle.kind())]);
+        writer.hex("host", handle.host());
+        if (handle.parent() == nullptr) writer.text("parent", "none");
+        else writer.number("parent", number_of(handle.parent()));
+        if (handle.device_memory() != nullptr) {
+            writer.open("memory", 0u);
+            handle.device_memory()->report(writer);
+            writer.close();
+        }
+        if (handle.batch() != nullptr) {
+            writer.open("batch", 0u);
+            handle.batch()->report(writer);
+            writer.close();
+        }
+        writer.close();
+        return true;
+    }));
+}
+
+uint32_t HandleRegistry::number_of(const LoaderHandle *handle) const
+{
+    AV_SCOPE("HandleRegistry::number_of");
+    uint32_t number = 0u;
+    uint32_t found = pool_.live();
+    static_cast<void>(pool_.all_of([&](const LoaderHandle &candidate) {
+        if (&candidate == handle) found = number;
+        number++;
+        return true;
+    }));
+    return found;
 }
 
 bool HandleRegistry::invariants_hold() const

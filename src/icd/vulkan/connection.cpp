@@ -3,6 +3,7 @@
 #include "core/platform/block_source.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
@@ -58,6 +59,17 @@ void Connection::close()
     /* Nothing is left to report a failed close to: the instance is gone. */
     static_cast<void>(search_.close());
     luid_ = 0u;
+}
+
+void Connection::report(StateWriter &writer) const
+{
+    AV_SCOPE("Connection::report");
+    writer.flag("opened", opened());
+    writer.flag("faulted", faulted());
+    writer.number("adapter", adapter());
+    writer.hex("luid", luid_);
+    writer.number("device", opened() ? connection_.device() : 0u);
+    writer.number("context", opened() ? transport_.object().context() : 0u);
 }
 
 bool             Connection::opened() const

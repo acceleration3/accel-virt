@@ -18,6 +18,7 @@
 
 namespace av {
 class BlockSource;
+class StateWriter;
 }
 
 namespace av::icd {
@@ -56,9 +57,16 @@ public:
     uint32_t             batches() const;
     uint32_t             memories() const;
 
+    /* A line per live handle on `connection`, numbered in the pool's order
+     * across every connection, naming its kind, host object and parent's
+     * number, with a line for the memory or batch it owns. */
+    void report(StateWriter &writer, const Connection *connection) const;
+
     bool invariants_hold() const;
 
 private:
+    /* The pool-order number of `handle`; live() when it is not live. */
+    uint32_t      number_of(const LoaderHandle *handle) const;
     LoaderHandle *existing(LoaderHandle::Kind kind, uint64_t host, const Connection *connection) const;
     bool          parent_fits(LoaderHandle::Kind kind, const Connection *connection, LoaderHandle *parent) const;
     bool          unique(const LoaderHandle &handle) const;

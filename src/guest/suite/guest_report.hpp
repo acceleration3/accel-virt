@@ -15,6 +15,8 @@
 
 namespace av {
 
+class StateWriter;
+
 class GuestReport {
 public:
     static constexpr size_t capacity = 16384u;
@@ -37,6 +39,9 @@ public:
     size_t      length() const;
     uint32_t    passed() const;
     uint32_t    failed() const;
+    /* `report/0` with the counts and the step recorded last - where a
+     * program that stopped answering got to (docs/trace.md). */
+    void        report(StateWriter &writer) const;
 
     bool invariants_hold() const;
 
@@ -48,6 +53,11 @@ private:
     TextBuffer buffer_;
     uint32_t   passed_;
     uint32_t   failed_;
+    /* The step checked last; the state service reads these from another
+     * thread, so each is one pointer to a literal, never a buffer. */
+    const char *last_scenario_;
+    const char *last_step_;
+    bool        finished_;
 };
 
 }  // namespace av

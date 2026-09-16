@@ -2,6 +2,7 @@
 
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/log_sink.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
@@ -115,6 +116,14 @@ Status DeviceMemory::release_all()
 {
     AV_SCOPE("DeviceMemory::release_all");
     return chunks_.release_all();
+}
+
+void DeviceMemory::report(StateWriter &writer) const
+{
+    AV_SCOPE("DeviceMemory::report");
+    writer.flag("types_learnt", learnt_);
+    writer.number("chunks", chunks_.chunks());
+    writer.number("placements", chunks_.placements());
 }
 
 bool DeviceMemory::invariants_hold() const

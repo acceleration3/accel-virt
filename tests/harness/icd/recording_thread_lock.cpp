@@ -6,7 +6,7 @@
 namespace av {
 
 RecordingThreadLock::RecordingThreadLock(LockTrace &trace, char letter)
-    : trace_(trace), letter_(letter), held_(false), acquisitions_(0u), violations_(0u) {}
+    : trace_(trace), letter_(letter), held_(false), elsewhere_(false), acquisitions_(0u), violations_(0u) {}
 
 RecordingThreadLock::~RecordingThreadLock()
 {
@@ -26,6 +26,18 @@ void RecordingThreadLock::acquire()
     held_ = true;
     acquisitions_++;
 }
+
+bool RecordingThreadLock::try_acquire()
+{
+    if (held_ || elsewhere_) {
+        trace_.append('!');
+        return false;
+    }
+    acquire();
+    return true;
+}
+
+void RecordingThreadLock::held_elsewhere(bool held) { elsewhere_ = held; }
 
 void RecordingThreadLock::release()
 {

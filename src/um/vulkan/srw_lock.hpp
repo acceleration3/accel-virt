@@ -14,7 +14,10 @@ public:
     SrwLock(const SrwLock &) = delete;
     SrwLock &operator=(const SrwLock &) = delete;
 
+    /* Each marks the calling thread's trace slot: blocked on, holding, given
+     * back - how a hang names the thread that holds what another waits for. */
     void acquire() override;
+    bool try_acquire() override;
     void release() override;
 
 private:

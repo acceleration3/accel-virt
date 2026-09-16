@@ -19,6 +19,7 @@
 namespace av {
 class BlockSource;
 class Kmt;
+class StateWriter;
 }  // namespace av
 
 namespace av::icd {
@@ -48,6 +49,10 @@ public:
                  void *&data) const;
     /* Every chunk allocation released, before the device goes. */
     [[nodiscard]] Status release_all();
+
+    /* Whether the host's memory types were learnt, and the chunks and
+     * placements held: plain counters, read as they stand. */
+    void report(StateWriter &writer) const;
 
     bool invariants_hold() const;
 

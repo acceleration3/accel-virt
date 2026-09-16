@@ -1,4 +1,5 @@
 #include "core/support/status.hpp"
+#include "core/trace/state_writer.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "harness/framework/test_registry.hpp"
 
@@ -44,4 +45,26 @@ TEST(guest_report, the_summary_names_its_program)
   report.measure("vulkan", "compute", Status::ok, 256u);
   report.finish();
   CHECK(std::strcmp(report.text(), "ok vulkan.compute 256\nrvkvkprobe: 1 passed, 0 failed\n") == 0);
+  CHECK(report.invariants_hold()); }
+
+TEST(guest_report_report, names_the_counts_and_the_step_checked_last)
+{ GuestReport report("rvkvkprobe");
+  char bytes[256];
+  av::StateWriter fresh(bytes, sizeof bytes);
+  report.report(fresh);
+  CHECK(std::strcmp(fresh.dump(),
+                    "report/0 program=rvkvkprobe passed=0 failed=0 last_scenario= last_step= finished=false") == 0);
+  report.check("adapter", "find", Status::ok, 0u);
+  report.measure("transport", "latency", Status::invalid_state, 7u);
+  report.check_refused("allocation", "refuse_hostile", Status::ok, 0u);
+  av::StateWriter checked(bytes, sizeof bytes);
+  report.report(checked);
+  CHECK(std::strcmp(checked.dump(), "report/0 program=rvkvkprobe passed=1 failed=2 last_scenario=allocation "
+                                    "last_step=refuse_hostile finished=false") == 0);
+  report.measure("vsync", "rate", Status::ok, 60u);
+  report.finish();
+  av::StateWriter done(bytes, sizeof bytes);
+  report.report(done);
+  CHECK(std::strcmp(done.dump(), "report/0 program=rvkvkprobe passed=2 failed=2 last_scenario=vsync "
+                                 "last_step=rate finished=true") == 0);
   CHECK(report.invariants_hold()); }

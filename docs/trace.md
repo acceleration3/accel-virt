@@ -113,10 +113,48 @@ names.
 ## The clock
 
 Every writer stamps the machine's interrupt time in 100 ns: `KeQueryInterruptTime`
-in the kernel, `QueryInterruptTime` in Windows user mode, `CLOCK_MONOTONIC` on the
-host. A guest table and the guest kernel's are therefore on one clock, and a
+in the kernel, the same value read from `KUSER_SHARED_DATA.InterruptTime` in
+Windows user mode (`InterruptClock`; `QueryInterruptTime` is missing from some
+guests' kernel32), `CLOCK_MONOTONIC` on the host. A guest table and the guest kernel's are therefore on one clock, and a
 reader judges a frame's age against the same clock read when it copied the
 table.
+
+## As built: Windows user mode
+
+- `ProcessTrace` (`src/um/trace/`) is started by `rvkvk.dll`'s `IcdLibrary` once
+  its root exists, and by `rvktest.exe`'s `GuestProgram` at `run()`. It makes
+  the section (128 slots, `TraceSection`), lays the table out and binds it, pins
+  its module (`GET_MODULE_HANDLE_EX_FLAG_PIN`) so the Vulkan loader's
+  `FreeLibrary` cannot unload code a scope or the service thread is in,
+  installs the unhandled-exception filter and starts `StateService`. A failed
+  step leaves tracing off; `rvkvk` logs it, `rvktest` runs regardless.
+- Every section and event is made with `ObjectSecurity`'s DACL - full access
+  for SYSTEM and Administrators, built with ntdll's `Rtl*` routines so no image
+  imports advapi32 - under `Global\`, or `Local\` where the process may not
+  create a global object.
+- `SrwLock` marks the table: `waiting` only when `TryAcquireSRWLockExclusive`
+  fails, `acquired` once held, `released` before it lets go. A state dump takes
+  the root's lock with `try_acquire` and writes `root/0 busy=true` if it is
+  held.
+- The crash filter (`WindowsCrash`) records the crash in the table, unwinds the
+  faulting thread from a copy of its `CONTEXT` (`RtlLookupFunctionEntry`,
+  `RtlVirtualUnwind`, 48 frames at most) and writes `CrashReport`'s lines -
+  the exception with its module and offset, the table through `TraceText`,
+  each native frame with its module and offset - to
+  `C:\ProgramData\rvk\crash-<module>-<pid>.txt`, then returns what the filter
+  it replaced returns.
+- The Vulkan ICD's dump: `root/0 busy= connections= handles= batches=
+  memories=`, then per connection `connection/<i> opened= faulted= adapter=
+  luid= device= context=`, its handles numbered in the registry's order
+  `connection/<i>/handle/<n> kind= host= parent=<n|none>`, and under a device
+  `memory/0 types_learnt= chunks= placements=`, under a command buffer
+  `batch/0 recorded= capacity= failed=`. `rvktest`'s: `program/0 run=` and
+  `report/0 program= passed= failed= last_scenario= last_step= finished=`.
+- `rvkinspect.exe` is `InspectProgram` (`src/guest/inspect/`, unit tested over
+  `MockInspectHost`, `MockKmt` and `ScriptedKernelTrace`) over
+  `WindowsInspectHost`. Its kernel escapes name the adapter alone (no device,
+  no context); the driver's side of them is not built yet, so until it is,
+  `kernel-trace` and `kernel-state` answer a kind 3 file.
 
 ## `rvkinspect.exe`
 

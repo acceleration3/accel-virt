@@ -3,6 +3,7 @@
 #include "core/platform/block_source.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "proto/submission/command_header.hpp"
 
@@ -124,6 +125,14 @@ ClientBlobArena &CommandBatch::blobs()
 {
     AV_SCOPE("CommandBatch::blobs");
     return blobs_;
+}
+
+void CommandBatch::report(StateWriter &writer) const
+{
+    AV_SCOPE("CommandBatch::report");
+    writer.number("recorded", used_);
+    writer.number("capacity", capacity_);
+    writer.flag("failed", failure_ != Status::ok);
 }
 
 bool CommandBatch::invariants_hold() const

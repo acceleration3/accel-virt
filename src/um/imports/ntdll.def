@@ -1,5 +1,9 @@
 LIBRARY ntdll.dll
 EXPORTS
+RtlAddAccessAllowedAce
+RtlCreateAcl
+RtlCreateSecurityDescriptor
+RtlSetDaclSecurityDescriptor
 memcmp
 memcpy
 memset

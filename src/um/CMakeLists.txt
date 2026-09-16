@@ -14,8 +14,9 @@ file(GLOB_RECURSE RVKTEST_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
-# rvkvk.dll's and rvkvkprobe.exe's shims are their own targets below.
-list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/(vulkan|probe)/")
+# rvkvk.dll's, rvkvkprobe.exe's and rvkinspect.exe's shims are their own
+# targets below.
+list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/(vulkan|probe|inspect)/")
 # Of the generated tree, only the guest's encoders: the rvk scenarios send real
 # Vulkan and OpenCL streams (044). The server dispatch is the host's, and the
 # OpenGL client does not link before its ICD helpers exist (050).
@@ -72,9 +73,11 @@ file(GLOB_RECURSE RVKVK_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../icd/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/kmt/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/transport/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../guest/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/vulkan/*.cpp)
 list(REMOVE_ITEM RVKVK_SOURCES ${RVKTEST_GENERATED})
 list(APPEND RVKVK_SOURCES
@@ -94,3 +97,10 @@ target_include_directories(rvkvk PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..
 target_link_options(rvkvk PRIVATE /ENTRY:rvkvk_entry /DEF:${CMAKE_CURRENT_SOURCE_DIR}/vulkan/rvkvk.def)
 set_property(TARGET rvkvk APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/vulkan/rvkvk.def)
 target_link_libraries(rvkvk PRIVATE ${RVKTEST_IMPORTS})
+
+# rvkinspect.exe, the guest's reader of trace tables and state dumps
+# (docs/trace.md): InspectProgram over the Windows host.
+file(GLOB RVKINSPECT_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/inspect/*.cpp)
+add_executable(rvkinspect ${RVKINSPECT_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/vulkan/process_heap.cpp)
+target_link_options(rvkinspect PRIVATE /ENTRY:rvkinspect_entry)
+target_link_libraries(rvkinspect PRIVATE rvkguest ${RVKTEST_IMPORTS})

@@ -153,6 +153,7 @@ public:
     MutexLock() { pthread_mutex_init(&mutex_, nullptr); }
     ~MutexLock() { pthread_mutex_destroy(&mutex_); }
     void acquire() override { pthread_mutex_lock(&mutex_); }
+    bool try_acquire() override { return pthread_mutex_trylock(&mutex_) == 0; }
     void release() override { pthread_mutex_unlock(&mutex_); }
 
 private:

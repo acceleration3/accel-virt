@@ -3,6 +3,7 @@
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/context_fault.hpp"
 #include "icd/vulkan/icd_binding.hpp"
@@ -824,6 +825,32 @@ uint32_t IcdRoot::handles_on_connections() const
         return true;
     }));
     return counted;
+}
+
+void IcdRoot::report(StateWriter &writer)
+{
+    AV_SCOPE("IcdRoot::report");
+    writer.open("root", 0u);
+    if (!lock_.try_acquire()) {
+        writer.flag("busy", true);
+        writer.close();
+        return;
+    }
+    ScopeExit release([&] { lock_.release(); });
+    writer.flag("busy", false);
+    writer.number("connections", connections_.live());
+    writer.number("handles", handles_.live());
+    writer.number("batches", handles_.batches());
+    writer.number("memories", handles_.memories());
+    writer.close();
+    uint32_t number = 0u;
+    static_cast<void>(connections_.all_of([&](const Connection &connection) {
+        writer.open("connection", number++);
+        connection.report(writer);
+        handles_.report(writer, &connection);
+        writer.close();
+        return true;
+    }));
 }
 
 bool IcdRoot::invariants_hold() const

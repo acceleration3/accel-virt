@@ -4,14 +4,17 @@
 #define AV_GUEST_PROGRAM_HPP
 
 #include "guest/suite/guest_report.hpp"
+#include "core/support/object_storage.hpp"
+#include "core/trace/state_reporter.hpp"
 #include "guest/suite/guest_suite.hpp"
 #include "um/gdi_kmt.hpp"
+#include "um/trace/process_trace.hpp"
 
 #include <stdint.h>
 
 namespace av {
 
-class GuestProgram {
+class GuestProgram final : public StateReporter {
 public:
     /* What the command line asked the program to run. */
     enum class Run : uint8_t { suite, timeout, rvk };
@@ -22,12 +25,15 @@ public:
      * runs: the host has been told to hold a context, and every other scenario
      * would be measuring that (feature 040, US3). With `rvk` only the scenarios
      * that send work to the host's executor library run (feature 044). */
-    GuestProgram(uint32_t stress_seconds, Run run);
+    GuestProgram(uint32_t stress_seconds, Run run, ObjectStorage<ProcessTrace> &trace, ProcessTrace::Filter crashed);
     GuestProgram(const GuestProgram &) = delete;
     GuestProgram &operator=(const GuestProgram &) = delete;
 
     /* The process exit code: how many steps failed. */
     uint32_t run();
+
+    /* `program/0 run=<suite|timeout|rvk>`, then the report's progress. */
+    void report(StateWriter &writer) override;
 
 private:
     void write_report() const;
@@ -36,6 +42,9 @@ private:
     GuestReport report_;
     GuestSuite  suite_;
     Run         run_;
+    /* rvktest's tracing, in the entry's storage (constitution III). */
+    ObjectStorage<ProcessTrace> &trace_;
+    ProcessTrace::Filter         crashed_;
 };
 
 }  // namespace av

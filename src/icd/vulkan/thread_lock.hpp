@@ -15,6 +15,9 @@ public:
     ThreadLock &operator=(const ThreadLock &) = delete;
 
     virtual void acquire() = 0;
+    /* Takes the lock only if no thread holds it: a state dump must never wait
+     * on a thread that may be the one hung (docs/trace.md). */
+    virtual bool try_acquire() = 0;
     virtual void release() = 0;
 
 protected:

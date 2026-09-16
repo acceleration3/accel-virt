@@ -1,20 +1,25 @@
 #include "um/guest_program.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 
 #include <windows.h>
 
 namespace av {
 
-GuestProgram::GuestProgram(uint32_t stress_seconds, Run run)
-    : kmt_(), report_(), suite_(kmt_, report_, stress_seconds), run_(run)
-    {
-        AV_SCOPE("GuestProgram::GuestProgram");
-    }
+GuestProgram::GuestProgram(uint32_t stress_seconds, Run run, ObjectStorage<ProcessTrace> &trace,
+                           ProcessTrace::Filter crashed)
+    : kmt_(), report_(), suite_(kmt_, report_, stress_seconds), run_(run), trace_(trace), crashed_(crashed)
+{
+    AV_SCOPE("GuestProgram::GuestProgram");
+}
 
 uint32_t GuestProgram::run()
 {
     AV_SCOPE("GuestProgram::run");
+    /* Tracing is a diagnosis aid: the suite runs, and reports only what it
+     * tests, whether or not the section could be made. */
+    if (trace_.construct() == Status::ok) static_cast<void>(trace_.object().start("rvktest", *this, crashed_));
     const Status initialized = kmt_.initialize();
     if (initialized == Status::ok) {
         if (run_ == Run::timeout) static_cast<void>(suite_.run_timeout());
@@ -26,6 +31,16 @@ uint32_t GuestProgram::run()
     }
     write_report();
     return report_.failed();
+}
+
+void GuestProgram::report(StateWriter &writer)
+{
+    AV_SCOPE("GuestProgram::report");
+    constexpr const char *runs[] = {"suite", "timeout", "rvk"};
+    writer.open("program", 0u);
+    writer.text("run", runs[static_cast<uint32_t>(run_)]);
+    writer.close();
+    report_.report(writer);
 }
 
 /* A report the console does not take is still the exit code. */

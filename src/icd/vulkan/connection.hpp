@@ -29,6 +29,7 @@ class BlockSource;
 class ClientTransport;
 class HostVisibleChunk;
 class Kmt;
+class StateWriter;
 }  // namespace av
 
 namespace av::icd {
@@ -78,6 +79,10 @@ public:
      * whether or not the connection has faulted: the first refusal, and
      * `chunk` empty either way. */
     [[nodiscard]] Status close_chunk(ObjectStorage<HostVisibleChunk> &chunk);
+
+    /* Its fields on the line `writer` has open: whether open and faulted, and
+     * the adapter, LUID, device and context it sends through. */
+    void report(StateWriter &writer) const;
 
     bool invariants_hold() const;
 

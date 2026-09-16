@@ -21,7 +21,11 @@ public:
     ~RecordingThreadLock();
 
     void acquire() override;
+    /* Recorded as the letter when taken and `!` when refused: refused while
+     * held here or while the test says another thread holds it. */
+    bool try_acquire() override;
     void release() override;
+    void held_elsewhere(bool held);
 
     bool          held() const;
     std::uint32_t acquisitions() const;
@@ -34,6 +38,7 @@ private:
     LockTrace    &trace_;
     char          letter_;
     bool          held_;
+    bool          elsewhere_;
     std::uint32_t acquisitions_;
     std::uint32_t violations_;
 };

@@ -84,6 +84,21 @@ host shapes wrongly reaches the ICD's own parsing, which has hostile tables and
 fuzz targets (`fuzz_physical_device_view`, `fuzz_extension_policy`,
 `fuzz_memory_type_table`).
 
+### The trace tracker in user mode
+
+What decides in the tracker's Windows side is portable and tested like the
+ICD (docs/trace.md): `InspectProgram` - `rvkinspect.exe`'s commands, the
+names it tries, the snapshot files it writes - over `MockInspectHost`, which
+scripts processes, named sections and state services and keeps every file
+written; `EscapeReader`, the driver's table and dump read a window at a time,
+over `MockKmt`'s adapter-only escapes answered by `ScriptedKernelTrace`, which
+cuts a window short, changes the total, refuses or answers another request at
+any page; `CrashReport` over `ScriptedModuleResolver`; and the ICD's state
+dump through `IcdRig`, with `RecordingThreadLock::held_elsewhere` standing for
+a root lock another thread holds. `fuzz_command_line` and `fuzz_escape_reader`
+feed the two readers of foreign bytes. The Windows shims in `src/um/trace/` and
+`src/um/inspect/` only translate and are proven by the guest run.
+
 ### The mock platform
 
 `Platform` is an abstract base with exactly two implementations — that is what

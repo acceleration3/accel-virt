@@ -21,6 +21,19 @@
 
 namespace av {
 
+/* The driver's side of an adapter-only escape, as a test plays it. */
+class AdapterEscapes {
+public:
+    AdapterEscapes() = default;
+    AdapterEscapes(const AdapterEscapes &) = delete;
+    AdapterEscapes &operator=(const AdapterEscapes &) = delete;
+    /* The NTSTATUS the escape answers; `data` may be written. */
+    virtual std::uint32_t answer(std::uint8_t *data, std::uint32_t size) = 0;
+
+protected:
+    ~AdapterEscapes() = default;
+};
+
 class MockKmt final : public Kmt {
 public:
     enum class Call : unsigned {
@@ -179,6 +192,11 @@ public:
     /* The next escape that names its handles rightly succeeds with these bytes
      * (cut to the escape's size) written over its data, whatever it asked. */
     void          answer_next_escape(const std::uint8_t *answer, std::uint32_t size);
+    /* From now on an escape naming only an adapter - no device, no context, as
+     * rvkinspect.exe's trace escapes are - is answered by `driver`; without
+     * one such an escape is refused as the driver refuses what it does not
+     * know. */
+    void          answer_adapter_escapes(AdapterEscapes *driver);
     /* The next bind answers `pages` rather than the allocation's own count, as
      * a driver that miscounted would. */
     void          answer_next_bind_pages(std::uint64_t pages);
@@ -281,6 +299,7 @@ private:
     std::uint8_t  escape_answer_[max_private];
     std::uint32_t escape_answer_size_;
     bool          escape_scripted_;
+    AdapterEscapes *adapter_escapes_;
     std::uint64_t bind_pages_;
     std::uint32_t bound_resources_[max_bindings];
     std::uint32_t bound_allocations_[max_bindings];

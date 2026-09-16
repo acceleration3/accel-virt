@@ -7,11 +7,21 @@
  *
  * _purecall and _fltused are what the MSVC ABI references with no C runtime to
  * define them, as for rvktest.exe (program_entry.cpp). */
+#include "core/trace/function_scope.hpp"
 #include "um/vulkan/icd_library.hpp"
 
 #include <windows.h>
 
-static constinit av::IcdLibrary rvkvk_library;
+static long WINAPI rvkvk_crashed(void *pointers);
+
+static constinit av::IcdLibrary rvkvk_library{&rvkvk_crashed};
+
+/* The process's unhandled-exception filter while rvkvk traces it. */
+static long WINAPI rvkvk_crashed(void *pointers)
+{
+    AV_SCOPE("rvkvk_crashed");
+    return rvkvk_library.crashed(pointers);
+}
 
 extern "C" BOOL WINAPI rvkvk_entry(HINSTANCE, DWORD, LPVOID) { return TRUE; }
 
