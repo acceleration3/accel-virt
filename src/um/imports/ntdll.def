@@ -1,5 +1,7 @@
 LIBRARY ntdll.dll
 EXPORTS
+memcmp
 memcpy
 memset
+strcmp
 strlen

@@ -1,11 +1,19 @@
 LIBRARY kernel32.dll
 EXPORTS
+AcquireSRWLockExclusive
 CloseHandle
+CreateDirectoryW
 CreateEventW
+CreateFileW
 ExitProcess
 GetCommandLineW
+GetCurrentProcessId
+GetProcessHeap
 GetStdHandle
+HeapAlloc
+HeapFree
 QueryPerformanceCounter
 QueryPerformanceFrequency
+ReleaseSRWLockExclusive
 WaitForSingleObject
 WriteFile

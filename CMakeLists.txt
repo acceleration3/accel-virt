@@ -67,6 +67,7 @@ set(AV_KHRONOS_INCLUDE ${CMAKE_SOURCE_DIR}/third_party/khronos/include)
 set(AV_GENERATED_SOURCES
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_command_names.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_default.cpp
+  ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatchable_handle_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_host_image_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_handle_lifetime_default.cpp
   ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan/vk_dispatch_server.cpp
@@ -364,7 +365,7 @@ ExternalProject_Add(rvktest
   BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
   BUILD_ALWAYS ON
   INSTALL_COMMAND ""
-  BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/rvktest.exe)
+  BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/rvktest.exe ${CMAKE_BINARY_DIR}/guest/rvkvk.dll)
 ExternalProject_Add_StepDependencies(rvktest configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake)
@@ -372,6 +373,13 @@ add_test(NAME guest_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest/rvktest.exe
                  --require-import D3DKMTSubmitCommand)
+
+# The Vulkan ICD exports exactly what the loader calls (feature 045).
+add_test(NAME rvkvk_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkvk.dll --dll --only-exports
+                 --require-export vk_icdNegotiateLoaderICDInterfaceVersion
+                 --require-export vk_icdGetInstanceProcAddr)
 
 # ---- gate scripts are tested like any other code ---------------------------
 add_test(NAME tools_tests

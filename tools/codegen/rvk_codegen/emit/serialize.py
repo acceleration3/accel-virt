@@ -1253,7 +1253,14 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "}  // namespace",
         "",
     ]
-    for h in _referenced_handle_names(reg):
+    # The dispatchable handles' handle_to_wire are a file of their own: the
+    # Vulkan ICD defines those five and must not pull a second definition of
+    # them on PE, while it still needs every identity below (feature 045).
+    handles = _referenced_handle_names(reg)
+    dispatchable = [h for h in handles if reg.handles[h].dispatchable]
+    for h in handles:
+        if h in dispatchable:
+            continue
         handle_default.append(
             f"RVK_HOOK_DEFAULT uint64_t handle_to_wire({h} v) noexcept "
             f"{{ return identity(v); }}"
@@ -1271,3 +1278,25 @@ def emit(reg: Registry, out_dir: Path) -> None:
     handle_default.append("}  // namespace av::vkproto")
     handle_default.append("")
     write(out_dir / "vk_handle_default.cpp", "\n".join(handle_default))
+
+    dispatchable_default = [
+        GENERATED_BANNER,
+        "",
+        '#include "vk_serialize.h"',
+        "",
+        "#include <stdint.h>",
+        "",
+        *weak,
+        "",
+        "namespace av::vkproto {",
+        "",
+    ]
+    for h in dispatchable:
+        dispatchable_default.append(
+            f"RVK_HOOK_DEFAULT uint64_t handle_to_wire({h} v) noexcept "
+            f"{{ uint64_t raw = 0; __builtin_memcpy(&raw, &v, sizeof(v)); return raw; }}"
+        )
+    dispatchable_default.append("")
+    dispatchable_default.append("}  // namespace av::vkproto")
+    dispatchable_default.append("")
+    write(out_dir / "vk_dispatchable_handle_default.cpp", "\n".join(dispatchable_default))
