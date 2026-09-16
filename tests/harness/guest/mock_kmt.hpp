@@ -120,7 +120,9 @@ public:
     Status        wait_for_vertical_blank(std::uint32_t adapter, std::uint32_t device, std::uint32_t source) override;
     /* As the driver answers a HostVisibleBindRecord: a bind of a host-visible
      * allocation of `device` answers first_chunk_resource + the binds so far
-     * and the allocation's pages; an unbind names a resource still bound. */
+     * and the allocation's pages; an unbind names a resource still bound;
+     * either on a lost context is refused. Destroying a bound allocation
+     * unbinds it, as the driver does when it tears the context down. */
     Status        escape(std::uint32_t adapter, std::uint32_t device, std::uint32_t context, std::uint8_t *data,
                          std::uint32_t size) override;
     std::uint64_t performance_counter(std::uint64_t &frequency) const override;
@@ -167,7 +169,8 @@ public:
     /* The Nth wait for a context from now (1-based) succeeds, writes nothing
      * and takes no queued answer: how a context the host faulted looks to its
      * process, since the driver completes what it queued and never reports
-     * DMA_FAULTED, which bugchecks the guest. */
+     * DMA_FAULTED, which bugchecks the guest. The driver knows the context
+     * lost from then on, and refuses a bind or unbind on it. */
     void          withhold_answer_at(std::uint32_t nth);
     /* The Nth wait for a context from now (1-based) runs `play(context)` before
      * any answer is written: how a test plays work the host does between a
@@ -222,7 +225,8 @@ public:
 private:
     enum class Kind : unsigned { none, adapter, device, allocation, queue, context, mapping };
     /* A context's `address` is the reply allocation its record named, or 0,
-     * and `ring` the ring allocation. */
+     * `ring` the ring allocation, and `lost` whether a wait on it was
+     * withheld - how the driver sees a context the host faulted. */
     struct Object {
         Kind          kind;
         std::uint32_t handle;
@@ -231,6 +235,7 @@ private:
         std::uint64_t pages;
         std::uint16_t allocation_kind;
         std::uint32_t ring;
+        bool          lost;
     };
     static constexpr std::uint32_t max_adapters = 8u;
     static constexpr std::uint32_t segment_groups = 2u;
@@ -278,6 +283,7 @@ private:
     bool          escape_scripted_;
     std::uint64_t bind_pages_;
     std::uint32_t bound_resources_[max_bindings];
+    std::uint32_t bound_allocations_[max_bindings];
     std::uint32_t bound_history_[max_bindings];
     std::uint32_t binds_;
     std::uint32_t play_countdown_;

@@ -34,7 +34,8 @@ public:
     DeviceMemory &operator=(const DeviceMemory &) = delete;
 
     /* A host-visible type from a chunk, answering VK_ERROR_OUT_OF_DEVICE_MEMORY
-     * for any refusal, or when the types cannot be learnt from `physical`; any
+     * for any refusal, or when the types cannot be learnt from `physical` -
+     * VK_ERROR_DEVICE_LOST when the host faulted the connection meanwhile; any
      * other type as the host answers it. */
     VkResult allocate(VkPhysicalDevice physical, VkDevice device, const VkMemoryAllocateInfo &info,
                       const VkAllocationCallbacks *allocator, VkDeviceMemory &memory);
@@ -52,6 +53,7 @@ public:
 
 private:
     [[nodiscard]] bool learn(VkPhysicalDevice physical);
+    VkResult           refusal() const;
     void               note(const char *what, uint64_t value);
 
     Connection     &connection_;

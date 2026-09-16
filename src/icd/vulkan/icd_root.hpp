@@ -2,6 +2,11 @@
  * the answers to the loader's own entry points, the instances and their
  * connections, and every dispatchable handle made through them.
  *
+ * Once the host has faulted an instance's context, every entry point on its
+ * objects that answers a VkResult answers VK_ERROR_DEVICE_LOST before anything
+ * is asked of the Kmt; queries with no result answer nothing; frees and
+ * destroys give back locally what the kernel holds for the process.
+ *
  * Three locks, always taken in one order. The memory lock serializes every
  * device's memory, and is taken before either of the others. The send lock is
  * held by a connection while a command is encoded and sent, and handle_to_wire
@@ -38,6 +43,7 @@ namespace av::icd {
 
 class IcdBinding;
 class LogSink;
+class MemoryTypeTable;
 class ThreadLock;
 struct IcdRootProbe;
 
@@ -96,6 +102,10 @@ public:
     void               free_memory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *allocator);
     VkResult           map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size,
                                   VkMemoryMapFlags flags, void **data);
+    /* vkFlushMappedMemoryRanges and vkInvalidateMappedMemoryRanges, named by
+     * `entry`: a mapping is the memory itself, so there is nothing to carry,
+     * and only a device this ICD did not make, or a lost one, is refused. */
+    VkResult           mapped_ranges(VkDevice device, const char *entry);
     void               physical_device_properties(VkPhysicalDevice physical_device,
                                                   VkPhysicalDeviceProperties *properties);
     void               physical_device_properties2(VkPhysicalDevice physical_device,
@@ -142,6 +152,12 @@ public:
 private:
     [[nodiscard]] Status open_connection(Connection *&opened);
     void                 note(const char *what, uint64_t value);
+    /* Whether the host has faulted `connection`, logged as `entry`'s. */
+    bool                 lost(const Connection &connection, const char *entry);
+    /* The host's memory types into `types`, unless the connection is lost
+     * before or while they are asked for. */
+    void                 learn_types(Connection &connection, VkPhysicalDevice physical_device,
+                                     MemoryTypeTable &types, const char *entry);
     LoaderHandle        *wrap_under(LoaderHandle::Kind kind, uint64_t host, Connection *connection,
                                     LoaderHandle *parent);
     void                *wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &parent);

@@ -703,6 +703,58 @@ TEST(mock_kmt_escape, refuses_what_the_driver_refuses)
   CHECK_EQ(kmt.bindings(), MockKmt::max_bindings);
   CHECK_EQ(kmt.bound_allocation(MockKmt::max_bindings), 0u); }
 
+/* A context the host faulted - one whose answer was withheld - is lost to the
+ * driver, which refuses a bind or unbind on it and keeps its other contexts'
+ * as they were. */
+TEST(mock_kmt_escape, a_context_whose_answer_was_withheld_refuses_binds_and_unbinds)
+{ MockKmt kmt;
+  EscapeRig rig(kmt);
+  std::uint32_t healthy = 0u;
+  CHECK_STATUS(kmt.create_context(rig.device(), healthy), Status::ok);
+  std::uint8_t record[HostVisibleBindRecord::encoded_size] = {};
+  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
+  CHECK_STATUS(rig.escape(record), Status::ok);
+  CHECK_STATUS(kmt.wait_for_context(rig.device(), rig.context()), Status::ok);
+  CHECK_STATUS(kmt.wait_for_context(rig.device(), healthy), Status::ok);
+  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
+  CHECK_STATUS(rig.escape(record), Status::ok);   /* a wait that was answered loses nothing */
+  kmt.withhold_answer_at(1u);
+  CHECK_STATUS(kmt.wait_for_context(rig.device(), rig.context()), Status::ok);
+  encode_request(HostVisibleBindRecord::Operation::unbind, 0u, 0x00100003u, record);
+  CHECK_STATUS(rig.escape(record), Status::invalid_parameter);
+  CHECK_EQ(kmt.last_code(), MockKmt::invalid_parameter);
+  encode_request(HostVisibleBindRecord::Operation::bind, rig.chunk(), 0u, record);
+  CHECK_STATUS(rig.escape(record), Status::invalid_parameter);
+  CHECK_EQ(u32_at(record, 12u), 0u);
+  CHECK_EQ(kmt.bindings(), 2u);
+  encode_request(HostVisibleBindRecord::Operation::unbind, 0u, 0x00100004u, record);
+  CHECK_STATUS(kmt.escape(rig.adapter(), rig.device(), healthy, record, sizeof record), Status::ok);
+  CHECK_EQ(kmt.bindings(), 1u);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
+/* Destroying a bound chunk unbinds it, as the driver does when it tears the
+ * chunk's context down; a chunk bound twice goes from both, and another
+ * chunk's binding stays. */
+TEST(mock_kmt_escape, destroying_a_bound_allocation_unbinds_it)
+{ MockKmt kmt;
+  EscapeRig rig(kmt);
+  const std::uint32_t second = rig.allocate(av::AllocationKind::host_visible_memory, 4096u);
+  std::uint8_t record[HostVisibleBindRecord::encoded_size] = {};
+  const std::uint32_t chunks[] = {rig.chunk(), second, rig.chunk()};
+  for (const std::uint32_t chunk : chunks) {
+      encode_request(HostVisibleBindRecord::Operation::bind, chunk, 0u, record);
+      CHECK_STATUS(rig.escape(record), Status::ok);
+  }
+  CHECK_EQ(kmt.bindings(), 3u);
+  CHECK_STATUS(kmt.destroy_allocation(rig.device(), rig.chunk()), Status::ok);
+  CHECK_EQ(kmt.bindings(), 1u);
+  encode_request(HostVisibleBindRecord::Operation::unbind, 0u, 0x00100003u, record);
+  CHECK_STATUS(rig.escape(record), Status::invalid_parameter);
+  encode_request(HostVisibleBindRecord::Operation::unbind, 0u, 0x00100004u, record);
+  CHECK_STATUS(rig.escape(record), Status::ok);
+  CHECK_EQ(kmt.bindings(), 0u);
+  CHECK_EQ(kmt.misuses(), 0u); }
+
 /* Handles it never gave, or that do not belong together, or no data, are a
  * misuse; a scripted failure answers its code with the record untouched; a
  * zero answer succeeds and writes nothing back; a scripted answer replaces what

@@ -12,6 +12,8 @@
 #include "proto/context/sub_api.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/host_visible_bind_record.hpp"
+#include "proto/wire/wire_reader.hpp"
+#include "proto/wire/wire_writer.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -247,6 +249,32 @@ TEST(host_visible_chunk, release_attempts_every_part_and_answers_the_first_failu
       CHECK_STATUS(chunk.release(), Status::ok);
       CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
   } }
+
+/* On a transport the host has faulted the driver refuses the unbind and
+ * unbinds the chunk itself as it is destroyed, so the unbind is not asked:
+ * the view and the allocation still go. */
+TEST(host_visible_chunk, release_on_a_faulted_transport_leaves_the_unbind_to_the_kernel)
+{ Rig rig;
+  HostVisibleChunk chunk(rig.connection(), rig.transport());
+  CHECK_STATUS(chunk.allocate(chunk_bytes), Status::ok);
+  CHECK_STATUS(chunk.lock(), Status::ok);
+  CHECK_STATUS(chunk.bind(), Status::ok);
+  rig.kmt().withhold_answer_at(1u);
+  av::WireWriter request = rig.transport().request_writer();
+  request.write_u32(1u);
+  av::WireReader reply(nullptr, 0u);
+  CHECK(rig.transport().send_sync(1u, request, reply) != av::TransportResult::ok);
+  rig.transport().end_call();
+  CHECK(rig.transport().faulted());
+  const std::uint32_t escapes = rig.kmt().calls(MockKmt::Call::escape);
+  const std::uint32_t unlocks = rig.kmt().calls(MockKmt::Call::unlock);
+  CHECK_STATUS(chunk.release(), Status::ok);
+  CHECK(chunk.invariants_hold());
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::escape), escapes);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::unlock), unlocks + 1u);
+  CHECK(chunk.view() == nullptr);
+  CHECK_EQ(chunk.resource_id(), 0u);
+  rig.check_only_the_link_is_left(); }
 
 /* A chunk that goes out of scope holding everything gives it all back. */
 TEST(host_visible_chunk, the_destructor_releases_what_is_held)

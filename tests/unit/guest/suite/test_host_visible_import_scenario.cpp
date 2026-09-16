@@ -624,7 +624,8 @@ TEST(host_visible_import_scenario, a_release_that_fails_is_reported_and_everythi
       CHECK_EQ(rig.kmt().open_objects(), 1u);
       CHECK_EQ(rig.kmt().queued_answers(), 0u);
       CHECK_EQ(rig.kmt().misuses(), 0u);
-      /* A refused unbind leaves the binding, as a driver that refused it keeps it. */
-      CHECK_EQ(rig.kmt().bindings(), one.fault == 1u ? 1u : 0u);
+      /* A refused unbind leaves the binding until the chunk is destroyed,
+       * which unbinds it as the driver does. */
+      CHECK_EQ(rig.kmt().bindings(), 0u);
       CHECK_STATUS(rig.search().close(), Status::ok);
   } }

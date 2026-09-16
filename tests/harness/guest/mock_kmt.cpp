@@ -29,7 +29,7 @@ MockKmt::MockKmt()
       adapter_count_(0u), claimed_(0u), claim_(false), failures_{}, countdown_{},
       zeroing_{}, calls_{}, objects_{}, views_{}, locked_{}, large_views_{}, large_bytes_{}, escape_{},
       escape_size_(0u), escape_answer_{}, escape_answer_size_(0u), escape_scripted_(false), bind_pages_(0u), bound_resources_{},
-      bound_history_{}, binds_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
+      bound_allocations_{}, bound_history_{}, binds_(0u), play_countdown_(0u), play_(nullptr), play_context_(nullptr), private_{},
       private_size_(0u), submission_{}, submission_size_(0u), next_handle_(first_handle),
       next_address_(first_address), next_fence_(0u), success_code_(0u), last_code_(0u), misuses_(0u), ticks_(0u),
       blank_period_(ticks_per_second / 60u), slip_nth_(0u), slip_ticks_(0u), wait_cost_(0u), slow_nth_(0u), slow_ticks_(0u), frequency_(ticks_per_second),
@@ -84,7 +84,7 @@ std::uint32_t MockKmt::open(Kind kind, std::uint32_t owner, std::uint64_t addres
 {
     for (Object &object : objects_) {
         if (object.kind != Kind::none) continue;
-        object = Object{kind, next_handle_, owner, address, pages, 0u, 0u};
+        object = Object{kind, next_handle_, owner, address, pages, 0u, 0u, false};
         next_handle_ += handle_step;
         return object.handle;
     }
@@ -230,6 +230,11 @@ Status MockKmt::destroy_allocation(std::uint32_t device, std::uint32_t allocatio
     if (object == nullptr || object->owner != device || is_locked(allocation)) return misuse();
     for (const Object &mapping : objects_)
         if (mapping.kind == Kind::mapping && mapping.owner == allocation) return misuse();
+    for (std::uint32_t slot = 0u; slot < max_bindings; slot++) {
+        if (bound_allocations_[slot] != allocation) continue;
+        bound_resources_[slot] = 0u;
+        bound_allocations_[slot] = 0u;
+    }
     return close(Kind::allocation, allocation);
 }
 
@@ -402,12 +407,13 @@ Status MockKmt::submit(std::uint32_t context, std::uint64_t commands, std::uint6
 Status MockKmt::wait_for_context(std::uint32_t device, std::uint32_t context)
 {
     if (!begin(Call::wait_for_context)) return refuse(last_code_);
-    const Object *const object = find(Kind::context, context);
+    Object *const object = find(Kind::context, context);
     if (find(Kind::device, device) == nullptr || object == nullptr || object->owner != device) return misuse();
     ticks_ += wait_cost_;
     if (slow_nth_ != 0u && calls_[static_cast<unsigned>(Call::wait_for_context)] % slow_nth_ == 0u) ticks_ += slow_ticks_;
     if (played()) play_(play_context_);
-    if (!withheld()) write_answer(*object);
+    if (withheld()) object->lost = true;
+    else write_answer(*object);
     consume(*object);
     return succeed();
 }
@@ -495,6 +501,7 @@ Status MockKmt::escape(std::uint32_t adapter, std::uint32_t device, std::uint32_
     escape_size_ = size < max_private ? size : max_private;
     for (std::uint32_t i = 0u; i < escape_size_; i++) escape_[i] = data[i];
     if (zeroed(Call::escape)) return succeed();
+    if (on->lost) return refuse(invalid_parameter);
     if (escape_scripted_) {
         escape_scripted_ = false;
         for (std::uint32_t i = 0u; i < escape_answer_size_ && i < size; i++) data[i] = escape_answer_[i];
@@ -514,9 +521,10 @@ Status MockKmt::bind_chunk(std::uint32_t device, std::uint8_t *data, std::uint32
     if (size != HostVisibleBindRecord::encoded_size || record.decode(data, size) != Status::ok)
         return refuse(invalid_parameter);
     if (!record.binds()) {
-        for (std::uint32_t &resource : bound_resources_)
-            if (resource == record.resource_id()) {
-                resource = 0u;
+        for (std::uint32_t slot = 0u; slot < max_bindings; slot++)
+            if (bound_resources_[slot] == record.resource_id()) {
+                bound_resources_[slot] = 0u;
+                bound_allocations_[slot] = 0u;
                 return succeed();
             }
         return refuse(invalid_parameter);
@@ -525,14 +533,15 @@ Status MockKmt::bind_chunk(std::uint32_t device, std::uint8_t *data, std::uint32
     if (chunk == nullptr || chunk->owner != device ||
         chunk->allocation_kind != static_cast<std::uint16_t>(AllocationKind::host_visible_memory))
         return refuse(invalid_parameter);
-    for (std::uint32_t &resource : bound_resources_) {
-        if (resource != 0u) continue;
-        resource = first_chunk_resource + binds_;
+    for (std::uint32_t slot = 0u; slot < max_bindings; slot++) {
+        if (bound_resources_[slot] != 0u) continue;
+        bound_resources_[slot] = first_chunk_resource + binds_;
+        bound_allocations_[slot] = record.allocation();
         if (binds_ < max_bindings) bound_history_[binds_] = record.allocation();
         binds_++;
         const std::uint64_t pages = bind_pages_ != 0u ? bind_pages_ : chunk->pages;
         bind_pages_ = 0u;
-        static_cast<void>(record.answered(resource, pages).encode(data, size));
+        static_cast<void>(record.answered(bound_resources_[slot], pages).encode(data, size));
         return succeed();
     }
     return refuse(invalid_parameter);

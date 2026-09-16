@@ -427,8 +427,25 @@ TEST(icd_command_buffers, ending_on_a_lost_connection_answers_device_lost)
   rig.draw(command_buffer, 1u);
   rig.kmt().withhold_answer_at(1u);
   CHECK_EQ(rig.entry<GetFenceStatus>("vkGetFenceStatus")(rig.device(), VK_NULL_HANDLE), VK_ERROR_DEVICE_LOST);
+  const std::uint32_t submitted = rig.kmt().calls(MockKmt::Call::submit);
   CHECK_EQ(rig.end(command_buffer), VK_ERROR_DEVICE_LOST);
-  CHECK_EQ(rig.rig().log().holding("vkEndCommandBuffer: batch not shipped, status"), 1u); }
+  CHECK_EQ(rig.rig().log().holding("rvkvk: vkEndCommandBuffer on a lost device"), 1u);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), submitted); }
+
+/* A submission the kernel refuses while the batch is published loses the
+ * connection there: the recording is not shipped, and is lost. */
+TEST(icd_command_buffers, a_publish_the_kernel_refuses_answers_device_lost)
+{ DeviceRig rig;
+  VkCommandBuffer command_buffer = VK_NULL_HANDLE;
+  CHECK_EQ(rig.allocate(1u, &command_buffer), VK_SUCCESS);
+  CHECK_EQ(rig.begin(command_buffer), VK_SUCCESS);
+  rig.draw(command_buffer, 1u);
+  rig.kmt().fail_at(MockKmt::Call::submit, 1u, MockKmt::invalid_parameter);
+  CHECK_EQ(rig.end(command_buffer), VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(rig.rig().log().holding("vkEndCommandBuffer: batch not shipped, status"), 1u);
+  CHECK(rig.rig().root().connection_of(rig.device(), Kind::device)->faulted());
+  CHECK(rig.rig().root().invariants_hold()); }
+
 
 /* The root's own spellings of the entry points, as the loader's table reaches them. */
 TEST(icd_command_buffers, the_roots_methods_answer_as_its_entry_points_do)

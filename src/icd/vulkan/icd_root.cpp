@@ -6,6 +6,7 @@
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/local_entries.hpp"
 #include "icd/vulkan/log_sink.hpp"
+#include "icd/vulkan/memory_type_table.hpp"
 #include "icd/vulkan/physical_device_view.hpp"
 #include "icd/vulkan/sliced_wait.hpp"
 #include "icd/vulkan/thread_lock.hpp"
@@ -111,6 +112,18 @@ void IcdRoot::note(const char *what, uint64_t value)
     log_.write(text.text());
 }
 
+bool IcdRoot::lost(const Connection &connection, const char *entry)
+{
+    if (!connection.faulted()) return false;
+    char       line[line_bytes] = {};
+    TextBuffer text(line, sizeof line);
+    text.append("rvkvk: ");
+    text.append(entry);
+    text.append(" on a lost device");
+    log_.write(text.text());
+    return true;
+}
+
 VkResult IcdRoot::negotiate(uint32_t *version)
 {
     if (version == nullptr) {
@@ -195,6 +208,7 @@ VkResult IcdRoot::enumerate_adapter_physical_devices(VkInstance instance, uint64
         log_.write("rvkvk: vk_icdEnumerateAdapterPhysicalDevices on an instance this driver did not make");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
+    if (lost(*connection, "vk_icdEnumerateAdapterPhysicalDevices")) return VK_ERROR_DEVICE_LOST;
     if (luid != connection->luid()) {
         *count = 0u;
         return VK_SUCCESS;
@@ -215,6 +229,7 @@ VkResult IcdRoot::enumerate_device_extensions(VkPhysicalDevice physical_device, 
         log_.write("rvkvk: vkEnumerateDeviceExtensionProperties on a physical device this driver did not make");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
+    if (lost(*made->connection(), "vkEnumerateDeviceExtensionProperties")) return VK_ERROR_DEVICE_LOST;
     if (layer != nullptr) {
         log_.write("rvkvk: device extensions of a layer asked for; this driver is no layer");
         return VK_ERROR_LAYER_NOT_PRESENT;
@@ -246,6 +261,7 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
         log_.write("rvkvk: vkCreateDevice on a physical device this driver did not make");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
+    if (lost(*made->connection(), "vkCreateDevice")) return VK_ERROR_DEVICE_LOST;
     const uint32_t refused = extensions_.first_refused(create->ppEnabledExtensionNames, create->enabledExtensionCount);
     if (refused != create->enabledExtensionCount) {
         const char *const name = create->ppEnabledExtensionNames[refused];
@@ -301,16 +317,24 @@ void IcdRoot::destroy_instance(VkInstance instance, const VkAllocationCallbacks 
     vkicd::generated::Wrap_vkDestroyInstance(instance, allocator);
 }
 
+void IcdRoot::learn_types(Connection &connection, VkPhysicalDevice physical_device, MemoryTypeTable &types,
+                          const char *entry)
+{
+    if (lost(connection, entry)) return;
+    VkPhysicalDeviceMemoryProperties host = {};
+    vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(connection.transport(), physical_device, &host);
+    if (lost(connection, entry)) return;
+    const Status built = types.build(host);
+    if (built != Status::ok) note("the host's memory types were not taken, status", static_cast<uint64_t>(built));
+}
+
 void IcdRoot::physical_device_memory_properties(VkPhysicalDevice physical_device,
                                                 VkPhysicalDeviceMemoryProperties *properties)
 {
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
-    VkPhysicalDeviceMemoryProperties host = {};
-    vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(connection->transport(), physical_device, &host);
     MemoryTypeTable types(kmt_, connection->adapter());
-    const Status    built = types.build(host);
-    if (built != Status::ok) note("the host's memory types were not taken, status", static_cast<uint64_t>(built));
+    learn_types(*connection, physical_device, types, "vkGetPhysicalDeviceMemoryProperties");
     types.properties(*properties);
 }
 
@@ -319,11 +343,8 @@ void IcdRoot::physical_device_memory_properties2(VkPhysicalDevice physical_devic
 {
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
-    VkPhysicalDeviceMemoryProperties host = {};
-    vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(connection->transport(), physical_device, &host);
     MemoryTypeTable types(kmt_, connection->adapter());
-    const Status    built = types.build(host);
-    if (built != Status::ok) note("the host's memory types were not taken, status", static_cast<uint64_t>(built));
+    learn_types(*connection, physical_device, types, "vkGetPhysicalDeviceMemoryProperties2");
     types.properties(properties->memoryProperties);
     auto *node = static_cast<VkBaseOutStructure *>(properties->pNext);
     for (uint32_t seen = 1u; node != nullptr && seen < max_chain; seen++, node = node->pNext)
@@ -358,6 +379,7 @@ VkResult IcdRoot::allocate_memory(VkDevice device, const VkMemoryAllocateInfo *i
 {
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return VK_ERROR_DEVICE_LOST;
+    if (lost(*made->connection(), "vkAllocateMemory")) return VK_ERROR_DEVICE_LOST;
     memory_lock_.acquire();
     ScopeExit           release([&] { memory_lock_.release(); });
     DeviceMemory *const owned = memory_of(*made);
@@ -381,11 +403,22 @@ VkResult IcdRoot::map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSiz
 {
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
+    if (lost(*made->connection(), "vkMapMemory")) return VK_ERROR_DEVICE_LOST;
     memory_lock_.acquire();
     ScopeExit                 release([&] { memory_lock_.release(); });
     const DeviceMemory *const owned = made->device_memory();
     if (owned == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
     return owned->map(memory, offset, size, flags, *data);
+}
+
+VkResult IcdRoot::mapped_ranges(VkDevice device, const char *entry)
+{
+    const Connection *const connection = connection_of(device, LoaderHandle::Kind::device);
+    if (connection == nullptr) {
+        log_.write("rvkvk: mapped ranges of a device this driver did not make");
+        return VK_ERROR_DEVICE_LOST;
+    }
+    return lost(*connection, entry) ? VK_ERROR_DEVICE_LOST : VK_SUCCESS;
 }
 
 void IcdRoot::physical_device_properties(VkPhysicalDevice physical_device, VkPhysicalDeviceProperties *properties)
@@ -528,6 +561,7 @@ VkResult IcdRoot::allocate_command_buffers(VkDevice device, const VkCommandBuffe
         log_.write("rvkvk: vkAllocateCommandBuffers on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
+    if (lost(*made->connection(), "vkAllocateCommandBuffers")) return VK_ERROR_DEVICE_LOST;
     const uint32_t count = info->commandBufferCount;
     if (count > max_allocated_at_once) {
         note("vkAllocateCommandBuffers: more command buffers at once than", max_allocated_at_once);
@@ -563,6 +597,8 @@ void IcdRoot::free_command_buffers(VkDevice device, VkCommandPool pool, uint32_t
 
 VkResult IcdRoot::begin_command_buffer(VkCommandBuffer command_buffer, const VkCommandBufferBeginInfo *info)
 {
+    if (lost(*connection_of(command_buffer, LoaderHandle::Kind::command_buffer), "vkBeginCommandBuffer"))
+        return VK_ERROR_DEVICE_LOST;
     CommandBatch &batch = record_target(command_buffer);
     batch.discard();
     if (vkproto::rvk_vkBeginCommandBuffer(batch, command_buffer, info) == VK_SUCCESS) return VK_SUCCESS;
@@ -574,7 +610,11 @@ VkResult IcdRoot::begin_command_buffer(VkCommandBuffer command_buffer, const VkC
  * batch, so what end() answers is the whole recording's answer. */
 VkResult IcdRoot::end_command_buffer(VkCommandBuffer command_buffer)
 {
-    CommandBatch  &batch = record_target(command_buffer);
+    CommandBatch &batch = record_target(command_buffer);
+    if (lost(*connection_of(command_buffer, LoaderHandle::Kind::command_buffer), "vkEndCommandBuffer")) {
+        batch.discard();
+        return VK_ERROR_DEVICE_LOST;
+    }
     const VkResult recorded = vkproto::rvk_vkEndCommandBuffer(batch, command_buffer);
     const Status   shipped = batch.end();
     if (shipped == Status::ok) return recorded;
@@ -596,6 +636,7 @@ VkResult IcdRoot::wait_for_fences(VkDevice device, uint32_t count, const VkFence
         log_.write("rvkvk: vkWaitForFences on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
+    if (lost(*made->connection(), "vkWaitForFences")) return VK_ERROR_DEVICE_LOST;
     uint64_t       frequency = 0u;
     const uint64_t start = kmt_.performance_counter(frequency);
     SlicedWait     wait(timeout, start, frequency);
@@ -615,6 +656,7 @@ VkResult IcdRoot::wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *in
         log_.write("rvkvk: vkWaitSemaphores on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
+    if (lost(*made->connection(), "vkWaitSemaphores")) return VK_ERROR_DEVICE_LOST;
     uint64_t       frequency = 0u;
     const uint64_t start = kmt_.performance_counter(frequency);
     SlicedWait     wait(timeout, start, frequency);
@@ -636,6 +678,7 @@ VkResult IcdRoot::queue_wait_idle(VkQueue queue)
         log_.write("rvkvk: vkQueueWaitIdle on a queue this driver did not make through a device");
         return VK_ERROR_DEVICE_LOST;
     }
+    if (lost(*made->connection(), "vkQueueWaitIdle")) return VK_ERROR_DEVICE_LOST;
     const auto        device = static_cast<VkDevice>(static_cast<void *>(made->parent()));
     ClientTransport  &transport = made->connection()->transport();
     VkFenceCreateInfo info = {};
@@ -658,6 +701,7 @@ VkResult IcdRoot::device_wait_idle(VkDevice device)
         log_.write("rvkvk: vkDeviceWaitIdle on a device this driver did not make");
         return VK_ERROR_DEVICE_LOST;
     }
+    if (lost(*made->connection(), "vkDeviceWaitIdle")) return VK_ERROR_DEVICE_LOST;
     for (uint32_t index = 0u;; index++) {
         LoaderHandle *const queue = child_of(*made, LoaderHandle::Kind::queue, index);
         if (queue == nullptr) return VK_SUCCESS;

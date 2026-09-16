@@ -36,6 +36,10 @@ bool DeviceMemory::learn(VkPhysicalDevice physical)
     if (learnt_) return true;
     VkPhysicalDeviceMemoryProperties host = {};
     vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(connection_.transport(), physical, &host);
+    if (connection_.faulted()) {
+        log_.write("rvkvk: vkAllocateMemory: the device's memory types cannot be learnt on a lost device");
+        return false;
+    }
     const Status built = types_.build(host);
     if (built != Status::ok) {
         note("vkAllocateMemory: the device's memory types cannot be learnt, status", static_cast<uint64_t>(built));
@@ -48,7 +52,7 @@ bool DeviceMemory::learn(VkPhysicalDevice physical)
 VkResult DeviceMemory::allocate(VkPhysicalDevice physical, VkDevice device, const VkMemoryAllocateInfo &info,
                                 const VkAllocationCallbacks *allocator, VkDeviceMemory &memory)
 {
-    if (!learn(physical)) return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    if (!learn(physical)) return refusal();
     if (!types_.host_visible(info.memoryTypeIndex)) {
         return vkproto::rvk_vkAllocateMemory(connection_.transport(), device, &info, allocator, &memory);
     }
@@ -56,10 +60,15 @@ VkResult DeviceMemory::allocate(VkPhysicalDevice physical, VkDevice device, cons
     const Status    status = chunks_.allocate(info.allocationSize, info.memoryTypeIndex, placed);
     if (status != Status::ok) {
         note("vkAllocateMemory: no host-visible memory, status", static_cast<uint64_t>(status));
-        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+        return refusal();
     }
     memory = as_memory(placed->memory());
     return VK_SUCCESS;
+}
+
+VkResult DeviceMemory::refusal() const
+{
+    return connection_.faulted() ? VK_ERROR_DEVICE_LOST : VK_ERROR_OUT_OF_DEVICE_MEMORY;
 }
 
 void DeviceMemory::free(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *allocator)

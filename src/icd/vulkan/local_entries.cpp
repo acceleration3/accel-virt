@@ -117,10 +117,11 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkMapMemory(VkDevice device, VkDeviceMemory
 
 VKAPI_ATTR void VKAPI_CALL local_vkUnmapMemory(VkDevice, VkDeviceMemory) {}
 
-VKAPI_ATTR VkResult VKAPI_CALL local_vkFlushMappedMemoryRanges(VkDevice, uint32_t, const VkMappedMemoryRange *)
-{ return VK_SUCCESS; }
+VKAPI_ATTR VkResult VKAPI_CALL local_vkFlushMappedMemoryRanges(VkDevice device, uint32_t, const VkMappedMemoryRange *)
+{ return icd_binding.root().mapped_ranges(device, "vkFlushMappedMemoryRanges"); }
 
-VKAPI_ATTR VkResult VKAPI_CALL local_vkInvalidateMappedMemoryRanges(VkDevice, uint32_t, const VkMappedMemoryRange *)
-{ return VK_SUCCESS; }
+VKAPI_ATTR VkResult VKAPI_CALL local_vkInvalidateMappedMemoryRanges(VkDevice device, uint32_t,
+                                                                    const VkMappedMemoryRange *)
+{ return icd_binding.root().mapped_ranges(device, "vkInvalidateMappedMemoryRanges"); }
 
 }  // namespace av::icd

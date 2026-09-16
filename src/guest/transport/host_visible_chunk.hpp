@@ -33,7 +33,9 @@ public:
      * answer the bind. invalid_state unless allocated and not yet bound. */
     [[nodiscard]] Status bind();
     /* Unbinds, unlocks and destroys whatever is held, each attempted whatever
-     * the one before answered: the first failure, and nothing is held after. */
+     * the one before answered: the first failure, and nothing is held after.
+     * On a faulted transport the unbind is left to the driver, which makes it
+     * as the allocation is destroyed. */
     [[nodiscard]] Status release();
 
     /* The resource the kernel bound it as, and its pages; 0 until bound. */

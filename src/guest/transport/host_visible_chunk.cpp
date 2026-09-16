@@ -65,7 +65,9 @@ Status HostVisibleChunk::release()
     const uint32_t device = connection_.device();
     Status         first = Status::ok;
     const auto     keep = [&first](Status status) { first = first == Status::ok ? status : first; };
-    if (resource_id_ != 0u) {
+    /* The driver refuses an unbind on a context the host faulted, and unbinds
+     * the chunk itself when it is destroyed below. */
+    if (resource_id_ != 0u && !transport_.faulted()) {
         const HostVisibleBindRecord unbind(HostVisibleBindRecord::Operation::unbind, 0u, resource_id_);
         uint8_t                     bytes[HostVisibleBindRecord::encoded_size] = {};
         static_cast<void>(unbind.encode(bytes, sizeof bytes));   /* the buffer is the encoded size */
