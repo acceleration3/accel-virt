@@ -27,6 +27,7 @@
 namespace av {
 class BlockSource;
 class ClientTransport;
+class HostVisibleChunk;
 class Kmt;
 }  // namespace av
 
@@ -54,6 +55,8 @@ public:
     void                 close();
     bool                 opened() const;
     bool                 faulted() const;
+    /* The rvkgpu adapter's handle, 0 until open. */
+    uint32_t             adapter() const;
     /* The adapter's LUID, 0 until open. */
     uint64_t             luid() const;
     /* What the generated wrappers send through, only while open: the root
@@ -64,6 +67,17 @@ public:
      * transport refuses whole or a faulted transport. None of them asks for an
      * answer, so none is waited for. */
     [[nodiscard]] TransportResult send_batch(const uint8_t *framed, size_t length);
+
+    /* A host-visible chunk of `bytes` built in `chunk`: allocated on this
+     * connection's device, resident, locked and bound to its context, under
+     * the lock. invalid_state while not open, faulted, or with `chunk` already
+     * holding one, and nothing asked of the Kmt; otherwise the first refusal,
+     * with whatever was made given back and `chunk` empty. */
+    [[nodiscard]] Status open_chunk(ObjectStorage<HostVisibleChunk> &chunk, uint64_t bytes);
+    /* Unbinds, unlocks and destroys the chunk `chunk` holds, under the lock,
+     * whether or not the connection has faulted: the first refusal, and
+     * `chunk` empty either way. */
+    [[nodiscard]] Status close_chunk(ObjectStorage<HostVisibleChunk> &chunk);
 
     bool invariants_hold() const;
 

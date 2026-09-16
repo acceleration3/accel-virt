@@ -8,7 +8,9 @@
 #include "core/support/status.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
+#include "core/support/object_storage.hpp"
 #include "guest/transport/guest_connection.hpp"
+#include "guest/transport/host_visible_chunk.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
@@ -120,6 +122,7 @@ public:
         CHECK(!connection_.opened());
         CHECK(!connection_.faulted());
         CHECK_EQ(connection_.luid(), 0u);
+        CHECK_EQ(connection_.adapter(), 0u);
         CHECK_EQ(kmt_.open_objects(), 0u);
         CHECK_EQ(kmt_.misuses(), 0u);
         CHECK_EQ(platform_.live_allocations(), 0u);
@@ -373,3 +376,103 @@ TEST(connection, a_batch_that_does_not_frame_is_refused_before_it_is_published)
   CHECK_EQ(rig.kmt().calls(MockKmt::Call::submit), 0u);
   CHECK(!rig.lock().held());
   CHECK(std::strcmp(rig.trace().text(), "SsSs") == 0); }
+
+namespace {
+
+constexpr std::uint64_t chunk_bytes = std::uint64_t{64} << 20u;
+
+}  // namespace
+
+/* A host-visible chunk is made on the connection's device, resident, locked and
+ * bound to its context, under the connection's lock; closing it unbinds,
+ * unlocks and destroys it. */
+TEST(connection, opens_a_bound_chunk_under_its_lock_and_closes_it)
+{ Rig rig;
+  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_EQ(rig.connection().adapter(), ConnectionProbe::search(rig.connection()).adapter());
+  av::ObjectStorage<av::HostVisibleChunk> chunk;
+  CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::ok);
+  CHECK(rig.connection().invariants_hold());
+  CHECK(chunk.constructed());
+  CHECK(chunk.object().invariants_hold());
+  CHECK(chunk.object().view() != nullptr);
+  CHECK_EQ(chunk.object().resource_id(), MockKmt::first_chunk_resource);
+  CHECK_EQ(chunk.object().pages(), chunk_bytes / MockKmt::page_bytes);
+  CHECK_EQ(rig.kmt().bindings(), 1u);
+  CHECK_EQ(rig.kmt().open_objects(), open_objects + 1u);
+  CHECK(std::strcmp(rig.trace().text(), "Ss") == 0);
+  CHECK(!rig.lock().held());
+
+  CHECK_STATUS(rig.connection().close_chunk(chunk), Status::ok);
+  CHECK(!chunk.constructed());
+  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK_EQ(rig.kmt().open_objects(), open_objects);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::unlock), 1u);
+  CHECK(std::strcmp(rig.trace().text(), "SsSs") == 0);
+  CHECK_EQ(rig.kmt().misuses(), 0u);
+  /* Closing what is not there is nothing. */
+  CHECK_STATUS(rig.connection().close_chunk(chunk), Status::ok);
+  CHECK(std::strcmp(rig.trace().text(), "SsSs") == 0); }
+
+/* Any step refused - the allocation, its residency, the paging fence, the
+ * lock, the bind - is the answer, with the chunk given back whole. */
+TEST(connection, a_chunk_refused_at_any_step_leaves_nothing)
+{ const MockKmt::Call steps[] = {MockKmt::Call::create_allocation, MockKmt::Call::make_resident,
+                                 MockKmt::Call::wait_for_fence, MockKmt::Call::lock, MockKmt::Call::escape};
+  for (const MockKmt::Call step : steps) {
+      Rig rig;
+      CHECK_STATUS(rig.connection().open(), Status::ok);
+      const std::uint32_t before = rig.kmt().calls(step);
+      rig.kmt().fail_at(step, 1u, MockKmt::invalid_parameter);
+      av::ObjectStorage<av::HostVisibleChunk> chunk;
+      CHECK(rig.connection().open_chunk(chunk, chunk_bytes) != Status::ok);
+      CHECK(!chunk.constructed());
+      CHECK(rig.connection().invariants_hold());
+      CHECK_EQ(rig.kmt().calls(step), before + 1u);
+      CHECK_EQ(rig.kmt().open_objects(), open_objects);
+      CHECK_EQ(rig.kmt().bindings(), 0u);
+      CHECK_EQ(rig.kmt().misuses(), 0u);
+      CHECK(!rig.lock().held());
+  }
+}
+
+/* A connection not open, or one the host has failed, makes no chunk and asks
+ * the Kmt nothing; storage already holding one is not overwritten. */
+TEST(connection, makes_no_chunk_closed_faulted_or_over_a_held_one)
+{ Rig rig;
+  av::ObjectStorage<av::HostVisibleChunk> chunk;
+  CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::invalid_state);
+  CHECK(!chunk.constructed());
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), 0u);
+
+  CHECK_STATUS(rig.connection().open(), Status::ok);
+  CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::ok);
+  const std::uint32_t made = rig.kmt().calls(MockKmt::Call::create_allocation);
+  CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::invalid_state);
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), made);
+  CHECK_EQ(rig.kmt().bindings(), 1u);
+
+  rig.kmt().withhold_answer_at(1u);
+  std::uint64_t instance = 0u;
+  CHECK_EQ(create_instance(rig.connection(), instance), VK_ERROR_DEVICE_LOST);
+  av::ObjectStorage<av::HostVisibleChunk> other;
+  CHECK_STATUS(rig.connection().open_chunk(other, chunk_bytes), Status::invalid_state);
+  CHECK(!other.constructed());
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::create_allocation), made);
+  /* A faulted connection still gives back what it made. */
+  CHECK_STATUS(rig.connection().close_chunk(chunk), Status::ok);
+  CHECK_EQ(rig.kmt().bindings(), 0u);
+  CHECK(!rig.lock().held()); }
+
+/* The Kmt's refusal to give a chunk back is reported, and the chunk is gone
+ * all the same. */
+TEST(connection, a_chunk_whose_release_is_refused_is_still_closed)
+{ Rig rig;
+  CHECK_STATUS(rig.connection().open(), Status::ok);
+  av::ObjectStorage<av::HostVisibleChunk> chunk;
+  CHECK_STATUS(rig.connection().open_chunk(chunk, chunk_bytes), Status::ok);
+  rig.kmt().fail_at(MockKmt::Call::escape, 1u, MockKmt::invalid_parameter);
+  CHECK(rig.connection().close_chunk(chunk) != Status::ok);
+  CHECK(!chunk.constructed());
+  CHECK_EQ(rig.kmt().calls(MockKmt::Call::destroy_allocation), 1u);
+  CHECK(!rig.lock().held()); }
