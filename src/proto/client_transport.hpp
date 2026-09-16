@@ -45,10 +45,14 @@ public:
      * overflowed, which faults the context rather than sending a short frame. */
     [[nodiscard]] virtual TransportResult send_async(uint32_t command_id, WireWriter &writer) = 0;
     /* Publish and wait. `reply` is pointed at the answer on ok, and is valid
-     * only until the next call on this transport. failed for an overflow, a
-     * faulted context, or an answer too large for the slot. */
+     * only until end_call. failed for an overflow, a faulted context, or an
+     * answer too large for the slot. */
     [[nodiscard]] virtual TransportResult send_sync(uint32_t command_id, WireWriter &writer,
                                                     WireReader &reply) = 0;
+    /* The synchronous call's reply has been decoded, whatever send_sync
+     * answered; called once after each send_sync (SyncCallScope). A transport
+     * shared between threads holds it for the caller until here. */
+    virtual void end_call() = 0;
     /* Where a reply decodes. On the guest it refuses every allocation: a
      * decoded reply fills the application's own structures, and anything a
      * decode would allocate is scratch that dies with the call. */

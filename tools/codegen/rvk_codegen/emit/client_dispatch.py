@@ -212,7 +212,9 @@ def _emit_body(reg: Registry, cmd: Command) -> list[str]:  # noqa: PLR0915
         return lines
 
     # send_sync points `r` at the answer in the reply slot on ok; it is valid
-    # only until the next call on this transport.
+    # until the call ends. The scope ends it on every return path below, so a
+    # transport shared between threads holds the slot through the decode.
+    lines.append("const ::av::SyncCallScope rvk_call{t};")
     lines.append("::av::WireReader r{nullptr, 0u};")
     lines.append(
         f"if (t.send_sync(::av::vkproto::kCmd_{cmd.name}, payload, r) "
@@ -354,6 +356,7 @@ def emit(reg: Registry, out_dir: Path) -> None:
         "",
         '#include "vk_dispatch_client.h"',
         "",
+        '#include "proto/sync_call_scope.hpp"',
         '#include "proto/wire/wire_writer.hpp"',
         '#include "vk_protocol_ids.h"',
         '#include "vk_serialize.h"',

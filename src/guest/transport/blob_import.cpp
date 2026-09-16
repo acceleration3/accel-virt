@@ -4,6 +4,7 @@
 #include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/blob_import_request.hpp"
 #include "proto/submission/command_header.hpp"
+#include "proto/sync_call_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
@@ -18,7 +19,8 @@ Status BlobImport::import(uint32_t resource_id, uint64_t offset, uint64_t size, 
     static_cast<void>(BlobImportRequest(resource_id, offset, size, memory_type).encode(body, sizeof body));
     WireWriter request = transport_.request_writer();
     request.write(body, sizeof body);
-    WireReader answer(nullptr, 0u);
+    const SyncCallScope call(transport_);
+    WireReader          answer(nullptr, 0u);
     if (transport_.send_sync(CommandHeader::import_blob_id, request, answer) != TransportResult::ok)
         return Status::invalid_state;
     return judge(answer);
@@ -46,7 +48,8 @@ Status BlobImport::release()
     WireWriter request = transport_.request_writer();
     request.write_u64(memory_);
     memory_ = 0u;
-    WireReader answer(nullptr, 0u);
+    const SyncCallScope call(transport_);
+    WireReader          answer(nullptr, 0u);
     if (transport_.send_sync(CommandHeader::release_blob_id, request, answer) != TransportResult::ok)
         return Status::invalid_state;
     return answer.remaining() == 0u ? Status::ok : Status::malformed;

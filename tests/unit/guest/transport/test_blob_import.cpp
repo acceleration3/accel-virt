@@ -78,6 +78,7 @@ TEST(blob_import, import_sends_the_contracts_request_and_holds_the_hosts_memory)
   CHECK(import.invariants_hold());
   CHECK_EQ(import.memory(), device_memory);
   CHECK_EQ(import.host_status(), 0u);
+  CHECK_EQ(transport.end_calls(), 1u);
   CHECK_EQ(transport.last_command(), CommandHeader::import_blob_id);
   CHECK_EQ(transport.last_length(), BlobImportRequest::encoded_size);
   const std::uint8_t *const request = transport.last_payload();
@@ -94,6 +95,7 @@ TEST(blob_import, import_sends_the_contracts_request_and_holds_the_hosts_memory)
   CHECK_STATUS(import.release(), Status::ok);
   CHECK(import.invariants_hold());
   CHECK_EQ(transport.last_command(), CommandHeader::release_blob_id);
+  CHECK_EQ(transport.end_calls(), 2u);
   CHECK_EQ(transport.last_length(), 8u);
   CHECK_EQ(u64_at(transport.last_payload(), 0u), device_memory);
   CHECK_EQ(import.memory(), 0u);

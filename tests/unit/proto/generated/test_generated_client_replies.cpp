@@ -344,6 +344,7 @@ public:
           return TransportResult::failed;
       reply = WireReader(reply_, answer.offset());
       return TransportResult::ok; }
+    void                 end_call() override {}
     WireArena           &decode_arena() override { return guest_arena_; }
     av::ClientBlobArena &blobs() override { return blobs_; }
 

@@ -55,6 +55,8 @@ public:
     TransportResult  send_async(uint32_t command_id, WireWriter &writer) override;
     /* Always failed: a recorded command is not answered. */
     TransportResult  send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply) override;
+    /* Nothing to end: no call is ever answered. */
+    void             end_call() override;
     WireArena       &decode_arena() override;
     ClientBlobArena &blobs() override;
 

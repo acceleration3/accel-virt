@@ -3,6 +3,7 @@
 
 #include "cl_dispatch_client.h"
 
+#include "proto/sync_call_scope.hpp"
 #include "proto/wire/wire_arena.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -15,6 +16,7 @@ cl_int rvk_clGetPlatformIDs(::av::ClientTransport& t, cl_uint num_entries, uint6
     b.write_varint(static_cast<uint64_t>(num_entries));
     b.write_pod<uint8_t>(platforms != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(num_platforms != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetPlatformIDs, b, r) !=
         ::av::TransportResult::ok) {
@@ -48,6 +50,7 @@ cl_int rvk_clGetPlatformInfo(::av::ClientTransport& t, uint64_t platform, cl_pla
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetPlatformInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -81,6 +84,7 @@ cl_int rvk_clGetDeviceIDs(::av::ClientTransport& t, uint64_t platform, cl_device
     b.write_varint(static_cast<uint64_t>(num_entries));
     b.write_pod<uint8_t>(devices != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(num_devices != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetDeviceIDs, b, r) !=
         ::av::TransportResult::ok) {
@@ -114,6 +118,7 @@ cl_int rvk_clGetDeviceInfo(::av::ClientTransport& t, uint64_t device, cl_device_
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetDeviceInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -160,6 +165,7 @@ uint64_t rvk_clCreateContext(::av::ClientTransport& t, const uint64_t* propertie
         }
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateContext, b, r) !=
         ::av::TransportResult::ok) {
@@ -189,6 +195,7 @@ uint64_t rvk_clCreateContextFromType(::av::ClientTransport& t, const uint64_t* p
     }
     b.write_varint(static_cast<uint64_t>(device_type));
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateContextFromType, b, r) !=
         ::av::TransportResult::ok) {
@@ -217,6 +224,7 @@ cl_int rvk_clRetainContext(::av::ClientTransport& t, uint64_t context) {
 cl_int rvk_clReleaseContext(::av::ClientTransport& t, uint64_t context) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clReleaseContext, b, r) !=
         ::av::TransportResult::ok) {
@@ -237,6 +245,7 @@ cl_int rvk_clGetContextInfo(::av::ClientTransport& t, uint64_t context, cl_conte
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetContextInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -269,6 +278,7 @@ uint64_t rvk_clCreateCommandQueue(::av::ClientTransport& t, uint64_t context, ui
     b.write_pod<uint64_t>(device);
     b.write_varint(static_cast<uint64_t>(properties));
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateCommandQueue, b, r) !=
         ::av::TransportResult::ok) {
@@ -299,6 +309,7 @@ uint64_t rvk_clCreateCommandQueueWithProperties(::av::ClientTransport& t, uint64
         }
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateCommandQueueWithProperties, b, r) !=
         ::av::TransportResult::ok) {
@@ -327,6 +338,7 @@ cl_int rvk_clRetainCommandQueue(::av::ClientTransport& t, uint64_t command_queue
 cl_int rvk_clReleaseCommandQueue(::av::ClientTransport& t, uint64_t command_queue) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clReleaseCommandQueue, b, r) !=
         ::av::TransportResult::ok) {
@@ -347,6 +359,7 @@ cl_int rvk_clGetCommandQueueInfo(::av::ClientTransport& t, uint64_t command_queu
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetCommandQueueInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -376,6 +389,7 @@ cl_int rvk_clGetCommandQueueInfo(::av::ClientTransport& t, uint64_t command_queu
 cl_int rvk_clFlush(::av::ClientTransport& t, uint64_t command_queue) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clFlush, b, r) !=
         ::av::TransportResult::ok) {
@@ -392,6 +406,7 @@ cl_int rvk_clFlush(::av::ClientTransport& t, uint64_t command_queue) {
 cl_int rvk_clFinish(::av::ClientTransport& t, uint64_t command_queue) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clFinish, b, r) !=
         ::av::TransportResult::ok) {
@@ -416,6 +431,7 @@ uint64_t rvk_clCreateBuffer(::av::ClientTransport& t, uint64_t context, cl_mem_f
         b.write(host_ptr, static_cast<size_t>(size));
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateBuffer, b, r) !=
         ::av::TransportResult::ok) {
@@ -440,6 +456,7 @@ uint64_t rvk_clCreateSubBuffer(::av::ClientTransport& t, uint64_t buffer, cl_mem
     b.write_pod<uint8_t>(buffer_create_info != nullptr ? 1 : 0);
     if (buffer_create_info != nullptr) b.write(buffer_create_info, sizeof(*buffer_create_info));
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateSubBuffer, b, r) !=
         ::av::TransportResult::ok) {
@@ -470,6 +487,7 @@ uint64_t rvk_clCreateImage(::av::ClientTransport& t, uint64_t context, cl_mem_fl
         b.write(host_ptr, static_cast<size_t>(host_ptr_bytes));
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateImage, b, r) !=
         ::av::TransportResult::ok) {
@@ -498,6 +516,7 @@ cl_int rvk_clRetainMemObject(::av::ClientTransport& t, uint64_t memobj) {
 cl_int rvk_clReleaseMemObject(::av::ClientTransport& t, uint64_t memobj) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(memobj);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clReleaseMemObject, b, r) !=
         ::av::TransportResult::ok) {
@@ -518,6 +537,7 @@ cl_int rvk_clGetMemObjectInfo(::av::ClientTransport& t, uint64_t memobj, cl_mem_
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetMemObjectInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -551,6 +571,7 @@ cl_int rvk_clGetImageInfo(::av::ClientTransport& t, uint64_t image, cl_image_inf
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetImageInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -586,6 +607,7 @@ cl_int rvk_clGetSupportedImageFormats(::av::ClientTransport& t, uint64_t context
     b.write_pod<uint8_t>(image_formats != nullptr ? 1 : 0);
     if (image_formats != nullptr) b.write_varint(static_cast<uint64_t>(image_formats_bytes));
     b.write_pod<uint8_t>(num_image_formats != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetSupportedImageFormats, b, r) !=
         ::av::TransportResult::ok) {
@@ -628,6 +650,7 @@ cl_int rvk_clEnqueueReadBuffer(::av::ClientTransport& t, uint64_t command_queue,
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueReadBuffer, b, r) !=
         ::av::TransportResult::ok) {
@@ -671,6 +694,7 @@ cl_int rvk_clEnqueueWriteBuffer(::av::ClientTransport& t, uint64_t command_queue
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueWriteBuffer, b, r) !=
         ::av::TransportResult::ok) {
@@ -704,6 +728,7 @@ cl_int rvk_clEnqueueCopyBuffer(::av::ClientTransport& t, uint64_t command_queue,
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueCopyBuffer, b, r) !=
         ::av::TransportResult::ok) {
@@ -741,6 +766,7 @@ cl_int rvk_clEnqueueFillBuffer(::av::ClientTransport& t, uint64_t command_queue,
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueFillBuffer, b, r) !=
         ::av::TransportResult::ok) {
@@ -789,6 +815,7 @@ cl_int rvk_clEnqueueReadImage(::av::ClientTransport& t, uint64_t command_queue, 
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueReadImage, b, r) !=
         ::av::TransportResult::ok) {
@@ -846,6 +873,7 @@ cl_int rvk_clEnqueueWriteImage(::av::ClientTransport& t, uint64_t command_queue,
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueWriteImage, b, r) !=
         ::av::TransportResult::ok) {
@@ -897,6 +925,7 @@ cl_int rvk_clEnqueueCopyImage(::av::ClientTransport& t, uint64_t command_queue, 
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueCopyImage, b, r) !=
         ::av::TransportResult::ok) {
@@ -942,6 +971,7 @@ cl_int rvk_clEnqueueCopyImageToBuffer(::av::ClientTransport& t, uint64_t command
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueCopyImageToBuffer, b, r) !=
         ::av::TransportResult::ok) {
@@ -987,6 +1017,7 @@ cl_int rvk_clEnqueueCopyBufferToImage(::av::ClientTransport& t, uint64_t command
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueCopyBufferToImage, b, r) !=
         ::av::TransportResult::ok) {
@@ -1019,6 +1050,7 @@ uint64_t rvk_clCreateProgramWithSource(::av::ClientTransport& t, uint64_t contex
         }
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateProgramWithSource, b, r) !=
         ::av::TransportResult::ok) {
@@ -1059,6 +1091,7 @@ uint64_t rvk_clCreateProgramWithBinary(::av::ClientTransport& t, uint64_t contex
     }
     b.write_pod<uint8_t>(binary_status != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateProgramWithBinary, b, r) !=
         ::av::TransportResult::ok) {
@@ -1092,6 +1125,7 @@ cl_int rvk_clRetainProgram(::av::ClientTransport& t, uint64_t program) {
 cl_int rvk_clReleaseProgram(::av::ClientTransport& t, uint64_t program) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(program);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clReleaseProgram, b, r) !=
         ::av::TransportResult::ok) {
@@ -1122,6 +1156,7 @@ cl_int rvk_clBuildProgram(::av::ClientTransport& t, uint64_t program, cl_uint nu
         b.write_varint(wire_len);
         b.write(options, wire_len);
     }
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clBuildProgram, b, r) !=
         ::av::TransportResult::ok) {
@@ -1142,6 +1177,7 @@ cl_int rvk_clGetProgramInfo(::av::ClientTransport& t, uint64_t program, cl_progr
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetProgramInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -1176,6 +1212,7 @@ cl_int rvk_clGetProgramBuildInfo(::av::ClientTransport& t, uint64_t program, uin
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetProgramBuildInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -1205,6 +1242,7 @@ cl_int rvk_clGetProgramBuildInfo(::av::ClientTransport& t, uint64_t program, uin
 cl_int rvk_clUnloadPlatformCompiler(::av::ClientTransport& t, uint64_t platform) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(platform);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clUnloadPlatformCompiler, b, r) !=
         ::av::TransportResult::ok) {
@@ -1228,6 +1266,7 @@ uint64_t rvk_clCreateKernel(::av::ClientTransport& t, uint64_t program, const ch
         b.write(kernel_name, wire_len);
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateKernel, b, r) !=
         ::av::TransportResult::ok) {
@@ -1250,6 +1289,7 @@ cl_int rvk_clCreateKernelsInProgram(::av::ClientTransport& t, uint64_t program, 
     b.write_varint(static_cast<uint64_t>(num_kernels));
     b.write_pod<uint8_t>(kernels != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(num_kernels_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateKernelsInProgram, b, r) !=
         ::av::TransportResult::ok) {
@@ -1288,6 +1328,7 @@ cl_int rvk_clRetainKernel(::av::ClientTransport& t, uint64_t kernel) {
 cl_int rvk_clReleaseKernel(::av::ClientTransport& t, uint64_t kernel) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(kernel);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clReleaseKernel, b, r) !=
         ::av::TransportResult::ok) {
@@ -1311,6 +1352,7 @@ cl_int rvk_clSetKernelArg(::av::ClientTransport& t, uint64_t kernel, cl_uint arg
         b.write_varint(static_cast<uint64_t>(arg_size));
         b.write(arg_value, static_cast<size_t>(arg_size));
     }
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clSetKernelArg, b, r) !=
         ::av::TransportResult::ok) {
@@ -1331,6 +1373,7 @@ cl_int rvk_clGetKernelInfo(::av::ClientTransport& t, uint64_t kernel, cl_kernel_
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetKernelInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -1365,6 +1408,7 @@ cl_int rvk_clGetKernelArgInfo(::av::ClientTransport& t, uint64_t kernel, cl_uint
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetKernelArgInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -1399,6 +1443,7 @@ cl_int rvk_clGetKernelWorkGroupInfo(::av::ClientTransport& t, uint64_t kernel, u
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetKernelWorkGroupInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -1460,6 +1505,7 @@ cl_int rvk_clEnqueueNDRangeKernel(::av::ClientTransport& t, uint64_t command_que
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueNDRangeKernel, b, r) !=
         ::av::TransportResult::ok) {
@@ -1488,6 +1534,7 @@ cl_int rvk_clEnqueueMarkerWithWaitList(::av::ClientTransport& t, uint64_t comman
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueMarkerWithWaitList, b, r) !=
         ::av::TransportResult::ok) {
@@ -1516,6 +1563,7 @@ cl_int rvk_clEnqueueBarrierWithWaitList(::av::ClientTransport& t, uint64_t comma
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueBarrierWithWaitList, b, r) !=
         ::av::TransportResult::ok) {
@@ -1542,6 +1590,7 @@ cl_int rvk_clWaitForEvents(::av::ClientTransport& t, cl_uint num_events, const u
             b.write_pod<uint64_t>(event_list[i]);
         }
     }
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clWaitForEvents, b, r) !=
         ::av::TransportResult::ok) {
@@ -1562,6 +1611,7 @@ cl_int rvk_clGetEventInfo(::av::ClientTransport& t, uint64_t event, cl_event_inf
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetEventInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -1592,6 +1642,7 @@ uint64_t rvk_clCreateUserEvent(::av::ClientTransport& t, uint64_t context, cl_in
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(context);
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateUserEvent, b, r) !=
         ::av::TransportResult::ok) {
@@ -1612,6 +1663,7 @@ cl_int rvk_clSetUserEventStatus(::av::ClientTransport& t, uint64_t event, cl_int
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(event);
     b.write_varint(static_cast<uint64_t>(execution_status));
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clSetUserEventStatus, b, r) !=
         ::av::TransportResult::ok) {
@@ -1637,6 +1689,7 @@ cl_int rvk_clRetainEvent(::av::ClientTransport& t, uint64_t event) {
 cl_int rvk_clReleaseEvent(::av::ClientTransport& t, uint64_t event) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(event);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clReleaseEvent, b, r) !=
         ::av::TransportResult::ok) {
@@ -1657,6 +1710,7 @@ cl_int rvk_clGetEventProfilingInfo(::av::ClientTransport& t, uint64_t event, cl_
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetEventProfilingInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -1689,6 +1743,7 @@ uint64_t rvk_clCreateFromGLBuffer(::av::ClientTransport& t, uint64_t context, cl
     b.write_varint(static_cast<uint64_t>(flags));
     b.write_varint(static_cast<uint64_t>(bufobj));
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateFromGLBuffer, b, r) !=
         ::av::TransportResult::ok) {
@@ -1713,6 +1768,7 @@ uint64_t rvk_clCreateFromGLTexture(::av::ClientTransport& t, uint64_t context, c
     b.write_varint(static_cast<uint64_t>(miplevel));
     b.write_varint(static_cast<uint64_t>(texture));
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateFromGLTexture, b, r) !=
         ::av::TransportResult::ok) {
@@ -1737,6 +1793,7 @@ uint64_t rvk_clCreateFromGLTexture2D(::av::ClientTransport& t, uint64_t context,
     b.write_varint(static_cast<uint64_t>(miplevel));
     b.write_varint(static_cast<uint64_t>(texture));
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateFromGLTexture2D, b, r) !=
         ::av::TransportResult::ok) {
@@ -1761,6 +1818,7 @@ uint64_t rvk_clCreateFromGLTexture3D(::av::ClientTransport& t, uint64_t context,
     b.write_varint(static_cast<uint64_t>(miplevel));
     b.write_varint(static_cast<uint64_t>(texture));
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateFromGLTexture3D, b, r) !=
         ::av::TransportResult::ok) {
@@ -1783,6 +1841,7 @@ uint64_t rvk_clCreateFromGLRenderbuffer(::av::ClientTransport& t, uint64_t conte
     b.write_varint(static_cast<uint64_t>(flags));
     b.write_varint(static_cast<uint64_t>(renderbuffer));
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateFromGLRenderbuffer, b, r) !=
         ::av::TransportResult::ok) {
@@ -1804,6 +1863,7 @@ cl_int rvk_clGetGLObjectInfo(::av::ClientTransport& t, uint64_t memobj, cl_gl_ob
     b.write_pod<uint64_t>(memobj);
     b.write_pod<uint8_t>(gl_object_type != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(gl_object_name != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetGLObjectInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -1834,6 +1894,7 @@ cl_int rvk_clGetGLTextureInfo(::av::ClientTransport& t, uint64_t memobj, cl_gl_t
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetGLTextureInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -1880,6 +1941,7 @@ cl_int rvk_clEnqueueAcquireGLObjects(::av::ClientTransport& t, uint64_t command_
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueAcquireGLObjects, b, r) !=
         ::av::TransportResult::ok) {
@@ -1916,6 +1978,7 @@ cl_int rvk_clEnqueueReleaseGLObjects(::av::ClientTransport& t, uint64_t command_
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueReleaseGLObjects, b, r) !=
         ::av::TransportResult::ok) {
@@ -1947,6 +2010,7 @@ cl_int rvk_clGetGLContextInfoKHR(::av::ClientTransport& t, const uint64_t* prope
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetGLContextInfoKHR, b, r) !=
         ::av::TransportResult::ok) {
@@ -1976,6 +2040,7 @@ cl_int rvk_clGetGLContextInfoKHR(::av::ClientTransport& t, const uint64_t* prope
 cl_int rvk_clRetainDevice(::av::ClientTransport& t, uint64_t device) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(device);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clRetainDevice, b, r) !=
         ::av::TransportResult::ok) {
@@ -1992,6 +2057,7 @@ cl_int rvk_clRetainDevice(::av::ClientTransport& t, uint64_t device) {
 cl_int rvk_clReleaseDevice(::av::ClientTransport& t, uint64_t device) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(device);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clReleaseDevice, b, r) !=
         ::av::TransportResult::ok) {
@@ -2020,6 +2086,7 @@ cl_int rvk_clCreateSubDevices(::av::ClientTransport& t, uint64_t in_device, cons
     b.write_varint(static_cast<uint64_t>(num_devices));
     b.write_pod<uint8_t>(out_devices != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(num_devices_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateSubDevices, b, r) !=
         ::av::TransportResult::ok) {
@@ -2059,6 +2126,7 @@ cl_int rvk_clEnqueueTask(::av::ClientTransport& t, uint64_t command_queue, uint6
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueTask, b, r) !=
         ::av::TransportResult::ok) {
@@ -2079,6 +2147,7 @@ cl_int rvk_clEnqueueMarker(::av::ClientTransport& t, uint64_t command_queue, uin
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueMarker, b, r) !=
         ::av::TransportResult::ok) {
@@ -2098,6 +2167,7 @@ cl_int rvk_clEnqueueMarker(::av::ClientTransport& t, uint64_t command_queue, uin
 cl_int rvk_clEnqueueBarrier(::av::ClientTransport& t, uint64_t command_queue) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(command_queue);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueBarrier, b, r) !=
         ::av::TransportResult::ok) {
@@ -2122,6 +2192,7 @@ cl_int rvk_clEnqueueWaitForEvents(::av::ClientTransport& t, uint64_t command_que
             b.write_pod<uint64_t>(event_list[i]);
         }
     }
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueWaitForEvents, b, r) !=
         ::av::TransportResult::ok) {
@@ -2156,6 +2227,7 @@ cl_int rvk_clEnqueueMigrateMemObjects(::av::ClientTransport& t, uint64_t command
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueMigrateMemObjects, b, r) !=
         ::av::TransportResult::ok) {
@@ -2213,6 +2285,7 @@ cl_int rvk_clEnqueueReadBufferRect(::av::ClientTransport& t, uint64_t command_qu
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueReadBufferRect, b, r) !=
         ::av::TransportResult::ok) {
@@ -2279,6 +2352,7 @@ cl_int rvk_clEnqueueWriteBufferRect(::av::ClientTransport& t, uint64_t command_q
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueWriteBufferRect, b, r) !=
         ::av::TransportResult::ok) {
@@ -2334,6 +2408,7 @@ cl_int rvk_clEnqueueCopyBufferRect(::av::ClientTransport& t, uint64_t command_qu
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueCopyBufferRect, b, r) !=
         ::av::TransportResult::ok) {
@@ -2382,6 +2457,7 @@ cl_int rvk_clEnqueueFillImage(::av::ClientTransport& t, uint64_t command_queue, 
         }
     }
     b.write_pod<uint8_t>(event != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clEnqueueFillImage, b, r) !=
         ::av::TransportResult::ok) {
@@ -2413,6 +2489,7 @@ uint64_t rvk_clCreateImage2D(::av::ClientTransport& t, uint64_t context, cl_mem_
         b.write(host_ptr, static_cast<size_t>(host_ptr_bytes));
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateImage2D, b, r) !=
         ::av::TransportResult::ok) {
@@ -2446,6 +2523,7 @@ uint64_t rvk_clCreateImage3D(::av::ClientTransport& t, uint64_t context, cl_mem_
         b.write(host_ptr, static_cast<size_t>(host_ptr_bytes));
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateImage3D, b, r) !=
         ::av::TransportResult::ok) {
@@ -2464,6 +2542,7 @@ uint64_t rvk_clCreateImage3D(::av::ClientTransport& t, uint64_t context, cl_mem_
 
 cl_int rvk_clUnloadCompiler(::av::ClientTransport& t) {
     ::av::WireWriter b = t.request_writer();
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clUnloadCompiler, b, r) !=
         ::av::TransportResult::ok) {
@@ -2483,6 +2562,7 @@ cl_int rvk_clSetCommandQueueProperty(::av::ClientTransport& t, uint64_t command_
     b.write_varint(static_cast<uint64_t>(properties));
     b.write_varint(static_cast<uint64_t>(enable));
     b.write_pod<uint8_t>(old_properties != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clSetCommandQueueProperty, b, r) !=
         ::av::TransportResult::ok) {
@@ -2511,6 +2591,7 @@ uint64_t rvk_clCreateProgramWithIL(::av::ClientTransport& t, uint64_t context, c
     }
     b.write_varint(static_cast<uint64_t>(length));
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateProgramWithIL, b, r) !=
         ::av::TransportResult::ok) {
@@ -2561,6 +2642,7 @@ cl_int rvk_clCompileProgram(::av::ClientTransport& t, uint64_t program, cl_uint 
             if (wire_len != 0) b.write(header_include_names[i], wire_len);
         }
     }
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCompileProgram, b, r) !=
         ::av::TransportResult::ok) {
@@ -2600,6 +2682,7 @@ uint64_t rvk_clLinkProgram(::av::ClientTransport& t, uint64_t context, cl_uint n
         }
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clLinkProgram, b, r) !=
         ::av::TransportResult::ok) {
@@ -2626,6 +2709,7 @@ cl_int rvk_clSetProgramSpecializationConstant(::av::ClientTransport& t, uint64_t
         b.write_varint(static_cast<uint64_t>(spec_size));
         b.write(spec_value, static_cast<size_t>(spec_size));
     }
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clSetProgramSpecializationConstant, b, r) !=
         ::av::TransportResult::ok) {
@@ -2643,6 +2727,7 @@ uint64_t rvk_clCloneKernel(::av::ClientTransport& t, uint64_t source_kernel, cl_
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(source_kernel);
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCloneKernel, b, r) !=
         ::av::TransportResult::ok) {
@@ -2669,6 +2754,7 @@ cl_int rvk_clSetKernelExecInfo(::av::ClientTransport& t, uint64_t kernel, cl_ker
         b.write_varint(static_cast<uint64_t>(param_value_size));
         b.write(param_value, static_cast<size_t>(param_value_size));
     }
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clSetKernelExecInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -2696,6 +2782,7 @@ cl_int rvk_clGetKernelSubGroupInfo(::av::ClientTransport& t, uint64_t kernel, ui
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetKernelSubGroupInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -2726,6 +2813,7 @@ cl_int rvk_clGetHostTimer(::av::ClientTransport& t, uint64_t device, cl_ulong* h
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(device);
     b.write_pod<uint8_t>(host_timestamp != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetHostTimer, b, r) !=
         ::av::TransportResult::ok) {
@@ -2749,6 +2837,7 @@ cl_int rvk_clGetDeviceAndHostTimer(::av::ClientTransport& t, uint64_t device, cl
     b.write_pod<uint64_t>(device);
     b.write_pod<uint8_t>(device_timestamp != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(host_timestamp != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetDeviceAndHostTimer, b, r) !=
         ::av::TransportResult::ok) {
@@ -2792,6 +2881,7 @@ uint64_t rvk_clCreateBufferWithProperties(::av::ClientTransport& t, uint64_t con
         b.write(host_ptr, static_cast<size_t>(size));
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateBufferWithProperties, b, r) !=
         ::av::TransportResult::ok) {
@@ -2831,6 +2921,7 @@ uint64_t rvk_clCreateImageWithProperties(::av::ClientTransport& t, uint64_t cont
         b.write(host_ptr, static_cast<size_t>(host_ptr_bytes));
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateImageWithProperties, b, r) !=
         ::av::TransportResult::ok) {
@@ -2860,6 +2951,7 @@ uint64_t rvk_clCreateSamplerWithProperties(::av::ClientTransport& t, uint64_t co
         }
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateSamplerWithProperties, b, r) !=
         ::av::TransportResult::ok) {
@@ -2881,6 +2973,7 @@ cl_int rvk_clSetDefaultDeviceCommandQueue(::av::ClientTransport& t, uint64_t con
     b.write_pod<uint64_t>(context);
     b.write_pod<uint64_t>(device);
     b.write_pod<uint64_t>(command_queue);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clSetDefaultDeviceCommandQueue, b, r) !=
         ::av::TransportResult::ok) {
@@ -2901,6 +2994,7 @@ uint64_t rvk_clCreateSampler(::av::ClientTransport& t, uint64_t context, cl_bool
     b.write_varint(static_cast<uint64_t>(addressing_mode));
     b.write_varint(static_cast<uint64_t>(filter_mode));
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateSampler, b, r) !=
         ::av::TransportResult::ok) {
@@ -2929,6 +3023,7 @@ cl_int rvk_clRetainSampler(::av::ClientTransport& t, uint64_t sampler) {
 cl_int rvk_clReleaseSampler(::av::ClientTransport& t, uint64_t sampler) {
     ::av::WireWriter b = t.request_writer();
     b.write_pod<uint64_t>(sampler);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clReleaseSampler, b, r) !=
         ::av::TransportResult::ok) {
@@ -2949,6 +3044,7 @@ cl_int rvk_clGetSamplerInfo(::av::ClientTransport& t, uint64_t sampler, cl_sampl
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetSamplerInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -2991,6 +3087,7 @@ uint64_t rvk_clCreatePipe(::av::ClientTransport& t, uint64_t context, cl_mem_fla
         }
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreatePipe, b, r) !=
         ::av::TransportResult::ok) {
@@ -3014,6 +3111,7 @@ cl_int rvk_clGetPipeInfo(::av::ClientTransport& t, uint64_t pipe, cl_pipe_info p
     b.write_varint(static_cast<uint64_t>(param_value_size));
     b.write_pod<uint8_t>(param_value != nullptr ? 1 : 0);
     b.write_pod<uint8_t>(param_value_size_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clGetPipeInfo, b, r) !=
         ::av::TransportResult::ok) {
@@ -3058,6 +3156,7 @@ uint64_t rvk_clCreateProgramWithBuiltInKernels(::av::ClientTransport& t, uint64_
         b.write(kernel_names, wire_len);
     }
     b.write_pod<uint8_t>(errcode_ret != nullptr ? 1 : 0);
+    const ::av::SyncCallScope rvk_call{t};
     ::av::WireReader r{nullptr, 0u};
     if (t.send_sync(kCmd_clCreateProgramWithBuiltInKernels, b, r) !=
         ::av::TransportResult::ok) {

@@ -5,7 +5,7 @@
 namespace av {
 
 MockTransport::MockTransport()
-    : request_{}, sent_{}, reply_{}, reply_length_(0u), sends_(0u), last_command_(0u),
+    : request_{}, sent_{}, reply_{}, reply_length_(0u), sends_(0u), end_calls_(0u), last_command_(0u),
       last_length_(0u), fail_next_(false), arena_(nullptr, 0u), blobs_() {}
 
 void MockTransport::set_reply(const std::uint8_t *reply, std::size_t length)
@@ -16,6 +16,8 @@ void MockTransport::set_reply(const std::uint8_t *reply, std::size_t length)
 
 void          MockTransport::fail_next() { fail_next_ = true; }
 std::uint32_t MockTransport::sends() const { return sends_; }
+std::uint32_t MockTransport::end_calls() const { return end_calls_; }
+void          MockTransport::end_call() { end_calls_++; }
 std::uint32_t MockTransport::last_command() const { return last_command_; }
 std::size_t   MockTransport::last_length() const { return last_length_; }
 const std::uint8_t *MockTransport::last_payload() const { return sent_; }

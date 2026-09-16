@@ -191,6 +191,7 @@ public:
       const av::TransportResult delivered = deliver(command, writer, answered);
       reply = WireReader(reply_, answered);
       return delivered; }
+    void                 end_call() override {}
     WireArena           &decode_arena() override { return arena_; }
     av::ClientBlobArena &blobs() override { return blobs_; }
 

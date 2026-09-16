@@ -205,7 +205,11 @@ TEST(kmt_transport, a_sync_command_reads_the_reply_the_device_wrote)
   WireReader got(nullptr, 0u);
   CHECK(transport.send_sync(0x10002u, writer, got) == TransportResult::ok);
   CHECK_EQ(got.read_u32(), 1u);
-  CHECK_EQ(got.read_u32(), 2u); }
+  /* Ending the call releases nothing: one thread owns this transport, and the
+   * reply stays where it was until the next call. */
+  transport.end_call();
+  CHECK_EQ(got.read_u32(), 2u);
+  CHECK_EQ(fixture.kmt().commands(), 1u); }
 
 /* Sending before setup is refused; the decode arena and blob arena refuse. */
 TEST(kmt_transport, before_setup_and_the_refusing_arenas)

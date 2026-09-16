@@ -169,6 +169,8 @@ TEST(command_batch, a_command_that_asks_for_an_answer_is_refused_and_not_recorde
   CHECK(rig.batch().invariants_hold());
   /* Through the generated client: the call fails as a lost device would. */
   CHECK_EQ(rvk_vkGetFenceStatus(rig.batch(), VK_NULL_HANDLE, VK_NULL_HANDLE), VK_ERROR_DEVICE_LOST);
+  rig.batch().end_call();
+  CHECK(rig.batch().invariants_hold());
   rig.draw(2u);
   CHECK_STATUS(rig.batch().end(), Status::ok);
   ShippedBatch shipped(rig.kmt(), rig.ring());

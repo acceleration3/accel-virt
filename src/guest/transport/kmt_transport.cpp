@@ -184,6 +184,8 @@ TransportResult KmtTransport::send_async(uint32_t command_id, WireWriter &writer
     return publish(command_id, writer, 0u, fence);
 }
 
+void KmtTransport::end_call() {}
+
 TransportResult KmtTransport::send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply)
 {
     if (faulted_) return TransportResult::failed;

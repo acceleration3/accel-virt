@@ -31,7 +31,8 @@ TEST(generated_clients, the_vulkan_client_creates_an_instance_and_reads_it_back)
   CHECK(result == VK_SUCCESS);
   CHECK_EQ(instance, 0xABCDEFull);
   CHECK_EQ(transport.sends(), 1u);
-  CHECK_EQ(transport.last_command(), av::vkproto::kCmd_vkCreateInstance); }
+  CHECK_EQ(transport.last_command(), av::vkproto::kCmd_vkCreateInstance);
+  CHECK_EQ(transport.end_calls(), 1u); }
 
 TEST(generated_clients, the_opencl_client_enumerates_platforms)
 { MockTransport transport;
@@ -49,7 +50,8 @@ TEST(generated_clients, the_opencl_client_enumerates_platforms)
   CHECK(result == CL_SUCCESS);
   CHECK_EQ(platforms[0], 0x1111ull);
   CHECK_EQ(count, 2u);
-  CHECK_EQ(transport.last_command(), av::clproto::kCmd_clGetPlatformIDs); }
+  CHECK_EQ(transport.last_command(), av::clproto::kCmd_clGetPlatformIDs);
+  CHECK_EQ(transport.end_calls(), 1u); }
 
 /* A transport that fails the send gives the client the API's own error. */
 TEST(generated_clients, a_failed_send_returns_the_apis_error)
@@ -58,4 +60,28 @@ TEST(generated_clients, a_failed_send_returns_the_apis_error)
   VkInstanceCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   std::uint64_t instance = 0u;
-  CHECK(av::vkproto::rvk_vkCreateInstance(transport, &info, nullptr, &instance) == VK_ERROR_DEVICE_LOST); }
+  CHECK(av::vkproto::rvk_vkCreateInstance(transport, &info, nullptr, &instance) == VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(transport.end_calls(), 1u); }
+
+/* A reply cut short is a failed call, and the call still ends once: the
+ * transport learns the decode is over on every return path. */
+TEST(generated_clients, a_short_reply_ends_the_call_once)
+{ MockTransport transport;
+  const std::uint8_t reply[2] = {};
+  transport.set_reply(reply, sizeof reply);
+  VkInstanceCreateInfo info = {};
+  info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  std::uint64_t instance = 0u;
+  CHECK(av::vkproto::rvk_vkCreateInstance(transport, &info, nullptr, &instance) == VK_ERROR_DEVICE_LOST);
+  CHECK_EQ(transport.end_calls(), 1u);
+  transport.set_reply(reply, 0u);
+  cl_uint count = 0u;
+  CHECK(av::clproto::rvk_clGetPlatformIDs(transport, 0u, nullptr, &count) != CL_SUCCESS);
+  CHECK_EQ(transport.end_calls(), 2u); }
+
+/* A recorded command answers nothing, so it opens no call to end. */
+TEST(generated_clients, an_async_command_ends_no_call)
+{ MockTransport transport;
+  av::vkproto::rvk_vkCmdDraw(transport, nullptr, 3u, 1u, 0u, 0u);
+  CHECK_EQ(transport.sends(), 1u);
+  CHECK_EQ(transport.end_calls(), 0u); }

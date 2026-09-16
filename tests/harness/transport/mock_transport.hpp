@@ -26,6 +26,8 @@ public:
     /* The next send fails rather than delivering. */
     void          fail_next();
     std::uint32_t sends() const;
+    /* How many times a call was ended. */
+    std::uint32_t end_calls() const;
     std::uint32_t last_command() const;
     std::size_t   last_length() const;
     const std::uint8_t *last_payload() const;
@@ -34,6 +36,7 @@ public:
     [[nodiscard]] TransportResult send_async(std::uint32_t command_id, WireWriter &writer) override;
     [[nodiscard]] TransportResult send_sync(std::uint32_t command_id, WireWriter &writer,
                                             WireReader &reply) override;
+    void             end_call() override;
     WireArena       &decode_arena() override;
     ClientBlobArena &blobs() override;
 
@@ -45,6 +48,7 @@ private:
     std::uint8_t    reply_[slot_bytes];
     std::size_t     reply_length_;
     std::uint32_t   sends_;
+    std::uint32_t   end_calls_;
     std::uint32_t   last_command_;
     std::size_t     last_length_;
     bool            fail_next_;

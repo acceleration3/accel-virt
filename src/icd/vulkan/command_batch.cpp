@@ -95,6 +95,8 @@ TransportResult CommandBatch::send_async(uint32_t command_id, WireWriter &writer
 
 TransportResult CommandBatch::send_sync(uint32_t, WireWriter &, WireReader &) { return TransportResult::failed; }
 
+void CommandBatch::end_call() {}
+
 WireArena       &CommandBatch::decode_arena() { return decode_arena_; }
 ClientBlobArena &CommandBatch::blobs() { return blobs_; }
 

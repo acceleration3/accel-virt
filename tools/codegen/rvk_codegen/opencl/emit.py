@@ -741,6 +741,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
          '#include "proto/client_transport.hpp"', "",
          "namespace av::clproto {", ""]
     c = [HEADER, '#include "cl_dispatch_client.h"', "",
+         '#include "proto/sync_call_scope.hpp"',
          '#include "proto/wire/wire_arena.hpp"',
          '#include "proto/wire/wire_reader.hpp"',
          '#include "proto/wire/wire_writer.hpp"',
@@ -766,7 +767,9 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
             elif not cmd.returns_void:
                 c.append("    return CL_SUCCESS;")
         else:
-            # send_sync points r at the answer, valid only until the next call.
+            # send_sync points r at the answer, valid until the call ends,
+            # which the scope does on every return path below.
+            c.append("    const ::av::SyncCallScope rvk_call{t};")
             c.append("    ::av::WireReader r{nullptr, 0u};")
             c.append(f"    if (t.send_sync(kCmd_{cmd.name}, b, r) !=")
             c.append("        ::av::TransportResult::ok) {")

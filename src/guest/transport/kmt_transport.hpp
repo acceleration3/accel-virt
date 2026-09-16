@@ -66,6 +66,8 @@ public:
     WireWriter      request_writer() override;
     TransportResult send_async(uint32_t command_id, WireWriter &writer) override;
     TransportResult send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply) override;
+    /* Nothing is held for a caller: one thread owns this transport. */
+    void            end_call() override;
     /* `length` bytes of CommandHeader-framed commands, published as one batch:
      * the whole batch is judged before anything is written, and one that does
      * not frame exactly is refused without faulting the context. When any
