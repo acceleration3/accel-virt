@@ -23,6 +23,17 @@ The script is JSON at $FAKE_GUEST_SCRIPT:
              capset without the host-visible bit does
   hostmem_written {"offset": n, "bytes": n}: the guest's pattern, as pmemsave
              finds it in the hostmem BAR; absent leaves the region all zeros
+  inspect    {"list": text, "trace": base64, "state": text, "kernel-trace":
+             base64, "kernel-state": text}: what rvkinspect.exe writes at its
+             --out path; trace answers are whole snapshot files, state answers
+             are wrapped as snapshot kind 2 (docs/trace.md); a command not
+             scripted exits 1 and writes nothing
+  powershell {"substring": "output"}: `powershell -File F` prints the output of
+             the first key found in the script pushed to F
+  trace_memory {"address": n, "b64": ...}: what pmemsave reads from guest
+             physical memory at that address
+  answer_delay seconds the agent takes over every answer, so two clients of
+             one connection are waiting at once
   exit_at_boot, agent_silent, garbage, no_reset, hang, pmemsave_nothing:
              misbehaviours
 Everything the guest was asked is appended to $FAKE_GUEST_JOURNAL.
@@ -32,6 +43,7 @@ import json
 import os
 import signal
 import socket
+import struct
 import sys
 import threading
 import time
@@ -41,6 +53,8 @@ ASSERTION = "qemu-system-x86_64: ../source/hw/pci/msix.c:122: msix_fire_vector_n
 LOOP_PERIOD = 0.5
 HOSTMEM_BAR = 4
 """The BAR virtio-gpu-pci registers the host-visible region in."""
+INSPECTOR = "rvkinspect"
+SNAPSHOT_STATE = 2
 HOSTMEM_BASE = 0xC0000000
 """Where this fake's guest programmed that BAR."""
 MODERN_BAR_BASE = 0xB0000000
@@ -82,6 +96,7 @@ class Guest:
         self.send_lock = threading.Lock()
         self.calls = {}
         self.files = {}
+        self.written = {}
         self.processes = {}
         self.qmp = None
         self.up = True
@@ -152,11 +167,44 @@ class Guest:
             self.script.setdefault("files", {})[target] = base64.b64decode(ran["out-data"]).decode("latin-1")
         return dict(ran, **{"out-data": ""})
 
+    def inspect(self, arguments):
+        """rvkinspect.exe COMMAND ... --out F: the scripted answer lands in F."""
+        answers = self.script.get("inspect", {})
+        command = arguments[0] if arguments else ""
+        target = arguments[arguments.index("--out") + 1] if "--out" in arguments[:-1] else None
+        if target is None or command not in answers:
+            return {"exited": True, "exitcode": 1, "out-data": "", "err-data": ""}
+        answer = answers[command]
+        if command in ("trace", "kernel-trace"):
+            content = base64.b64decode(answer)
+        elif command in ("state", "kernel-state"):
+            text = answer.encode()
+            content = b"RVKSNAP1" + struct.pack("<QII", 0, SNAPSHOT_STATE, len(text)) + text
+        else:
+            content = answer.encode()
+        self.script.setdefault("files", {})[target] = content.decode("latin-1")
+        return {"exited": True, "exitcode": 0, "out-data": "", "err-data": ""}
+
+    def powershell_script(self, arguments):
+        """powershell -File F, F pushed by the caller: the scripted output for it."""
+        pushed = self.written.get(arguments[arguments.index("-File") + 1], b"").decode("latin-1")
+        for needle, output in self.script.get("powershell", {}).items():
+            if needle in pushed:
+                return {"exited": True, "exitcode": 0,
+                        "out-data": base64.b64encode(output.encode()).decode(), "err-data": ""}
+        return {"exited": True, "exitcode": 0, "out-data": "", "err-data": ""}
+
     def process(self, path, arguments):
         program = path.rsplit("\\", 1)[-1].lower().removesuffix(".exe")
         if program == "cmd":
             self.note(f"exec {path} {' '.join(arguments)}")
             return self.shell(arguments)
+        if program == INSPECTOR:
+            self.note(f"exec {path} {' '.join(arguments)}")
+            return self.inspect(arguments)
+        if program == "powershell" and "-File" in arguments[:-1] and "-Stage" not in arguments:
+            self.note(f"exec {path} {' '.join(arguments)}")
+            return self.powershell_script(arguments)
         name = program if program in PROGRAMS else None
         if "-Stage" in arguments:
             name = arguments[arguments.index("-Stage") + 1]
@@ -231,6 +279,8 @@ class Guest:
                                           "eof": not entry[2]}}).encode()
         if command == "guest-file-close":
             path, written, _ = self.files[arguments["handle"]]
+            if written:
+                self.written[path] = written
             self.note(f"file {path} {len(written)}" if written else f"pull {path}")
             return json.dumps({"return": {}}).encode()
         if command in ("guest-suspend-ram", "guest-suspend-disk"):
@@ -291,6 +341,7 @@ class Guest:
                     return
                 if self.script.get("garbage"):
                     reply = b"}{ not json\n[1,2]\n" + reply
+                time.sleep(self.script.get("answer_delay", 0))
                 try:
                     connection.sendall(reply + b"\n")
                 except OSError:
@@ -313,6 +364,10 @@ class Guest:
         at offset n of it is 1 + (n * 7) % 251, as the scenario in
         src/guest/suite/host_visible_scenario.hpp writes it."""
         image = bytearray(size)
+        traced = self.script.get("trace_memory")
+        if traced is not None and address == traced["address"]:
+            table = base64.b64decode(traced["b64"])[:size]
+            image[:len(table)] = table
         written = self.script.get("hostmem_written")
         if written is not None and address == HOSTMEM_BASE:
             offset = written.get("offset", 0)

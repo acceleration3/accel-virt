@@ -10,6 +10,7 @@ import json
 import os
 import random
 import socket
+import threading
 import time
 
 CHUNK = 48 * 1024
@@ -116,31 +117,42 @@ class GuestAgent:
     def __init__(self, path, timeout):
         self.channel = Channel(path, timeout)
         self.timeout = timeout
+        # One request and its answer at a time: the runner and the relay
+        # (AgentRelay) share this connection, and the agent answers in order.
+        self.lock = threading.RLock()
 
     def close(self):
-        self.channel.close()
+        with self.lock:
+            self.channel.close()
 
     def sync(self):
         """Resynchronizes the stream: whatever an earlier session left unread is dropped."""
         token = random.randrange(1, 2**31)
-        deadline = time.monotonic() + self.timeout
-        self.channel.send({"execute": "guest-sync-delimited", "arguments": {"id": token}}, prefix=DELIMITER)
-        while True:
-            self.channel.discard_through_delimiter(deadline)
-            message = self.channel.message(deadline)
-            if message.get("return") == token:
-                return
+        with self.lock:
+            deadline = time.monotonic() + self.timeout
+            self.channel.send({"execute": "guest-sync-delimited", "arguments": {"id": token}}, prefix=DELIMITER)
+            while True:
+                self.channel.discard_through_delimiter(deadline)
+                message = self.channel.message(deadline)
+                if message.get("return") == token:
+                    return
+
+    def exchange(self, request):
+        """One request and the agent's whole answer, an error object included."""
+        with self.lock:
+            self.channel.send(request)
+            return self.channel.message(time.monotonic() + self.timeout)
 
     def execute(self, command, arguments=None):
         request = {"execute": command}
         if arguments is not None:
             request["arguments"] = arguments
-        self.channel.send(request)
-        return answer_of(self.channel.message(time.monotonic() + self.timeout))
+        return answer_of(self.exchange(request))
 
     def notify(self, command, arguments):
         """A command the agent does not answer, such as a shutdown."""
-        self.channel.send({"execute": command, "arguments": arguments})
+        with self.lock:
+            self.channel.send({"execute": command, "arguments": arguments})
 
     def run(self, path, arguments, timeout, poll=0.25):
         """Runs a program in the guest: its exit code, standard output and error."""
@@ -189,6 +201,113 @@ class GuestAgent:
             self.execute("guest-file-close", {"handle": handle})
 
 
+# Commands the agent never answers, or answers outside the line protocol: a
+# relayed one would leave the shared connection waiting or out of step.
+UNRELAYED = ("guest-sync", "guest-sync-delimited", "guest-shutdown", "guest-suspend-disk", "guest-suspend-ram",
+             "guest-suspend-hybrid")
+
+
+class AgentRelay:
+    """Lets another program - tools/mcp/rvk_inspect.py - reach the guest while
+    a run holds the agent's only connection: a unix socket taking one JSON
+    request per line and answering each with one line, forwarded over whatever
+    connection the run holds now (it changes at every reboot)."""
+
+    def __init__(self, path, current):
+        self.path = str(path)
+        self.current = current
+        self.server = None
+        self.thread = None
+
+    def start(self):
+        try:
+            os.unlink(self.path)
+        except FileNotFoundError:
+            pass
+        self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.server.bind(self.path)
+        self.server.listen(4)
+        self.thread = threading.Thread(target=self.serve, args=(self.server,), daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        if self.server is None:
+            return
+        server, self.server = self.server, None
+        try:
+            server.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        server.close()
+        try:
+            os.unlink(self.path)
+        except FileNotFoundError:
+            pass
+
+    def serve(self, server):
+        while True:
+            try:
+                connection, _ = server.accept()
+            except OSError:
+                return
+            threading.Thread(target=self.client, args=(connection,), daemon=True).start()
+
+    def client(self, connection):
+        buffer = b""
+        with connection:
+            while True:
+                try:
+                    data = connection.recv(RECEIVE)
+                except OSError:
+                    return
+                if not data:
+                    return
+                buffer += data
+                while b"\n" in buffer:
+                    line, buffer = buffer.split(b"\n", 1)
+                    if not line.strip():
+                        continue
+                    try:
+                        connection.sendall(json.dumps(self.answer(line)).encode() + b"\n")
+                    except OSError:
+                        return
+
+    def answer(self, line):
+        try:
+            request = json.loads(line)
+        except ValueError:
+            return failure("JSONParsing", "not a JSON request")
+        if not isinstance(request, dict) or not isinstance(request.get("execute"), str):
+            return failure("InvalidParameter", "a request is an object naming a command in \"execute\"")
+        if request["execute"] in UNRELAYED:
+            return failure("Refused", f"{request['execute']} is not relayed: the run's connection would wait "
+                                      "for an answer that never comes")
+        forwarded = {"execute": request["execute"]}
+        if "arguments" in request:
+            forwarded["arguments"] = request["arguments"]
+        agent = self.current()
+        if agent is None:
+            return failure("Unavailable", "the run holds no agent connection now (booting or rebooting)")
+        try:
+            message = agent.exchange(forwarded)
+        except AgentTimeout:
+            # The late answer would be read as the next request's: drop it.
+            try:
+                agent.sync()
+            except AgentError:
+                pass
+            return failure("Timeout", "the guest agent did not answer in time")
+        except AgentError as error:
+            return failure("Unavailable", str(error))
+        if "error" in message or "return" in message:
+            return {key: message[key] for key in ("return", "error") if key in message}
+        return failure("Protocol", f"not an answer: {message}")
+
+
+def failure(kind, description):
+    return {"error": {"class": kind, "desc": description}}
+
+
 def decode(text):
     try:
         return base64.b64decode(text, validate=True)
@@ -203,11 +322,14 @@ class Qmp:
         self.channel = Channel(path, timeout)
         self.timeout = timeout
         self.pending = []
-        deadline = time.monotonic() + timeout
-        greeting = self.channel.message(deadline)
-        if "QMP" not in greeting:
-            raise AgentError(f"not a QMP greeting: {greeting}")
-        self.execute("qmp_capabilities")
+        try:
+            greeting = self.channel.message(time.monotonic() + timeout)
+            if "QMP" not in greeting:
+                raise AgentError(f"not a QMP greeting: {greeting}")
+            self.execute("qmp_capabilities")
+        except AgentError:
+            self.channel.close()
+            raise
 
     def close(self):
         self.channel.close()

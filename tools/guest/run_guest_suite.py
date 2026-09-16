@@ -39,7 +39,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fetch_vulkan_runtime import Refused, pins_from, problems_on_disk  # noqa: E402
-from guest_agent import AgentError, Qmp, wait_for_agent  # noqa: E402
+from guest_agent import AgentError, AgentRelay, Qmp, wait_for_agent  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 GUEST_DIRECTORY = "C:\\rvk"
@@ -437,6 +437,7 @@ class GuestRun:
         self.qmp = None
         self.qmp_lost = False
         self.agent = None
+        self.relay = AgentRelay(self.work / "agent-relay.sock", lambda: self.agent)
         self.log = []
         self.colours = 0
         self.heads = 0
@@ -1333,6 +1334,9 @@ class GuestRun:
             self.say(f"{failed.step} failed: {failed.reason}")
 
     def hold(self):
+        # The relay goes with the connection: a held guest's agent socket is free
+        # for tools/guest/guest_shell.py and tools/mcp/rvk_inspect.py directly.
+        self.relay.stop()
         for channel in (self.agent, self.qmp):
             if channel is not None:
                 channel.close()
@@ -1407,6 +1411,7 @@ class GuestRun:
             (self.work / socket_name).unlink(missing_ok=True)
 
     def finish(self):
+        self.relay.stop()
         self.stop_qemu()
         for leftover in ("overlay.qcow2", "vars.fd"):
             (self.work / leftover).unlink(missing_ok=True)
@@ -1417,6 +1422,7 @@ class GuestRun:
         before = fingerprint(self.args.image) if watched else None
         failure = None
         try:
+            self.relay.start()
             try:
                 self.prepare()
                 self.boot()

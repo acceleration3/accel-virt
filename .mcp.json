@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "rvk-inspect": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["tools/mcp/rvk_inspect.py"]
+    }
+  }
+}

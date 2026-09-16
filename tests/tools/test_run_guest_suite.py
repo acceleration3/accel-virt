@@ -8,16 +8,21 @@ import json
 import os
 import pathlib
 import shutil
+import socket
 import struct
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 from tool_run import ROOT
 
 sys.path.insert(0, str(ROOT / "tools" / "guest"))
 from run_guest_suite import Screendump, StepFailed, describe_panic, luid_low_part, vulkaninfo_devices  # noqa: E402
+
+sys.path.insert(0, str(ROOT / "tools" / "mcp"))
+import rvk_inspect  # noqa: E402
 
 RUNNER = ROOT / "tools" / "guest" / "run_guest_suite.py"
 FAKES = ROOT / "tests" / "tools" / "fake_guest"
@@ -795,6 +800,114 @@ class GuestSuiteRun(unittest.TestCase):
         result = self.run_suite("--boot-timeout", "2")
         self.assertEqual(result.returncode, 1)
         self.assertIn("guest: sign.reset failed: timed out waiting for an answer", result.stdout)
+        self.assert_clean()
+
+    def start_suite(self, *extra):
+        """run_suite's command, left running for a test to act on the guest meanwhile."""
+        arguments = ["--image", self.image, "--work", self.work, "--power-poll", "0.1",
+                     "--qemu", FAKES / "fake_qemu.py",
+                     "--qemu-img", FAKES / "fake_qemu_img.py", "--executor", "/nowhere/librvk_echo_executor.so",
+                     "--driver", self.scratch / "rvkgpu.sys", "--test", self.scratch / "rvktest.exe",
+                     "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
+                     "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
+                     "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
+        runner = subprocess.Popen([sys.executable, "-B", str(RUNNER), *map(str, arguments)], stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT, text=True, env=self.environment,
+                                  stdin=subprocess.DEVNULL)
+        self.addCleanup(lambda: runner.poll() is None and runner.kill())
+        return runner
+
+    def wait_for_stage(self, name, runner):
+        deadline = time.monotonic() + 30
+        while f"-Stage {name}" not in "\n".join(self.journal_lines()):
+            self.assertIsNone(runner.poll(), "the run ended before the stage")
+            self.assertLess(time.monotonic(), deadline, f"the run never reached {name}")
+            time.sleep(0.05)
+
+    def test_the_agent_relay_serves_the_guest_while_the_run_holds_its_agent(self):
+        """docs/trace.md: tools/mcp/rvk_inspect.py reaches a guest a run holds
+        through <work>/agent-relay.sock, one answer per request line, without
+        disturbing the run's own exchanges."""
+        self.script(hang="check", reg=7, answer_delay=0.02)
+        runner = self.start_suite("--step-timeout", "8")
+        self.wait_for_stage("check", runner)
+        relay = self.work / "agent-relay.sock"
+        self.assertTrue(relay.exists())
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client.settimeout(10)
+        client.connect(str(relay))
+        replies = client.makefile("rb")
+
+        def ask(request):
+            client.sendall((request if isinstance(request, bytes) else json.dumps(request).encode()) + b"\n")
+            return json.loads(replies.readline())
+
+        self.assertEqual(ask({"execute": "guest-ping"}), {"return": {}})
+        started = ask({"execute": "guest-exec", "arguments": {"path": "C:\\Windows\\System32\\reg.exe",
+                                                              "arg": ["query", "HKLM"], "capture-output": True}})
+        pid = started["return"]["pid"]
+        # The run polls its hung stage all along; every relayed answer is still this request's.
+        for _ in range(40):
+            status = ask({"execute": "guest-exec-status", "arguments": {"pid": pid}})
+            self.assertEqual((status["return"]["exited"], status["return"]["exitcode"]), (True, 7))
+        self.assertEqual(ask(b"{not json")["error"]["class"], "JSONParsing")
+        self.assertEqual(ask({"execute": 5})["error"]["class"], "InvalidParameter")
+        self.assertEqual(ask([1, 2])["error"]["class"], "InvalidParameter")
+        for refused in ("guest-shutdown", "guest-sync-delimited", "guest-suspend-disk"):
+            self.assertEqual(ask({"execute": refused, "arguments": {"mode": "powerdown"}})["error"]["class"],
+                             "Refused")
+        self.assertEqual(ask({"execute": "guest-no-such"})["error"]["class"], "CommandNotFound")
+        self.assertEqual(ask({"execute": "guest-ping"}), {"return": {}})
+        # A client gone mid-request leaves the relay serving the next one.
+        dropped = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        dropped.connect(str(relay))
+        dropped.sendall(json.dumps({"execute": "guest-ping"}).encode() + b"\n")
+        dropped.close()
+        guest = rvk_inspect.Guest(self.work)
+        self.assertEqual(guest.via, "relay")
+        self.assertEqual(guest.agent.execute("guest-ping"), {})
+        guest.close()
+        replies.close()
+        client.close()
+        output, _ = runner.communicate(timeout=120)
+        self.assertEqual(runner.returncode, 1, output)
+        self.assertIn("guest: check failed: ", output)
+        self.assertIn("still running after 8.0 s", output)
+        self.assertFalse(relay.exists())
+        self.assertEqual(self.stage_calls()[-1], "collect")
+        self.assert_clean()
+
+    def test_a_held_guest_gives_its_agent_socket_back_and_the_relay_goes(self):
+        self.script(rvktest=1, outputs={"rvktest": "FAIL x\nrvktest: 0 passed, 1 failed\n"})
+        runner = subprocess.Popen([sys.executable, "-B", str(RUNNER), "--image", str(self.image),
+                                   "--work", str(self.work), "--power-poll", "0.1",
+                                   "--qemu", str(FAKES / "fake_qemu.py"), "--qemu-img", str(FAKES / "fake_qemu_img.py"),
+                                   "--executor", "/nowhere/librvk_echo_executor.so",
+                                   "--driver", str(self.scratch / "rvkgpu.sys"),
+                                   "--test", str(self.scratch / "rvktest.exe"),
+                                   "--icd", str(self.scratch / "rvkvk.dll"),
+                                   "--icd-manifest", str(self.scratch / "rvkvk.json"),
+                                   "--firmware", str(self.scratch / "OVMF_CODE.fd"),
+                                   "--firmware-vars", str(self.scratch / "OVMF_VARS.fd"),
+                                   "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", "--hold"],
+                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                  env=self.environment)
+        self.addCleanup(lambda: runner.poll() is None and runner.kill())
+        held = []
+        while True:
+            line = runner.stdout.readline()
+            self.assertTrue(line, "the run ended without holding: " + "".join(held))
+            held.append(line)
+            if "press Enter" in line:
+                break
+        self.assertFalse((self.work / "agent-relay.sock").exists())
+        guest = rvk_inspect.Guest(self.work)
+        self.assertEqual(guest.via, "agent")
+        self.assertEqual(guest.agent.execute("guest-ping"), {})
+        guest.close()
+        output, _ = runner.communicate("\n", timeout=120)
+        self.assertEqual(runner.returncode, 1, output)
+        self.assertIn("guest: hold.agent ok", output)
         self.assert_clean()
 
     def test_an_overlay_qemu_img_refuses_or_a_missing_input_stops_before_qemu(self):
