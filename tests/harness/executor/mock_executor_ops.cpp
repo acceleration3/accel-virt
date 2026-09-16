@@ -24,7 +24,8 @@ private:
 MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
     : table_{}, sub_apis_(sub_apis), import_kinds_(0u), imported_(0u), released_blobs_(0u), lock_(), released_(), held_(false), waiting_(0u), executors_{}, fail_create_(0u), created_(0u), destroyed_(0u),
       executed_(0u), ids_{}, sizes_{}, last_sub_api_(0u), last_uuid_byte_(0u), misuses_(0u), imports_{},
-      refuse_import_(0u), withhold_handle_(0u), answered_handle_(0u)
+      refuse_import_(0u), withhold_handle_(0u), answered_handle_(0u), option_creates_(0u), last_options_{},
+      last_share_(nullptr), last_share_live_(false), creates_held_(false), creates_waiting_(0u)
 {
     pthread_mutex_init(&lock_, nullptr);
     pthread_cond_init(&released_, nullptr);
@@ -66,6 +67,26 @@ MockExecutorOps::MockExecutorOps(std::uint32_t sub_apis)
             return mock.answered_handle_ != 0u ? mock.answered_handle_ : blob_id | handle_bit;
         }
         return 0u;
+    };
+    table_.create_with_options = [](void *opaque, std::uint32_t sub_api, const std::uint8_t *uuid,
+                                    const RvkContextOptions *options, RvkExecutor *share) -> RvkExecutor * {
+        MockExecutorOps &mock = mock_of(opaque);
+        {
+            Lock lock(mock.lock_);
+            mock.option_creates_++;
+            mock.last_options_ = options != nullptr ? *options : RvkContextOptions{};
+            mock.last_share_ = share;
+            mock.creates_waiting_++;
+            while (mock.creates_held_) pthread_cond_wait(&mock.released_, &mock.lock_);
+            mock.creates_waiting_--;
+        }
+        /* Read after the hold: the share must still be alive when a create using it returns. */
+        const bool live = mock.alive(share);
+        {
+            Lock lock(mock.lock_);
+            mock.last_share_live_ = live;
+        }
+        return mock.table_.create(opaque, sub_api, uuid);
     };
     table_.create = [](void *opaque, std::uint32_t sub_api, const std::uint8_t *uuid) -> RvkExecutor * {
         MockExecutorOps &mock = mock_of(opaque);
@@ -157,6 +178,33 @@ const RvkExecutorOps &MockExecutorOps::table() const { return table_; }
 RvkExecutorOps       &MockExecutorOps::editable() { return table_; }
 
 void          MockExecutorOps::fail_create_at(std::uint32_t nth) { Lock lock(lock_); fail_create_ = nth; }
+void MockExecutorOps::hold_creates()
+{
+    Lock lock(lock_);
+    creates_held_ = true;
+}
+void MockExecutorOps::release_creates()
+{
+    Lock lock(lock_);
+    creates_held_ = false;
+    pthread_cond_broadcast(&released_);
+}
+std::uint32_t     MockExecutorOps::creates_waiting() { Lock lock(lock_); return creates_waiting_; }
+std::uint32_t     MockExecutorOps::option_creates() { Lock lock(lock_); return option_creates_; }
+RvkContextOptions MockExecutorOps::last_options() { Lock lock(lock_); return last_options_; }
+RvkExecutor      *MockExecutorOps::last_share() { Lock lock(lock_); return last_share_; }
+bool              MockExecutorOps::last_share_live() { Lock lock(lock_); return last_share_live_; }
+bool              MockExecutorOps::is_live(RvkExecutor *executor) { return alive(executor); }
+
+/* Whether `handle` is a live executor of this table, asked from any thread:
+ * sharing reads another context's executor without calling into it. */
+bool MockExecutorOps::alive(RvkExecutor *handle)
+{
+    Lock lock(lock_);
+    for (const Executor &executor : executors_)
+        if (static_cast<const void *>(&executor) == static_cast<const void *>(handle)) return executor.live;
+    return false;
+}
 std::uint32_t MockExecutorOps::created() { Lock lock(lock_); return created_; }
 std::uint32_t MockExecutorOps::destroyed() { Lock lock(lock_); return destroyed_; }
 std::uint32_t MockExecutorOps::live() { Lock lock(lock_); return created_ - destroyed_; }

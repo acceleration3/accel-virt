@@ -39,7 +39,19 @@ public:
     void          release();
     /* Commands waiting behind a hold. */
     std::uint32_t waiting();
-    /* The Nth create from now answers NULL. */
+    /* While held, every create_with_options waits before it makes anything,
+     * so a test can keep a context's creation open; release lets them go. */
+    void              hold_creates();
+    void              release_creates();
+    std::uint32_t     creates_waiting();
+    /* Version 4's creates, what the last one was asked, and whether its share
+     * was an executor of this table still alive when that create returned. */
+    std::uint32_t     option_creates();
+    RvkContextOptions last_options();
+    RvkExecutor      *last_share();
+    bool              last_share_live();
+    bool              is_live(RvkExecutor *executor);
+    /* The Nth create from now answers NULL (either spelling). */
     void          fail_create_at(std::uint32_t nth);
     std::uint32_t created();
     std::uint32_t destroyed();
@@ -89,6 +101,7 @@ private:
     static constexpr std::uint32_t max_imports = 512u;
 
     Executor *executor_of(RvkExecutor *executor);
+    bool      alive(RvkExecutor *executor);
 
     RvkExecutorOps             table_;
     std::uint32_t              sub_apis_;
@@ -113,6 +126,12 @@ private:
     std::uint32_t              refuse_import_;
     std::uint32_t              withhold_handle_;
     std::uint64_t              answered_handle_;
+    std::uint32_t              option_creates_;
+    RvkContextOptions          last_options_;
+    RvkExecutor               *last_share_;
+    bool                       last_share_live_;
+    bool                       creates_held_;
+    std::uint32_t              creates_waiting_;
 };
 
 }  // namespace av

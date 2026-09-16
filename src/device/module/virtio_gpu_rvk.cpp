@@ -33,7 +33,7 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
         return Status::invalid_parameter;
     }
     if (library_.accept(executor) == Status::invalid_parameter) {
-        message.append("virtio-gpu-rvk: the executor library's table is not ABI version 1 or 2, or lacks an operation");
+        message.append("virtio-gpu-rvk: the executor library's table is not ABI version 1 to 4, or lacks an operation");
         host_.log(message.text());
         return Status::invalid_parameter;
     }
@@ -45,6 +45,11 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
     }
     if (blobs_.initialize() == Status::no_memory) {
         message.append("virtio-gpu-rvk: the host has no mutex for the blob table");
+        host_.log(message.text());
+        return Status::no_memory;
+    }
+    if (contexts_.initialize() == Status::no_memory) {
+        message.append("virtio-gpu-rvk: the host has no mutex for the contexts' shared executors");
         host_.log(message.text());
         return Status::no_memory;
     }

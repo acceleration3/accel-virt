@@ -26,6 +26,7 @@
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/violation.hpp"
 #include "proto/context/capset_info.hpp"
+#include "proto/context/gl_context_options.hpp"
 #include "proto/context/gpu_identity.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/rvk_context_record.hpp"
@@ -1056,4 +1057,205 @@ TEST(rvk_context_table_report, a_context_being_set_up_is_counted_but_not_listed)
   CHECK_STATUS(fixture.bind(&first_context), Status::ok);
   fixture.platform().on_acquire(nullptr, nullptr);
   CHECK(mid.claimed_unset);
+
+/* Feature 050: an OpenGL context's options reach the host's setup, and a share
+ * context - named by its ring's D3DKMT handle, which only resolves in the
+ * process that made it - becomes that context's device id. Everything the
+ * record cannot mean is refused before a request is sent. */
+namespace {
+
+using av::GlContextOptions;
+using GlProfile = av::GlContextOptions::Profile;
+
+constexpr std::size_t setup_offset = 32u;   /* past submit_3d's header and size */
+constexpr std::size_t options_offset = setup_offset + 32u;
+
+CapsetInfo capset_at(std::uint16_t minor)
+{
+    return CapsetInfo(av::ProtocolVersion(1u, minor), 0x7u, 64u, 12u, 20u, 0u,
+                      av::GpuIdentity(0u, 0u, 0u, uuid, 0u, 0u, "gpu"));
+}
+
+/* A second context's ring, fence page and reply slot, mapped past the first's. */
+class Transport {
+public:
+    Transport(Fixture &fixture, std::uint64_t at)
+        : ring_(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::context_ring, 2u * page),
+          fence_(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::fence_page, page),
+          reply_(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::reply_slot, page)
+    {
+        ring_.map_into_aperture(at);
+        fence_.map_into_aperture(at + 2u);
+        reply_.map_into_aperture(at + 3u);
+    }
+    RvkContextRecord record(SubApi api, const GlContextOptions &options) const
+    {
+        return RvkContextRecord(api, 12u, ring_.handle(), fence_.handle(), reply_.handle(), options);
+    }
+    ProcessAllocation &ring() { return ring_; }
+
+private:
+    ProcessAllocation ring_;
+    ProcessAllocation fence_;
+    ProcessAllocation reply_;
+};
+
+Status bind_at(Fixture &fixture, void *context, const RvkContextRecord &record, std::uint16_t minor = 1u)
+{
+    return fixture.table().bind(context, record, fixture.device(), fixture.mapped().function().doorbells(),
+                                capset_at(minor));
+}
+
+std::uint8_t setup_byte(const Host &host, std::uint32_t nth, std::size_t offset)
+{
+    return static_cast<std::uint8_t>(host.field(submit_3d_type, nth, offset) & 0xFFu);
+}
+
+int third_context = 0;
+
+}  // namespace
+
+TEST(rvk_context_table_bind, a_gl_contexts_options_reach_the_setup_unchanged)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  const GlContextOptions options(4u, 6u, GlProfile::core,
+                                 GlContextOptions::debug | GlContextOptions::robust_access, 0u);
+  CHECK_STATUS(bind_at(fixture, &first_context,
+                       RvkContextRecord(SubApi::opengl, 12u, fixture.ring().handle(), fixture.fence().handle(),
+                                        fixture.reply().handle(), options)),
+               Status::ok);
+  CHECK_EQ(host.count_of(submit_3d_type), 1u);
+  CHECK_EQ(host.field(submit_3d_type, 0u, 24u), 48u);            /* the setup's size */
+  CHECK_EQ(host.field(submit_3d_type, 0u, setup_offset + 4u), 0x00010001u);   /* protocol 1.1 */
+  CHECK_EQ(setup_byte(host, 0u, options_offset), 4u);
+  CHECK_EQ(setup_byte(host, 0u, options_offset + 1u), 6u);
+  CHECK_EQ(setup_byte(host, 0u, options_offset + 2u), 1u);
+  CHECK_EQ(setup_byte(host, 0u, options_offset + 3u), 5u);
+  CHECK_EQ(host.field(submit_3d_type, 0u, options_offset + 4u), 0u);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* A device at the previous minor is given the 32-byte setup of old, which
+ * cannot carry options: a record asking for any is refused unsent. */
+TEST(rvk_context_table_bind, a_device_at_the_previous_minor_gets_the_old_setup_and_no_options)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(bind_at(fixture, &first_context, fixture.record(), 0u), Status::ok);
+  CHECK_EQ(host.field(submit_3d_type, 0u, 24u), 32u);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok);
+  const std::uint32_t sent = host.queue().requests();
+  const RvkContextRecord with_options(SubApi::opengl, 12u, fixture.ring().handle(), fixture.fence().handle(),
+                                      fixture.reply().handle(), GlContextOptions(3u, 3u, GlProfile::core, 0u, 0u));
+  CHECK_STATUS(bind_at(fixture, &first_context, with_options, 0u), Status::invalid_parameter);
+  CHECK_EQ(host.queue().requests(), sent);
+  CHECK_EQ(fixture.table().bound(), 0u);
+  CHECK_EQ(fixture.handles().outstanding(), 0u); }
+
+TEST(rvk_context_table_bind, a_share_context_naming_a_live_gl_context_becomes_its_device_id)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  const GlContextOptions core(4u, 6u, GlProfile::core, 0u, 0u);
+  CHECK_STATUS(bind_at(fixture, &first_context,
+                       RvkContextRecord(SubApi::opengl, 12u, fixture.ring().handle(), fixture.fence().handle(),
+                                        fixture.reply().handle(), core)),
+               Status::ok);
+  Transport second(fixture, 60u);
+  CHECK_STATUS(bind_at(fixture, &second_context,
+                       second.record(SubApi::opengl, core.sharing(fixture.ring().handle()))),
+               Status::ok);
+  /* The first context is host context 1, and the second's setup names it. */
+  CHECK_EQ(host.count_of(submit_3d_type), 2u);
+  CHECK_EQ(host.field(submit_3d_type, 1u, options_offset + 4u), 1u);
+  CHECK_EQ(setup_byte(host, 1u, options_offset), 4u);
+  CHECK_EQ(fixture.handles().outstanding(), 0u);
+  CHECK(fixture.table().invariants_hold());
+  /* A third may share the second, whose own ring names it. */
+  Transport third(fixture, 70u);
+  CHECK_STATUS(bind_at(fixture, &third_context, third.record(SubApi::opengl, core.sharing(second.ring().handle()))),
+               Status::ok);
+  CHECK_EQ(host.field(submit_3d_type, 2u, options_offset + 4u), 2u);
+  CHECK_STATUS(fixture.table().unbind(&third_context, &fixture.device()), Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&second_context, &fixture.device()), Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+TEST(rvk_context_table_bind, a_share_context_that_is_not_a_live_gl_context_of_the_device_is_refused_unsent)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  const GlContextOptions core(4u, 6u, GlProfile::core, 0u, 0u);
+  /* The first context speaks Vulkan. */
+  CHECK_STATUS(bind_at(fixture, &first_context, fixture.record()), Status::ok);
+  Transport gl(fixture, 60u);
+  Transport asking(fixture, 70u);
+  const std::uint32_t own = asking.ring().handle();
+  ProcessAllocation stray(fixture.platform(), fixture.allocations(), fixture.handles(), AllocationKind::context_ring,
+                          2u * page);
+  stray.map_into_aperture(80u);
+  /* A handle of another process resolves to nothing here. */
+  ProcessAllocation elsewhere(fixture.platform(), fixture.allocations(), fixture.handles(),
+                              AllocationKind::context_ring, 2u * page);
+  const std::uint32_t foreign = elsewhere.handle();
+  fixture.handles().remove(foreign);
+  const std::uint32_t refused[] = {
+      0x7777u,                       /* an unknown handle */
+      foreign,                       /* another process's */
+      fixture.ring().handle(),       /* a Vulkan context's ring */
+      own,                           /* the context's own */
+      stray.handle(),                /* a ring no context runs on */
+      fixture.fence().handle(),      /* not a ring */
+  };
+  const std::uint32_t sent = host.queue().requests();
+  for (const std::uint32_t share : refused) {
+      CHECK_STATUS(bind_at(fixture, &third_context, asking.record(SubApi::opengl, core.sharing(share))),
+                   Status::invalid_parameter);
+      CHECK_EQ(host.queue().requests(), sent);
+      CHECK_EQ(fixture.table().bound(), 1u);
+      CHECK_EQ(fixture.handles().outstanding(), 0u);
+      CHECK(fixture.table().invariants_hold());
+  }
+  /* A destroyed GL context's ring still exists, and names no context. */
+  CHECK_STATUS(bind_at(fixture, &second_context, gl.record(SubApi::opengl, core)), Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&second_context, &fixture.device()), Status::ok);
+  const std::uint32_t after = host.queue().requests();
+  CHECK_STATUS(bind_at(fixture, &third_context, asking.record(SubApi::opengl, core.sharing(gl.ring().handle()))),
+               Status::invalid_parameter);
+  CHECK_EQ(host.queue().requests(), after);
+  /* A live GL context whose ring another device holds. */
+  CHECK_STATUS(bind_at(fixture, &second_context, gl.record(SubApi::opengl, core)), Status::ok);
+  int other_device = 0;
+  int this_device = 0;
+  CHECK_STATUS(gl.ring().allocation()->open(&other_device), Status::ok);
+  CHECK_STATUS(asking.ring().allocation()->open(&this_device), Status::ok);
+  const std::uint32_t before = host.queue().requests();
+  CHECK_STATUS(bind_at(fixture, &third_context, asking.record(SubApi::opengl, core.sharing(gl.ring().handle()))),
+               Status::invalid_parameter);
+  CHECK_EQ(host.queue().requests(), before);
+  /* The same device, and it binds. */
+  CHECK_STATUS(asking.ring().allocation()->close(), Status::ok);
+  CHECK_STATUS(asking.ring().allocation()->open(&other_device), Status::ok);
+  CHECK_STATUS(bind_at(fixture, &third_context, asking.record(SubApi::opengl, core.sharing(gl.ring().handle()))),
+               Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&third_context, &fixture.device()), Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&second_context, &fixture.device()), Status::ok);
+  CHECK_STATUS(asking.ring().allocation()->close(), Status::ok);
+  CHECK_STATUS(gl.ring().allocation()->close(), Status::ok);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+/* A GL context the device let go of - a reset abandons every context, which
+ * keep their rings until they are destroyed - is no context to share. */
+TEST(rvk_context_table_bind, an_abandoned_gl_context_is_no_share_context)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  const GlContextOptions core(4u, 6u, GlProfile::core, 0u, 0u);
+  CHECK_STATUS(bind_at(fixture, &first_context,
+                       RvkContextRecord(SubApi::opengl, 12u, fixture.ring().handle(), fixture.fence().handle(),
+                                        fixture.reply().handle(), core)),
+               Status::ok);
+  fixture.table().abandon_all();
+  Transport second(fixture, 60u);
+  const std::uint32_t sent = host.queue().requests();
+  CHECK_STATUS(bind_at(fixture, &second_context, second.record(SubApi::opengl, core.sharing(fixture.ring().handle()))),
+               Status::invalid_parameter);
+  CHECK_EQ(host.queue().requests(), sent);
+  CHECK_EQ(fixture.handles().outstanding(), 0u);
+  CHECK(fixture.table().invariants_hold());
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }

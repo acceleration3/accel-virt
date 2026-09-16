@@ -95,6 +95,12 @@ Status Allocation::open(const void *device)
     return Status::ok;
 }
 
+bool Allocation::held_with(const Allocation &other) const
+{
+    AV_SCOPE("Allocation::held_with");
+    return owner_ == other.owner_;
+}
+
 Status Allocation::close()
 {
     AV_SCOPE("Allocation::close");

@@ -1,6 +1,7 @@
 #include "device/executor/opengl_backend.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/executor/gl_context_attributes.hpp"
 #include "device/executor/imported_blob.hpp"
 #include "proto/generated/opengl/gl_command_names.h"
 #include "proto/generated/opengl/gl_dispatch_server.h"
@@ -54,10 +55,12 @@ OpenGlBackend::OpenGlBackend()
     AV_SCOPE("OpenGlBackend::OpenGlBackend");
 }
 
-bool OpenGlBackend::initialize(const GlDisplay *display)
+bool OpenGlBackend::initialize(const GlDisplay *display, const RvkContextOptions *options, const OpenGlBackend *share)
 {
     AV_SCOPE("OpenGlBackend::initialize");
-    if (display == nullptr || !context_.open(*display)) return false;
+    if (display == nullptr ||
+        !context_.open(*display, GlContextAttributes(options), share != nullptr ? &share->context_ : nullptr))
+        return false;
     resolved_ = static_cast<uint32_t>(load_real_gl(gl_, resolve_through, &context_));
     gl_.rvk_bind_sync = bind_sync;
     gl_.rvk_sync_for = sync_for;
@@ -109,19 +112,27 @@ bool OpenGlBackend::lost() const
     return lost_;
 }
 
-bool OpenGlBackend::adopt(ImportedBlob &)
+/* The context's arena: guest memory the device already mapped, which its
+ * bulk-data commands read and write in place. GL imports no host pointer on
+ * both host drivers, so the pointer is not a GL object - it is the region
+ * (research.md §5). Its address names it on the wire, which no other import of
+ * this context can share while it is held. */
+bool OpenGlBackend::adopt(ImportedBlob &blob)
 {
     AV_SCOPE("OpenGlBackend::adopt");
-    /* GL_EXT_memory_object_fd takes a dma-buf on Mesa and refuses one on
-     * NVIDIA, and the region a command reads from is not an imported object
-     * anyway - it is a mapping the device already made. Nothing to adopt yet;
-     * import_kinds says so for OpenGL. */
-    return false;
+    if (blob.kind() != RVK_BLOB_HOST_POINTER || region_.length() != 0u) return false;
+    region_.take(static_cast<uint8_t *>(blob.pointer()), blob.size());
+    const uint64_t address = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(blob.pointer()));
+    blob.record(address, address);
+    return true;
 }
 
-void OpenGlBackend::abandon(ImportedBlob &)
+void OpenGlBackend::abandon(ImportedBlob &blob)
 {
     AV_SCOPE("OpenGlBackend::abandon");
+    if (blob.object() == 0u) return;
+    region_.give_back();
+    blob.record(0u, 0u);
 }
 
 bool     OpenGlBackend::bind_fence(uint64_t token, void *fence)
@@ -145,11 +156,6 @@ uint8_t *OpenGlBackend::guest_bytes(uint64_t offset, uint64_t bytes) const
     return region_.at(offset, bytes);
 }
 
-void OpenGlBackend::take_region(uint8_t *base, uint64_t length)
-{
-    AV_SCOPE("OpenGlBackend::take_region");
-    region_.take(base, length);
-}
 
 uint32_t OpenGlBackend::resolved() const
 {

@@ -7,15 +7,15 @@
 namespace av {
 
 RvkContextRecord::RvkContextRecord()
-    : sub_api_(0u), ring_order_(0u), ring_(0u), fence_(0u), reply_(0u)
+    : sub_api_(0u), ring_order_(0u), ring_(0u), fence_(0u), reply_(0u), options_()
     {
         AV_SCOPE("RvkContextRecord::RvkContextRecord");
     }
 
 RvkContextRecord::RvkContextRecord(SubApi sub_api, uint8_t ring_order, uint32_t ring, uint32_t fence,
-                                   uint32_t reply)
+                                   uint32_t reply, const GlContextOptions &options)
     : sub_api_(static_cast<uint32_t>(sub_api)), ring_order_(ring_order), ring_(ring), fence_(fence),
-      reply_(reply)
+      reply_(reply), options_(options)
       {
           AV_SCOPE("RvkContextRecord::RvkContextRecord");
       }
@@ -45,6 +45,11 @@ uint32_t RvkContextRecord::reply() const
     AV_SCOPE("RvkContextRecord::reply");
     return reply_;
 }
+GlContextOptions RvkContextRecord::options() const
+{
+    AV_SCOPE("RvkContextRecord::options");
+    return options_;
+}
 
 Status RvkContextRecord::encode(uint8_t *bytes, size_t capacity) const
 {
@@ -57,7 +62,7 @@ Status RvkContextRecord::encode(uint8_t *bytes, size_t capacity) const
     writer.write_u32(ring_);
     writer.write_u32(fence_);
     writer.write_u32(reply_);
-    writer.write_zeros(8u);
+    options_.write(writer);
     return writer.status();
 }
 
@@ -69,8 +74,10 @@ bool RvkContextRecord::fields_valid() const
                                sub_api_ == static_cast<uint32_t>(SubApi::opencl);
     const bool distinct_reply =
         reply_ == 0u || (reply_ != ring_ && reply_ != fence_);
+    const bool options_fit =
+        sub_api_ == static_cast<uint32_t>(SubApi::opengl) ? options_.valid() : options_.defaults();
     return one_known_api && ring_ != 0u && fence_ != 0u && fence_ != ring_ && distinct_reply &&
-           ring_order_ >= lowest_order && ring_order_ <= highest_order;
+           ring_order_ >= lowest_order && ring_order_ <= highest_order && options_fit;
 }
 
 Status RvkContextRecord::decode(const uint8_t *bytes, size_t length)
@@ -85,7 +92,7 @@ Status RvkContextRecord::decode(const uint8_t *bytes, size_t length)
     candidate.ring_  = reader.read_u32();
     candidate.fence_ = reader.read_u32();
     candidate.reply_ = reader.read_u32();
-    reader.expect_zero(8u);
+    candidate.options_.read(reader);
     if (reader.status() != Status::ok) return reader.status();
     if (found_magic != magic || !candidate.fields_valid()) return Status::malformed;
     *this = candidate;

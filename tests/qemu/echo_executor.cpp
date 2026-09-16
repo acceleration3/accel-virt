@@ -18,7 +18,16 @@
 //                        `offset` of the import's pointer, as a host GPU would
 //                        write them: the answer is u32 1 when they were written
 //
+//   0x30007 options      on an OpenGL context: the answer is the u8 major,
+//                        minor, profile and flags it was created with, then
+//                        the u64 ordinal of the executor it shares (0: none)
+//
 // Anything else is RVK_UNKNOWN. With RVK_ECHO_FAIL_CREATE set, create fails.
+//
+// Version 4 (feature 050): create_with_options records what it was asked for.
+// With RVK_ECHO_OPENGL set the library offers OpenGL beside Vulkan, and with
+// RVK_ECHO_ABI_VERSION_3 it answers the version 3 table, which makes only
+// default contexts.
 //
 // It is a version 3 library (feature 045): import_blob records a host pointer
 // the device hands it, imported_handle answers blob_id | 0x4000000000000000 for
@@ -54,6 +63,7 @@ constexpr std::uint32_t lose_device = 0x10003u;
 constexpr std::uint32_t count = 0x10004u;
 constexpr std::uint32_t peek = 0x10005u;
 constexpr std::uint32_t poke = 0x10006u;
+constexpr std::uint32_t options_asked = 0x30007u;
 constexpr std::uint64_t handle_bit = 0x4000000000000000u;
 constexpr std::uint64_t page = 4096u;
 constexpr std::size_t   max_imports = 16u;
@@ -74,6 +84,9 @@ struct Executor {
     std::uint64_t ordinal;
     bool          one_thread;
     Import        imports[max_imports];
+    RvkContextOptions options;
+    /* The ordinal of the executor it shares objects with, or 0. */
+    std::uint64_t     shares;
 };
 
 Executor *executor_of(RvkExecutor *handle) { return static_cast<Executor *>(static_cast<void *>(handle)); }
@@ -158,15 +171,19 @@ void stall(std::uint64_t milliseconds)
     static_cast<void>(nanosleep(&sleep, nullptr));
 }
 
-std::uint32_t sub_apis(void *) { return RVK_EXECUTOR_SUB_API_VULKAN; }
+std::uint32_t sub_apis(void *)
+{
+    const std::uint32_t opengl = std::getenv("RVK_ECHO_OPENGL") != nullptr ? RVK_EXECUTOR_SUB_API_OPENGL : 0u;
+    return RVK_EXECUTOR_SUB_API_VULKAN | opengl;
+}
 
-RvkExecutor *create(void *, std::uint32_t sub_api, const std::uint8_t *)
+RvkExecutor *create(void *opaque, std::uint32_t sub_api, const std::uint8_t *)
 {
     /* Only what sub_apis offers. Accepting anything looks harmless in a test
      * library and is not: the device would hand that context commands of an
      * API nothing here decodes, and the guest would wait for answers that
      * never come. The conformance suite found this one (feature 042). */
-    if (sub_api != RVK_EXECUTOR_SUB_API_VULKAN) return nullptr;
+    if ((sub_apis(opaque) & sub_api) == 0u || sub_api == 0u || (sub_api & (sub_api - 1u)) != 0u) return nullptr;
     if (std::getenv("RVK_ECHO_FAIL_CREATE") != nullptr) return nullptr;
     auto *const executor = static_cast<Executor *>(std::calloc(1u, sizeof(Executor)));
     if (executor == nullptr) return nullptr;
@@ -174,6 +191,27 @@ RvkExecutor *create(void *, std::uint32_t sub_api, const std::uint8_t *)
     executor->ordinal = ++created;
     executor->one_thread = true;
     return static_cast<RvkExecutor *>(static_cast<void *>(executor));
+}
+
+bool defaults(const RvkContextOptions *options)
+{
+    return options == nullptr || (options->major == 0u && options->minor == 0u && options->profile == 0u &&
+                                  options->flags == 0u && options->reserved == 0u);
+}
+
+/* Options and a share only for OpenGL, and a share only of an OpenGL executor. */
+RvkExecutor *create_with_options(void *opaque, std::uint32_t sub_api, const std::uint8_t *uuid,
+                                 const RvkContextOptions *options, RvkExecutor *share)
+{
+    const bool opengl = sub_api == RVK_EXECUTOR_SUB_API_OPENGL;
+    if ((!defaults(options) || share != nullptr) && !opengl) return nullptr;
+    if (options != nullptr && (options->major > 4u || options->reserved != 0u)) return nullptr;
+    RvkExecutor *const made = create(opaque, sub_api, uuid);
+    if (made == nullptr) return nullptr;
+    Executor *const executor = executor_of(made);
+    if (options != nullptr) executor->options = *options;
+    executor->shares = share != nullptr ? executor_of(share)->ordinal : 0u;
+    return made;
 }
 
 void destroy(void *, RvkExecutor *handle) { std::free(handle); }
@@ -202,6 +240,16 @@ std::uint32_t execute(void *, RvkExecutor *handle, std::uint32_t id, const std::
     case lose_device: return RVK_DEVICE_LOST;
     case peek: answer_peek(executor, payload, size, reply, capacity, reply_size); break;
     case poke: answer_poke(executor, payload, size, reply, capacity, reply_size); break;
+    case options_asked: {
+        *reply_size = 12u;
+        if (capacity < 12u) break;
+        reply[0] = executor->options.major;
+        reply[1] = executor->options.minor;
+        reply[2] = executor->options.profile;
+        reply[3] = executor->options.flags;
+        std::memcpy(reply + 4u, &executor->shares, 8u);
+        break;
+    }
     case count: {
         const std::uint32_t flag = executor->one_thread ? 1u : 0u;
         *reply_size = 12u;
@@ -257,7 +305,21 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               import_kinds,
                               import_blob,
                               release_blob,
-                              imported_handle};
+                              imported_handle,
+                              create_with_options};
+
+/* Version 3: default contexts only (feature 050). */
+const RvkExecutorOps version_3_table = {RVK_EXECUTOR_ABI_VERSION_HANDLES,
+                                        nullptr,
+                                        sub_apis,
+                                        create,
+                                        destroy,
+                                        execute,
+                                        import_kinds,
+                                        import_blob,
+                                        release_blob,
+                                        imported_handle,
+                                        nullptr};
 
 /* Version 1, carrying none of the memory operations: the device must keep
  * accepting a library that imports nothing, and a suite whose only library is
@@ -271,6 +333,7 @@ const RvkExecutorOps version_1_table = {RVK_EXECUTOR_ABI_VERSION_MINIMUM,
                                         nullptr,
                                         nullptr,
                                         nullptr,
+                                        nullptr,
                                         nullptr};
 
 }  // namespace
@@ -279,6 +342,9 @@ extern "C" {
 
 __attribute__((visibility("default")))
 const RvkExecutorOps *rvk_executor_ops(void)
-{ return std::getenv("RVK_ECHO_ABI_VERSION_1") != nullptr ? &version_1_table : &table; }
+{
+    if (std::getenv("RVK_ECHO_ABI_VERSION_1") != nullptr) return &version_1_table;
+    return std::getenv("RVK_ECHO_ABI_VERSION_3") != nullptr ? &version_3_table : &table;
+}
 
 }

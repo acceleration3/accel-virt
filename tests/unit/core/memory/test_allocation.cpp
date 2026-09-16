@@ -289,6 +289,30 @@ TEST(allocation_open, a_ring_belongs_to_the_device_that_opened_it)
   CHECK(allocation.invariants_hold());
   CHECK_STATUS(allocation.close(), Status::ok); }
 
+/* Two rings are held together when one device holds both, or nobody holds
+ * either: the rule two OpenGL contexts are shared under (feature 050). */
+TEST(allocation_open, rings_are_held_together_only_by_one_device_or_by_none)
+{ MockPlatform platform;
+  Segments segments(platform);
+  int first_device = 0;
+  int second_device = 0;
+  const AllocationDescriptor ring(AllocationKind::context_ring, true, SurfaceLayout(), 0x4000u, ScanoutTarget());
+  Allocation first(platform, segments.segments(), ring, 0x4000u);
+  Allocation second(platform, segments.segments(), ring, 0x4000u);
+  CHECK(first.held_with(second));
+  CHECK_STATUS(first.open(&first_device), Status::ok);
+  CHECK(!first.held_with(second));
+  CHECK(!second.held_with(first));
+  CHECK_STATUS(second.open(&second_device), Status::ok);
+  CHECK(!first.held_with(second));
+  CHECK_STATUS(second.close(), Status::ok);
+  CHECK_STATUS(second.open(&first_device), Status::ok);
+  CHECK(first.held_with(second));
+  CHECK(first.held_with(first));
+  CHECK_STATUS(first.close(), Status::ok);
+  CHECK_STATUS(second.close(), Status::ok);
+  CHECK(first.held_with(second)); }
+
 TEST(allocation_open, a_fence_page_belongs_to_its_device_and_a_shadow_does_not)
 { MockPlatform platform;
   Segments segments(platform);

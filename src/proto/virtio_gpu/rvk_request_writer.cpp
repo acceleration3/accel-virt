@@ -161,13 +161,14 @@ Status RvkRequestWriter::unref(uint32_t resource_id)
 Status RvkRequestWriter::setup(uint32_t context_id, const ContextSetup &setup)
 {
     AV_SCOPE("RvkRequestWriter::setup");
-    WireWriter writer(bytes_, capacity_);
-    if (!begin(writer, submit_3d, context_id, setup_size)) return Status::too_large;
-    writer.write_u32(ContextSetup::encoded_size);
+    WireWriter   writer(bytes_, capacity_);
+    const size_t command = setup.size();
+    if (!begin(writer, submit_3d, context_id, short_request_size + command)) return Status::too_large;
+    writer.write_u32(static_cast<uint32_t>(command));
     writer.write_zeros(4u);
-    /* Sized for it: the setup fits the 32 bytes begin reserved. */
-    static_cast<void>(setup.encode(bytes_ + short_request_size, ContextSetup::encoded_size));
-    return Status::ok;
+    const Status encoded = setup.encode(bytes_ + short_request_size, command);
+    if (encoded != Status::ok) length_ = 0u;
+    return encoded;
 }
 
 size_t RvkRequestWriter::length() const

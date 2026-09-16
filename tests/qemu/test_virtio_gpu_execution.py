@@ -16,6 +16,7 @@ import unittest
 import virtio_qtest
 from rvk_context import (COUNT, DOORBELL_SHM_ID, ECHO, EXECUTOR, FEATURE_CONTEXT_INIT, GENERATE_REPLY,
                          IMPORT_BLOB, LOSE_DEVICE, NOP, PAGE, PEEK, POKE, REAL_EXECUTOR, RELEASE_BLOB,
+                         SUB_API_OPENGL, SUB_API_VULKAN, setup_with_options,
                          RESP_ERR_INVALID_PARAMETER, RESP_ERR_INVALID_RESOURCE_ID, RESP_OK_NODATA, UNDECODABLE,
                          GuestRing, command, create_context, guest_blob, guest_blob_pages, host_blob, response_type,
                          rvk_device, setup, submit, unref)
@@ -40,7 +41,9 @@ def wait_for(condition, seconds=10.0):
 class Context:
     """A context with a guest-backed ring, fence page and, if asked, reply slot."""
 
-    def __init__(self, test, gpu, context, doorbell, reply_bytes=PAGE):
+    def __init__(self, test, gpu, context, doorbell, reply_bytes=PAGE, options=None, answer=RESP_OK_NODATA):
+        """`options` is (sub_api, major, minor, profile, flags, share) for the options minor's setup, whose
+        answer is `answer`."""
         self.ring_resource = 200 + 3 * context
         self.test = test
         self.gpu = gpu
@@ -55,9 +58,13 @@ class Context:
         if reply_bytes:
             gpu.qtest.write_bytes(self.reply, b"\xEE" * 64)
             requests.append(guest_blob(ids[2], self.reply, reply_bytes))
-        requests.append(submit(context, setup(ids[0], ids[1], 12, doorbell) [:-4] + struct.pack("<I", ids[2])))
+        if options is None:
+            bound = setup(ids[0], ids[1], 12, doorbell)[:-4] + struct.pack("<I", ids[2])
+        else:
+            bound = setup_with_options(ids[0], ids[1], doorbell, ids[2], *options)
         for request in requests:
             test.assertEqual(hex(response_type(gpu.control(request))), hex(RESP_OK_NODATA))
+        test.assertEqual(hex(response_type(gpu.control(submit(context, bound)))), hex(answer))
         self.fence = 0
 
     def run(self, *commands):
@@ -82,6 +89,71 @@ def import_body(resource, offset, size, memory_type=0, reserved=0):
 
 def peek_body(handle, offset, count):
     return struct.pack("<QQI", handle, offset, count)
+
+
+OPTIONS_ASKED = 0x30007
+PROFILE_CORE = 1
+FLAG_DEBUG = 1
+
+
+class EchoEnvironment:
+    """The echo executor reads its controls from the environment QEMU starts in."""
+
+    def __init__(self, test, **values):
+        for name, value in values.items():
+            previous = os.environ.get(name)
+            os.environ[name] = value
+            test.addCleanup(self.restore, name, previous)
+
+    @staticmethod
+    def restore(name, previous):
+        if previous is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = previous
+
+
+@unittest.skipUnless(BUILD and EXECUTOR, "run by the qemu_virtio_gpu ctest")
+class VirtioGpuContextOptions(unittest.TestCase):
+    """Feature 050: an OpenGL context's options and share context reach the executor library."""
+
+    def open(self, **environment):
+        EchoEnvironment(self, RVK_ECHO_OPENGL="1", **environment)
+        qtest = virtio_qtest.Qtest(BUILD, rvk_device(), False)
+        self.addCleanup(qtest.close)
+        return virtio_qtest.VirtioGpu(qtest, WANTED)
+
+    def asked(self, context):
+        self.assertTrue(context.run(command(OPTIONS_ASKED, b"", GENERATE_REPLY)))
+        (status, _fence, size, _required), answer = context.answer()
+        self.assertEqual((status, size), (STATUS_OK, 12))
+        return struct.unpack("<BBBBQ", answer)
+
+    def test_a_context_is_made_with_its_options_and_one_shares_it(self):
+        gpu = self.open()
+        first = Context(self, gpu, 1, 0, options=(SUB_API_OPENGL, 4, 6, PROFILE_CORE, FLAG_DEBUG, 0))
+        self.assertEqual(self.asked(first), (4, 6, PROFILE_CORE, FLAG_DEBUG, 0))
+        second = Context(self, gpu, 2, 1, options=(SUB_API_OPENGL, 3, 3, PROFILE_CORE, 0, 1))
+        self.assertEqual(self.asked(second), (3, 3, PROFILE_CORE, 0, 1))
+        plain = Context(self, gpu, 3, 2, options=(SUB_API_OPENGL, 0, 0, 0, 0, 0))
+        self.assertEqual(self.asked(plain), (0, 0, 0, 0, 0))
+
+    def test_a_share_that_is_not_another_bound_opengl_context_is_refused(self):
+        gpu = self.open()
+        Context(self, gpu, 1, 0, options=(SUB_API_VULKAN, 0, 0, 0, 0, 0))
+        for context, share in ((2, 1), (3, 9), (4, 4)):
+            Context(self, gpu, context, context, options=(SUB_API_OPENGL, 4, 6, PROFILE_CORE, 0, share),
+                    answer=RESP_ERR_INVALID_PARAMETER)
+        # Options on another sub-API cannot even be written.
+        Context(self, gpu, 5, 5, options=(SUB_API_VULKAN, 4, 6, PROFILE_CORE, 0, 0),
+                answer=RESP_ERR_INVALID_PARAMETER)
+
+    def test_a_version_3_library_makes_only_default_contexts(self):
+        gpu = self.open(RVK_ECHO_ABI_VERSION_3="1")
+        Context(self, gpu, 1, 0, options=(SUB_API_OPENGL, 4, 6, PROFILE_CORE, 0, 0),
+                answer=RESP_ERR_INVALID_PARAMETER)
+        plain = Context(self, gpu, 2, 1, options=(SUB_API_OPENGL, 0, 0, 0, 0, 0))
+        self.assertEqual(self.asked(plain), (0, 0, 0, 0, 0))
 
 
 @unittest.skipUnless(BUILD and EXECUTOR, "run by the qemu_virtio_gpu ctest")

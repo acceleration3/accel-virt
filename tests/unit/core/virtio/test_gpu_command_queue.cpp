@@ -231,7 +231,7 @@ TEST(gpu_command_queue_send, a_wide_request_uses_the_wide_slot_alone)
   FakeVirtqueueDevice device = fixture.device(0u);
   CHECK_EQ(device.respond_all(ok_nodata), 2u);
   CHECK_EQ(device.seen(0u).length, wide);
-  CHECK_EQ(device.request(0u)[FakeVirtqueueDevice::request_bytes - 1u], 0xA5u);
+  CHECK_EQ(device.request(0u)[wide - 1u], 0xA5u);
   std::uint32_t completed = 0u, refused = 0u;
   CHECK_STATUS(fixture.control().harvest(completed, refused), Status::ok);
   CHECK_EQ(completed, 2u);

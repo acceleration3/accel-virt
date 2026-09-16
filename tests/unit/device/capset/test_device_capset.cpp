@@ -47,7 +47,7 @@ TEST(device_capset_describe, offers_vulkan_every_ring_order_and_the_bound_gpu)
   CHECK(capset.described());
   const CapsetInfo &info = capset.info();
   CHECK_EQ(info.version().major_version(), 1u);
-  CHECK_EQ(info.version().minor_version(), 0u);
+  CHECK_EQ(info.version().minor_version(), 1u);
   CHECK(info.offers(SubApi::vulkan));
   CHECK(!info.offers(SubApi::opengl));
   CHECK(!info.offers(SubApi::opencl));

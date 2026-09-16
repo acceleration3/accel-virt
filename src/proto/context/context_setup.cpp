@@ -8,17 +8,18 @@
 namespace av {
 
 ContextSetup::ContextSetup()
-    : version_(0u, 0u), sub_api_(0u), ring_resource_(0u), ring_order_(0u), fence_resource_(0u), doorbell_(0u), reply_resource_(0u)
-    {
-        AV_SCOPE("ContextSetup::ContextSetup");
-    }
+    : version_(0u, 0u), sub_api_(0u), ring_resource_(0u), ring_order_(0u), fence_resource_(0u), doorbell_(0u),
+      reply_resource_(0u), options_()
+      {
+          AV_SCOPE("ContextSetup::ContextSetup");
+      }
 
 ContextSetup::ContextSetup(const ProtocolVersion &version, SubApi sub_api, uint32_t ring_resource,
                            uint8_t ring_order, uint32_t fence_resource, uint32_t doorbell,
-                           uint32_t reply_resource)
+                           uint32_t reply_resource, const GlContextOptions &options)
     : version_(version), sub_api_(static_cast<uint32_t>(sub_api)), ring_resource_(ring_resource),
       ring_order_(ring_order), fence_resource_(fence_resource), doorbell_(doorbell),
-      reply_resource_(reply_resource)
+      reply_resource_(reply_resource), options_(options)
       {
           AV_SCOPE("ContextSetup::ContextSetup");
       }
@@ -58,11 +59,23 @@ uint32_t               ContextSetup::reply_resource() const
     AV_SCOPE("ContextSetup::reply_resource");
     return reply_resource_;
 }
+GlContextOptions       ContextSetup::options() const
+{
+    AV_SCOPE("ContextSetup::options");
+    return options_;
+}
+
+size_t ContextSetup::size() const
+{
+    AV_SCOPE("ContextSetup::size");
+    return version_.minor_version() >= options_minor ? encoded_size : base_size;
+}
 
 Status ContextSetup::encode(uint8_t *bytes, size_t capacity) const
 {
     AV_SCOPE("ContextSetup::encode");
-    if (capacity < encoded_size) return Status::too_large;
+    if (capacity < size()) return Status::too_large;
+    if (!options_fit()) return Status::invalid_parameter;
     WireWriter writer(bytes, capacity);
     writer.write_u32(magic);
     writer.write_u16(version_.major_version());
@@ -74,7 +87,18 @@ Status ContextSetup::encode(uint8_t *bytes, size_t capacity) const
     writer.write_u32(fence_resource_);
     writer.write_u32(doorbell_);
     writer.write_u32(reply_resource_);
+    if (size() == encoded_size) {
+        options_.write(writer);
+        writer.write_zeros(encoded_size - base_size - GlContextOptions::encoded_size);
+    }
     return writer.status();
+}
+
+bool ContextSetup::options_fit() const
+{
+    AV_SCOPE("ContextSetup::options_fit");
+    if (sub_api_ == static_cast<uint32_t>(SubApi::opengl) && size() == encoded_size) return options_.valid();
+    return options_.defaults();
 }
 
 bool ContextSetup::fields_valid() const
@@ -87,7 +111,7 @@ bool ContextSetup::fields_valid() const
                                 (reply_resource_ != ring_resource_ && reply_resource_ != fence_resource_);
     return one_known_api && ring_resource_ != 0u && fence_resource_ != 0u &&
            fence_resource_ != ring_resource_ && distinct_reply && ring_order_ >= lowest_order &&
-           ring_order_ <= highest_order;
+           ring_order_ <= highest_order && options_fit();
 }
 
 Status ContextSetup::decode(const uint8_t *bytes, size_t length)
@@ -106,7 +130,12 @@ Status ContextSetup::decode(const uint8_t *bytes, size_t length)
     candidate.fence_resource_ = reader.read_u32();
     candidate.doorbell_       = reader.read_u32();
     candidate.reply_resource_ = reader.read_u32();
+    if (candidate.size() == encoded_size) {
+        candidate.options_.read(reader);
+        reader.expect_zero(encoded_size - base_size - GlContextOptions::encoded_size);
+    }
     if (reader.status() != Status::ok) return reader.status();
+    if (length != candidate.size()) return Status::malformed;
     if (found_magic != magic || !candidate.fields_valid()) return Status::malformed;
     *this = candidate;
     return Status::ok;

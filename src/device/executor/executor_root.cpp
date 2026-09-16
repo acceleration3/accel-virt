@@ -17,7 +17,8 @@ alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][DecodeArena::arena_byt
 
 }  // namespace
 
-ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, apis_(nullptr), slot_api_{}, slot_gpu_{}
+ExecutorRoot::ExecutorRoot()
+    : gpus_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, apis_of_{}, gpus_of_{}, apis_(nullptr)
 {
     AV_SCOPE("ExecutorRoot::ExecutorRoot");
 }
@@ -46,11 +47,18 @@ uint32_t ExecutorRoot::import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) c
     return gpu != nullptr ? gpu->import_kinds(sub_api) : 0u;
 }
 
-ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid)
+ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid, const RvkContextOptions *options,
+                                   ContextSession *share)
 {
     AV_SCOPE("ExecutorRoot::open");
     const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
     if (gpu == nullptr) return nullptr;
+    const bool asked = share != nullptr || (options != nullptr && (options->major != 0u || options->minor != 0u ||
+                                                                   options->profile != 0u || options->flags != 0u ||
+                                                                   options->reserved != 0u));
+    if (asked && sub_api != RVK_EXECUTOR_SUB_API_OPENGL) return nullptr;
+    const OpenGlBackend *const shared = share != nullptr ? sharing(share, *gpu) : nullptr;
+    if (share != nullptr && shared == nullptr) return nullptr;
     /* A sub-API this GPU does not run is a context the guest should never have
      * been allowed to ask for, but the capset is the union across GPUs, so it
      * could have been. */
@@ -72,12 +80,12 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid)
          * dxgkrnl's timeout, so it may cost a context and never a driver
          * start-up (feature 044, T035). A GPU the capset said runs the API can
          * still refuse a context, and then the slot goes back. */
-        if (!bind(slot, sub_api, *gpu)) {
+        if (!bind(slot, sub_api, *gpu, options, shared)) {
             sessions_[slot].release();
             return nullptr;
         }
-        slot_api_[slot] = sub_api;
-        slot_gpu_[slot] = gpu->index();
+        apis_of_[slot] = sub_api;
+        gpus_of_[slot] = gpu->index();
         return &sessions_[slot];
     }
     return nullptr;
@@ -94,12 +102,26 @@ SessionBackend *ExecutorRoot::backend_in(uint32_t slot, uint32_t sub_api)
     }
 }
 
-bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu)
+const OpenGlBackend *ExecutorRoot::sharing(const ContextSession *share, const HostGpu &gpu) const
+{
+    AV_SCOPE("ExecutorRoot::sharing");
+    for (uint32_t slot = 0u; slot < max_sessions; slot++) {
+        if (&sessions_[slot] != share) continue;
+        const bool fits = share->live() && apis_of_[slot] == RVK_EXECUTOR_SUB_API_OPENGL &&
+                          gpus_of_[slot] == gpu.index();
+        return fits ? &opengl_[slot] : nullptr;
+    }
+    return nullptr;
+}
+
+bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, const RvkContextOptions *options,
+                        const OpenGlBackend *share)
 {
     AV_SCOPE("ExecutorRoot::bind");
     switch (sub_api) {
     case RVK_EXECUTOR_SUB_API_OPENCL: return opencl_[slot].initialize(apis_->opencl_device(gpu.index()));
-    case RVK_EXECUTOR_SUB_API_OPENGL: return opengl_[slot].initialize(apis_->gl_display(gpu.index()));
+    case RVK_EXECUTOR_SUB_API_OPENGL:
+        return opengl_[slot].initialize(apis_->gl_display(gpu.index()), options, share);
     default: vulkan_[slot].initialize(gpu); return true;
     }
 }
@@ -114,6 +136,8 @@ void ExecutorRoot::close(ContextSession *session)
      * which is a guest's to trigger as often as it likes. */
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         if (&sessions_[slot] != session) continue;
+        apis_of_[slot] = 0u;
+        gpus_of_[slot] = 0u;
         vulkan_[slot].shut_down();
         opencl_[slot].shut_down();
         opengl_[slot].shut_down();
@@ -138,8 +162,8 @@ void ExecutorRoot::report(StateWriter &writer)
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         if (!sessions_[slot].live()) continue;
         writer.open("session", slot);
-        writer.text("api", api_name(slot_api_[slot]));
-        writer.number("gpu", slot_gpu_[slot]);
+        writer.text("api", api_name(apis_of_[slot]));
+        writer.number("gpu", gpus_of_[slot]);
         writer.close();
     }
     writer.close();

@@ -45,7 +45,8 @@ public:
      * into `request`, and reports what it wrote. Returns the number completed. */
     std::uint16_t answer_all(std::uint8_t *request, std::uint32_t capacity, Answerer answerer, void *context);
     static constexpr std::uint32_t max_requests = 64u;
-    static constexpr std::uint32_t request_bytes = 64u;
+    /* The widest request a driver writes here (RvkRequestWriter::max_request_size). */
+    static constexpr std::uint32_t request_bytes = 96u;
     /* The type of the first request published and not answered yet, or 0 when
      * none is: what a host that answers by kind has to see before it does. */
     std::uint32_t        pending_type() const;

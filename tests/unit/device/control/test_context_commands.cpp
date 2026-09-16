@@ -8,6 +8,7 @@
 #include "device/control/control_request.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/fence/fence_interrupts.hpp"
+#include "device/abi/rvk_executor.h"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "device/memory/blob_table.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -18,6 +19,7 @@
 #include "harness/ring/ring_blob_writer.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"
+#include "proto/context/gl_context_options.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/virtio_gpu/context_request.hpp"
@@ -46,7 +48,10 @@ namespace {
 constexpr std::uint32_t ok_nodata = 0x1100u, ok_capset_info = 0x1102u, ok_capset = 0x1103u,
                         err_unanswered = 0u, err_out_of_memory = 0x1201u, err_invalid_resource_id = 0x1203u,
                         err_invalid_context_id = 0x1204u, err_invalid_parameter = 0x1205u;
-constexpr std::uint32_t ring = 20u, fence = 21u, small_ring = 22u, headless_ring = 23u, second_ring = 24u;
+constexpr std::uint32_t ring = 20u, fence = 21u, small_ring = 22u, headless_ring = 23u, second_ring = 24u,
+                        third_ring = 25u;
+constexpr std::uint32_t vulkan_only = static_cast<std::uint32_t>(SubApi::vulkan);
+constexpr std::uint32_t vulkan_and_gl = vulkan_only | static_cast<std::uint32_t>(SubApi::opengl);
 constexpr std::uint8_t  uuid[16] = {0x7b, 0x7a};
 
 GpuRequestBuilder capset_info(std::uint32_t index)
@@ -78,42 +83,48 @@ GpuRequestBuilder destroy(std::uint32_t id)
     return request;
 }
 
-GpuRequestBuilder submit(std::uint32_t id, const ContextSetup &setup, std::uint32_t size = ContextSetup::encoded_size)
+/* The setup's own size unless `size` says otherwise. */
+GpuRequestBuilder submit(std::uint32_t id, const ContextSetup &setup, std::uint32_t size = 0u)
 {
     std::uint8_t bytes[ContextSetup::encoded_size] = {};
     static_cast<void>(setup.encode(bytes, sizeof bytes));
     GpuRequestBuilder request(ContextCommands::submit_3d);
-    request.context(id).u32(size).u32(0u).append(bytes, sizeof bytes);
+    request.context(id).u32(size != 0u ? size : static_cast<std::uint32_t>(setup.size())).u32(0u);
+    request.append(bytes, setup.size());
     return request;
 }
 
 ContextSetup setup(std::uint32_t ring_id = ring, std::uint8_t order = 12u, std::uint16_t major = 1u,
-                   std::uint32_t doorbell = 0u, std::uint32_t reply = 0u)
+                   std::uint32_t doorbell = 0u, std::uint32_t reply = 0u, std::uint16_t minor = 0u)
 {
-    return ContextSetup(ProtocolVersion(major, 0u), SubApi::vulkan, ring_id, order, fence, doorbell, reply);
+    return ContextSetup(ProtocolVersion(major, minor), SubApi::vulkan, ring_id, order, fence, doorbell, reply);
 }
 
 class Fixture {
 public:
-    Fixture()
-        : blobs_(host_), interrupts_(host_), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(),
+    /* A device offering `sub_apis`, over a library of `abi_version`. */
+    explicit Fixture(std::uint32_t sub_apis = vulkan_only, std::uint32_t abi_version = RVK_EXECUTOR_ABI_VERSION)
+        : blobs_(host_), interrupts_(host_), ops_(sub_apis), library_(),
           contexts_(host_, blobs_, interrupts_, library_), capset_(host_), commands_(host_, contexts_, capset_)
     {
         static_cast<void>(blobs_.initialize());
+        static_cast<void>(contexts_.initialize());
+        ops_.editable().abi_version = abi_version;
         static_cast<void>(library_.accept(&ops_.table()));
         host_.add_gpu(uuid);
         host_.set_hostmem_size(0x10000u);
-        capset_.describe(0u, static_cast<std::uint32_t>(SubApi::vulkan),
-                         av::CapsetInfo::feature_host_visible_memory);
+        capset_.describe(0u, sub_apis, av::CapsetInfo::feature_host_visible_memory);
         static_cast<void>(blobs_.create_host(ring, 0x2000u));
         static_cast<void>(blobs_.create_host(fence, 0x1000u));
         static_cast<void>(blobs_.create_host(small_ring, 0x1000u));
         static_cast<void>(blobs_.create_host(headless_ring, 0x2000u));
         static_cast<void>(blobs_.create_host(second_ring, 0x2000u));
+        static_cast<void>(blobs_.create_host(third_ring, 0x2000u));
         av::RingBlobWriter writer(blobs_);
         writer.write_header(ring, 12u);
         writer.write_header(small_ring, 12u);
         writer.write_header(second_ring, 12u);
+        writer.write_header(third_ring, 12u);
     }
 
     /* The response type, or 0 when the core left the request to the base class. */
@@ -133,6 +144,7 @@ public:
     MockHost           &host() { return host_; }
     BlobTable          &blobs() { return blobs_; }
     DeviceContextTable &contexts() { return contexts_; }
+    av::MockExecutorOps &ops() { return ops_; }
 
 private:
     MockHost            host_;
@@ -247,6 +259,10 @@ TEST(context_commands_submit, refuses_every_setup_it_cannot_bind)
       {submit(5u, setup()).truncate(31u), err_invalid_parameter},
       {submit(5u, setup(), 31u), err_invalid_parameter},
       {submit(5u, setup()).truncate(48u), err_invalid_parameter},        /* the buffer is not all there */
+      {submit(5u, setup(), 48u), err_invalid_parameter},                 /* a 32-byte setup named as 48 */
+      {submit(5u, setup(ring, 12u, 1u, 0u, 0u, 1u), 32u), err_invalid_parameter},   /* a 48-byte one as 32 */
+      {submit(5u, setup(ring, 12u, 1u, 0u, 0u, 1u)).truncate(79u), err_invalid_parameter},
+      {submit(5u, setup(), 49u), err_invalid_parameter},                 /* past any setup */
       {malformed, err_invalid_parameter},
       {submit(5u, setup(99u)), err_invalid_resource_id},
       {submit(5u, setup(small_ring)), err_invalid_parameter},
@@ -258,6 +274,15 @@ TEST(context_commands_submit, refuses_every_setup_it_cannot_bind)
   for (Case &c : cases) CHECK_EQ(fixture.send(c.request), c.answer);
   CHECK(!fixture.contexts().find(5u)->binding().bound());
   CHECK_EQ(fixture.send(submit(5u, setup())), ok_nodata); }
+
+/* The setup of the current minor is 48 bytes, and binds as the old one does. */
+TEST(context_commands_submit, binds_a_setup_of_the_current_minor)
+{ Fixture fixture;
+  CHECK_EQ(fixture.send(create(5u)), ok_nodata);
+  const ContextSetup current = setup(ring, 12u, 1u, 0u, 0u, 1u);
+  CHECK_EQ(current.size(), 48u);
+  CHECK_EQ(fixture.send(submit(5u, current)), ok_nodata);
+  CHECK(fixture.contexts().find(5u)->binding().bound()); }
 
 TEST(context_commands_submit, a_host_that_cannot_stage_the_batches_is_out_of_memory)
 { Fixture fixture;
@@ -322,3 +347,51 @@ TEST(context_commands, answer_is_main_loop_only)
                Status::ok);
   fixture.host().join_thread(thread);
   CHECK(fixture.host().claim(HostViolation::main_loop_required)); }
+
+/* ---- OpenGL options and sharing (feature 050) ---- */
+
+namespace {
+
+ContextSetup gl_setup(std::uint32_t ring_id, std::uint32_t doorbell, const av::GlContextOptions &options)
+{
+    return ContextSetup(ProtocolVersion(1u, ContextSetup::options_minor), SubApi::opengl, ring_id, 12u, fence,
+                        doorbell, 0u, options);
+}
+
+const av::GlContextOptions core_33(3u, 3u, av::GlContextOptions::Profile::core, 0u, 0u);
+
+}  // namespace
+
+TEST(context_commands_submit, a_gl_context_shares_only_another_bound_gl_context)
+{ Fixture fixture(vulkan_and_gl);
+  CHECK_EQ(fixture.send(create(1u)), ok_nodata);
+  CHECK_EQ(fixture.send(submit(1u, gl_setup(ring, 1u, core_33))), ok_nodata);
+  CHECK_EQ(fixture.send(create(2u)), ok_nodata);
+  CHECK_EQ(fixture.send(submit(2u, setup(second_ring, 12u, 1u, 2u))), ok_nodata);
+  CHECK_EQ(fixture.send(create(3u)), ok_nodata);
+  CHECK_EQ(fixture.send(create(4u)), ok_nodata);
+  const std::uint32_t refused[] = {99u, 3u, 2u, 4u};
+  for (const std::uint32_t share : refused) {
+      CHECK_EQ(fixture.send(submit(3u, gl_setup(third_ring, 3u, core_33.sharing(share)))), err_invalid_parameter);
+      CHECK(!fixture.contexts().find(3u)->binding().bound());
+  }
+  CHECK(!fixture.contexts().can_share(3u, 99u));
+  CHECK(!fixture.contexts().can_share(1u, 1u));
+  CHECK(!fixture.contexts().can_share(3u, 2u));
+  CHECK(!fixture.contexts().can_share(3u, 4u));
+  CHECK(!fixture.contexts().can_share(3u, 0u));
+  CHECK(fixture.contexts().can_share(3u, 1u));
+  CHECK_EQ(fixture.send(submit(3u, gl_setup(third_ring, 3u, core_33.sharing(1u)))), ok_nodata);
+  CHECK(fixture.contexts().find(3u)->binding().bound());
+  CHECK(fixture.contexts().invariants_hold()); }
+
+/* A library before version 4 makes default contexts: options are refused
+ * before anything is bound, and the defaults still bind. */
+TEST(context_commands_submit, options_a_version_three_library_cannot_make_are_refused)
+{ Fixture fixture(vulkan_and_gl, RVK_EXECUTOR_ABI_VERSION_HANDLES);
+  CHECK_EQ(fixture.send(create(1u)), ok_nodata);
+  CHECK_EQ(fixture.send(submit(1u, gl_setup(ring, 1u, core_33))), err_invalid_parameter);
+  CHECK(!fixture.contexts().find(1u)->binding().bound());
+  CHECK_EQ(fixture.host().live_doorbells(), 0u);
+  CHECK_EQ(fixture.send(submit(1u, gl_setup(ring, 1u, av::GlContextOptions()))), ok_nodata);
+  CHECK(fixture.contexts().find(1u)->binding().bound()); }

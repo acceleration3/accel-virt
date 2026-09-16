@@ -122,6 +122,7 @@ bool ExecutorConformance::run(const char *path)
     if (found_ != 0u) return false;
     check_sub_apis();
     check_create_and_destroy();
+    if (ops_->abi_version >= options_version) check_create_with_options();
     return found_ == 0u;
 }
 
@@ -144,6 +145,50 @@ void ExecutorConformance::check_table()
             "the table claims version 2 and is missing one of its memory operations");
     if (ops_->abi_version < imported_handle_version) return;
     require(ops_->imported_handle != nullptr, "the table claims version 3 and has no imported_handle");
+    if (ops_->abi_version < options_version) return;
+    require(ops_->create_with_options != nullptr, "the table claims version 4 and has no create_with_options");
+}
+
+/* Version 4 (feature 050): no options is create; options belong to OpenGL
+ * alone; and on a real GPU, an OpenGL 4.6 core context is made, one sharing it
+ * too, and OpenGL 5.0 is refused. */
+void ExecutorConformance::check_create_with_options()
+{
+    const std::uint32_t   offered = ops_->sub_apis(ops_->opaque);
+    const std::uint8_t   *gpu = real_gpu_ ? gpu_ : no_such_gpu;
+    const RvkContextOptions core_46 = {4u, 6u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u};
+    const RvkContextOptions gl_50 = {5u, 0u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u};
+    require(ops_->create_with_options(ops_->opaque, unclaimed_sub_api, gpu, nullptr, nullptr) == nullptr,
+            "create_with_options answered an executor for a sub-API nobody defined");
+    for (const ApiBit &api : api_bits) {
+        if ((offered & api.sub_api) == 0u) continue;
+        RvkExecutor *const plain = ops_->create_with_options(ops_->opaque, api.sub_api, gpu, nullptr, nullptr);
+        if (plain == nullptr) {
+            skipped_because("an offered sub-API made no executor with no options; its options went unchecked");
+            continue;
+        }
+        if (api.sub_api != RVK_EXECUTOR_SUB_API_OPENGL) {
+            require(ops_->create_with_options(ops_->opaque, api.sub_api, gpu, &core_46, nullptr) == nullptr,
+                    "create_with_options made a context with OpenGL options for another sub-API");
+            require(ops_->create_with_options(ops_->opaque, api.sub_api, gpu, nullptr, plain) == nullptr,
+                    "create_with_options shared an executor of a sub-API that shares nothing");
+        } else if (real_gpu_) {
+            RvkExecutor *const core = ops_->create_with_options(ops_->opaque, api.sub_api, gpu, &core_46, nullptr);
+            require(core != nullptr, "create_with_options refused an OpenGL 4.6 core context on a real GPU");
+            RvkExecutor *const shared = core != nullptr
+                                            ? ops_->create_with_options(ops_->opaque, api.sub_api, gpu, &core_46, core)
+                                            : nullptr;
+            require(core == nullptr || shared != nullptr,
+                    "create_with_options refused an OpenGL context sharing another on its GPU");
+            require(ops_->create_with_options(ops_->opaque, api.sub_api, gpu, &gl_50, nullptr) == nullptr,
+                    "create_with_options made an OpenGL 5.0 context");
+            if (shared != nullptr) ops_->destroy(ops_->opaque, shared);
+            if (core != nullptr) ops_->destroy(ops_->opaque, core);
+        } else {
+            skipped_because("OpenGL's options were not checked without a real GPU");
+        }
+        ops_->destroy(ops_->opaque, plain);
+    }
 }
 
 void ExecutorConformance::check_sub_apis()

@@ -38,7 +38,7 @@ struct DeviceContextTableProbe {
     {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
-                static_cast<void>(slot.construct(table.host_, table.blobs_, table.interrupts_, table.library_, id));
+                static_cast<void>(slot.construct(table.host_, table.blobs_, table.interrupts_, table.library_, table.shares_, id));
                 static_cast<void>(slot.object().start());
                 return;
             }
@@ -224,7 +224,7 @@ TEST(virtio_gpu_rvk_realize, an_executor_table_this_abi_does_not_accept_is_refus
   char bytes[128];
   TextBuffer message(bytes, sizeof bytes);
   CHECK_STATUS(device.realize("auto", false, &executor.table(), message), Status::invalid_parameter);
-  CHECK(std::strstr(message.text(), "not ABI version 1 or 2") != nullptr);
+  CHECK(std::strstr(message.text(), "not ABI version 1 to 4") != nullptr);
   CHECK(!device.realized());
   CHECK_EQ(host.logged(), 1u); }
 
@@ -353,6 +353,23 @@ TEST(virtio_gpu_rvk_realize, a_host_without_a_mutex_for_the_blob_table_is_refuse
   CHECK(device.invariants_hold());
   device.reset(); }
 
+/* Feature 050: the contexts' shared executors need a lock of their own, and a
+ * host with none refuses the realize with that said; the next one completes. */
+TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_shared_executors_refuses_the_realize)
+{ MockHost host;
+  host.add_gpu(first);
+  VirtioGpuRvk device(host);
+  char bytes[128];
+  TextBuffer message(bytes, sizeof bytes);
+  host.fail_mutex_at(3u);
+  CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::no_memory);
+  CHECK(std::strstr(message.text(), "no mutex for the contexts' shared executors") != nullptr);
+  CHECK(!device.realized());
+  TextBuffer again(bytes, sizeof bytes);
+  CHECK_STATUS(device.realize("auto", false, nullptr, again), Status::ok);
+  CHECK(device.realized());
+  device.reset(); }
+
 /* The stress probe is a measurement, not a capability: a host that has no
  * mutex left for it realizes anyway, with nothing counting interrupts. */
 TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_the_stress_probe_still_realizes)
@@ -361,7 +378,7 @@ TEST(virtio_gpu_rvk_realize, a_host_with_no_mutex_for_the_stress_probe_still_rea
   VirtioGpuRvk device(host);
   char bytes[96];
   TextBuffer message(bytes, sizeof bytes);
-  host.fail_mutex_at(3u);   /* the fence interrupts take the first, the blob table the second */
+  host.fail_mutex_at(4u);   /* the fence interrupts, the blob table and the shared executors take the first three */
   CHECK_STATUS(device.realize("auto", false, nullptr, message), Status::ok);
   CHECK(device.realized());
   CHECK(device.invariants_hold());
@@ -386,10 +403,11 @@ TEST(virtio_gpu_rvk, lifecycle_is_main_loop_only)
                    &device, thread),
                Status::ok);
   host.join_thread(thread);
-  /* realize, its fence interrupts, its blob table and its binding, reset, both
-   * tables, the status and the interrupts under it, create, destroy and its
-   * table, and control, which an unrealized device answers no further */
-  for (int violation = 0; violation < 13; violation++) CHECK(host.claim(HostViolation::main_loop_required));
+  /* realize, its fence interrupts, its blob table, its context table and its
+   * binding, reset, both tables, the status and the interrupts under it,
+   * create, destroy and its table, and control, which an unrealized device
+   * answers no further */
+  for (int violation = 0; violation < 14; violation++) CHECK(host.claim(HostViolation::main_loop_required));
   CHECK_EQ(host.unclaimed_violations(), 0u);
   CHECK_EQ(host.logged(), 1u); }
 

@@ -14,10 +14,12 @@ bytes, reserved and required zero until now, carry the options:
 | 25 | u8 | minor | at most the highest minor of `major` (1.5, 2.1, 3.3, 4.6) |
 | 26 | u8 | profile | 0 none, 1 core, 2 compatibility (050 sends only 0 and 1) |
 | 27 | u8 | flags | bit 0 debug, bit 1 forward compatible, bit 2 robust access, bit 3 lose context on reset; bits 4-7 zero |
-| 28 | u32 | share_context | the D3DKMT handle of another rvk OpenGL context of this process and device, or 0 |
+| 28 | u32 | share_context | the D3DKMT handle of another rvk OpenGL context's ring allocation, of this process and device, or 0 |
 
 All eight zero is the old meaning (the host's default context, no sharing), so
-every existing caller is unchanged. The KMD refuses (`STATUS_INVALID_PARAMETER`)
+every existing caller is unchanged. The share context is named by its ring's
+allocation handle because dxgkrnl resolves only allocation and resource handles
+for a driver (`DXGK_HANDLE_TYPE`), not context handles. The KMD refuses (`STATUS_INVALID_PARAMETER`)
 a non-zero option for a sub-API other than OpenGL, any rule above broken
 (major 0 with a non-zero minor, profile or flag included), and a share context
 that is not a live rvk OpenGL context of the calling process on the same device.

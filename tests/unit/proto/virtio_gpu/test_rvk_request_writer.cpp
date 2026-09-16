@@ -4,6 +4,7 @@
 #include "harness/framework/byte_layout.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "proto/context/context_setup.hpp"
+#include "proto/context/gl_context_options.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/context/sub_api.hpp"
 #include "proto/virtio_gpu/blob_request.hpp"
@@ -171,11 +172,36 @@ TEST(rvk_request_writer_setup, is_submit_3d_carrying_one_context_setup)
   ContextRequest decoded;
   CHECK_STATUS(decoded.decode_submit(reader), Status::ok);
   CHECK_EQ(decoded.context_id(), 9u);
-  CHECK_EQ(decoded.command_size(), ContextSetup::encoded_size);
+  CHECK_EQ(decoded.command_size(), ContextSetup::base_size);
   ContextSetup read_back;
-  CHECK_STATUS(read_back.decode(buffer.bytes + 32u, ContextSetup::encoded_size), Status::ok);
+  CHECK_STATUS(read_back.decode(buffer.bytes + 32u, ContextSetup::base_size), Status::ok);
   CHECK_EQ(read_back.doorbell(), 7u);
   CHECK_EQ(read_back.reply_resource(), 42u); }
+
+/* A setup of the current minor carries its options in 48 bytes; one whose
+ * options it cannot carry is refused and nothing is left to send. */
+TEST(rvk_request_writer_setup, carries_a_setup_of_its_own_size)
+{ Buffer buffer;
+  RvkRequestWriter writer(buffer.bytes, sizeof buffer.bytes);
+  const av::GlContextOptions options(4u, 6u, av::GlContextOptions::Profile::core, 0u, 3u);
+  const ContextSetup setup(ProtocolVersion(1u, 1u), SubApi::opengl, 40u, 12u, 41u, 7u, 42u, options);
+  CHECK_STATUS(writer.setup(9u, setup), Status::ok);
+  CHECK_EQ(writer.length(), 80u);
+  WireReader reader(buffer.bytes, writer.length());
+  ContextRequest decoded;
+  CHECK_STATUS(decoded.decode_submit(reader), Status::ok);
+  CHECK_EQ(decoded.command_size(), 48u);
+  ContextSetup read_back;
+  CHECK_STATUS(read_back.decode(buffer.bytes + 32u, 48u), Status::ok);
+  CHECK_EQ(read_back.options().major(), std::uint8_t{4u});
+  CHECK_EQ(read_back.options().share_context(), 3u);
+  const ContextSetup vulkan_with_options(ProtocolVersion(1u, 1u), SubApi::vulkan, 40u, 12u, 41u, 7u, 42u, options);
+  CHECK_STATUS(writer.setup(9u, vulkan_with_options), Status::invalid_parameter);
+  CHECK_EQ(writer.length(), 0u);
+  std::uint8_t tight[79] = {};
+  RvkRequestWriter short_writer(tight, sizeof tight);
+  CHECK_STATUS(short_writer.setup(9u, setup), Status::too_large);
+  CHECK_EQ(short_writer.length(), 0u); }
 
 TEST(rvk_request_writer, a_request_that_does_not_fit_writes_nothing)
 { std::uint8_t bytes[71];

@@ -68,7 +68,6 @@ private:
     static constexpr size_t   guest_blob_size = guest_blob_fixed + guest_blob_entry;
     static constexpr size_t   host_blob_size = 56u;
     static constexpr size_t   map_blob_size = 40u;
-    static constexpr size_t   setup_size = 64u;
     static constexpr uint32_t name_bytes = 64u;
     static constexpr uint32_t blob_memory_guest = 1u;
     static constexpr uint32_t blob_memory_host3d = 2u;

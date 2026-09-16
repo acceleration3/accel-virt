@@ -61,8 +61,11 @@ public:
      * context up. invalid_state for a context already bound; no_space when no
      * doorbell is free or the device has none for the slot; invalid_parameter
      * for a handle naming no allocation of its role, one another context
-     * already runs on, a ring too small for its order, or pages VidMm has not
-     * all mapped; no_memory when a page cannot be
+     * already runs on, a ring too small for its order, pages VidMm has not
+     * all mapped, a share context that is not another live OpenGL context of
+     * the process on the same device (named by its ring's handle, which only
+     * resolves in the process that made it; feature 050), or options the
+     * device's protocol cannot carry; no_memory when a page cannot be
      * mapped; the device's refusal otherwise. Nothing stays bound on failure. */
     [[nodiscard]] Status bind(void *context, const RvkContextRecord &record, VirtioGpuDevice &device,
                               RegisterWindow &doorbells, const CapsetInfo &capset);
@@ -117,6 +120,9 @@ private:
      * when `context` already holds one (in `duplicate`). */
     uint32_t             claim(void *context, bool &duplicate);
     [[nodiscard]] Status resolve(uint32_t handle, uint32_t role, uint8_t order, Allocation *&allocation);
+    /* The device id of the live OpenGL context of this process and device whose
+     * ring `handle` names, other than `slot`'s own; 0 for a handle of 0. */
+    [[nodiscard]] Status resolve_share(uint32_t slot, uint32_t handle, uint32_t &context_id);
     [[nodiscard]] Status set_up(uint32_t slot, const RvkContextRecord &record, VirtioGpuDevice &device,
                                 RegisterWindow &doorbells, const CapsetInfo &capset);
     void                 release(uint32_t slot);

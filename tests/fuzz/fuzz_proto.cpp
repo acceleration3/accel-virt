@@ -5,6 +5,7 @@
 #include "core/support/status.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"
+#include "proto/context/sub_api.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/command_header.hpp"
@@ -30,6 +31,18 @@ void round_trip(const std::uint8_t *bytes, std::size_t length)
     std::uint8_t again[Structure::encoded_size] = {};
     if (decoded.encode(again, sizeof again) != av::Status::ok) __builtin_trap();
     if (std::memcmp(again, bytes, sizeof again) != 0) __builtin_trap();
+}
+
+/* A setup is 32 or 48 bytes by its minor: what decodes is exactly its size. */
+void setup_round_trip(const std::uint8_t *bytes, std::size_t length)
+{
+    av::ContextSetup decoded;
+    if (decoded.decode(bytes, length) != av::Status::ok) return;
+    if (decoded.size() != length) __builtin_trap();
+    std::uint8_t again[av::ContextSetup::encoded_size] = {};
+    if (decoded.encode(again, sizeof again) != av::Status::ok) __builtin_trap();
+    if (std::memcmp(again, bytes, length) != 0) __builtin_trap();
+    if (decoded.sub_api() != av::SubApi::opengl && !decoded.options().defaults()) __builtin_trap();
 }
 
 void ring_sequence(const std::uint8_t *bytes, std::size_t length)
@@ -75,7 +88,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     const std::size_t length = size - 1u;
     switch (data[0] % 11u) {
     case 0: round_trip<av::CapsetInfo>(payload, length); break;
-    case 1: round_trip<av::ContextSetup>(payload, length); break;
+    case 1: setup_round_trip(payload, length); break;
     case 2: round_trip<av::RingHeader>(payload, length); break;
     case 3: round_trip<av::SubmissionDescriptor>(payload, length); break;
     case 4: round_trip<av::FencePage>(payload, length); break;

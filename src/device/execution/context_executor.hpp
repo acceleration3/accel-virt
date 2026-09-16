@@ -6,6 +6,7 @@
 
 #include "core/support/status.hpp"
 #include "device/abi/rvk_executor.h"
+#include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
 
 #include <stddef.h>
@@ -14,6 +15,7 @@
 namespace av {
 
 class ExecutorLibrary;
+class ExecutorShares;
 class Host;
 struct ContextExecutorProbe;
 
@@ -21,16 +23,23 @@ class ContextExecutor {
 public:
     static constexpr size_t uuid_bytes = 16u;
 
-    ContextExecutor(Host &host, const ExecutorLibrary &library);
+    /* `shares` is the device's; an OpenGL executor is published there under
+     * context `id` for as long as it lives (feature 050). */
+    ContextExecutor(Host &host, const ExecutorLibrary &library, ExecutorShares &shares, uint32_t id);
     /* An executor the worker never destroyed is released here, off its thread. */
     ~ContextExecutor();
     ContextExecutor(const ContextExecutor &) = delete;
     ContextExecutor &operator=(const ContextExecutor &) = delete;
 
-    /* Main loop, at setup: the executor create() makes. */
-    void                 configure(SubApi api, const uint8_t *gpu_uuid);
-    /* Worker. invalid_state when created or not configured; no_memory when
-     * the library makes none. */
+    /* Main loop, at setup: the executor create() makes, with `options`, whose
+     * share context is the device's id of the context to share with. */
+    void                 configure(SubApi api, const uint8_t *gpu_uuid, const GlContextOptions &options);
+    /* Whether the library can make a context with `options`: the defaults
+     * always, anything else only from version 4. */
+    bool                 accepts(const GlContextOptions &options) const;
+    /* Worker. invalid_state when created or not configured, or for an OpenGL
+     * executor that cannot be published, which is given back; no_memory when
+     * the library makes none, or there is no executor to share with. */
     [[nodiscard]] Status create();
     /* Worker. */
     void                 destroy();
@@ -59,11 +68,16 @@ private:
     static constexpr uint16_t opencl_commands = 2u;
     static constexpr uint16_t opengl_commands = 3u;
 
+    RvkExecutor *make() const;
+
     Host                  &host_;
     const ExecutorLibrary &library_;
+    ExecutorShares        &shares_;
+    uint32_t               id_;
     RvkExecutor           *executor_;
     SubApi                 api_;
     uint8_t                uuid_[uuid_bytes];
+    GlContextOptions       options_;
     bool                   configured_;
 
     friend struct ContextExecutorProbe;

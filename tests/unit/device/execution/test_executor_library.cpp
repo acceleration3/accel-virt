@@ -122,9 +122,10 @@ TEST(executor_library_accept, version_two_is_a_library_that_imports_and_names_no
   CHECK(!library.names_imports()); }
 
 TEST(executor_library_accept, version_three_without_imported_handle_is_refused)
-{ CHECK_EQ(RVK_EXECUTOR_ABI_VERSION, 3u);
+{ CHECK_EQ(RVK_EXECUTOR_ABI_VERSION, 4u);
   CHECK_EQ(RVK_EXECUTOR_ABI_VERSION_HANDLES, 3u);
   MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
+  ops.editable().abi_version = RVK_EXECUTOR_ABI_VERSION_HANDLES;
   ops.editable().imported_handle = nullptr;
   ExecutorLibrary library;
   CHECK_STATUS(library.accept(&ops.table()), Status::invalid_parameter);
@@ -156,4 +157,65 @@ TEST(executor_library_import_blob, forwards_the_import_its_release_and_the_handl
   CHECK_EQ(library.imported_handle(executor, 0x21u), 0u);
   CHECK_EQ(ops.released(), 1u);
   library.destroy(executor);
+  CHECK_EQ(ops.misuses(), 0u); }
+
+/* Version 4 (feature 050): a table claiming it carries create_with_options or
+ * is refused; an older one makes default contexts only, and a create asking
+ * for anything else is refused without a call. */
+TEST(executor_library_accept, version_four_needs_create_with_options)
+{ MockExecutorOps ops(RVK_EXECUTOR_SUB_API_OPENGL);
+  RvkExecutorOps &table = ops.editable();
+  CHECK_EQ(table.abi_version, RVK_EXECUTOR_ABI_VERSION_OPTIONS);
+  table.create_with_options = nullptr;
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&table), Status::invalid_parameter);
+  CHECK(!library.available());
+  CHECK(!library.names_options()); }
+
+TEST(executor_library_create, a_version_four_library_is_handed_the_options_and_the_share)
+{ const std::uint8_t uuid[16] = {9};
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_OPENGL);
+  ExecutorLibrary library;
+  CHECK(!library.names_options());
+  CHECK_STATUS(library.accept(&ops.table()), Status::ok);
+  CHECK(library.names_options());
+  RvkExecutor *const first = library.create(SubApi::opengl, uuid);
+  CHECK(first != nullptr);
+  CHECK_EQ(ops.option_creates(), 1u);
+  CHECK(ops.last_share() == nullptr);
+  CHECK_EQ(ops.last_options().major, 0u);
+  const RvkContextOptions options = {4u, 6u, RVK_CONTEXT_PROFILE_CORE, RVK_CONTEXT_FLAG_DEBUG, 0u};
+  RvkExecutor *const second = library.create(SubApi::opengl, uuid, &options, first);
+  CHECK(second != nullptr);
+  CHECK(second != first);
+  CHECK_EQ(ops.option_creates(), 2u);
+  CHECK(ops.last_share() == first);
+  CHECK(ops.last_share_live());
+  CHECK_EQ(ops.last_options().major, 4u);
+  CHECK_EQ(ops.last_options().minor, 6u);
+  CHECK_EQ(ops.last_options().profile, RVK_CONTEXT_PROFILE_CORE);
+  CHECK_EQ(ops.last_options().flags, RVK_CONTEXT_FLAG_DEBUG);
+  CHECK_EQ(ops.last_sub_api(), RVK_EXECUTOR_SUB_API_OPENGL);
+  library.destroy(second);
+  library.destroy(first);
+  CHECK_EQ(ops.misuses(), 0u); }
+
+TEST(executor_library_create, a_version_three_library_makes_only_default_contexts)
+{ const std::uint8_t uuid[16] = {};
+  MockExecutorOps ops(RVK_EXECUTOR_SUB_API_OPENGL);
+  RvkExecutorOps &table = ops.editable();
+  table.abi_version = RVK_EXECUTOR_ABI_VERSION_HANDLES;
+  table.create_with_options = nullptr;
+  ExecutorLibrary library;
+  CHECK_STATUS(library.accept(&table), Status::ok);
+  CHECK(!library.names_options());
+  RvkExecutor *const plain = library.create(SubApi::opengl, uuid);
+  CHECK(plain != nullptr);
+  CHECK_EQ(ops.created(), 1u);
+  const RvkContextOptions options = {3u, 3u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u};
+  CHECK(library.create(SubApi::opengl, uuid, &options, nullptr) == nullptr);
+  CHECK(library.create(SubApi::opengl, uuid, nullptr, plain) == nullptr);
+  CHECK_EQ(ops.created(), 1u);
+  CHECK_EQ(ops.option_creates(), 0u);
+  library.destroy(plain);
   CHECK_EQ(ops.misuses(), 0u); }

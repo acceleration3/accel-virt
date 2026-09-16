@@ -8,6 +8,7 @@
 
 namespace av {
 
+class GlContextAttributes;
 class GlDisplay;
 
 class GlContext {
@@ -17,10 +18,12 @@ public:
     GlContext(const GlContext &) = delete;
     GlContext &operator=(const GlContext &) = delete;
 
-    /* Opens a context on `display`, which must outlive it. False for a display
-     * that is not open, a driver that refuses a context, or a context already
-     * open. */
-    [[nodiscard]] bool open(const GlDisplay &display);
+    /* Opens a context on `display`, which must outlive it, made with
+     * `attributes` and sharing `share`'s objects (null: none), which must be
+     * open on the same display. False for a display that is not open, attributes
+     * that are not valid, a share on another display or not open, a driver that
+     * refuses the context, or a context already open. */
+    [[nodiscard]] bool open(const GlDisplay &display, const GlContextAttributes &attributes, const GlContext *share);
     /* Destroys the context; the display stays open for every other one. */
     void               close();
     bool               open() const;

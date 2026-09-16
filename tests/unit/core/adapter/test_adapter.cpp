@@ -85,6 +85,7 @@
 #include "harness/platform/violation.hpp"
 #include "harness/vidpn/fake_vidpn.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
+#include "proto/context/gl_context_options.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/submission/fence_page.hpp"
 #include "proto/submission/submission_descriptor.hpp"
@@ -206,11 +207,11 @@ constexpr std::uint8_t  other_gpu[av::GpuIdentity::uuid_bytes] = {4};
 
 /* A device that says it has a host-visible region; whether it really presents
  * one is the PCI walk's answer, and both have to agree (feature 041). */
-av::CapsetInfo host_capset(const std::uint8_t *uuid)
+av::CapsetInfo host_capset(const std::uint8_t *uuid, std::uint32_t sub_apis = 1u)
 {
     return av::CapsetInfo(av::ProtocolVersion(av::ProtocolVersion::current_major,
                                               av::ProtocolVersion::current_minor),
-                          1u, 64u, 12u, 24u, av::CapsetInfo::feature_host_visible_memory,
+                          sub_apis, 64u, 12u, 24u, av::CapsetInfo::feature_host_visible_memory,
                           av::GpuIdentity(1u, 2u, av::GpuIdentity::discrete_gpu, uuid, 0u, 0u, "the host's"));
 }
 
@@ -263,6 +264,7 @@ public:
     /* What the device says it is from the next ask on: another host GPU is
      * another device (feature 040, FR-005). */
     void                   answer_capset_of(const std::uint8_t *uuid) { capset_ = host_capset(uuid); }
+    void                   offer_opengl() { capset_ = host_capset(first_gpu, 0x3u); }
     /* Whether the driver made its region blob and mapped it. */
     /* A device with no room left for the region's blob. */
     void                   refuse_the_blob() { refuse_blob_ = true; }
@@ -3182,6 +3184,13 @@ public:
         CHECK_STATUS(record.encode(record_bytes_, sizeof record_bytes_), av::Status::ok);
     }
 
+    /* The record asks for an OpenGL context made with `options` instead. */
+    void ask_for_gl(const av::GlContextOptions &options)
+    {
+        const av::RvkContextRecord record(av::SubApi::opengl, 12u, ring_.kmt_handle(), fence_.kmt_handle(),
+                                          reply_.kmt_handle(), options);
+        CHECK_STATUS(record.encode(record_bytes_, sizeof record_bytes_), av::Status::ok);
+    }
     std::uint32_t create_context(av::DxgkargCreateContextRecord &request)
     {
         request.Flags = 0x4u;   /* VirtualAddressing */
@@ -3225,6 +3234,39 @@ private:
 };
 
 }  // namespace
+
+/* Feature 050: an OpenGL context created through the DDI with options asks
+ * the host for them in its setup; options the record may not carry fail the
+ * create before anything reaches the host. */
+TEST(adapter_rvk_context, a_gl_context_created_with_options_asks_the_host_for_them)
+{ Fixture fixture; av::FakeHandleTable handles;
+  fixture.function().add_doorbell_region();
+  fixture.offer_opengl();
+  CHECK_EQ(fixture.start(), success);
+  RvkProcess process(fixture, handles);
+  process.ask_for_gl(av::GlContextOptions(3u, 3u, av::GlContextOptions::Profile::core,
+                                          av::GlContextOptions::forward_compatible, 0u));
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(process.create_context(context), success);
+  CHECK_EQ(fixture.context_requests(), 2u);
+  av::FakeVirtqueueDevice &control = fixture.control();
+  const std::uint8_t *setup = nullptr;
+  for (std::uint32_t index = 0u; index < control.requests(); index++)
+      if (control.request_type(index) == 0x0207u) setup = control.request(index);
+  CHECK(setup != nullptr);
+  CHECK_EQ(setup[24], 48u);                    /* the setup's size */
+  CHECK_EQ(setup[32 + 32], 3u);
+  CHECK_EQ(setup[32 + 33], 3u);
+  CHECK_EQ(setup[32 + 34], 1u);
+  CHECK_EQ(setup[32 + 35], 2u);
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  /* 4.7 is no OpenGL: refused, and the host is asked nothing. */
+  process.ask_for_gl(av::GlContextOptions(4u, 7u, av::GlContextOptions::Profile::core, 0u, 0u));
+  const std::uint32_t before = fixture.context_requests();
+  av::DxgkargCreateContextRecord refused = {};
+  CHECK(process.create_context(refused) != success);
+  CHECK_EQ(fixture.context_requests(), before);
+  CHECK(fixture.adapter().invariants_hold()); }
 
 /* SC-001's driver half: a process's context is set up on the host over its own
  * memory, a batch it describes rings the doorbell, and the submission fence

@@ -17,6 +17,7 @@
 #include "core/platform/spin_lock_try_guard.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "proto/context/rvk_context_record.hpp"
+#include "proto/context/sub_api.hpp"
 #include "proto/resources/allocation_kind.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/resources/host_visible_bind_record.hpp"
@@ -84,6 +85,27 @@ Status RvkContextTable::resolve(uint32_t handle, uint32_t role, uint8_t order, A
     return Status::ok;
 }
 
+Status RvkContextTable::resolve_share(uint32_t slot, uint32_t handle, uint32_t &context_id)
+{
+    AV_SCOPE("RvkContextTable::resolve_share");
+    context_id = 0u;
+    if (handle == 0u) return Status::ok;
+    AcquiredHandleData acquired(dxgkrnl_, handle);
+    if (acquired.acquire() != Status::ok) return Status::invalid_parameter;
+    const Allocation *const ring = allocations_.find(acquired.data());
+    SpinLockGuard           locked(lock_);
+    for (uint32_t other = 0u; other < max_contexts; other++) {
+        /* A slot with no context names no ring, so a handle that is no allocation matches nothing. */
+        if (other == slot || uses_[other][ring_role] != ring || !live_[other]) continue;
+        const RvkContextBinding &binding = bindings_[other].object();
+        if (binding.sub_api() != SubApi::opengl || !ring->held_with(*uses_[slot][ring_role]))
+            return Status::invalid_parameter;
+        context_id = binding.context_id();
+        return Status::ok;
+    }
+    return Status::invalid_parameter;
+}
+
 Status RvkContextTable::bind(void *context, const RvkContextRecord &record, VirtioGpuDevice &device,
                              RegisterWindow &doorbells, const CapsetInfo &capset)
 {
@@ -109,7 +131,12 @@ Status RvkContextTable::bind(void *context, const RvkContextRecord &record, Virt
         for (uint32_t role = 0u; role < roles; role++) uses_[slot][role] = resolved[role];
         orders_[slot] = record.ring_order();
     }
-    const Status status = set_up(slot, record, device, doorbells, capset);
+    uint32_t     share = 0u;
+    const Status shared = resolve_share(slot, record.options().share_context(), share);
+    if (shared != Status::ok) return shared;
+    const RvkContextRecord sharing(record.sub_api(), record.ring_order(), record.ring(), record.fence(),
+                                   record.reply(), record.options().sharing(share));
+    const Status status = set_up(slot, sharing, device, doorbells, capset);
     if (status != Status::ok) return status;
     unwind.dismiss();
     SpinLockGuard locked(lock_);

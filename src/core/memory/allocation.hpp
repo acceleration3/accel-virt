@@ -44,6 +44,9 @@ public:
      * shared memory (feature 041, FR-003). */
     [[nodiscard]] Status open(const void *device);
     [[nodiscard]] Status close();
+    /* Whether the same device holds both, or neither is held: two rvk contexts
+     * share objects only on one device (feature 050). */
+    bool                 held_with(const Allocation &other) const;
 
     /* The guest pages the aperture segment now reads this allocation from. */
     [[nodiscard]] Status map_aperture(const DxgkBuildPagingBufferMapApertureSegmentRecord &request);

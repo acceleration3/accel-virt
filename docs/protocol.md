@@ -27,11 +27,14 @@ a well-formed request this side cannot honour (major version, sub-API);
 
 ## Version
 
-`major.minor`, both `u16`. This document is **1.0**.
+`major.minor`, both `u16`. This document is **1.1**.
 
 Two peers are compatible when their majors are equal. The negotiated version is
 `major.min(local minor, peer minor)`. A structure's layout depends only on the
-major; minors add meaning to feature bits and reserved-free fields only.
+major, with one exception: minor 1 appends the context setup's options (feature
+050), and the setup's minor says which layout it has. The driver writes the
+setup at the negotiated minor, so a device at minor 0 is sent the 32-byte setup
+and never an option.
 
 ## Capset (device -> guest)
 
@@ -82,7 +85,8 @@ may advertise a capability an older guest does not use.
 
 Sent in an rvk control command after `VIRTIO_GPU_CMD_CTX_CREATE` with context
 init capset id 0x72. It binds the context to its ring, fence page and doorbell.
-32 bytes.
+32 bytes at minor 0; 48 at minor 1 and later, and a setup whose length is not
+its minor's is malformed.
 
 | Offset | Type | Field | Rule |
 |--:|---|---|---|
@@ -96,6 +100,17 @@ init capset id 0x72. It binds the context to its ring, fence page and doorbell.
 | 20 | u32 | fence_resource | non-zero, different from `ring_resource` |
 | 24 | u32 | doorbell | the doorbell page, below the capset's `max_contexts` |
 | 28 | u32 | reply_resource | 0 for no reply slot; otherwise different from `ring_resource` and `fence_resource` |
+| 32 | u8 | gl_major | minor 1: 1..4 for OpenGL; 0 means the host's default context, and then every option below is 0 |
+| 33 | u8 | gl_minor | at most `gl_major`'s highest minor (1.5, 2.1, 3.3, 4.6) |
+| 34 | u8 | gl_profile | 0 none, 1 core, 2 compatibility |
+| 35 | u8 | gl_flags | bit 0 debug, 1 forward compatible, 2 robust access, 3 lose context on reset; 4-7 zero |
+| 36 | u32 | share_context | the device context id of a bound OpenGL context to share objects with, or 0 |
+| 40 | u8[8] | reserved | 0 |
+
+Options belong to OpenGL: a setup of another sub-API carries all eight option
+bytes zero. The device refuses (`ERR_INVALID_PARAMETER`) a share context that
+is not another bound OpenGL context of the device, and non-default options when
+its executor library is older than version 4.
 
 The checks that need the capset (major, sub_api membership, ring order range,
 doorbell index) are a separate validation against a decoded capset; the decoder
@@ -107,7 +122,7 @@ A device realized with an executor library (see Execution) offers
 `VIRTIO_GPU_F_CONTEXT_INIT` and `num_capsets` 1, and answers these virtio-gpu
 requests itself (virtio 1.2 §5.7.6.8); without one it offers neither, and
 refuses every request below with `ERR_INVALID_PARAMETER`. The capset carries
-protocol 1.0, exactly the sub-APIs the executor offers, 64 contexts, ring orders 12 to 24,
+protocol 1.1, exactly the sub-APIs the executor offers, 64 contexts, ring orders 12 to 24,
 `host_visible_memory` when the device has a hostmem region, and the host GPU the
 device is bound to. The context setup travels as the whole command buffer of a
 `SUBMIT_3D` to the context: `size` is 32 and the buffer is one setup. The ring
@@ -273,7 +288,7 @@ Every call must return: `CTX_DESTROY` and a reset wait for a worker's call to
 finish.
 
 
-`src/device/abi/rvk_executor.h`, now version 3, is what runs a context's commands on
+`src/device/abi/rvk_executor.h`, now version 4, is what runs a context's commands on
 the host's API: `sub_apis`, `create(sub_api, gpu_uuid)`, `destroy`, and
 `execute(id, payload, size, reply, capacity, &reply_size)` answering executed,
 unknown, undecodable or device lost. The QEMU device loads the library its
@@ -304,6 +319,19 @@ answering to one handle are refused the same way, since RELEASE_BLOB of one
 would release both. A version 2 library still loads and still imports for the
 capset's purposes, but the device never asks it for an IMPORT_BLOB; a table
 claiming version 3 without `imported_handle` fails realize.
+
+**Version 4 adds `create_with_options(sub_api, gpu_uuid, options, share)`**
+(feature 050): `create` with an OpenGL context's version, profile and flags
+(`RvkContextOptions`, null for the defaults) and the executor of the context it
+shares objects with (null for none), which the device resolves from the setup's
+`share_context` among the executors its contexts published, on the same GPU, and
+keeps alive until the create returns. Other sub-APIs refuse options and shares;
+a version the host refuses is a null executor, which the guest sees as the
+context's fault. A version 3 library is only handed the defaults; a table
+claiming version 4 without `create_with_options` fails realize. On OpenGL,
+`import_kinds` answers `RVK_BLOB_HOST_POINTER` and `import_blob` takes the
+pointer as the context's bulk-data region - one at a time, its handle the
+pointer's address - rather than as a GL object.
 
 A blob crosses as a tagged handle - a host pointer or a dma-buf, whichever the
 API can take without a copy - with no offset, because the device hands over a
@@ -411,10 +439,18 @@ doorbell - the miniport owns the doorbell page and rings it itself. 32 bytes.
 | 12 | u32 | ring | the ring allocation, non-zero |
 | 16 | u32 | fence | the fence-page allocation, non-zero, different from `ring` |
 | 20 | u32 | reply | 0 for no reply slot; otherwise different from `ring` and `fence` |
-| 24 | u64 | reserved | 0 |
+| 24 | u8 | gl_major | OpenGL only, as the setup's options (feature 050); 0 on any other sub-API |
+| 25 | u8 | gl_minor | |
+| 26 | u8 | gl_profile | |
+| 27 | u8 | gl_flags | |
+| 28 | u32 | share_context | the ring allocation handle of another rvk OpenGL context of this process and device, or 0 |
 
-The bytes alone prove magic, one known sub-API, non-zero distinct ids and an
-order in 12..24; membership in the device's `sub_apis` and the capset's order
+All eight option bytes zero is the record of old. The bytes alone prove magic,
+one known sub-API, non-zero distinct ids, an order in 12..24 and options only
+an OpenGL record may carry; the miniport resolves `share_context` - a ring
+handle, since dxgkrnl resolves no context handle for a driver - to a live
+OpenGL context of the calling process whose ring the same device holds, and puts
+that context's device id in the setup; membership in the device's `sub_apis` and the capset's order
 range are a second validation against the decoded capset. The record is
 unchanged unless the decode returns ok.
 

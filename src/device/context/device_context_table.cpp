@@ -2,13 +2,15 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
+#include "device/context/context_binding.hpp"
 #include "device/host/host.hpp"
+#include "proto/context/sub_api.hpp"
 
 namespace av {
 
 DeviceContextTable::DeviceContextTable(Host &host, BlobTable &blobs, FenceInterrupts &interrupts,
                                        const ExecutorLibrary &library)
-    : host_(host), blobs_(blobs), interrupts_(interrupts), library_(library), slots_{}
+    : host_(host), blobs_(blobs), interrupts_(interrupts), library_(library), shares_(host, library), slots_{}
     {
         AV_SCOPE("DeviceContextTable::DeviceContextTable");
     }
@@ -17,6 +19,21 @@ DeviceContextTable::~DeviceContextTable()
 {
     AV_SCOPE("DeviceContextTable::~DeviceContextTable");
     destroy_all();
+}
+
+Status DeviceContextTable::initialize()
+{
+    AV_SCOPE("DeviceContextTable::initialize");
+    host_.require_main_loop("DeviceContextTable::initialize");
+    return shares_.initialize();
+}
+
+bool DeviceContextTable::can_share(uint32_t asking, uint32_t share)
+{
+    AV_SCOPE("DeviceContextTable::can_share");
+    host_.require_main_loop("DeviceContextTable::can_share");
+    const DeviceContext *const shared = asking != share ? find(share) : nullptr;
+    return shared != nullptr && shared->binding().bound() && shared->binding().sub_api() == SubApi::opengl;
 }
 
 ObjectStorage<DeviceContext> *DeviceContextTable::slot_of(uint32_t id)
@@ -34,7 +51,7 @@ Status DeviceContextTable::create(uint32_t id)
     if (id == 0u) return Status::invalid_parameter;
     if (slot_of(id) != nullptr) return Status::conflict;
     for (ObjectStorage<DeviceContext> &slot : slots_) {
-        if (slot.construct(host_, blobs_, interrupts_, library_, id) != Status::ok) continue;   /* occupied */
+        if (slot.construct(host_, blobs_, interrupts_, library_, shares_, id) != Status::ok) continue;   /* occupied */
         const Status status = slot.object().start();
         if (status != Status::ok) slot.destroy();
         return status;
@@ -77,16 +94,6 @@ bool DeviceContextTable::holds_doorbell(uint32_t index)
     return false;
 }
 
-void DeviceContextTable::report(StateWriter &writer)
-{
-    AV_SCOPE("DeviceContextTable::report");
-    writer.open("contexts", 0u);
-    writer.number("live", live());
-    for (ObjectStorage<DeviceContext> &slot : slots_)
-        if (slot.constructed()) slot.object().report(writer);
-    writer.close();
-}
-
 uint32_t DeviceContextTable::live() const
 {
     AV_SCOPE("DeviceContextTable::live");
@@ -107,6 +114,16 @@ bool DeviceContextTable::invariants_hold() const
             if (slots_[second].constructed() && slots_[second].object().id() == context.id()) return false;
     }
     return true;
+}
+
+void DeviceContextTable::report(StateWriter &writer)
+{
+    AV_SCOPE("DeviceContextTable::report");
+    writer.open("contexts", 0u);
+    writer.number("live", live());
+    for (ObjectStorage<DeviceContext> &slot : slots_)
+        if (slot.constructed()) slot.object().report(writer);
+    writer.close();
 }
 
 }  // namespace av

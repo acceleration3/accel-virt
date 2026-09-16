@@ -18,6 +18,8 @@
 
 namespace av {
 
+class GlContextAttributes;
+
 class GlDisplay {
 public:
     static constexpr uint32_t uuid_bytes = 16u;
@@ -33,11 +35,12 @@ public:
     void               close();
     bool               open() const;
 
-    /* A context on this display, current on nobody; null when the display is
-     * not open or the driver refuses one. Binds the OpenGL API on the calling
-     * thread first, because EGL keeps the bound API per thread and a worker
-     * never bound it. */
-    void *create_context() const;
+    /* A context on this display made with `attributes`, sharing `share`'s
+     * objects (null: none), current on nobody; null when the display is not
+     * open, the attributes are not valid, or the driver refuses one. Binds the
+     * OpenGL API on the calling thread first, because EGL keeps the bound API
+     * per thread and a worker never bound it. */
+    void *create_context(const GlContextAttributes &attributes, void *share) const;
     [[nodiscard]] bool make_current(void *context) const;
     /* Releases the calling thread's current context, then destroys `context`. */
     void  destroy_context(void *context) const;

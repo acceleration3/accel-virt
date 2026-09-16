@@ -12,6 +12,7 @@
 
 #include "core/support/status.hpp"
 #include "core/trace/state_reporter.hpp"
+#include "device/abi/rvk_executor.h"
 #include "device/executor/context_session.hpp"
 #include "device/executor/host_gpu_set.hpp"
 #include "device/executor/opencl_backend.hpp"
@@ -56,8 +57,14 @@ public:
      *
      * The backend is the session's own, not shared: a context that dies still
      * owning a VkInstance has to take it with it, and one shared by every
-     * session has nowhere to do that (feature 042, found by fuzzing). */
-    ContextSession *open(uint32_t sub_api, const uint8_t *gpu_uuid);
+     * session has nowhere to do that (feature 042, found by fuzzing).
+     *
+     * `options` (null: the defaults) and `share` (null: none) are version 4's
+     * (feature 050): only OpenGL takes options other than the defaults or a
+     * share, which must be a live OpenGL session of this root on the same GPU;
+     * anything else is null. */
+    ContextSession *open(uint32_t sub_api, const uint8_t *gpu_uuid, const RvkContextOptions *options = nullptr,
+                         ContextSession *share = nullptr);
     /* The backend a session is running on, for a test to look at. */
     SessionBackend *backend_of(const ContextSession *session);
     /* Gives a session's slot and block back. Safe on a null, which is what the
@@ -88,7 +95,11 @@ private:
     SessionBackend *backend_in(uint32_t slot, uint32_t sub_api);
     /* Binds the backend of `sub_api` in `slot` to `gpu`, with what the host
      * found for it: false when the host found nothing for this API there. */
-    [[nodiscard]] bool bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu);
+    [[nodiscard]] bool bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu, const RvkContextOptions *options,
+                            const OpenGlBackend *share);
+    /* The OpenGL backend `share` runs on, when it is a live OpenGL session of
+     * this root on `gpu`; null otherwise. */
+    const OpenGlBackend *sharing(const ContextSession *share, const HostGpu &gpu) const;
     /* Whether `session` is one of ours rather than a pointer the device
      * invented or already gave back. */
     bool owns(const ContextSession *session) const;
@@ -100,12 +111,13 @@ private:
     VulkanBackend  vulkan_[max_sessions];
     OpenClBackend  opencl_[max_sessions];
     OpenGlBackend  opengl_[max_sessions];
+    /* What each open session runs: its sub-API and its GPU's index, for a
+     * share's check and the dump. */
+    uint32_t       apis_of_[max_sessions];
+    uint32_t       gpus_of_[max_sessions];
     /* The host that was asked, which keeps what a context runs on - its
      * display, its OpenCL device - for as long as this root. Null until then. */
     HostApis      *apis_;
-    /* What each slot was opened for, for the dump. */
-    uint32_t       slot_api_[max_sessions];
-    uint32_t       slot_gpu_[max_sessions];
 };
 
 }  // namespace av

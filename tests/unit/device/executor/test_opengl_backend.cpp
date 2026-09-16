@@ -6,6 +6,7 @@
  * rather than whether a driver drew anything. A host with no EGL fails to open
  * a context and every command is refused, which is also asserted. */
 #include "device/executor/imported_blob.hpp"
+#include "core/support/status.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/opengl_backend.hpp"
 #include "device/shim/gl_display.hpp"
@@ -45,7 +46,18 @@ extern "C" const char *__lsan_default_suppressions(void)
 
 namespace {
 
-std::uint8_t region[4096];
+alignas(4096) std::uint8_t region[2u * 4096u];
+alignas(4096) std::uint8_t second_region[4096];
+
+RvkBlobHandle host_pointer(std::uint8_t *base, std::uint64_t bytes)
+{
+    RvkBlobHandle handle = {};
+    handle.kind = RVK_BLOB_HOST_POINTER;
+    handle.pointer = base;
+    handle.fd = -1;
+    handle.size = bytes;
+    return handle;
+}
 int          fence = 0;
 constexpr std::uint8_t no_such_gpu[16] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
                                           0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
@@ -78,7 +90,9 @@ TEST(opengl_backend, a_fence_is_found_only_by_the_token_it_was_bound_to)
 TEST(opengl_backend, guest_bytes_answers_inside_the_region_and_nowhere_else)
 { OpenGlBackend backend;
   CHECK(backend.guest_bytes(0u, 1u) == nullptr);
-  backend.take_region(region, sizeof region);
+  av::ImportedBlob blob;
+  CHECK_STATUS(blob.take(1u, host_pointer(region, sizeof region)), av::Status::ok);
+  CHECK(backend.adopt(blob));
   CHECK(backend.guest_bytes(0u, sizeof region) == region);
   CHECK(backend.guest_bytes(16u, 32u) == region + 16u);
   CHECK(backend.guest_bytes(0u, sizeof region + 1u) == nullptr);
@@ -89,12 +103,12 @@ TEST(opengl_backend, guest_bytes_answers_inside_the_region_and_nowhere_else)
  * display nobody opened, and no GPU nobody has gets a display. */
 TEST(opengl_backend, a_gpu_with_no_display_opens_no_context)
 { OpenGlBackend backend;
-  CHECK(!backend.initialize(nullptr));
+  CHECK(!backend.initialize(nullptr, nullptr, nullptr));
   av::GlDisplay display;
   CHECK(!display.open(no_such_gpu));
   CHECK(!display.open());
   CHECK(!display.open(nullptr));
-  CHECK(!backend.initialize(&display));
+  CHECK(!backend.initialize(&display, nullptr, nullptr));
   CHECK_EQ(backend.resolved(), 0u); }
 
 /* Without a context every command is refused rather than run against a table
@@ -113,14 +127,41 @@ TEST(opengl_backend, without_a_context_nothing_runs)
   backend.shut_down();
   CHECK_EQ(backend.resolved(), 0u); }
 
-/* The region a command reads from is a mapping the device made, not an object
- * this backend imported - so there is nothing here to adopt. */
-TEST(opengl_backend, takes_no_blob_and_says_so)
+/* The region a command reads from is the guest chunk the context imported
+ * (feature 050): one host pointer at a time, named by a handle that is not 0,
+ * and given back when the import is. A dma-buf is not a region. */
+TEST(opengl_backend, adopts_one_host_pointer_as_its_region)
 { OpenGlBackend backend;
-  av::ImportedBlob blob;
-  CHECK(!backend.adopt(blob));
-  backend.abandon(blob);
-  CHECK_EQ(blob.object(), 0u); }
+  av::ImportedBlob first;
+  CHECK_STATUS(first.take(1u, host_pointer(region, sizeof region)), av::Status::ok);
+  CHECK(backend.adopt(first));
+  CHECK(first.wire_handle() != 0u);
+  CHECK(first.object() != 0u);
+  CHECK(backend.guest_bytes(4096u, 4096u) == region + 4096u);
+  CHECK(backend.guest_bytes(4096u, 4097u) == nullptr);
+  av::ImportedBlob second;
+  CHECK_STATUS(second.take(2u, host_pointer(second_region, sizeof second_region)), av::Status::ok);
+  CHECK(!backend.adopt(second));
+  CHECK_EQ(second.wire_handle(), 0u);
+  /* Giving back an import that is not the region leaves the region. */
+  backend.abandon(second);
+  CHECK(backend.guest_bytes(0u, 1u) == region);
+  backend.abandon(first);
+  CHECK_EQ(first.wire_handle(), 0u);
+  CHECK_EQ(first.object(), 0u);
+  CHECK(backend.guest_bytes(0u, 1u) == nullptr);
+  CHECK(backend.adopt(second));
+  CHECK(backend.guest_bytes(0u, 4096u) == second_region);
+  backend.shut_down();
+  CHECK(backend.guest_bytes(0u, 1u) == nullptr);
+  av::ImportedBlob shared;
+  RvkBlobHandle dma = {};
+  dma.kind = RVK_BLOB_DMA_BUF;
+  dma.fd = 7;
+  dma.size = 4096u;
+  CHECK_STATUS(shared.take(3u, dma), av::Status::ok);
+  CHECK(!backend.adopt(shared));
+  CHECK(backend.guest_bytes(0u, 1u) == nullptr); }
 
 /* A real context on a real GPU, found from this host's own enumeration rather
  * than a UUID written into the test. A host with no GPU that runs OpenGL has
@@ -138,11 +179,11 @@ TEST(opengl_backend, a_context_on_a_real_gpu_runs_a_command_and_refuses_a_broken
   if (display == nullptr) return;
 
   OpenGlBackend backend;
-  CHECK(backend.initialize(display));
+  CHECK(backend.initialize(display, nullptr, nullptr));
   CHECK(backend.resolved() > 0u);
   /* A second context on the same display, which outlives the first. */
   OpenGlBackend other;
-  CHECK(other.initialize(display));
+  CHECK(other.initialize(display, nullptr, nullptr));
 
   std::uint8_t block[4096];
   WireArena arena(block, sizeof block);

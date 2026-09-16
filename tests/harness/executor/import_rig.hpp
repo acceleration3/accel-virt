@@ -11,6 +11,7 @@
 #include "device/execution/blob_imports.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
+#include "device/execution/executor_shares.hpp"
 #include "device/memory/blob_table.hpp"
 #include "harness/executor/mock_executor_ops.hpp"
 #include "harness/host/mock_host.hpp"
@@ -55,6 +56,7 @@ private:
     MockHost        host_;
     MockExecutorOps ops_;
     ExecutorLibrary library_;
+    ExecutorShares  shares_;
     ContextExecutor executor_;
     BlobTable       blobs_;
     BlobImports     imports_;

@@ -27,6 +27,8 @@ Status ExecutorLibrary::accept(const RvkExecutorOps *ops)
         return Status::invalid_parameter;
     if (ops->abi_version >= RVK_EXECUTOR_ABI_VERSION_HANDLES && ops->imported_handle == nullptr)
         return Status::invalid_parameter;
+    if (ops->abi_version >= RVK_EXECUTOR_ABI_VERSION_OPTIONS && ops->create_with_options == nullptr)
+        return Status::invalid_parameter;
     ops_ = ops;
     return Status::ok;
 }
@@ -80,10 +82,20 @@ uint32_t ExecutorLibrary::sub_apis() const
     return ops_ != nullptr ? ops_->sub_apis(ops_->opaque) & known_sub_apis : 0u;
 }
 
-RvkExecutor *ExecutorLibrary::create(SubApi api, const uint8_t *gpu_uuid) const
+bool ExecutorLibrary::names_options() const
+{
+    AV_SCOPE("ExecutorLibrary::names_options");
+    return ops_ != nullptr && ops_->abi_version >= RVK_EXECUTOR_ABI_VERSION_OPTIONS;
+}
+
+RvkExecutor *ExecutorLibrary::create(SubApi api, const uint8_t *gpu_uuid, const RvkContextOptions *options,
+                                     RvkExecutor *share) const
 {
     AV_SCOPE("ExecutorLibrary::create");
-    return ops_ != nullptr ? ops_->create(ops_->opaque, static_cast<uint32_t>(api), gpu_uuid) : nullptr;
+    if (names_options())
+        return ops_->create_with_options(ops_->opaque, static_cast<uint32_t>(api), gpu_uuid, options, share);
+    if (options != nullptr || share != nullptr || ops_ == nullptr) return nullptr;
+    return ops_->create(ops_->opaque, static_cast<uint32_t>(api), gpu_uuid);
 }
 
 void ExecutorLibrary::destroy(RvkExecutor *executor) const

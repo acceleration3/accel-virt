@@ -10,7 +10,8 @@ namespace av {
 class ProtocolVersion {
 public:
     static constexpr uint16_t current_major = 1u;
-    static constexpr uint16_t current_minor = 0u;
+    /* 1: a context setup carries an OpenGL context's options (feature 050). */
+    static constexpr uint16_t current_minor = 1u;
 
     ProtocolVersion(uint16_t major_version, uint16_t minor_version);
 

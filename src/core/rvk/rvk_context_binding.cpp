@@ -24,8 +24,11 @@ RvkContextBinding::RvkContextBinding(Platform &platform, RegisterWindow &doorbel
 Status RvkContextBinding::set_up(VirtioGpuDevice &device, const CapsetInfo &capset, const ContextPages &pages)
 {
     AV_SCOPE("RvkContextBinding::set_up");
-    const ContextSetup setup(capset.version(), record_.sub_api(), first_resource_id_, record_.ring_order(),
-                             first_resource_id_ + 1u, doorbell_, first_resource_id_ + 2u);
+    const ProtocolVersion ours(ProtocolVersion::current_major, ProtocolVersion::current_minor);
+    const ContextSetup    setup(capset.version().negotiated_with(ours), record_.sub_api(), first_resource_id_,
+                                record_.ring_order(), first_resource_id_ + 1u, doorbell_, first_resource_id_ + 2u,
+                                record_.options());
+    if (!setup.options_fit()) return Status::invalid_parameter;
     const Status begun = context_.set_up(capset, context_id_, setup, pages);
     if (begun != Status::ok) return begun;
     run_sequence(device);
@@ -121,6 +124,11 @@ uint32_t            RvkContextBinding::context_id() const
 {
     AV_SCOPE("RvkContextBinding::context_id");
     return context_id_;
+}
+SubApi              RvkContextBinding::sub_api() const
+{
+    AV_SCOPE("RvkContextBinding::sub_api");
+    return record_.sub_api();
 }
 uint64_t            RvkContextBinding::completed() const
 {

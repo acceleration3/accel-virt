@@ -6,6 +6,7 @@
 #include "device/execution/blob_imports.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
+#include "device/execution/executor_shares.hpp"
 #include "device/execution/transport_command.hpp"
 #include "device/memory/blob_table.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -28,7 +29,7 @@ namespace {
 /* What a context's transport commands run over: no library, no blobs. */
 class Fixture {
 public:
-    Fixture() : executor_(host_, library_), blobs_(host_), imports_(host_, blobs_, executor_) {}
+    Fixture() : shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_), imports_(host_, blobs_, executor_) {}
 
     av::MockHost &host() { return host_; }
     Status run(const CommandHeader &header, const std::uint8_t *body = nullptr)
@@ -43,6 +44,7 @@ public:
 private:
     av::MockHost        host_;
     av::ExecutorLibrary library_;
+    av::ExecutorShares  shares_;
     av::ContextExecutor executor_;
     av::BlobTable       blobs_;
     av::BlobImports     imports_;

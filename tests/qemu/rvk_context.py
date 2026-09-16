@@ -30,6 +30,9 @@ SETUP_MAGIC = 0x434B5652
 RING_MAGIC = 0x524B5652
 BATCH_MAGIC = 0x424B5652
 SUB_API_VULKAN = 1
+SUB_API_OPENGL = 2
+# The setup's minor that carries an OpenGL context's options (feature 050).
+OPTIONS_MINOR = 1
 DOORBELL_SHM_ID = 0x72
 DOORBELLS = 64
 PAGE = 0x1000
@@ -62,6 +65,12 @@ def destroy_context(context):
 
 def setup(ring, fence, order=12, doorbell=0, major=1, minor=0, sub_api=SUB_API_VULKAN):
     return struct.pack("<IHHIIB3xIII", SETUP_MAGIC, major, minor, sub_api, ring, order, fence, doorbell, 0)
+
+
+def setup_with_options(ring, fence, doorbell, reply, sub_api, major=0, minor=0, profile=0, flags=0, share=0):
+    """The 48-byte setup of the options minor: `share` is the device id of the context to share."""
+    return struct.pack("<IHHIIB3xIII", SETUP_MAGIC, 1, OPTIONS_MINOR, sub_api, ring, 12, fence, doorbell, reply) + \
+        struct.pack("<BBBBI8x", major, minor, profile, flags, share)
 
 
 def submit(context, command, size=None):

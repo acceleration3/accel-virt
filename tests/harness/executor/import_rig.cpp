@@ -3,6 +3,7 @@
 #include "device/control/control_request.hpp"
 #include "harness/host/mock_request.hpp"
 #include "proto/context/context_resources.hpp"
+#include "proto/context/gl_context_options.hpp"
 #include "proto/context/sub_api.hpp"
 
 #include <cstdlib>
@@ -21,7 +22,7 @@ constexpr std::size_t   entry_size = 16u;
 
 /* A rig that cannot make its events, thread or lock has nothing to test with. */
 ImportRig::ImportRig(bool executor)
-    : host_(), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(), executor_(host_, library_), blobs_(host_),
+    : host_(), ops_(RVK_EXECUTOR_SUB_API_VULKAN), library_(), shares_(host_, library_), executor_(host_, library_, shares_, 1u), blobs_(host_),
       imports_(host_, blobs_, executor_), start_(nullptr), done_(nullptr), thread_(nullptr), job_(nullptr),
       job_context_(nullptr), stopping_(false)
 {
@@ -32,7 +33,7 @@ ImportRig::ImportRig(bool executor)
         host_.create_event(start_) != Status::ok || host_.create_event(done_) != Status::ok ||
         host_.start_thread([](void *rig) { static_cast<ImportRig *>(rig)->serve(); }, this, thread_) != Status::ok)
         std::abort();
-    executor_.configure(SubApi::vulkan, no_uuid);
+    executor_.configure(SubApi::vulkan, no_uuid, GlContextOptions());
     imports_.configure(ring);
     if (executor) on_worker([this] { static_cast<void>(executor_.create()); });
 }

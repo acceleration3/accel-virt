@@ -26,6 +26,7 @@ public:
      * own version promised. */
     static constexpr std::uint32_t memory_channel_version = 2u;
     static constexpr std::uint32_t imported_handle_version = 3u;
+    static constexpr std::uint32_t options_version = 4u;
 
     ExecutorConformance();
     ExecutorConformance(const ExecutorConformance &) = delete;
@@ -66,6 +67,7 @@ private:
     /* Version 3: an import of real memory answers a handle the executor's own
      * commands accept back. Needs a Vulkan device, so a real GPU. */
     void check_imported_handle(RvkExecutor *executor);
+    void check_create_with_options();
     /* SC-002: something each API can actually be asked to do, rather than only
      * commands it refuses. A library that answers every malformed frame
      * correctly and runs nothing is not one the device can use. */

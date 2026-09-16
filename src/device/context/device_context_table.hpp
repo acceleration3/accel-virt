@@ -8,6 +8,7 @@
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "device/context/device_context.hpp"
+#include "device/execution/executor_shares.hpp"
 
 #include <stdint.h>
 
@@ -30,6 +31,9 @@ public:
     DeviceContextTable(const DeviceContextTable &) = delete;
     DeviceContextTable &operator=(const DeviceContextTable &) = delete;
 
+    /* The lock the contexts share executors under: invalid_state once made,
+     * no_memory when the host has none. */
+    [[nodiscard]] Status initialize();
     /* invalid_parameter for id 0, conflict for a live id, no_space when full,
      * or the worker's failure, leaving no context behind. */
     [[nodiscard]] Status create(uint32_t id);
@@ -38,6 +42,10 @@ public:
     DeviceContext       *find(uint32_t id);
     /* Whether a bound context holds doorbell page `index`. */
     bool                 holds_doorbell(uint32_t index);
+    /* Whether context `asking` may share context `share`'s objects: another
+     * context, bound, speaking OpenGL (feature 050). Both are on this device's
+     * one GPU. */
+    bool                 can_share(uint32_t asking, uint32_t share);
     uint32_t             live() const;
     /* Main loop: its line, then each context in slot order. */
     void                 report(StateWriter &writer);
@@ -51,6 +59,8 @@ private:
     BlobTable                   &blobs_;
     FenceInterrupts             &interrupts_;
     const ExecutorLibrary       &library_;
+    /* Before the contexts, whose executors are withdrawn from it as they go. */
+    ExecutorShares               shares_;
     ObjectStorage<DeviceContext> slots_[max_contexts];
 
     friend struct DeviceContextTableProbe;

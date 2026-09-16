@@ -54,10 +54,13 @@ public:
     RvkContextBinding(const RvkContextBinding &) = delete;
     RvkContextBinding &operator=(const RvkContextBinding &) = delete;
 
-    /* PASSIVE. Builds the setup from the record and the capset and drives the
-     * sequence - CTX_CREATE, a blob over each of `pages`' lists and the setup -
-     * to established. The pages must outlive the binding's use of them.
-     * invalid_parameter for a record the capset forbids or pages not complete;
+    /* PASSIVE. Builds the setup from the record, whose share context is
+     * already the device's id for it, at the version the capset and this
+     * driver both speak, and drives the sequence - CTX_CREATE, a blob over each
+     * of `pages`' lists and the setup - to established. The pages must outlive
+     * the binding's use of them. invalid_parameter, with nothing sent, for
+     * options that version cannot carry; for a record the capset forbids or
+     * pages not complete;
      * not_supported when the device refuses a step, which leaves the context failed. */
     [[nodiscard]] Status set_up(VirtioGpuDevice &device, const CapsetInfo &capset, const ContextPages &pages);
     /* PASSIVE. Drives CTX_DESTROY and a blob unref for each blob, then lets go
@@ -85,6 +88,7 @@ public:
     GuestContext::State state() const;
     bool                established() const;
     uint32_t            context_id() const;
+    SubApi              sub_api() const;
     uint64_t            completed() const;
     bool                faulted() const;
 

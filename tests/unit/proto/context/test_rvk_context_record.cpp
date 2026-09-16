@@ -4,6 +4,7 @@
  * wire (feature 043). */
 #include "core/support/status.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "proto/context/gl_context_options.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/context/sub_api.hpp"
 
@@ -131,3 +132,145 @@ TEST(rvk_context_record, a_reserved_byte_that_is_not_zero_is_refused)
   CHECK_STATUS(sample().encode(bytes, sizeof bytes), Status::ok);
   bytes[9] = 1u;
   CHECK(rejects(bytes, sizeof bytes)); }
+
+/* ---- an OpenGL context's options, in the reserved tail (feature 050) ---- */
+
+namespace {
+
+using av::GlContextOptions;
+using Profile = av::GlContextOptions::Profile;
+
+constexpr std::uint32_t share_handle = 0x40000242u;
+
+RvkContextRecord gl_record(const GlContextOptions &options)
+{
+    return RvkContextRecord(SubApi::opengl, 20u, 2u, 3u, 4u, options);
+}
+
+/* The options' eight bytes at offset 24 of an OpenGL record, `tail` given. */
+bool rejects_tail(SubApi api, const std::uint8_t tail[8])
+{
+    std::uint8_t bytes[RvkContextRecord::encoded_size] = {};
+    if (RvkContextRecord(api, 20u, 2u, 3u, 4u).encode(bytes, sizeof bytes) != Status::ok) return false;
+    std::memcpy(bytes + 24u, tail, 8u);
+    return rejects(bytes, sizeof bytes);
+}
+
+}  // namespace
+
+TEST(rvk_context_record, gl_options_round_trip_in_the_reserved_tail)
+{ const GlContextOptions options(4u, 6u, Profile::core,
+                                 GlContextOptions::debug | GlContextOptions::lose_context_on_reset, share_handle);
+  Encoded encoded(gl_record(options));
+  CHECK_STATUS(encoded.status(), Status::ok);
+  /* Where the contract puts each field. */
+  const std::uint8_t expected_tail[8] = {4u, 6u, 1u, 0x09u, 0x42u, 0x02u, 0x00u, 0x40u};
+  CHECK(std::memcmp(encoded.bytes() + 24u, expected_tail, sizeof expected_tail) == 0);
+  RvkContextRecord decoded;
+  CHECK_STATUS(decoded.decode(encoded.bytes(), RvkContextRecord::encoded_size), Status::ok);
+  const GlContextOptions got = decoded.options();
+  CHECK_EQ(got.major(), std::uint8_t{4u});
+  CHECK_EQ(got.minor(), std::uint8_t{6u});
+  CHECK(got.profile() == Profile::core);
+  CHECK_EQ(got.flags(), std::uint8_t{0x09u});
+  CHECK_EQ(got.share_context(), share_handle);
+  CHECK(!got.defaults());
+  CHECK(got.valid());
+  std::uint8_t again[RvkContextRecord::encoded_size] = {};
+  CHECK_STATUS(decoded.encode(again, sizeof again), Status::ok);
+  CHECK(std::memcmp(again, encoded.bytes(), sizeof again) == 0); }
+
+/* All eight zero is 043's record: the host's default context, no sharing. */
+TEST(rvk_context_record, an_all_zero_tail_is_the_default_options)
+{ for (SubApi api : {SubApi::vulkan, SubApi::opengl, SubApi::opencl}) {
+      Encoded encoded(RvkContextRecord(api, 20u, 2u, 3u, 4u));
+      CHECK(std::memcmp(encoded.bytes() + 24u, "\0\0\0\0\0\0\0\0", 8u) == 0);
+      RvkContextRecord decoded;
+      CHECK_STATUS(decoded.decode(encoded.bytes(), RvkContextRecord::encoded_size), Status::ok);
+      CHECK(decoded.options().defaults());
+      CHECK_EQ(decoded.options().major(), std::uint8_t{0u});
+      CHECK_EQ(decoded.options().share_context(), 0u);
+  }
+  CHECK(GlContextOptions().defaults());
+  CHECK(GlContextOptions().valid()); }
+
+/* Every version a major has, and each profile and flag, is accepted. */
+TEST(rvk_context_record, every_gl_version_profile_and_flag_the_contract_names_decodes)
+{ struct Version { std::uint8_t major; std::uint8_t highest_minor; };
+  const Version versions[] = {{1u, 5u}, {2u, 1u}, {3u, 3u}, {4u, 6u}};
+  for (const Version &version : versions)
+      for (std::uint8_t minor = 0u; minor <= version.highest_minor; minor++) {
+          RvkContextRecord decoded;
+          Encoded encoded(gl_record(GlContextOptions(version.major, minor, Profile::none, 0u, 0u)));
+          CHECK_STATUS(decoded.decode(encoded.bytes(), RvkContextRecord::encoded_size), Status::ok);
+          CHECK_EQ(decoded.options().minor(), minor);
+      }
+  for (Profile profile : {Profile::none, Profile::core, Profile::compatibility})
+      for (std::uint8_t flags = 0u; flags < 16u; flags++) {
+          RvkContextRecord decoded;
+          Encoded encoded(gl_record(GlContextOptions(3u, 3u, profile, flags, share_handle)));
+          CHECK_STATUS(decoded.decode(encoded.bytes(), RvkContextRecord::encoded_size), Status::ok);
+          CHECK(decoded.options().profile() == profile);
+          CHECK_EQ(decoded.options().flags(), flags);
+      } }
+
+TEST(rvk_context_record, gl_options_the_contract_forbids_are_refused)
+{ struct Case { const char *what; std::uint8_t tail[8]; };
+  const Case cases[] = {
+      {"major 5", {5u, 0u, 1u, 0u, 0u, 0u, 0u, 0u}},
+      {"major 255", {255u, 0u, 0u, 0u, 0u, 0u, 0u, 0u}},
+      {"4.7", {4u, 7u, 1u, 0u, 0u, 0u, 0u, 0u}},
+      {"3.4", {3u, 4u, 1u, 0u, 0u, 0u, 0u, 0u}},
+      {"2.2", {2u, 2u, 0u, 0u, 0u, 0u, 0u, 0u}},
+      {"1.6", {1u, 6u, 0u, 0u, 0u, 0u, 0u, 0u}},
+      {"profile 3", {4u, 6u, 3u, 0u, 0u, 0u, 0u, 0u}},
+      {"profile 255", {4u, 6u, 255u, 0u, 0u, 0u, 0u, 0u}},
+      {"flag bit 4", {4u, 6u, 1u, 0x10u, 0u, 0u, 0u, 0u}},
+      {"flag bit 7", {4u, 6u, 1u, 0x80u, 0u, 0u, 0u, 0u}},
+      {"major 0 with a minor", {0u, 1u, 0u, 0u, 0u, 0u, 0u, 0u}},
+      {"major 0 with a profile", {0u, 0u, 1u, 0u, 0u, 0u, 0u, 0u}},
+      {"major 0 with a flag", {0u, 0u, 0u, 1u, 0u, 0u, 0u, 0u}},
+      {"major 0 with a share", {0u, 0u, 0u, 0u, 1u, 0u, 0u, 0u}},
+  };
+  for (const Case &one : cases) {
+      CHECK(rejects_tail(SubApi::opengl, one.tail));
+      CHECK(!GlContextOptions(one.tail[0], one.tail[1], static_cast<Profile>(one.tail[2]), one.tail[3],
+                              one.tail[4] | (std::uint32_t{one.tail[5]} << 8u))
+                 .valid());
+  } }
+
+/* Options belong to OpenGL: any non-zero byte of the tail on another sub-API is
+ * refused, even one an OpenGL record may carry. */
+TEST(rvk_context_record, an_option_on_a_vulkan_or_opencl_record_is_refused)
+{ for (SubApi api : {SubApi::vulkan, SubApi::opencl})
+      for (std::size_t at = 0u; at < 8u; at++) {
+          std::uint8_t tail[8] = {};
+          tail[at] = 1u;
+          CHECK(rejects_tail(api, tail));
+      }
+  const std::uint8_t valid_for_gl[8] = {4u, 6u, 1u, 0u, 0u, 0u, 0u, 0u};
+  CHECK(!rejects_tail(SubApi::opengl, valid_for_gl));
+  CHECK(rejects_tail(SubApi::vulkan, valid_for_gl)); }
+
+/* Any byte of a valid OpenGL record flipped either decodes to a record whose
+ * encoding is exactly those bytes, or is refused. */
+TEST(rvk_context_record, a_byte_flip_sweep_decodes_exactly_or_is_refused)
+{ Encoded encoded(gl_record(GlContextOptions(3u, 3u, Profile::compatibility, GlContextOptions::robust_access,
+                                              share_handle)));
+  std::uint32_t refused = 0u;
+  for (std::size_t at = 0u; at < RvkContextRecord::encoded_size; at++)
+      for (std::uint32_t bit = 0u; bit < 8u; bit++) {
+          std::uint8_t bytes[RvkContextRecord::encoded_size] = {};
+          std::memcpy(bytes, encoded.bytes(), sizeof bytes);
+          bytes[at] = static_cast<std::uint8_t>(bytes[at] ^ (1u << bit));
+          RvkContextRecord decoded;
+          if (decoded.decode(bytes, sizeof bytes) != Status::ok) {
+              refused++;
+              continue;
+          }
+          std::uint8_t again[RvkContextRecord::encoded_size] = {};
+          CHECK_STATUS(decoded.encode(again, sizeof again), Status::ok);
+          CHECK(std::memcmp(again, bytes, sizeof again) == 0);
+      }
+  /* The magic's 32 bits, the reserved padding's 24 and the flags' high 4 at least. */
+  CHECK(refused >= 60u); }

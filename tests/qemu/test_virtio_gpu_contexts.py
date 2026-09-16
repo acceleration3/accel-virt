@@ -157,7 +157,7 @@ class VirtioGpuContexts(unittest.TestCase):
         gpu = self.open(f"virtio-gpu-rvk-pci,host-gpu={host.uuid},executor={rvk_context.EXECUTOR},hostmem={HOSTMEM}")
         capset = self.capset(gpu)
         magic, major, minor, sub_apis, contexts, min_order, max_order = struct.unpack_from("<IHHIIBB", capset)
-        self.assertEqual((magic, major, minor), (CAPSET_MAGIC, 1, 0))
+        self.assertEqual((magic, major, minor), (CAPSET_MAGIC, 1, 1))
         self.assertEqual((sub_apis, contexts, min_order, max_order), (SUB_API_VULKAN, MAX_CONTEXTS, 12, 24))
         self.assertEqual(capset[18:24], bytes(6))
         features = struct.unpack_from("<Q", capset, 24)[0]
@@ -218,7 +218,8 @@ class VirtioGpuContexts(unittest.TestCase):
     def test_a_bound_context_keeps_its_blobs_until_it_is_destroyed(self):
         gpu = self.open()
         self.bindable(gpu)
-        self.expect(gpu, submit(1, setup(minor=7)), RESP_OK_NODATA)
+        # A later minor carries at least the options minor's 48 bytes.
+        self.expect(gpu, submit(1, setup(minor=7) + bytes(16)), RESP_OK_NODATA)
         self.expect(gpu, unref(RING), RESP_ERR_INVALID_PARAMETER)
         self.expect(gpu, unref(FENCE), RESP_ERR_INVALID_PARAMETER)
         self.expect(gpu, submit(1, setup()), RESP_ERR_INVALID_PARAMETER)

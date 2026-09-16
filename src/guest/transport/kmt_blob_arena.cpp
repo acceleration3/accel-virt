@@ -1,6 +1,7 @@
 #include "guest/transport/kmt_blob_arena.hpp"
 
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "proto/client_blob_arena.hpp"
 
@@ -15,12 +16,20 @@ constexpr uint32_t any_memory_type = 0u;
 }  // namespace
 
 KmtBlobArena::KmtBlobArena(GuestConnection &connection, KmtTransport &transport)
-    : transport_(transport), chunk_(connection, transport), import_(transport), bytes_(0u) {}
+    : transport_(transport), chunk_(connection, transport), import_(transport), bytes_(0u)
+    {
+        AV_SCOPE("KmtBlobArena::KmtBlobArena");
+    }
 
-KmtBlobArena::~KmtBlobArena() { static_cast<void>(close()); }
+KmtBlobArena::~KmtBlobArena()
+{
+    AV_SCOPE("KmtBlobArena::~KmtBlobArena");
+    static_cast<void>(close());
+}
 
 Status KmtBlobArena::open(uint64_t bytes)
 {
+    AV_SCOPE("KmtBlobArena::open");
     if (bytes_ != 0u) return Status::invalid_state;
     if (bytes > max_bytes) return Status::invalid_parameter;
     const uint64_t pages = (bytes + page_bytes - 1u) / page_bytes;
@@ -42,6 +51,7 @@ Status KmtBlobArena::open(uint64_t bytes)
 
 Status KmtBlobArena::close()
 {
+    AV_SCOPE("KmtBlobArena::close");
     if (bytes_ == 0u) return Status::ok;
     transport_.blobs().lend(nullptr, 0u);
     bytes_ = 0u;
@@ -50,11 +60,20 @@ Status KmtBlobArena::close()
     return released != Status::ok ? released : unbound;
 }
 
-bool     KmtBlobArena::lending() const { return bytes_ != 0u; }
-uint64_t KmtBlobArena::bytes() const { return bytes_; }
+bool     KmtBlobArena::lending() const
+{
+    AV_SCOPE("KmtBlobArena::lending");
+    return bytes_ != 0u;
+}
+uint64_t KmtBlobArena::bytes() const
+{
+    AV_SCOPE("KmtBlobArena::bytes");
+    return bytes_;
+}
 
 bool KmtBlobArena::invariants_hold() const
 {
+    AV_SCOPE("KmtBlobArena::invariants_hold");
     if (bytes_ == 0u) return !transport_.blobs().ready();
     return bytes_ % page_bytes == 0u && bytes_ >= default_bytes && bytes_ <= max_bytes &&
            transport_.blobs().ready();

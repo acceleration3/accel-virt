@@ -336,3 +336,54 @@ TEST(executor_root_open, contexts_on_a_real_gpu_are_sessions_that_close_alone)
       }
   }
   host.close(); }
+
+/* Version 4 (feature 050): only OpenGL takes options or a share, whatever
+ * field of the options is set, and a share that is not a session of this root
+ * - a stranger, a closed one, another API's - makes nothing. */
+TEST(executor_root_open, options_or_a_share_for_another_api_get_no_session)
+{ Opened opened;
+  const RvkContextOptions asked[] = {{1u, 0u, 0u, 0u, 0u}, {0u, 1u, 0u, 0u, 0u}, {0u, 0u, 1u, 0u, 0u},
+                                     {0u, 0u, 0u, 1u, 0u}, {0u, 0u, 0u, 0u, 1u}};
+  for (const RvkContextOptions &options : asked)
+      CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel, &options, nullptr) == nullptr);
+  const RvkContextOptions defaults = {};
+  ContextSession *const vulkan = opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel, &defaults, nullptr);
+  CHECK(vulkan != nullptr);
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_VULKAN, intel, nullptr, vulkan) == nullptr);
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_OPENGL, intel, nullptr, vulkan) == nullptr);
+  ContextSession stranger;
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_OPENGL, intel, nullptr, &stranger) == nullptr);
+  opened.root().close(vulkan);
+  CHECK(opened.root().open(RVK_EXECUTOR_SUB_API_OPENGL, intel, nullptr, vulkan) == nullptr);
+  CHECK_EQ(opened.root().live(), 0u); }
+
+/* On the GPUs this host has: an OpenGL session shares another on its own GPU
+ * and not one on another GPU, and one made with options it cannot have is
+ * refused with its slot given back. */
+TEST(executor_root_open, an_opengl_session_shares_one_on_its_own_gpu)
+{ av::LoaderHostApis host;
+  host.open();
+  ExecutorRoot root;
+  CHECK_STATUS(root.initialize(host), Status::ok);
+  ContextSession *previous = nullptr;
+  const RvkContextOptions core = {4u, 3u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u};
+  const RvkContextOptions impossible = {4u, 7u, RVK_CONTEXT_PROFILE_CORE, 0u, 0u};
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      if ((host.sub_apis(i) & RVK_EXECUTOR_SUB_API_OPENGL) == 0u) continue;
+      std::uint8_t uuid[16] = {};
+      host.gpu_uuid(i, uuid);
+      ContextSession *const first = root.open(RVK_EXECUTOR_SUB_API_OPENGL, uuid, nullptr, nullptr);
+      CHECK(first != nullptr);
+      ContextSession *const second = root.open(RVK_EXECUTOR_SUB_API_OPENGL, uuid, &core, first);
+      CHECK(second != nullptr);
+      const std::uint32_t live = root.live();
+      CHECK(root.open(RVK_EXECUTOR_SUB_API_OPENGL, uuid, &impossible, nullptr) == nullptr);
+      CHECK_EQ(root.live(), live);
+      if (previous != nullptr) CHECK(root.open(RVK_EXECUTOR_SUB_API_OPENGL, uuid, &core, previous) == nullptr);
+      root.close(second);
+      if (previous != nullptr) root.close(previous);
+      previous = first;
+  }
+  if (previous != nullptr) root.close(previous);
+  CHECK_EQ(root.live(), 0u);
+  host.close(); }

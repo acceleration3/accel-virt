@@ -8,6 +8,7 @@
 #ifndef AV_OPENGL_BACKEND_HPP
 #define AV_OPENGL_BACKEND_HPP
 
+#include "device/abi/rvk_executor.h"
 #include "device/executor/guest_region.hpp"
 #include "device/executor/session_backend.hpp"
 #include "device/executor/sync_tokens.hpp"
@@ -25,10 +26,13 @@ public:
     OpenGlBackend();
 
     /* Opens a context on the display the host keeps for this context's GPU,
-     * which must outlive it, and fills the table from it. False for a null
-     * display - a GPU the host serves no OpenGL on - or one that will not make
-     * a context. */
-    [[nodiscard]] bool initialize(const GlDisplay *display);
+     * which must outlive it, made with `options` (null: the defaults) and
+     * sharing `share`'s objects (null: none), and fills the table from it.
+     * False for a null display - a GPU the host serves no OpenGL on - options
+     * no OpenGL has, a share with no context on this display, or a context the
+     * driver will not make. */
+    [[nodiscard]] bool initialize(const GlDisplay *display, const RvkContextOptions *options,
+                                  const OpenGlBackend *share);
     void               shut_down();
 
     bool knows(uint32_t command_id) const override;
@@ -46,9 +50,8 @@ public:
     [[nodiscard]] bool bind_fence(uint64_t token, void *fence);
     void              *fence_for(uint64_t token) const;
     void               forget_fence(uint64_t token);
+    /* The bytes of the imported region its bulk-data commands name. */
     uint8_t           *guest_bytes(uint64_t offset, uint64_t bytes) const;
-    /* The mapping this context's bulk-data commands read from. */
-    void               take_region(uint8_t *base, uint64_t length);
 
     uint32_t resolved() const;
     uint64_t ran() const;
@@ -65,6 +68,8 @@ private:
     uint32_t    resolved_;
     uint64_t    ran_;
     bool        lost_;
+
+    friend struct OpenGlBackendProbe;
 };
 
 }  // namespace av

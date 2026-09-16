@@ -36,10 +36,11 @@ public:
      * A sub-API with no backend is refused by the root rather than given a
      * session that would answer nothing; the capset already says which those
      * are, because it offers only what a GPU here reports running. */
-    av::ContextSession *create(uint32_t sub_api, const uint8_t *gpu_uuid)
+    av::ContextSession *create(uint32_t sub_api, const uint8_t *gpu_uuid, const RvkContextOptions *options,
+                               av::ContextSession *share)
     {
         AV_SCOPE("Library::create");
-        return root().open(sub_api, gpu_uuid);
+        return root().open(sub_api, gpu_uuid, options, share);
     }
 
     void destroy(av::ContextSession *session)
@@ -118,7 +119,14 @@ uint32_t sub_apis(void *)
 RvkExecutor *create(void *, uint32_t sub_api, const uint8_t *gpu_uuid)
 {
     AV_SCOPE("create");
-    return handle_of(library.create(sub_api, gpu_uuid));
+    return handle_of(library.create(sub_api, gpu_uuid, nullptr, nullptr));
+}
+
+RvkExecutor *create_with_options(void *, uint32_t sub_api, const uint8_t *gpu_uuid, const RvkContextOptions *options,
+                                 RvkExecutor *share)
+{
+    AV_SCOPE("create_with_options");
+    return handle_of(library.create(sub_api, gpu_uuid, options, session_of(share)));
 }
 
 void destroy(void *, RvkExecutor *executor)
@@ -178,7 +186,8 @@ const RvkExecutorOps table = {RVK_EXECUTOR_ABI_VERSION,
                               import_kinds,
                               import_blob,
                               release_blob,
-                              imported_handle};
+                              imported_handle,
+                              create_with_options};
 
 }  // namespace
 

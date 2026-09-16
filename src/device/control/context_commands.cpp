@@ -97,7 +97,7 @@ uint32_t ContextCommands::destroy(ControlRequest &request)
                                                                  : GpuResponse::err_invalid_context_id;
 }
 
-/* The command buffer is exactly one context setup. */
+/* The command buffer is exactly one context setup, of either size. */
 uint32_t ContextCommands::submit(ControlRequest &request)
 {
     AV_SCOPE("ContextCommands::submit");
@@ -109,10 +109,12 @@ uint32_t ContextCommands::submit(ControlRequest &request)
     if (context == nullptr) return GpuResponse::err_invalid_context_id;
     uint8_t      command[ContextSetup::encoded_size] = {};
     ContextSetup setup;
-    if (submit.command_size() != ContextSetup::encoded_size ||
-        setup.decode(command, request.read(ContextRequest::submit_size, command, sizeof command)) != Status::ok ||
-        contexts_.holds_doorbell(setup.doorbell()))
+    if (submit.command_size() > sizeof command ||
+        request.read(ContextRequest::submit_size, command, submit.command_size()) != submit.command_size() ||
+        setup.decode(command, submit.command_size()) != Status::ok || contexts_.holds_doorbell(setup.doorbell()))
         return GpuResponse::err_invalid_parameter;
+    const uint32_t share = setup.options().share_context();
+    if (share != 0u && !contexts_.can_share(submit.context_id(), share)) return GpuResponse::err_invalid_parameter;
     switch (context->bind(setup, capset_.info())) {
     case Status::ok: return GpuResponse::ok_nodata;
     case Status::not_found: return GpuResponse::err_invalid_resource_id;

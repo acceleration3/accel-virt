@@ -1,6 +1,7 @@
 #include "device/shim/gl_display.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "device/executor/gl_context_attributes.hpp"
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -64,7 +65,7 @@ bool GlDisplay::open(const uint8_t *uuid)
          * GlDisplay already holds, and terminating it would end that one. */
         if (display == EGL_NO_DISPLAY || eglInitialize(display, nullptr, nullptr) != EGL_TRUE) continue;
         display_ = display;
-        void *const context = create_context();
+        void *const context = create_context(GlContextAttributes(nullptr), nullptr);
         uint8_t mine[uuid_bytes] = {};
         bool    told = false;
         if (make_current(context)) {
@@ -90,11 +91,12 @@ void GlDisplay::close()
     display_ = nullptr;
 }
 
-void *GlDisplay::create_context() const
+void *GlDisplay::create_context(const GlContextAttributes &attributes, void *share) const
 {
     AV_SCOPE("GlDisplay::create_context");
-    if (display_ == nullptr || eglBindAPI(EGL_OPENGL_API) != EGL_TRUE) return nullptr;
-    const EGLContext context = eglCreateContext(display_, EGL_NO_CONFIG_KHR, EGL_NO_CONTEXT, nullptr);
+    if (display_ == nullptr || !attributes.valid() || eglBindAPI(EGL_OPENGL_API) != EGL_TRUE) return nullptr;
+    const EGLContext context = eglCreateContext(display_, EGL_NO_CONFIG_KHR,
+                                                share != nullptr ? share : EGL_NO_CONTEXT, attributes.list());
     return context == EGL_NO_CONTEXT ? nullptr : context;
 }
 

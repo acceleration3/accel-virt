@@ -38,7 +38,7 @@ struct DeviceContextTableProbe {
     {
         for (ObjectStorage<DeviceContext> &slot : table.slots_)
             if (!slot.constructed()) {
-                static_cast<void>(slot.construct(table.host_, table.blobs_, table.interrupts_, table.library_, id));
+                static_cast<void>(slot.construct(table.host_, table.blobs_, table.interrupts_, table.library_, table.shares_, id));
                 if (started) static_cast<void>(slot.object().start());
                 return;
             }

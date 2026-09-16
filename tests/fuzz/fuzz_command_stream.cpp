@@ -11,6 +11,8 @@
 #include "device/execution/blob_imports.hpp"
 #include "device/execution/context_executor.hpp"
 #include "device/execution/executor_library.hpp"
+#include "proto/context/gl_context_options.hpp"
+#include "device/execution/executor_shares.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/memory/blob_table.hpp"
@@ -56,8 +58,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
     av::MockExecutorOps ops(RVK_EXECUTOR_SUB_API_VULKAN);
     av::ExecutorLibrary library;
     if (library.accept(&ops.table()) != av::Status::ok) __builtin_trap();
-    av::ContextExecutor executor(host, library);
-    executor.configure(av::SubApi::vulkan, uuid);
+    av::ExecutorShares  shares(host, library);
+    av::ContextExecutor executor(host, library, shares, 1u);
+    executor.configure(av::SubApi::vulkan, uuid, av::GlContextOptions());
     av::BatchStaging staging(host);
     if (staging.allocate(capacity, with_reply ? reply_length - 32u : 0u) != av::Status::ok) __builtin_trap();
     av::FenceInterrupts interrupts(host);

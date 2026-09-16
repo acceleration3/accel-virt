@@ -134,6 +134,9 @@ uint32_t LoaderHostApis::import_kinds(uint32_t index, uint32_t sub_api)
     if (index >= count_) return 0u;
     if (sub_api == RVK_EXECUTOR_SUB_API_VULKAN) return vulkan_kinds_[index];
     if (sub_api == RVK_EXECUTOR_SUB_API_OPENCL) return opencl_kinds_[index];
+    /* OpenGL takes a host pointer as its context's region, not as a GL object
+     * (feature 050), so any GPU it runs on takes one. */
+    if (sub_api == RVK_EXECUTOR_SUB_API_OPENGL && gl_displays_[index].open()) return RVK_BLOB_HOST_POINTER;
     return 0u;
 }
 

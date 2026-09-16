@@ -24,11 +24,12 @@ bool GlContext::open() const
     return context_ != nullptr;
 }
 
-bool GlContext::open(const GlDisplay &display)
+bool GlContext::open(const GlDisplay &display, const GlContextAttributes &attributes, const GlContext *share)
 {
     AV_SCOPE("GlContext::open");
     if (context_ != nullptr) return false;
-    void *const context = display.create_context();
+    if (share != nullptr && (share->context_ == nullptr || share->display_ != &display)) return false;
+    void *const context = display.create_context(attributes, share != nullptr ? share->context_ : nullptr);
     if (context == nullptr) return false;
     if (!display.make_current(context)) {
         display.destroy_context(context);

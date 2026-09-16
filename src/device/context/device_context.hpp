@@ -23,6 +23,7 @@ namespace av {
 class BlobTable;
 class CapsetInfo;
 class ExecutorLibrary;
+class ExecutorShares;
 class FenceInterrupts;
 class ContextSetup;
 class Host;
@@ -33,15 +34,16 @@ struct DeviceContextProbe;
 class DeviceContext {
 public:
     DeviceContext(Host &host, BlobTable &blobs, FenceInterrupts &interrupts, const ExecutorLibrary &library,
-                  uint32_t id);
+                  ExecutorShares &shares, uint32_t id);
     DeviceContext(const DeviceContext &) = delete;
     DeviceContext &operator=(const DeviceContext &) = delete;
 
     /* Main loop: starts the context's worker. */
     [[nodiscard]] Status start();
     [[nodiscard]] Status post(const WorkItem &item);
-    /* Main loop. The binding's answer; invalid_parameter for a ring header that
-     * is not fresh or a fence page that cannot be prepared; no_memory when the
+    /* Main loop. invalid_parameter, with nothing bound, for options the
+     * library cannot make; the binding's answer; invalid_parameter for a ring
+     * header that is not fresh or a fence page that cannot be prepared; no_memory when the
      * host cannot stage its batches; the worker's answer when the doorbell cannot be connected
      * or the ring handed over. Nothing stays pinned, connected or prepared
      * unless ok. */

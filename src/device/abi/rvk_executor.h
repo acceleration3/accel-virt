@@ -25,15 +25,19 @@ extern "C" {
  * are one command's payload, so a command naming a blob has nothing to name it
  * with. Version 2 adds the three operations that fix that and changes nothing
  * else (feature 042). Version 3 adds imported_handle, so an import can become
- * memory the guest names in its own commands (feature 045). The device accepts
- * all three: a version 1 library imports nothing, and a version 2 library
- * imports nothing a guest can name. */
-#define RVK_EXECUTOR_ABI_VERSION 3u
+ * memory the guest names in its own commands (feature 045). Version 4 adds
+ * create_with_options, so an OpenGL context is made with the version, profile
+ * and flags the application asked for and shares another's objects (feature
+ * 050). The device accepts all four: a version 1 library imports nothing, a
+ * version 2 library imports nothing a guest can name, and a version 3 library
+ * makes only default contexts. */
+#define RVK_EXECUTOR_ABI_VERSION 4u
 #define RVK_EXECUTOR_ABI_VERSION_MINIMUM 1u
 /* The versions that brought each part of the table, which the device reads no
  * further than a library's abi_version allows. */
 #define RVK_EXECUTOR_ABI_VERSION_IMPORTS 2u
 #define RVK_EXECUTOR_ABI_VERSION_HANDLES 3u
+#define RVK_EXECUTOR_ABI_VERSION_OPTIONS 4u
 #define RVK_EXECUTOR_OPS_SYMBOL "rvk_executor_ops"
 
 /* The capset's sub_apis bits. */
@@ -71,6 +75,25 @@ typedef struct RvkBlobHandle {
 } RvkBlobHandle;
 
 typedef struct RvkExecutor RvkExecutor;
+
+/* What an OpenGL context is made with: its version (major 0 is the host's
+ * default context, and then every field is 0), a profile (0 none, 1 core, 2
+ * compatibility) and the WGL/EGL flags (bit 0 debug, 1 forward compatible, 2
+ * robust access, 3 lose context on reset). */
+#define RVK_CONTEXT_PROFILE_CORE 1u
+#define RVK_CONTEXT_PROFILE_COMPATIBILITY 2u
+#define RVK_CONTEXT_FLAG_DEBUG 1u
+#define RVK_CONTEXT_FLAG_FORWARD_COMPATIBLE 2u
+#define RVK_CONTEXT_FLAG_ROBUST_ACCESS 4u
+#define RVK_CONTEXT_FLAG_LOSE_CONTEXT_ON_RESET 8u
+
+typedef struct RvkContextOptions {
+    uint8_t major;
+    uint8_t minor;
+    uint8_t profile;
+    uint8_t flags;
+    uint32_t reserved; /* 0 */
+} RvkContextOptions;
 
 typedef struct RvkExecutorOps {
     uint32_t abi_version;
@@ -116,6 +139,17 @@ typedef struct RvkExecutorOps {
      * asks it once the import is made. The device chooses every blob_id and
      * never reuses one while its import lives. Runs on the context's worker. */
     uint64_t (*imported_handle)(void *opaque, RvkExecutor *executor, uint64_t blob_id);
+
+    /* Version 4 onwards. A version 3 table ends above. */
+
+    /* create, made with `options` (NULL: the defaults, as create) and sharing
+     * the objects of `share` (NULL: none), an executor of the same sub-API on
+     * the same GPU that stays alive until this returns. A sub-API that has no
+     * options refuses non-default ones; a version or share the host API
+     * refuses answers NULL. Runs on the new context's worker, while `share`
+     * may be current on its own. */
+    RvkExecutor *(*create_with_options)(void *opaque, uint32_t sub_api, const uint8_t *gpu_uuid,
+                                        const RvkContextOptions *options, RvkExecutor *share);
 } RvkExecutorOps;
 
 typedef const RvkExecutorOps *(*RvkExecutorOpsFunction)(void);
