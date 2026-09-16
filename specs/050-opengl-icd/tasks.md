@@ -1,0 +1,166 @@
+---
+
+description: "Tasks: OpenGL - an installable client driver"
+---
+
+# Tasks: OpenGL - an installable client driver
+
+**Input**: Design documents from `/specs/050-opengl-icd/`
+
+**Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/icd_interface.md, contracts/context_options.md, quickstart.md
+
+**Tests**: Required, and written first (constitution IV). Every new class gets its test before its body, `invariants_hold()` checked after every mutation, and hostile-input tables plus a fuzz target for anything reading bytes it did not write.
+
+**Organization**: setup, then the discovery experiment in a real guest before anything is built on it, then the shared foundation (generator, arena, context options), then one phase per user story. Each `**Checkpoint**` is a commit once `ctest --test-dir build -E tools_tests` passes there; run the coverage build before committing a new class ([[fast-test-loop]]).
+
+**Branch**: `050-opengl-icd` starts from `045-vulkan-icd`, which is not merged yet. It merges only after 045, fast-forward, once `tools/gate.sh` passes.
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[Story]**: US1 (the system opengl32.dll loads the rvkgpu ICD), US2 (pixel formats and WGL extensions behave as on a hardware driver), US3 (many contexts, many threads, one transport)
+
+---
+
+## Phase 1: Setup - the binary, the tools and the shared pieces
+
+- [ ] T001 [P] `tools/re/binaries.txt` pins `opengl32.dll 35168907d9acfa3d6b10c1b546f433f8269eaf1c4200db85c7d1142e0f3db9cd` and `gdi32full.dll 1e870e196e70856ecd9326989712e209121466cfde2d54517bc90e623883ea77` (10.0.26100.5074); `tools/re/build_workspace.sh` imports them with the others; `docs/kb/07-usermode.md` gains "How opengl32 finds an ICD on a WDDM adapter" from research.md §1 with the addresses
+- [ ] T002 [P] `tools/re/gl_proc_table.py`: reads `glCltRGBAProcTable` from the pinned `opengl32.dll` and its PDB through the Ghidra workspace (as `tools/re/q.py` opens it), strips the `glclt` prefix, and writes `tools/codegen/profiles/opengl_proc_table.txt` (a header comment naming the binary's hash, then one `index name` line per entry, 336 lines: `0 glNewList`, `136 glVertex3f`, `215 glEnable`); `--check` compares the committed file with the binary and says it skipped when the workspace is absent; tests in `tests/tools/test_gl_proc_table.py` over a fixture table (a parse of index/name lines, a short table, a duplicate name, a name without the prefix, `--check` on a match, a mismatch and a missing workspace); commit the generated file
+- [ ] T003 [P] `tools/check_guest_image.py`: `--allow-import MODULE` (T002 of 045) is exercised for `user32.dll` and `opengl32.dll` in `tests/tools/test_check_guest_image.py` (a DLL importing user32 refused without the flag and accepted with it)
+- [ ] T004 Move what both ICDs share, behaviour unchanged, tests moving with their classes: `ExtensionPolicy`, `ThreadLock`, `LockedTransport`, `LogSink`, `SlicedWait` from `src/icd/vulkan/` to `src/icd/common/` (namespace `av::icd`), `RecordingThreadLock`, `LockTrace`, `RecordingLog` stay in `tests/harness/icd/`; `ProcessHeap`, `SrwLock`, `FileLog` from `src/um/vulkan/` to `src/um/icd/`, `FileLog` taking its file stem (`rvkvk`, `rvkgl`) at construction; `src/um/CMakeLists.txt`, `CMakeLists.txt` (`av_icd` globs `src/icd/*`), `tools/check_extension_policy.py` (finds each ICD's `reported_extensions`, one per `src/icd/<api>/`, with its test in `tests/tools/test_check_extension_policy.py` extended for two tables in two directories); `ctest --test-dir build -E tools_tests` and `rvkvk_image` pass unchanged
+- [ ] T005 `.specify/memory/constitution.md` (PATCH, 2.5.4) and `CLAUDE.md`: the process-lifetime list gains `rvkgl.dll`'s root in `src/um/opengl/rvkgl_exports.cpp` and `GlIcdBinding`'s pointer in `src/icd/opengl/gl_hooks.cpp` (plan.md Complexity Tracking); `README.md` layout lists `src/icd/common/`, `src/icd/opengl/`, `src/um/icd/`, `src/um/opengl/`
+
+**Checkpoint**: the binary is pinned, the table order is committed data, and the shared pieces are where both ICDs can use them. Commit.
+
+---
+
+## Phase 2: Discovery - opengl32 picks the rvkgpu ICD from a session-0 window, proven live first
+
+**Purpose**: research.md §9 is inference until a real guest's `opengl32.dll` loads the adapter's ICD for a window the runner's session can make. Nothing of the ICD is built until T009 passes or its fallback is built.
+
+- [ ] T006 `src/km/rvkgpu.inf`: in `[Rvkgpu_SoftwareSettings]`, `HKR,, OpenGLDriverName, 0x00010000, "%13%\rvkgl.dll"`, `HKR,, OpenGLVersion, 0x00010001, 2`, `HKR,, OpenGLFlags, 0x00010001, 1`; `rvkgl.dll` in `[SourceDisksFiles]` and `[Rvkgpu_Files]`; `tests/tools/test_driver_package.py` asserts the three values, their types, that no `OpenGLDrivers` key and no `...Wow` value is written, and that the runner stages `build/guest/rvkgl.dll` (`--gl-icd`) beside `rvkvk.dll` for every run
+- [ ] T007 `src/um/opengl/rvkgl_discovery.cpp` and `rvkgl.def`: a discovery build of `rvkgl.dll` whose 14 exports (contracts/icd_interface.md) each append their name and first argument to `C:\ProgramData\rvk\rvkgl-<pid>.log` through `FileLog` and answer: `DrvValidateVersion` TRUE for 2, `DrvDescribePixelFormat` one RGBA8 D24S8 double-buffered format, `DrvSetPixelFormat` TRUE, everything else FALSE/NULL; `src/um/CMakeLists.txt` builds it as `rvkgl.dll` (the discovery file is replaced by `rvkgl_exports.cpp` in T030); ctest `rvkgl_image` runs `check_guest_image.py --dll --only-exports` with the 14 `--require-export` names and `--allow-import user32.dll`
+- [ ] T008 `src/um/probe/rvkglprobe_discovery.cpp`: `rvkglprobe.exe --discovery` (imports opengl32, gdi32, user32, kernel32, ntdll through import libraries from `src/um/imports/{opengl32,user32}.def`) registers a window class, creates a 64×64 window, gets its DC, calls `DescribePixelFormat`, `SetPixelFormat(1)` and `wglCreateContext`, and prints each result, `GetLastError`, `D3DKMTOpenAdapterFromHdc`'s status and LUID for the DC, and whether `rvkgl.dll` is loaded in the process (`GetModuleHandleW`); ctest `rvkglprobe_image` with `--allow-import opengl32.dll --allow-import user32.dll`; `tools/guest/run_guest_suite.py --opengl-discovery` pushes the probe, runs it, and copies its output to `discovery.txt`; tests in `tests/tools/test_run_guest_suite.py` against the fake guest
+- [ ] T009 Live: `run_guest_suite.py --opengl-discovery` on the prepared image; record in this task's *As built* the DC's adapter (or the open's failure), which ICD loaded, and the log's calls. **If `rvkgl.dll` is not the ICD opengl32 loaded for a session-0 window, T010 is built before Phase 3; otherwise T010 is removed as not needed.**
+- [ ] T010 *(only if T009 needs it)* An interactive-session launcher: `--prepare-image` configures autologon for a local test user (`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon` `AutoAdminLogon`, `DefaultUserName`, `DefaultPassword`) and the runner runs a probe with `schtasks /Create /IT /RU <user> /TR ... /SC ONCE` then `/Run`, waiting on the task's result and output file; tests in `tests/tools/test_run_guest_suite.py`; T009 repeated through it and recorded
+
+**Checkpoint**: a real `opengl32.dll` has called this project's ICD for a window the runner can make. Commit.
+
+---
+
+## Phase 3: Foundational - the generated client links, the arena lends, the host honours options
+
+### The generator
+
+- [ ] T011 Write `tests/tools/test_gl_icd_emit.py` first (the emitter over a small registry and a five-entry order file): `gl_icd_table.h` holds a `GLCLTPROCTABLE`-shaped table in the file's order, each slot the generated wrapper or a named ICD entry the profile lists as manual, and a by-name table of every other entry; the wrappers are `Wrap_gl*` in `namespace av::glicd::generated` with no `extern "C"`; `gl_icd_exports.def` is no longer written; every synchronous call declares `const ::av::SyncCallScope rvk_call{t};` before `send_sync`; the client names `ClientBlobLease`/`taken()` as `src/proto/client_blob_arena.hpp` does
+- [ ] T012 `tools/codegen/rvk_codegen/opengl/emit.py` and `profile.py` (reads `tools/codegen/profiles/opengl_proc_table.txt` through a new `--proc-table` argument, added to `tools/generated_sources.txt`); GL 1.1 names the core profile lacks get the table slot `::av::glicd::legacy_entry(index)`'s answer, a per-index recorder the ICD defines; regenerate `src/proto/generated/opengl/`; `python3 tools/check_generated.py` passes
+- [ ] T013 `ClientBlobArena` in `src/proto/client_blob_arena.{hpp,cpp}` gains `retire_all()` (every lease back once the command that used them is answered) with tests in `tests/unit/proto/test_client_blob_arena.cpp` (take after retire starts at 0; retire with no arena; invariants after each)
+
+### The blob arena
+
+- [ ] T014 Write `tests/unit/guest/transport/test_kmt_blob_arena.cpp` first over `MockKmt`: `open(bytes)` allocates, locks and binds a `host_visible_memory` chunk (16 MiB, or `bytes` rounded to pages up to 256 MiB) and imports it with `IMPORT_BLOB`; a lease is handed out only when open; a lease carries a writable `data` inside the view and an `offset` from the chunk's start; `give_back` rewinds the top lease only; `retire_all` returns every lease; a request past the chunk is refused, not a lease; each step's failure (allocate, resident, lock, bind, import) leaves nothing held; `close` releases the import before the unbind; invariants after each
+- [ ] T015 `KmtBlobArena` (object) in `src/guest/transport/kmt_blob_arena.{hpp,cpp}`, the `ClientBlobArena` a GL context's transport answers from `blobs()`, over 045's `HostVisibleChunk` and `BlobImport`; `KmtTransport` retires the arena after every answered synchronous call and after `send_async` returns (the device reads the region before it runs the next command)
+
+### Context options, through every layer
+
+- [ ] T016 [P] Write `tests/unit/proto/context/test_rvk_context_record.cpp` cases first: `GlContextOptions` round-trips in the reserved tail (contracts/context_options.md §1); an all-zero tail decodes as 043's record; refusals: an option on a Vulkan or OpenCL record, major 5, minor 6 of major 4, minor 2 of major 1 past 1.5 (1.6), profile 3, a flag in bits 4-7, major 0 with any other field set; a byte-flip sweep; then `GlContextOptions` (object) in `src/proto/context/gl_context_options.{hpp,cpp}` and the record's tail; `tests/fuzz/fuzz_rvk_context_record.cpp` with a corpus in `tests/corpus/fuzz_rvk_context_record/`
+- [ ] T017 [P] Write `tests/unit/proto/context/test_context_setup.cpp` cases first: the next protocol minor version's 48-byte setup carries the options and the share context's device id; a 32-byte setup of the previous minor is default options; 48 bytes with the old minor and 32 with the new are `malformed`; non-zero reserved bytes are refused; then extend `ContextSetup` in `src/proto/context/context_setup.{hpp,cpp}` and `ProtocolVersion`; the setup's fuzz target gains seeds of both sizes
+- [ ] T018 Write `tests/unit/core/rvk/test_rvk_context_table.cpp` cases first (over the fake dxgkrnl's handle table): a record with options reaches the setup unchanged; a share context naming a live rvk OpenGL context of the same process and device becomes that context's device id; refusals, each `STATUS_INVALID_PARAMETER` with nothing sent - a share handle of another process, of a Vulkan context, of a destroyed context, of a context on another device, the context's own handle, an unknown handle; then the resolution in `src/core/rvk/rvk_context_table.cpp`; `tests/unit/scenarios/` gains a create with options through the DDI table
+- [ ] T019 Write `tests/unit/device/context/test_device_context.cpp` cases first: a 48-byte setup hands the options and the share context's `RvkExecutor` to a version 4 library's `create_with_options`; a share id that is not a live OpenGL context on the same host GPU, and non-default options for a version 3 library, refuse the create (`ERR_INVALID_PARAMETER`) without calling the library; a library answering null refuses the create; then `src/device/context/device_context.cpp`, `src/device/execution/` where the setup is read, and `ExecutorLibrary` (`names_options()`, version 4 tables without `create_with_options` refused at accept); `src/device/abi/rvk_executor.h` version 4 (`RVK_EXECUTOR_ABI_VERSION_OPTIONS`, `RvkContextOptions`); `docs/protocol.md` documents both
+- [ ] T020 Write `tests/unit/device/executor/test_opengl_backend_device.cpp` cases first (real GPUs, returning without judging on a host with none): a 4.6 core context reports `GL_VERSION` 4.6 and `GL_CONTEXT_PROFILE_MASK` core; 3.3 core reports 3.3 or later with the core bit; 4.7 and 5.0 are refused (null session); a debug context reports `GL_CONTEXT_FLAG_DEBUG_BIT`; a robust context with lose-on-reset reports `GL_LOSE_CONTEXT_ON_RESET`; a context made with a share executor sees a texture the other made while that one is current on another thread; `adopt` of a host pointer takes it as the region (a `glReadPixels` into a region offset writes those bytes) and a second `adopt` is refused; then `ExecutorRoot::create_with_options` (`src/device/executor/executor_root.cpp`), `OpenGlBackend::initialize(display, options, share)` and `adopt`/`abandon` (`src/device/executor/opengl_backend.cpp`), `GlDisplay::create_context(attributes, share)` and `GlContext::open(display, options, share)` (`src/device/shim/gl_display.*`, `gl_context.*`), `import_kinds` answering `RVK_BLOB_HOST_POINTER` for OpenGL
+- [ ] T021 `tests/qemu/echo_executor.cpp` answers ABI version 4 (`create_with_options` records the options; `RVK_ECHO_ABI_VERSION_3` keeps the version 3 table); `tests/conformance/executor/executor_conformance.cpp` checks `create_with_options` (null options equal `create`; with `--gpu`, a 4.6 core OpenGL context and a refused 5.0); `tests/qemu/test_virtio_gpu_execution.py` creates a context with options and one sharing it under the echo executor
+
+**Checkpoint**: the generated OpenGL client links, a GL context can lend bulk data from guest memory the host reads in place, and a host context is made with the application's version, profile, flags and share target. Commit.
+
+---
+
+## Phase 4: US1 - The system opengl32.dll loads the rvkgpu ICD (Priority: P1) 🎯 MVP
+
+**Goal**: `opengl32.dll` loads `rvkgl.dll` from the adapter's registration, a context becomes current, and `GL_RENDERER` names the host GPU.
+
+**Independent test**: a fake `opengl32` (tests) drives the `Drv*` interface in Microsoft's order over MockKmt with every refusal; in the guest, `rvkglprobe.exe` creates a context through the system `opengl32.dll` with no DLL beside it.
+
+### Seams and harness
+
+- [ ] T022 [P] [US1] `WindowSurface` interface in `src/icd/opengl/window_surface.hpp` (`window_of(hdc)`, `client_size(hwnd, width, height)`, `blit(hdc, width, height, bgra_bottom_up)`; protected non-virtual destructor) with `ScriptedWindowSurface` in `tests/harness/icd/` (windows and DCs the test declares, memory DCs with no window, sizes the test changes, every blit kept); `ThreadSlot` interface in `src/icd/opengl/thread_slot.hpp` (`get()`, `set(value)`, `thread_id()`) with `ScriptedThreadSlot` (the test switches the current thread by id); seams tested in `tests/unit/harness/icd/test_gl_seams.cpp`
+- [ ] T023 [P] [US1] `FakeOpengl32` in `tests/harness/icd/fake_opengl32.{hpp,cpp}`: resolves the 14 exports from a `GlIcdRoot`'s entry table by name, refuses the ICD as `pgldrvLoadAndAllocDriverInfo` does (research.md §1: the required entries, `Flags & 1`'s three, `DrvValidateVersion(2)`), passes nine recorded callback procs, installs a `GLCLTPROCTABLE` only when `cEntries` is 336 or 306 (as `__wglSetProcTable` does) and calls GL through it on the current thread; `wglGetProcAddress` asks `DrvGetProcAddress`; tests in `tests/unit/harness/icd/test_fake_opengl32.cpp`
+
+### ICD core, each test first
+
+- [ ] T024 [P] [US1] `PixelFormatTable` (object) in `src/icd/opengl/pixel_format_table.{hpp,cpp}`: the fixed rows of research.md §7 (RGBA8 × {none, D24S8, D32} × {single, double} × {sRGB off, on} × {0, 4 samples}); `describe(index, bytes, pfd)` answers the count for any index and fills the descriptor only "for an index in range and a size at least its own"; test `tests/unit/icd/opengl/test_pixel_format_table.cpp` (index 0, 1, N, N+1, `INT_MAX`, negative; size 0, 39, 40; every row's flags include `PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_SUPPORT_COMPOSITION` and no palette or bitmap flag; indices stable across two tables)
+- [ ] T025 [P] [US1] `ContextAttributes` (object) in `src/icd/opengl/context_attributes.{hpp,cpp}`: decodes a `wglCreateContextAttribsARB` list into `GlContextOptions` per data-model.md ("pairs until 0, at most 64; a repeated name, an unknown name, a version below 1.0 or with a minor past what that major has, both profile bits, a flag outside the four defined and a layer other than 0 answer the ARB errors"); a null list is the defaults; test `tests/unit/icd/opengl/test_context_attributes.cpp` with the hostile table (zero-length, unterminated at 64 pairs, every name twice, 0x2091 = 0, 4.7, 5.0, 3.4, 1.6, profile 3, flag 0x10, layer 1, reset strategy values) and a byte-flip sweep; `tests/fuzz/fuzz_context_attributes.cpp` with a corpus
+- [ ] T026 [US1] `CurrentContexts` (system) in `src/icd/opengl/current_contexts.{hpp,cpp}` over `ThreadSlot`: `make_current(context)` refuses a context current on another thread (answering which), `release()`, `current()`, `current_anywhere(context)`; test `tests/unit/icd/opengl/test_current_contexts.cpp` (two scripted threads, A current then B refused with A untouched, release then B accepted, releasing nothing, a context deleted while current on this thread)
+- [ ] T027 [US1] `GuestGlContext` (object) in `src/icd/opengl/guest_gl_context.{hpp,cpp}`: states per data-model.md (`created` -> `made`/`current` <-> `released` -> `deleted`; `made` -> `lost`); `make(connection, pixel_format)` opens its `KmtTransport` of `SubApi::opengl` (ring order 20, 256 KiB staging, 64 KiB replies) with the options and share context in the record, its `LockedTransport` and `KmtBlobArena`; a host refusal of the version answers `ERROR_INVALID_VERSION_ARB`, of the profile `ERROR_INVALID_PROFILE_ARB`; the local error (`record(GL_INVALID_OPERATION)`, `take_error()` before the host's); test `tests/unit/icd/opengl/test_guest_gl_context.cpp` over MockKmt with the allocation-failure sweep (staging, transport, arena each refused in turn, nothing leaked)
+- [ ] T028 [US1] `ClientArrayState` (object) in `src/icd/opengl/client_array_state.{hpp,cpp}` and the generated hooks' answers: `pixel_bytes`, `level_bytes`, `compressed_bytes`, `compressed_level_bytes` (sizes from format, type, dimensions and the pixel store state, overflow-checked, 0 for an unknown combination), `pixel_buffer_bound`, `query_buffer_bound`, `offsets_of`, `skip_*` (a redundant bind the context already has), `forget_bindings`; test `tests/unit/icd/opengl/test_client_array_state.cpp` (every format/type pair `gl_sizes.h` names, row alignment 1/2/4/8, a width × height × depth past 2^64, an unknown format, bindings made and forgotten)
+- [ ] T029 [US1] `GlIcdRoot` (system) in `src/icd/opengl/gl_icd_root.{hpp,cpp}` per contracts/icd_interface.md: `validate_version`, `set_callback_procs` (keeps up to 9), `describe_pixel_format`, `set_pixel_format` (through `WindowTable`, T039, reduced here to one format per window), `create_context`, `create_layer_context` (layer 0), `delete_context`, `set_context` (makes the host context on first use - opening the process's one `GuestConnection` at the first - and answers the 336-entry proc table), `release_context`, `copy_context` (`ERROR_NOT_SUPPORTED`), `get_proc_address` (the by-name table plus the WGL functions), `describe_layer_plane` (FALSE); a `DHGLRC` is a pool index with a generation, so a stale or forged one answers `ERROR_INVALID_HANDLE`; `GlIcdBinding` (`src/icd/opengl/gl_icd_binding.{hpp,cpp}`) and the one-line hooks in `src/icd/opengl/gl_hooks.cpp` (`wire()` answers the calling thread's current context's `LockedTransport` or null; `legacy_entry(index)`'s recorders set `GL_INVALID_OPERATION`); `src/icd/opengl/gl_helpers.h` defines `kPixelBlobFloor` (4 KiB) and declares the hooks; the 43 manual entries (research.md §2) in `src/icd/opengl/manual_entries.cpp`, one line each into the current context, with `glGetString(GL_VERSION)` answering the host's string and `glGetString(GL_EXTENSIONS)`/`glGetStringi` the policy's list; test `tests/unit/icd/opengl/test_gl_icd_root.cpp` through `FakeOpengl32` over MockKmt and a scripted host (the load order, every refusal of contracts/icd_interface.md, `glGetString(GL_RENDERER)` the host's answer, a GL call with nothing current doing nothing, a legacy `glBegin` answering `GL_INVALID_OPERATION` from `glGetError` with no host call, the lock trace of a create and a call); the build: `av_icd` gains `src/icd/opengl` and the generated OpenGL client, entries and handle defaults; `src/icd` stays in the design, symbol and coverage gates' scope
+
+### The DLL and its registration
+
+- [ ] T030 [US1] `src/um/opengl/`: `rvkgl_exports.cpp` (the 14 exports, each one line into `GlIcdLibrary` in `ObjectStorage`, which constructs the root on the first call as 045's `IcdLibrary` does; the DLL entry does nothing), `gl_icd_library.{hpp,cpp}`, `gdi_window_surface.{hpp,cpp}` (`WindowFromDC`, `GetClientRect`, `SetDIBitsToDevice`), `tls_thread_slot.{hpp,cpp}` (`TlsAlloc` at construction, `TlsFree` at destruction, `GetCurrentThreadId`); the discovery file of T007 is deleted; `src/um/imports/{kernel32,user32,gdi32}.def` gain what these call; `rvkgl_image` keeps passing
+- [ ] T031 [US1] `tests/loopback/test_fullstack_opengl_icd.cpp`: `FakeOpengl32` over the ICD's entry table on `FullStackRig` with `rvk_executor_ops()` bound to `WidestHostGpu` (opened from the executor library file, as 045's T038 does): a context becomes current, `GL_RENDERER` is the host GPU's, `GL_VERSION` is the host's capped at 4.6, a `glClear` to a colour read back with `glReadPixels` above `kPixelBlobFloor` arrives through the arena; a host without OpenGL returns without judging
+
+**Checkpoint**: the ICD answers opengl32's calls over MockKmt and on the host GPU, and a DLL exporting exactly its 14 entry points builds. Commit.
+
+---
+
+## Phase 5: US2 - Pixel formats and WGL extensions behave as on a hardware driver (Priority: P1)
+
+**Goal**: formats, WGL extensions, share lists and presentation behave as an application expects from a hardware driver.
+
+**Independent test**: the pixel-format table and WGL answers are table-tested on Linux; the probe's `pixel_format`, `draw`, `share` and `attribs` steps pass in the guest.
+
+- [ ] T032 [P] [US2] `PixelFormatQuery` (object) in `src/icd/opengl/pixel_format_query.{hpp,cpp}`: `wglGetPixelFormatAttribivARB`/`fvARB` and `wglChoosePixelFormatARB` answered from `PixelFormatTable` per data-model.md ("an unknown attribute, a list past 128 pairs, an unterminated list and a format out of range answer `ERROR_INVALID_PARAMETER`/`ERROR_INVALID_PIXEL_FORMAT`"); `WGL_NUMBER_PIXEL_FORMATS_ARB` answers for index 0; choose orders by the ARB's rules (exact matches first, then fewest extra bits); test `tests/unit/icd/opengl/test_pixel_format_query.cpp` (every attribute the ARB defines for every row, sRGB and multisample attributes, a request no row meets answering zero formats and TRUE, `max` 0, null outputs) and a byte-flip sweep; `tests/fuzz/fuzz_pixel_format_query.cpp` with a corpus
+- [ ] T033 [P] [US2] `GlExtensionPolicy` (object) in `src/icd/opengl/gl_extension_policy.{hpp,cpp}` over `ExtensionPolicy`: GL rows (none reported until a test names one) intersected with `gl_tier.h` and the host's `glGetStringi(GL_EXTENSIONS, i)` list, which is asked once per context and capped at 1024 names; WGL rows `WGL_ARB_extensions_string`, `WGL_ARB_pixel_format`, `WGL_ARB_create_context`, `WGL_ARB_create_context_profile`, `WGL_ARB_create_context_robustness`, `WGL_ARB_multisample`, `WGL_ARB_framebuffer_sRGB`, each naming its test; `WGL_EXT_swap_control` never reported; `wglGetExtensionsStringARB(hdc)` answers the WGL list for a DC with a window; test `tests/unit/icd/opengl/test_gl_extension_policy.cpp` (a host listing 1025 names, an unterminated name, an extension outside the tier, swap control on the host); `tools/check_extension_policy.py` passes for both ICDs
+- [ ] T034 [US2] `WindowTable` (system) in `src/icd/opengl/window_table.{hpp,cpp}` per data-model.md ("a window's format is set once; a DC with no window is declined; a row goes when the last context that drew on it is deleted or the window is gone at the next swap", at most 256 rows); `GlIcdRoot::set_pixel_format` moves onto it; test `tests/unit/icd/opengl/test_window_table.cpp` (a second `SetPixelFormat` refused with the first kept, a memory DC declined, 257 windows, a window gone, a context whose format differs from the window's refused by `DrvSetContext`)
+- [ ] T035 [US2] `BackBufferPresenter` (object) in `src/icd/opengl/back_buffer_presenter.{hpp,cpp}`: a host framebuffer with colour and depth/stencil renderbuffers matching the format (sRGB, samples) and the window's client size; `framebuffer_name` maps framebuffer 0 to it for the context current on that window; `swap()` resolves a multisampled buffer, reads `GL_BGRA`/`GL_UNSIGNED_BYTE` into an arena lease and blits bottom-up; a changed client size reallocates before the next frame; a failed blit is logged; `DrvSwapBuffers` and `DrvSwapLayerBuffers` (main plane only) in `GlIcdRoot`; test `tests/unit/icd/opengl/test_back_buffer_presenter.cpp` over a scripted host (the commands a first frame, a resize and a multisampled frame send; the blit's bytes are the host's answer; a 0×0 window; a swap with nothing current answering FALSE)
+- [ ] T036 [US2] `BufferMapping` (object) in `src/icd/opengl/buffer_mapping.{hpp,cpp}` per data-model.md ("filled at map unless invalidating or write-only; written back at unmap (or before the next command for a persistent, writable map); an unmap of a range not mapped is `GL_INVALID_OPERATION`", at most 64 per context); the manual `glMapBuffer`, `glMapBufferRange`, `glMapNamedBuffer(Range)`, `glUnmapBuffer`, `glUnmapNamedBuffer`, `glFlushMappedBufferRange` entries and the `flush_persistent_mappings` hook; the path logged once per context (FR-006); test `tests/unit/icd/opengl/test_buffer_mapping.cpp` (read, write, read-write, invalidate, persistent across commands, a range past the buffer, a 65th map, a map larger than the arena)
+- [ ] T037 [US2] Share lists: `DrvShareLists` in `GlIcdRoot` records the share target while neither context has been made (both in `created`) and answers FALSE after; the target becomes the record's `share_context`; test `tests/unit/icd/opengl/test_gl_share_lists.cpp` over MockKmt (the record carries the share handle, a share after `DrvSetContext` refused, sharing with a deleted context refused, a chain a→b→c)
+- [ ] T038 [US2] `GlProbe` (object) in `src/guest/suite/gl_probe.{hpp,cpp}` over a `GlEntry` seam (`src/guest/suite/gl_entry.hpp`: the WGL and GL calls the probe makes; on Linux it is `FakeOpengl32` over the ICD, in the guest the system `opengl32.dll`): steps `pixel_format`, `context`, `version` (prints `GL_VERSION` and `GL_RENDERER`), `draw` (a full-screen triangle from `src/guest/suite/shaders/triangle.vert` and `solid.frag` into the default framebuffer, `SwapBuffers`, then `glReadPixels`: every pixel the fragment shader's colour ±1), `share` (a texture made in one context read in another after `wglShareLists`), `attribs` (4.7 refused with `ERROR_INVALID_VERSION_ARB`, both profile bits with `ERROR_INVALID_PROFILE_ARB`); test first `tests/unit/guest/suite/test_gl_probe.cpp` over a scripted `GlEntry`; `test_fullstack_opengl_icd.cpp` runs these steps and every one passes on this machine
+
+**Checkpoint**: formats, WGL extensions, share lists and presentation pass on the rig. Commit.
+
+---
+
+## Phase 6: US3 - Many contexts, many threads, one transport (Priority: P2)
+
+**Goal**: contexts on several threads share one device link, each on its own host context; misuse and loss are contained.
+
+**Independent test**: loopback tests create contexts on several threads, make them current alternately, share objects and delete contexts in every order, with invariants after each step and no leak in the guest or the device.
+
+- [ ] T039 [US3] Multi-context tests in `tests/unit/icd/opengl/test_gl_contexts.cpp` over MockKmt with `ScriptedThreadSlot`: three contexts on two threads share one `GuestConnection` and own three rvk contexts; a context current on thread A is refused on thread B with A's state untouched (US3.2); deletion in every order of three (current, released, never made) releases each host context exactly once; a process's last context closes the device; a Vulkan connection (045) and a GL context in one process each keep their own rvk context; invariants after each step
+- [ ] T040 [US3] Device loss in `src/icd/opengl/`: after a transport faults, the context and every other context on the same device are `lost`; with `WGL_CONTEXT_ROBUST_ACCESS_BIT_ARB` and lose-on-reset, `glGetGraphicsResetStatus` answers `GL_UNKNOWN_CONTEXT_RESET` locally; otherwise `glGetError` answers `GL_OUT_OF_MEMORY` once; every other call is a no-op with no Kmt call; `DrvDeleteContext` succeeds locally; a new context opens a new device; test `tests/unit/icd/opengl/test_gl_device_loss.cpp` over `MockKmt::withhold_answer_at`; `vkRvkForceContextFault`'s GL counterpart `rvkForceContextFault` (probe-only, through `DrvGetProcAddress`) over 045's `ContextFault`
+- [ ] T041 [US3] `GlProbe` gains `busy` (a context current on a second thread refused, `ERROR_BUSY`), `lost` (the forced fault; the robust context's reset status and the next call a no-op), `recreated` (a new context passes `draw`); tests in `test_gl_probe.cpp`; `test_fullstack_opengl_icd.cpp` runs every step with the device's context count back to what it was
+
+**Checkpoint**: many contexts, threads and a loss behave on the rig. Commit.
+
+---
+
+## Phase 7: The guest proof, polish and the merge
+
+- [ ] T042 `src/um/probe/`: `rvkglprobe.exe` runs `GlProbe` over the system `opengl32.dll` (a window of 64×64 made as T008's), printing `rvkglprobe: N passed, M failed` and `ok opengl.<step>`/`fail opengl.<step>` lines (`GuestReport` with the program name); the discovery file of T008 is kept as `--discovery`; `rvkglprobe_image` passes
+- [ ] T043 `tools/guest/run_guest_suite.py --opengl` (refused with `--rvk` and `--vulkan`): stages `rvkgl.dll` in the package, pushes `rvkglprobe.exe`, runs it (through T010's launcher if T009 required it), requires exit 0, the summary with 0 failed and all nine steps, and `GL_RENDERER` naming a host GPU; pulls `C:\ProgramData\rvk\*.log` into `diag/`; tests in `tests/tools/test_run_guest_suite.py`; `tools/gate.sh` runs it as a fourth boot in `build-guest-opengl/`
+- [ ] T044 `docs/testing.md` "As built" describes the GL ICD's layers (FakeOpengl32 units, the full-stack probe, the `--opengl` boot); `docs/protocol.md` the record's options, the setup's growth, ABI version 4 and the GL import; `docs/kb/07-usermode.md` (T001) is checked against what the live runs showed
+- [ ] T045 Coverage build: every new or changed file under `src/icd`, `src/core`, `src/device`, `src/proto` at 100% branches (`ctest --test-dir build-coverage -R coverage_gate`); every new fuzz target's 60-second smoke clean (`build-fuzz`)
+- [ ] T046 `AV_GUEST_IMAGE=... tools/gate.sh` passes with all four boots; after 045 is merged, fast-forward `050-opengl-icd` onto `master` (rebase first if 045 changed after this branch started); push
+
+---
+
+## Dependencies & Execution Order
+
+- Phase 1: T001-T003 independent; T004 before any ICD class; T005 any time before merge.
+- Phase 2 needs T001 (the pinned binary for the record) and T004 (`FileLog`'s stem). **T009 must pass (or T010 be built) before Phase 4.**
+- Phase 3: T011-T013 (generator) before T029; T014-T015 (arena) before T027; T016 → T017 → T018 → T019 → T020 → T021 in order (each layer consumes the one before).
+- Phase 4 needs Phase 3; T022-T025 independent; T026 → T027 → T028 → T029 → T030 → T031.
+- Phase 5 needs T029; T032-T033 independent; T034 → T035; T036, T037 after T029; T038 last.
+- Phase 6 needs Phase 5's T038.
+- Phase 7 last; T046 waits on 045's merge.
+
+### Parallel opportunities
+
+- Setup: T001, T002, T003 in disjoint files (Python only, no C++ build collision).
+- Phase 3: T016 and T017 are separate proto files; the device and executor tasks share a build directory, one builder at a time.
+- Phase 4: T022, T023, T024, T025 are separate test files.
+- Phase 5: T032 and T033.
+
+## Implementation Strategy
+
+**Proof first**: Phase 2 - the one assumption about Windows that is inference - is proven in a real guest before the ICD is built on it. **MVP**: Phases 1-4, a context current through the system `opengl32.dll` on the host GPU. **Then** US2's formats, extensions, sharing and presentation, US3's threads and loss, and the fourth guest boot.

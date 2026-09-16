@@ -40,7 +40,24 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `GlIcdRoot` | system (guest UM) | the context pool, the window table, the pixel formats, the injected seams | Answer the `Drv*` interface |
+| `PixelFormatTable` | object | the fixed list of formats this ICD serves | Describe a pixel format by its index |
+| `PixelFormatQuery` | object | the table it answers from, the attribute list being judged | Answer `WGL_ARB_pixel_format`'s queries |
+| `ContextAttributes` | object | the decoded `wglCreateContextAttribsARB` list | Judge one attribute list |
+| `WindowTable` | system | per window: its pixel format, client size, back buffers | Track the windows a process drew on |
+| `GuestGlContext` | object | one `DHGLRC`: its options, share target, transport, owner thread, local error | Be one application GL context |
+| `CurrentContexts` | system | the `ThreadSlot`, the contexts current on threads | Say which context a thread draws with |
+| `ClientArrayState` | object | the bindings and client arrays the manual entry points read | Size the bytes a command sends |
+| `BufferMapping` | object | one mapped range, its arena lease | Mirror a mapped buffer range in guest memory |
+| `BackBufferPresenter` | object | a window's host framebuffer, its read-back lease | Put a finished frame on the window's DC |
+| `GlExtensionPolicy` | object | the rows of reportable GL and WGL extensions and their tests | Decide which extensions the application sees |
+| `KmtBlobArena` | object (guest transport) | one `host_visible_memory` chunk bound to the context, its bump offset | Lend room for bulk data |
+| `GlContextOptions` | object (proto) | version, profile, flags, share context | Carry what a host context is made with |
+| `ProcTableOrder` | object (tools, generated data) | Microsoft's `GLCLTPROCTABLE` order | Place a GL 1.1 entry at its table index |
+
+`ExtensionPolicy`, `ProcessHeap`, `SrwLock`, `FileLog`, `ThreadLock`,
+`LockedTransport`, `Connection`'s adapter search and 045's chunk binding are
+reused, moved to `src/icd/common/` and `src/um/icd/` where both ICDs need them.
 
 ### Test requirements
 
@@ -74,11 +91,12 @@ them to use the host GPU the moment the rvkgpu package is installed, without
 copying a DLL beside each executable. Also the driver's developers, who need the
 ICD interface and pixel-format logic tested on Linux before a guest runs it.
 
-Starting point: render-server's OpenGL client is a replacement `opengl32.dll`
-placed beside the executable, exporting the GL entry points and 30 `wgl*`
-functions, with OpenGL 4.6 core (645 commands) executed on the host through
-surfaceless EGL. It is not an installable client driver: the system
-`opengl32.dll` never loads it. This feature makes it one.
+Starting point: the generated OpenGL client (063) encodes OpenGL 4.6 core
+(645 commands) for execution on the host through surfaceless EGL (044), but it
+was shaped as a replacement `opengl32.dll` exporting the GL entry points by
+name, and it does not link: its ICD hooks do not exist. The system
+`opengl32.dll` never loads such a DLL. This feature makes it an installable
+client driver.
 
 ### User Story 1 - The system opengl32.dll loads the rvkgpu ICD (Priority: P1)
 
@@ -97,8 +115,8 @@ creates a context through the system `opengl32.dll` with no DLL beside it.
    adapter's display, **Then** the system `opengl32.dll` loads the ICD named by
    the adapter's `OpenGLDriverName` registration and the context runs on the
    host GPU.
-2. **Given** a 32-bit application under WoW64, **When** it does the same,
-   **Then** the 32-bit ICD named by `OpenGLDriverNameWow` loads.
+2. *(moved to 061)* **Given** a 32-bit application under WoW64, **When** it
+   does the same, **Then** the 32-bit ICD named by `OpenGLDriverNameWow` loads.
 3. **Given** `DrvSetContext`, **When** a context becomes current on a thread,
    **Then** the ICD returns a complete dispatch table for that context's version
    and profile, and `glGetString(GL_RENDERER)` names the host GPU the adapter is
@@ -120,8 +138,8 @@ each format the ICD offers; `wgl_smoke`-style scenarios run in the guest.
    (color, depth, stencil, double buffer, sRGB, multisample) and its index is
    stable for the ICD's lifetime.
 2. **Given** `WGL_ARB_create_context`, `WGL_ARB_create_context_profile`,
-   `WGL_ARB_pixel_format`, `WGL_ARB_multisample`, `WGL_ARB_framebuffer_sRGB`
-   and `WGL_EXT_swap_control`, **When** an application queries
+   `WGL_ARB_pixel_format`, `WGL_ARB_multisample` and `WGL_ARB_framebuffer_sRGB`
+   (`WGL_EXT_swap_control` moved to 051), **When** an application queries
    `wglGetExtensionsStringARB`, **Then** each is listed only when implemented
    and tested (constitution VI).
 3. **Given** two contexts on one pixel format, **When** `wglShareLists` is
@@ -165,6 +183,21 @@ with invariants after each step and no leak in the guest or the device.
 - A hostile process passes garbage `DHGLRC`, `HDC` or pixel-format indices:
   every entry point validates and fails.
 
+## Clarifications
+
+### Session 2026-09-16 (resolved from the code, the WDK and `opengl32.dll`; research.md)
+
+- Q: How does the system `opengl32.dll` find the ICD? → A: `D3DKMTOpenAdapterFromHdc` on the application's DC (or, with no usable DC, the first `D3DKMTEnumAdapters2` adapter), then `D3DKMTQueryAdapterInfo(KMTQAITYPE_UMOPENGLINFO)`, which dxgkrnl answers from `OpenGLDriverName`, `OpenGLVersion` and `OpenGLFlags` in the adapter's software key (`DpiGetAdapterInfo`). One ICD per process, chosen at the first pixel-format call (research §1).
+- Q: What does `OpenGLVersion`/`OpenGLFlags` have to be? → A: `OpenGLVersion` = 2 (passed to `DrvValidateVersion`), `OpenGLFlags` = 1, which makes `opengl32` require and call `DrvDescribePixelFormat`, `DrvSetPixelFormat` and `DrvSwapBuffers` (research §1).
+- Q: 32-bit applications (US1.2, SC-001's 32-bit half)? → A: moved to 061 with 045's 32-bit Vulkan ICD; 050 writes no `...Wow` value.
+- Q: render-server's t00-t55 programs (SC-001)? → A: render-server contributes no runtime (063), and nothing outside this repository is referenced. SC-001 is proven by `rvkglprobe.exe` through the system `opengl32.dll` and the same probe over the full-stack rig.
+- Q: What does a legacy `wglCreateContext` get before 051? → A: a core-profile context at the host's version (capped at 4.6), reported truthfully as core; GL 1.1 entries the core profile lacks raise `GL_INVALID_OPERATION` locally. 051 makes legacy creation compatibility.
+- Q: `WGL_EXT_swap_control`? → A: moved to 051, which paces presentation; 050 presents by read-back, where an interval means nothing testable.
+- Q: `DrvSwapBuffers` before 051? → A: read the back buffer into the context's blob arena and `SetDIBitsToDevice` it to the DC (research §6).
+- Q: Buffer mappings (FR-006)? → A: GL cannot import a host pointer on both host drivers, so every mapping is fill-at-map, write-back-at-unmap through the blob arena, logged once per context; the arena itself is a 045 host-visible chunk the host reads with no copy (research §5).
+- Q: Share lists (US2.3)? → A: the host context is made lazily at the first `DrvSetContext`, with the share target `wglShareLists` named; after that `DrvShareLists` fails (research §4).
+- Q: Which windows can the guest proof draw on? → A: the runner's processes run in session 0; a live experiment (tasks Phase 2) proves `opengl32` picks the rvkgpu ICD there before anything is built on it, with an interactive-session launcher as the recorded fallback.
+
 ## Requirements *(mandatory)*
 
 - **FR-001**: The ICD is registered only through the adapter's
@@ -176,22 +209,23 @@ with invariants after each step and no leak in the guest or the device.
   core (constitution III; the export boundary is an ABI boundary).
 - **FR-003**: The ICD reports OpenGL 4.6 core only when the host GPU provides
   it through EGL, otherwise the host's version; extensions are the intersection
-  of render-server's tier list, what this feature tests, and the host.
+  of the generated tier list (`gl_tier.h`), what this feature tests, and the host.
 - **FR-004**: The ICD's pixel-format decisions, context table, current-context
   tracking and WGL extension answers are portable logic tested on Linux to the
   constitution's standard; the Windows shim is translation only.
 - **FR-005**: GL commands travel over the guest transport of feature 043; the
   ICD opens no ivshmem device, shared region or named mapping.
-- **FR-006**: Buffer mappings use host-visible memory where the capset offers
-  it, and render-server's fill-at-map, write-back-at-unmap path otherwise; the
-  chosen path is visible in the driver's log.
+- **FR-006**: Buffer mappings are filled at map and written back at unmap
+  through the context's blob arena, whose memory the host reads without a copy;
+  the path is visible in the driver's log.
 - **FR-007**: Every value from the application or the host that the ICD reads
   is validated; malformed input returns a GL or WGL error, never an assert.
 
 ## Success Criteria *(mandatory)*
 
-- **SC-001**: With no DLL beside it, render-server's GL test programs (t00-t55)
-  pass in the guest through the system `opengl32.dll`, 64-bit and 32-bit.
+- **SC-001**: With no DLL beside it, `rvkglprobe.exe` passes every step in the
+  guest through the system `opengl32.dll` (64-bit; 32-bit is 061's), and the
+  same probe passes through the ICD over the full-stack rig.
 - **SC-002**: The ICD core has 100% branch coverage on Linux and a fuzz target
   over its WGL attribute-list parsing.
 - **SC-003**: `glGetString(GL_VERSION)` in the guest matches the version the
@@ -200,15 +234,18 @@ with invariants after each step and no leak in the guest or the device.
 ## Assumptions
 
 - Feature 043's transport and feature 044's live rvk contexts exist.
-- render-server's OpenGL client can be linked below an ICD entry layer instead
-  of its own `opengl32.dll` exports; where it cannot, the contract this spec
-  needs from render-server is a client that takes its dispatch table from the
-  ICD rather than exporting GL symbols.
+- Feature 045's ICD infrastructure (process heap, locks, log, connection,
+  host-visible chunks) exists; this feature is built on its branch.
+- The generated OpenGL client (063) links below the ICD's entry layer once its
+  hooks exist and the emitter writes the `GLCLTPROCTABLE` in Microsoft's order;
+  it exports no GL symbol.
 
 ## Out of Scope
 
-- The compatibility profile and presentation through rvkgpu: feature 051.
-  Until then SwapBuffers uses render-server's existing read-back and blit.
+- The compatibility profile, presentation through rvkgpu and
+  `WGL_EXT_swap_control`: feature 051. Until then SwapBuffers reads back and
+  blits through GDI.
+- The 32-bit ICD (`OpenGLDriverNameWow`): feature 061.
 - OpenGL ES through WGL, GLX-style overlays and layer planes
   (`DrvCreateLayerContext` accepts only layer 0).
 - Interop with Vulkan, OpenCL and other processes: feature 053.
