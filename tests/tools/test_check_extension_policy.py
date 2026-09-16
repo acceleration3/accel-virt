@@ -135,6 +135,19 @@ class CheckExtensionPolicy(unittest.TestCase):
         self.assertIn("want one reported_extensions table in src/icd/opengl, found 0", result.stderr)
         self.assertNotIn("src/icd/vulkan,", result.stderr)
 
+    def test_a_directory_with_no_source_is_no_icd_yet(self):
+        self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv"}')
+        self.write("src/icd/opengl/gl_helpers.h", "// hooks the generated client calls\n")
+        self.write("src/icd/opengl/window_surface.hpp", "class WindowSurface;\n")
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ok, 1 reported (vulkan 1)", result.stdout)
+        # Its first source makes it an ICD, which then needs its table.
+        self.write("src/icd/opengl/pixel_format_table.cpp", "// no table\n")
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("want one reported_extensions table in src/icd/opengl, found 0", result.stderr)
+
     def test_rows_are_judged_against_their_own_apis_list(self):
         self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv"}')
         self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv"}', where="src/icd/opengl/gl_icd_root.cpp")

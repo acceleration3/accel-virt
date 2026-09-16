@@ -47,6 +47,14 @@ ClientBlobArena::ClientBlobArena(uint8_t *block, size_t capacity)
         AV_SCOPE("ClientBlobArena::ClientBlobArena");
     }
 
+void ClientBlobArena::lend(uint8_t *block, size_t capacity)
+{
+    AV_SCOPE("ClientBlobArena::lend");
+    block_ = block;
+    capacity_ = block == nullptr ? 0u : capacity;
+    used_ = 0u;
+}
+
 bool ClientBlobArena::ready() const
 {
     AV_SCOPE("ClientBlobArena::ready");
@@ -68,6 +76,12 @@ void ClientBlobArena::give_back(const ClientBlobLease &lease)
     /* Only the top: a bump arena cannot free a lease with another taken after
      * it, and the only lease not yet sent is the last one taken. */
     if (lease.taken() && lease.offset() + lease.bytes() == used_) used_ = lease.offset();
+}
+
+void ClientBlobArena::retire_all()
+{
+    AV_SCOPE("ClientBlobArena::retire_all");
+    used_ = 0u;
 }
 
 size_t ClientBlobArena::used() const

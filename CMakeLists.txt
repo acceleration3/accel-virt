@@ -284,6 +284,18 @@ if(AV_GENERATED)
   target_include_directories(av_icd PRIVATE ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan)
   target_compile_options(av_icd PRIVATE ${AV_TEST_FLAGS})
   target_link_options(av_icd PUBLIC ${AV_TEST_FLAGS})
+
+  # The generated OpenGL client and ICD entries, built against the hooks the
+  # OpenGL ICD declares (src/proto/gl_icd_support.hpp, src/icd/opengl/gl_helpers.h),
+  # so a change to either side that breaks the other fails the build; the
+  # OpenGL ICD links them once it defines the hooks (feature 050).
+  add_library(av_gl_generated OBJECT
+    ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_dispatch_client.cpp
+    ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl/gl_icd_entries.cpp)
+  target_link_libraries(av_gl_generated PRIVATE av_core)
+  target_include_directories(av_gl_generated PRIVATE ${CMAKE_SOURCE_DIR}/src/proto/generated/opengl
+    ${CMAKE_SOURCE_DIR}/src/icd/opengl)
+  target_compile_options(av_gl_generated PRIVATE ${AV_TEST_FLAGS})
 endif()
 
 # ---- unit tests: one binary per module, so a crash isolates -----------------

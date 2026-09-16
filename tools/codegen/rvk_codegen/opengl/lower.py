@@ -264,6 +264,24 @@ def lower(raw: RawRegistry, prof: Profile) -> Registry:
             continue
         reg.aliases[name] = target
 
+    # The driver's own entry points, declared from the registry so the ICD's
+    # definitions and the table agree with gl.xml; another spelling of one of
+    # them is an alias, as for the generated commands.
+    for name in sorted(prof.driver_implemented):
+        entry = raw.commands.get(name)
+        if entry is None or entry.api != "gl" or name in reg.commands:
+            continue
+        if entry.alias in prof.driver_implemented and entry.alias in raw.commands:
+            continue
+        reg.driver_entries[name] = (entry.return_type.cpp(),
+                                    ", ".join(p.text for p in entry.params))
+    for name in sorted(prof.driver_implemented):
+        entry = raw.commands.get(name)
+        if entry is None or name in reg.driver_entries or name in reg.commands:
+            continue
+        if entry.alias in reg.driver_entries:
+            reg.aliases[name] = entry.alias
+
     generated = set(reg.commands)
     for name, commands in sorted(raw.extensions.items()):
         if not name.startswith("GL_"):

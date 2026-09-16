@@ -25,11 +25,11 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
                            uint8_t *staging, size_t staging_bytes)
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{}, locked_{},
-      dma_address_(0u), context_(0u), ring_(), reply_(), fences_(), faulted_(false), decode_arena_(nullptr, 0u),
-      blobs_()
-      {
-          AV_SCOPE("KmtTransport::KmtTransport");
-      }
+      dma_address_(0u), context_(0u), ring_(), reply_(), fences_(), faulted_(false), answered_(false),
+      decode_arena_(nullptr, 0u), blobs_()
+{
+    AV_SCOPE("KmtTransport::KmtTransport");
+}
 
 KmtTransport::~KmtTransport()
 {
@@ -214,6 +214,9 @@ TransportResult KmtTransport::send_async(uint32_t command_id, WireWriter &writer
 void KmtTransport::end_call()
 {
     AV_SCOPE("KmtTransport::end_call");
+    if (!answered_) return;
+    answered_ = false;
+    blobs_.retire_all();
 }
 
 TransportResult KmtTransport::send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply)
@@ -223,7 +226,9 @@ TransportResult KmtTransport::send_sync(uint32_t command_id, WireWriter &writer,
     uint64_t              fence = 0u;
     const TransportResult sent = publish(command_id, writer, CommandHeader::generate_reply, fence);
     if (sent != TransportResult::ok) return sent;
-    return await(fence, reply);
+    const TransportResult answered = await(fence, reply);
+    answered_ = answered == TransportResult::ok;
+    return answered;
 }
 
 /* The batch is judged whole before a byte reaches the ring: a frame the device

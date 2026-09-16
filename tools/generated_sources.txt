@@ -5,4 +5,4 @@
 #   <api> <generator> <registry> <out> [extra arguments...]
 vulkan rvk_codegen third_party/khronos/vk.xml src/proto/generated/vulkan --profile @tools/codegen/profiles/vulkan.toml --ids @tools/codegen/profiles/vulkan_ids.toml --header @third_party/khronos/include/vulkan/vulkan_core.h
 opencl rvk_codegen.opencl third_party/khronos/cl.xml src/proto/generated/opencl --profile @tools/codegen/profiles/opencl.toml --ids @tools/codegen/profiles/opencl_ids.toml
-opengl rvk_codegen.opengl third_party/khronos/gl.xml src/proto/generated/opengl --wgl @third_party/khronos/wgl.xml --profile @tools/codegen/profiles/opengl.toml --ids @tools/codegen/profiles/opengl_ids.toml
+opengl rvk_codegen.opengl third_party/khronos/gl.xml src/proto/generated/opengl --wgl @third_party/khronos/wgl.xml --profile @tools/codegen/profiles/opengl.toml --ids @tools/codegen/profiles/opengl_ids.toml --proc-table @tools/codegen/profiles/opengl_proc_table.txt

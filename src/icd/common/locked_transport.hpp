@@ -8,8 +8,10 @@
  * (SyncCallScope). So the lock is taken when the writer is lent and let go when
  * an asynchronous command has been sent, or when a synchronous call ends -
  * otherwise another thread's round trip could replace the reply mid-decode.
- * Only the thread whose call is open ends it; an end with no synchronous call
- * open lets go of nothing. */
+ * A command whose payload was dropped before any send is ended by the thread
+ * writing it (the OpenGL client), which lets its writer's lock go. Only the
+ * thread whose call is open ends it; an end with no call open lets go of
+ * nothing. */
 #ifndef AV_ICD_LOCKED_TRANSPORT_HPP
 #define AV_ICD_LOCKED_TRANSPORT_HPP
 

@@ -94,6 +94,60 @@ TEST(client_blob_arena, an_untaken_lease_given_back_is_a_no_op)
   static_cast<void>(taken);
   CHECK(arena.invariants_hold()); }
 
+/* Every lease retires at once when an answer shows the host has read them
+ * all: the next take starts at the beginning again, and the room is whole. */
+TEST(client_blob_arena, retiring_returns_every_lease_and_the_next_take_starts_at_zero)
+{ std::uint8_t block[64];
+  ClientBlobArena arena(block, sizeof block);
+  ClientBlobLease first = arena.take(16u);
+  ClientBlobLease second = arena.take(48u);
+  CHECK(first.taken());
+  CHECK(second.taken());
+  CHECK(!arena.take(1u).taken());
+  arena.retire_all();
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(arena.invariants_hold());
+  ClientBlobLease again = arena.take(64u);
+  CHECK(again.taken());
+  CHECK_EQ(again.offset(), 0u);
+  CHECK(again.data() == block);
+  CHECK_EQ(arena.used(), 64u);
+  CHECK(arena.invariants_hold());
+  /* A retire with nothing lent leaves it empty. */
+  arena.retire_all();
+  arena.retire_all();
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(arena.invariants_hold()); }
+
+TEST(client_blob_arena, retiring_an_arena_with_no_block_keeps_it_unready)
+{ ClientBlobArena arena;
+  arena.retire_all();
+  CHECK(!arena.ready());
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(!arena.take(1u).taken());
+  CHECK(arena.invariants_hold()); }
+
+/* Memory lent later - a GL context's chunk once it is imported - replaces the
+ * arena's block with nothing taken from it; lending nothing takes it away. */
+TEST(client_blob_arena, lent_memory_replaces_the_block_and_lending_none_takes_it_away)
+{ ClientBlobArena arena;
+  std::uint8_t first[32];
+  arena.lend(first, sizeof first);
+  CHECK(arena.ready());
+  CHECK(arena.take(32u).data() == first);
+  CHECK_EQ(arena.used(), 32u);
+  std::uint8_t second[16];
+  arena.lend(second, sizeof second);
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(!arena.take(17u).taken());
+  CHECK(arena.take(16u).data() == second);
+  CHECK(arena.invariants_hold());
+  arena.lend(nullptr, 64u);
+  CHECK(!arena.ready());
+  CHECK_EQ(arena.used(), 0u);
+  CHECK(!arena.take(1u).taken());
+  CHECK(arena.invariants_hold()); }
+
 /* The invariant catches the states the class never builds. */
 TEST(client_blob_arena, the_invariant_catches_impossible_states)
 { std::uint8_t block[64];

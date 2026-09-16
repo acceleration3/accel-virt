@@ -349,15 +349,15 @@ def _enum_value(name: str) -> int:
 # ---------------------------------------------------------------------
 
 def _lease_for_write(name: str, out: list[str], guard: str) -> None:
-    out.append(f"    ::av::ClientBlobArena::Lease {name}_lease{{}};")
+    out.append(f"    ::av::ClientBlobLease {name}_lease{{}};")
     out.append(f"    bool {name}_via_blob = false;")
     out.append(f"    if ({guard} &&")
     out.append(f"        {name}_want >= ::av::glproto::kPixelBlobFloor) {{")
     out.append("        auto& rvk_blobs = rvk_t.blobs();")
     out.append("        if (rvk_blobs.ready()) {")
     out.append(f"            {name}_lease = rvk_blobs.take({name}_want);")
-    out.append(f"            if ({name}_lease.ok()) {{")
-    out.append(f"                __builtin_memcpy({name}_lease.data, {name}, {name}_want);")
+    out.append(f"            if ({name}_lease.taken()) {{")
+    out.append(f"                __builtin_memcpy({name}_lease.data(), {name}, {name}_want);")
     out.append(f"                {name}_via_blob = true;")
     out.append("            }")
     out.append("        }")
@@ -375,15 +375,18 @@ def _read_leases(cmd: Command) -> list[str]:
     return [p.name for p in cmd.params if p.role is Role.PIXELS_OUT]
 
 
-def _hand_back_leases(cmd: Command, out: list[str], sent: bool,
-                      indent: str = "    ") -> None:
+def _hand_back_leases(cmd: Command, out: list[str], indent: str = "    ") -> None:
+    """Rewinds the write leases of a command the host will not read, or has
+    read already because it answered.
+
+    A command that was sent keeps its leases: the host reads them when it
+    runs the command, which for a one-way call is later than the send. They
+    are retired together once an answer shows the host has run everything
+    before it (KmtTransport::end_call)."""
     for name in _write_leases(cmd):
         out.append(f"{indent}if ({name}_via_blob) {{")
         out.append(f"{indent}    rvk_t.blobs()")
-        if sent:
-            out.append(f"{indent}        .retire_after_last({name}_lease);")
-        else:
-            out.append(f"{indent}        .give_back({name}_lease);")
+        out.append(f"{indent}        .give_back({name}_lease);")
         out.append(f"{indent}}}")
 
 
@@ -422,7 +425,7 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
                    f"reinterpret_cast<uintptr_t>({name})));")
         out.append(f"    }} else if ({name}_via_blob) {{")
         out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_want));")
-        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_lease.offset));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_lease.offset()));")
         out.append(f"    }} else if ({name} != nullptr) {{")
         out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_want));")
         out.append(f"        if ({name}_want != 0) rvk_b.write({name}, {name}_want);")
@@ -443,7 +446,7 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
         # one, so a four-byte read would take 4096 and a round trip to
         # give it back, which is worse than the reply slot it replaced.
         out.append(f"    const size_t {name}_want = static_cast<size_t>({size});")
-        out.append(f"    ::av::ClientBlobArena::Lease {name}_lease{{}};")
+        out.append(f"    ::av::ClientBlobLease {name}_lease{{}};")
         out.append(f"    bool {name}_via_blob = false;")
         if not cmd.is_async:
             out.append(f"    if (!{name}_is_offset && {name} != nullptr &&")
@@ -451,7 +454,7 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
             out.append("        auto& rvk_blobs = rvk_t.blobs();")
             out.append("        if (rvk_blobs.ready()) {")
             out.append(f"            {name}_lease = rvk_blobs.take({name}_want);")
-            out.append(f"            {name}_via_blob = {name}_lease.ok();")
+            out.append(f"            {name}_via_blob = {name}_lease.taken();")
             # Cleared before the host writes into it.
             #
             # A read is allowed to ask for more than there is: a caller
@@ -464,7 +467,7 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
             # before it. The host writes zeros there, and this is how
             # it looks like the host.
             out.append(f"            if ({name}_via_blob) "
-                       f"__builtin_memset({name}_lease.data, 0, {name}_want);")
+                       f"__builtin_memset({name}_lease.data(), 0, {name}_want);")
             out.append("        }")
             out.append("    }")
         out.append(f"    rvk_b.write_pod<uint8_t>(")
@@ -475,7 +478,7 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
                    f"reinterpret_cast<uintptr_t>({name})));")
         out.append(f"    }} else if ({name}_via_blob) {{")
         out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_want));")
-        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_lease.offset));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_lease.offset()));")
         out.append(f"    }} else if ({name} != nullptr) {{")
         out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_want));")
         out.append("    }")
@@ -519,7 +522,7 @@ def _encode_param(cmd: Command, p: Param, out: list[str]) -> None:
                    f"{name} == nullptr ? 0 : ({name}_via_blob ? 3 : 1));")
         out.append(f"    if ({name}_via_blob) {{")
         out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_want));")
-        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_lease.offset));")
+        out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_lease.offset()));")
         out.append(f"    }} else if ({name} != nullptr) {{")
         out.append(f"        rvk_b.write_varint(static_cast<uint64_t>({name}_want));")
         out.append(f"        if ({name}_want != 0) rvk_b.write({name}, {name}_want);")
@@ -597,7 +600,7 @@ def _decode_reply(cmd: Command, out: list[str]) -> None:
             # left is to hand them to the caller and give the lease
             # back.
             out.append(f"    if ({p.name}_via_blob) {{")
-            out.append(f"        __builtin_memcpy({p.name}, {p.name}_lease.data, {p.name}_want);")
+            out.append(f"        __builtin_memcpy({p.name}, {p.name}_lease.data(), {p.name}_want);")
             out.append("        rvk_t.blobs()")
             out.append(f"            .give_back({p.name}_lease);")
             out.append("    }")
@@ -635,6 +638,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
          '#include "gl_protocol_ids.h"',
          '#include "gl_sizes.h"',
          '#include "proto/client_blob_arena.hpp"',
+         '#include "proto/sync_call_scope.hpp"',
          '',
          "namespace av::glproto {\n",
          "// Below one page a blob lease costs more than the reply slot",
@@ -652,6 +656,11 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         # One trace scope per command sent (docs/trace.md).
         c.append(f'    AV_SCOPE("rvk_{cmd.name}");')
         c.append("    ::av::WireWriter rvk_b = rvk_t.request_writer();")
+        if not cmd.is_async:
+            # Ends the call on every path from here, a payload dropped
+            # before the send included: a transport shared between threads
+            # holds its lock from the writer to this (feature 050).
+            c.append("    const ::av::SyncCallScope rvk_call{rvk_t};")
         if cmd.mints_handle:
             # The handle the guest is about to answer with, written
             # first so the server binds it before it decodes anything
@@ -675,12 +684,14 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
         c.append("    if (rvk_b.status() != ::av::Status::ok) {")
         c.append(f'        ::av::icd::payload_dropped("gl", "{cmd.name}",')
         c.append("                                       rvk_b.offset());")
-        _hand_back_leases(cmd, c, sent=False, indent="        ")
+        _hand_back_leases(cmd, c, indent="        ")
+        if cmd.is_async:
+            # No send will let the writer's lock go, so the call ends here.
+            c.append("        rvk_t.end_call();")
         c.append(f"        {'return;' if _ret_kind(cmd) == 'void' else fail_for(cmd)}")
         c.append("    }")
         if cmd.is_async:
             c.append(f"    (void)rvk_t.send_async(kCmd_{cmd.name}, rvk_b);")
-            _hand_back_leases(cmd, c, sent=True)
             if cmd.mints_handle:
                 c.append("    return rvk_token;")
             c.append("}")
@@ -690,7 +701,7 @@ def emit_client(reg: Registry, out_dir: Path) -> None:
             c.append("    ::av::WireReader rvk_r{nullptr, 0u};")
             c.append(f"    const bool rvk_sent = rvk_t.send_sync(kCmd_{cmd.name}, rvk_b, rvk_r) ==")
             c.append("        ::av::TransportResult::ok;")
-            _hand_back_leases(cmd, c, sent=False)
+            _hand_back_leases(cmd, c)
             c.append("    if (!rvk_sent) {")
             for rname in _read_leases(cmd):
                 c.append(f"        if ({rname}_via_blob) rvk_t.blobs().give_back({rname}_lease);")
@@ -2161,7 +2172,60 @@ def _reads_buffers(cmd) -> bool:
             name.startswith("glDispatchCompute"))
 
 
-def emit_icd(reg: Registry, out_dir: Path) -> None:
+class GenerationError(Exception):
+    pass
+
+
+# The suffix opengl32 gives the colour entries of its RGBA table; the command
+# is the one without it.
+RGBA_SUFFIX = "_InRGBA"
+
+
+def read_proc_table(text: str) -> list[str]:
+    """The command names of opengl32's GLCLTPROCTABLE, in slot order.
+
+    The file is `<index> <name>` per line from 0 without a gap; `#` starts a
+    comment line. Anything else is refused: the order is Microsoft's ABI, and
+    a slot out of place calls the wrong function with the wrong arguments."""
+    names: list[str] = []
+    for number, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split()
+        if len(parts) != 2 or not parts[0].isdigit():
+            raise GenerationError(f"proc table line {number}: want '<index> <name>': {line!r}")
+        if int(parts[0]) != len(names):
+            raise GenerationError(f"proc table line {number}: slot {parts[0]} where {len(names)} was due")
+        name = parts[1]
+        if name.endswith(RGBA_SUFFIX):
+            name = name[:-len(RGBA_SUFFIX)]
+        names.append(name)
+    if not names:
+        raise GenerationError("proc table: no slots")
+    return names
+
+
+def _icd_entry_declaration(cmd: Command) -> str:
+    return _icd_signature(cmd).replace(f" APIENTRY {cmd.name}(", f" APIENTRY Wrap_{cmd.name}(", 1)
+
+
+def _table_slot(reg: Registry, index: int, name: str) -> str:
+    if name in reg.driver_entries:
+        return f"reinterpret_cast<GlProc>(&Wrap_{name})"
+    cmd = reg.commands.get(name)
+    if cmd is None:
+        raise GenerationError(
+            f"proc table slot {index}: {name} is neither generated nor a driver entry")
+    # The compatibility profile's commands have no host to go to before 051
+    # makes compatibility contexts: the ICD answers each with the error a
+    # core context would record, and knows the slot it was called through.
+    if cmd.tier == "compat":
+        return f"::av::glicd::legacy_entry({index}u)"
+    return f"reinterpret_cast<GlProc>(&Wrap_{name})"
+
+
+def emit_icd(reg: Registry, out_dir: Path, proc_table: list[str]) -> None:
     out = [HEADER, '#include "gl_icd_entries.h"\n',
            "#include <stdint.h>\n",
            '#include "core/trace/function_scope.hpp"',
@@ -2169,7 +2233,7 @@ def emit_icd(reg: Registry, out_dir: Path) -> None:
            '#include "gl_dispatch_client.h"',
            '#include "gl_helpers.h"\n',
            "// Every entry point whose whole job is to forward.",
-           'extern "C" {', ""]
+           "namespace av::glicd::generated {", ""]
     forwarded: list[str] = []
     handwritten: list[str] = []
     for cmd in reg.commands.values():
@@ -2179,7 +2243,7 @@ def emit_icd(reg: Registry, out_dir: Path) -> None:
             handwritten.append(cmd.name)
             continue
         forwarded.append(cmd.name)
-        out.append(f"{_icd_signature(cmd)} {{")
+        out.append(f"{_icd_entry_declaration(cmd)} {{")
         # One trace scope per API call (docs/trace.md).
         out.append(f'    AV_SCOPE("{cmd.name}");')
         args = ", ".join(["*rvk_t"] + _icd_forward_args(cmd))
@@ -2218,119 +2282,88 @@ def emit_icd(reg: Registry, out_dir: Path) -> None:
             out.append(f"    return ::av::glproto::rvk_{cmd.name}({args});")
         out.append("}")
         out.append("")
-    out += ['}  // extern "C"', ""]
+    out += ["}  // namespace av::glicd::generated", ""]
     write(out_dir / "gl_icd_entries.cpp", "\n".join(out))
 
+    # Internal names only: opengl32 reaches an ICD through the table and
+    # DrvGetProcAddress, and a GL symbol of the ICD's own could only collide
+    # with the one the application links.
     header = [HEADER, "#pragma once\n",
               '#include "gl_types.h"\n',
               "// Declared for the driver's own use; defined either by the",
               "// generated file beside this one or by the driver itself.",
-              'extern "C" {', ""]
+              "namespace av::glicd::generated {", ""]
     for cmd in reg.commands.values():
         if cmd.api != "gl":
             continue
-        header.append(f"{_icd_signature(cmd)};")
-    header += ["", '}  // extern "C"', ""]
+        header.append(f"{_icd_entry_declaration(cmd)};")
+    header += ["", "// The driver's own, which the wire does not carry."]
+    for name, (returns, params) in sorted(reg.driver_entries.items()):
+        header.append(f"{returns} APIENTRY Wrap_{name}({params or 'void'});")
+    header += ["", "}  // namespace av::glicd::generated", ""]
     write(out_dir / "gl_icd_entries.h", "\n".join(header))
 
-    # The table wglGetProcAddress answers from, and the export list.
+    in_table = set(proc_table)
     table = [HEADER, "#pragma once\n",
+             "#include <stdint.h>\n",
              '#include "gl_icd_entries.h"\n',
              "namespace av::glicd {\n",
-             "struct NamedEntry {",
-             "    const char* name;",
-             "    void* address;",
-             "};",
-             "",
-             "inline const NamedEntry kEntries[] = {"]
+             "using GlProc = void (APIENTRY *)();\n",
+             "// The slot's entry for a compatibility command, defined by the ICD.",
+             "GlProc legacy_entry(uint32_t index) noexcept;\n",
+             "}  // namespace av::glicd\n",
+             "namespace av::glicd::generated {\n",
+             "using ::av::glicd::GlProc;\n",
+             "// opengl32's GLCLTPROCTABLE: DrvSetContext answers it, and",
+             "// __wglSetProcTable takes it only at exactly this many entries.",
+             f"inline constexpr uint32_t kProcTableSlots = {len(proc_table)}u;\n",
+             "struct GlProcTable {",
+             "    int32_t entries;",
+             "    GlProc slots[kProcTableSlots];",
+             "};\n",
+             "inline void fill_proc_table(GlProcTable& table) noexcept {",
+             "    table.entries = static_cast<int32_t>(kProcTableSlots);"]
+    for index, name in enumerate(proc_table):
+        table.append(f"    table.slots[{index}] = {_table_slot(reg, index, name)};")
+    table += ["}", "",
+              "// Every other entry, which DrvGetProcAddress answers by name.",
+              "struct NamedEntry {",
+              "    const char* name;",
+              "    GlProc address;",
+              "};",
+              "",
+              "inline const NamedEntry kNamedEntries[] = {"]
+    named = 0
     for cmd in reg.commands.values():
-        if cmd.api != "gl":
+        if cmd.api != "gl" or cmd.name in in_table:
             continue
-        table.append(f'    {{"{cmd.name}", reinterpret_cast<void*>(&{cmd.name})}},')
+        table.append(f'    {{"{cmd.name}", reinterpret_cast<GlProc>(&Wrap_{cmd.name})}},')
+        named += 1
+    for name in sorted(reg.driver_entries):
+        if name in in_table:
+            continue
+        table.append(f'    {{"{name}", reinterpret_cast<GlProc>(&Wrap_{name})}},')
+        named += 1
     # The same entry points under the names an extension gave them.
     # A loader asking for glDebugMessageInsertARB is asking for
     # glDebugMessageInsert; answering nothing leaves it a null pointer
     # to call.
     for name, target in sorted(reg.aliases.items()):
-        table.append(f'    {{"{name}", reinterpret_cast<void*>(&{target})}},')
+        table.append(f'    {{"{name}", reinterpret_cast<GlProc>(&Wrap_{target})}},')
+        named += 1
     table += ["};", "",
-              "inline constexpr size_t kEntryCount =",
-              "    sizeof(kEntries) / sizeof(kEntries[0]);",
+              f"inline constexpr uint32_t kNamedEntryCount = {named}u;",
               "",
-              "[[nodiscard]] inline void* entry_by_name(const char* name) noexcept {",
-              "    if (name == nullptr) return nullptr;",
-              "    for (size_t i = 0; i < kEntryCount; ++i) {",
-              "        if (__builtin_strcmp(name, kEntries[i].name) == 0) {",
-              "            return kEntries[i].address;",
-              "        }",
-              "    }",
-              "    return nullptr;",
-              "}",
-              "",
-              "}  // namespace av::glicd", ""]
+              "}  // namespace av::glicd::generated", ""]
     write(out_dir / "gl_icd_table.h", "\n".join(table))
-
-    # What the library exports, written out rather than left to the
-    # linker. Exporting everything would put this build's runtime
-    # internals — the unwinder, the allocator — in the import library,
-    # and the first application to link it would collide with its own.
-    exports = ["; Generated by rvk-codegen-gl. Do not edit.",
-               ";",
-               "; The entry points an application may call, and nothing",
-               "; else. Exporting everything would put this build's own",
-               "; runtime in the import library.",
-               "EXPORTS"]
-    for cmd in reg.commands.values():
-        if cmd.api == "gl":
-            exports.append(f"    {cmd.name}")
-    # The ones the driver implements rather than carries, and the
-    # window-system layer, which is written by hand.
-    for name in ("glMapBuffer", "glMapBufferRange", "glUnmapBuffer",
-                 "glFlushMappedBufferRange", "glMapNamedBuffer",
-                 "glMapNamedBufferRange", "glUnmapNamedBuffer",
-                 "glFlushMappedNamedBufferRange", "glGetBufferPointerv",
-                 "glGetNamedBufferPointerv", "glGetVertexAttribPointerv",
-                 "glGetPointerv",
-                 # The direct-state-access spellings of the same two
-                 # things: mapping, which answers with an address, and
-                 # the pointer queries, which answer with one.
-                 "glMapNamedBufferEXT", "glMapNamedBufferRangeEXT",
-                 "glUnmapNamedBufferEXT",
-                 "glFlushMappedNamedBufferRangeEXT",
-                 "glGetNamedBufferPointervEXT", "glGetPointerIndexedvEXT",
-                 "glGetPointeri_vEXT", "glGetVertexArrayPointervEXT",
-                 "glGetVertexArrayPointeri_vEXT",
-                 "wglCreateContext", "wglCreateLayerContext",
-                 "wglCreateContextAttribsARB", "wglDeleteContext",
-                 "wglMakeCurrent", "wglGetCurrentContext", "wglGetCurrentDC",
-                 "wglGetProcAddress", "wglShareLists", "wglCopyContext",
-                 "wglSwapBuffers", "wglSwapLayerBuffers", "wglSwapIntervalEXT",
-                 "wglGetSwapIntervalEXT", "wglChoosePixelFormat",
-                 "wglDescribePixelFormat", "wglGetPixelFormat",
-                 "wglSetPixelFormat", "wglGetExtensionsStringARB",
-                 "wglGetExtensionsStringEXT", "wglUseFontBitmapsA",
-                 "wglUseFontBitmapsW", "wglUseFontOutlinesA",
-                 "wglUseFontOutlinesW", "wglCreateBufferRegionARB",
-                 # The layer-plane family. No driver implements them and
-                 # every one exports them: opengl32.lib names them, so an
-                 # application that links it imports them whether it calls
-                 # them or not.
-                 "wglDescribeLayerPlane", "wglGetLayerPaletteEntries",
-                 "wglSetLayerPaletteEntries", "wglRealizeLayerPalette",
-                 "wglSwapMultipleBuffers",
-                 # How the other drivers of this project find the link
-                 # this one opened, so that two of them in a process
-                 # are one session on the server.
-                 "rvkGetSharedTransport"):
-        exports.append(f"    {name}")
-    write(out_dir / "gl_icd_exports.def", "\n".join(exports) + "\n")
 
     print(f"  icd: {len(forwarded)} entry points forwarded, "
           f"{len(handwritten)} left to the driver, "
-          f"{len(exports) - 6} exported")
+          f"{len(proc_table)} table slots, {named} by name")
 
 
-def emit_all(reg: Registry, out_dir: Path, enum_values: dict[str, int]) -> None:
+def emit_all(reg: Registry, out_dir: Path, enum_values: dict[str, int],
+             proc_table: list[str]) -> None:
     _ENUM_VALUES.update(enum_values)
     out_dir.mkdir(parents=True, exist_ok=True)
     emit_types(reg, out_dir)
@@ -2341,4 +2374,4 @@ def emit_all(reg: Registry, out_dir: Path, enum_values: dict[str, int]) -> None:
     emit_server(reg, out_dir)
     emit_real_dispatch(reg, out_dir)
     emit_tier(reg, out_dir)
-    emit_icd(reg, out_dir)
+    emit_icd(reg, out_dir, proc_table)

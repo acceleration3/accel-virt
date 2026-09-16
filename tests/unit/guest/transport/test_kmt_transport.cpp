@@ -211,6 +211,49 @@ TEST(kmt_transport, a_sync_command_reads_the_reply_the_device_wrote)
   CHECK_EQ(got.read_u32(), 2u);
   CHECK_EQ(fixture.kmt().commands(), 1u); }
 
+/* Leases retire at the end of a call the host answered: it has run every
+ * command sent before, one-way ones included. A one-way send, a failed call,
+ * or an end with no call keep them, since the host may not have read them yet. */
+TEST(kmt_transport, an_answered_call_retires_every_blob_lease_and_nothing_else_does)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.open(), Status::ok);
+  std::uint8_t transport_staging[staging_bytes] = {};
+  KmtTransport transport(fixture.connection(), SubApi::opengl, 12u,
+                         reply_bytes, transport_staging, sizeof transport_staging);
+  CHECK_STATUS(transport.initialize(), Status::ok);
+  std::uint8_t room[64] = {};
+  transport.blobs().lend(room, sizeof room);
+  CHECK(transport.blobs().take(16u).taken());
+  transport.end_call();
+  CHECK_EQ(transport.blobs().used(), 16u);
+  WireWriter async = transport.request_writer();
+  async.write_u32(1u);
+  CHECK(transport.send_async(0x30001u, async) == TransportResult::ok);
+  transport.end_call();
+  CHECK_EQ(transport.blobs().used(), 16u);
+  const std::uint8_t nothing = 0u;
+  fixture.kmt().queue_answer(&nothing, 0u);
+  WireWriter sync = transport.request_writer();
+  sync.write_u32(2u);
+  WireReader got(nullptr, 0u);
+  CHECK(transport.send_sync(0x30002u, sync, got) == TransportResult::ok);
+  /* Still readable while the call's reply is decoded. */
+  CHECK_EQ(transport.blobs().used(), 16u);
+  transport.end_call();
+  CHECK_EQ(transport.blobs().used(), 0u);
+  /* One answer retires once: leases taken after it wait for the next. */
+  CHECK(transport.blobs().take(8u).taken());
+  transport.end_call();
+  CHECK_EQ(transport.blobs().used(), 8u);
+  /* A call that failed has shown nothing about what the host read. */
+  fixture.kmt().withhold_answer_at(1u);
+  WireWriter lost = transport.request_writer();
+  lost.write_u32(3u);
+  CHECK(transport.send_sync(0x30002u, lost, got) == TransportResult::failed);
+  transport.end_call();
+  CHECK_EQ(transport.blobs().used(), 8u);
+  CHECK(transport.invariants_hold()); }
+
 /* Sending before setup is refused; the decode arena and blob arena refuse. */
 TEST(kmt_transport, before_setup_and_the_refusing_arenas)
 { Fixture fixture;

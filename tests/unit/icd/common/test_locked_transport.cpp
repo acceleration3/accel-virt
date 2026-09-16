@@ -120,6 +120,27 @@ TEST(locked_transport, an_end_with_no_sync_call_open_releases_nothing)
   CHECK(std::strcmp(trace.text(), "SsSs") == 0);
   CHECK(transport.invariants_hold()); }
 
+/* The OpenGL client drops a payload that overflowed before any send and ends
+ * the call itself: the writer's lock goes, the inner call ends, and a later
+ * call takes the lock afresh (feature 050). */
+TEST(locked_transport, an_end_while_writing_lets_the_writer_go)
+{ MockTransport inner;
+  LockTrace trace;
+  RecordingThreadLock lock(trace, 'S');
+  LockedTransport transport(inner, lock);
+  WireWriter writer = transport.request_writer();
+  CHECK(lock.held());
+  CHECK(transport.invariants_hold());
+  transport.end_call();
+  CHECK(!lock.held());
+  CHECK(transport.invariants_hold());
+  CHECK_EQ(inner.sends(), 0u);
+  CHECK_EQ(inner.end_calls(), 1u);
+  writer = transport.request_writer();
+  CHECK(transport.send_async(command, writer) == TransportResult::ok);
+  CHECK(!lock.held());
+  CHECK(std::strcmp(trace.text(), "SsSs") == 0); }
+
 /* The lock is held exactly while a command is being written or a call's reply
  * read; a transport that says otherwise is refused. */
 TEST(locked_transport, invariants_refuse_a_held_lock_with_no_call_or_a_call_without_it)

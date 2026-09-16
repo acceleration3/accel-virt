@@ -5,8 +5,8 @@ every row names the test that proves the extension through the ICD - a
 TEST(suite, case) that exists under tests/ - and an extension the generator
 implemented for that API. No test, no row; no row, no report.
 
-Each ICD is one directory src/icd/<api>/ (src/icd/common/ is what they share and
-holds no table) with exactly one `reported_extensions`: an array of
+Each ICD is one directory src/icd/<api>/ holding source (src/icd/common/ is what
+they share and holds no table) with exactly one `reported_extensions`: an array of
 ExtensionPolicy::Row, or a null pointer while nothing is reported. Anything in
 the array that is not a row this can read fails, so a row cannot hide from it.
 
@@ -45,12 +45,15 @@ class PolicyCheck:
                         yield os.path.relpath(path, self.root), COMMENT.sub("", source.read())
 
     def icds(self):
-        """Each ICD's directory under src/icd, by API name."""
+        """Each ICD's directory under src/icd, by API name: one holding source.
+        Headers alone - hooks a generated tree calls before the ICD exists - are
+        no ICD yet, and have nothing to report."""
         base = os.path.join(self.root, TABLE_DIRECTORY)
         if not os.path.isdir(base):
             return []
         return sorted(name for name in os.listdir(base)
-                      if name != SHARED_DIRECTORY and os.path.isdir(os.path.join(base, name)))
+                      if name != SHARED_DIRECTORY and os.path.isdir(os.path.join(base, name))
+                      and any(True for _source in self.sources(os.path.join(TABLE_DIRECTORY, name), (".cpp",))))
 
     def tables(self, directory):
         """Every definition of a table in `directory`: (where, rows text or None for empty)."""

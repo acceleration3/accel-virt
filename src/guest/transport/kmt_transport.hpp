@@ -66,7 +66,9 @@ public:
     WireWriter      request_writer() override;
     TransportResult send_async(uint32_t command_id, WireWriter &writer) override;
     TransportResult send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply) override;
-    /* Nothing is held for a caller: one thread owns this transport. */
+    /* Nothing is held for a caller: one thread owns this transport. A call
+     * the host answered retires every blob lease, since the host has run
+     * every command sent before it. */
     void            end_call() override;
     /* `length` bytes of CommandHeader-framed commands, published as one batch:
      * the whole batch is judged before anything is written, and one that does
@@ -110,6 +112,8 @@ private:
     ReplyReader      reply_;
     TransportFence   fences_;
     bool             faulted_;
+    /* A synchronous call was answered since the last end_call. */
+    bool             answered_;
     WireArena        decode_arena_;
     ClientBlobArena  blobs_;
 

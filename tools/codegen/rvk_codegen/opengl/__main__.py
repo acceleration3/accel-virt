@@ -20,6 +20,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--wgl", type=Path, default=None, help="Path to wgl.xml")
     p.add_argument("--profile", type=Path, default=PROFILES / "opengl.toml")
     p.add_argument("--ids", type=Path, default=PROFILES / "opengl_ids.toml")
+    p.add_argument("--proc-table", type=Path, default=PROFILES / "opengl_proc_table.txt",
+                   help="opengl32's GLCLTPROCTABLE order (tools/re/gl_proc_table.py)")
     p.add_argument("--out", type=Path, required=True)
     p.add_argument(
         "--check",
@@ -42,6 +44,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: --ids does not exist: {args.ids}", file=sys.stderr)
         return 2
 
+    if not args.proc_table.is_file():
+        print(f"error: --proc-table does not exist: {args.proc_table}", file=sys.stderr)
+        return 2
+    try:
+        proc_table = emit.read_proc_table(args.proc_table.read_text())
+    except emit.GenerationError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
     raw = parse.parse(args.xml, args.wgl)
     prof = profile.load(args.profile, args.ids)
     try:
@@ -59,10 +70,13 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError:
             continue
 
-    if args.check:
-        return _check(reg, values, args.out)
-
-    emit.emit_all(reg, args.out, values)
+    try:
+        if args.check:
+            return _check(reg, values, proc_table, args.out)
+        emit.emit_all(reg, args.out, values, proc_table)
+    except emit.GenerationError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     prof.write_ids()
     asynchronous = sum(1 for c in reg.commands.values() if c.is_async)
     print(f"rvk-codegen-gl: {len(reg.commands)} commands "
@@ -70,14 +84,14 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _check(reg: Registry, values: dict[str, int], out: Path) -> int:
+def _check(reg: Registry, values: dict[str, int], proc_table: list[str], out: Path) -> int:
     """Generate to a temp dir and diff the whole directory against ``out``."""
     if not out.is_dir():
         print(f"error: --out does not exist: {out}", file=sys.stderr)
         return 1
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        emit.emit_all(reg, tmp, values)
+        emit.emit_all(reg, tmp, values, proc_table)
 
         differ = False
         expected = sorted(p.name for p in tmp.iterdir())

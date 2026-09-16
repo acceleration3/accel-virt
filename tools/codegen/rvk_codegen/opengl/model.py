@@ -174,6 +174,10 @@ class Registry:
     # declares them and does not define them; the definition is in
     # gl_helpers.cpp and never touches the wire.
     answered_by_guest: set[str] = field(default_factory=set)
+    # The driver's own entry points the wire does not carry (the profile's
+    # driver_implemented that the registry declares): name -> (return type,
+    # parameter list), as gl.xml writes them.
+    driver_entries: dict[str, tuple[str, str]] = field(default_factory=dict)
     # The other spellings of a command this driver carries.
     #
     # The registry says glDebugMessageInsertARB is glDebugMessageInsert

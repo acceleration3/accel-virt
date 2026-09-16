@@ -39,7 +39,7 @@ void LockedTransport::end_call()
 {
     AV_SCOPE("LockedTransport::end_call");
     inner_.end_call();
-    if (phase_ == Phase::answering) let_go();
+    if (phase_ != Phase::idle) let_go();
 }
 
 void LockedTransport::let_go()
