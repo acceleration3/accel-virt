@@ -41,7 +41,7 @@ bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
 
 VulkanBackend::VulkanBackend()
     : gpu_(nullptr), listed_(), extensions_(), instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE), host_import_(false), handles_(),
-      adopted_(), import_(), parent_(0u), ran_(0u), lost_(false)
+      adopted_(), import_(), importable_(), parent_(0u), ran_(0u), lost_(false)
 {}
 
 void VulkanBackend::initialize(const HostGpu &gpu) { gpu_ = &gpu; }
@@ -204,6 +204,34 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
     return result;
 }
 
+void VulkanBackend::restrict_to_importable(VkPhysicalDevice physical, VkPhysicalDeviceMemoryProperties &properties)
+{
+    const auto key = reinterpret_cast<uint64_t>(physical);
+    if (!importable_.known_for(key)) importable_.learn(key, import_.probe_types(physical));
+    importable_.restrict(properties);
+}
+
+void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
+                                                           VkPhysicalDeviceMemoryProperties *pMemoryProperties)
+{
+    RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties(physicalDevice, pMemoryProperties);
+    restrict_to_importable(physicalDevice, *pMemoryProperties);
+}
+
+void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice physicalDevice,
+                                                            VkPhysicalDeviceMemoryProperties2 *pMemoryProperties)
+{
+    RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties2(physicalDevice, pMemoryProperties);
+    restrict_to_importable(physicalDevice, pMemoryProperties->memoryProperties);
+}
+
+void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2KHR(VkPhysicalDevice physicalDevice,
+                                                               VkPhysicalDeviceMemoryProperties2 *pMemoryProperties)
+{
+    RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties2KHR(physicalDevice, pMemoryProperties);
+    restrict_to_importable(physicalDevice, pMemoryProperties->memoryProperties);
+}
+
 bool VulkanBackend::backs_with_host(VkDevice device, const void *next, VkStructureType external,
                                     VkExternalMemoryHandleTypeFlags host_types) const
 {
@@ -318,6 +346,7 @@ void VulkanBackend::shut_down()
     }
     handles_.forget_all();
     adopted_.clear();
+    importable_.learn(0u, 0u);
     gpu_ = nullptr;
     ran_ = 0u;
     lost_ = false;

@@ -25,6 +25,11 @@ public:
      * measured and 0x18 on the other, so never assumed. 0 when the device has
      * no such entry point or the driver refuses the pointer. */
     uint32_t           importable_types(VkDevice device, void *pointer);
+    /* The memory types a page of this process may be imported into on
+     * `physical`, asked of a device made for the question and destroyed after
+     * it, since the mask is a device's answer and an application asks for its
+     * memory types before it has one. 0 when no such device can be made. */
+    uint32_t           probe_types(VkPhysicalDevice physical);
     /* Whether `device` was made with VK_EXT_external_memory_host. */
     bool               imports(VkDevice device);
     /* `size` bytes at `pointer` as memory of `device` in `memory_type`, or

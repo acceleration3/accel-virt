@@ -941,3 +941,115 @@ TEST(vulkan_backend_device, a_device_that_imports_nothing_makes_buffers_as_asked
       CHECK_EQ(wire_buffer_types(wire, replaced, asked), driver_buffer_types(replaced, asked));
   }
 }
+
+/* Imports go to the device the context made last, so a device it made earlier
+ * is never backed by host memory even while its replacement imports: its
+ * buffers are made as asked. */
+TEST(vulkan_backend_device, a_replaced_device_makes_buffers_as_asked_while_its_replacement_imports)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      GuestDevice made(host, i);
+      if (made.device() == 0u) continue;
+      BackendTransport wire(made.backend());
+      const VkBufferCreateInfo asked = storage_buffer();
+      VkExternalMemoryBufferCreateInfo external = host_buffer();
+      VkBufferCreateInfo for_host = storage_buffer();
+      for_host.pNext = &external;
+
+      const std::uint64_t replaced = made.device();
+      const std::uint64_t kept = made.guest().create_device(made.physical());
+      CHECK(kept != 0u);
+      CHECK_EQ(wire_buffer_types(wire, kept, asked), driver_buffer_types(kept, for_host));
+      CHECK_EQ(wire_buffer_types(wire, replaced, asked), driver_buffer_types(replaced, asked));
+  }
+}
+
+/* A chain naming other structures is still the guest's chain: the host
+ * allocation is added in front of it and what the guest named still applies. */
+TEST(vulkan_backend_device, a_buffer_with_its_own_chain_is_still_made_for_host_allocation)
+{ av::LoaderHostApis &host = opened_host();
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      GuestDevice made(host, i);
+      if (made.device() == 0u) continue;
+      BackendTransport wire(made.backend());
+      VkBufferOpaqueCaptureAddressCreateInfo capture = {};
+      capture.sType = VK_STRUCTURE_TYPE_BUFFER_OPAQUE_CAPTURE_ADDRESS_CREATE_INFO;
+      VkBufferCreateInfo asked = storage_buffer();
+      asked.pNext = &capture;
+      VkExternalMemoryBufferCreateInfo external = host_buffer();
+      external.pNext = &capture;
+      VkBufferCreateInfo for_host = storage_buffer();
+      for_host.pNext = &external;
+      const std::uint32_t host_types = driver_buffer_types(made.device(), for_host);
+      CHECK(host_types != 0u);
+      CHECK_EQ(wire_buffer_types(wire, made.device(), asked), host_types);
+  }
+}
+
+namespace {
+
+VkPhysicalDeviceMemoryProperties driver_memory(std::uint64_t physical)
+{ VkPhysicalDeviceMemoryProperties memory = {};
+  ::vkGetPhysicalDeviceMemoryProperties(as_handle<VkPhysicalDevice>(physical), &memory);
+  return memory; }
+
+/* What the guest's view must be: the driver's own properties, with a type host
+ * visible only where the driver would import `page` into it. */
+void check_restricted(const VkPhysicalDeviceMemoryProperties &guest, const VkPhysicalDeviceMemoryProperties &driver,
+                      std::uint32_t importable)
+{ constexpr VkMemoryPropertyFlags host_only = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                                              VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+  CHECK_EQ(guest.memoryTypeCount, driver.memoryTypeCount);
+  CHECK_EQ(guest.memoryHeapCount, driver.memoryHeapCount);
+  for (std::uint32_t type = 0u; type < driver.memoryTypeCount; type++) {
+      const VkMemoryPropertyFlags flags = driver.memoryTypes[type].propertyFlags;
+      const bool                  kept = (importable & (1u << type)) != 0u;
+      CHECK_EQ(guest.memoryTypes[type].propertyFlags, kept ? flags : flags & ~host_only);
+      CHECK_EQ(guest.memoryTypes[type].heapIndex, driver.memoryTypes[type].heapIndex);
+  }
+  for (std::uint32_t heap = 0u; heap < driver.memoryHeapCount; heap++)
+      CHECK_EQ(guest.memoryHeaps[heap].size, driver.memoryHeaps[heap].size); }
+
+}  // namespace
+
+/* The guest's only mappable memory is its own RAM, imported by the host GPU, so
+ * the guest sees a type host visible only where the driver imports a host
+ * pointer: every type on Intel, and on NVIDIA not the BAR type. The answer is
+ * the same before the guest has a device - an application chooses its types
+ * before it makes one - and through either spelling of the query. */
+TEST(vulkan_backend_device, memory_is_host_visible_to_the_guest_only_where_a_host_pointer_imports)
+{ av::LoaderHostApis &host = opened_host();
+  Pages pages(1u);
+  for (std::uint32_t i = 0u; i < host.gpu_count(); i++) {
+      GuestDevice made(host, i);
+      if (made.device() == 0u) continue;
+      const std::uint32_t importable = made.importable(pages.at(0u));
+      CHECK(importable != 0u);
+
+      av::HostGpu gpu;
+      gpu.describe(host, i);
+      VulkanBackend fresh;
+      fresh.initialize(gpu);
+      GuestSequence  guest(fresh);
+      BackendTransport wire(fresh);
+      const std::uint64_t instance = guest.create_instance();
+      const std::uint64_t physical = guest.first_physical_device(instance);
+      CHECK(physical != 0u);
+      const VkPhysicalDeviceMemoryProperties driver = driver_memory(physical);
+      VkPhysicalDeviceMemoryProperties before = {};
+      vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(wire, as_handle<VkPhysicalDevice>(physical), &before);
+      check_restricted(before, driver, importable);
+
+      VkPhysicalDeviceMemoryProperties2 after = {};
+      after.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+      CHECK(guest.create_device(physical) != 0u);
+      vkproto::rvk_vkGetPhysicalDeviceMemoryProperties2(wire, as_handle<VkPhysicalDevice>(physical), &after);
+      check_restricted(after.memoryProperties, driver, importable);
+      VkPhysicalDeviceMemoryProperties2 khr = {};
+      khr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+      vkproto::rvk_vkGetPhysicalDeviceMemoryProperties2KHR(wire, as_handle<VkPhysicalDevice>(physical), &khr);
+      check_restricted(khr.memoryProperties, driver, importable);
+      fresh.shut_down();
+  }
+}

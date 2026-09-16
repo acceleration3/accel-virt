@@ -13,6 +13,7 @@
 #include "device/executor/adopted_blobs.hpp"
 #include "device/executor/extension_list.hpp"
 #include "device/executor/handle_registry.hpp"
+#include "device/executor/importable_types.hpp"
 #include "device/executor/session_backend.hpp"
 #include "device/shim/physical_device_list.hpp"
 #include "device/shim/vulkan_host_import.hpp"
@@ -54,6 +55,15 @@ public:
                                const VkDeviceCreateInfo *pCreateInfo,
                                const VkAllocationCallbacks *pAllocator, VkDevice *pDevice) override;
     void     on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *pAllocator) override;
+
+    /* The driver's memory types, host visible only where a host pointer
+     * imports (feature 045, T033): the guest maps nothing but its own RAM. */
+    void on_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
+                                                VkPhysicalDeviceMemoryProperties *pMemoryProperties) override;
+    void on_vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice physicalDevice,
+                                                 VkPhysicalDeviceMemoryProperties2 *pMemoryProperties) override;
+    void on_vkGetPhysicalDeviceMemoryProperties2KHR(VkPhysicalDevice physicalDevice,
+                                                    VkPhysicalDeviceMemoryProperties2 *pMemoryProperties) override;
 
     /* Made for host allocation wherever the driver allows it, because the
      * guest's ICD cannot know at create whether the memory bound later will be
@@ -148,6 +158,9 @@ private:
     /* Whether the driver imports the blob's pointer into the type it asks
      * for on the guest's device. */
     bool importable(const ImportedBlob &blob);
+    /* Narrows `properties` of `physical` to what imports, learning the mask
+     * the first time `physical` is asked about. */
+    void restrict_to_importable(VkPhysicalDevice physical, VkPhysicalDeviceMemoryProperties &properties);
     /* The bound GPU's physical device on `instance`, or VK_NULL_HANDLE. */
     VkPhysicalDevice bound_device(VkInstance instance);
 
@@ -172,6 +185,7 @@ private:
     HandleRegistry   handles_;
     AdoptedBlobs     adopted_;
     VulkanHostImport import_;
+    ImportableTypes  importable_;
     uint64_t parent_;
     uint64_t ran_;
     bool     lost_;

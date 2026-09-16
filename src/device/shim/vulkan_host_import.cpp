@@ -1,5 +1,7 @@
 #include "device/shim/vulkan_host_import.hpp"
 
+#include <sys/mman.h>
+
 namespace av {
 
 VulkanHostImport::VulkanHostImport() : held_(0u) {}
@@ -18,6 +20,30 @@ uint32_t VulkanHostImport::importable_types(VkDevice device, void *pointer)
         VK_SUCCESS)
         return 0u;
     return host.memoryTypeBits;
+}
+
+uint32_t VulkanHostImport::probe_types(VkPhysicalDevice physical)
+{
+    static constexpr const char *const extensions[] = {"VK_KHR_external_memory", "VK_EXT_external_memory_host"};
+    constexpr size_t                   page = 4096u;
+    float                              priority = 1.0f;
+    VkDeviceQueueCreateInfo            queue = {};
+    queue.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue.queueCount = 1u;
+    queue.pQueuePriorities = &priority;
+    VkDeviceCreateInfo create = {};
+    create.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    create.queueCreateInfoCount = 1u;
+    create.pQueueCreateInfos = &queue;
+    create.enabledExtensionCount = 2u;
+    create.ppEnabledExtensionNames = extensions;
+    VkDevice device = VK_NULL_HANDLE;
+    if (::vkCreateDevice(physical, &create, nullptr, &device) != VK_SUCCESS) return 0u;
+    void *const pointer = mmap(nullptr, page, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    const uint32_t mask = pointer != MAP_FAILED ? importable_types(device, pointer) : 0u;
+    if (pointer != MAP_FAILED) static_cast<void>(munmap(pointer, page));
+    ::vkDestroyDevice(device, nullptr);
+    return mask;
 }
 
 bool VulkanHostImport::imports(VkDevice device)
