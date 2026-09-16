@@ -104,6 +104,16 @@ uint32_t HandleRegistry::batches() const
     return counted;
 }
 
+uint32_t HandleRegistry::memories() const
+{
+    uint32_t counted = 0u;
+    static_cast<void>(pool_.all_of([&](const LoaderHandle &handle) {
+        if (handle.device_memory() != nullptr) counted++;
+        return true;
+    }));
+    return counted;
+}
+
 bool HandleRegistry::unique(const LoaderHandle &handle) const
 {
     uint32_t sharing = 0u;

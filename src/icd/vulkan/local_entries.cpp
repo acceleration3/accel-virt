@@ -92,4 +92,35 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkQueueWaitIdle(VkQueue queue) { return icd
 VKAPI_ATTR VkResult VKAPI_CALL local_vkDeviceWaitIdle(VkDevice device)
 { return icd_binding.root().device_wait_idle(device); }
 
+VKAPI_ATTR void VKAPI_CALL local_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator)
+{ icd_binding.root().destroy_instance(instance, pAllocator); }
+
+VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
+                                                                     VkPhysicalDeviceMemoryProperties *pMemoryProperties)
+{ icd_binding.root().physical_device_memory_properties(physicalDevice, pMemoryProperties); }
+
+VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice physicalDevice,
+                                                                      VkPhysicalDeviceMemoryProperties2 *pMemoryProperties)
+{ icd_binding.root().physical_device_memory_properties2(physicalDevice, pMemoryProperties); }
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
+                                                      const VkAllocationCallbacks *pAllocator, VkDeviceMemory *pMemory)
+{ return icd_binding.root().allocate_memory(device, pAllocateInfo, pAllocator, pMemory); }
+
+VKAPI_ATTR void VKAPI_CALL local_vkFreeMemory(VkDevice device, VkDeviceMemory memory,
+                                              const VkAllocationCallbacks *pAllocator)
+{ icd_binding.root().free_memory(device, memory, pAllocator); }
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkMapMemory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset,
+                                                 VkDeviceSize size, VkMemoryMapFlags flags, void **ppData)
+{ return icd_binding.root().map_memory(device, memory, offset, size, flags, ppData); }
+
+VKAPI_ATTR void VKAPI_CALL local_vkUnmapMemory(VkDevice, VkDeviceMemory) {}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkFlushMappedMemoryRanges(VkDevice, uint32_t, const VkMappedMemoryRange *)
+{ return VK_SUCCESS; }
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkInvalidateMappedMemoryRanges(VkDevice, uint32_t, const VkMappedMemoryRange *)
+{ return VK_SUCCESS; }
+
 }  // namespace av::icd

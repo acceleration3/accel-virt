@@ -36,6 +36,7 @@ public:
     LockTrace            &trace();
     RecordingThreadLock  &lock();
     RecordingThreadLock  &send_lock();
+    RecordingThreadLock  &memory_lock();
     RecordingLog         &log();
     icd::IcdRoot         &root();
 
@@ -62,6 +63,7 @@ private:
     LockTrace            trace_;
     RecordingThreadLock  lock_;
     RecordingThreadLock  send_lock_;
+    RecordingThreadLock  memory_lock_;
     RecordingLog         log_;
     icd::IcdRoot         root_;
 };

@@ -51,6 +51,18 @@ const Entry        local_rows[] = {
     {"vkWaitSemaphoresKHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkWaitSemaphores), Level::device},
     {"vkQueueWaitIdle", reinterpret_cast<PFN_vkVoidFunction>(&local_vkQueueWaitIdle), Level::device},
     {"vkDeviceWaitIdle", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDeviceWaitIdle), Level::device},
+    {"vkDestroyInstance", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyInstance), Level::instance},
+    {"vkGetPhysicalDeviceMemoryProperties",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceMemoryProperties), Level::physical_device},
+    {"vkGetPhysicalDeviceMemoryProperties2",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceMemoryProperties2), Level::physical_device},
+    {"vkAllocateMemory", reinterpret_cast<PFN_vkVoidFunction>(&local_vkAllocateMemory), Level::device},
+    {"vkFreeMemory", reinterpret_cast<PFN_vkVoidFunction>(&local_vkFreeMemory), Level::device},
+    {"vkMapMemory", reinterpret_cast<PFN_vkVoidFunction>(&local_vkMapMemory), Level::device},
+    {"vkUnmapMemory", reinterpret_cast<PFN_vkVoidFunction>(&local_vkUnmapMemory), Level::device},
+    {"vkFlushMappedMemoryRanges", reinterpret_cast<PFN_vkVoidFunction>(&local_vkFlushMappedMemoryRanges), Level::device},
+    {"vkInvalidateMappedMemoryRanges",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkInvalidateMappedMemoryRanges), Level::device},
 };
 constexpr uint32_t local_row_count = sizeof local_rows / sizeof local_rows[0];
 /* VK_API_VERSION_1_3, spelled without the header macro's C casts. */
@@ -58,11 +70,15 @@ constexpr uint32_t vulkan_1_3 = (1u << 22u) | (3u << 12u);
 constexpr size_t   line_bytes = 160u;
 /* The device extensions this ICD reports (research.md §9), each with the test
  * that exercises it through the ICD; tools/check_extension_policy.py holds every
- * row to a test that exists and a name the generator implemented. No extension
- * is proven through the ICD yet, so none is reported: VK_EXT_memory_budget
- * arrives with T035's test, and the probe's with T037. */
-constexpr const ExtensionPolicy::Row *reported_extensions = nullptr;
-constexpr uint32_t                    reported_extension_count = 0u;
+ * row to a test that exists and a name the generator implemented. The probe's
+ * arrive with T037. */
+constexpr ExtensionPolicy::Row reported_extensions[] = {
+    {"VK_EXT_memory_budget", 1u, "icd_memory.the_budget_nodes_in_the_chain_are_the_adapter_s"},
+};
+constexpr uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
+/* The application's structure and the nodes after it that a memory properties
+ * query looks at; a longer or cyclic chain is looked at this far. */
+constexpr uint32_t max_chain = 32u;
 /* More than any GPU driver lists: a host claiming more is not asked for them. */
 constexpr uint32_t max_host_extensions = 1024u;
 /* The most command buffers one vkAllocateCommandBuffers stages the host's
@@ -71,12 +87,13 @@ constexpr uint32_t max_allocated_at_once = 1024u;
 
 }  // namespace
 
-IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, LogSink &log,
-                 IcdBinding &binding)
-    : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), log_(log), binding_(binding),
+IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
+                 LogSink &log, IcdBinding &binding)
+    : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), memory_lock_(memory_lock), log_(log),
+      binding_(binding),
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
       entry_points_(local_rows, local_row_count),
-      extensions_(reported_extensions, reported_extension_count), batches_(memory), handles_(memory), connections_(memory), pending_(nullptr)
+      extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr)
 {
     binding_.bind(*this);
 }
@@ -249,11 +266,126 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
     return *device != VK_NULL_HANDLE ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
+void IcdRoot::release_device_memory(LoaderHandle &device)
+{
+    memory_lock_.acquire();
+    ScopeExit           release([&] { memory_lock_.release(); });
+    DeviceMemory *const memory = device.device_memory();
+    if (memory == nullptr) return;
+    const Status released = memory->release_all();
+    if (released != Status::ok) note("device memory not released whole, status", static_cast<uint64_t>(released));
+}
+
 void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *allocator)
 {
-    if (connection_of(device, LoaderHandle::Kind::device) == nullptr) return;
+    LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
+    if (made == nullptr) return;
+    release_device_memory(*made);
     vkicd::generated::Wrap_vkDestroyDevice(device, allocator);
     destroy_wrapper(device, LoaderHandle::Kind::device);
+}
+
+void IcdRoot::destroy_instance(VkInstance instance, const VkAllocationCallbacks *allocator)
+{
+    LoaderHandle *const made = handle_of(instance, LoaderHandle::Kind::instance);
+    if (made == nullptr) return;
+    for (uint32_t physical = 0u;; physical++) {
+        LoaderHandle *const physical_device = child_of(*made, LoaderHandle::Kind::physical_device, physical);
+        if (physical_device == nullptr) break;
+        for (uint32_t index = 0u;; index++) {
+            LoaderHandle *const device = child_of(*physical_device, LoaderHandle::Kind::device, index);
+            if (device == nullptr) break;
+            release_device_memory(*device);
+        }
+    }
+    vkicd::generated::Wrap_vkDestroyInstance(instance, allocator);
+}
+
+void IcdRoot::physical_device_memory_properties(VkPhysicalDevice physical_device,
+                                                VkPhysicalDeviceMemoryProperties *properties)
+{
+    Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
+    if (connection == nullptr) return;
+    VkPhysicalDeviceMemoryProperties host = {};
+    vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(connection->transport(), physical_device, &host);
+    MemoryTypeTable types(kmt_, connection->adapter());
+    const Status    built = types.build(host);
+    if (built != Status::ok) note("the host's memory types were not taken, status", static_cast<uint64_t>(built));
+    types.properties(*properties);
+}
+
+void IcdRoot::physical_device_memory_properties2(VkPhysicalDevice physical_device,
+                                                 VkPhysicalDeviceMemoryProperties2 *properties)
+{
+    Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
+    if (connection == nullptr) return;
+    VkPhysicalDeviceMemoryProperties host = {};
+    vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(connection->transport(), physical_device, &host);
+    MemoryTypeTable types(kmt_, connection->adapter());
+    const Status    built = types.build(host);
+    if (built != Status::ok) note("the host's memory types were not taken, status", static_cast<uint64_t>(built));
+    types.properties(properties->memoryProperties);
+    auto *node = static_cast<VkBaseOutStructure *>(properties->pNext);
+    for (uint32_t seen = 1u; node != nullptr && seen < max_chain; seen++, node = node->pNext)
+        if (node->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT)
+            types.budget(*reinterpret_cast<VkPhysicalDeviceMemoryBudgetPropertiesEXT *>(node));
+}
+
+LoaderHandle *IcdRoot::allocating_device(VkDevice device)
+{
+    LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
+    if (made != nullptr && made->parent()->kind() == LoaderHandle::Kind::physical_device) return made;
+    log_.write("rvkvk: memory of a device this driver did not make through a physical device");
+    return nullptr;
+}
+
+DeviceMemory *IcdRoot::memory_of(LoaderHandle &device)
+{
+    lock_.acquire();
+    ScopeExit release([&] { lock_.release(); });
+    if (device.device_memory() != nullptr) return device.device_memory();
+    DeviceMemory *made = nullptr;
+    if (memories_.create(made, memory_, kmt_, *device.connection(), log_) != Status::ok) {
+        log_.write("rvkvk: no memory to keep a device's allocations in");
+        return nullptr;
+    }
+    device.allocate_from(memories_, *made);
+    return made;
+}
+
+VkResult IcdRoot::allocate_memory(VkDevice device, const VkMemoryAllocateInfo *info,
+                                  const VkAllocationCallbacks *allocator, VkDeviceMemory *memory)
+{
+    LoaderHandle *const made = allocating_device(device);
+    if (made == nullptr) return VK_ERROR_DEVICE_LOST;
+    memory_lock_.acquire();
+    ScopeExit           release([&] { memory_lock_.release(); });
+    DeviceMemory *const owned = memory_of(*made);
+    if (owned == nullptr) return VK_ERROR_OUT_OF_HOST_MEMORY;
+    const auto physical = static_cast<VkPhysicalDevice>(static_cast<void *>(made->parent()));
+    return owned->allocate(physical, device, *info, allocator, *memory);
+}
+
+void IcdRoot::free_memory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *allocator)
+{
+    LoaderHandle *const made = allocating_device(device);
+    if (made == nullptr) return;
+    memory_lock_.acquire();
+    ScopeExit           release([&] { memory_lock_.release(); });
+    DeviceMemory *const owned = memory_of(*made);
+    if (owned != nullptr) owned->free(device, memory, allocator);
+}
+
+VkResult IcdRoot::map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size,
+                             VkMemoryMapFlags flags, void **data)
+{
+    LoaderHandle *const made = allocating_device(device);
+    if (made == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
+    memory_lock_.acquire();
+    ScopeExit                 release([&] { memory_lock_.release(); });
+    const DeviceMemory *const owned = made->device_memory();
+    if (owned == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
+    return owned->map(memory, offset, size, flags, *data);
 }
 
 void IcdRoot::physical_device_properties(VkPhysicalDevice physical_device, VkPhysicalDeviceProperties *properties)
@@ -551,6 +683,8 @@ bool IcdRoot::invariants_hold() const
     if (pending_ != nullptr || !handles_.invariants_hold() || handles_on_connections() != handles_.live()) return false;
     if (!batches_.invariants_hold() || batches_.live() != handles_.batches()) return false;
     if (!batches_.all_of([](const CommandBatch &batch) { return batch.invariants_hold(); })) return false;
+    if (!memories_.invariants_hold() || memories_.live() != handles_.memories()) return false;
+    if (!memories_.all_of([](const DeviceMemory &memory) { return memory.invariants_hold(); })) return false;
     return connections_.all_of([](const Connection &connection) {
         return connection.opened() && connection.invariants_hold();
     });

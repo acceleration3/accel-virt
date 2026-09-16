@@ -137,6 +137,10 @@ include = [
     "VK_EXT_4444_formats",
     "VK_EXT_attachment_feedback_loop_layout",
     "VK_EXT_memory_priority",
+    # Answered by the Windows ICD itself from D3DKMTQueryVideoMemoryInfo
+    # (feature 045): it carries no command, and is listed so the ICD's
+    # extension policy may report it.
+    "VK_EXT_memory_budget",
     "VK_EXT_pageable_device_local_memory",
 
     # How a 32-bit application maps memory at all under wine.

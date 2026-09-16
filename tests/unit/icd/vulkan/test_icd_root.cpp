@@ -199,7 +199,9 @@ TEST(icd_root, an_instance_it_made_answers_every_entry_point_with_its_own_rows_f
       "vkGetDeviceQueue", "vkGetDeviceQueue2", "vkAllocateCommandBuffers", "vkFreeCommandBuffers",
       "vkBeginCommandBuffer", "vkEndCommandBuffer", "vkResetCommandBuffer", "vkWaitForFences", "vkWaitSemaphores",
       "vkWaitSemaphoresKHR", "vkQueueWaitIdle", "vkDeviceWaitIdle", "vkEnumerateDeviceExtensionProperties",
-      "vkCreateDevice"};
+      "vkCreateDevice", "vkDestroyInstance", "vkGetPhysicalDeviceMemoryProperties",
+      "vkGetPhysicalDeviceMemoryProperties2", "vkAllocateMemory", "vkFreeMemory", "vkFlushMappedMemoryRanges",
+      "vkInvalidateMappedMemoryRanges"};
   std::uint32_t wrappers = 0u;
   for (const av::vkicd::generated::Entry &row : av::vkicd::generated::wrapper_entries()) {
       const PFN_vkVoidFunction found = root.instance_proc_addr(instance, row.name);
@@ -236,13 +238,21 @@ TEST(icd_root, every_manual_entry_point_it_answers_is_its_own_and_the_rest_are_n
 { IcdRig rig;
   const VkInstance instance = rig.create_instance();
   std::uint32_t answered = 0u;
+  std::uint32_t mapping = 0u;
   for (const char *name : kManualEntryPoints) {
       const PFN_vkVoidFunction found = rig.root().instance_proc_addr(instance, name);
       if (found == nullptr) continue;
       answered++;
+      /* Mapping is the ICD's own too (T035), and answers only through an instance. */
+      if (found == entry_of(&av::icd::local_vkMapMemory) || found == entry_of(&av::icd::local_vkUnmapMemory)) {
+          mapping++;
+          CHECK(rig.root().instance_proc_addr(VK_NULL_HANDLE, name) == nullptr);
+          continue;
+      }
       CHECK(found == rig.root().instance_proc_addr(VK_NULL_HANDLE, name));
   }
-  CHECK_EQ(answered, 2u);
+  CHECK_EQ(answered, 4u);
+  CHECK_EQ(mapping, 2u);
   rig.destroy_instance(instance); }
 
 TEST(icd_root, reports_no_instance_extensions_and_no_layers)
@@ -290,7 +300,9 @@ TEST(icd_root, answers_only_physical_device_level_entry_points_to_get_physical_d
                                       "vk_icdEnumerateAdapterPhysicalDevices", "vkNotAnEntryPoint", "", nullptr};
   for (const char *name : other_levels) CHECK(proc_addr(instance, name) == nullptr);
   CHECK(rig.root().physical_device_proc_addr("vkGetPhysicalDeviceMemoryProperties") ==
-        entry_of(&av::vkicd::generated::Wrap_vkGetPhysicalDeviceMemoryProperties));
+        entry_of(&av::icd::local_vkGetPhysicalDeviceMemoryProperties));
+  CHECK(rig.root().physical_device_proc_addr("vkGetPhysicalDeviceSparseImageFormatProperties") ==
+        entry_of(&av::vkicd::generated::Wrap_vkGetPhysicalDeviceSparseImageFormatProperties));
   CHECK(rig.root().physical_device_proc_addr("vkAllocateMemory") == nullptr);
   rig.destroy_instance(instance); }
 
@@ -351,8 +363,9 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
       av::LockTrace trace;
       av::RecordingThreadLock lock(trace, 'H');
       av::RecordingThreadLock send_lock(trace, 'S');
+      av::RecordingThreadLock memory_lock(trace, 'M');
       av::RecordingLog log;
-      IcdRoot root(platform, kmt, lock, send_lock, log, av::icd::icd_binding);
+      IcdRoot root(platform, kmt, lock, send_lock, memory_lock, log, av::icd::icd_binding);
       if (!refusal.no_adapter) {
           kmt.add_adapter(av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
                                           av::AdapterScenario::virtio_vendor, av::AdapterScenario::rvk_subsystem),

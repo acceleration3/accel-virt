@@ -10,8 +10,10 @@
 #include "guest/transport/kmt_transport.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/icd/lock_trace.hpp"
+#include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "icd/vulkan/command_batch.hpp"
+#include "icd/vulkan/device_memory.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/handle_registry.hpp"
 #include "icd/vulkan/loader_handle.hpp"
@@ -41,6 +43,13 @@ struct LoaderHandleProbe {
         return pool;
     }
     static void restore_pool(LoaderHandle &handle, ObjectPool<CommandBatch> *pool) { handle.batches_ = pool; }
+    static ObjectPool<DeviceMemory> *forget_memories(LoaderHandle &handle)
+    {
+        ObjectPool<DeviceMemory> *const pool = handle.memories_;
+        handle.memories_ = nullptr;
+        return pool;
+    }
+    static void restore_memories(LoaderHandle &handle, ObjectPool<DeviceMemory> *pool) { handle.memories_ = pool; }
 };
 
 struct HandleRegistryProbe {
@@ -427,10 +436,18 @@ namespace {
  * connection only at end, which these tests never call. */
 class BatchSource {
 public:
-    BatchSource() : lock_(trace_, 'S'), connection_(kmt_, platform_, lock_), batches_(platform_) {}
+    BatchSource() : lock_(trace_, 'S'), connection_(kmt_, platform_, lock_), batches_(platform_), memories_(platform_) {}
 
     MockPlatform                          &platform() { return platform_; }
     av::ObjectPool<av::icd::CommandBatch> &batches() { return batches_; }
+    av::ObjectPool<av::icd::DeviceMemory> &memories() { return memories_; }
+
+    av::icd::DeviceMemory &make_memory()
+    {
+        av::icd::DeviceMemory *memory = nullptr;
+        CHECK_STATUS(memories_.create(memory, platform_, kmt_, connection_, log_), Status::ok);
+        return *memory;
+    }
 
     av::icd::CommandBatch &make()
     {
@@ -446,6 +463,8 @@ private:
     av::RecordingThreadLock               lock_;
     Connection                            connection_;
     av::ObjectPool<av::icd::CommandBatch> batches_;
+    av::RecordingLog                      log_;
+    av::ObjectPool<av::icd::DeviceMemory> memories_;
 };
 
 }  // namespace
@@ -492,6 +511,48 @@ TEST(loader_handle, invariants_refuse_a_batch_on_anything_but_a_command_buffer_o
   CHECK(!device.invariants_hold());
   LoaderHandleProbe::restore_pool(device, pool);
   CHECK(device.invariants_hold()); }
+
+TEST(loader_handle, a_device_owns_its_memory_until_it_is_destroyed)
+{ BatchSource source;
+  {
+      LoaderHandle instance(Kind::instance, instance_host, first, nullptr);
+      LoaderHandle device(Kind::device, device_host, first, &instance);
+      CHECK(device.device_memory() == nullptr);
+      av::icd::DeviceMemory &memory = source.make_memory();
+      device.allocate_from(source.memories(), memory);
+      CHECK(device.invariants_hold());
+      CHECK(device.device_memory() == &memory);
+      CHECK_EQ(source.memories().live(), 1u);
+  }
+  CHECK_EQ(source.memories().live(), 0u); }
+
+TEST(handle_registry, destroying_an_instance_takes_its_devices_memory_and_counts_it)
+{ MockPlatform platform;
+  BatchSource source;
+  HandleRegistry registry(platform);
+  Tree tree(registry);
+  CHECK_EQ(registry.memories(), 0u);
+  tree.device->allocate_from(source.memories(), source.make_memory());
+  CHECK(registry.invariants_hold());
+  CHECK_EQ(registry.memories(), 1u);
+  CHECK_EQ(registry.batches(), 0u);
+  CHECK_STATUS(registry.destroy(tree.instance), Status::ok);
+  CHECK(registry.invariants_hold());
+  CHECK_EQ(registry.memories(), 0u);
+  CHECK_EQ(source.memories().live(), 0u); }
+
+TEST(loader_handle, invariants_refuse_memory_on_anything_but_a_device_or_without_its_pool)
+{ BatchSource source;
+  LoaderHandle instance(Kind::instance, instance_host, first, nullptr);
+  LoaderHandle queue(Kind::queue, 0x4400u, first, &instance);
+  queue.allocate_from(source.memories(), source.make_memory());
+  CHECK(!queue.invariants_hold());
+  LoaderHandleProbe::set_kind(queue, Kind::device);
+  CHECK(queue.invariants_hold());
+  av::ObjectPool<av::icd::DeviceMemory> *const pool = LoaderHandleProbe::forget_memories(queue);
+  CHECK(!queue.invariants_hold());
+  LoaderHandleProbe::restore_memories(queue, pool);
+  CHECK(queue.invariants_hold()); }
 
 TEST(handle_registry, child_answers_each_live_handle_of_a_kind_made_through_a_parent_once)
 { MockPlatform platform;

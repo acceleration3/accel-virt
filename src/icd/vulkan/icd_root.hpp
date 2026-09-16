@@ -2,10 +2,11 @@
  * the answers to the loader's own entry points, the instances and their
  * connections, and every dispatchable handle made through them.
  *
- * Two locks, always taken in one order. The send lock is held by a connection
- * while a command is encoded and sent, and handle_to_wire takes the root's own
- * lock inside it; nothing here holds the root's lock while calling into a
- * wrapper, so the reverse never happens. Instance creation is serialized by the
+ * Three locks, always taken in one order. The memory lock serializes every
+ * device's memory, and is taken before either of the others. The send lock is
+ * held by a connection while a command is encoded and sent, and handle_to_wire
+ * takes the root's own lock inside it; nothing here holds the root's lock while
+ * calling into a wrapper or taking another lock, so the reverse never happens. Instance creation is serialized by the
  * loader, which holds its loader_lock around the whole of vkCreateInstance
  * (Vulkan-Loader bde79ad2dd83, trampoline.c:554-804): the connection opened for
  * an instance about to be made is therefore handed to the wrapper through one
@@ -17,6 +18,7 @@
 #include "core/support/status.hpp"
 #include "icd/vulkan/command_batch.hpp"
 #include "icd/vulkan/connection.hpp"
+#include "icd/vulkan/device_memory.hpp"
 #include "icd/vulkan/entry_points.hpp"
 #include "icd/vulkan/extension_policy.hpp"
 #include "icd/vulkan/handle_registry.hpp"
@@ -46,8 +48,8 @@ public:
     static constexpr uint32_t oldest_interface = 5u;
 
     /* Binds itself into `binding` until destroyed. */
-    IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, LogSink &log,
-            IcdBinding &binding);
+    IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
+            LogSink &log, IcdBinding &binding);
     ~IcdRoot();
     IcdRoot(const IcdRoot &) = delete;
     IcdRoot &operator=(const IcdRoot &) = delete;
@@ -75,7 +77,25 @@ public:
      * before the host sees it; one made is parented to its physical device. */
     VkResult           create_device(VkPhysicalDevice physical_device, const VkDeviceCreateInfo *create,
                                      const VkAllocationCallbacks *allocator, VkDevice *device);
+    /* A device's host-visible memory is released before the device goes, and
+     * an instance's devices' before the instance: the host refuses to unbind a
+     * chunk it still has imported. */
     void               destroy_device(VkDevice device, const VkAllocationCallbacks *allocator);
+    void               destroy_instance(VkInstance instance, const VkAllocationCallbacks *allocator);
+    /* The host's memory types as the adapter presents them (MemoryTypeTable),
+     * with VK_EXT_memory_budget's structures in the chain answered from the
+     * adapter's budgets; all zero when the host's answer cannot be taken. */
+    void               physical_device_memory_properties(VkPhysicalDevice physical_device,
+                                                         VkPhysicalDeviceMemoryProperties *properties);
+    void               physical_device_memory_properties2(VkPhysicalDevice physical_device,
+                                                          VkPhysicalDeviceMemoryProperties2 *properties);
+    /* DeviceMemory, under the memory lock: a device this ICD did not make
+     * through a physical device allocates nothing and maps nothing. */
+    VkResult           allocate_memory(VkDevice device, const VkMemoryAllocateInfo *info,
+                                       const VkAllocationCallbacks *allocator, VkDeviceMemory *memory);
+    void               free_memory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *allocator);
+    VkResult           map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size,
+                                  VkMemoryMapFlags flags, void **data);
     void               physical_device_properties(VkPhysicalDevice physical_device,
                                                   VkPhysicalDeviceProperties *properties);
     void               physical_device_properties2(VkPhysicalDevice physical_device,
@@ -115,7 +135,8 @@ public:
     CommandBatch    &record_target(VkCommandBuffer command_buffer);
 
     /* Every connection open, every handle on a live connection, every batch
-     * owned by a command buffer, and nothing pending outside vkCreateInstance. */
+     * owned by a command buffer, every device memory by a device, and nothing
+     * pending outside vkCreateInstance. */
     bool invariants_hold() const;
 
 private:
@@ -127,11 +148,18 @@ private:
     LoaderHandle        *handle_of(void *handle, LoaderHandle::Kind kind);
     LoaderHandle        *child_of(const LoaderHandle &parent, LoaderHandle::Kind kind, uint32_t index);
     uint32_t             handles_on_connections() const;
+    /* The device's memory, made the first time it is asked for; null when
+     * there is no memory for it. Under the memory lock. */
+    DeviceMemory        *memory_of(LoaderHandle &device);
+    /* The device at `device`, made through a physical device, or null. */
+    LoaderHandle        *allocating_device(VkDevice device);
+    void                 release_device_memory(LoaderHandle &device);
 
     BlockSource           &memory_;
     Kmt                   &kmt_;
     ThreadLock            &lock_;
     ThreadLock            &send_lock_;
+    ThreadLock            &memory_lock_;
     LogSink               &log_;
     IcdBinding            &binding_;
     uint32_t               api_version_;
@@ -141,6 +169,7 @@ private:
     /* Before the handles: a command buffer's handle destroys its batch in this
      * pool, so the pool outlives every handle. */
     ObjectPool<CommandBatch> batches_;
+    ObjectPool<DeviceMemory> memories_;
     HandleRegistry         handles_;
     ObjectPool<Connection> connections_;
     Connection            *pending_;

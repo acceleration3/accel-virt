@@ -59,6 +59,24 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkWaitSemaphores(VkDevice device, const VkS
                                                       uint64_t timeout);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkQueueWaitIdle(VkQueue queue);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkDeviceWaitIdle(VkDevice device);
+VKAPI_ATTR void VKAPI_CALL local_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator);
+VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
+                                                                     VkPhysicalDeviceMemoryProperties *pMemoryProperties);
+VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice physicalDevice,
+                                                                      VkPhysicalDeviceMemoryProperties2 *pMemoryProperties);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
+                                                      const VkAllocationCallbacks *pAllocator, VkDeviceMemory *pMemory);
+VKAPI_ATTR void VKAPI_CALL local_vkFreeMemory(VkDevice device, VkDeviceMemory memory,
+                                              const VkAllocationCallbacks *pAllocator);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkMapMemory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset,
+                                                 VkDeviceSize size, VkMemoryMapFlags flags, void **ppData);
+/* Mapped memory is the process's own RAM, so there is nothing to unmap, flush
+ * or invalidate: the host GPU reads and writes the same bytes. */
+VKAPI_ATTR void VKAPI_CALL local_vkUnmapMemory(VkDevice device, VkDeviceMemory memory);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkFlushMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount,
+                                                               const VkMappedMemoryRange *pMemoryRanges);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkInvalidateMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount,
+                                                                    const VkMappedMemoryRange *pMemoryRanges);
 
 }  // namespace av::icd
 

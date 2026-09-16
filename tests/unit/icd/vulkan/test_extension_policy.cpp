@@ -22,7 +22,7 @@ const Row rows[] = {
     {"VK_KHR_timeline_semaphore", 2u, "extension_policy.test"},
     {"VK_KHR_spirv_1_4", 1u, "extension_policy.test"},
     /* Named by the policy but not implemented by the generator. */
-    {"VK_EXT_memory_budget", 1u, "extension_policy.test"},
+    {"VK_NV_ray_tracing", 1u, "extension_policy.test"},
     /* Never reported, whatever names them. */
     {"VK_KHR_swapchain", 70u, "extension_policy.test"},
     {"VK_KHR_surface", 25u, "extension_policy.test"},
@@ -62,7 +62,7 @@ TEST(extension_policy, reports_only_the_host_implemented_policy_extensions)
   host = HostList();
   host.add("VK_KHR_maintenance1", 2u);
   host.add("VK_KHR_spirv_1_4", 1u);
-  host.add("VK_EXT_memory_budget", 1u);
+  host.add("VK_NV_ray_tracing", 1u);
   host.add("VK_KHR_swapchain", 70u);
   host.add("VK_KHR_surface", 25u);
   host.add("VK_KHR_win32_surface", 6u);
@@ -184,7 +184,7 @@ TEST(extension_policy, a_device_may_enable_exactly_what_would_be_reported)
   const char *const allowed[] = {"VK_KHR_timeline_semaphore", "VK_KHR_spirv_1_4"};
   CHECK_EQ(policy.first_refused(allowed, 2u), 2u);
   CHECK_EQ(policy.first_refused(nullptr, 0u), 0u);
-  const char *const refused[] = {"VK_EXT_memory_budget", "VK_KHR_maintenance1", "VK_KHR_swapchain",
+  const char *const refused[] = {"VK_NV_ray_tracing", "VK_KHR_maintenance1", "VK_KHR_swapchain",
                                  "VK_KHR_timeline_semaphor", "", nullptr};
   for (const char *name : refused) {
       const char *const names[] = {"VK_KHR_spirv_1_4", name, "VK_KHR_timeline_semaphore"};

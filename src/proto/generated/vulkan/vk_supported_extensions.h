@@ -27,6 +27,7 @@ inline constexpr const char* kImplementedDeviceExtensions[] = {
     "VK_EXT_graphics_pipeline_library",
     "VK_EXT_host_image_copy",
     "VK_EXT_line_rasterization",
+    "VK_EXT_memory_budget",
     "VK_EXT_memory_priority",
     "VK_EXT_mesh_shader",
     "VK_EXT_pageable_device_local_memory",

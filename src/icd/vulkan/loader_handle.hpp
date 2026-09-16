@@ -8,8 +8,9 @@
  * it again. Everything after it is the ICD's: the host's handle for the object,
  * the connection its commands cross, and the handle it was made through, whose
  * kind is always a lower one - which is what makes a chain of parents finite. A command buffer also owns the
- * batch its commands record into, which goes when the handle does, however it
- * is destroyed: by itself, or with its device or instance. */
+ * batch its commands record into, and a device the memory it allocated, each of
+ * which goes when the handle does, however it is destroyed: by itself, or with
+ * its device or instance. */
 #ifndef AV_ICD_LOADER_HANDLE_HPP
 #define AV_ICD_LOADER_HANDLE_HPP
 
@@ -24,6 +25,7 @@ namespace av::icd {
 
 class CommandBatch;
 class Connection;
+class DeviceMemory;
 struct LoaderHandleProbe;
 
 class LoaderHandle {
@@ -52,10 +54,16 @@ public:
     void          record_into(ObjectPool<CommandBatch> &batches, CommandBatch &batch);
     /* The batch it owns; null for anything but a command buffer given one. */
     CommandBatch *batch() const;
+    /* Takes `memory`, made in `memories`, as the memory this device allocates
+     * from. */
+    void          allocate_from(ObjectPool<DeviceMemory> &memories, DeviceMemory &memory);
+    /* The memory it owns; null for anything but a device given one. */
+    DeviceMemory *device_memory() const;
 
     /* An instance has no parent and anything else has one of a lower kind on
      * the same connection; the host never names an object 0; only a command
-     * buffer owns a batch, together with the pool it came from. */
+     * buffer owns a batch and only a device owns memory, each together with the
+     * pool it came from. */
     bool invariants_hold() const;
 
 private:
@@ -66,6 +74,8 @@ private:
     LoaderHandle *parent_;
     ObjectPool<CommandBatch> *batches_;
     CommandBatch             *batch_;
+    ObjectPool<DeviceMemory> *memories_;
+    DeviceMemory             *memory_;
 
     friend struct LoaderHandleProbe;
 };

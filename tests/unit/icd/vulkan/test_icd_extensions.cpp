@@ -1,7 +1,7 @@
 /* Device extensions as the loader reaches them through the root (research.md
  * §9): the host is asked how many it lists and then for all of them, and the
- * application sees what the ICD's policy reports - which, with no extension yet
- * proven through the ICD, is none, whatever the host lists. A device naming an
+ * application sees what the ICD's policy reports - only VK_EXT_memory_budget,
+ * which it answers itself (T035), whatever else the host lists. A device naming an
  * extension the policy would not report is refused before the host sees it.
  * The host's answers are hostile: refusals, a count past what it sends, more
  * than any driver lists. Invariants after every call that changes the root. */
@@ -107,6 +107,21 @@ private:
 const char *const host_extensions[] = {"VK_KHR_spirv_1_4", "VK_KHR_timeline_semaphore", "VK_KHR_swapchain"};
 
 }  // namespace
+
+/* The one extension the ICD has proven, once the host lists it, beside others
+ * it does not report. */
+TEST(icd_extensions, reports_the_memory_budget_the_host_lists_and_nothing_else)
+{ ExtensionRig rig;
+  const char *const listed[] = {"VK_KHR_swapchain", "VK_EXT_memory_budget", "VK_KHR_spirv_1_4"};
+  rig.answer_count(VK_SUCCESS, 3u);
+  rig.answer_list(VK_SUCCESS, 3u, listed, 3u);
+  std::uint32_t         count = 3u;
+  VkExtensionProperties properties[3] = {};
+  CHECK_EQ(rig.enumerate(&count, properties), VK_SUCCESS);
+  CHECK_EQ(count, 1u);
+  CHECK(std::strcmp(properties[0].extensionName, "VK_EXT_memory_budget") == 0);
+  CHECK_EQ(properties[0].specVersion, 1u);
+  CHECK_EQ(properties[1].extensionName[0], '\0'); }
 
 TEST(icd_extensions, reports_none_of_the_hosts_extensions_while_none_is_proven)
 { ExtensionRig rig;

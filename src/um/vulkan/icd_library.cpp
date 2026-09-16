@@ -5,7 +5,8 @@
 namespace av {
 
 IcdLibrary::Seams::Seams()
-    : heap(), lock(), send_lock(), log(), kmt(), root(heap, kmt, lock, send_lock, log, icd::icd_binding)
+    : heap(), lock(), send_lock(), memory_lock(), log(), kmt(),
+      root(heap, kmt, lock, send_lock, memory_lock, log, icd::icd_binding)
 {
     log.open();
 }
