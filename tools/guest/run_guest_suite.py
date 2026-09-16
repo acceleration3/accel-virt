@@ -160,6 +160,9 @@ def arguments():
     parser.add_argument("--driver", default=str(ROOT / "build" / "driver" / "rvkgpu.sys"))
     parser.add_argument("--inf", default=str(ROOT / "src" / "km" / "rvkgpu.inf"))
     parser.add_argument("--test", default=str(ROOT / "build" / "guest" / "rvktest.exe"))
+    parser.add_argument("--inspect", default=str(ROOT / "build" / "guest" / "rvkinspect.exe"),
+                        help="the trace inspector (docs/trace.md), pushed to every run so tools/mcp/rvk_inspect.py "
+                             "can read a hung or crashed program")
     parser.add_argument("--icd", default=str(ROOT / "build" / "guest" / "rvkvk.dll"),
                         help="the Vulkan ICD the package installs beside rvkgpu.sys (feature 045)")
     parser.add_argument("--icd-manifest", default=str(ROOT / "src" / "um" / "vulkan" / "rvkvk.json"))
@@ -460,7 +463,8 @@ class GuestRun:
     def prepare(self):
         required = [self.args.image, self.args.provision]
         if not self.args.prepare_image:
-            required += [self.args.driver, self.args.inf, self.args.icd, self.args.icd_manifest, self.args.test]
+            required += [self.args.driver, self.args.inf, self.args.icd, self.args.icd_manifest, self.args.test,
+                         self.args.inspect]
         if self.args.vulkan:
             required.append(self.args.probe)
         for path in required:
@@ -568,7 +572,8 @@ class GuestRun:
                       (self.args.inf, PACKAGE_DIRECTORY + "\\rvkgpu.inf"),
                       (self.args.icd, PACKAGE_DIRECTORY + "\\rvkvk.dll"),
                       (self.args.icd_manifest, PACKAGE_DIRECTORY + "\\rvkvk.json"),
-                      (self.args.test, GUEST_DIRECTORY + "\\rvktest.exe")]
+                      (self.args.test, GUEST_DIRECTORY + "\\rvktest.exe"),
+                      (self.args.inspect, GUEST_DIRECTORY + "\\rvkinspect.exe")]
         if self.args.vulkan:
             # The loader beside the programs that import it, where Windows
             # looks first.

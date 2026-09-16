@@ -93,7 +93,7 @@ class GuestSuiteRun(unittest.TestCase):
         self.image.write_bytes(b"prepared image")
         self.os_stat = os.stat(self.image)
         for name in ("rvkgpu.sys", "rvkgpu.pdb", "rvkvk.dll", "rvkvk.json", "rvktest.exe", "rvkvkprobe.exe",
-                     "OVMF_VARS.fd", "OVMF_CODE.fd"):
+                     "rvkinspect.exe", "OVMF_VARS.fd", "OVMF_CODE.fd"):
             (self.scratch / name).write_bytes(name.encode() * 100)
         self.work = self.scratch / "work"
         self.journal = self.scratch / "journal.txt"
@@ -114,6 +114,7 @@ class GuestSuiteRun(unittest.TestCase):
                      "--qemu", FAKES / "fake_qemu.py",
                      "--qemu-img", FAKES / "fake_qemu_img.py", "--executor", "/nowhere/librvk_echo_executor.so",
                      "--driver", self.scratch / "rvkgpu.sys", "--test", self.scratch / "rvktest.exe",
+                     "--inspect", self.scratch / "rvkinspect.exe",
                      "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
@@ -153,7 +154,7 @@ class GuestSuiteRun(unittest.TestCase):
                           "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800",
                           "monitortimeout -Minutes 1", "monitortimeout -Minutes 0",
                           "sleepstates", "check", "collect"])
-        self.assertEqual(events.count("file"), 6)
+        self.assertEqual(events.count("file"), 7)
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.sys 1000", lines)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.inf", "\n".join(lines))
@@ -161,6 +162,9 @@ class GuestSuiteRun(unittest.TestCase):
         # package missing a file it names (feature 045).
         self.assertIn("file C:\\rvk\\package\\rvkvk.dll 900", lines)
         self.assertIn("file C:\\rvk\\package\\rvkvk.json 1000", lines)
+        # The inspector is in every run, so a hung or crashed program can be
+        # read from the host whatever the run is for (docs/trace.md).
+        self.assertIn("file C:\\rvk\\rvkinspect.exe 1400", lines)
         self.assertNotIn("vulkaninfo", "\n".join(lines))
         order = [line for line in lines
                  if line in ("reboot", "powerdown") or (line.startswith("exec") and ("-Stage" in line or "rvktest" in line))]
@@ -808,6 +812,7 @@ class GuestSuiteRun(unittest.TestCase):
                      "--qemu", FAKES / "fake_qemu.py",
                      "--qemu-img", FAKES / "fake_qemu_img.py", "--executor", "/nowhere/librvk_echo_executor.so",
                      "--driver", self.scratch / "rvkgpu.sys", "--test", self.scratch / "rvktest.exe",
+                     "--inspect", self.scratch / "rvkinspect.exe",
                      "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
@@ -885,6 +890,7 @@ class GuestSuiteRun(unittest.TestCase):
                                    "--executor", "/nowhere/librvk_echo_executor.so",
                                    "--driver", str(self.scratch / "rvkgpu.sys"),
                                    "--test", str(self.scratch / "rvktest.exe"),
+                                   "--inspect", str(self.scratch / "rvkinspect.exe"),
                                    "--icd", str(self.scratch / "rvkvk.dll"),
                                    "--icd-manifest", str(self.scratch / "rvkvk.json"),
                                    "--firmware", str(self.scratch / "OVMF_CODE.fd"),
@@ -919,6 +925,10 @@ class GuestSuiteRun(unittest.TestCase):
         missing = self.run_suite("--test", self.scratch / "absent.exe")
         self.assertEqual(missing.returncode, 1)
         self.assertIn("absent.exe does not exist", missing.stdout)
+        uninspected = self.run_suite("--inspect", self.scratch / "noinspect.exe")
+        self.assertEqual(uninspected.returncode, 1)
+        self.assertIn("guest: prepare failed: " + str(self.scratch / "noinspect.exe") + " does not exist",
+                      uninspected.stdout)
         unbuilt = self.run_suite("--icd", self.scratch / "absent.dll")
         self.assertEqual(unbuilt.returncode, 1)
         self.assertIn("guest: prepare failed: " + str(self.scratch / "absent.dll") + " does not exist", unbuilt.stdout)
