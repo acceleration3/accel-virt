@@ -23,6 +23,9 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkEnumerateInstanceVersion(uint32_t *pApiVe
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL local_vk_icdGetPhysicalDeviceProcAddr(VkInstance, const char *pName)
 { return icd_binding.root().physical_device_proc_addr(pName); }
 
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL local_vkGetDeviceProcAddr(VkDevice device, const char *pName)
+{ return icd_binding.root().device_proc_addr(device, pName); }
+
 VKAPI_ATTR VkResult VKAPI_CALL local_vk_icdEnumerateAdapterPhysicalDevices(VkInstance instance, uint64_t adapterLUID,
                                                                            uint32_t *pPhysicalDeviceCount,
                                                                            VkPhysicalDevice *pPhysicalDevices)

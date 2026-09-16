@@ -36,10 +36,10 @@ PFN_vkVoidFunction EntryPoints::find_local(const char *name) const
     return found != nullptr ? found->fn : nullptr;
 }
 
-PFN_vkVoidFunction EntryPoints::find_physical_device_level(const char *name) const
+PFN_vkVoidFunction EntryPoints::find_at_level(vkicd::generated::DispatchLevel level, const char *name) const
 {
     const Entry *const found = row(name);
-    if (found == nullptr || found->level != vkicd::generated::DispatchLevel::physical_device) return nullptr;
+    if (found == nullptr || found->level != level) return nullptr;
     return found->fn;
 }
 

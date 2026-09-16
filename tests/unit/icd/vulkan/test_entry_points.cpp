@@ -1,7 +1,7 @@
 /* Resolving a Vulkan entry point by name: a local row wins over the generated
  * wrapper of the same name, a generated name answers its wrapper, and anything
  * else - an unknown name, an empty or null one - answers null. find_local never
- * falls back to a wrapper; find_physical_device_level answers only a row the
+ * falls back to a wrapper; find_at_level answers only a row the
  * loader dispatches on a physical device. A table naming an entry point twice
  * breaks the invariant. */
 #include "harness/framework/test_registry.hpp"
@@ -109,13 +109,13 @@ TEST(entry_points, invariants_refuse_a_table_with_a_hole_or_a_name_twice)
 
 TEST(entry_points, a_physical_device_level_name_answers_its_local_row_or_its_wrapper)
 { EntryPoints entry_points(rows, row_count);
-  CHECK(entry_points.find_physical_device_level("vkGetPhysicalDeviceFeatures") ==
+  CHECK(entry_points.find_at_level(Level::physical_device, "vkGetPhysicalDeviceFeatures") ==
         reinterpret_cast<PFN_vkVoidFunction>(&local_features));
-  CHECK(entry_points.find_physical_device_level("vkGetPhysicalDeviceFeatures2") ==
+  CHECK(entry_points.find_at_level(Level::physical_device, "vkGetPhysicalDeviceFeatures2") ==
         reinterpret_cast<PFN_vkVoidFunction>(&av::vkicd::generated::Wrap_vkGetPhysicalDeviceFeatures2));
-  CHECK(entry_points.find_physical_device_level("vkCreateDevice") ==
+  CHECK(entry_points.find_at_level(Level::physical_device, "vkCreateDevice") ==
         reinterpret_cast<PFN_vkVoidFunction>(&av::vkicd::generated::Wrap_vkCreateDevice));
-  CHECK(entry_points.find_physical_device_level("vkEnumerateDeviceExtensionProperties") ==
+  CHECK(entry_points.find_at_level(Level::physical_device, "vkEnumerateDeviceExtensionProperties") ==
         reinterpret_cast<PFN_vkVoidFunction>(&av::vkicd::generated::Wrap_vkEnumerateDeviceExtensionProperties)); }
 
 /* What the loader would dispatch on the wrong object: a device, queue or
@@ -127,7 +127,7 @@ TEST(entry_points, any_other_level_answers_no_physical_device_entry_point)
       "vkEnumeratePhysicalDeviceGroups", "vkDestroyInstance", "vkCreateInstance", "vkEnumerateInstanceVersion",
       "vkNotAnEntryPoint", "", nullptr};
   for (const char *name : not_physical_device_level)
-      CHECK(entry_points.find_physical_device_level(name) == nullptr);
+      CHECK(entry_points.find_at_level(Level::physical_device, name) == nullptr);
   CHECK(entry_points.find("vkDestroyDevice") != nullptr);
   CHECK(entry_points.find("vkCreateBuffer") != nullptr); }
 
@@ -137,7 +137,7 @@ TEST(entry_points, a_local_rows_level_overrides_the_wrappers)
 { const Entry relevelled[] = {
       {"vkGetPhysicalDeviceFeatures2", reinterpret_cast<PFN_vkVoidFunction>(&local_features), Level::device}};
   EntryPoints entry_points(relevelled, 1u);
-  CHECK(entry_points.find_physical_device_level("vkGetPhysicalDeviceFeatures2") == nullptr);
+  CHECK(entry_points.find_at_level(Level::physical_device, "vkGetPhysicalDeviceFeatures2") == nullptr);
   CHECK(entry_points.find("vkGetPhysicalDeviceFeatures2") == reinterpret_cast<PFN_vkVoidFunction>(&local_features)); }
 
 /* The generated table's levels as vk.xml's first parameters give them: every
@@ -147,10 +147,33 @@ TEST(entry_points, every_generated_row_at_physical_device_level_is_answered_and_
 { EntryPoints entry_points(nullptr, 0u);
   std::uint32_t answered = 0u;
   for (const Entry &row : av::vkicd::generated::wrapper_entries()) {
-      const PFN_vkVoidFunction found = entry_points.find_physical_device_level(row.name);
+      const PFN_vkVoidFunction found = entry_points.find_at_level(Level::physical_device, row.name);
       CHECK(found == (row.level == Level::physical_device ? row.fn : nullptr));
       if (found != nullptr) answered++;
       if (std::strncmp(row.name, "vkGetPhysicalDevice", 19) == 0) CHECK(row.level == Level::physical_device);
       if (std::strncmp(row.name, "vkCmd", 5) == 0) CHECK(row.level == Level::device);
   }
   CHECK(answered >= 17u); }
+
+/* A device's dispatch table: every generated row at device level, a local
+ * device row over its wrapper, and nothing at another level. */
+TEST(entry_points, a_device_level_name_answers_its_local_row_or_its_wrapper_and_no_other_level_does)
+{ const Entry local[] = {
+      {"vkCreateBuffer", reinterpret_cast<PFN_vkVoidFunction>(&local_features), Level::device},
+      {"vkGetPhysicalDeviceFeatures", reinterpret_cast<PFN_vkVoidFunction>(&local_features), Level::physical_device}};
+  EntryPoints entry_points(local, 2u);
+  CHECK(entry_points.find_at_level(Level::device, "vkCreateBuffer") ==
+        reinterpret_cast<PFN_vkVoidFunction>(&local_features));
+  CHECK(entry_points.find_at_level(Level::device, "vkCmdDraw") ==
+        reinterpret_cast<PFN_vkVoidFunction>(&av::vkicd::generated::Wrap_vkCmdDraw));
+  CHECK(entry_points.find_at_level(Level::device, "vkGetPhysicalDeviceFeatures") == nullptr);
+  CHECK(entry_points.find_at_level(Level::device, "vkDestroyInstance") == nullptr);
+  CHECK(entry_points.find_at_level(Level::device, "vkNotAnEntryPoint") == nullptr);
+  CHECK(entry_points.find_at_level(Level::device, nullptr) == nullptr);
+  std::uint32_t answered = 0u;
+  for (const Entry &row : av::vkicd::generated::wrapper_entries()) {
+      const PFN_vkVoidFunction found = entry_points.find_at_level(Level::device, row.name);
+      if (row.level != Level::device) CHECK(found == nullptr);
+      else if (found != nullptr) answered++;
+  }
+  CHECK(answered > 100u); }

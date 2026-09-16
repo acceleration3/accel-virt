@@ -238,22 +238,93 @@ TEST(icd_root, every_manual_entry_point_it_answers_is_its_own_and_the_rest_are_n
 { IcdRig rig;
   const VkInstance instance = rig.create_instance();
   std::uint32_t answered = 0u;
-  std::uint32_t mapping = 0u;
+  std::uint32_t through_an_instance = 0u;
   for (const char *name : kManualEntryPoints) {
       const PFN_vkVoidFunction found = rig.root().instance_proc_addr(instance, name);
       if (found == nullptr) continue;
       answered++;
-      /* Mapping is the ICD's own too (T035), and answers only through an instance. */
-      if (found == entry_of(&av::icd::local_vkMapMemory) || found == entry_of(&av::icd::local_vkUnmapMemory)) {
-          mapping++;
+      /* Mapping (T035) and device dispatch are the ICD's own too, and answer
+       * only through an instance. */
+      if (found == entry_of(&av::icd::local_vkMapMemory) || found == entry_of(&av::icd::local_vkUnmapMemory) ||
+          found == entry_of(&av::icd::local_vkGetDeviceProcAddr)) {
+          through_an_instance++;
           CHECK(rig.root().instance_proc_addr(VK_NULL_HANDLE, name) == nullptr);
           continue;
       }
       CHECK(found == rig.root().instance_proc_addr(VK_NULL_HANDLE, name));
   }
-  CHECK_EQ(answered, 4u);
-  CHECK_EQ(mapping, 2u);
+  CHECK_EQ(answered, 5u);
+  CHECK_EQ(through_an_instance, 3u);
   rig.destroy_instance(instance); }
+
+/* The Windows loader drops a driver that answers any of these null for its
+ * instance (Vulkan-Loader, loader_icd_init_entries: LOOKUP_REQUIRED_GIPA), and
+ * every application then sees no device at all. */
+TEST(icd_root, an_instance_answers_every_entry_point_the_loader_requires)
+{ IcdRig rig;
+  const VkInstance instance = rig.create_instance();
+  const char *const required[] = {
+      "vkDestroyInstance", "vkEnumeratePhysicalDevices", "vkGetPhysicalDeviceFeatures",
+      "vkGetPhysicalDeviceFormatProperties", "vkGetPhysicalDeviceImageFormatProperties",
+      "vkGetPhysicalDeviceProperties", "vkGetPhysicalDeviceQueueFamilyProperties",
+      "vkGetPhysicalDeviceMemoryProperties", "vkGetDeviceProcAddr", "vkCreateDevice",
+      "vkEnumerateDeviceExtensionProperties", "vkGetPhysicalDeviceSparseImageFormatProperties"};
+  for (const char *name : required) CHECK(rig.root().instance_proc_addr(instance, name) != nullptr);
+  CHECK(rig.root().instance_proc_addr(instance, "vkGetDeviceProcAddr") ==
+        entry_of(&av::icd::local_vkGetDeviceProcAddr));
+  rig.destroy_instance(instance); }
+
+using GetDeviceProcAddr = PFN_vkVoidFunction (*)(VkDevice, const char *);
+using CreateDeviceEntry = VkResult (*)(VkPhysicalDevice, const VkDeviceCreateInfo *, const VkAllocationCallbacks *,
+                                       VkDevice *);
+
+/* The loader fills a device's dispatch table from this: the device-level
+ * entry the instance would answer, local rows first, and null for a command
+ * dispatched on anything but a device, queue or command buffer. */
+TEST(icd_root, a_device_it_made_answers_device_level_entry_points_and_no_other)
+{ IcdRig rig;
+  const VkInstance instance = rig.create_instance();
+  const VkPhysicalDevice physical_device = rig.physical_device(instance);
+  VkDeviceCreateInfo info = {};
+  info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  rig.host().vk_handle(0, ScriptedHost::vk_device);
+  VkDevice device = VK_NULL_HANDLE;
+  CHECK_EQ(rig.entry<CreateDeviceEntry>(instance, "vkCreateDevice")(physical_device, &info, nullptr, &device),
+           VK_SUCCESS);
+  const GetDeviceProcAddr device_proc_addr = rig.entry<GetDeviceProcAddr>(instance, "vkGetDeviceProcAddr");
+  CHECK(device_proc_addr(device, "vkDestroyDevice") == entry_of(&av::icd::local_vkDestroyDevice));
+  CHECK(device_proc_addr(device, "vkAllocateMemory") == entry_of(&av::icd::local_vkAllocateMemory));
+  CHECK(device_proc_addr(device, "vkMapMemory") == entry_of(&av::icd::local_vkMapMemory));
+  /* A device-level command itself, which the spec has answer through a device. */
+  CHECK(device_proc_addr(device, "vkGetDeviceProcAddr") == entry_of(&av::icd::local_vkGetDeviceProcAddr));
+  CHECK(device_proc_addr(device, "vkCreateBuffer") ==
+        entry_of(&av::vkicd::generated::Wrap_vkCreateBuffer));
+  CHECK(device_proc_addr(device, "vkCmdDraw") == entry_of(&av::vkicd::generated::Wrap_vkCmdDraw));
+  std::uint32_t device_level = 0u;
+  for (const av::vkicd::generated::Entry &row : av::vkicd::generated::wrapper_entries()) {
+      const PFN_vkVoidFunction found = device_proc_addr(device, row.name);
+      if (row.level != av::vkicd::generated::DispatchLevel::device) {
+          CHECK(found == nullptr);
+          continue;
+      }
+      CHECK(found == rig.root().instance_proc_addr(instance, row.name));
+      device_level++;
+  }
+  CHECK(device_level > 100u);
+  const char *const not_device_level[] = {"vkCreateDevice", "vkGetPhysicalDeviceProperties2", "vkDestroyInstance",
+                                          "vkCreateInstance",
+                                          "vk_icdEnumerateAdapterPhysicalDevices", "vkNotAnEntryPoint", "",
+                                          nullptr};
+  for (const char *name : not_device_level) CHECK(device_proc_addr(device, name) == nullptr);
+  /* Anything but a live device of this ICD answers nothing. */
+  int stack = 0;
+  CHECK(device_proc_addr(reinterpret_cast<VkDevice>(&stack), "vkDestroyDevice") == nullptr);
+  CHECK(device_proc_addr(reinterpret_cast<VkDevice>(physical_device), "vkDestroyDevice") == nullptr);
+  CHECK(device_proc_addr(VK_NULL_HANDLE, "vkDestroyDevice") == nullptr);
+  rig.entry<void (*)(VkDevice, const VkAllocationCallbacks *)>(instance, "vkDestroyDevice")(device, nullptr);
+  CHECK(device_proc_addr(device, "vkDestroyDevice") == nullptr);
+  rig.destroy_instance(instance);
+  CHECK(rig.root().invariants_hold()); }
 
 TEST(icd_root, reports_no_instance_extensions_and_no_layers)
 { IcdRig rig;

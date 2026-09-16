@@ -68,6 +68,10 @@ public:
      * no instance, and answering it anything else would have the loader call
      * that function with the wrong object. */
     PFN_vkVoidFunction physical_device_proc_addr(const char *name) const;
+    /* The device-level entry point of that name for a device this ICD made,
+     * which the loader builds the device's dispatch table from; null for any
+     * other device or level. */
+    PFN_vkVoidFunction device_proc_addr(VkDevice device, const char *name);
     VkResult           enumerate_instance_extensions(const char *layer, uint32_t *count,
                                                      VkExtensionProperties *properties);
     VkResult           enumerate_instance_version(uint32_t *version);
