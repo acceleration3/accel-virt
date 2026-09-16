@@ -81,6 +81,7 @@ LUID_HEX_DIGITS = 16
 LUID_LOW_PART_BYTES = 4
 KHRONOS_DRIVERS = "HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers"
 REG = "C:\\Windows\\System32\\reg.exe"
+CMD = "C:\\Windows\\System32\\cmd.exe"
 # reg.exe answers 1 for every failure and says which in English on this image:
 # only the one naming a missing key is an absent key.
 REG_FAILED = 1
@@ -1129,9 +1130,15 @@ class GuestRun:
     def vulkaninfo(self):
         """SC-001: the loader, asked by a program that knows nothing of rvk,
         lists exactly one physical device and that device's LUID; its LowPart."""
-        code, out, _error = self.step("vulkaninfo", lambda: self.agent.run(GUEST_DIRECTORY + "\\vulkaninfo.exe", [],
-                                                                         self.args.step_timeout))
-        (self.work / "vulkaninfo.txt").write_bytes(out)
+        # The listing goes to a guest file and is pulled: with the agent capturing
+        # its standard output, vulkaninfo on a live guest never exited, although
+        # the ICD had destroyed its instance and closed its device.
+        listing = GUEST_DIRECTORY + "\\vulkaninfo.txt"
+        command = f"{GUEST_DIRECTORY}\\vulkaninfo.exe > {listing} 2>&1"
+        code, _out, _error = self.step("vulkaninfo", lambda: self.agent.run(CMD, ["/c", command],
+                                                                          self.args.step_timeout))
+        self.step("vulkaninfo.pull", lambda: self.agent.pull(listing, self.work / "vulkaninfo.txt"))
+        out = (self.work / "vulkaninfo.txt").read_bytes()
         if code != 0:
             raise StepFailed("vulkaninfo", f"exited {code}; see vulkaninfo.txt")
         devices = vulkaninfo_devices(out.decode(errors="replace"))

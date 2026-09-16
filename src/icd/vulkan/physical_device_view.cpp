@@ -50,15 +50,23 @@ void PhysicalDeviceView::restore()
     }
 }
 
+/* A LUID's bytes are its 64-bit value's, little-endian: LowPart, then
+ * HighPart (Kmt::adapter_luid). The ID node and the core 1.1 node both carry
+ * it; a client of 1.2 or later reads the latter. */
 void PhysicalDeviceView::write_luid()
 {
     for (uint32_t index = 1u; index < remembered_; index++) {
-        if (types_[index] != VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES) continue;
-        auto *identity = reinterpret_cast<VkPhysicalDeviceIDProperties *>(nodes_[index]);
-        /* A LUID's bytes are its 64-bit value's, little-endian: LowPart, then
-         * HighPart (Kmt::adapter_luid). */
-        __builtin_memcpy(identity->deviceLUID, &luid_, sizeof identity->deviceLUID);
-        identity->deviceLUIDValid = VK_TRUE;
+        if (types_[index] == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES) {
+            auto *identity = reinterpret_cast<VkPhysicalDeviceIDProperties *>(nodes_[index]);
+            __builtin_memcpy(identity->deviceLUID, &luid_, sizeof identity->deviceLUID);
+            identity->deviceNodeMask = only_node;
+            identity->deviceLUIDValid = VK_TRUE;
+        } else if (types_[index] == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES) {
+            auto *core11 = reinterpret_cast<VkPhysicalDeviceVulkan11Properties *>(nodes_[index]);
+            __builtin_memcpy(core11->deviceLUID, &luid_, sizeof core11->deviceLUID);
+            core11->deviceNodeMask = only_node;
+            core11->deviceLUIDValid = VK_TRUE;
+        }
     }
 }
 

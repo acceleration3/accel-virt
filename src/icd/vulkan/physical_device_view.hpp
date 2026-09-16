@@ -30,6 +30,8 @@ class PhysicalDeviceView {
 public:
     /* The application's structure and the nodes after it. */
     static constexpr uint32_t max_chain = 32u;
+    /* An adapter is one node: the mask a valid LUID comes with. */
+    static constexpr uint32_t only_node = 1u;
 
     /* `latest_version` is the API version the ICD implements. */
     PhysicalDeviceView(ClientTransport &transport, uint64_t luid, uint32_t latest_version, LogSink &log);

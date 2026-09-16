@@ -326,19 +326,34 @@ TEST(icd_root, a_device_it_made_answers_device_level_entry_points_and_no_other)
   rig.destroy_instance(instance);
   CHECK(rig.root().invariants_hold()); }
 
-TEST(icd_root, reports_no_instance_extensions_and_no_layers)
+/* The one instance extension is VK_KHR_get_physical_device_properties2: its
+ * entry points are the ICD's own, and a loader client such as vulkaninfo asks
+ * for the physical device's LUID only when the extension is listed - the live
+ * run showed no deviceLUID without it. The count and array protocol is the
+ * loader's: VK_INCOMPLETE with what fits, nothing written past the capacity. */
+TEST(icd_root, reports_physical_device_properties2_as_its_one_instance_extension)
 { IcdRig rig;
   const InstanceExtensions enumerate =
       rig.entry<InstanceExtensions>(VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties");
   std::uint32_t count = 5u;
   CHECK_EQ(enumerate(nullptr, &count, nullptr), VK_SUCCESS);
-  CHECK_EQ(count, 0u);
+  CHECK_EQ(count, 1u);
   VkExtensionProperties properties[2] = {};
   properties[0].specVersion = 9u;
-  count = 2u;
-  CHECK_EQ(enumerate(nullptr, &count, properties), VK_SUCCESS);
+  count = 0u;
+  CHECK_EQ(enumerate(nullptr, &count, properties), VK_INCOMPLETE);
   CHECK_EQ(count, 0u);
   CHECK_EQ(properties[0].specVersion, 9u);
+  count = 2u;
+  CHECK_EQ(enumerate(nullptr, &count, properties), VK_SUCCESS);
+  CHECK_EQ(count, 1u);
+  CHECK(__builtin_strcmp(properties[0].extensionName, "VK_KHR_get_physical_device_properties2") == 0);
+  CHECK_EQ(properties[0].specVersion, 2u);
+  CHECK_EQ(properties[1].specVersion, 0u);
+  bool implemented = false;
+  for (const char *const name : av::vkproto::kImplementedInstanceExtensions)
+    implemented = implemented || __builtin_strcmp(name, properties[0].extensionName) == 0;
+  CHECK(implemented);
   count = 2u;
   CHECK_EQ(enumerate("VK_LAYER_KHRONOS_validation", &count, properties), VK_ERROR_LAYER_NOT_PRESENT);
   CHECK_EQ(count, 2u);

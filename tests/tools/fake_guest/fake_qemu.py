@@ -11,7 +11,8 @@ The script is JSON at $FAKE_GUEST_SCRIPT:
   files      {"C:\\guest\\path": "content"}: what guest-file-read returns, byte
              per character (latin-1), so a dump's binary header can be scripted
   rvktest, rvkvkprobe, vulkaninfo, reg
-             exit code of that program
+             exit code of that program; one run as `cmd.exe /c PROGRAM > FILE`
+             leaves its output in FILE
   panic      {"during": stage, "code": n, "loop": bool}: the guest bugchecks when
              the stage runs, then reboots; with loop, it bugchecks on every boot
              until QEMU is started again without virtio-gpu-rvk-pci
@@ -137,8 +138,25 @@ class Guest:
             self.script["screendump"] = [int(part) for part in size.split("x")]
         return 0, "set: 0\n"
 
+    def shell(self, arguments):
+        """cmd.exe /c PROGRAM ARG... > FILE 2>&1: the program runs as the agent
+        would run it, and what it printed becomes FILE for a pull."""
+        line = arguments[1] if len(arguments) == 2 and arguments[0] == "/c" else ""
+        command, _, redirect = line.partition(" > ")
+        target = redirect.removesuffix(" 2>&1")
+        if not command or not target:
+            return {"exited": True, "exitcode": 1, "out-data": "", "err-data": ""}
+        words = command.split()
+        ran = self.process(words[0], words[1:])
+        if ran["exited"]:
+            self.script.setdefault("files", {})[target] = base64.b64decode(ran["out-data"]).decode("latin-1")
+        return dict(ran, **{"out-data": ""})
+
     def process(self, path, arguments):
         program = path.rsplit("\\", 1)[-1].lower().removesuffix(".exe")
+        if program == "cmd":
+            self.note(f"exec {path} {' '.join(arguments)}")
+            return self.shell(arguments)
         name = program if program in PROGRAMS else None
         if "-Stage" in arguments:
             name = arguments[arguments.index("-Stage") + 1]

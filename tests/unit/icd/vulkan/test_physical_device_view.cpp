@@ -212,6 +212,49 @@ TEST(physical_device_view, the_luid_goes_only_into_identity_nodes_anywhere_in_th
   CHECK(driver.pNext == &identity);
   CHECK(driver.sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES); }
 
+/* A Vulkan 1.2 client reads the LUID from the core 1.1 properties rather than
+ * the ID node - vulkaninfo on a live guest printed deviceLUIDValid false there -
+ * so both carry the adapter's LUID, and the node mask a valid LUID requires
+ * names the one node this adapter has. */
+TEST(physical_device_view, the_luid_and_node_mask_go_into_core_1_1_properties_too)
+{ ViewRig view_rig;
+  WireWriter reply(view_rig.reply_block(), reply_bytes);
+  write_properties2_with_identity(reply, vulkan_1_3);
+  view_rig.answer(reply);
+  PhysicalDeviceView view(view_rig.transport(), 0x0000000900000001ull, vulkan_1_3, view_rig.rig().log());
+  VkPhysicalDeviceIDProperties identity = {};
+  identity.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
+  identity.deviceNodeMask = 0x40u;
+  VkPhysicalDeviceVulkan11Properties core11 = {};
+  core11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES;
+  core11.pNext = &identity;
+  core11.deviceNodeMask = 0x40u;
+  core11.maxMemoryAllocationSize = 0x1234u;
+  VkPhysicalDeviceProperties2 answer = {};
+  answer.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+  answer.pNext = &core11;
+  view.properties2(view_rig.physical_device(), &answer);
+  const std::uint64_t luid = 0x0000000900000001ull;
+  CHECK(std::memcmp(core11.deviceLUID, &luid, sizeof luid) == 0);
+  CHECK_EQ(core11.deviceLUIDValid, VK_TRUE);
+  CHECK_EQ(core11.deviceNodeMask, 1u);
+  CHECK(std::memcmp(identity.deviceLUID, &luid, sizeof luid) == 0);
+  CHECK_EQ(identity.deviceLUIDValid, VK_TRUE);
+  CHECK_EQ(identity.deviceNodeMask, 1u);
+  CHECK(core11.pNext == &identity);
+  CHECK(core11.sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES);
+  VkPhysicalDeviceVulkan12Properties core12 = {};
+  core12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES;
+  core12.driverID = static_cast<VkDriverId>(7);
+  WireWriter again(view_rig.reply_block(), reply_bytes);
+  write_properties2_with_identity(again, vulkan_1_3);
+  view_rig.answer(again);
+  answer.pNext = &core12;
+  view.properties2(view_rig.physical_device(), &answer);
+  const std::uint8_t untouched[sizeof core12.driverName] = {};
+  CHECK(std::memcmp(core12.driverName, untouched, sizeof untouched) == 0);
+  CHECK(view.invariants_hold()); }
+
 TEST(physical_device_view, properties2_with_no_chain_is_only_held_to_the_version)
 { ViewRig view_rig;
   WireWriter reply(view_rig.reply_block(), reply_bytes);

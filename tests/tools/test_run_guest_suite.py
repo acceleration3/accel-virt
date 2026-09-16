@@ -392,8 +392,13 @@ class GuestSuiteRun(unittest.TestCase):
                        "C:\\rvk\\package\\rvkvk.dll 900", "C:\\rvk\\package\\rvkvk.json 1000"):
             self.assertIn(f"file {pushed}", lines)
         programs = [line.split()[1] for line in lines if line.startswith("exec") and "powershell" not in line]
-        self.assertEqual(programs, ["C:\\Windows\\System32\\reg.exe", "C:\\rvk\\vulkaninfo.exe",
-                                    "C:\\rvk\\rvkvkprobe.exe"])
+        self.assertEqual(programs, ["C:\\Windows\\System32\\reg.exe", "C:\\Windows\\System32\\cmd.exe",
+                                    "C:\\rvk\\vulkaninfo.exe", "C:\\rvk\\rvkvkprobe.exe"])
+        # vulkaninfo's full listing is written to a guest file and pulled: the
+        # agent's captured output stalled the program on a live guest.
+        self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\rvk\\vulkaninfo.exe "
+                      "> C:\\rvk\\vulkaninfo.txt 2>&1", lines)
+        self.assertIn("pull C:\\rvk\\vulkaninfo.txt", lines)
         self.assertIn("exec C:\\Windows\\System32\\reg.exe query HKLM\\SOFTWARE\\Khronos\\Vulkan\\Drivers", lines)
         self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
         self.assertIn("guest: vulkan: executor /nowhere/librvk_executor.so, host-gpu auto", result.stdout)

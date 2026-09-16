@@ -81,6 +81,18 @@ constexpr ExtensionPolicy::Row reported_extensions[] = {
     {"VK_EXT_memory_budget", 1u, "icd_memory.the_budget_nodes_in_the_chain_are_the_adapter_s"},
 };
 constexpr uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
+/* The instance extensions this ICD reports. The *2 queries are its own entry
+ * points, and vulkaninfo reads a physical device's LUID only when this
+ * extension is listed (the live --vulkan run of 045). */
+struct InstanceExtension {
+    const char *name;
+    uint32_t    spec_version;
+};
+constexpr InstanceExtension reported_instance_extensions[] = {
+    {"VK_KHR_get_physical_device_properties2", 2u},
+};
+constexpr uint32_t reported_instance_extension_count =
+    sizeof reported_instance_extensions / sizeof reported_instance_extensions[0];
 /* The application's structure and the nodes after it that a memory properties
  * query looks at; a longer or cyclic chain is looked at this far. */
 constexpr uint32_t max_chain = 32u;
@@ -159,14 +171,25 @@ PFN_vkVoidFunction IcdRoot::device_proc_addr(VkDevice device, const char *name)
     return entry_points_.find_at_level(vkicd::generated::DispatchLevel::device, name);
 }
 
-VkResult IcdRoot::enumerate_instance_extensions(const char *layer, uint32_t *count, VkExtensionProperties *)
+VkResult IcdRoot::enumerate_instance_extensions(const char *layer, uint32_t *count, VkExtensionProperties *properties)
 {
     if (layer != nullptr) {
         log_.write("rvkvk: instance extensions of a layer asked for; this driver is no layer");
         return VK_ERROR_LAYER_NOT_PRESENT;
     }
-    *count = 0u;
-    return VK_SUCCESS;
+    if (properties == nullptr) {
+        *count = reported_instance_extension_count;
+        return VK_SUCCESS;
+    }
+    const uint32_t written = *count < reported_instance_extension_count ? *count : reported_instance_extension_count;
+    for (uint32_t index = 0u; index < written; index++) {
+        properties[index] = VkExtensionProperties{};
+        __builtin_memcpy(properties[index].extensionName, reported_instance_extensions[index].name,
+                         __builtin_strlen(reported_instance_extensions[index].name) + 1u);
+        properties[index].specVersion = reported_instance_extensions[index].spec_version;
+    }
+    *count = written;
+    return written < reported_instance_extension_count ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
 VkResult IcdRoot::enumerate_instance_version(uint32_t *version)
