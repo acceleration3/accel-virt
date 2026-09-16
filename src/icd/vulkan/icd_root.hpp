@@ -132,6 +132,12 @@ public:
     VkResult           wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *info, uint64_t timeout);
     VkResult           queue_wait_idle(VkQueue queue);
     VkResult           device_wait_idle(VkDevice device);
+    /* The probe's lost step (feature 045): the instance's context is sent a
+     * vkCreateInstance cut after its structure type, which the host faults it
+     * for. VK_ERROR_DEVICE_LOST once it has; VK_ERROR_INITIALIZATION_FAILED
+     * when the host answered instead, or for a physical device this did not
+     * make. It faults only the caller's own context. */
+    VkResult           force_context_fault(VkPhysicalDevice physical_device);
 
     /* What the generated wrappers' hooks forward to (icd_hooks.cpp). */
     Connection      *acquire_connection();

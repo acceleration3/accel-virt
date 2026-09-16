@@ -36,3 +36,12 @@ TEST(guest_report, text_past_the_capacity_is_cut_but_every_step_is_counted)
   CHECK_EQ(report.passed(), 2000u);
   CHECK(std::strstr(report.text(), "rvktest:") == nullptr);
   CHECK(report.invariants_hold()); }
+
+/* The summary names the program that ran the steps: rvkvkprobe.exe's report
+ * is judged by its own line (feature 045). */
+TEST(guest_report, the_summary_names_its_program)
+{ GuestReport report("rvkvkprobe");
+  report.measure("vulkan", "compute", Status::ok, 256u);
+  report.finish();
+  CHECK(std::strcmp(report.text(), "ok vulkan.compute 256\nrvkvkprobe: 1 passed, 0 failed\n") == 0);
+  CHECK(report.invariants_hold()); }

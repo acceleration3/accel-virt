@@ -59,6 +59,9 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkWaitSemaphores(VkDevice device, const VkS
                                                       uint64_t timeout);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkQueueWaitIdle(VkQueue queue);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkDeviceWaitIdle(VkDevice device);
+/* Not Vulkan's: the probe's forced fault, a physical-device-level function the
+ * loader dispatches to an ICD that names it (loader interface version 7). */
+VKAPI_ATTR VkResult VKAPI_CALL local_vkRvkForceContextFault(VkPhysicalDevice physicalDevice);
 VKAPI_ATTR void VKAPI_CALL local_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator);
 VKAPI_ATTR void VKAPI_CALL local_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
                                                                      VkPhysicalDeviceMemoryProperties *pMemoryProperties);

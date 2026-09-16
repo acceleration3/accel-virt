@@ -3,6 +3,7 @@
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
 #include "guest/kmt/kmt.hpp"
+#include "guest/transport/context_fault.hpp"
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/local_entries.hpp"
 #include "icd/vulkan/log_sink.hpp"
@@ -53,6 +54,8 @@ const Entry        local_rows[] = {
     {"vkQueueWaitIdle", reinterpret_cast<PFN_vkVoidFunction>(&local_vkQueueWaitIdle), Level::device},
     {"vkDeviceWaitIdle", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDeviceWaitIdle), Level::device},
     {"vkDestroyInstance", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroyInstance), Level::instance},
+    {"vkRvkForceContextFault", reinterpret_cast<PFN_vkVoidFunction>(&local_vkRvkForceContextFault),
+            Level::physical_device},
     {"vkGetPhysicalDeviceMemoryProperties",
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceMemoryProperties), Level::physical_device},
     {"vkGetPhysicalDeviceMemoryProperties2",
@@ -708,6 +711,22 @@ VkResult IcdRoot::device_wait_idle(VkDevice device)
         const VkResult idle = queue_wait_idle(static_cast<VkQueue>(static_cast<void *>(queue)));
         if (idle != VK_SUCCESS) return idle;
     }
+}
+
+VkResult IcdRoot::force_context_fault(VkPhysicalDevice physical_device)
+{
+    LoaderHandle *const made = handle_of(physical_device, LoaderHandle::Kind::physical_device);
+    if (made == nullptr) {
+        log_.write("rvkvk: vkRvkForceContextFault on a physical device this driver did not make");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    Connection &connection = *made->connection();
+    if (lost(connection, "vkRvkForceContextFault")) return VK_ERROR_DEVICE_LOST;
+    if (ContextFault(connection.transport()).send() != Status::ok) {
+        log_.write("rvkvk: the host answered a truncated vkCreateInstance");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    return VK_ERROR_DEVICE_LOST;
 }
 
 uint32_t IcdRoot::handles_on_connections() const

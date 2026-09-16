@@ -8,7 +8,10 @@ constexpr uint32_t code_digits = 8u;
 
 }  // namespace
 
-GuestReport::GuestReport() : text_{}, buffer_(text_, capacity), passed_(0u), failed_(0u) {}
+GuestReport::GuestReport() : GuestReport("rvktest") {}
+
+GuestReport::GuestReport(const char *program)
+    : program_(program), text_{}, buffer_(text_, capacity), passed_(0u), failed_(0u) {}
 
 void GuestReport::check(const char *scenario, const char *step, Status status, uint32_t code)
 {
@@ -57,7 +60,8 @@ void GuestReport::line(const char *scenario, const char *step, bool passed, Stat
 
 void GuestReport::finish()
 {
-    buffer_.append("rvktest: ");
+    buffer_.append(program_);
+    buffer_.append(": ");
     buffer_.append_decimal(passed_);
     buffer_.append(" passed, ");
     buffer_.append_decimal(failed_);

@@ -308,8 +308,9 @@ foreach(src ${AV_UNIT_TESTS})
     target_sources(${name} PRIVATE ${AV_EXECUTOR_ENTRY})
   endif()
   # The ICD's tests link its core, which no other test may: its hooks replace
-  # the generated defaults every other binary relies on.
-  if(src MATCHES "/tests/unit/icd/")
+  # the generated defaults every other binary relies on. The probe's loader
+  # seam is tested through the ICD's own entry point, so it links it too.
+  if(src MATCHES "/tests/unit/icd/" OR name STREQUAL "test_loader_vulkan")
     target_link_libraries(${name} PRIVATE av_icd)
   endif()
   if(name STREQUAL "test_generated_clients" OR name STREQUAL "test_loopback_transport")

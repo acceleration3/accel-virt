@@ -2,7 +2,7 @@
  * line per step, `ok scenario.step`, `ok scenario.step N` for a step that
  * measured something, or
  * `FAIL scenario.step status=N code=0xXXXXXXXX`, then
- * `rvktest: P passed, F failed`. Text past the capacity is cut; the counts
+ * `<program>: P passed, F failed`, the program rvktest unless named. Text past the capacity is cut; the counts
  * are not, and a report without its summary line reads as a failure. */
 #ifndef AV_GUEST_REPORT_HPP
 #define AV_GUEST_REPORT_HPP
@@ -20,6 +20,7 @@ public:
     static constexpr size_t capacity = 16384u;
 
     GuestReport();
+    explicit GuestReport(const char *program);
     GuestReport(const GuestReport &) = delete;
     GuestReport &operator=(const GuestReport &) = delete;
 
@@ -42,6 +43,7 @@ public:
 private:
     void line(const char *scenario, const char *step, bool passed, Status status, uint32_t code);
 
+    const char *program_;
     char       text_[capacity];
     TextBuffer buffer_;
     uint32_t   passed_;

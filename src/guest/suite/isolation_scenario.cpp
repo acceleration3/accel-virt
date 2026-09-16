@@ -1,11 +1,9 @@
 #include "guest/suite/isolation_scenario.hpp"
 
 #include "core/support/scope_exit.hpp"
+#include "guest/transport/context_fault.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
-#include "proto/generated/vulkan/vk_protocol_ids.h"
-#include "proto/wire/wire_reader.hpp"
-#include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
@@ -49,18 +47,11 @@ Status IsolationScenario::exercise_healthy()
     return transport.nop(answered);
 }
 
-/* The structure type and nothing after it: a create-info truncated at its
- * first field boundary, which no decoder can take for an instance's (research
- * section 6), and which reaches no host ICD. */
 Status IsolationScenario::fault(KmtTransport &doomed)
 {
     const Status opened = doomed.initialize();
     if (opened != Status::ok) return opened;
-    WireWriter request = doomed.request_writer();
-    request.write_u32(static_cast<uint32_t>(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO));
-    WireReader            answer(nullptr, 0u);
-    const TransportResult sent = doomed.send_sync(vkproto::kCmd_vkCreateInstance, request, answer);
-    return sent == TransportResult::failed ? Status::ok : Status::conflict;
+    return ContextFault(doomed).send();
 }
 
 }  // namespace av

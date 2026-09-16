@@ -1,0 +1,23 @@
+#include "guest/transport/context_fault.hpp"
+
+#include "proto/client_transport.hpp"
+#include "proto/generated/vulkan/vk_protocol_ids.h"
+#include "proto/sync_call_scope.hpp"
+
+#include <vulkan/vulkan_core.h>
+
+namespace av {
+
+ContextFault::ContextFault(ClientTransport &transport) : transport_(transport) {}
+
+Status ContextFault::send()
+{
+    WireWriter request = transport_.request_writer();
+    request.write_u32(static_cast<uint32_t>(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO));
+    WireReader          answer(nullptr, 0u);
+    const SyncCallScope call(transport_);
+    const TransportResult sent = transport_.send_sync(vkproto::kCmd_vkCreateInstance, request, answer);
+    return sent == TransportResult::failed ? Status::ok : Status::conflict;
+}
+
+}  // namespace av
