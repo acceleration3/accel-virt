@@ -16,6 +16,8 @@
 
 namespace av {
 
+class StateWriter;
+
 class ApertureSegment;
 class MemorySegments;
 struct AllocationTableProbe;
@@ -40,6 +42,10 @@ public:
     [[nodiscard]] Status open(Allocation &allocation, const void *device);
     [[nodiscard]] Status close(Allocation &allocation);
     uint32_t             live() const;
+
+    /* A line for the table and one per allocation; `busy=true` and nothing
+     * more while another thread holds the table. */
+    void report(StateWriter &writer);
 
     bool invariants_hold() const;
 

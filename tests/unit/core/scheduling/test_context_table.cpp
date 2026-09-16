@@ -13,11 +13,15 @@
 #include "core/scheduling/context_table.hpp"
 #include "core/scheduling/device_table.hpp"
 #include "core/support/status.hpp"
+#include "core/platform/lock_rank.hpp"
+#include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
 
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 
 namespace av {
 
@@ -203,3 +207,35 @@ TEST(context_table_create, a_record_sized_private_data_that_does_not_decode_is_r
   CHECK_STATUS(fixture.contexts().create(fixture.device(), request), Status::invalid_parameter);
   CHECK_EQ(fixture.contexts().live(), 0u);
   CHECK(request.hContext == nullptr); }
+
+TEST(context_table_report, writes_each_context_and_its_device)
+{ Fixture fixture;
+  DxgkargCreateContextRecord first = {};
+  first.Flags = 0x1u;
+  first.EngineAffinity = 1u;
+  CHECK_STATUS(fixture.contexts().create(fixture.device(), first), Status::ok);
+  DxgkargCreateContextRecord second = {};
+  second.EngineAffinity = 1u;
+  CHECK_STATUS(fixture.contexts().create(fixture.device(), second), Status::ok);
+  char bytes[512];
+  av::StateWriter writer(bytes, sizeof bytes);
+  fixture.contexts().report(writer);
+  const auto hex_of = [](const void *object) {
+      return static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(object));
+  };
+  char expected[512];
+  std::snprintf(expected, sizeof expected,
+                "context_table/0 busy=false live=2\n"
+                "context_table/0/context/0 handle=0x%016llX device=0x%016llX node=0 flags=0x0000000000000001 rvk=false\n"
+                "context_table/0/context/1 handle=0x%016llX device=0x%016llX node=0 flags=0x0000000000000000 rvk=false",
+                hex_of(first.hContext), hex_of(fixture.device()), hex_of(second.hContext), hex_of(fixture.device()));
+  CHECK(std::strcmp(writer.dump(), expected) == 0);
+  fixture.platform().hold_elsewhere(av::LockRank::context_table);
+  av::StateWriter busy(bytes, sizeof bytes);
+  fixture.contexts().report(busy);
+  CHECK(std::strcmp(busy.dump(), "context_table/0 busy=true") == 0);
+  fixture.platform().set_irql(av::Irql::dispatch);
+  fixture.contexts().report(busy);
+  CHECK(fixture.platform().claim(av::Violation::irql_ceiling));
+  CHECK(fixture.platform().claim(av::Violation::irql_ceiling));
+  fixture.platform().set_irql(av::Irql::passive); }

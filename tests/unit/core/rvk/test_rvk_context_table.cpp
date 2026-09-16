@@ -22,6 +22,7 @@
 #include "harness/device/fake_virtqueue_device.hpp"
 #include "harness/device/mapped_virtio_function.hpp"
 #include "harness/dxgkrnl/fake_handle_table.hpp"
+#include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/violation.hpp"
 #include "proto/context/capset_info.hpp"
@@ -37,6 +38,7 @@
 #include "proto/virtio_gpu/gpu_response.hpp"
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <optional>
 
@@ -974,3 +976,84 @@ TEST(rvk_context_table_invariants, detect_a_broken_chunk_or_one_on_a_free_slot)
   CHECK(fixture.table().invariants_hold());
   CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
 
+
+/* ---- report -------------------------------------------------------------------- */
+
+TEST(rvk_context_table_report, writes_each_live_context_its_memory_and_its_chunks)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  ProcessAllocation chunk(fixture.platform(), fixture.allocations(), fixture.handles(),
+                          AllocationKind::host_visible_memory, page);
+  chunk.map_into_aperture(40u);
+  HostVisibleBindRecord answer;
+  CHECK_STATUS(bind_chunk(fixture, &first_context, chunk.handle(), answer), Status::ok);
+  char bytes[1024];
+  av::StateWriter writer(bytes, sizeof bytes);
+  fixture.table().report(writer);
+  const auto hex_of = [](const void *object) {
+      return static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(object));
+  };
+  char expected[1024];
+  std::snprintf(expected, sizeof expected,
+                "rvk_context_table/0 busy=false bound=1\n"
+                "rvk_context_table/0/rvk_context/0 handle=0x%016llX doorbell=0 ring_order=12 ring=0x%016llX"
+                " fence_page=0x%016llX reply=0x%016llX state=2 context_id=1 completed=0 live=true lost=false\n"
+                "rvk_context_table/0/rvk_context/0/chunk/0 resource=%u allocation=0x%016llX",
+                hex_of(&first_context), hex_of(fixture.ring().allocation()), hex_of(fixture.fence().allocation()),
+                hex_of(fixture.reply().allocation()), static_cast<unsigned>(chunk_base), hex_of(chunk.allocation()));
+  CHECK(std::strcmp(writer.dump(), expected) == 0);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_EQ(fixture.platform().locks_held(), 0u);
+  /* A context faulted by its fence page is reported lost once the DPC saw it. */
+  fixture.complete_through(0u, 3u);
+  fixture.serve();
+  av::StateWriter faulted(bytes, sizeof bytes);
+  fixture.table().report(faulted);
+  CHECK(std::strstr(faulted.dump(), " lost=true\n") != nullptr);
+  fixture.platform().hold_elsewhere(av::LockRank::rvk_context_slots);
+  av::StateWriter busy(bytes, sizeof bytes);
+  fixture.table().report(busy);
+  CHECK(std::strcmp(busy.dump(), "rvk_context_table/0 busy=true") == 0);
+  fixture.platform().set_irql(Irql::isr);
+  fixture.table().report(busy);
+  CHECK(fixture.platform().claim(av::Violation::irql_ceiling));
+  CHECK(fixture.platform().claim(av::Violation::irql_ceiling));
+  fixture.platform().set_irql(Irql::passive);
+  fixture.platform().released_elsewhere();
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }
+
+namespace {
+
+/* A dump taken at each lock the bind takes, as an inspector's escape could be
+ * served on another thread meanwhile. */
+struct MidBind {
+    av::MockPlatform *platform;
+    RvkContextTable  *table;
+    bool              claimed_unset = false;
+};
+
+void report_mid_bind(void *context)
+{
+    auto *const mid = static_cast<MidBind *>(context);
+    mid->platform->on_acquire(nullptr, nullptr);
+    char bytes[512];
+    av::StateWriter writer(bytes, sizeof bytes);
+    mid->table->report(writer);
+    if (std::strcmp(writer.dump(), "rvk_context_table/0 busy=false bound=1") == 0) mid->claimed_unset = true;
+    mid->platform->on_acquire(&report_mid_bind, mid);
+}
+
+}  // namespace
+
+/* A context claimed but not yet set up has no binding to describe: it is
+ * counted and not listed. */
+TEST(rvk_context_table_report, a_context_being_set_up_is_counted_but_not_listed)
+{ Fixture fixture;
+  Host host(fixture.mapped());
+  MidBind mid{&fixture.platform(), &fixture.table()};
+  fixture.platform().on_acquire(&report_mid_bind, &mid);
+  CHECK_STATUS(fixture.bind(&first_context), Status::ok);
+  fixture.platform().on_acquire(nullptr, nullptr);
+  CHECK(mid.claimed_unset);
+  CHECK_STATUS(fixture.table().unbind(&first_context, &fixture.device()), Status::ok); }

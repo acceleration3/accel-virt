@@ -118,6 +118,17 @@ public:
         return true;
     }
 
+    /* Every live object to `visit`, in pool order; legal at DISPATCH. */
+    template <typename Visitor>
+    void for_each(Visitor visit) const
+    {
+        AV_SCOPE("ObjectPool::for_each");
+        platform_.require_irql_at_most(Irql::dispatch, "ObjectPool::for_each");
+        for (Chunk *chunk = chunks_; chunk != nullptr; chunk = chunk->next_)
+            for (uint32_t slot = 0u; slot < chunk_slots; slot++)
+                if ((chunk->used_ & (uint64_t{1} << slot)) != 0u) visit(static_cast<const T &>(*object_at(*chunk, slot)));
+    }
+
     uint32_t live() const
     {
         AV_SCOPE("ObjectPool::live");

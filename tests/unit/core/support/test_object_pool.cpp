@@ -206,6 +206,34 @@ TEST(object_pool_all_of, checks_every_live_object_and_nothing_else)
   CHECK_STATUS(pool.destroy(objects[3]), Status::ok);
   CHECK(pool.all_of([](const Tracked &tracked) { return tracked.value() != 3u; })); }
 
+/* Every live object once, across chunks, and a destroyed one not at all. */
+TEST(object_pool_for_each, visits_every_live_object_once)
+{ MockPlatform platform; int destroyed = 0;
+  ObjectPool<Tracked> pool(platform);
+  std::uint32_t visits = 0u;
+  pool.for_each([&](const Tracked &) { visits++; });
+  CHECK_EQ(visits, 0u);
+  Tracked *objects[70] = {};
+  for (std::uint32_t i = 0u; i < 70u; i++) CHECK_STATUS(pool.create(objects[i], destroyed, i), Status::ok);
+  CHECK_STATUS(pool.destroy(objects[65]), Status::ok);
+  std::uint32_t sum = 0u;
+  bool seen[70] = {};
+  pool.for_each([&](const Tracked &tracked) {
+      CHECK(!seen[tracked.value()]);
+      seen[tracked.value()] = true;
+      sum += tracked.value();
+      visits++;
+  });
+  CHECK_EQ(visits, 69u);
+  CHECK_EQ(sum, 69u * 70u / 2u - 65u);
+  CHECK(!seen[65]);
+  platform.set_irql(av::Irql::dispatch);
+  pool.for_each([](const Tracked &) {});
+  platform.set_irql(av::Irql::isr);
+  pool.for_each([](const Tracked &) {});
+  CHECK(platform.claim(av::Violation::irql_ceiling));
+  platform.set_irql(av::Irql::passive); }
+
 TEST(object_pool_destroy_all, empties_the_pool_and_releases_every_chunk)
 { MockPlatform platform; int destroyed = 0;
   ObjectPool<Tracked> pool(platform);

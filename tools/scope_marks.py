@@ -32,10 +32,14 @@ INDENT = "    "
 FNV_OFFSET = 2166136261
 FNV_PRIME = 16777619
 
-# The table's own code would recurse into itself; the layout proofs are data
+# The table's own code, and every TraceHost it calls into (a `*_trace_host.cpp`
+# and the clock one reads), would recurse into itself: a scope's enter asks the
+# host for the thread, whose scope enters again. The layout proofs are data
 # the kernel build checks at compile time; generated code is its generator's.
 EXCLUDED_DIRECTORIES = ("src/core/trace/", "src/proto/generated/")
-EXCLUDED_FILES = ("src/km/ddi_record_layout.cpp", "src/km/ddi_table_layout.cpp")
+EXCLUDED_FILES = ("src/km/ddi_record_layout.cpp", "src/km/ddi_table_layout.cpp",
+                  "src/um/trace/interrupt_clock.cpp")
+EXCLUDED_SUFFIXES = ("_trace_host.cpp", "_trace_host.hpp")
 SOURCE_SUFFIXES = (".cpp", ".hpp")
 DEFINITION_KINDS = {
     ci.CursorKind.FUNCTION_DECL, ci.CursorKind.CXX_METHOD, ci.CursorKind.CONSTRUCTOR,
@@ -112,7 +116,8 @@ def sources(root):
         relative = path.relative_to(root).as_posix()
         if path.suffix not in SOURCE_SUFFIXES or not path.is_file():
             continue
-        if relative.startswith(EXCLUDED_DIRECTORIES) or relative in EXCLUDED_FILES:
+        if (relative.startswith(EXCLUDED_DIRECTORIES) or relative in EXCLUDED_FILES
+                or relative.endswith(EXCLUDED_SUFFIXES)):
             continue
         yield path, relative
 

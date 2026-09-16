@@ -36,6 +36,7 @@
 #include "core/scheduling/hw_queue_table.hpp"
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
+#include "core/trace/state_reporter.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "core/virtio/virtio_pci_layout.hpp"
 
@@ -103,8 +104,9 @@ struct LinkedDeviceRecord;
 struct AdapterProbe;
 class Context;
 class PciBaseAddresses;
+class StateWriter;
 
-class Adapter {
+class Adapter final : public StateReporter {
 public:
     Adapter(Platform &platform, void *physical_device_object);
     ~Adapter();
@@ -130,6 +132,8 @@ public:
     int32_t link_device(void *physical_device_object, LinkedDeviceRecord *linked);
     /* Answers at any adapter state: capabilities describe the driver. */
     int32_t query_adapter_info(const DxgkargQueryAdapterInfoRecord *query);
+    /* A host-visible chunk binding (feature 045), or rvkinspect.exe's trace
+     * escape (docs/trace.md), told apart by the record's magic. */
     int32_t escape(const DxgkargEscapeRecord *escape);
     int32_t collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect);
     int32_t create_device(DxgkargCreateDeviceRecord *request);
@@ -230,6 +234,10 @@ public:
     int32_t reset_hw_engine(const DxgkargResetHwEngineRecord *request);
     /* After a successful reset; submissions were never refused in between. */
     int32_t resume_hw_engine(const DxgkargResumeHwEngineRecord *request);
+
+    /* This adapter and everything it holds, as the trace escape's state dump;
+     * never waits for a lock. */
+    void report(StateWriter &writer) override;
 
     bool invariants_hold() const;
 

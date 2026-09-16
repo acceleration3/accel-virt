@@ -83,7 +83,7 @@ uint32_t ExecutorLibrary::sub_apis() const
 RvkExecutor *ExecutorLibrary::create(SubApi api, const uint8_t *gpu_uuid) const
 {
     AV_SCOPE("ExecutorLibrary::create");
-    return ops_->create(ops_->opaque, static_cast<uint32_t>(api), gpu_uuid);
+    return ops_ != nullptr ? ops_->create(ops_->opaque, static_cast<uint32_t>(api), gpu_uuid) : nullptr;
 }
 
 void ExecutorLibrary::destroy(RvkExecutor *executor) const

@@ -1,15 +1,17 @@
 #include "core/display/display_sources.hpp"
 
+#include "core/display/display_mode.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 
 namespace av {
 
 DisplaySources::DisplaySources(Platform &platform)
     : platform_(platform), count_(1u), private_formats_{}, committed_{}, vsync_enabled_(false),
       scanout_addresses_{}, primaries_{}, visible_{}
-      {
-          AV_SCOPE("DisplaySources::DisplaySources");
-      }
+{
+    AV_SCOPE("DisplaySources::DisplaySources");
+}
 
 Status DisplaySources::set_count(uint32_t outputs)
 {
@@ -123,6 +125,25 @@ bool DisplaySources::visible(uint32_t source)
     AV_SCOPE("DisplaySources::visible");
     platform_.require_irql_at_most(Irql::dispatch, "DisplaySources::visible");
     return source < count_ && platform_.load_atomic(visible_[source]) != 0u;
+}
+
+void DisplaySources::report(StateWriter &writer)
+{
+    AV_SCOPE("DisplaySources::report");
+    writer.open("display_sources", 0u);
+    writer.number("count", count_);
+    writer.flag("vsync", vsync_enabled_);
+    for (uint32_t source = 0u; source < count_; source++) {
+        writer.open("source", source);
+        writer.number("format", private_formats_[source]);
+        writer.number("width", committed_[source] != nullptr ? committed_[source]->width() : 0u);
+        writer.number("height", committed_[source] != nullptr ? committed_[source]->height() : 0u);
+        writer.hex("scanout", platform_.load_atomic(scanout_addresses_[source]));
+        writer.hex("primary", platform_.load_atomic(primaries_[source]));
+        writer.flag("visible", platform_.load_atomic(visible_[source]) != 0u);
+        writer.close();
+    }
+    writer.close();
 }
 
 bool DisplaySources::invariants_hold() const

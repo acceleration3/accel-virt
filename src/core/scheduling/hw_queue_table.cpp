@@ -5,7 +5,9 @@
 #include "core/scheduling/context.hpp"
 #include "core/scheduling/context_table.hpp"
 #include "core/support/invariant_scope.hpp"
+#include "core/platform/mutex_try_guard.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 
 namespace av {
 
@@ -53,6 +55,26 @@ uint32_t HwQueueTable::live() const
 {
     AV_SCOPE("HwQueueTable::live");
     return queues_.live();
+}
+
+void HwQueueTable::report(StateWriter &writer)
+{
+    AV_SCOPE("HwQueueTable::report");
+    platform_.require_irql_at_most(Irql::apc, "HwQueueTable::report");
+    const MutexTryGuard guard(mutex_);
+    writer.open("hw_queue_table", 0u);
+    writer.flag("busy", !guard.held());
+    if (guard.held()) {
+        writer.number("live", queues_.live());
+        uint64_t index = 0u;
+        queues_.for_each([&](const HwQueue &queue) {
+            writer.open("hw_queue", index++);
+            writer.address("handle", &queue);
+            writer.address("context", &queue.context());
+            writer.close();
+        });
+    }
+    writer.close();
 }
 
 bool HwQueueTable::invariants_hold() const

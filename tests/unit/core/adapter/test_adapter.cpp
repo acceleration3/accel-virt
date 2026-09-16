@@ -35,6 +35,7 @@
 #include "core/ddi/dxgkarg_escape_record.hpp"
 #include "core/rvk/rvk_context_binding.hpp"
 #include "proto/resources/host_visible_bind_record.hpp"
+#include "proto/trace/trace_escape_record.hpp"
 #include "core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "core/ddi/dxgkarg_get_scan_line_record.hpp"
 #include "core/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
@@ -1833,6 +1834,63 @@ TEST(adapter_escape, an_escape_that_is_not_a_chunk_binding_is_not_supported)
       escape.PrivateDriverDataSize = size;
       CHECK_EQ(nt(fixture.adapter().escape(&escape)), not_supported);
   } }
+
+/* rvkinspect.exe names only the adapter: the trace escape needs no context,
+ * and its state dump is this adapter and what it holds. */
+TEST(adapter_escape, the_trace_escape_answers_the_state_of_the_adapter_without_a_context)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  std::uint8_t data[av::TraceEscapeRecord::encoded_size + 16u * 1024u] = {};
+  const av::TraceEscapeRecord request(av::TraceEscapeRecord::Kind::state, 0u, 16u * 1024u);
+  CHECK_STATUS(request.encode(data, sizeof data), av::Status::ok);
+  DxgkargEscapeRecord escape = {};
+  escape.pPrivateDriverData = data;
+  escape.PrivateDriverDataSize = sizeof data;
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
+  av::TraceEscapeRecord answer = request;
+  CHECK_STATUS(answer.accept_answer(data, sizeof data), av::Status::ok);
+  CHECK_EQ(answer.window(), answer.total());
+  char dump[16u * 1024u + 1u] = {};
+  std::memcpy(dump, data + av::TraceEscapeRecord::encoded_size, answer.window());
+  /* A started adapter with nothing created: the fixture's 8 GiB aperture, one
+   * source, and every table empty and free. */
+  const char *const expected =
+      "adapter/0 started=true present=true powering_down=false presented_fence=0"
+      " display_changed=0x0000000000000000 aperture_bytes=0x0000000200000000 host_visible=false"
+      " host_visible_base=0x0000000000000000 host_visible_bytes=0x0000000000000000 vsync_enables=0 vsync_reported=0\n"
+      "adapter/0/device_table/0 busy=false devices=0 opens=0\n"
+      "adapter/0/allocation_table/0 busy=false live=0\n"
+      "adapter/0/context_table/0 busy=false live=0\n"
+      "adapter/0/hw_queue_table/0 busy=false live=0\n"
+      "adapter/0/execution_node/0 busy=false pending=0 last_submitted=0 last_completed=0"
+      " preemption_requested=false preemption_fence=0 stopped=false progress_time=0\n"
+      "adapter/0/rvk_context_table/0 busy=false bound=0\n"
+      "adapter/0/display_sources/0 count=1 vsync=false\n"
+      "adapter/0/display_sources/0/source/0 format=0 width=0 height=0 scanout=0x0000000000000000"
+      " primary=0x0000000000000000 visible=false";
+  CHECK(std::strcmp(dump, expected) == 0);
+  /* A table another thread holds is only busy; the rest is still reported. */
+  fixture.platform().hold_elsewhere(av::LockRank::device_table);
+  CHECK_STATUS(request.encode(data, sizeof data), av::Status::ok);
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
+  std::memcpy(dump, data + av::TraceEscapeRecord::encoded_size, sizeof dump - 1u);
+  CHECK(std::strstr(dump, "\nadapter/0/device_table/0 busy=true\nadapter/0/allocation_table/0 busy=false") != nullptr);
+  fixture.platform().released_elsewhere();
+  CHECK_EQ(fixture.platform().locks_held(), 0u);
+  /* A request that is not one is refused, and the table kind answers too. */
+  const av::TraceEscapeRecord oversized(av::TraceEscapeRecord::Kind::table, 0u, 16u * 1024u + 1u);
+  CHECK_STATUS(oversized.encode(data, sizeof data), av::Status::ok);
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), invalid_parameter);
+  const av::TraceEscapeRecord table(av::TraceEscapeRecord::Kind::table, 0u, 16u * 1024u);
+  CHECK_STATUS(table.encode(data, sizeof data), av::Status::ok);
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
+  answer = table;
+  CHECK_STATUS(answer.accept_answer(data, sizeof data), av::Status::ok);
+  CHECK_EQ(answer.total(), 0u);
+  /* With nowhere to build the dump, the escape says so. */
+  CHECK_STATUS(request.encode(data, sizeof data), av::Status::ok);
+  fixture.platform().fail_allocation_at(1u);
+  CHECK_EQ(nt(fixture.adapter().escape(&escape)), 0xC0000017u); }
 
 TEST(adapter_escape, missing_or_empty_private_data_is_invalid)
 { Fixture fixture; std::uint8_t data[4] = {};

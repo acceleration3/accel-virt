@@ -14,6 +14,8 @@
 
 namespace av {
 
+class StateWriter;
+
 class InterruptNotification;
 struct ExecutionNodeProbe;
 
@@ -52,6 +54,10 @@ public:
      * and answers the fence that was executing - the last completed one when
      * nothing was queued. */
     uint32_t             abort_pending();
+
+    /* The node's fences and the packets pending on it; `busy=true` and nothing
+     * more while the DPC or a submission holds the node. DISPATCH. */
+    void report(StateWriter &writer);
 
     bool invariants_hold() const;
 

@@ -13,6 +13,8 @@
 
 namespace av {
 
+class StateWriter;
+
 class DeviceTable;
 class GpuMmuGeometry;
 struct ContextTableProbe;
@@ -28,6 +30,10 @@ public:
     [[nodiscard]] Status destroy(void *context);
     Context             *find(void *context);
     uint32_t             live() const;
+
+    /* A line for the table and one per context; `busy=true` and nothing more
+     * while another thread holds the table. */
+    void report(StateWriter &writer);
 
     bool invariants_hold() const;
 

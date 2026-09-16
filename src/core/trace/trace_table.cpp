@@ -100,6 +100,12 @@ void TraceTable::released(uint64_t lock)
     write64(layout_.slot(slot) + TraceLayout::holding_at, 0u);
 }
 
+void TraceTable::withdraw()
+{
+    region_ = nullptr;
+    layout_ = TraceLayout(uint32_t{0});
+}
+
 void TraceTable::record_crash(uint32_t code, uint64_t address)
 {
     if (region_ == nullptr || read64(TraceLayout::crashed_at) != 0u) return;

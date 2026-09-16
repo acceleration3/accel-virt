@@ -4,6 +4,8 @@
 #include "core/platform/spin_lock_guard.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
+#include "core/platform/spin_lock_try_guard.hpp"
 
 namespace av {
 
@@ -179,6 +181,33 @@ uint32_t ExecutionNode::pending()
 /* Queued fences strictly increase, lie above the last completed fence, and
  * end at the last submitted one; a packet awaiting its host has an owner to
  * finish it. */
+void ExecutionNode::report(StateWriter &writer)
+{
+    AV_SCOPE("ExecutionNode::report");
+    platform_.require_irql_at_most(Irql::dispatch, "ExecutionNode::report");
+    const SpinLockTryGuard guard(lock_);
+    writer.open("execution_node", 0u);
+    writer.flag("busy", !guard.held());
+    if (guard.held()) {
+        writer.number("pending", count_);
+        writer.number("last_submitted", last_submitted_);
+        writer.number("last_completed", last_completed_);
+        writer.flag("preemption_requested", preemption_requested_);
+        writer.number("preemption_fence", preemption_fence_);
+        writer.flag("stopped", stopped_);
+        writer.number("progress_time", progress_time_);
+        for (uint32_t index = 0u; index < count_; index++) {
+            const uint32_t slot = (head_ + index) % capacity;
+            writer.open("packet", index);
+            writer.number("fence", pending_[slot]);
+            writer.address("owner", owners_[slot]);
+            writer.number("awaited", awaited_[slot]);
+            writer.close();
+        }
+    }
+    writer.close();
+}
+
 bool ExecutionNode::invariants_hold() const
 {
     AV_SCOPE("ExecutionNode::invariants_hold");

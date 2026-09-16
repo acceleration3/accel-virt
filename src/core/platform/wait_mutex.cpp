@@ -4,7 +4,7 @@
 
 namespace av {
 
-WaitMutex::WaitMutex(Platform &platform, LockRank rank) : platform_(platform), storage_{}, rank_(rank)
+WaitMutex::WaitMutex(Platform &platform, LockRank rank) : platform_(platform), storage_{}, rank_(rank), marks_(this)
 {
     AV_SCOPE("WaitMutex::WaitMutex");
     platform_.require_irql_at_most(Irql::dispatch, "WaitMutex::WaitMutex");
@@ -15,13 +15,25 @@ void WaitMutex::acquire()
 {
     AV_SCOPE("WaitMutex::acquire");
     platform_.require_irql_at_most(Irql::passive, "WaitMutex::acquire");
+    marks_.waiting();
     platform_.acquire_wait_mutex(storage_, rank_);
+    marks_.acquired();
+}
+
+bool WaitMutex::try_acquire()
+{
+    AV_SCOPE("WaitMutex::try_acquire");
+    platform_.require_irql_at_most(Irql::passive, "WaitMutex::try_acquire");
+    if (!platform_.try_acquire_wait_mutex(storage_, rank_)) return false;
+    marks_.acquired();
+    return true;
 }
 
 void WaitMutex::release()
 {
     AV_SCOPE("WaitMutex::release");
     platform_.require_irql_at_most(Irql::passive, "WaitMutex::release");
+    marks_.released();
     platform_.release_wait_mutex(storage_, rank_);
 }
 

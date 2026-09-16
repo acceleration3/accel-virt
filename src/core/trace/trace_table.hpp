@@ -46,6 +46,11 @@ public:
     void acquired(uint64_t lock);
     void released(uint64_t lock);
 
+    /* The table stops using its region, which its owner may then release:
+     * every later call writes nothing - including the leaves of scopes still
+     * open when it was withdrawn. The region's bytes are left as they are. */
+    void withdraw();
+
     /* Once, from the thread that crashed; a later call keeps the first. */
     void record_crash(uint32_t code, uint64_t address);
 

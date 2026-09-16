@@ -11,6 +11,7 @@
 #include "core/support/status.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl.hpp"
 #include "harness/platform/mock_platform.hpp"
+#include "harness/trace/mock_trace_host.hpp"
 
 #include <cstdint>
 
@@ -34,7 +35,7 @@ private:
     /* Only their addresses reach DriverEntry, as the kernel's objects would. */
     int                       driver_object_;
     int                       registry_path_;
-    DriverImage<MockPlatform> image_;
+    DriverImage<MockPlatform, MockTraceHost> image_;
     std::int32_t              entered_;
     FakeDxgkrnl               dxgkrnl_;
     Status                    registered_;

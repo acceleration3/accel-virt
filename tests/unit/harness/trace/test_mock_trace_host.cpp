@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+#include <pthread.h>
+
 using av::MockTraceHost;
 using av::TraceHost;
 
@@ -50,3 +52,24 @@ TEST(mock_trace_host, runs_the_level_hook_once)
   static_cast<void>(mock.level());
   static_cast<void>(mock.level());
   CHECK_EQ(calls, 1); }
+
+namespace {
+
+void *key_on_this_thread(void *host)
+{
+    return reinterpret_cast<void *>(static_cast<std::uintptr_t>(static_cast<MockTraceHost *>(host)->thread_key()));
+}
+
+}  // namespace
+
+/* The full-stack rig's device workers share the process with the driver's
+ * table: another thread gets no key, and so no slot. */
+TEST(mock_trace_host, another_thread_is_given_no_key)
+{ MockTraceHost mock;
+  mock.run_as(0x77u, 7u);
+  pthread_t thread;
+  CHECK_EQ(pthread_create(&thread, nullptr, &key_on_this_thread, &mock), 0);
+  void *key = reinterpret_cast<void *>(1);
+  CHECK_EQ(pthread_join(thread, &key), 0);
+  CHECK(key == nullptr);
+  CHECK_EQ(mock.thread_key(), 0x77u); }

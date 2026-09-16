@@ -4,11 +4,15 @@
 #include "core/support/status.hpp"
 #include "harness/device/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
+#include "core/platform/lock_rank.hpp"
+#include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
 
 #include <cstdint>
+#include <cstring>
+#include <cstdio>
 
 namespace av {
 
@@ -316,3 +320,33 @@ TEST(execution_node_invariants, a_stopped_node_with_pending_packets_is_detected)
   probe.set_pending(0u, 1u);
   probe.set_count(1u);
   CHECK(!fixture.node().invariants_hold()); }
+
+TEST(execution_node_report, writes_the_fences_and_each_pending_packet_in_order)
+{ Fixture fixture;
+  int owner = 0;
+  CHECK_STATUS(fixture.node().submit(1u), Status::ok);
+  CHECK_STATUS(fixture.node().complete(fixture.notification()), Status::ok);
+  CHECK_STATUS(fixture.node().submit(4u, &owner, 9u), Status::ok);
+  CHECK_STATUS(fixture.node().submit(5u), Status::ok);
+  char bytes[512];
+  av::StateWriter writer(bytes, sizeof bytes);
+  fixture.node().report(writer);
+  char expected[512];
+  std::snprintf(expected, sizeof expected,
+                "execution_node/0 busy=false pending=2 last_submitted=5 last_completed=1"
+                " preemption_requested=false preemption_fence=0 stopped=false progress_time=0\n"
+                "execution_node/0/packet/0 fence=4 owner=0x%016llX awaited=9\n"
+                "execution_node/0/packet/1 fence=5 owner=0x0000000000000000 awaited=0",
+                static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(&owner)));
+  CHECK(std::strcmp(writer.dump(), expected) == 0);
+  CHECK(fixture.node().invariants_hold());
+  CHECK_EQ(fixture.platform().locks_held(), 0u);
+  fixture.platform().hold_elsewhere(av::LockRank::execution_node);
+  av::StateWriter busy(bytes, sizeof bytes);
+  fixture.node().report(busy);
+  CHECK(std::strcmp(busy.dump(), "execution_node/0 busy=true") == 0);
+  fixture.platform().set_irql(Irql::isr);
+  fixture.node().report(busy);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  fixture.platform().set_irql(Irql::dispatch); }

@@ -1,6 +1,7 @@
 /* Hostile argument blocks for the capability DDIs: QueryAdapterInfo, Escape and
  * CollectDbgInfo with fuzzed types and declared sizes over buffers of exactly
- * those sizes. A declared size beyond the real buffer is a dxgkrnl contract
+ * those sizes. An escape may be given the trace escape's magic and version, so
+ * the fuzzer reaches its request checks rather than stopping at the magic. A declared size beyond the real buffer is a dxgkrnl contract
  * breach no driver can detect, so sizes are clamped to what exists. Any answer
  * outside dxgkrnl's accepted statuses, a write past a buffer, or a violation
  * traps. */
@@ -8,6 +9,7 @@
 #include "core/ddi/dxgkarg_collect_dbg_info_record.hpp"
 #include "core/ddi/dxgkarg_escape_record.hpp"
 #include "core/ddi/dxgkarg_query_adapter_info_record.hpp"
+#include "proto/trace/trace_escape_record.hpp"
 #include "harness/platform/mock_platform.hpp"
 
 #include <cstddef>
@@ -71,6 +73,12 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size
             break;
         }
         case 1u: {
+            if ((selector & 0x40u) != 0u) {
+                const std::uint32_t magic = av::TraceEscapeRecord::magic;
+                std::memcpy(input, &magic, sizeof magic);
+                input[4] = 1u;
+                input[5] = 0u;
+            }
             av::DxgkargEscapeRecord escape = {};
             escape.pPrivateDriverData = null_input ? nullptr : input;
             escape.PrivateDriverDataSize = input_size;

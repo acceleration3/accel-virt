@@ -4,6 +4,7 @@
 #ifndef AV_SPIN_LOCK_HPP
 #define AV_SPIN_LOCK_HPP
 
+#include "core/platform/lock_marks.hpp"
 #include "core/platform/lock_rank.hpp"
 #include "core/platform/platform.hpp"
 
@@ -19,12 +20,15 @@ public:
 
     /* Returns the level release() must restore. */
     [[nodiscard]] Irql acquire();
+    /* The lock if it is free; `previous` is set only when it was taken. */
+    [[nodiscard]] bool try_acquire(Irql &previous);
     void release(Irql previous);
 
 private:
     Platform &platform_;
     uintptr_t word_;
     LockRank  rank_;
+    LockMarks marks_;
 };
 
 }  // namespace av

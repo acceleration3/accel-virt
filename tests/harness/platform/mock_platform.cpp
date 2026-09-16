@@ -58,6 +58,8 @@ MockPlatform::~MockPlatform()
         registry.record_failure(__FILE__, __LINE__, "%u lock(s) still held", held_count_);
     if (frame_view_count_ != 0u)
         registry.record_failure(__FILE__, __LINE__, "%u frame view(s) left mapped", frame_view_count_);
+    if (bugcheck_routine_ != nullptr)
+        registry.record_failure(__FILE__, __LINE__, "a bugcheck callback was never deregistered");
     for (const Timer &timer : timers_)
         if (timer.live) registry.record_failure(__FILE__, __LINE__, "a timer was never destroyed");
     for (std::uint32_t i = 0u; i < live_count_; i++) std::free(live_[i]);
@@ -272,8 +274,15 @@ bool MockPlatform::pop_lock(LockRank rank)
     return true;
 }
 
+void MockPlatform::on_acquire(StallCallback callback, void *context)
+{
+    acquire_callback_ = callback;
+    acquire_context_ = context;
+}
+
 Irql MockPlatform::acquire_spin_lock(std::uintptr_t &, LockRank rank)
 {
+    if (acquire_callback_ != nullptr) acquire_callback_(acquire_context_);
     const Irql previous = irql_;
     push_lock(rank, previous);
     if (irql_ < Irql::dispatch) irql_ = Irql::dispatch;
@@ -285,10 +294,18 @@ void MockPlatform::release_spin_lock(std::uintptr_t &, LockRank rank, Irql previ
     if (pop_lock(rank)) irql_ = previous;
 }
 
+bool MockPlatform::try_acquire_spin_lock(std::uintptr_t &word, LockRank rank, Irql &previous)
+{
+    if (holding_elsewhere_ && held_elsewhere_ == rank) return false;
+    previous = acquire_spin_lock(word, rank);
+    return true;
+}
+
 void MockPlatform::initialize_mutex(void *) {}
 
 void MockPlatform::acquire_mutex(void *, LockRank rank)
 {
+    if (acquire_callback_ != nullptr) acquire_callback_(acquire_context_);
     if (irql_ >= Irql::dispatch)
         record(Violation::blocking_at_dispatch, "mutex rank %u acquired at IRQL %u",
                static_cast<unsigned>(rank), static_cast<unsigned>(irql_));
@@ -301,11 +318,19 @@ void MockPlatform::release_mutex(void *, LockRank rank)
     if (pop_lock(rank)) irql_ = held_[held_count_].previous;
 }
 
+bool MockPlatform::try_acquire_mutex(void *storage, LockRank rank)
+{
+    if (holding_elsewhere_ && held_elsewhere_ == rank) return false;
+    acquire_mutex(storage, rank);
+    return true;
+}
+
 void MockPlatform::initialize_wait_mutex(void *) {}
 
 /* Blocks without raising the IRQL, so a holder may wait at PASSIVE. */
 void MockPlatform::acquire_wait_mutex(void *, LockRank rank)
 {
+    if (acquire_callback_ != nullptr) acquire_callback_(acquire_context_);
     if (irql_ >= Irql::dispatch)
         record(Violation::blocking_at_dispatch, "wait mutex rank %u acquired at IRQL %u",
                static_cast<unsigned>(rank), static_cast<unsigned>(irql_));
@@ -313,6 +338,21 @@ void MockPlatform::acquire_wait_mutex(void *, LockRank rank)
 }
 
 void MockPlatform::release_wait_mutex(void *, LockRank rank) { static_cast<void>(pop_lock(rank)); }
+
+bool MockPlatform::try_acquire_wait_mutex(void *storage, LockRank rank)
+{
+    if (holding_elsewhere_ && held_elsewhere_ == rank) return false;
+    acquire_wait_mutex(storage, rank);
+    return true;
+}
+
+void MockPlatform::hold_elsewhere(LockRank rank)
+{
+    holding_elsewhere_ = true;
+    held_elsewhere_ = rank;
+}
+
+void MockPlatform::released_elsewhere() { holding_elsewhere_ = false; }
 
 std::uint64_t MockPlatform::interrupt_time() const { return now_; }
 
@@ -441,6 +481,68 @@ void MockPlatform::log(const char *message)
         lines_[lines_used_++] = '\n';
         lines_[lines_used_] = '\0';
     }
+}
+
+void MockPlatform::log_at_bugcheck(const char *message)
+{
+    bugcheck_line_count_++;
+    if (verbose_) std::fprintf(stderr, "bugcheck: %s\n", message);
+    const std::size_t length = std::strlen(message);
+    if (bugcheck_used_ + length + 2u < log_capacity) {
+        std::memcpy(bugcheck_text_ + bugcheck_used_, message, length);
+        bugcheck_used_ += length;
+        bugcheck_text_[bugcheck_used_++] = '\n';
+        bugcheck_text_[bugcheck_used_] = '\0';
+    }
+}
+
+/* The kernel keeps one record per registration; a second without a
+ * deregistration is a record inserted twice, which it bugchecks on. */
+bool MockPlatform::register_bugcheck(void *buffer, std::size_t bytes, BugcheckRoutine routine)
+{
+    if (irql_ != Irql::passive)
+        record(Violation::irql_ceiling, "register_bugcheck at IRQL %u", static_cast<unsigned>(irql_));
+    if (refuse_bugcheck_) {
+        refuse_bugcheck_ = false;
+        return false;
+    }
+    if (bugcheck_routine_ != nullptr) {
+        std::fprintf(stderr, "\n    bugcheck callback registered twice\n");
+        std::abort();
+    }
+    bugcheck_buffer_ = buffer;
+    bugcheck_bytes_ = bytes;
+    bugcheck_routine_ = routine;
+    return true;
+}
+
+void MockPlatform::deregister_bugcheck()
+{
+    bugcheck_buffer_ = nullptr;
+    bugcheck_bytes_ = 0u;
+    bugcheck_routine_ = nullptr;
+}
+
+void MockPlatform::refuse_bugcheck_registration() { refuse_bugcheck_ = true; }
+
+bool MockPlatform::bugcheck()
+{
+    if (bugcheck_routine_ == nullptr) return false;
+    const Irql before = irql_;
+    irql_ = Irql::isr;
+    bugcheck_routine_(bugcheck_buffer_, static_cast<std::uint32_t>(bugcheck_bytes_));
+    irql_ = before;
+    return true;
+}
+
+bool          MockPlatform::bugcheck_registered() const { return bugcheck_routine_ != nullptr; }
+const void   *MockPlatform::bugcheck_buffer() const { return bugcheck_buffer_; }
+std::size_t   MockPlatform::bugcheck_bytes() const { return bugcheck_bytes_; }
+std::uint32_t MockPlatform::bugcheck_lines() const { return bugcheck_line_count_; }
+
+bool MockPlatform::bugcheck_line(const char *text) const
+{
+    return std::strstr(bugcheck_text_, text) != nullptr;
 }
 
 std::int32_t MockPlatform::register_miniport(void *driver_object, void *registry_path, const DdiTable &table)

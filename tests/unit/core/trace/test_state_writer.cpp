@@ -2,6 +2,7 @@
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 
+#include <cstdint>
 #include <cstring>
 
 using av::StateWriter;
@@ -61,6 +62,14 @@ TEST(state_writer, writes_one_line_per_object_under_its_path)
   CHECK(std::strcmp(writer.dump(), expected) == 0);
   CHECK_EQ(writer.length(), std::strlen(expected));
   CHECK(!writer.truncated()); }
+
+TEST(state_writer, an_address_is_written_as_its_value_in_hex)
+{ char bytes[64];
+  StateWriter writer(bytes, sizeof bytes);
+  writer.open("device", 1u);
+  writer.address("handle", reinterpret_cast<const void *>(static_cast<std::uintptr_t>(0xFFFF800012345678ull)));
+  writer.address("none", nullptr);
+  CHECK(std::strcmp(writer.dump(), "device/1 handle=0xFFFF800012345678 none=0x0000000000000000") == 0); }
 
 TEST(state_writer, names_nothing_as_a_question_mark_and_an_empty_value)
 { char bytes[128];

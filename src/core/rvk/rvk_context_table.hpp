@@ -30,6 +30,8 @@
 
 namespace av {
 
+class StateWriter;
+
 class Allocation;
 class AllocationTable;
 class CapsetInfo;
@@ -97,6 +99,10 @@ public:
      * is taken; the device's refusal otherwise. Nothing is bound on failure. */
     [[nodiscard]] Status bind_chunk(void *context, HostVisibleBindRecord &record, VirtioGpuDevice &device);
     uint32_t             bound() const;
+
+    /* One line per live rvk context and its bound chunks; `busy=true` and
+     * nothing more while a submission or the DPC holds the slots. */
+    void report(StateWriter &writer);
 
     bool invariants_hold() const;
 

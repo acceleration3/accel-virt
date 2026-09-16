@@ -99,6 +99,25 @@ a root lock another thread holds. `fuzz_command_line` and `fuzz_escape_reader`
 feed the two readers of foreign bytes. The Windows shims in `src/um/trace/` and
 `src/um/inspect/` only translate and are proven by the guest run.
 
+### The trace tracker in the driver
+
+`DriverTrace` and `DriverImage` run over `MockPlatform` and `MockTraceHost`:
+the table laid out before the miniport, the address line logged, the bugcheck
+routine registered and run through `MockPlatform::bugcheck`, whose lines
+(`log_at_bugcheck`) a test reads apart from the ordinary log; an allocation
+that fails, a registration the kernel refuses, a table overwritten before the
+bugcheck. The lock marks are read back from a bound table while the lock is
+being acquired (`MockPlatform::on_acquire`), and every `try_acquire` is
+refused by `MockPlatform::hold_elsewhere(rank)`, which is also how each
+table's report is shown writing only `busy=true`. `TraceEscape` is paged the
+way `rvkinspect.exe` pages it and reassembled; `Adapter::escape` answers the
+whole dump of a started adapter byte for byte; `fuzz_adapter_info` can give an
+escape the trace magic.
+
+`MockTraceHost` models the one thread that made it: every other thread gets no
+key and so no slot. That keeps the full-stack rig's device workers - which
+share the process, and so the driver's bound table - from racing its slots.
+
 ### The mock platform
 
 `Platform` is an abstract base with exactly two implementations — that is what

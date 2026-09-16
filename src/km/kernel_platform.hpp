@@ -30,12 +30,15 @@ public:
     void     require_irql_at_most(Irql ceiling, const char *function) override;
     Irql     acquire_spin_lock(uintptr_t &word, LockRank rank) override;
     void     release_spin_lock(uintptr_t &word, LockRank rank, Irql previous) override;
+    bool     try_acquire_spin_lock(uintptr_t &word, LockRank rank, Irql &previous) override;
     void     initialize_mutex(void *storage) override;
     void     acquire_mutex(void *storage, LockRank rank) override;
     void     release_mutex(void *storage, LockRank rank) override;
+    bool     try_acquire_mutex(void *storage, LockRank rank) override;
     void     initialize_wait_mutex(void *storage) override;
     void     acquire_wait_mutex(void *storage, LockRank rank) override;
     void     release_wait_mutex(void *storage, LockRank rank) override;
+    bool     try_acquire_wait_mutex(void *storage, LockRank rank) override;
     uint64_t interrupt_time() const override;
     uint64_t performance_counter(uint64_t &frequency) const override;
     void     store_atomic(uint64_t &target, uint64_t value) override;
@@ -53,6 +56,9 @@ public:
     void     write_register_u32(void *address, uint32_t value) override;
     void     write_register_u64(void *address, uint64_t value) override;
     void     log(const char *message) override;
+    void     log_at_bugcheck(const char *message) override;
+    bool     register_bugcheck(void *buffer, size_t bytes, BugcheckRoutine routine) override;
+    void     deregister_bugcheck() override;
     void     report_broken_invariant(const char *what, const char *function) override;
     int32_t  register_miniport(void *driver_object, void *registry_path,
                                const DdiTable &table) override;
@@ -70,6 +76,9 @@ private:
      * which feature 037's guest log showed. Not the core SpinLock: this object
      * implements that contract, so its own logging cannot route through it. */
     KSPIN_LOCK log_lock_;
+    /* The trace table's bugcheck registration (docs/trace.md): non-paged, as
+     * the kernel keeps it on its list until it is deregistered. */
+    KBUGCHECK_CALLBACK_RECORD bugcheck_record_;
 };
 
 }  // namespace av

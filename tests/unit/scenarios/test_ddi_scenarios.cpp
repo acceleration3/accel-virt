@@ -51,6 +51,7 @@
 #include "harness/dxgkrnl/fake_handle_table.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
+#include "harness/trace/mock_trace_host.hpp"
 #include "harness/vidmm/fake_gpu_mmu.hpp"
 #include "harness/vidmm/fake_vidmm.hpp"
 #include "harness/vidmm/gpu_mmu_rule.hpp"
@@ -95,7 +96,9 @@ std::uint32_t nt(std::int32_t status) { return static_cast<std::uint32_t>(status
  * leaves the image the way the kernel does when the driver is unloaded. */
 class LoadedDriver {
 public:
-    LoadedDriver() : entered_(image_.enter(&driver_object, &registry_path)) {}
+    LoadedDriver()
+        : entered_(image_.enter(&driver_object, &registry_path, av::ImageRange(0u, 0u), nullptr)),
+          loaded_allocations_(image_.platform().live_allocations()) {}
     ~LoadedDriver()
     {
         reinterpret_cast<void (*)()>(table().routine(DdiSlot::DxgkDdiUnload))();
@@ -103,12 +106,15 @@ public:
     }
 
     int32_t         entered() const { return entered_; }
+    /* What a loaded driver holds before any adapter: its trace table. */
+    std::uint32_t   loaded_allocations() const { return loaded_allocations_; }
     MockPlatform   &platform() { return image_.platform(); }
     const DdiTable &table() { return *image_.platform().registered_table(); }
 
 private:
-    DriverImage<MockPlatform> image_;
-    int32_t                   entered_;
+    DriverImage<MockPlatform, av::MockTraceHost> image_;
+    int32_t                                      entered_;
+    std::uint32_t                                loaded_allocations_;
 };
 
 /* The display info a host with one 1280x800 scanout answers. */
@@ -279,7 +285,7 @@ TEST(ddi_scenario, the_recorded_bring_up_and_teardown)
     CHECK_EQ(device.function().common().status(), 0u);
     CHECK_EQ(device.dxgkrnl().live_mappings(), 0u);
     CHECK_EQ(device.fdo().remove_device(), 0); }
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 TEST(ddi_scenario, stop_device_twice)
@@ -314,7 +320,7 @@ TEST(ddi_scenario, fifty_stop_and_start_cycles_leave_nothing_behind)
   CHECK_EQ(device.fdo().stop_device(), 0);
   CHECK_EQ(device.dxgkrnl().live_mappings(), 0u);
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 TEST(ddi_scenario, remove_device_without_stop_device)
@@ -327,7 +333,7 @@ TEST(ddi_scenario, remove_device_without_stop_device)
   CHECK_EQ(remove, 0);
   CHECK_EQ(device.dxgkrnl().live_mappings(), 0u);
   CHECK_EQ(device.function().common().status(), 0u);
-  CHECK_EQ(driver.platform().live_allocations(), 0u); }
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations()); }
 
 TEST(ddi_scenario, an_interrupt_before_start_device_finished)
 { LoadedDriver driver;
@@ -346,7 +352,7 @@ TEST(ddi_scenario, a_failed_start_is_stopped_then_removed)
   CHECK(!device.fdo().started());
   CHECK_EQ(device.dxgkrnl().live_mappings(), 0u);
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u); }
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations()); }
 
 TEST(ddi_scenario, reset_device_at_bugcheck_then_teardown)
 { LoadedDriver driver;
@@ -388,8 +394,9 @@ TEST(ddi_scenario, add_device_past_the_adapter_ceiling_is_no_memory)
   for (std::uint32_t i = 0u; i < 8u; i++) CHECK_EQ(fdos[i].add_device(), 0);
   CHECK_EQ(nt(fdos[8].add_device()), no_memory);
   CHECK(fdos[8].context() == nullptr);
-  /* DriverEntry, a line for each adapter added, and the refusal naming why. */
-  CHECK_EQ(driver.platform().logged(), 10u);
+  /* DriverEntry, the trace table, a line for each adapter added, and the
+   * refusal naming why. */
+  CHECK_EQ(driver.platform().logged(), 11u);
   CHECK(std::strstr(driver.platform().last_log(), "no free adapter slot") != nullptr); }
 
 /* ---- Capability reporting (feature 007) ------------------------------------ */
@@ -441,7 +448,7 @@ TEST(ddi_scenario, a_refused_capability_fails_start_and_stops_the_device)
   CHECK_EQ(function.common().status(), 0u);
   CHECK_EQ(dxgkrnl.live_mappings(), 0u);
   CHECK_EQ(fdo.remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u); }
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations()); }
 
 TEST(ddi_scenario, escape_and_debug_collection_through_the_table)
 { LoadedDriver driver;
@@ -917,7 +924,7 @@ TEST(ddi_scenario, a_primary_lives_from_standard_allocation_to_destruction)
     CHECK_EQ(runtime.destroy_primary(), 0);
     CHECK_EQ(runtime.destroy_device(), 0); }
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 TEST(ddi_scenario, destroy_device_with_an_open_then_the_allocation)
@@ -933,7 +940,7 @@ TEST(ddi_scenario, destroy_device_with_an_open_then_the_allocation)
     CHECK_EQ(runtime.destroy_device(), 0);
     CHECK_EQ(runtime.destroy_primary(), 0); }
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u); }
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations()); }
 
 TEST(ddi_scenario, remove_device_with_devices_and_allocations_outstanding)
 { LoadedDriver driver;
@@ -945,7 +952,7 @@ TEST(ddi_scenario, remove_device_with_devices_and_allocations_outstanding)
     CHECK_EQ(runtime.create_device(), 0);
     CHECK_EQ(runtime.open(), 0);
     CHECK_EQ(device.fdo().remove_device(), 0); }
-  CHECK_EQ(driver.platform().live_allocations(), 0u); }
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations()); }
 
 /* ---- Submission (feature 009) ------------------------------------------------- */
 
@@ -972,7 +979,7 @@ TEST(ddi_scenario, render_patch_submit_and_three_fences_complete_through_the_dpc
     CHECK_EQ(fence, 3u);
     CHECK_EQ(device.dxgkrnl().dpc_notifications(), 1u); }
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 TEST(ddi_scenario, a_preemption_is_reported_after_what_was_pending_and_again_with_nothing_pending)
@@ -1034,7 +1041,7 @@ TEST(ddi_scenario, a_timeout_is_recovered_from_twice)
     CHECK_EQ(vidsch.query_current_fence(fence), 0);
     CHECK_EQ(fence, 4u); }
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 /* ---- Modes (feature 011) --------------------------------------------------- */
@@ -1071,7 +1078,7 @@ TEST(ddi_scenario, a_mode_change_from_edid_to_commit)
     CHECK_EQ(dmm.control_vsync(false), 0);
     CHECK_EQ(dmm.commit(vidpn, 2u), 0); }
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 TEST(ddi_scenario, a_second_path_is_refused_and_a_mode_off_the_list_is_never_offered)
@@ -1134,7 +1141,7 @@ TEST(ddi_scenario, a_primary_scans_out_at_vsync_while_presents_complete)
   driver.platform().run_timers(frame * 4u);
   CHECK_EQ(device.dxgkrnl().interrupts(), reported);
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 /* ---- Cursor and the legacy surface (feature 013) ------------------------------ */
@@ -1193,7 +1200,7 @@ TEST(ddi_scenario, the_pointer_reaches_the_cursor_queue_and_the_legacy_surface_d
   CHECK_EQ(nt(reinterpret_cast<std::int32_t (*)(void *)>(table.routine(DdiSlot::DxgkDdiDestroyOverlay))(nullptr)),
            not_supported);
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 /* ---- WDDM 1.1 (feature 014) ---------------------------------------------------- */
@@ -1251,7 +1258,7 @@ TEST(ddi_scenario, an_engine_reset_then_the_device_disappears)
   CHECK_EQ(device.fdo().surprise_removal(), 0);
   CHECK_EQ(device.fdo().interrupt(1u), 0u);
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 /* ---- WDDM 1.3 (feature 016) ---------------------------------------------------- */
@@ -1359,7 +1366,7 @@ TEST(ddi_scenario, a_gpu_mmu_adapter_pages_submits_by_virtual_address_and_flips_
   CHECK_EQ(device.dxgkrnl().interrupts(), reported + 1u);
   CHECK_EQ(device.dxgkrnl().interrupt(reported).Argument3, 4u);
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 /* ---- WDDM 2.1 (feature 018) ----------------------------------------------------- */
@@ -1388,7 +1395,7 @@ TEST(ddi_scenario, start_declines_hdr_priority_and_the_monitor_link_is_plain)
   CHECK_EQ(stricter.update_link_info(0u, 0u), 0);
   CHECK_EQ(stricter.update_link_info(1u, 0u), static_cast<std::int32_t>(0xC000000Du));
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 /* ---- WDDM 2.2 (feature 019) ----------------------------------------------------- */
@@ -1429,7 +1436,7 @@ TEST(ddi_scenario, hardware_queues_submit_complete_through_progress_fences_and_r
     CHECK_EQ(vidsch.fence_signals(), 1u);
     CHECK_EQ(queue.submit(0x10000u, 0u), 0); }
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 /* ---- WDDM 2.3 - 2.7 (feature 020) ----------------------------------------------- */
@@ -1465,7 +1472,7 @@ TEST(ddi_scenario, a_wddm_2_3_adapter_starts_and_scans_out_with_the_later_slots_
   CHECK_EQ(dmm.show_primary(nullptr, 0), 0);
   CHECK_EQ(dmm.control_vsync(false), 0);
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 /* ---- WDDM 2.4 (feature 021) ----------------------------------------------------- */
@@ -1519,7 +1526,7 @@ TEST(ddi_scenario, a_system_memory_primary_flips_immediately_and_gpu_va_presents
   CHECK_EQ(reinterpret_cast<std::int32_t (*)(void *, const av::DxgkargResumeHwEngineRecord *)>(
                table.routine(DdiSlot::DxgkDdiResumeHwEngine))(adapter, &resume), 0);
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 /* ---- WDDM 2.9 (feature 022) ----------------------------------------------------- */
@@ -1568,7 +1575,7 @@ TEST(ddi_scenario, a_wddm_3_0_adapter_allocates_a_primary_with_the_later_slots_n
     CHECK_EQ(runtime.flags2(), 0u);   /* CreateDriverAllocations refuses Flags2 above 0x3f from 3.0 */
     CHECK_EQ(runtime.destroy_primary(), 0); }
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 /* ---- WDDM 3.1 (feature 024) ----------------------------------------------------- */
@@ -1593,7 +1600,7 @@ TEST(ddi_scenario, a_wddm_3_1_adapter_starts_without_native_fences_or_doorbells)
     av::FakeHwQueue queue(driver.platform(), table, device.fdo().context(), vidsch.context());
     CHECK_EQ(queue.create(0u), 0); }
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 /* ---- WDDM 3.2 (feature 025) ----------------------------------------------------- */
@@ -1619,7 +1626,7 @@ TEST(ddi_scenario, a_wddm_3_2_display_adapter_starts_with_the_3_2_slots_null)
   { av::FakeVidPn vidpn;
     CHECK_EQ(dmm.set_mode(vidpn, 1280u, 800u), 0); }
   CHECK_EQ(device.fdo().remove_device(), 0);
-  CHECK_EQ(driver.platform().live_allocations(), 0u);
+  CHECK_EQ(driver.platform().live_allocations(), driver.loaded_allocations());
   CHECK_EQ(driver.platform().unclaimed_violations(), 0u); }
 
 /* ---- Several outputs (feature 038, US4) ------------------------------------- */

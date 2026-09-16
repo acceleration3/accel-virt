@@ -28,6 +28,8 @@ public:
     void close();
     void number(const char *key, uint64_t value);
     void hex(const char *key, uint64_t value);
+    /* An object's address, which is the handle dxgkrnl or a loader holds. */
+    void address(const char *key, const void *object);
     void text(const char *key, const char *value);
     void flag(const char *key, bool value);
 

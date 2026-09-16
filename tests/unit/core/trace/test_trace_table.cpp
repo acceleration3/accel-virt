@@ -430,3 +430,23 @@ TEST(trace_table_invariants, fail_for_an_unlaid_table_that_claims_slots)
   CHECK(table.invariants_hold());
   av::TraceTableProbe::claim_slots(table);
   CHECK(!table.invariants_hold()); }
+
+/* A table withdrawn while a scope is open writes nothing when that scope
+ * leaves, so its owner may release the region first. */
+TEST(trace_table_withdraw, later_calls_write_nothing_to_the_region)
+{ TableFixture fixture;
+  fixture.host.run_as(0x10u, 1u);
+  const std::uint32_t slot = fixture.table.enter(outer);
+  fixture.table.withdraw();
+  CHECK(fixture.table.invariants_hold());
+  CHECK(fixture.table.region() == nullptr);
+  CHECK_EQ(fixture.table.bytes(), 0u);
+  std::memset(fixture.region.bytes, 0xEE, sizeof fixture.region.bytes);
+  fixture.table.leave(slot);
+  CHECK_EQ(fixture.table.enter(inner), TraceTable::no_slot);
+  fixture.table.waiting(1u);
+  fixture.table.acquired(1u);
+  fixture.table.released(1u);
+  fixture.table.record_crash(1u, 1u);
+  for (std::size_t byte = 0u; byte < sizeof fixture.region.bytes; byte++) CHECK_EQ(fixture.region.bytes[byte], 0xEEu);
+  CHECK(fixture.table.invariants_hold()); }

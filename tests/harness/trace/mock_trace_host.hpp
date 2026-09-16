@@ -1,13 +1,19 @@
 /* A TraceHost whose thread, clock and level the test sets, whose Nth swap
  * fails as if another thread got there first, and which can run a hook when a
  * table asks for the level - the moment inside a push an interrupt on the same
- * thread would arrive. */
+ * thread would arrive.
+ *
+ * It models the one thread that constructed it, as MockPlatform does: any
+ * other thread - a device worker of the full-stack rig - is given key 0, which
+ * a table takes no slot for, so the plain swap below is never raced. */
 #ifndef AV_MOCK_TRACE_HOST_HPP
 #define AV_MOCK_TRACE_HOST_HPP
 
 #include "core/trace/trace_host.hpp"
 
 #include <cstdint>
+
+#include <pthread.h>
 
 namespace av {
 
@@ -42,6 +48,7 @@ private:
     std::uint32_t exchanges_;
     std::uint32_t fail_at_;
     bool          failing_;
+    pthread_t     owner_;
     mutable Hook  hook_;
     mutable void *hook_context_;
 };

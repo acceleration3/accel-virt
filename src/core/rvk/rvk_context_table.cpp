@@ -13,6 +13,8 @@
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
+#include "core/platform/spin_lock_try_guard.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/resources/allocation_kind.hpp"
@@ -339,6 +341,43 @@ void RvkContextTable::log_binding(uint32_t slot, uint32_t message, Status status
 
 /* A live slot is bound and set up on both of its pages; a bound slot names
  * every allocation it runs on; a free slot holds nothing. */
+void RvkContextTable::report(StateWriter &writer)
+{
+    AV_SCOPE("RvkContextTable::report");
+    platform_.require_irql_at_most(Irql::dispatch, "RvkContextTable::report");
+    const SpinLockTryGuard guard(lock_);
+    writer.open("rvk_context_table", 0u);
+    writer.flag("busy", !guard.held());
+    if (guard.held()) {
+        writer.number("bound", bound());
+        for (uint32_t slot = 0u; slot < max_contexts; slot++) {
+            if (contexts_[slot] == nullptr || !bindings_[slot].constructed()) continue;
+            const RvkContextBinding &binding = bindings_[slot].object();
+            writer.open("rvk_context", slot);
+            writer.address("handle", contexts_[slot]);
+            writer.number("doorbell", slot);
+            writer.number("ring_order", orders_[slot]);
+            writer.address("ring", uses_[slot][ring_role]);
+            writer.address("fence_page", uses_[slot][fence_role]);
+            writer.address("reply", uses_[slot][reply_role]);
+            writer.number("state", static_cast<uint8_t>(binding.state()));
+            writer.number("context_id", binding.context_id());
+            writer.number("completed", binding.completed());
+            writer.flag("live", live_[slot]);
+            writer.flag("lost", lost(slot));
+            for (uint32_t chunk = 0u; chunk < RvkContextBinding::chunk_slots; chunk++) {
+                if (!chunks_[slot][chunk].bound()) continue;
+                writer.open("chunk", chunk);
+                writer.number("resource", chunks_[slot][chunk].resource_id());
+                writer.address("allocation", chunks_[slot][chunk].allocation());
+                writer.close();
+            }
+            writer.close();
+        }
+    }
+    writer.close();
+}
+
 bool RvkContextTable::invariants_hold() const
 {
     AV_SCOPE("RvkContextTable::invariants_hold");

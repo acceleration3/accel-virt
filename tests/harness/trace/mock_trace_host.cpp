@@ -4,7 +4,7 @@ namespace av {
 
 MockTraceHost::MockTraceHost()
     : key_(0x1000u), number_(100u), now_(1u), level_(0u), exchanges_(0u), fail_at_(0u), failing_(false),
-      hook_(nullptr), hook_context_(nullptr)
+      owner_(pthread_self()), hook_(nullptr), hook_context_(nullptr)
 {}
 
 void MockTraceHost::run_as(std::uint64_t key, std::uint32_t number)
@@ -25,7 +25,10 @@ void MockTraceHost::on_next_level(Hook hook, void *context)
 }
 
 std::uint32_t MockTraceHost::exchanges() const { return exchanges_; }
-std::uint64_t MockTraceHost::thread_key() const { return key_; }
+std::uint64_t MockTraceHost::thread_key() const
+{
+    return pthread_equal(pthread_self(), owner_) != 0 ? key_ : 0u;
+}
 std::uint32_t MockTraceHost::thread_number() const { return number_; }
 std::uint64_t MockTraceHost::clock() const { return now_; }
 

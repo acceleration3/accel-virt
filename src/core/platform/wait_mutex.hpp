@@ -5,6 +5,7 @@
 #ifndef AV_WAIT_MUTEX_HPP
 #define AV_WAIT_MUTEX_HPP
 
+#include "core/platform/lock_marks.hpp"
 #include "core/platform/lock_rank.hpp"
 #include "core/platform/platform.hpp"
 
@@ -23,12 +24,15 @@ public:
     WaitMutex &operator=(const WaitMutex &) = delete;
 
     void acquire();
+    /* The lock if it is free, without waiting; whether it was taken. */
+    [[nodiscard]] bool try_acquire();
     void release();
 
 private:
     Platform &platform_;
     alignas(8) unsigned char storage_[storage_bytes];
     LockRank  rank_;
+    LockMarks marks_;
 };
 
 }  // namespace av

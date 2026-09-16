@@ -9,7 +9,9 @@
 #include "core/platform/mutex_guard.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/support/scope_exit.hpp"
+#include "core/platform/mutex_try_guard.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 
 namespace av {
 
@@ -135,6 +137,29 @@ uint32_t AllocationTable::live() const
 {
     AV_SCOPE("AllocationTable::live");
     return allocations_.live();
+}
+
+void AllocationTable::report(StateWriter &writer)
+{
+    AV_SCOPE("AllocationTable::report");
+    platform_.require_irql_at_most(Irql::apc, "AllocationTable::report");
+    const MutexTryGuard guard(mutex_);
+    writer.open("allocation_table", 0u);
+    writer.flag("busy", !guard.held());
+    if (guard.held()) {
+        writer.number("live", allocations_.live());
+        uint64_t index = 0u;
+        allocations_.for_each([&](const Allocation &allocation) {
+            writer.open("allocation", index++);
+            writer.address("handle", &allocation);
+            writer.number("kind", static_cast<uint16_t>(allocation.descriptor().kind()));
+            writer.number("size", allocation.size());
+            writer.number("opens", allocation.opens());
+            writer.flag("cpu_visible", allocation.descriptor().cpu_visible());
+            writer.close();
+        });
+    }
+    writer.close();
 }
 
 bool AllocationTable::invariants_hold() const

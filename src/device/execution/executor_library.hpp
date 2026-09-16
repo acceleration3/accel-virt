@@ -23,8 +23,10 @@ public:
     bool                 available() const;
     /* The sub-APIs the library offers that the protocol knows; 0 without one. */
     uint32_t             sub_apis() const;
-    /* Only on an available library. */
+    /* Null without a library: a context's worker asks whether or not one was
+     * loaded, and the device core's own tests bind contexts with none. */
     RvkExecutor         *create(SubApi api, const uint8_t *gpu_uuid) const;
+    /* Only of an executor create answered. */
     void                 destroy(RvkExecutor *executor) const;
     uint32_t             execute(RvkExecutor *executor, uint32_t command_id, const uint8_t *payload, size_t size,
                                  uint8_t *reply, size_t reply_capacity, size_t &reply_size) const;

@@ -11,7 +11,9 @@
 #include "core/platform/mutex_guard.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/support/scope_exit.hpp"
+#include "core/platform/mutex_try_guard.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 
 namespace av {
 
@@ -165,6 +167,35 @@ uint32_t DeviceTable::opens() const
 }
 
 /* Every open joins a live device to an allocation that counts it. */
+void DeviceTable::report(StateWriter &writer)
+{
+    AV_SCOPE("DeviceTable::report");
+    platform_.require_irql_at_most(Irql::apc, "DeviceTable::report");
+    const MutexTryGuard guard(mutex_);
+    writer.open("device_table", 0u);
+    writer.flag("busy", !guard.held());
+    if (guard.held()) {
+        writer.number("devices", devices_.live());
+        writer.number("opens", opens_.live());
+        uint64_t index = 0u;
+        devices_.for_each([&](const Device &device) {
+            writer.open("device", index++);
+            writer.address("handle", &device);
+            writer.address("runtime", device.runtime_handle());
+            writer.hex("flags", device.flags());
+            uint64_t open = 0u;
+            opens_.for_each([&](const DeviceAllocation &opened) {
+                if (&opened.device() != &device) return;
+                writer.open("open", open++);
+                writer.address("allocation", &opened.allocation());
+                writer.close();
+            });
+            writer.close();
+        });
+    }
+    writer.close();
+}
+
 bool DeviceTable::invariants_hold() const
 {
     AV_SCOPE("DeviceTable::invariants_hold");

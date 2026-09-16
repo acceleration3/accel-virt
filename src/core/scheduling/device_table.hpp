@@ -15,6 +15,8 @@
 
 namespace av {
 
+class StateWriter;
+
 class Adapter;
 class AllocationTable;
 struct DeviceTableProbe;
@@ -38,6 +40,10 @@ public:
     Device              *find(void *device);
     uint32_t             devices() const;
     uint32_t             opens() const;
+
+    /* A line for the table and one per device with the allocations it has
+     * open; `busy=true` and nothing more while another thread holds the table. */
+    void report(StateWriter &writer);
 
     bool invariants_hold() const;
 

@@ -153,8 +153,71 @@ table.
 - `rvkinspect.exe` is `InspectProgram` (`src/guest/inspect/`, unit tested over
   `MockInspectHost`, `MockKmt` and `ScriptedKernelTrace`) over
   `WindowsInspectHost`. Its kernel escapes name the adapter alone (no device,
-  no context); the driver's side of them is not built yet, so until it is,
-  `kernel-trace` and `kernel-state` answer a kind 3 file.
+  no context), which the driver answers (below).
+- `WindowsTraceHost` and `InterruptClock` open no scope of their own: every
+  scope's entry calls them, and a scope there recursed without end once a
+  table was bound. `tools/scope_marks.py` exempts every `*_trace_host.*` file
+  and `src/um/trace/interrupt_clock.cpp`.
+
+## As built: the driver
+
+- `DriverImage<KernelPlatform, KernelTraceHost>::enter` starts `DriverTrace`
+  (`src/core/miniport/`) right after the platform and before the miniport, so
+  every DDI's scopes land in the table: 64 slots in `allocate_contiguous`
+  memory, bound for `AV_SCOPE`, and the line
+  `rvkgpu: trace table at physical 0x<16 hex digits> bytes 52832` logged. The
+  table is registered with `KeRegisterBugCheckCallback` (component
+  `rvkgpu-trace`, the table as the buffer, so a dump carries its bytes), and
+  the routine - a one-line function in `src/km/driver_entry.cpp` - writes
+  `TraceText`'s lines, prefixed `rvkgpu: `, straight to the debug port
+  (`Platform::log_at_bugcheck`: no lock, no `DbgPrint`). Names are read only
+  inside the driver's image, which `DriverEntry` takes from the driver
+  object's `DriverStart` and `DriverSize`.
+- A table that cannot be allocated leaves tracing off and the driver loading
+  (`rvkgpu: trace table not allocated; tracing is off`); a refused
+  registration is logged and the table stays bound.
+- `leave()` destroys the miniport first, whose teardown still opens scopes,
+  then `DriverTrace::stop`: unbind, `TraceTable::withdraw` (the scopes still
+  open - `stop`'s own and its callers' - then write nothing), deregister,
+  release.
+- `KernelTraceHost` (`src/km/`): the `KTHREAD` address without its top bit as
+  the key, `PsGetCurrentThreadId` as the number, `KeQueryInterruptTime`,
+  `KeGetCurrentIrql`, `InterlockedCompareExchange64` - all legal at any IRQL.
+- `SpinLock`, `Mutex` and `WaitMutex` mark the table through `LockMarks`:
+  `waiting` before the platform's acquire, `acquired` after, `released` before
+  the release. Each gained `try_acquire` (`KeTryToAcquireSpinLockAtDpcLevel`
+  after raising to DISPATCH, `ExTryToAcquireFastMutex`, `KeWaitForSingleObject`
+  with a zero timeout) and a `*TryGuard`.
+- `Adapter::escape` tells the two escapes apart by their first four bytes: the
+  host-visible bind still needs a context; `RVKD` goes to `TraceEscape`, which
+  answers with only the adapter named. A table request copies the window from
+  the bound table (total 0 when none is bound); a state request builds the
+  adapter's dump for the call in 256 KiB of **non-paged** memory - it is written
+  while the reporters hold spin locks - and copies the window. A malformed
+  request is `STATUS_INVALID_PARAMETER` with nothing written, a dump with no
+  memory `STATUS_NO_MEMORY`.
+- The dump (`Adapter::report`), never waiting for a lock - a table another
+  thread holds is its line with `busy=true`:
+  `adapter/0 started= present= powering_down= presented_fence= display_changed=
+  aperture_bytes= host_visible= host_visible_base= host_visible_bytes=
+  vsync_enables= vsync_reported=`, then
+  `device_table/0` (`device/<i> handle= runtime= flags=`, `open/<j> allocation=`),
+  `allocation_table/0` (`allocation/<i> handle= kind= size= opens= cpu_visible=`),
+  `context_table/0` (`context/<i> handle= device= node= flags= rvk=`),
+  `hw_queue_table/0` (`hw_queue/<i> handle= context=`),
+  `execution_node/0 pending= last_submitted= last_completed= preemption_requested=
+  preemption_fence= stopped= progress_time=` (`packet/<i> fence= owner= awaited=`),
+  `rvk_context_table/0 bound=` (`rvk_context/<slot> handle= doorbell= ring_order=
+  ring= fence_page= reply= state= context_id= completed= live= lost=`,
+  `chunk/<k> resource= allocation=`; a context being set up is counted and not
+  listed), and `display_sources/0 count= vsync=` (`source/<i> format= width=
+  height= scanout= primary= visible=`). Handles are the objects' addresses,
+  which are what dxgkrnl holds.
+- **No size cap on the escape.** `NtGdiDdDDIEscape` (dxgkrnl.sys 10.0.26100,
+  @140440d60) copies driver-private data of any `PrivateDriverDataSize` into a
+  buffer of that size - on its stack up to 0x200 bytes, from pool above - and
+  refuses only when that allocation fails (`STATUS_NO_MEMORY`), so
+  rvkinspect's 16 KiB windows need no smaller page.
 
 ## `rvkinspect.exe`
 

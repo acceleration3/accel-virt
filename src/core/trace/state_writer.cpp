@@ -42,6 +42,11 @@ void StateWriter::hex(const char *name, uint64_t value)
     out_.append_hex(value, hex_digits);
 }
 
+void StateWriter::address(const char *name, const void *object)
+{
+    hex(name, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(object)));
+}
+
 void StateWriter::text(const char *name, const char *value)
 {
     key(name);

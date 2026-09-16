@@ -5,7 +5,7 @@
 namespace av {
 
 RegisteredDriver::RegisteredDriver()
-    : driver_object_(0), registry_path_(0), image_(), entered_(image_.enter(&driver_object_, &registry_path_)),
+    : driver_object_(0), registry_path_(0), image_(), entered_(image_.enter(&driver_object_, &registry_path_, ImageRange(0u, 0u), nullptr)),
       dxgkrnl_(), registered_(entered_ >= 0 ? dxgkrnl_.initialize(&table()) : Status::invalid_state) {}
 
 /* A DriverEntry that failed has already left the image. */

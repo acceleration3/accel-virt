@@ -9,12 +9,15 @@
 #include "core/memory/memory_segments.hpp"
 #include "core/memory/aperture_segment.hpp"
 #include "core/support/status.hpp"
+#include "core/platform/lock_rank.hpp"
+#include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 namespace av {
@@ -290,3 +293,46 @@ TEST(allocation_table_invariants, a_broken_allocation_breaks_the_table)
   CHECK(fixture.table().invariants_hold());
   AllocationTableProbe::corrupt_pool(fixture.table());
   CHECK(!fixture.table().invariants_hold()); }
+
+/* ---- report -------------------------------------------------------------------- */
+
+TEST(allocation_table_report, writes_the_table_then_each_allocation)
+{ Fixture fixture;
+  fixture.set_count(2u, shadow);
+  CHECK_STATUS(fixture.create(), Status::ok);
+  char bytes[512];
+  av::StateWriter writer(bytes, sizeof bytes);
+  fixture.table().report(writer);
+  char expected[512];
+  std::snprintf(expected, sizeof expected,
+                "allocation_table/0 busy=false live=2\n"
+                "allocation_table/0/allocation/0 handle=0x%016llX kind=2 size=4096 opens=0 cpu_visible=true\n"
+                "allocation_table/0/allocation/1 handle=0x%016llX kind=2 size=4096 opens=0 cpu_visible=true",
+                static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(fixture.info(0u).hAllocation)),
+                static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(fixture.info(1u).hAllocation)));
+  CHECK(std::strcmp(writer.dump(), expected) == 0);
+  CHECK(fixture.table().invariants_hold());
+  CHECK_EQ(fixture.platform().locks_held(), 0u);
+  CHECK_STATUS(fixture.destroy(2u), Status::ok); }
+
+TEST(allocation_table_report, a_table_another_thread_holds_is_only_busy)
+{ Fixture fixture;
+  CHECK_STATUS(fixture.create(), Status::ok);
+  fixture.platform().hold_elsewhere(av::LockRank::allocation_table);
+  char bytes[128];
+  av::StateWriter writer(bytes, sizeof bytes);
+  fixture.table().report(writer);
+  CHECK(std::strcmp(writer.dump(), "allocation_table/0 busy=true") == 0);
+  fixture.platform().released_elsewhere();
+  CHECK_STATUS(fixture.destroy(1u), Status::ok); }
+
+TEST(allocation_table_report, is_apc_at_most)
+{ Fixture fixture;
+  fixture.platform().set_irql(Irql::dispatch);
+  char bytes[128];
+  av::StateWriter writer(bytes, sizeof bytes);
+  fixture.platform().hold_elsewhere(av::LockRank::allocation_table);
+  fixture.table().report(writer);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  fixture.platform().set_irql(Irql::passive); }

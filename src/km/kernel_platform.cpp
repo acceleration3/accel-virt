@@ -24,10 +24,11 @@ static_assert(static_cast<unsigned>(Pool::non_paged) == 0u && static_cast<unsign
 /* One millisecond, in the 100 ns units ExSetTimerResolution counts. */
 constexpr ULONG fine_clock_ticks = 10000u;
 
-KernelPlatform::KernelPlatform(ULONG pool_tag) : pool_tag_(pool_tag), log_lock_()
+KernelPlatform::KernelPlatform(ULONG pool_tag) : pool_tag_(pool_tag), log_lock_(), bugcheck_record_()
 {
     AV_SCOPE("KernelPlatform::KernelPlatform");
     KeInitializeSpinLock(&log_lock_);
+    KeInitializeCallbackRecord(&bugcheck_record_);
 }
 
 void *KernelPlatform::allocate(size_t bytes, Pool pool)
@@ -136,6 +137,21 @@ void KernelPlatform::release_spin_lock(uintptr_t &word, LockRank, Irql previous)
     KeReleaseSpinLock(&word, static_cast<KIRQL>(previous));
 }
 
+/* KeTryToAcquireSpinLockAtDpcLevel wants DISPATCH already; a refusal gives the
+ * raise back so the caller sees no change. */
+bool KernelPlatform::try_acquire_spin_lock(uintptr_t &word, LockRank, Irql &previous)
+{
+    AV_SCOPE("KernelPlatform::try_acquire_spin_lock");
+    KIRQL raised_from = 0;
+    KeRaiseIrql(DISPATCH_LEVEL, &raised_from);
+    if (KeTryToAcquireSpinLockAtDpcLevel(&word) != FALSE) {
+        previous = static_cast<Irql>(raised_from);
+        return true;
+    }
+    KeLowerIrql(raised_from);
+    return false;
+}
+
 /* TimerCallback is EXT_CALLBACK with void pointers, so it is passed as is. */
 /* A high-resolution EX timer still expires on the system clock's tick, and a
  * guest's default tick is 15.625 ms: a 16.666 ms period then fires every
@@ -191,6 +207,12 @@ void KernelPlatform::release_mutex(void *storage, LockRank)
     ExReleaseFastMutex(static_cast<PFAST_MUTEX>(storage));
 }
 
+bool KernelPlatform::try_acquire_mutex(void *storage, LockRank)
+{
+    AV_SCOPE("KernelPlatform::try_acquire_mutex");
+    return ExTryToAcquireFastMutex(static_cast<PFAST_MUTEX>(storage)) != FALSE;
+}
+
 void KernelPlatform::initialize_wait_mutex(void *storage)
 {
     AV_SCOPE("KernelPlatform::initialize_wait_mutex");
@@ -207,6 +229,14 @@ void KernelPlatform::release_wait_mutex(void *storage, LockRank)
 {
     AV_SCOPE("KernelPlatform::release_wait_mutex");
     static_cast<void>(KeReleaseMutex(static_cast<PKMUTEX>(storage), FALSE));
+}
+
+/* A zero timeout polls the mutex: STATUS_SUCCESS only when it was free. */
+bool KernelPlatform::try_acquire_wait_mutex(void *storage, LockRank)
+{
+    AV_SCOPE("KernelPlatform::try_acquire_wait_mutex");
+    LARGE_INTEGER now = {};
+    return KeWaitForSingleObject(storage, Executive, KernelMode, FALSE, &now) == STATUS_SUCCESS;
 }
 
 uint64_t KernelPlatform::interrupt_time() const
@@ -298,6 +328,33 @@ void KernelPlatform::log(const char *message)
         WRITE_PORT_UCHAR(reinterpret_cast<PUCHAR>(debug_port), static_cast<UCHAR>(*cursor));
     WRITE_PORT_UCHAR(reinterpret_cast<PUCHAR>(debug_port), '\n');
     KeReleaseSpinLock(&log_lock_, previous);
+}
+
+/* At a bugcheck another processor may be frozen holding log_lock_, and
+ * DbgPrint may not be safe to call: the port is written directly. */
+void KernelPlatform::log_at_bugcheck(const char *message)
+{
+    AV_SCOPE("KernelPlatform::log_at_bugcheck");
+    for (const char *cursor = message; *cursor != '\0'; ++cursor)
+        WRITE_PORT_UCHAR(reinterpret_cast<PUCHAR>(debug_port), static_cast<UCHAR>(*cursor));
+    WRITE_PORT_UCHAR(reinterpret_cast<PUCHAR>(debug_port), '\n');
+}
+
+/* BugcheckRoutine is KBUGCHECK_CALLBACK_ROUTINE with ULONG spelled uint32_t,
+ * which on this ABI is the same type in the same register. */
+bool KernelPlatform::register_bugcheck(void *buffer, size_t bytes, BugcheckRoutine routine)
+{
+    AV_SCOPE("KernelPlatform::register_bugcheck");
+    static constexpr char component[] = "rvkgpu-trace";
+    return KeRegisterBugCheckCallback(&bugcheck_record_, reinterpret_cast<PKBUGCHECK_CALLBACK_ROUTINE>(routine),
+                                      buffer, static_cast<ULONG>(bytes),
+                                      const_cast<PUCHAR>(reinterpret_cast<const UCHAR *>(component))) != FALSE;
+}
+
+void KernelPlatform::deregister_bugcheck()
+{
+    AV_SCOPE("KernelPlatform::deregister_bugcheck");
+    static_cast<void>(KeDeregisterBugCheckCallback(&bugcheck_record_));
 }
 
 /* The table's layout is proven identical to DRIVER_INITIALIZATION_DATA by

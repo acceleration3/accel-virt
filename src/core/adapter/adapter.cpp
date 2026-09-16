@@ -1,6 +1,7 @@
 #include "core/adapter/adapter.hpp"
 
 #include "core/adapter/debug_report.hpp"
+#include "core/adapter/trace_escape.hpp"
 #include "core/ddi/d3dkmdt_vidpn_present_path_record.hpp"
 #include "core/ddi/dxgk_child_container_id_record.hpp"
 #include "core/ddi/dxgk_child_descriptor_record.hpp"
@@ -25,7 +26,9 @@
 #include "core/ddi/dxgkarg_destroy_allocation_record.hpp"
 #include "core/ddi/dxgkarg_escape_record.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 #include "proto/resources/host_visible_bind_record.hpp"
+#include "proto/trace/trace_escape_record.hpp"
 #include "core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "core/ddi/dxgkarg_get_scan_line_record.hpp"
 #include "core/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
@@ -540,7 +543,13 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
     platform_.require_irql_at_most(Irql::passive, "Adapter::escape");
     if (escape == nullptr || escape->pPrivateDriverData == nullptr || escape->PrivateDriverDataSize == 0u)
         return NtStatus(Status::invalid_parameter).value();
-    return bind_chunk(*escape);
+    auto *const bytes = static_cast<uint8_t *>(escape->pPrivateDriverData);
+    uint32_t    magic = 0u;
+    if (escape->PrivateDriverDataSize >= sizeof magic) platform_.copy(&magic, bytes, sizeof magic);
+    if (magic != TraceEscapeRecord::magic) return bind_chunk(*escape);
+    /* Only the adapter is named: the inspector opens no device. */
+    const Status answered = TraceEscape(platform_, *this).answer(bytes, escape->PrivateDriverDataSize);
+    return NtStatus(answered == Status::malformed ? Status::invalid_parameter : answered).value();
 }
 
 /* The one escape this driver defines: a process binding a host-visible chunk to
@@ -1458,6 +1467,32 @@ int32_t Adapter::resume_hw_engine(const DxgkargResumeHwEngineRecord *request)
     if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
     return NtStatus(Status::ok).value();
+}
+
+void Adapter::report(StateWriter &writer)
+{
+    AV_SCOPE("Adapter::report");
+    platform_.require_irql_at_most(Irql::passive, "Adapter::report");
+    writer.open("adapter", 0u);
+    writer.flag("started", started_);
+    writer.flag("present", present_);
+    writer.flag("powering_down", transition_.held());
+    writer.number("presented_fence", presented_fence_);
+    writer.hex("display_changed", display_changed_);
+    writer.hex("aperture_bytes", segment_.size());
+    writer.flag("host_visible", host_visible_.offered());
+    writer.hex("host_visible_base", host_visible_.base());
+    writer.hex("host_visible_bytes", host_visible_.size());
+    writer.number("vsync_enables", vsync_.enabled_count());
+    writer.number("vsync_reported", vsync_.reported());
+    devices_.report(writer);
+    allocations_.report(writer);
+    contexts_.report(writer);
+    hw_queues_.report(writer);
+    node_.report(writer);
+    rvk_contexts_.report(writer);
+    sources_.report(writer);
+    writer.close();
 }
 
 bool Adapter::invariants_hold() const

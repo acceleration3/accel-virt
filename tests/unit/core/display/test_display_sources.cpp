@@ -1,9 +1,14 @@
 #include "core/display/display_mode.hpp"
 #include "core/display/display_sources.hpp"
 #include "core/support/status.hpp"
+#include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
+
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 
 using av::DisplaySources;
 using av::Irql;
@@ -163,3 +168,26 @@ TEST(display_sources_invariants, no_outputs_and_more_than_it_holds_are_detected)
   DisplaySources other(platform);
   av::DisplaySourcesProbe::offer_more_than_it_holds(other);
   CHECK(!other.invariants_hold()); }
+
+TEST(display_sources_report, writes_each_source_s_format_mode_scanout_and_visibility)
+{ MockPlatform platform; DisplaySources sources(platform);
+  const av::DisplayMode mode(1280u, 800u);
+  std::uint32_t primary = 0u;
+  CHECK_STATUS(sources.set_count(2u), Status::ok);
+  CHECK_STATUS(sources.set_private_format(0u, 0x15u), Status::ok);
+  CHECK_STATUS(sources.commit(0u, &mode), Status::ok);
+  CHECK_STATUS(sources.set_scanout(0u, 0x7000, &primary), Status::ok);
+  CHECK_STATUS(sources.set_visible(1u, true), Status::ok);
+  sources.set_vsync(true);
+  char bytes[512];
+  av::StateWriter writer(bytes, sizeof bytes);
+  sources.report(writer);
+  char expected[512];
+  std::snprintf(expected, sizeof expected,
+                "display_sources/0 count=2 vsync=true\n"
+                "display_sources/0/source/0 format=21 width=1280 height=800 scanout=0x0000000000007000"
+                " primary=0x%016llX visible=false\n"
+                "display_sources/0/source/1 format=0 width=0 height=0 scanout=0x0000000000000000"
+                " primary=0x0000000000000000 visible=true",
+                static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(&primary)));
+  CHECK(std::strcmp(writer.dump(), expected) == 0); }

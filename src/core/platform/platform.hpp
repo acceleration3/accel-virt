@@ -24,6 +24,10 @@ class DdiTable;
  * created with. The signature is the kernel's EXT_CALLBACK. */
 using TimerCallback = void (*)(void *timer, void *context);
 
+/* What the kernel calls while it bugchecks: the buffer registered with it and
+ * that buffer's size. The signature is KBUGCHECK_CALLBACK_ROUTINE's. */
+using BugcheckRoutine = void (*)(void *buffer, uint32_t bytes);
+
 class Platform : public BlockSource {
 public:
     Platform() = default;
@@ -61,15 +65,23 @@ public:
     virtual Irql acquire_spin_lock(uintptr_t &word, LockRank rank) = 0;
     virtual void release_spin_lock(uintptr_t &word, LockRank rank, Irql previous) = 0;
 
+    /* The lock if it is free, without waiting; whether it was taken. A taken
+     * spin lock raised to DISPATCH and `previous` is the level its release
+     * restores; one not taken left the level as it was. */
+    [[nodiscard]] virtual bool try_acquire_spin_lock(uintptr_t &word, LockRank rank, Irql &previous) = 0;
+
     /* A blocking mutex in opaque storage of at least Mutex::storage_bytes. */
     virtual void initialize_mutex(void *storage) = 0;
     virtual void acquire_mutex(void *storage, LockRank rank) = 0;
     virtual void release_mutex(void *storage, LockRank rank) = 0;
+    /* The mutex if it is free, without waiting; whether it was taken. */
+    [[nodiscard]] virtual bool try_acquire_mutex(void *storage, LockRank rank) = 0;
     /* A mutex held across waits at PASSIVE, in storage of at least
      * WaitMutex::storage_bytes: holding it does not raise the IRQL. */
     virtual void initialize_wait_mutex(void *storage) = 0;
     virtual void acquire_wait_mutex(void *storage, LockRank rank) = 0;
     virtual void release_wait_mutex(void *storage, LockRank rank) = 0;
+    [[nodiscard]] virtual bool try_acquire_wait_mutex(void *storage, LockRank rank) = 0;
 
     /* Monotonic, in 100 ns units. */
     virtual uint64_t interrupt_time() const = 0;
@@ -108,6 +120,16 @@ public:
     virtual void     write_register_u64(void *address, uint64_t value) = 0;
 
     virtual void log(const char *message) = 0;
+    /* The same line while the system bugchecks: no lock, no allocation, no
+     * debugger print - only the debug port. */
+    virtual void log_at_bugcheck(const char *message) = 0;
+
+    /* `routine` is called with `buffer` if the system bugchecks, and the
+     * buffer's `bytes` are saved in the crash dump; whether the kernel took
+     * the registration. One registration at a time; PASSIVE. */
+    [[nodiscard]] virtual bool register_bugcheck(void *buffer, size_t bytes, BugcheckRoutine routine) = 0;
+    /* Of the registration made; nothing without one. PASSIVE. */
+    virtual void deregister_bugcheck() = 0;
 
     /* DxgkInitialize: hands the table to dxgkrnl; answers an NTSTATUS. */
     virtual int32_t register_miniport(void *driver_object, void *registry_path,

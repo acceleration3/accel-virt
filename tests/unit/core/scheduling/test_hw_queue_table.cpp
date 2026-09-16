@@ -15,11 +15,15 @@
 #include "core/scheduling/hw_queue_table.hpp"
 #include "core/support/object_pool.hpp"
 #include "core/support/status.hpp"
+#include "core/platform/lock_rank.hpp"
+#include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
 
 #include <cstdint>
+#include <cstring>
+#include <cstdio>
 
 using av::Adapter;
 using av::AllocationTable;
@@ -153,3 +157,29 @@ TEST(hw_queue_table, is_passive_only)
   while (fixture.platform().claim(Violation::irql_ceiling)) {}
   while (fixture.platform().claim(Violation::blocking_at_dispatch)) {}
   while (fixture.platform().claim(Violation::allocation_at_dispatch)) {} }
+
+TEST(hw_queue_table_report, writes_each_queue_and_its_context)
+{ Fixture fixture;
+  DxgkargCreateHwQueueRecord request = fixture.request();
+  CHECK_STATUS(fixture.queues().create(fixture.hw_context(), request), Status::ok);
+  char bytes[256];
+  av::StateWriter writer(bytes, sizeof bytes);
+  fixture.queues().report(writer);
+  char expected[256];
+  std::snprintf(expected, sizeof expected,
+                "hw_queue_table/0 busy=false live=1\n"
+                "hw_queue_table/0/hw_queue/0 handle=0x%016llX context=0x%016llX",
+                static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(request.hHwQueue)),
+                static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(fixture.hw_context())));
+  CHECK(std::strcmp(writer.dump(), expected) == 0);
+  fixture.platform().hold_elsewhere(av::LockRank::hw_queue_table);
+  av::StateWriter busy(bytes, sizeof bytes);
+  fixture.queues().report(busy);
+  CHECK(std::strcmp(busy.dump(), "hw_queue_table/0 busy=true") == 0);
+  fixture.platform().set_irql(av::Irql::dispatch);
+  fixture.queues().report(busy);
+  CHECK(fixture.platform().claim(av::Violation::irql_ceiling));
+  CHECK(fixture.platform().claim(av::Violation::irql_ceiling));
+  fixture.platform().set_irql(av::Irql::passive);
+  fixture.platform().released_elsewhere();
+  CHECK_STATUS(fixture.queues().destroy(request.hHwQueue), Status::ok); }

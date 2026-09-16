@@ -18,12 +18,15 @@
 #include "harness/device/fake_virtio_gpu_function.hpp"
 #include "harness/dxgkrnl/fake_dxgkrnl_adapter.hpp"
 #include "harness/dxgkrnl/fake_handle_table.hpp"
+#include "core/platform/lock_rank.hpp"
+#include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "harness/platform/violation.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 namespace av {
@@ -142,6 +145,8 @@ public:
     DxgkOpenAllocationInfoRecord &open_info(std::uint32_t i) { return opens_[i]; }
     FakeHandleTable              &kernel_handles() { return kernel_handles_; }
     std::uint32_t                 handle(std::uint32_t i) const { return handles_[i]; }
+    const void                   *allocation_handle(std::uint32_t i) const { return infos_[i].hAllocation; }
+    const void                   *runtime_device() const { return &runtime_device_; }
 
 private:
     MockPlatform                 platform_;
@@ -309,3 +314,51 @@ TEST(device_table_invariants, detect_broken_pools_orphaned_opens_and_uncounted_o
       if (knob == 3) av::AllocationProbe::forget_opens(*fixture.allocation(0u));
       CHECK(!fixture.devices().invariants_hold());
   } }
+
+/* ---- report -------------------------------------------------------------------- */
+
+namespace {
+
+unsigned long long hex_of(const void *object) { return static_cast<unsigned long long>(reinterpret_cast<std::uintptr_t>(object)); }
+
+}  // namespace
+
+TEST(device_table_report, writes_each_device_and_the_allocations_it_has_open)
+{ Fixture fixture;
+  void *device = fixture.create_device();
+  void *other = fixture.create_device();
+  DxgkargOpenAllocationRecord request = fixture.open_request(2u);
+  CHECK_STATUS(fixture.devices().open(device, request), Status::ok);
+  DxgkargOpenAllocationRecord other_request = fixture.open_request(1u);
+  CHECK_STATUS(fixture.devices().open(other, other_request), Status::ok);
+  char bytes[1024];
+  av::StateWriter writer(bytes, sizeof bytes);
+  fixture.devices().report(writer);
+  char expected[1024];
+  std::snprintf(expected, sizeof expected,
+                "device_table/0 busy=false devices=2 opens=3\n"
+                "device_table/0/device/0 handle=0x%016llX runtime=0x%016llX flags=0x0000000000000000\n"
+                "device_table/0/device/0/open/0 allocation=0x%016llX\n"
+                "device_table/0/device/0/open/1 allocation=0x%016llX\n"
+                "device_table/0/device/1 handle=0x%016llX runtime=0x%016llX flags=0x0000000000000000\n"
+                "device_table/0/device/1/open/0 allocation=0x%016llX",
+                hex_of(device), hex_of(fixture.runtime_device()), hex_of(fixture.allocation_handle(0u)),
+                hex_of(fixture.allocation_handle(1u)), hex_of(other), hex_of(fixture.runtime_device()),
+                hex_of(fixture.allocation_handle(0u)));
+  CHECK(std::strcmp(writer.dump(), expected) == 0);
+  CHECK(fixture.devices().invariants_hold());
+  CHECK_EQ(fixture.platform().locks_held(), 0u); }
+
+TEST(device_table_report, a_table_another_thread_holds_is_only_busy)
+{ Fixture fixture;
+  fixture.create_device();
+  fixture.platform().hold_elsewhere(av::LockRank::device_table);
+  char bytes[128];
+  av::StateWriter writer(bytes, sizeof bytes);
+  fixture.devices().report(writer);
+  CHECK(std::strcmp(writer.dump(), "device_table/0 busy=true") == 0);
+  fixture.platform().set_irql(Irql::dispatch);
+  fixture.devices().report(writer);
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  CHECK(fixture.platform().claim(Violation::irql_ceiling));
+  fixture.platform().set_irql(Irql::passive); }

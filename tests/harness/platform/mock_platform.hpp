@@ -50,12 +50,17 @@ public:
     void     require_irql_at_most(Irql ceiling, const char *function) override;
     Irql     acquire_spin_lock(std::uintptr_t &word, LockRank rank) override;
     void     release_spin_lock(std::uintptr_t &word, LockRank rank, Irql previous) override;
+    /* Taken as acquire_spin_lock takes it, unless the test holds that rank
+     * elsewhere. */
+    bool     try_acquire_spin_lock(std::uintptr_t &word, LockRank rank, Irql &previous) override;
     void     initialize_mutex(void *storage) override;
     void     acquire_mutex(void *storage, LockRank rank) override;
     void     release_mutex(void *storage, LockRank rank) override;
+    bool     try_acquire_mutex(void *storage, LockRank rank) override;
     void     initialize_wait_mutex(void *storage) override;
     void     acquire_wait_mutex(void *storage, LockRank rank) override;
     void     release_wait_mutex(void *storage, LockRank rank) override;
+    bool     try_acquire_wait_mutex(void *storage, LockRank rank) override;
     std::uint64_t interrupt_time() const override;
     /* The test clock, at 10 000 000 ticks per second. */
     std::uint64_t performance_counter(std::uint64_t &frequency) const override;
@@ -75,6 +80,10 @@ public:
     void     write_register_u32(void *address, std::uint32_t value) override;
     void     write_register_u64(void *address, std::uint64_t value) override;
     void     log(const char *message) override;
+    /* Kept apart from log(): a test reads what a bugcheck wrote. */
+    void     log_at_bugcheck(const char *message) override;
+    bool     register_bugcheck(void *buffer, std::size_t bytes, BugcheckRoutine routine) override;
+    void     deregister_bugcheck() override;
     void     report_broken_invariant(const char *what, const char *function) override;
     std::int32_t register_miniport(void *driver_object, void *registry_path,
                                    const DdiTable &table) override;
@@ -103,6 +112,9 @@ public:
      * point a test can answer a request the driver is blocked on. */
     using StallCallback = void (*)(void *context);
     void on_stall(StallCallback callback, void *context);
+    /* Called inside every blocking lock acquire, before the lock is taken: the
+     * moment a thread is waiting on it. */
+    void on_acquire(StallCallback callback, void *context);
 
     /* An MDL of `page_count` pages with those frame addresses, as dxgkrnl hands
      * one to BuildPagingBuffer. The frames must outlive this platform; any
@@ -112,6 +124,23 @@ public:
     /* What a device sees at a fake physical address: the host pointer, if the
      * whole range lies inside one contiguous block. */
     void *translate_physical(std::uint64_t physical_address, std::size_t bytes) const;
+
+    /* Every try_acquire of a lock of `rank` fails, as if another thread held
+     * it, until released_elsewhere. */
+    void hold_elsewhere(LockRank rank);
+    void released_elsewhere();
+
+    /* The next register_bugcheck is refused. */
+    void refuse_bugcheck_registration();
+    /* The kernel bugchecks: the registered routine runs with its buffer at
+     * above DISPATCH; false with nothing registered. */
+    bool bugcheck();
+    bool          bugcheck_registered() const;
+    const void   *bugcheck_buffer() const;
+    std::size_t   bugcheck_bytes() const;
+    std::uint32_t bugcheck_lines() const;
+    /* Whether any line written at a bugcheck holds `text`. */
+    bool          bugcheck_line(const char *text) const;
 
     /* Removes one recorded occurrence of `kind`; false if there was none. */
     bool claim(Violation kind);
@@ -204,6 +233,17 @@ private:
     char          lines_[log_capacity] = {};
     std::size_t   lines_used_ = 0u;
     LogRecord    *record_ = nullptr;
+    StallCallback acquire_callback_ = nullptr;
+    void         *acquire_context_ = nullptr;
+    bool          holding_elsewhere_ = false;
+    LockRank      held_elsewhere_ = LockRank::log_budget;
+    bool          refuse_bugcheck_ = false;
+    void         *bugcheck_buffer_ = nullptr;
+    std::size_t   bugcheck_bytes_ = 0u;
+    BugcheckRoutine bugcheck_routine_ = nullptr;
+    std::uint32_t bugcheck_line_count_ = 0u;
+    char          bugcheck_text_[log_capacity] = {};
+    std::size_t   bugcheck_used_ = 0u;
     std::uint32_t registration_status_;
     void         *registered_driver_object_;
     void         *registered_registry_path_;

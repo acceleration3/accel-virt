@@ -3,7 +3,9 @@
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/platform/mutex_guard.hpp"
 #include "core/scheduling/device_table.hpp"
+#include "core/platform/mutex_try_guard.hpp"
 #include "core/trace/function_scope.hpp"
+#include "core/trace/state_writer.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "core/support/invariant_scope.hpp"
 
@@ -66,6 +68,29 @@ uint32_t ContextTable::live() const
 {
     AV_SCOPE("ContextTable::live");
     return contexts_.live();
+}
+
+void ContextTable::report(StateWriter &writer)
+{
+    AV_SCOPE("ContextTable::report");
+    platform_.require_irql_at_most(Irql::apc, "ContextTable::report");
+    const MutexTryGuard guard(mutex_);
+    writer.open("context_table", 0u);
+    writer.flag("busy", !guard.held());
+    if (guard.held()) {
+        writer.number("live", contexts_.live());
+        uint64_t index = 0u;
+        contexts_.for_each([&](const Context &context) {
+            writer.open("context", index++);
+            writer.address("handle", &context);
+            writer.address("device", &context.device());
+            writer.number("node", context.node());
+            writer.hex("flags", context.flags());
+            writer.flag("rvk", context.is_rvk());
+            writer.close();
+        });
+    }
+    writer.close();
 }
 
 bool ContextTable::invariants_hold() const

@@ -14,6 +14,8 @@
 
 namespace av {
 
+class StateWriter;
+
 class ContextTable;
 struct DxgkargCreateHwQueueRecord;
 struct HwQueueTableProbe;
@@ -30,6 +32,10 @@ public:
     /* Whether any queue still runs on `context`. */
     bool                 serves(void *context);
     uint32_t             live() const;
+
+    /* A line for the table and one per queue; `busy=true` and nothing more
+     * while another thread holds the table. */
+    void report(StateWriter &writer);
 
     bool invariants_hold() const;
 

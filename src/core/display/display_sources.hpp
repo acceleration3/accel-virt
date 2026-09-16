@@ -14,6 +14,8 @@
 
 namespace av {
 
+class StateWriter;
+
 class DisplayMode;
 struct DisplaySourcesProbe;
 
@@ -58,6 +60,9 @@ public:
     [[nodiscard]] Status set_visible(uint32_t source, bool visible);
     /* Dispatch at most: the DPC asks before carrying a frame. */
     bool                 visible(uint32_t source);
+
+    /* One line per source: its format, committed mode, scanout and primary. */
+    void report(StateWriter &writer);
 
     bool invariants_hold() const;
 

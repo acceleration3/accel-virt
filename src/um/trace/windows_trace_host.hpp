@@ -1,5 +1,7 @@
 /* TraceHost in a Windows process: the thread's id as both key and number, the
- * interrupt time, no IRQL, and the processor's compare-and-swap. */
+ * interrupt time, no IRQL, and the processor's compare-and-swap. Its methods,
+ * and the clock's, open no trace scope: every scope's entry calls them, so a
+ * scope of their own would recurse (tools/scope_marks.py exempts the files). */
 #ifndef AV_UM_WINDOWS_TRACE_HOST_HPP
 #define AV_UM_WINDOWS_TRACE_HOST_HPP
 

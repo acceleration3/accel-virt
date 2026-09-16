@@ -28,7 +28,10 @@ TEST(executor_library_accept, no_table_leaves_the_device_without_an_executor)
 { ExecutorLibrary library;
   CHECK_STATUS(library.accept(nullptr), Status::ok);
   CHECK(!library.available());
-  CHECK_EQ(library.sub_apis(), 0u); }
+  CHECK_EQ(library.sub_apis(), 0u);
+  /* A context's worker may still ask for one; it is told there is none. */
+  const std::uint8_t uuid[16] = {};
+  CHECK(library.create(SubApi::vulkan, uuid) == nullptr); }
 
 TEST(executor_library_accept, another_abi_version_or_a_missing_operation_is_refused)
 { for (int broken = 0; broken < 5; broken++) {
