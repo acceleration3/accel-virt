@@ -13,8 +13,8 @@ file(GLOB_RECURSE RVKTEST_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
-# rvkvk.dll's shim is its own target below.
-list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/vulkan/")
+# rvkvk.dll's and rvkvkprobe.exe's shims are their own targets below.
+list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/(vulkan|probe)/")
 # Of the generated tree, only the guest's encoders: the rvk scenarios send real
 # Vulkan and OpenCL streams (044). The server dispatch is the host's, and the
 # OpenGL client does not link before its ICD helpers exist (050).
@@ -29,25 +29,39 @@ list(APPEND RVKTEST_SOURCES
   ${RVKTEST_GENERATED_DIR}/vulkan/vk_host_image_default.cpp
   ${RVKTEST_GENERATED_DIR}/opencl/cl_dispatch_client.cpp)
 
-# Import libraries naming exactly what the program calls; the SDK's own are
-# not in the kit.
+# Import libraries naming exactly what the programs call; the SDK's own are
+# not in the kit. vulkan-1 is the Khronos loader, which only the probe calls.
 set(RVKTEST_IMPORTS "")
-foreach(module gdi32 kernel32 ntdll)
+foreach(module gdi32 kernel32 ntdll vulkan-1)
   set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}.lib)
   add_custom_command(OUTPUT ${library}
     COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
   list(APPEND RVKTEST_IMPORTS ${library})
 endforeach()
-add_custom_target(rvktest_imports DEPENDS ${RVKTEST_IMPORTS})
+list(POP_BACK RVKTEST_IMPORTS VULKAN_LOADER_IMPORT)
+add_custom_target(rvktest_imports DEPENDS ${RVKTEST_IMPORTS} ${VULKAN_LOADER_IMPORT})
 
-add_executable(rvktest ${RVKTEST_SOURCES})
-add_dependencies(rvktest rvktest_imports)
-target_include_directories(rvktest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..
+# The suite and the probe share everything but their entry points, as one
+# archive the linker takes only what each program calls from.
+set(RVKTEST_ENTRY ${CMAKE_CURRENT_SOURCE_DIR}/program_entry.cpp ${CMAKE_CURRENT_SOURCE_DIR}/guest_program.cpp)
+list(REMOVE_ITEM RVKTEST_SOURCES ${RVKTEST_ENTRY})
+add_library(rvkguest STATIC ${RVKTEST_SOURCES})
+add_dependencies(rvkguest rvktest_imports)
+target_include_directories(rvkguest PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..
   ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/khronos/include
   ${RVKTEST_GENERATED_DIR}/vulkan
   ${RVKTEST_GENERATED_DIR}/opencl)
-target_link_libraries(rvktest PRIVATE ${RVKTEST_IMPORTS})
+
+add_executable(rvktest ${RVKTEST_ENTRY})
+target_link_options(rvktest PRIVATE /ENTRY:rvktest_entry)
+target_link_libraries(rvktest PRIVATE rvkguest ${RVKTEST_IMPORTS})
+
+# rvkvkprobe.exe, feature 045's proof through the Khronos loader.
+file(GLOB RVKVKPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/*.cpp)
+add_executable(rvkvkprobe ${RVKVKPROBE_SOURCES})
+target_link_options(rvkvkprobe PRIVATE /ENTRY:rvkvkprobe_entry)
+target_link_libraries(rvkvkprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${VULKAN_LOADER_IMPORT})
 
 # rvkvk.dll, the Vulkan ICD (feature 045): the ICD's decisions in src/icd over
 # the transport, D3DKMT through gdi32 and the shim in vulkan/. The generated

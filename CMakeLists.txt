@@ -378,7 +378,8 @@ ExternalProject_Add(rvktest
   BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR>
   BUILD_ALWAYS ON
   INSTALL_COMMAND ""
-  BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/rvktest.exe ${CMAKE_BINARY_DIR}/guest/rvkvk.dll)
+  BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/rvktest.exe ${CMAKE_BINARY_DIR}/guest/rvkvk.dll
+                   ${CMAKE_BINARY_DIR}/guest/rvkvkprobe.exe)
 ExternalProject_Add_StepDependencies(rvktest configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake)
@@ -386,6 +387,13 @@ add_test(NAME guest_image
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
                  ${CMAKE_BINARY_DIR}/guest/rvktest.exe
                  --require-import D3DKMTSubmitCommand)
+
+# The probe binds to the Khronos loader and nothing else beyond the three
+# (feature 045).
+add_test(NAME rvkvkprobe_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkvkprobe.exe
+                 --allow-import vulkan-1.dll --require-import vkGetInstanceProcAddr)
 
 # The Vulkan ICD exports exactly what the loader calls (feature 045).
 add_test(NAME rvkvk_image
