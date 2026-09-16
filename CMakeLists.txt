@@ -313,6 +313,18 @@ foreach(src ${AV_UNIT_TESTS})
   if(src MATCHES "/tests/unit/icd/" OR name STREQUAL "test_loader_vulkan")
     target_link_libraries(${name} PRIVATE av_icd)
   endif()
+  # The probe through the ICD on this machine's GPU (feature 045, T038): the
+  # ICD's hooks and the executor's cannot share a binary, so the executor is
+  # the library file QEMU loads, its symbols its own.
+  if(name STREQUAL "test_fullstack_vulkan_icd")
+    target_link_libraries(${name} PRIVATE av_icd ${CMAKE_DL_LIBS})
+    add_dependencies(${name} rvk_executor)
+    target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+    # The Vulkan loader unloads a driver when its last instance goes, and a
+    # leak in it is then reported from an unknown module no suppression can
+    # name.
+    set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1)
+  endif()
   if(name STREQUAL "test_generated_clients" OR name STREQUAL "test_loopback_transport")
     target_include_directories(${name} PRIVATE
       ${CMAKE_SOURCE_DIR}/src/proto/generated/vulkan
