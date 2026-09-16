@@ -151,10 +151,11 @@ src/core/                         portable driver logic — no platform headers
   rvk/                              rvk contexts as the driver drives them: capset, setup, ring, fences
 src/km/                           Windows kernel shim — translation only; builds rvkgpu.sys and holds rvkgpu.inf
 src/guest/                        the in-guest D3DKMT suite — portable, tested on Linux over MockKmt
-  kmt/  suite/                      the D3DKMT contract and PCI identity; scenarios, session, report
+  kmt/  suite/  transport/          the D3DKMT contract and PCI identity; scenarios, the Vulkan probe, report; KmtTransport, chunks, imports
 src/icd/                          guest user-mode ICDs' decisions — portable, tested on Linux over MockKmt
   vulkan/                           rvkvk.dll: loader entry points, connections, command batches, memory types
-src/um/                           Windows user-mode shim — translation only; builds rvktest.exe and rvkvk.dll
+src/um/                           Windows user-mode shim — translation only; builds rvktest.exe, rvkvk.dll and rvkvkprobe.exe
+  vulkan/  probe/  imports/         rvkvk.dll's exports and seams; the probe's entry; import-library .def files
 src/device/                       QEMU device core — freestanding C++23, librvk_device.a
   host/  abi/                       the Host contract; TableHost, rvk_device.h, the C entry points
   gpu/  threading/  context/        host GPU binding; per-context workers and doorbells; the context table
@@ -174,7 +175,8 @@ tests/harness/                    the adversarial platform mock, fake dxgkrnl
   host/  ring/  executor/           MockHost and request builders; the guest side of a ring; mock executors
   loopback/                         the rig holding guest core and device core together (L4)
   fullstack/                        the real driver on the real device core, with DdiKmt as D3DKMT (L4)
-  guest/                            MockKmt, the scripted D3DKMT the in-guest suite is tested against
+  guest/                            MockKmt, the scripted D3DKMT the in-guest suite is tested against; ScriptedVulkan
+  icd/                              IcdRig, recording locks and log, ShippedBatch, the ICD's harness
 tests/fuzz/ tests/corpus/         L3: libFuzzer targets and seed corpora
 tests/fixtures/                   bytes captured from real devices (tools/host/capture_pci_config.py)
 tests/qemu/                       the device under qtest: a virtio-gpu driver with no guest, the suites run on it

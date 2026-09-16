@@ -318,6 +318,17 @@ pointer imports into Vulkan on every GPU measured, while OpenGL and OpenCL take
 a dma-buf and only on some drivers. Where neither works the guest is copied at
 the boundary and the capset bit is clear.
 
+**What the guest is told is host visible** is what IMPORT_BLOB can serve. The
+executor answers `vkGetPhysicalDeviceMemoryProperties` (all three spellings)
+with `HOST_VISIBLE`, and `HOST_COHERENT` and `HOST_CACHED` with it, cleared from
+every type the driver will not import a host pointer into - NVIDIA's BAR type,
+here - since the guest maps host-visible memory as its own RAM and has no other
+way to reach it. The mask is learnt once per physical device, from a device the
+executor makes for the question over an anonymous page; `import_blob` still
+checks the type against the real pointer. Buffers and images made on the device
+imports go to carry `HOST_ALLOCATION` external-memory create info where the
+driver reports the create importable, unless the guest's chain names its own.
+
 ## Ring header (shared, both write)
 
 Offset 0 of the ring resource; the ring's data area follows at offset 32 and
@@ -660,6 +671,12 @@ by the next write.
 
 A faulted context's executor is destroyed at once, on its worker; the context,
 its doorbell and its blobs stay until `CTX_DESTROY` or a reset.
+
+A guest can fault its own context on purpose, and the Vulkan ICD does so for
+its probe: `vkRvkForceContextFault(VkPhysicalDevice)`, an ICD-local
+physical-device-level entry and not an extension, sends a `vkCreateInstance`
+frame cut after its structure type on the instance's own transport, which the
+executor cannot decode (fault 6). No other context is touched.
 
 **Recovery.** The guest's engine reset destroys the context (`CTX_DESTROY`),
 writes a fresh ring header, and creates and sets up a context again - the same

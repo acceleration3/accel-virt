@@ -135,7 +135,7 @@ description: "Tasks: Vulkan - the ICD on rvkgpu"
 
 ## Phase 6: Polish, the guest proof and the merge
 
-- [ ] T043 `docs/testing.md` "As built" describes the ICD's layers (MockKmt units, the full-stack probe, the `--vulkan` boot); `docs/protocol.md` the bind escape and `IMPORT_BLOB`; `docs/kb/07-usermode.md` gains the loader's discovery (research.md §1) as the knowledge base's record
+- [X] T043 `docs/testing.md` "As built" describes the ICD's layers (MockKmt units, the full-stack probe, the `--vulkan` boot); `docs/protocol.md` the bind escape and `IMPORT_BLOB`; `docs/kb/07-usermode.md` gains the loader's discovery (research.md §1) as the knowledge base's record *As built:* `docs/protocol.md` already carried the bind escape, IMPORT_BLOB and RELEASE_BLOB from T010 and T014; it gains what the guest is told is host visible (T033's narrowing, and T035's `HOST_ALLOCATION` create info) and the forced context fault the probe uses (T037). `docs/kb/07-usermode.md` already carried the loader's discovery (research.md §1) as "How the Vulkan loader finds an ICD on a WDDM adapter", written with T030; unchanged. `docs/testing.md` gains "The Vulkan ICD" under L1 (the seams, `IcdRig`, the fuzz targets) and the probe's full-stack test under L4; its L5 already described the `--vulkan` boot (T040). README's layout lists `src/guest/transport/`, `src/um/vulkan/`, `src/um/probe/`, `src/um/imports/` and `tests/harness/icd/`.
 - [ ] T044 Coverage build: every new file under `src/icd`, `src/core`, `src/device`, `src/proto` at 100% branches (`ctest --test-dir build-coverage -R coverage_gate`)
 - [ ] T045 `AV_GUEST_IMAGE=... tools/gate.sh` passes with all three boots; merge to `master`; push
 

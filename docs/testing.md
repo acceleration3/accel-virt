@@ -61,6 +61,29 @@ BAR, creating a system thread, calling `DxgkCbNotifyInterrupt`, writing an MMIO
 register. Those are shim, they contain no decisions, and L2 covers their
 sequencing.
 
+### The Vulkan ICD
+
+`rvkvk.dll`'s decisions live in `src/icd/vulkan/` and are tested the same way
+(feature 045): the ICD is portable C++ over injected seams, and `src/um/vulkan/`
+holds only their Windows implementations - `ProcessHeap` (a `BlockSource`),
+`SrwLock` (a `ThreadLock`), `FileLog` (a `LogSink`), `GdiKmt` - and the two
+exports. On Linux the seams are `MockPlatform`, `RecordingThreadLock` (every
+acquire and release written to one `LockTrace`, so a test asserts the order
+across the root's, the send and the memory locks) and `RecordingLog`, and the
+Kmt is `MockKmt`, which plays the host's replies through `ScriptedHost`.
+
+`IcdRig` (`tests/harness/icd/`) builds an `IcdRoot` over those and reaches it
+only through the entry points the loader would be handed, so a unit test is a
+Vulkan call sequence: negotiation, `vkCreateInstance`, adapter enumeration by
+LUID, device creation under `ExtensionPolicy`, command buffers recording into
+`CommandBatch` (read back off MockKmt's ring with `ShippedBatch`), sliced
+waits against MockKmt's counter, host-visible allocations placed in chunks and
+mapped as MockKmt's lock views, and device loss through a withheld answer. The
+generated wrappers are linked as the DLL links them (`av_icd`), so a reply the
+host shapes wrongly reaches the ICD's own parsing, which has hostile tables and
+fuzz targets (`fuzz_physical_device_view`, `fuzz_extension_policy`,
+`fuzz_memory_type_table`).
+
 ### The mock platform
 
 `Platform` is an abstract base with exactly two implementations — that is what
@@ -441,6 +464,17 @@ What it cannot see, and L5 still must:
   `rvktest.exe rvk` run pass, and the guest is shown one physical device and one
   OpenCL platform - the bound GPU's - on a host that has two GPUs and three
   platforms. A host without a scenario's sub-API returns without judging it
+- the Vulkan probe through the ICD (`test_fullstack_vulkan_icd.cpp`, 045):
+  `VulkanProbe` over `LoaderVulkan`, whose `vkGetInstanceProcAddr` is the bound
+  `IcdRoot`'s as the DLL's export answers the loader, and that root over the
+  rig's `DdiKmt`, so instance, adapter LUID, device, a compute dispatch and a
+  draw read back through `vkMapMemory`, a forced context fault and a recreated
+  device run through the real driver, device and executor. The executor is the
+  library file opened `RTLD_LOCAL` (`ExecutorLibraryFile`), not the entry point
+  linked in, because the ICD and the executor both define the generated handle
+  hooks; the test runs with `VK_LOADER_DISABLE_DYNAMIC_LIBRARY_UNLOADING=1`, so a
+  driver the host loader unloaded cannot leave a leak ASan reports from an
+  unknown module
 
 Still to come: a shared allocation opened by a second simulated process, and a
 display path - a VidPn committed and a primary scanned out - through the rig.
