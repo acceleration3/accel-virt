@@ -1,5 +1,6 @@
 #include "device/module/virtio_gpu_rvk.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/control/blob_commands.hpp"
 #include "device/control/context_commands.hpp"
 #include "device/control/control_request.hpp"
@@ -14,11 +15,15 @@ constexpr uint64_t guest_probe_address = 0x100000u;
 
 VirtioGpuRvk::VirtioGpuRvk(Host &host)
     : host_(host), binding_(host), library_(), feasibility_(host), capset_(host), blobs_(host), interrupts_(host),
-      status_(host, interrupts_), contexts_(host, blobs_, interrupts_, library_) {}
+      status_(host, interrupts_), contexts_(host, blobs_, interrupts_, library_)
+      {
+          AV_SCOPE("VirtioGpuRvk::VirtioGpuRvk");
+      }
 
 Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExecutorOps *executor,
                              TextBuffer &message)
 {
+    AV_SCOPE("VirtioGpuRvk::realize");
     host_.require_main_loop("VirtioGpuRvk::realize");
     if (binding_.bound()) return Status::invalid_state;
     if (base_blobs) {
@@ -60,6 +65,7 @@ Status VirtioGpuRvk::realize(const char *host_gpu, bool base_blobs, const RvkExe
 
 void VirtioGpuRvk::reset()
 {
+    AV_SCOPE("VirtioGpuRvk::reset");
     host_.require_main_loop("VirtioGpuRvk::reset");
     contexts_.destroy_all();
     status_.reset();
@@ -70,6 +76,7 @@ void VirtioGpuRvk::reset()
  * written before realize would only log a refusal it can do nothing about. */
 void VirtioGpuRvk::status(uint8_t status)
 {
+    AV_SCOPE("VirtioGpuRvk::status");
     host_.require_main_loop("VirtioGpuRvk::status");
     if (!binding_.bound()) return;
     status_.set(status);
@@ -77,6 +84,7 @@ void VirtioGpuRvk::status(uint8_t status)
 
 bool VirtioGpuRvk::control(void *request, uint32_t type)
 {
+    AV_SCOPE("VirtioGpuRvk::control");
     host_.require_main_loop("VirtioGpuRvk::control");
     if (!binding_.bound()) return false;
     ControlRequest control(host_, request);
@@ -86,11 +94,13 @@ bool VirtioGpuRvk::control(void *request, uint32_t type)
 
 uint32_t VirtioGpuRvk::capsets() const
 {
+    AV_SCOPE("VirtioGpuRvk::capsets");
     return capset_.described() ? 1u : 0u;
 }
 
 uint32_t VirtioGpuRvk::blobs() const
 {
+    AV_SCOPE("VirtioGpuRvk::blobs");
     return blobs_.live();
 }
 
@@ -98,6 +108,7 @@ uint32_t VirtioGpuRvk::blobs() const
  * carries them would run with no one to tell. */
 Status VirtioGpuRvk::create_context(uint32_t id)
 {
+    AV_SCOPE("VirtioGpuRvk::create_context");
     host_.require_main_loop("VirtioGpuRvk::create_context");
     if (!binding_.bound() || !interrupts_.connected()) return Status::invalid_state;
     return contexts_.create(id);
@@ -105,28 +116,33 @@ Status VirtioGpuRvk::create_context(uint32_t id)
 
 Status VirtioGpuRvk::destroy_context(uint32_t id)
 {
+    AV_SCOPE("VirtioGpuRvk::destroy_context");
     host_.require_main_loop("VirtioGpuRvk::destroy_context");
     return contexts_.destroy(id);
 }
 
 uint32_t VirtioGpuRvk::contexts() const
 {
+    AV_SCOPE("VirtioGpuRvk::contexts");
     return contexts_.live();
 }
 
 bool VirtioGpuRvk::realized() const
 {
+    AV_SCOPE("VirtioGpuRvk::realized");
     return binding_.bound();
 }
 
 uint32_t VirtioGpuRvk::gpu_index() const
 {
+    AV_SCOPE("VirtioGpuRvk::gpu_index");
     return binding_.index();
 }
 
 /* Contexts exist only on a realized device. */
 bool VirtioGpuRvk::invariants_hold() const
 {
+    AV_SCOPE("VirtioGpuRvk::invariants_hold");
     return contexts_.invariants_hold() && blobs_.invariants_hold() && interrupts_.invariants_hold() &&
            status_.invariants_hold() && (binding_.bound() || contexts_.live() == 0u);
 }

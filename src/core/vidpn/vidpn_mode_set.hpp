@@ -9,6 +9,7 @@
 #include "core/platform/platform.hpp"
 #include "core/support/nt_status.hpp"
 #include "core/support/status.hpp"
+#include "core/trace/function_scope.hpp"
 #include "core/vidpn/vidpn.hpp"
 
 #include <stdint.h>
@@ -24,11 +25,13 @@ namespace av {
  * dxgkrnl owns is put back, per record type. */
 inline void restore_created(D3dkmdtVidPnSourceModeRecord &info, const D3dkmdtVidPnSourceModeRecord &created)
 {
+    AV_SCOPE("restore_created");
     info.Id = created.Id;
 }
 
 inline void restore_created(D3dkmdtVidPnTargetModeRecord &info, const D3dkmdtVidPnTargetModeRecord &created)
 {
+    AV_SCOPE("restore_created");
     info.Id = created.Id;
     info.MinimumVSyncFreqNumerator = created.MinimumVSyncFreqNumerator;
     info.MinimumVSyncFreqDenominator = created.MinimumVSyncFreqDenominator;
@@ -66,19 +69,24 @@ using TargetModeSet = VidPnModeSet<D3dkmdtVidPnTargetModeRecord, DxgkVidPnTarget
 
 template <typename Mode, typename ModeSetInterface>
 VidPnModeSet<Mode, ModeSetInterface>::VidPnModeSet(Platform &platform, VidPn &vidpn, uint32_t owner)
-    : platform_(platform), vidpn_(vidpn), owner_(owner), mode_set_(nullptr), interface_(nullptr) {}
+    : platform_(platform), vidpn_(vidpn), owner_(owner), mode_set_(nullptr), interface_(nullptr)
+    {
+        AV_SCOPE("VidPnModeSet::VidPnModeSet");
+    }
 
 /* A destructor has nowhere to report a failed release; the set is dxgkrnl's
  * to reclaim with the VidPn either way. */
 template <typename Mode, typename ModeSetInterface>
 VidPnModeSet<Mode, ModeSetInterface>::~VidPnModeSet()
 {
+    AV_SCOPE("VidPnModeSet::~VidPnModeSet");
     if (interface_ != nullptr) static_cast<void>(vidpn_.release_mode_set(mode_set_, interface_));
 }
 
 template <typename Mode, typename ModeSetInterface>
 Status VidPnModeSet<Mode, ModeSetInterface>::acquire()
 {
+    AV_SCOPE("VidPnModeSet::acquire");
     platform_.require_irql_at_most(Irql::passive, "VidPnModeSet::acquire");
     if (interface_ != nullptr) return Status::invalid_state;
     return vidpn_.acquire_mode_set(owner_, mode_set_, interface_);
@@ -87,6 +95,7 @@ Status VidPnModeSet<Mode, ModeSetInterface>::acquire()
 template <typename Mode, typename ModeSetInterface>
 Status VidPnModeSet<Mode, ModeSetInterface>::create()
 {
+    AV_SCOPE("VidPnModeSet::create");
     platform_.require_irql_at_most(Irql::passive, "VidPnModeSet::create");
     if (interface_ != nullptr) return Status::invalid_state;
     return vidpn_.create_mode_set(owner_, mode_set_, interface_);
@@ -95,6 +104,7 @@ Status VidPnModeSet<Mode, ModeSetInterface>::create()
 template <typename Mode, typename ModeSetInterface>
 Status VidPnModeSet<Mode, ModeSetInterface>::assign()
 {
+    AV_SCOPE("VidPnModeSet::assign");
     platform_.require_irql_at_most(Irql::passive, "VidPnModeSet::assign");
     if (interface_ == nullptr) return Status::invalid_state;
     const Status status = vidpn_.assign_mode_set(owner_, mode_set_, interface_);
@@ -105,6 +115,7 @@ Status VidPnModeSet<Mode, ModeSetInterface>::assign()
 template <typename Mode, typename ModeSetInterface>
 Status VidPnModeSet<Mode, ModeSetInterface>::copy_pinned(Mode &mode)
 {
+    AV_SCOPE("VidPnModeSet::copy_pinned");
     platform_.require_irql_at_most(Irql::passive, "VidPnModeSet::copy_pinned");
     if (interface_ == nullptr) return Status::invalid_state;
     const Mode  *pinned = nullptr;
@@ -119,6 +130,7 @@ Status VidPnModeSet<Mode, ModeSetInterface>::copy_pinned(Mode &mode)
 template <typename Mode, typename ModeSetInterface>
 Status VidPnModeSet<Mode, ModeSetInterface>::add(const Mode &description)
 {
+    AV_SCOPE("VidPnModeSet::add");
     platform_.require_irql_at_most(Irql::passive, "VidPnModeSet::add");
     if (interface_ == nullptr) return Status::invalid_state;
     Mode        *info = nullptr;

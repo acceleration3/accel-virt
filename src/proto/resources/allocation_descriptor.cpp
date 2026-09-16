@@ -1,25 +1,53 @@
 #include "proto/resources/allocation_descriptor.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
 AllocationDescriptor::AllocationDescriptor()
-    : kind_(AllocationKind::client), cpu_visible_(false), layout_(), size_(0u), scanout_() {}
+    : kind_(AllocationKind::client), cpu_visible_(false), layout_(), size_(0u), scanout_()
+    {
+        AV_SCOPE("AllocationDescriptor::AllocationDescriptor");
+    }
 
 AllocationDescriptor::AllocationDescriptor(AllocationKind kind, bool cpu_visible, const SurfaceLayout &layout,
                                            uint64_t size, const ScanoutTarget &scanout)
-    : kind_(kind), cpu_visible_(cpu_visible), layout_(layout), size_(size), scanout_(scanout) {}
+    : kind_(kind), cpu_visible_(cpu_visible), layout_(layout), size_(size), scanout_(scanout)
+    {
+        AV_SCOPE("AllocationDescriptor::AllocationDescriptor");
+    }
 
-AllocationKind       AllocationDescriptor::kind() const { return kind_; }
-bool                 AllocationDescriptor::cpu_visible() const { return cpu_visible_; }
-const SurfaceLayout &AllocationDescriptor::layout() const { return layout_; }
-uint64_t             AllocationDescriptor::size() const { return size_; }
-const ScanoutTarget &AllocationDescriptor::scanout() const { return scanout_; }
+AllocationKind       AllocationDescriptor::kind() const
+{
+    AV_SCOPE("AllocationDescriptor::kind");
+    return kind_;
+}
+bool                 AllocationDescriptor::cpu_visible() const
+{
+    AV_SCOPE("AllocationDescriptor::cpu_visible");
+    return cpu_visible_;
+}
+const SurfaceLayout &AllocationDescriptor::layout() const
+{
+    AV_SCOPE("AllocationDescriptor::layout");
+    return layout_;
+}
+uint64_t             AllocationDescriptor::size() const
+{
+    AV_SCOPE("AllocationDescriptor::size");
+    return size_;
+}
+const ScanoutTarget &AllocationDescriptor::scanout() const
+{
+    AV_SCOPE("AllocationDescriptor::scanout");
+    return scanout_;
+}
 
 Status AllocationDescriptor::encode(uint8_t *bytes, size_t capacity) const
 {
+    AV_SCOPE("AllocationDescriptor::encode");
     if (capacity < encoded_size) return Status::too_large;
     WireWriter writer(bytes, capacity);
     writer.write_u32(magic);
@@ -41,6 +69,7 @@ Status AllocationDescriptor::encode(uint8_t *bytes, size_t capacity) const
  * only a primary names a scanout; a buffer that is not a surface is a client's. */
 bool AllocationDescriptor::is_valid() const
 {
+    AV_SCOPE("AllocationDescriptor::is_valid");
     const bool known_kind = kind_ == AllocationKind::shared_primary || kind_ == AllocationKind::shadow ||
                             kind_ == AllocationKind::staging || kind_ == AllocationKind::gdi ||
                             kind_ == AllocationKind::client || kind_ == AllocationKind::context_ring ||
@@ -62,6 +91,7 @@ bool AllocationDescriptor::is_valid() const
 
 Status AllocationDescriptor::decode(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("AllocationDescriptor::decode");
     WireReader reader(bytes, length);
     const uint32_t found_magic = reader.read_u32();
     const uint16_t kind = reader.read_u16();

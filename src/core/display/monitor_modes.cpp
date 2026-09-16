@@ -3,15 +3,20 @@
 #include "core/ddi/dxgkarg_recommend_monitor_modes_record.hpp"
 #include "core/display/display_mode_list.hpp"
 #include "core/display/display_sources.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
 MonitorModes::MonitorModes(Platform &platform, const DisplayModeList &modes, const DisplaySources &sources,
                            const DxgkargRecommendMonitorModesRecord &request)
-    : platform_(platform), sources_(sources), modes_(modes), request_(request) {}
+    : platform_(platform), sources_(sources), modes_(modes), request_(request)
+    {
+        AV_SCOPE("MonitorModes::MonitorModes");
+    }
 
 NtStatus MonitorModes::recommend()
 {
+    AV_SCOPE("MonitorModes::recommend");
     platform_.require_irql_at_most(Irql::passive, "MonitorModes::recommend");
     if (request_.VideoPresentTargetId >= sources_.count() || request_.hMonitorSourceModeSet == nullptr ||
         request_.pMonitorSourceModeSetInterface == nullptr)
@@ -23,6 +28,7 @@ NtStatus MonitorModes::recommend()
 
 Status MonitorModes::add(const DisplayMode &mode)
 {
+    AV_SCOPE("MonitorModes::add");
     const DxgkMonitorSourceModeSetInterfaceRecord &set_interface = *request_.pMonitorSourceModeSetInterface;
     D3dkmdtMonitorSourceModeRecord                *info = nullptr;
     const Status status = NtStatus(set_interface.pfnCreateNewModeInfo(request_.hMonitorSourceModeSet, &info)).status();

@@ -1,5 +1,6 @@
 #include "device/executor/context_session.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/imported_blob.hpp"
 #include "device/executor/session_backend.hpp"
@@ -10,10 +11,13 @@ namespace av {
 
 ContextSession::ContextSession()
     : backend_(nullptr), arena_(), imports_(), starved_(0u), faulted_(false)
-{}
+{
+    AV_SCOPE("ContextSession::ContextSession");
+}
 
 Status ContextSession::initialize(SessionBackend &backend, uint8_t *block, size_t block_bytes)
 {
+    AV_SCOPE("ContextSession::initialize");
     if (backend_ != nullptr) return Status::invalid_state;
     backend_ = &backend;
     arena_.attach(block, block_bytes);
@@ -24,6 +28,7 @@ Status ContextSession::initialize(SessionBackend &backend, uint8_t *block, size_
 
 void ContextSession::release()
 {
+    AV_SCOPE("ContextSession::release");
     /* Whatever the guest never released is released here: an imported host
      * pointer must not outlive the mapping the device keeps for it, and an
      * adopted descriptor is this library's to close. */
@@ -42,11 +47,16 @@ void ContextSession::release()
     faulted_ = false;
 }
 
-bool ContextSession::live() const { return backend_ != nullptr; }
+bool ContextSession::live() const
+{
+    AV_SCOPE("ContextSession::live");
+    return backend_ != nullptr;
+}
 
 uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, size_t size,
                                  uint8_t *reply, size_t reply_capacity, size_t &answer)
 {
+    AV_SCOPE("ContextSession::execute");
     answer = 0u;
     /* Once the host device is gone nothing more will run on it, and saying so
      * again is cheaper than finding out again. */
@@ -77,6 +87,7 @@ uint32_t ContextSession::execute(uint32_t command_id, const uint8_t *payload, si
 
 uint32_t ContextSession::import_blob(uint64_t blob_id, const RvkBlobHandle &handle)
 {
+    AV_SCOPE("ContextSession::import_blob");
     if (backend_ == nullptr || faulted_) return RVK_UNDECODABLE;
     ImportedBlob *taken = nullptr;
     if (imports_.take(blob_id, handle, taken) != Status::ok) return RVK_UNDECODABLE;
@@ -93,6 +104,7 @@ uint32_t ContextSession::import_blob(uint64_t blob_id, const RvkBlobHandle &hand
 
 void ContextSession::release_blob(uint64_t blob_id)
 {
+    AV_SCOPE("ContextSession::release_blob");
     ImportedBlob *const blob = imports_.drop(blob_id);
     if (blob == nullptr) return;
     backend_->abandon(*blob);
@@ -101,16 +113,26 @@ void ContextSession::release_blob(uint64_t blob_id)
 
 uint64_t ContextSession::imported_handle(uint64_t blob_id)
 {
+    AV_SCOPE("ContextSession::imported_handle");
     const ImportedBlob *const blob = imports_.find(blob_id);
     return blob != nullptr ? blob->wire_handle() : 0u;
 }
 
-uint32_t ContextSession::imports() const { return imports_.count(); }
+uint32_t ContextSession::imports() const
+{
+    AV_SCOPE("ContextSession::imports");
+    return imports_.count();
+}
 
-size_t ContextSession::starved() const { return starved_; }
+size_t ContextSession::starved() const
+{
+    AV_SCOPE("ContextSession::starved");
+    return starved_;
+}
 
 bool ContextSession::invariants_hold() const
 {
+    AV_SCOPE("ContextSession::invariants_hold");
     return arena_.invariants_hold() && imports_.invariants_hold() &&
            (backend_ != nullptr || !faulted_) && (backend_ != nullptr || imports_.count() == 0u);
 }

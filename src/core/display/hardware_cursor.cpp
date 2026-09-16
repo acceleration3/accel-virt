@@ -4,6 +4,7 @@
 #include "core/ddi/dxgkarg_set_pointer_shape_record.hpp"
 #include "core/display/cursor_image.hpp"
 #include "core/display/display_sources.hpp"
+#include "core/trace/function_scope.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
 
@@ -12,12 +13,20 @@ namespace av {
 HardwareCursor::HardwareCursor(Platform &platform, const DisplaySources &sources,
                               ObjectStorage<VirtioGpuDevice> &device)
     : platform_(platform), sources_(sources), device_(device), backing_(nullptr), resource_created_(false), shape_set_(false),
-      visible_(false), hot_x_(0u), hot_y_(0u), x_(0), y_(0) {}
+      visible_(false), hot_x_(0u), hot_y_(0u), x_(0), y_(0)
+      {
+          AV_SCOPE("HardwareCursor::HardwareCursor");
+      }
 
-HardwareCursor::~HardwareCursor() { release(); }
+HardwareCursor::~HardwareCursor()
+{
+    AV_SCOPE("HardwareCursor::~HardwareCursor");
+    release();
+}
 
 Status HardwareCursor::initialize()
 {
+    AV_SCOPE("HardwareCursor::initialize");
     platform_.require_irql_at_most(Irql::passive, "HardwareCursor::initialize");
     if (backing_ != nullptr) return Status::invalid_state;
     backing_ = static_cast<uint8_t *>(platform_.allocate_contiguous(CursorImage::pixel_bytes));
@@ -26,6 +35,7 @@ Status HardwareCursor::initialize()
 
 void HardwareCursor::release()
 {
+    AV_SCOPE("HardwareCursor::release");
     platform_.require_irql_at_most(Irql::passive, "HardwareCursor::release");
     if (backing_ != nullptr) platform_.release_contiguous(backing_, CursorImage::pixel_bytes);
     backing_ = nullptr;
@@ -34,6 +44,7 @@ void HardwareCursor::release()
 
 void HardwareCursor::forget_device()
 {
+    AV_SCOPE("HardwareCursor::forget_device");
     platform_.require_irql_at_most(Irql::passive, "HardwareCursor::forget_device");
     resource_created_ = false;
     shape_set_ = false;
@@ -44,6 +55,7 @@ void HardwareCursor::forget_device()
  * zero, which the queue refuses, so the writer's own answer adds nothing. */
 Status HardwareCursor::create_resource(VirtioGpuDevice &device)
 {
+    AV_SCOPE("HardwareCursor::create_resource");
     uint8_t          request[GpuRequestWriter::max_request_size];
     GpuRequestWriter writer(request, sizeof request);
     static_cast<void>(writer.create_2d(resource_id, GpuRequestWriter::format_b8g8r8a8, max_side, max_side));
@@ -58,6 +70,7 @@ Status HardwareCursor::create_resource(VirtioGpuDevice &device)
 
 Status HardwareCursor::update(VirtioGpuDevice &device, uint32_t resource)
 {
+    AV_SCOPE("HardwareCursor::update");
     uint8_t          request[GpuRequestWriter::max_request_size];
     GpuRequestWriter writer(request, sizeof request);
     static_cast<void>(writer.update_cursor(scanout, x_, y_, resource, hot_x_, hot_y_));
@@ -66,6 +79,7 @@ Status HardwareCursor::update(VirtioGpuDevice &device, uint32_t resource)
 
 Status HardwareCursor::set_shape(const DxgkargSetPointerShapeRecord &shape)
 {
+    AV_SCOPE("HardwareCursor::set_shape");
     platform_.require_irql_at_most(Irql::passive, "HardwareCursor::set_shape");
     if (backing_ == nullptr || !device_.constructed()) return Status::invalid_state;
     if (shape.VidPnSourceId >= sources_.count()) return Status::invalid_parameter;
@@ -88,6 +102,7 @@ Status HardwareCursor::set_shape(const DxgkargSetPointerShapeRecord &shape)
 /* A pointer made visible before any shape is shown when the shape arrives. */
 Status HardwareCursor::set_position(const DxgkargSetPointerPositionRecord &position)
 {
+    AV_SCOPE("HardwareCursor::set_position");
     platform_.require_irql_at_most(Irql::passive, "HardwareCursor::set_position");
     if (!device_.constructed()) return Status::invalid_state;
     if (position.VidPnSourceId >= sources_.count()) return Status::invalid_parameter;

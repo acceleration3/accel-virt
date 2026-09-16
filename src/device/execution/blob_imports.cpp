@@ -1,6 +1,7 @@
 #include "device/execution/blob_imports.hpp"
 
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/execution/context_executor.hpp"
 #include "device/host/host.hpp"
@@ -12,10 +13,14 @@ namespace av {
 
 BlobImports::BlobImports(Host &host, BlobTable &blobs, ContextExecutor &executor)
     : host_(host), blobs_(blobs), executor_(executor), ring_resource_(0u), next_blob_id_(1u),
-      device_memory_(nullptr), blob_ids_(nullptr), resources_(nullptr) {}
+      device_memory_(nullptr), blob_ids_(nullptr), resources_(nullptr)
+      {
+          AV_SCOPE("BlobImports::BlobImports");
+      }
 
 BlobImports::~BlobImports()
 {
+    AV_SCOPE("BlobImports::~BlobImports");
     if (device_memory_ == nullptr) return;
     for (uint32_t slot = 0u; slot < max_imports; slot++)
         if (device_memory_[slot] != 0u) blobs_.release_alias(resources_[slot]);
@@ -24,12 +29,14 @@ BlobImports::~BlobImports()
 
 void BlobImports::configure(uint32_t ring_resource)
 {
+    AV_SCOPE("BlobImports::configure");
     host_.require_main_loop("BlobImports::configure");
     ring_resource_ = ring_resource;
 }
 
 Status BlobImports::reserve()
 {
+    AV_SCOPE("BlobImports::reserve");
     if (device_memory_ != nullptr) return Status::ok;
     void *const block = host_.allocate(max_imports * (sizeof(uint64_t) * 2u + sizeof(uint32_t)));
     if (block == nullptr) return Status::no_space;
@@ -42,6 +49,7 @@ Status BlobImports::reserve()
 Status BlobImports::import(uint32_t resource, uint64_t offset, uint64_t size, uint32_t memory_type,
                            uint64_t &device_memory)
 {
+    AV_SCOPE("BlobImports::import");
     host_.require_worker("BlobImports::import");
     device_memory = 0u;
     if (ContextResources(ring_resource_).chunk_slot(resource) == ContextResources::chunk_slots)
@@ -67,6 +75,7 @@ Status BlobImports::import(uint32_t resource, uint64_t offset, uint64_t size, ui
 Status BlobImports::hand_over(const GuestPageAlias &alias, uint64_t offset, uint64_t size, uint32_t memory_type,
                               uint32_t slot)
 {
+    AV_SCOPE("BlobImports::hand_over");
     if (size > alias.length() || offset > alias.length() - size) return Status::too_large;
     RvkBlobHandle handle = {};
     handle.kind = RVK_BLOB_HOST_POINTER;
@@ -90,6 +99,7 @@ Status BlobImports::hand_over(const GuestPageAlias &alias, uint64_t offset, uint
 
 void BlobImports::release(uint64_t device_memory)
 {
+    AV_SCOPE("BlobImports::release");
     host_.require_worker("BlobImports::release");
     const uint32_t slot = device_memory != 0u ? slot_of(device_memory) : max_imports;
     if (slot == max_imports) return;
@@ -100,6 +110,7 @@ void BlobImports::release(uint64_t device_memory)
 
 uint32_t BlobImports::slot_of(uint64_t device_memory) const
 {
+    AV_SCOPE("BlobImports::slot_of");
     for (uint32_t slot = 0u; device_memory_ != nullptr && slot < max_imports; slot++)
         if (device_memory_[slot] == device_memory) return slot;
     return max_imports;
@@ -107,6 +118,7 @@ uint32_t BlobImports::slot_of(uint64_t device_memory) const
 
 uint32_t BlobImports::imports() const
 {
+    AV_SCOPE("BlobImports::imports");
     uint32_t count = 0u;
     for (uint32_t slot = 0u; device_memory_ != nullptr && slot < max_imports; slot++)
         count += device_memory_[slot] != 0u ? 1u : 0u;
@@ -117,6 +129,7 @@ uint32_t BlobImports::imports() const
  * import answers to, and no import was made under an id not yet handed out. */
 bool BlobImports::invariants_hold() const
 {
+    AV_SCOPE("BlobImports::invariants_hold");
     const ContextResources resources(ring_resource_);
     for (uint32_t slot = 0u; device_memory_ != nullptr && slot < max_imports; slot++) {
         if (device_memory_[slot] == 0u) continue;

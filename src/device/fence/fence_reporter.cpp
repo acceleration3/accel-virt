@@ -1,5 +1,6 @@
 #include "device/fence/fence_reporter.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/fence/fence_interrupts.hpp"
 #include "device/host/host.hpp"
 #include "device/threading/doorbell.hpp"
@@ -9,10 +10,14 @@ namespace av {
 
 FenceReporter::FenceReporter(Host &host, FenceInterrupts &interrupts)
     : host_(host), interrupts_(interrupts), page_(), line_(0u), completed_(0u), progress_(0u),
-      fault_(FaultCode::none), prepared_(false), faulted_(false), pending_(false) {}
+      fault_(FaultCode::none), prepared_(false), faulted_(false), pending_(false)
+      {
+          AV_SCOPE("FenceReporter::FenceReporter");
+      }
 
 Status FenceReporter::prepare(const FenceWindow &page, uint32_t line)
 {
+    AV_SCOPE("FenceReporter::prepare");
     host_.require_main_loop("FenceReporter::prepare");
     if (prepared_) return Status::invalid_state;
     if (!page.invariants_hold() || line >= Doorbell::pages) return Status::invalid_parameter;
@@ -27,6 +32,7 @@ Status FenceReporter::prepare(const FenceWindow &page, uint32_t line)
 
 void FenceReporter::withdraw()
 {
+    AV_SCOPE("FenceReporter::withdraw");
     host_.require_main_loop("FenceReporter::withdraw");
     page_ = FenceWindow();
     prepared_ = false;
@@ -37,6 +43,7 @@ void FenceReporter::withdraw()
 
 void FenceReporter::complete(uint64_t fence)
 {
+    AV_SCOPE("FenceReporter::complete");
     host_.require_worker("FenceReporter::complete");
     if (!prepared_ || faulted_) return;
     completed_ = fence;
@@ -47,6 +54,7 @@ void FenceReporter::complete(uint64_t fence)
 
 void FenceReporter::heartbeat()
 {
+    AV_SCOPE("FenceReporter::heartbeat");
     host_.require_worker("FenceReporter::heartbeat");
     if (!prepared_ || faulted_) return;
     progress_++;
@@ -55,6 +63,7 @@ void FenceReporter::heartbeat()
 
 void FenceReporter::fault(FaultCode code)
 {
+    AV_SCOPE("FenceReporter::fault");
     host_.require_worker("FenceReporter::fault");
     if (!prepared_ || faulted_) return;
     faulted_ = true;
@@ -65,20 +74,34 @@ void FenceReporter::fault(FaultCode code)
 
 void FenceReporter::signal()
 {
+    AV_SCOPE("FenceReporter::signal");
     host_.require_worker("FenceReporter::signal");
     if (!pending_) return;
     pending_ = false;
     interrupts_.raise(line_);
 }
 
-bool     FenceReporter::faulted() const   { return faulted_; }
-uint64_t FenceReporter::completed() const { return completed_; }
-uint64_t FenceReporter::progress() const  { return progress_; }
+bool     FenceReporter::faulted() const
+{
+    AV_SCOPE("FenceReporter::faulted");
+    return faulted_;
+}
+uint64_t FenceReporter::completed() const
+{
+    AV_SCOPE("FenceReporter::completed");
+    return completed_;
+}
+uint64_t FenceReporter::progress() const
+{
+    AV_SCOPE("FenceReporter::progress");
+    return progress_;
+}
 
 /* Nothing completes or faults before the page exists, every completion moved
  * progress, and a fault always has a reason. */
 bool FenceReporter::invariants_hold() const
 {
+    AV_SCOPE("FenceReporter::invariants_hold");
     if (!prepared_) return !pending_ && !faulted_;
     return page_.invariants_hold() && (completed_ == 0u || progress_ != 0u) &&
            (!faulted_ || fault_ != FaultCode::none);

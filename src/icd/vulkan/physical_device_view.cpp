@@ -1,5 +1,6 @@
 #include "icd/vulkan/physical_device_view.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "icd/vulkan/log_sink.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 
@@ -7,10 +8,14 @@ namespace av::icd {
 
 PhysicalDeviceView::PhysicalDeviceView(ClientTransport &transport, uint64_t luid, uint32_t latest_version,
                                        LogSink &log)
-    : transport_(transport), luid_(luid), latest_version_(latest_version), log_(log), nodes_{}, types_{}, nexts_{}, remembered_(0u) {}
+    : transport_(transport), luid_(luid), latest_version_(latest_version), log_(log), nodes_{}, types_{}, nexts_{}, remembered_(0u)
+    {
+        AV_SCOPE("PhysicalDeviceView::PhysicalDeviceView");
+    }
 
 void PhysicalDeviceView::properties(VkPhysicalDevice physical_device, VkPhysicalDeviceProperties *answer)
 {
+    AV_SCOPE("PhysicalDeviceView::properties");
     *answer = VkPhysicalDeviceProperties{};
     vkproto::rvk_vkGetPhysicalDeviceProperties(transport_, physical_device, answer);
     if (answer->apiVersion > latest_version_) answer->apiVersion = latest_version_;
@@ -18,6 +23,7 @@ void PhysicalDeviceView::properties(VkPhysicalDevice physical_device, VkPhysical
 
 void PhysicalDeviceView::properties2(VkPhysicalDevice physical_device, VkPhysicalDeviceProperties2 *answer)
 {
+    AV_SCOPE("PhysicalDeviceView::properties2");
     if (!remember(answer)) {
         log_.write("rvkvk: vkGetPhysicalDeviceProperties2 chain longer than 32 structures, not sent");
         return;
@@ -31,6 +37,7 @@ void PhysicalDeviceView::properties2(VkPhysicalDevice physical_device, VkPhysica
 
 bool PhysicalDeviceView::remember(VkPhysicalDeviceProperties2 *answer)
 {
+    AV_SCOPE("PhysicalDeviceView::remember");
     remembered_ = 0u;
     auto *node = reinterpret_cast<VkBaseOutStructure *>(answer);
     for (; node != nullptr && remembered_ < max_chain; node = node->pNext) {
@@ -44,6 +51,7 @@ bool PhysicalDeviceView::remember(VkPhysicalDeviceProperties2 *answer)
 
 void PhysicalDeviceView::restore()
 {
+    AV_SCOPE("PhysicalDeviceView::restore");
     for (uint32_t index = 0u; index < remembered_; index++) {
         nodes_[index]->sType = types_[index];
         nodes_[index]->pNext = nexts_[index];
@@ -55,6 +63,7 @@ void PhysicalDeviceView::restore()
  * it; a client of 1.2 or later reads the latter. */
 void PhysicalDeviceView::write_luid()
 {
+    AV_SCOPE("PhysicalDeviceView::write_luid");
     for (uint32_t index = 1u; index < remembered_; index++) {
         if (types_[index] == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES) {
             auto *identity = reinterpret_cast<VkPhysicalDeviceIDProperties *>(nodes_[index]);
@@ -70,6 +79,10 @@ void PhysicalDeviceView::write_luid()
     }
 }
 
-bool PhysicalDeviceView::invariants_hold() const { return remembered_ <= max_chain; }
+bool PhysicalDeviceView::invariants_hold() const
+{
+    AV_SCOPE("PhysicalDeviceView::invariants_hold");
+    return remembered_ <= max_chain;
+}
 
 }  // namespace av::icd

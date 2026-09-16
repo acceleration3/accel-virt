@@ -1,6 +1,7 @@
 #include "guest/suite/opencl_scenario.hpp"
 
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 #include "guest/transport/kmt_transport.hpp"
 
 namespace av {
@@ -26,10 +27,14 @@ constexpr cl_int unanswered = CL_OUT_OF_RESOURCES;
 
 OpenClScenario::OpenClScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
     : steps_(kmt, report, "opencl"), link_(kmt, search, steps_, SubApi::opencl), device_(0u), context_(0u),
-      queue_(0u), buffers_{}, program_(0u), kernel_(0u), release_error_(CL_SUCCESS), inputs_{}, output_{} {}
+      queue_(0u), buffers_{}, program_(0u), kernel_(0u), release_error_(CL_SUCCESS), inputs_{}, output_{}
+      {
+          AV_SCOPE("OpenClScenario::OpenClScenario");
+      }
 
 void OpenClScenario::run()
 {
+    AV_SCOPE("OpenClScenario::run");
     ScopeExit closing([&] { link_.close(); });
     if (link_.open() != Status::ok) return;
     Status built = find_device();
@@ -46,6 +51,7 @@ void OpenClScenario::run()
  * wherever a CPU runtime or another GPU is listed too. */
 Status OpenClScenario::find_device()
 {
+    AV_SCOPE("OpenClScenario::find_device");
     KmtTransport &transport = link_.transport();
     uint64_t      platforms[max_platforms] = {};
     cl_uint       count = 0u;
@@ -64,6 +70,7 @@ Status OpenClScenario::find_device()
 
 Status OpenClScenario::make_queue()
 {
+    AV_SCOPE("OpenClScenario::make_queue");
     KmtTransport &transport = link_.transport();
     cl_int        error = unanswered;
     context_ = clproto::rvk_clCreateContext(transport, nullptr, 1u, &device_, &error);
@@ -76,6 +83,7 @@ Status OpenClScenario::make_queue()
 
 Status OpenClScenario::make_buffers()
 {
+    AV_SCOPE("OpenClScenario::make_buffers");
     for (uint32_t index = 0u; index < elements; index++) {
         inputs_[0][index] = static_cast<float>(index);
         inputs_[1][index] = static_cast<float>(2u * index);
@@ -94,6 +102,7 @@ Status OpenClScenario::make_buffers()
 
 Status OpenClScenario::make_kernel()
 {
+    AV_SCOPE("OpenClScenario::make_kernel");
     KmtTransport &transport = link_.transport();
     const char   *sources[] = {vector_add_source};
     cl_int        error = unanswered;
@@ -110,6 +119,7 @@ Status OpenClScenario::make_kernel()
  * resolves it, never the guest. */
 Status OpenClScenario::compute()
 {
+    AV_SCOPE("OpenClScenario::compute");
     KmtTransport &transport = link_.transport();
     cl_int        ran = CL_SUCCESS;
     for (cl_uint index = 0u; index < buffer_count && ran == CL_SUCCESS; index++)
@@ -136,6 +146,7 @@ Status OpenClScenario::compute()
  * as undecodable, which would fault the context before the rest are. */
 void OpenClScenario::release()
 {
+    AV_SCOPE("OpenClScenario::release");
     release_error_ = CL_SUCCESS;
     release_object(&clproto::rvk_clReleaseKernel, kernel_);
     release_object(&clproto::rvk_clReleaseProgram, program_);
@@ -147,6 +158,7 @@ void OpenClScenario::release()
 
 void OpenClScenario::release_object(Release call, uint64_t &object)
 {
+    AV_SCOPE("OpenClScenario::release_object");
     if (object == 0u) return;
     const cl_int released = call(link_.transport(), object);
     object = 0u;

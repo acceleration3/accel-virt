@@ -1,5 +1,6 @@
 #include "guest/suite/probe_commands.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/suite/probe_device.hpp"
 #include "guest/suite/probe_outcome.hpp"
 #include "guest/suite/vulkan_entry.hpp"
@@ -7,17 +8,22 @@
 namespace av {
 
 ProbeCommands::ProbeCommands(ProbeDevice &device)
-    : device_(device), pool_(VK_NULL_HANDLE), buffer_(VK_NULL_HANDLE), fence_(VK_NULL_HANDLE) {}
+    : device_(device), pool_(VK_NULL_HANDLE), buffer_(VK_NULL_HANDLE), fence_(VK_NULL_HANDLE)
+    {
+        AV_SCOPE("ProbeCommands::ProbeCommands");
+    }
 
 /* Vulkan makes destroying VK_NULL_HANDLE a no-op; the buffer is the pool's. */
 ProbeCommands::~ProbeCommands()
 {
+    AV_SCOPE("ProbeCommands::~ProbeCommands");
     device_.vulkan().destroy_fence(device_.device(), fence_);
     device_.vulkan().destroy_command_pool(device_.device(), pool_);
 }
 
 bool ProbeCommands::begin(ProbeOutcome &outcome)
 {
+    AV_SCOPE("ProbeCommands::begin");
     VulkanEntry   &vulkan = device_.vulkan();
     const VkDevice device = device_.device();
     VkCommandPoolCreateInfo pool = {};
@@ -41,6 +47,7 @@ bool ProbeCommands::begin(ProbeOutcome &outcome)
 
 bool ProbeCommands::run(ProbeOutcome &outcome)
 {
+    AV_SCOPE("ProbeCommands::run");
     VulkanEntry &vulkan = device_.vulkan();
     if (!outcome.accept(vulkan.end_command_buffer(buffer_))) return false;
     VkSubmitInfo submit = {};
@@ -51,10 +58,15 @@ bool ProbeCommands::run(ProbeOutcome &outcome)
     return outcome.accept(vulkan.wait_for_fence(device_.device(), fence_, wait_nanoseconds));
 }
 
-VkCommandBuffer ProbeCommands::buffer() const { return buffer_; }
+VkCommandBuffer ProbeCommands::buffer() const
+{
+    AV_SCOPE("ProbeCommands::buffer");
+    return buffer_;
+}
 
 bool ProbeCommands::invariants_hold() const
 {
+    AV_SCOPE("ProbeCommands::invariants_hold");
     return pool_ != VK_NULL_HANDLE || (buffer_ == VK_NULL_HANDLE && fence_ == VK_NULL_HANDLE);
 }
 

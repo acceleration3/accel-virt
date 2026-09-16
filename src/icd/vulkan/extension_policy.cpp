@@ -1,5 +1,6 @@
 #include "icd/vulkan/extension_policy.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/generated/vulkan/vk_supported_extensions.h"
 
 namespace av::icd {
@@ -11,10 +12,14 @@ const char *const withheld[] = {"VK_KHR_surface", "VK_KHR_win32_surface", "VK_KH
 
 }  // namespace
 
-ExtensionPolicy::ExtensionPolicy(const Row *rows, uint32_t count) : rows_(rows), count_(count) {}
+ExtensionPolicy::ExtensionPolicy(const Row *rows, uint32_t count) : rows_(rows), count_(count)
+{
+    AV_SCOPE("ExtensionPolicy::ExtensionPolicy");
+}
 
 const ExtensionPolicy::Row *ExtensionPolicy::reportable(const char *name) const
 {
+    AV_SCOPE("ExtensionPolicy::reportable");
     if (name == nullptr) return nullptr;
     for (const char *const never : withheld)
         if (__builtin_strcmp(never, name) == 0) return nullptr;
@@ -33,6 +38,7 @@ const ExtensionPolicy::Row *ExtensionPolicy::reportable(const char *name) const
 bool ExtensionPolicy::reported_by_host(const Row &row, const VkExtensionProperties *host, uint32_t host_count,
                                        VkExtensionProperties &entry) const
 {
+    AV_SCOPE("ExtensionPolicy::reported_by_host");
     const size_t compared = __builtin_strlen(row.name_) + 1u;
     for (uint32_t index = 0u; index < host_count; index++) {
         if (__builtin_memcmp(host[index].extensionName, row.name_, compared) != 0) continue;
@@ -47,6 +53,7 @@ bool ExtensionPolicy::reported_by_host(const Row &row, const VkExtensionProperti
 VkResult ExtensionPolicy::report(const VkExtensionProperties *host, uint32_t host_count, uint32_t *count,
                                  VkExtensionProperties *properties) const
 {
+    AV_SCOPE("ExtensionPolicy::report");
     uint32_t reported = 0u;
     for (uint32_t index = 0u; index < count_; index++) {
         VkExtensionProperties entry = {};
@@ -62,6 +69,7 @@ VkResult ExtensionPolicy::report(const VkExtensionProperties *host, uint32_t hos
 
 uint32_t ExtensionPolicy::first_refused(const char *const *names, uint32_t count) const
 {
+    AV_SCOPE("ExtensionPolicy::first_refused");
     for (uint32_t index = 0u; index < count; index++)
         if (reportable(names[index]) == nullptr) return index;
     return count;
@@ -69,6 +77,7 @@ uint32_t ExtensionPolicy::first_refused(const char *const *names, uint32_t count
 
 bool ExtensionPolicy::invariants_hold() const
 {
+    AV_SCOPE("ExtensionPolicy::invariants_hold");
     for (uint32_t index = 0u; index < count_; index++) {
         const Row &row = rows_[index];
         if (row.name_ == nullptr || row.name_[0] == '\0' || row.test_ == nullptr || row.test_[0] == '\0') return false;

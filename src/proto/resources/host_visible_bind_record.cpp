@@ -1,23 +1,46 @@
 #include "proto/resources/host_visible_bind_record.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
-HostVisibleBindRecord::HostVisibleBindRecord() : operation_(0u), allocation_(0u), resource_id_(0u), pages_(0u) {}
+HostVisibleBindRecord::HostVisibleBindRecord() : operation_(0u), allocation_(0u), resource_id_(0u), pages_(0u)
+{
+    AV_SCOPE("HostVisibleBindRecord::HostVisibleBindRecord");
+}
 
 HostVisibleBindRecord::HostVisibleBindRecord(Operation operation, uint32_t allocation, uint32_t resource_id)
     : operation_(static_cast<uint16_t>(operation)), allocation_(allocation), resource_id_(resource_id), pages_(0u)
-{}
+{
+    AV_SCOPE("HostVisibleBindRecord::HostVisibleBindRecord");
+}
 
-bool     HostVisibleBindRecord::binds() const { return operation_ == static_cast<uint16_t>(Operation::bind); }
-uint32_t HostVisibleBindRecord::allocation() const { return allocation_; }
-uint32_t HostVisibleBindRecord::resource_id() const { return resource_id_; }
-uint64_t HostVisibleBindRecord::pages() const { return pages_; }
+bool     HostVisibleBindRecord::binds() const
+{
+    AV_SCOPE("HostVisibleBindRecord::binds");
+    return operation_ == static_cast<uint16_t>(Operation::bind);
+}
+uint32_t HostVisibleBindRecord::allocation() const
+{
+    AV_SCOPE("HostVisibleBindRecord::allocation");
+    return allocation_;
+}
+uint32_t HostVisibleBindRecord::resource_id() const
+{
+    AV_SCOPE("HostVisibleBindRecord::resource_id");
+    return resource_id_;
+}
+uint64_t HostVisibleBindRecord::pages() const
+{
+    AV_SCOPE("HostVisibleBindRecord::pages");
+    return pages_;
+}
 
 HostVisibleBindRecord HostVisibleBindRecord::answered(uint32_t resource_id, uint64_t pages) const
 {
+    AV_SCOPE("HostVisibleBindRecord::answered");
     HostVisibleBindRecord answer = *this;
     answer.resource_id_ = resource_id;
     answer.pages_ = pages;
@@ -26,6 +49,7 @@ HostVisibleBindRecord HostVisibleBindRecord::answered(uint32_t resource_id, uint
 
 Status HostVisibleBindRecord::encode(uint8_t *bytes, size_t capacity) const
 {
+    AV_SCOPE("HostVisibleBindRecord::encode");
     WireWriter writer(bytes, capacity);
     writer.write_u32(magic);
     writer.write_u16(version);
@@ -41,6 +65,7 @@ Status HostVisibleBindRecord::encode(uint8_t *bytes, size_t capacity) const
  * names a resource and nothing else the kernel answers. */
 bool HostVisibleBindRecord::is_request() const
 {
+    AV_SCOPE("HostVisibleBindRecord::is_request");
     if (pages_ != 0u) return false;
     if (operation_ == static_cast<uint16_t>(Operation::bind)) return allocation_ != 0u && resource_id_ == 0u;
     return operation_ == static_cast<uint16_t>(Operation::unbind) && resource_id_ != 0u;
@@ -48,6 +73,7 @@ bool HostVisibleBindRecord::is_request() const
 
 Status HostVisibleBindRecord::read(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("HostVisibleBindRecord::read");
     WireReader     reader(bytes, length);
     const uint32_t found_magic = reader.read_u32();
     const uint16_t found_version = reader.read_u16();
@@ -62,6 +88,7 @@ Status HostVisibleBindRecord::read(const uint8_t *bytes, size_t length)
 
 Status HostVisibleBindRecord::decode(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("HostVisibleBindRecord::decode");
     HostVisibleBindRecord candidate;
     const Status          read_back = candidate.read(bytes, length);
     if (read_back != Status::ok) return read_back;
@@ -74,6 +101,7 @@ Status HostVisibleBindRecord::decode(const uint8_t *bytes, size_t length)
  * the request's own. */
 Status HostVisibleBindRecord::accept_answer(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("HostVisibleBindRecord::accept_answer");
     HostVisibleBindRecord answer;
     const Status          read_back = answer.read(bytes, length);
     if (read_back != Status::ok) return read_back;

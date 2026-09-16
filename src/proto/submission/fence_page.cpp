@@ -1,26 +1,53 @@
 #include "proto/submission/fence_page.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
-FencePage::FencePage() : flags_(0u), completed_fence_(0u), progress_(0u), fault_code_(0u) {}
+FencePage::FencePage() : flags_(0u), completed_fence_(0u), progress_(0u), fault_code_(0u)
+{
+    AV_SCOPE("FencePage::FencePage");
+}
 
 FencePage::FencePage(uint64_t completed_fence, uint64_t progress)
-    : flags_(0u), completed_fence_(completed_fence), progress_(progress), fault_code_(0u) {}
+    : flags_(0u), completed_fence_(completed_fence), progress_(progress), fault_code_(0u)
+    {
+        AV_SCOPE("FencePage::FencePage");
+    }
 
 FencePage::FencePage(uint64_t completed_fence, uint64_t progress, uint32_t fault_code)
     : flags_(faulted_flag), completed_fence_(completed_fence), progress_(progress),
-      fault_code_(fault_code) {}
+      fault_code_(fault_code)
+      {
+          AV_SCOPE("FencePage::FencePage");
+      }
 
-bool     FencePage::faulted() const         { return (flags_ & faulted_flag) != 0u; }
-uint64_t FencePage::completed_fence() const { return completed_fence_; }
-uint64_t FencePage::progress() const        { return progress_; }
-uint32_t FencePage::fault_code() const      { return fault_code_; }
+bool     FencePage::faulted() const
+{
+    AV_SCOPE("FencePage::faulted");
+    return (flags_ & faulted_flag) != 0u;
+}
+uint64_t FencePage::completed_fence() const
+{
+    AV_SCOPE("FencePage::completed_fence");
+    return completed_fence_;
+}
+uint64_t FencePage::progress() const
+{
+    AV_SCOPE("FencePage::progress");
+    return progress_;
+}
+uint32_t FencePage::fault_code() const
+{
+    AV_SCOPE("FencePage::fault_code");
+    return fault_code_;
+}
 
 Status FencePage::encode(uint8_t *bytes, size_t capacity) const
 {
+    AV_SCOPE("FencePage::encode");
     if (capacity < encoded_size) return Status::too_large;
     WireWriter writer(bytes, capacity);
     writer.write_u32(magic);
@@ -34,6 +61,7 @@ Status FencePage::encode(uint8_t *bytes, size_t capacity) const
 
 Status FencePage::decode(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("FencePage::decode");
     WireReader reader(bytes, length);
     const uint32_t found_magic = reader.read_u32();
     FencePage candidate;

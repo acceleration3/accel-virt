@@ -1,6 +1,7 @@
 #include "device/context/context_binding.hpp"
 
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 #include "device/host/host.hpp"
 #include "device/fence/fence_window.hpp"
 #include "device/memory/blob_table.hpp"
@@ -15,15 +16,20 @@ namespace av {
 
 ContextBinding::ContextBinding(Host &host, BlobTable &blobs)
     : host_(host), blobs_(blobs), version_(0u, 0u), sub_api_(SubApi::vulkan), ring_resource_(0u), ring_order_(0u),
-      fence_resource_(0u), doorbell_(0u), reply_resource_(0u), bound_(false) {}
+      fence_resource_(0u), doorbell_(0u), reply_resource_(0u), bound_(false)
+      {
+          AV_SCOPE("ContextBinding::ContextBinding");
+      }
 
 ContextBinding::~ContextBinding()
 {
+    AV_SCOPE("ContextBinding::~ContextBinding");
     unbind();
 }
 
 Status ContextBinding::bind(const ContextSetup &setup, const CapsetInfo &capset)
 {
+    AV_SCOPE("ContextBinding::bind");
     host_.require_main_loop("ContextBinding::bind");
     if (bound_) return Status::invalid_state;
     if (setup.validate_against(capset) != Status::ok) return Status::not_supported;
@@ -52,6 +58,7 @@ Status ContextBinding::bind(const ContextSetup &setup, const CapsetInfo &capset)
 
 void ContextBinding::unbind()
 {
+    AV_SCOPE("ContextBinding::unbind");
     host_.require_main_loop("ContextBinding::unbind");
     if (!bound_) return;
     blobs_.unpin(ring_resource_);
@@ -62,36 +69,43 @@ void ContextBinding::unbind()
 
 bool ContextBinding::bound() const
 {
+    AV_SCOPE("ContextBinding::bound");
     return bound_;
 }
 
 const ProtocolVersion &ContextBinding::version() const
 {
+    AV_SCOPE("ContextBinding::version");
     return version_;
 }
 
 SubApi ContextBinding::sub_api() const
 {
+    AV_SCOPE("ContextBinding::sub_api");
     return sub_api_;
 }
 
 uint32_t ContextBinding::ring_resource() const
 {
+    AV_SCOPE("ContextBinding::ring_resource");
     return ring_resource_;
 }
 
 uint8_t ContextBinding::ring_order() const
 {
+    AV_SCOPE("ContextBinding::ring_order");
     return ring_order_;
 }
 
 uint32_t ContextBinding::fence_resource() const
 {
+    AV_SCOPE("ContextBinding::fence_resource");
     return fence_resource_;
 }
 
 uint32_t ContextBinding::doorbell() const
 {
+    AV_SCOPE("ContextBinding::doorbell");
     return doorbell_;
 }
 
@@ -99,6 +113,7 @@ uint32_t ContextBinding::doorbell() const
  * empty window is what prepare refuses. */
 RingWindow ContextBinding::ring_window()
 {
+    AV_SCOPE("ContextBinding::ring_window");
     host_.require_main_loop("ContextBinding::ring_window");
     BlobWindow blob;
     if (bound_) static_cast<void>(blobs_.window(ring_resource_, blob));
@@ -107,11 +122,13 @@ RingWindow ContextBinding::ring_window()
 
 uint32_t ContextBinding::reply_resource() const
 {
+    AV_SCOPE("ContextBinding::reply_resource");
     return reply_resource_;
 }
 
 BlobWindow ContextBinding::reply_window()
 {
+    AV_SCOPE("ContextBinding::reply_window");
     host_.require_main_loop("ContextBinding::reply_window");
     BlobWindow blob;
     if (bound_ && reply_resource_ != 0u) static_cast<void>(blobs_.window(reply_resource_, blob));
@@ -120,6 +137,7 @@ BlobWindow ContextBinding::reply_window()
 
 FenceWindow ContextBinding::fence_window()
 {
+    AV_SCOPE("ContextBinding::fence_window");
     host_.require_main_loop("ContextBinding::fence_window");
     BlobWindow blob;
     if (bound_) static_cast<void>(blobs_.window(fence_resource_, blob));

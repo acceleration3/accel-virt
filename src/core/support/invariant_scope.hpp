@@ -5,6 +5,7 @@
 #define AV_INVARIANT_SCOPE_HPP
 
 #include "core/platform/platform.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
@@ -15,9 +16,14 @@ public:
     InvariantScope(Platform &platform, const T &subject, const char *function)
         : platform_(&platform), subject_(&subject), function_(function)
     {
+        AV_SCOPE("InvariantScope::InvariantScope");
         verify();
     }
-    ~InvariantScope() { verify(); }
+    ~InvariantScope()
+    {
+        AV_SCOPE("InvariantScope::~InvariantScope");
+        verify();
+    }
 #else
     InvariantScope(Platform &, const T &, const char *) {}
     ~InvariantScope() = default;
@@ -29,6 +35,7 @@ private:
 #if defined(AV_CHECKED)
     void verify() const
     {
+        AV_SCOPE("InvariantScope::verify");
         if (!subject_->invariants_hold())
             platform_->report_broken_invariant("invariants_hold", function_);
     }

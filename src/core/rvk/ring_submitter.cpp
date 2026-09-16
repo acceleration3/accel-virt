@@ -1,6 +1,7 @@
 #include "core/rvk/ring_submitter.hpp"
 
 #include "core/platform/register_window.hpp"
+#include "core/trace/function_scope.hpp"
 #include "proto/submission/fence_progress.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/submission/submission_descriptor.hpp"
@@ -11,10 +12,14 @@ namespace av {
 
 RingSubmitter::RingSubmitter(Platform &platform, RegisterWindow &doorbells, FenceProgress &fences)
     : platform_(platform), doorbells_(doorbells), fences_(fences), ring_(nullptr), order_(0u), doorbell_(0u),
-      tail_(0u), published_(0u), device_(), failed_(false) {}
+      tail_(0u), published_(0u), device_(), failed_(false)
+      {
+          AV_SCOPE("RingSubmitter::RingSubmitter");
+      }
 
 Status RingSubmitter::attach(uint8_t *ring, uint8_t order, uint32_t doorbell)
 {
+    AV_SCOPE("RingSubmitter::attach");
     platform_.require_irql_at_most(Irql::dispatch, "RingSubmitter::attach");
     if (ring_ != nullptr) return Status::invalid_state;
     if (ring == nullptr || order < RingHeader::lowest_order || order > RingHeader::highest_order ||
@@ -32,6 +37,7 @@ Status RingSubmitter::attach(uint8_t *ring, uint8_t order, uint32_t doorbell)
 
 void RingSubmitter::detach()
 {
+    AV_SCOPE("RingSubmitter::detach");
     platform_.require_irql_at_most(Irql::dispatch, "RingSubmitter::detach");
     ring_ = nullptr;
 }
@@ -39,6 +45,7 @@ void RingSubmitter::detach()
 /* The head is copied once and judged against the tail this driver published. */
 Status RingSubmitter::judge_head()
 {
+    AV_SCOPE("RingSubmitter::judge_head");
     uint8_t bytes[sizeof(uint64_t)] = {};
     platform_.copy(bytes, ring_ + head_offset, sizeof bytes);
     WireReader reader(bytes, sizeof bytes);
@@ -50,6 +57,7 @@ Status RingSubmitter::judge_head()
 
 Status RingSubmitter::submit(const SubmissionDescriptor &submission)
 {
+    AV_SCOPE("RingSubmitter::submit");
     platform_.require_irql_at_most(Irql::dispatch, "RingSubmitter::submit");
     if (ring_ == nullptr || failed_) return Status::invalid_state;
     if (submission.begin() != tail_ ||
@@ -68,14 +76,31 @@ Status RingSubmitter::submit(const SubmissionDescriptor &submission)
     return Status::ok;
 }
 
-bool     RingSubmitter::attached() const { return ring_ != nullptr; }
-uint64_t RingSubmitter::tail() const   { return tail_; }
-uint64_t RingSubmitter::head() const   { return device_.head(); }
-bool     RingSubmitter::failed() const { return failed_; }
+bool     RingSubmitter::attached() const
+{
+    AV_SCOPE("RingSubmitter::attached");
+    return ring_ != nullptr;
+}
+uint64_t RingSubmitter::tail() const
+{
+    AV_SCOPE("RingSubmitter::tail");
+    return tail_;
+}
+uint64_t RingSubmitter::head() const
+{
+    AV_SCOPE("RingSubmitter::head");
+    return device_.head();
+}
+bool     RingSubmitter::failed() const
+{
+    AV_SCOPE("RingSubmitter::failed");
+    return failed_;
+}
 
 /* Every submission moves the tail, and the device is never ahead of it. */
 bool RingSubmitter::invariants_hold() const
 {
+    AV_SCOPE("RingSubmitter::invariants_hold");
     return (published_ == 0u || tail_ != 0u) && device_.tail() <= tail_;
 }
 

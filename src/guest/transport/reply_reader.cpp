@@ -1,16 +1,24 @@
 #include "guest/transport/reply_reader.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 
 namespace av {
 
-ReplyReader::ReplyReader() : slot_(nullptr), capacity_(0u), required_(0u) {}
+ReplyReader::ReplyReader() : slot_(nullptr), capacity_(0u), required_(0u)
+{
+    AV_SCOPE("ReplyReader::ReplyReader");
+}
 
 ReplyReader::ReplyReader(const uint8_t *slot, size_t capacity)
-    : slot_(slot), capacity_(slot == nullptr ? 0u : capacity), required_(0u) {}
+    : slot_(slot), capacity_(slot == nullptr ? 0u : capacity), required_(0u)
+    {
+        AV_SCOPE("ReplyReader::ReplyReader");
+    }
 
 Status ReplyReader::read(uint64_t expected_fence, WireReader &answer)
 {
+    AV_SCOPE("ReplyReader::read");
     required_ = 0u;
     if (slot_ == nullptr) return Status::invalid_state;
     ReplyHeader  header;
@@ -27,8 +35,16 @@ Status ReplyReader::read(uint64_t expected_fence, WireReader &answer)
     return Status::ok;
 }
 
-uint32_t ReplyReader::required() const { return required_; }
+uint32_t ReplyReader::required() const
+{
+    AV_SCOPE("ReplyReader::required");
+    return required_;
+}
 
-bool ReplyReader::invariants_hold() const { return slot_ != nullptr || capacity_ == 0u; }
+bool ReplyReader::invariants_hold() const
+{
+    AV_SCOPE("ReplyReader::invariants_hold");
+    return slot_ != nullptr || capacity_ == 0u;
+}
 
 }  // namespace av

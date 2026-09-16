@@ -1,5 +1,6 @@
 #include "guest/suite/probe_buffer.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/suite/probe_device.hpp"
 #include "guest/suite/probe_outcome.hpp"
 #include "guest/suite/vulkan_entry.hpp"
@@ -7,17 +8,22 @@
 namespace av {
 
 ProbeBuffer::ProbeBuffer(ProbeDevice &device)
-    : device_(device), buffer_(VK_NULL_HANDLE), memory_(VK_NULL_HANDLE), bytes_(nullptr) {}
+    : device_(device), buffer_(VK_NULL_HANDLE), memory_(VK_NULL_HANDLE), bytes_(nullptr)
+    {
+        AV_SCOPE("ProbeBuffer::ProbeBuffer");
+    }
 
 /* Vulkan makes destroying and freeing VK_NULL_HANDLE a no-op. */
 ProbeBuffer::~ProbeBuffer()
 {
+    AV_SCOPE("ProbeBuffer::~ProbeBuffer");
     device_.vulkan().destroy_buffer(device_.device(), buffer_);
     device_.vulkan().free_memory(device_.device(), memory_);
 }
 
 bool ProbeBuffer::make(VkDeviceSize bytes, VkBufferUsageFlags usage, ProbeOutcome &outcome)
 {
+    AV_SCOPE("ProbeBuffer::make");
     VulkanEntry   &vulkan = device_.vulkan();
     const VkDevice device = device_.device();
     VkBufferCreateInfo info = {};
@@ -45,11 +51,20 @@ bool ProbeBuffer::make(VkDeviceSize bytes, VkBufferUsageFlags usage, ProbeOutcom
     return true;
 }
 
-VkBuffer       ProbeBuffer::buffer() const { return buffer_; }
-unsigned char *ProbeBuffer::bytes() const { return bytes_; }
+VkBuffer       ProbeBuffer::buffer() const
+{
+    AV_SCOPE("ProbeBuffer::buffer");
+    return buffer_;
+}
+unsigned char *ProbeBuffer::bytes() const
+{
+    AV_SCOPE("ProbeBuffer::bytes");
+    return bytes_;
+}
 
 bool ProbeBuffer::invariants_hold() const
 {
+    AV_SCOPE("ProbeBuffer::invariants_hold");
     if (bytes_ != nullptr && memory_ == VK_NULL_HANDLE) return false;
     return memory_ == VK_NULL_HANDLE || buffer_ != VK_NULL_HANDLE;
 }

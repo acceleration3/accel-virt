@@ -1,15 +1,19 @@
 #include "device/executor/handle_registry.hpp"
 
+#include "core/trace/function_scope.hpp"
+
 namespace av {
 
 HandleRegistry::HandleRegistry() : handles_{}, parents_{}, end_(0u), count_(0u)
 {
+    AV_SCOPE("HandleRegistry::HandleRegistry");
     static_assert(max_handles < no_parent);
     for (uint16_t &parent : parents_) parent = no_parent;
 }
 
 bool HandleRegistry::remember(uint64_t handle, uint64_t parent)
 {
+    AV_SCOPE("HandleRegistry::remember");
     /* The null handle is the API's own and is never anybody's to own. */
     if (handle == 0u) return true;
     if (knows(handle)) return true;
@@ -26,12 +30,14 @@ bool HandleRegistry::remember(uint64_t handle, uint64_t parent)
 
 bool HandleRegistry::knows(uint64_t handle) const
 {
+    AV_SCOPE("HandleRegistry::knows");
     if (handle == 0u) return true;
     return slot_of(handle) != end_;
 }
 
 void HandleRegistry::forget(uint64_t handle)
 {
+    AV_SCOPE("HandleRegistry::forget");
     if (handle == 0u) return;
     const uint32_t slot = slot_of(handle);
     if (slot == end_) return;
@@ -41,6 +47,7 @@ void HandleRegistry::forget(uint64_t handle)
 
 void HandleRegistry::forget_children(uint64_t handle)
 {
+    AV_SCOPE("HandleRegistry::forget_children");
     if (handle == 0u) return;
     const uint32_t slot = slot_of(handle);
     if (slot == end_) return;
@@ -54,6 +61,7 @@ void HandleRegistry::forget_children(uint64_t handle)
 
 void HandleRegistry::forget_all()
 {
+    AV_SCOPE("HandleRegistry::forget_all");
     for (uint32_t i = 0u; i < end_; i++) {
         handles_[i] = 0u;
         parents_[i] = no_parent;
@@ -62,10 +70,15 @@ void HandleRegistry::forget_all()
     count_ = 0u;
 }
 
-uint32_t HandleRegistry::count() const { return count_; }
+uint32_t HandleRegistry::count() const
+{
+    AV_SCOPE("HandleRegistry::count");
+    return count_;
+}
 
 uint32_t HandleRegistry::slot_of(uint64_t handle) const
 {
+    AV_SCOPE("HandleRegistry::slot_of");
     for (uint32_t i = 0u; i < end_; i++) {
         if (handles_[i] == handle) return i;
     }
@@ -74,6 +87,7 @@ uint32_t HandleRegistry::slot_of(uint64_t handle) const
 
 void HandleRegistry::free_slot(uint32_t slot)
 {
+    AV_SCOPE("HandleRegistry::free_slot");
     handles_[slot] = 0u;
     parents_[slot] = no_parent;
     count_--;
@@ -81,6 +95,7 @@ void HandleRegistry::free_slot(uint32_t slot)
 
 void HandleRegistry::sweep_orphans()
 {
+    AV_SCOPE("HandleRegistry::sweep_orphans");
     bool freed = true;
     while (freed) {
         freed = false;
@@ -96,6 +111,7 @@ void HandleRegistry::sweep_orphans()
 
 bool HandleRegistry::invariants_hold() const
 {
+    AV_SCOPE("HandleRegistry::invariants_hold");
     if (end_ > max_handles) return false;
     if (end_ != 0u && handles_[end_ - 1u] == 0u) return false;
     uint32_t held = 0u;

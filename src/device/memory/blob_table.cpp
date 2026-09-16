@@ -1,21 +1,27 @@
 #include "device/memory/blob_table.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/host/host.hpp"
 #include "core/support/scope_exit.hpp"
 #include "device/memory/blob_window.hpp"
 
 namespace av {
 
-BlobTable::BlobTable(Host &host) : host_(host), space_(host), lock_(nullptr), slots_{} {}
+BlobTable::BlobTable(Host &host) : host_(host), space_(host), lock_(nullptr), slots_{}
+{
+    AV_SCOPE("BlobTable::BlobTable");
+}
 
 BlobTable::~BlobTable()
 {
+    AV_SCOPE("BlobTable::~BlobTable");
     release_all();
     if (lock_ != nullptr) host_.destroy_mutex(lock_);
 }
 
 Status BlobTable::initialize()
 {
+    AV_SCOPE("BlobTable::initialize");
     host_.require_main_loop("BlobTable::initialize");
     if (lock_ != nullptr) return Status::invalid_state;
     return host_.create_mutex(lock_) == Status::ok ? Status::ok : Status::no_memory;
@@ -23,6 +29,7 @@ Status BlobTable::initialize()
 
 ObjectStorage<BlobResource> *BlobTable::slot_of(uint32_t id)
 {
+    AV_SCOPE("BlobTable::slot_of");
     for (ObjectStorage<BlobResource> &slot : slots_)
         if (slot.constructed() && slot.object().id() == id) return &slot;
     return nullptr;
@@ -30,6 +37,7 @@ ObjectStorage<BlobResource> *BlobTable::slot_of(uint32_t id)
 
 Status BlobTable::create_guest(uint32_t id, uint64_t size, ControlRequest &request, size_t offset, uint32_t entries)
 {
+    AV_SCOPE("BlobTable::create_guest");
     host_.require_main_loop("BlobTable::create_guest");
     if (lock_ == nullptr) return Status::invalid_state;
     if (slot_of(id) != nullptr) return Status::conflict;
@@ -46,6 +54,7 @@ Status BlobTable::create_guest(uint32_t id, uint64_t size, ControlRequest &reque
 
 Status BlobTable::create_host(uint32_t id, uint64_t size)
 {
+    AV_SCOPE("BlobTable::create_host");
     host_.require_main_loop("BlobTable::create_host");
     if (lock_ == nullptr) return Status::invalid_state;
     if (slot_of(id) != nullptr) return Status::conflict;
@@ -62,6 +71,7 @@ Status BlobTable::create_host(uint32_t id, uint64_t size)
 
 bool BlobTable::overlaps_mapping(uint64_t offset, uint64_t size) const
 {
+    AV_SCOPE("BlobTable::overlaps_mapping");
     for (const ObjectStorage<BlobResource> &slot : slots_)
         if (slot.constructed() && slot.object().overlaps(offset, size)) return true;
     return false;
@@ -69,6 +79,7 @@ bool BlobTable::overlaps_mapping(uint64_t offset, uint64_t size) const
 
 Status BlobTable::map(uint32_t id, uint64_t offset)
 {
+    AV_SCOPE("BlobTable::map");
     host_.require_main_loop("BlobTable::map");
     ObjectStorage<BlobResource> *const slot = slot_of(id);
     if (slot == nullptr) return Status::not_found;
@@ -79,6 +90,7 @@ Status BlobTable::map(uint32_t id, uint64_t offset)
 
 Status BlobTable::unmap(uint32_t id)
 {
+    AV_SCOPE("BlobTable::unmap");
     host_.require_main_loop("BlobTable::unmap");
     ObjectStorage<BlobResource> *const slot = slot_of(id);
     return slot != nullptr ? slot->object().unmap() : Status::not_found;
@@ -86,6 +98,7 @@ Status BlobTable::unmap(uint32_t id)
 
 Status BlobTable::pin(uint32_t id, uint64_t minimum_size)
 {
+    AV_SCOPE("BlobTable::pin");
     host_.require_main_loop("BlobTable::pin");
     ObjectStorage<BlobResource> *const slot = slot_of(id);
     if (slot == nullptr) return Status::not_found;
@@ -96,6 +109,7 @@ Status BlobTable::pin(uint32_t id, uint64_t minimum_size)
 
 Status BlobTable::window(uint32_t id, BlobWindow &window)
 {
+    AV_SCOPE("BlobTable::window");
     host_.require_main_loop("BlobTable::window");
     ObjectStorage<BlobResource> *const slot = slot_of(id);
     if (slot == nullptr) return Status::not_found;
@@ -106,6 +120,7 @@ Status BlobTable::window(uint32_t id, BlobWindow &window)
 
 void BlobTable::unpin(uint32_t id)
 {
+    AV_SCOPE("BlobTable::unpin");
     host_.require_main_loop("BlobTable::unpin");
     ObjectStorage<BlobResource> *const slot = slot_of(id);
     if (slot != nullptr) slot->object().unpin();
@@ -113,6 +128,7 @@ void BlobTable::unpin(uint32_t id)
 
 Status BlobTable::release(uint32_t id)
 {
+    AV_SCOPE("BlobTable::release");
     host_.require_main_loop("BlobTable::release");
     ObjectStorage<BlobResource> *const slot = slot_of(id);
     if (slot == nullptr) return Status::not_found;
@@ -125,6 +141,7 @@ Status BlobTable::release(uint32_t id)
 
 void BlobTable::release_all()
 {
+    AV_SCOPE("BlobTable::release_all");
     host_.require_main_loop("BlobTable::release_all");
     if (lock_ == nullptr) return;
     host_.lock_mutex(lock_);
@@ -134,6 +151,7 @@ void BlobTable::release_all()
 
 bool BlobTable::contains(uint32_t id)
 {
+    AV_SCOPE("BlobTable::contains");
     host_.require_main_loop("BlobTable::contains");
     return slot_of(id) != nullptr;
 }
@@ -142,6 +160,7 @@ bool BlobTable::contains(uint32_t id)
  * worker would otherwise be reading. */
 Status BlobTable::hold_alias(uint32_t id, const GuestPageAlias *&alias)
 {
+    AV_SCOPE("BlobTable::hold_alias");
     alias = nullptr;
     if (lock_ == nullptr) return Status::not_found;
     host_.lock_mutex(lock_);
@@ -152,6 +171,7 @@ Status BlobTable::hold_alias(uint32_t id, const GuestPageAlias *&alias)
 
 void BlobTable::release_alias(uint32_t id)
 {
+    AV_SCOPE("BlobTable::release_alias");
     if (lock_ == nullptr) return;
     host_.lock_mutex(lock_);
     ObjectStorage<BlobResource> *const slot = slot_of(id);
@@ -161,6 +181,7 @@ void BlobTable::release_alias(uint32_t id)
 
 uint32_t BlobTable::live() const
 {
+    AV_SCOPE("BlobTable::live");
     uint32_t count = 0u;
     for (const ObjectStorage<BlobResource> &slot : slots_) count += slot.constructed() ? 1u : 0u;
     return count;
@@ -170,6 +191,7 @@ uint32_t BlobTable::live() const
  * lives that a worker's alias could not be held apart from. */
 bool BlobTable::invariants_hold() const
 {
+    AV_SCOPE("BlobTable::invariants_hold");
     if (lock_ == nullptr && live() != 0u) return false;
     for (uint32_t first = 0u; first < max_blobs; first++) {
         if (!slots_[first].constructed()) continue;

@@ -1,6 +1,7 @@
 #include "core/virtio/virt_queue.hpp"
 
 #include "core/support/invariant_scope.hpp"
+#include "core/trace/function_scope.hpp"
 #include "core/virtio/virtq_segment.hpp"
 
 namespace av {
@@ -23,15 +24,20 @@ struct VirtQueue::Shadow {
 VirtQueue::VirtQueue(Platform &platform, uint16_t index)
     : platform_(platform), index_(index), size_(0u), ring_(platform), shadow_(nullptr),
       free_head_(0u), free_count_(0u), avail_index_(0u), last_used_index_(0u), driver_offset_(0u),
-      device_offset_(0u), notify_offset_(0u) {}
+      device_offset_(0u), notify_offset_(0u)
+      {
+          AV_SCOPE("VirtQueue::VirtQueue");
+      }
 
 VirtQueue::~VirtQueue()
 {
+    AV_SCOPE("VirtQueue::~VirtQueue");
     if (shadow_ != nullptr) platform_.release(shadow_);
 }
 
 Status VirtQueue::initialize(uint16_t device_max_size)
 {
+    AV_SCOPE("VirtQueue::initialize");
     platform_.require_irql_at_most(Irql::passive, "VirtQueue::initialize");
     InvariantScope<VirtQueue> guard(platform_, *this, "initialize");
     if (device_max_size == 0u || (device_max_size & (device_max_size - 1u)) != 0u) return Status::malformed;
@@ -56,39 +62,49 @@ Status VirtQueue::initialize(uint16_t device_max_size)
     return Status::ok;
 }
 
-void VirtQueue::bind_notify_offset(uint64_t offset) { notify_offset_ = offset; }
+void VirtQueue::bind_notify_offset(uint64_t offset)
+{
+    AV_SCOPE("VirtQueue::bind_notify_offset");
+    notify_offset_ = offset;
+}
 
 uint16_t VirtQueue::read_u16(size_t offset) const
 {
+    AV_SCOPE("VirtQueue::read_u16");
     const uint8_t *bytes = ring_.bytes();
     return static_cast<uint16_t>(bytes[offset] | bytes[offset + 1u] << 8u);
 }
 
 uint32_t VirtQueue::read_u32(size_t offset) const
 {
+    AV_SCOPE("VirtQueue::read_u32");
     return uint32_t{read_u16(offset)} | uint32_t{read_u16(offset + 2u)} << 16u;
 }
 
 void VirtQueue::write_u16(size_t offset, uint16_t value)
 {
+    AV_SCOPE("VirtQueue::write_u16");
     ring_.bytes()[offset] = static_cast<uint8_t>(value);
     ring_.bytes()[offset + 1u] = static_cast<uint8_t>(value >> 8u);
 }
 
 void VirtQueue::write_u32(size_t offset, uint32_t value)
 {
+    AV_SCOPE("VirtQueue::write_u32");
     write_u16(offset, static_cast<uint16_t>(value));
     write_u16(offset + 2u, static_cast<uint16_t>(value >> 16u));
 }
 
 void VirtQueue::write_u64(size_t offset, uint64_t value)
 {
+    AV_SCOPE("VirtQueue::write_u64");
     write_u32(offset, static_cast<uint32_t>(value));
     write_u32(offset + 4u, static_cast<uint32_t>(value >> 32u));
 }
 
 Status VirtQueue::add(const VirtqSegment *segments, uint16_t count, uint16_t &head)
 {
+    AV_SCOPE("VirtQueue::add");
     platform_.require_irql_at_most(Irql::dispatch, "VirtQueue::add");
     InvariantScope<VirtQueue> guard(platform_, *this, "add");
     if (size_ == 0u) return Status::invalid_state;
@@ -126,6 +142,7 @@ Status VirtQueue::add(const VirtqSegment *segments, uint16_t count, uint16_t &he
 
 void VirtQueue::free_chain(uint16_t head)
 {
+    AV_SCOPE("VirtQueue::free_chain");
     uint16_t last = head;
     for (uint16_t i = 1u; i < shadow_[head].chain_length; i++) last = shadow_[last].next;
     shadow_[last].next = free_head_;
@@ -137,6 +154,7 @@ void VirtQueue::free_chain(uint16_t head)
 
 Status VirtQueue::take_used(uint16_t &head, uint32_t &written)
 {
+    AV_SCOPE("VirtQueue::take_used");
     platform_.require_irql_at_most(Irql::dispatch, "VirtQueue::take_used");
     InvariantScope<VirtQueue> guard(platform_, *this, "take_used");
     if (size_ == 0u) return Status::invalid_state;
@@ -159,16 +177,45 @@ Status VirtQueue::take_used(uint16_t &head, uint32_t &written)
     return Status::ok;
 }
 
-uint16_t VirtQueue::index() const            { return index_; }
-uint16_t VirtQueue::size() const             { return size_; }
-uint16_t VirtQueue::free_descriptors() const { return free_count_; }
-uint64_t VirtQueue::descriptor_area() const  { return ring_.physical_address(); }
-uint64_t VirtQueue::driver_area() const      { return ring_.physical_address() + driver_offset_; }
-uint64_t VirtQueue::device_area() const      { return ring_.physical_address() + device_offset_; }
-uint64_t VirtQueue::notify_offset() const    { return notify_offset_; }
+uint16_t VirtQueue::index() const
+{
+    AV_SCOPE("VirtQueue::index");
+    return index_;
+}
+uint16_t VirtQueue::size() const
+{
+    AV_SCOPE("VirtQueue::size");
+    return size_;
+}
+uint16_t VirtQueue::free_descriptors() const
+{
+    AV_SCOPE("VirtQueue::free_descriptors");
+    return free_count_;
+}
+uint64_t VirtQueue::descriptor_area() const
+{
+    AV_SCOPE("VirtQueue::descriptor_area");
+    return ring_.physical_address();
+}
+uint64_t VirtQueue::driver_area() const
+{
+    AV_SCOPE("VirtQueue::driver_area");
+    return ring_.physical_address() + driver_offset_;
+}
+uint64_t VirtQueue::device_area() const
+{
+    AV_SCOPE("VirtQueue::device_area");
+    return ring_.physical_address() + device_offset_;
+}
+uint64_t VirtQueue::notify_offset() const
+{
+    AV_SCOPE("VirtQueue::notify_offset");
+    return notify_offset_;
+}
 
 bool VirtQueue::invariants_hold() const
 {
+    AV_SCOPE("VirtQueue::invariants_hold");
     const uint16_t in_flight = static_cast<uint16_t>(avail_index_ - last_used_index_);
     return free_count_ <= size_ && in_flight <= size_ && (size_ == 0u) == (shadow_ == nullptr);
 }

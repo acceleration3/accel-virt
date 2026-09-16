@@ -1,5 +1,6 @@
 #include "guest/suite/vulkan_device_chain.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/suite/scenario_steps.hpp"
 #include "proto/client_transport.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
@@ -18,10 +19,14 @@ constexpr uint32_t queue_family = 0u;
 }  // namespace
 
 VulkanDeviceChain::VulkanDeviceChain(ScenarioSteps &steps, ClientTransport &transport)
-    : steps_(steps), transport_(transport), instance_(0u), physical_device_(0u), device_(0u) {}
+    : steps_(steps), transport_(transport), instance_(0u), physical_device_(0u), device_(0u)
+    {
+        AV_SCOPE("VulkanDeviceChain::VulkanDeviceChain");
+    }
 
 Status VulkanDeviceChain::make()
 {
+    AV_SCOPE("VulkanDeviceChain::make");
     const Status instanced = make_instance();
     if (instanced != Status::ok) return instanced;
     const Status found = find_physical_device();
@@ -31,6 +36,7 @@ Status VulkanDeviceChain::make()
 
 Status VulkanDeviceChain::make_instance()
 {
+    AV_SCOPE("VulkanDeviceChain::make_instance");
     VkApplicationInfo application = {};
     application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     application.pApplicationName = "rvktest";
@@ -50,6 +56,7 @@ Status VulkanDeviceChain::make_instance()
  * it; one with more than the room answers VK_INCOMPLETE, which fails it too. */
 Status VulkanDeviceChain::find_physical_device()
 {
+    AV_SCOPE("VulkanDeviceChain::find_physical_device");
     const VkInstance instance = reinterpret_cast<VkInstance>(instance_);
     uint32_t         count = 0u;
     VkResult         listed = vkproto::rvk_vkEnumeratePhysicalDevices(transport_, instance, &count, nullptr);
@@ -65,6 +72,7 @@ Status VulkanDeviceChain::find_physical_device()
 
 Status VulkanDeviceChain::make_device()
 {
+    AV_SCOPE("VulkanDeviceChain::make_device");
     float                   priority = queue_priority;
     VkDeviceQueueCreateInfo queue = {};
     queue.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -87,6 +95,7 @@ Status VulkanDeviceChain::make_device()
  * fault the context, so only what was made is named. */
 void VulkanDeviceChain::destroy()
 {
+    AV_SCOPE("VulkanDeviceChain::destroy");
     if (device_ != 0u) vkproto::rvk_vkDestroyDevice(transport_, device(), nullptr);
     if (instance_ != 0u) vkproto::rvk_vkDestroyInstance(transport_, reinterpret_cast<VkInstance>(instance_), nullptr);
     device_ = 0u;
@@ -96,14 +105,20 @@ void VulkanDeviceChain::destroy()
 
 VkPhysicalDevice VulkanDeviceChain::physical_device() const
 {
+    AV_SCOPE("VulkanDeviceChain::physical_device");
     return reinterpret_cast<VkPhysicalDevice>(physical_device_);
 }
 
-VkDevice VulkanDeviceChain::device() const { return reinterpret_cast<VkDevice>(device_); }
+VkDevice VulkanDeviceChain::device() const
+{
+    AV_SCOPE("VulkanDeviceChain::device");
+    return reinterpret_cast<VkDevice>(device_);
+}
 
 /* Each handle is only ever held with the one it was made from. */
 bool VulkanDeviceChain::invariants_hold() const
 {
+    AV_SCOPE("VulkanDeviceChain::invariants_hold");
     return (device_ == 0u || physical_device_ != 0u) && (physical_device_ == 0u || instance_ != 0u);
 }
 

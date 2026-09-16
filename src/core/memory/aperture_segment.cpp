@@ -2,13 +2,18 @@
 
 #include "core/ddi/dxgk_segment_descriptor4_record.hpp"
 #include "core/support/invariant_scope.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
-ApertureSegment::ApertureSegment(Platform &platform) : platform_(platform), size_(0u) {}
+ApertureSegment::ApertureSegment(Platform &platform) : platform_(platform), size_(0u)
+{
+    AV_SCOPE("ApertureSegment::ApertureSegment");
+}
 
 Status ApertureSegment::initialize(int64_t system_memory_bytes)
 {
+    AV_SCOPE("ApertureSegment::initialize");
     platform_.require_irql_at_most(Irql::passive, "ApertureSegment::initialize");
     InvariantScope<ApertureSegment> guard(platform_, *this, "initialize");
     if (system_memory_bytes < static_cast<int64_t>(page_bytes)) return Status::invalid_parameter;
@@ -18,6 +23,7 @@ Status ApertureSegment::initialize(int64_t system_memory_bytes)
 
 void ApertureSegment::describe(DxgkSegmentDescriptor4Record &descriptor) const
 {
+    AV_SCOPE("ApertureSegment::describe");
     platform_.require_irql_at_most(Irql::passive, "ApertureSegment::describe");
     descriptor = DxgkSegmentDescriptor4Record{};
     descriptor.Flags = flags;
@@ -26,8 +32,16 @@ void ApertureSegment::describe(DxgkSegmentDescriptor4Record &descriptor) const
     descriptor.CommitLimit = size_;
 }
 
-uint64_t ApertureSegment::size() const { return size_; }
+uint64_t ApertureSegment::size() const
+{
+    AV_SCOPE("ApertureSegment::size");
+    return size_;
+}
 
-bool ApertureSegment::invariants_hold() const { return (size_ & (page_bytes - 1u)) == 0u; }
+bool ApertureSegment::invariants_hold() const
+{
+    AV_SCOPE("ApertureSegment::invariants_hold");
+    return (size_ & (page_bytes - 1u)) == 0u;
+}
 
 }  // namespace av

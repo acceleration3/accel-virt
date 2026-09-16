@@ -3,15 +3,20 @@
 #include "core/ddi/d3dddi_patch_location_list_record.hpp"
 #include "core/ddi/dxgk_allocation_list_record.hpp"
 #include "core/ddi/dxgkarg_patch_record.hpp"
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
 PatchRequest::PatchRequest(Platform &platform, const DxgkargPatchRecord &request)
-    : platform_(platform), request_(request) {}
+    : platform_(platform), request_(request)
+    {
+        AV_SCOPE("PatchRequest::PatchRequest");
+    }
 
 Status PatchRequest::validate() const
 {
+    AV_SCOPE("PatchRequest::validate");
     const DxgkargPatchRecord &r = request_;
     const uint64_t last = uint64_t{r.PatchLocationListSubmissionStart} + r.PatchLocationListSubmissionLength;
     if (r.pDmaBuffer == nullptr || r.DmaBufferSubmissionEndOffset > r.DmaBufferSize ||
@@ -31,6 +36,7 @@ Status PatchRequest::validate() const
 
 Status PatchRequest::patch()
 {
+    AV_SCOPE("PatchRequest::patch");
     platform_.require_irql_at_most(Irql::passive, "PatchRequest::patch");
     const Status status = validate();
     if (status != Status::ok) return status;

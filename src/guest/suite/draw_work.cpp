@@ -1,5 +1,6 @@
 #include "guest/suite/draw_work.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/suite/probe_device.hpp"
 #include "guest/suite/probe_outcome.hpp"
 #include "guest/suite/shaders/solid_spv.hpp"
@@ -19,11 +20,15 @@ constexpr float        full_extent = static_cast<float>(DrawWork::extent);
 DrawWork::DrawWork(ProbeDevice &device)
     : device_(device), image_(device), readback_(device), commands_(device), render_pass_(VK_NULL_HANDLE),
       framebuffer_(VK_NULL_HANDLE), vertex_(VK_NULL_HANDLE), fragment_(VK_NULL_HANDLE), layout_(VK_NULL_HANDLE),
-      pipeline_(VK_NULL_HANDLE) {}
+      pipeline_(VK_NULL_HANDLE)
+      {
+          AV_SCOPE("DrawWork::DrawWork");
+      }
 
 /* Vulkan makes destroying VK_NULL_HANDLE a no-op. */
 DrawWork::~DrawWork()
 {
+    AV_SCOPE("DrawWork::~DrawWork");
     VulkanEntry   &vulkan = device_.vulkan();
     const VkDevice device = device_.device();
     vulkan.destroy_pipeline(device, pipeline_);
@@ -36,6 +41,7 @@ DrawWork::~DrawWork()
 
 void DrawWork::run(ProbeOutcome &outcome)
 {
+    AV_SCOPE("DrawWork::run");
     if (!image_.make(extent, outcome)) return;
     if (!readback_.make(pixels * pixel_bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, outcome)) return;
     if (!make_render_pass(outcome) || !make_shaders(outcome) || !make_pipeline(outcome)) return;
@@ -48,6 +54,7 @@ void DrawWork::run(ProbeOutcome &outcome)
 /* Cleared, drawn, and left ready to be copied out. */
 bool DrawWork::make_render_pass(ProbeOutcome &outcome)
 {
+    AV_SCOPE("DrawWork::make_render_pass");
     VkAttachmentDescription attachment = {};
     attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
     attachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -84,6 +91,7 @@ bool DrawWork::make_render_pass(ProbeOutcome &outcome)
 
 bool DrawWork::make_shaders(ProbeOutcome &outcome)
 {
+    AV_SCOPE("DrawWork::make_shaders");
     VulkanEntry &vulkan = device_.vulkan();
     VkShaderModuleCreateInfo vertex = {};
     vertex.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -103,6 +111,7 @@ bool DrawWork::make_shaders(ProbeOutcome &outcome)
 /* No vertex input, one viewport over the image, nothing culled or blended. */
 bool DrawWork::make_pipeline(ProbeOutcome &outcome)
 {
+    AV_SCOPE("DrawWork::make_pipeline");
     VkPipelineShaderStageCreateInfo stages[2] = {};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -157,6 +166,7 @@ bool DrawWork::make_pipeline(ProbeOutcome &outcome)
 
 void DrawWork::record()
 {
+    AV_SCOPE("DrawWork::record");
     VulkanEntry          &vulkan = device_.vulkan();
     const VkCommandBuffer buffer = commands_.buffer();
     const VkClearValue    black = {};
@@ -181,6 +191,7 @@ void DrawWork::record()
 
 uint32_t DrawWork::coloured() const
 {
+    AV_SCOPE("DrawWork::coloured");
     uint32_t matched = 0u;
     for (uint32_t pixel = 0u; pixel < pixels; pixel++) {
         const unsigned char *const at = readback_.bytes() + pixel * pixel_bytes;
@@ -196,6 +207,7 @@ uint32_t DrawWork::coloured() const
 
 bool DrawWork::invariants_hold() const
 {
+    AV_SCOPE("DrawWork::invariants_hold");
     if (framebuffer_ != VK_NULL_HANDLE && render_pass_ == VK_NULL_HANDLE) return false;
     return pipeline_ == VK_NULL_HANDLE || layout_ != VK_NULL_HANDLE;
 }

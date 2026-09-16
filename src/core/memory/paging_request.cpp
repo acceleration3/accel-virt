@@ -16,21 +16,27 @@
 #include "core/memory/page_table_update.hpp"
 #include "core/platform/log_budget.hpp"
 #include "core/support/text_buffer.hpp"
+#include "core/trace/function_scope.hpp"
 #include "proto/commands/paging_command_writer.hpp"
 
 namespace av {
 
 PagingRequest::PagingRequest(Platform &platform, AllocationTable &allocations, LogBudget &budget,
                              DxgkargBuildPagingBufferRecord &request)
-    : platform_(platform), allocations_(allocations), budget_(budget), request_(request) {}
+    : platform_(platform), allocations_(allocations), budget_(budget), request_(request)
+    {
+        AV_SCOPE("PagingRequest::PagingRequest");
+    }
 
 template <typename Operation> void PagingRequest::read_operation(Operation &operation) const
 {
+    AV_SCOPE("PagingRequest::read_operation");
     platform_.copy(&operation, request_.Reserved, sizeof operation);
 }
 
 NtStatus PagingRequest::build()
 {
+    AV_SCOPE("PagingRequest::build");
     platform_.require_irql_at_most(Irql::passive, "PagingRequest::build");
     PagingCommandWriter writer(static_cast<uint8_t *>(request_.pDmaBuffer), request_.DmaSize);
     switch (request_.Operation) {
@@ -49,6 +55,7 @@ NtStatus PagingRequest::build()
 
 Status PagingRequest::map_aperture()
 {
+    AV_SCOPE("PagingRequest::map_aperture");
     DxgkBuildPagingBufferMapApertureSegmentRecord map;
     read_operation(map);
     Allocation *const allocation = map.SegmentId == ApertureSegment::segment_id
@@ -61,6 +68,7 @@ Status PagingRequest::map_aperture()
 
 Status PagingRequest::unmap_aperture()
 {
+    AV_SCOPE("PagingRequest::unmap_aperture");
     DxgkBuildPagingBufferUnmapApertureSegmentRecord unmap;
     read_operation(unmap);
     Allocation *const allocation = unmap.SegmentId == ApertureSegment::segment_id
@@ -74,6 +82,7 @@ Status PagingRequest::unmap_aperture()
 
 NtStatus PagingRequest::refuse()
 {
+    AV_SCOPE("PagingRequest::refuse");
     if (budget_.allows()) {
         char       bytes[64];
         TextBuffer line(bytes, sizeof bytes);
@@ -88,6 +97,7 @@ NtStatus PagingRequest::refuse()
 void PagingRequest::log_aperture(const char *operation, uint32_t segment, uint64_t offset, uint64_t pages,
                                  Status status)
 {
+    AV_SCOPE("PagingRequest::log_aperture");
     if (!budget_.allows()) return;
     char       bytes[128];
     TextBuffer line(bytes, sizeof bytes);
@@ -106,6 +116,7 @@ void PagingRequest::log_aperture(const char *operation, uint32_t segment, uint64
 
 Status PagingRequest::update_table() const
 {
+    AV_SCOPE("PagingRequest::update_table");
     DxgkBuildPagingBufferUpdatePageTableRecord update;
     read_operation(update);
     return PageTableUpdate(platform_, update).write();
@@ -113,6 +124,7 @@ Status PagingRequest::update_table() const
 
 Status PagingRequest::write_flush(PagingCommandWriter &writer) const
 {
+    AV_SCOPE("PagingRequest::write_flush");
     DxgkBuildPagingBufferFlushTlbRecord flush;
     read_operation(flush);
     return writer.flush_tlb(flush.RootPageTableAddressSegmentId, flush.RootPageTableAddressSegmentOffset,
@@ -121,6 +133,7 @@ Status PagingRequest::write_flush(PagingCommandWriter &writer) const
 
 Status PagingRequest::write_fill(PagingCommandWriter &writer) const
 {
+    AV_SCOPE("PagingRequest::write_fill");
     DxgkBuildPagingBufferFillVirtualRecord fill;
     read_operation(fill);
     return writer.fill(fill.DestinationVirtualAddress, fill.FillSizeInBytes, fill.FillPattern);
@@ -128,6 +141,7 @@ Status PagingRequest::write_fill(PagingCommandWriter &writer) const
 
 Status PagingRequest::write_transfer(PagingCommandWriter &writer) const
 {
+    AV_SCOPE("PagingRequest::write_transfer");
     DxgkBuildPagingBufferTransferVirtualRecord transfer;
     read_operation(transfer);
     return writer.transfer(transfer.SourceVirtualAddress, transfer.DestinationVirtualAddress,
@@ -137,6 +151,7 @@ Status PagingRequest::write_transfer(PagingCommandWriter &writer) const
 
 NtStatus PagingRequest::copy_entries(PagingCommandWriter &writer)
 {
+    AV_SCOPE("PagingRequest::copy_entries");
     uint32_t next = request_.MultipassOffset;
     const Status status = write_copy(writer, next);
     if (status == Status::invalid_parameter) return NtStatus(status);
@@ -148,6 +163,7 @@ NtStatus PagingRequest::copy_entries(PagingCommandWriter &writer)
 
 Status PagingRequest::write_copy(PagingCommandWriter &writer, uint32_t &next) const
 {
+    AV_SCOPE("PagingRequest::write_copy");
     DxgkBuildPagingBufferCopyPageTableEntriesRecord copy;
     read_operation(copy);
     if (copy.pRanges == nullptr || next >= copy.NumRanges) return Status::invalid_parameter;
@@ -161,6 +177,7 @@ Status PagingRequest::write_copy(PagingCommandWriter &writer, uint32_t &next) co
 
 Status PagingRequest::write_range(PagingCommandWriter &writer, const DxgkBuildPagingBufferCopyRangeRecord &range) const
 {
+    AV_SCOPE("PagingRequest::write_range");
     const uint64_t source_end = uint64_t{range.SrcStartPteIndex} + range.NumPageTableEntries;
     const uint64_t destination_end = uint64_t{range.DstStartPteIndex} + range.NumPageTableEntries;
     if (source_end > GpuMmuGeometry::entries_per_table || destination_end > GpuMmuGeometry::entries_per_table)
@@ -171,6 +188,7 @@ Status PagingRequest::write_range(PagingCommandWriter &writer, const DxgkBuildPa
 
 NtStatus PagingRequest::finish(Status status, size_t length)
 {
+    AV_SCOPE("PagingRequest::finish");
     if (request_.pDmaBuffer == nullptr) return NtStatus(Status::invalid_parameter);
     request_.pDmaBuffer = static_cast<uint8_t *>(request_.pDmaBuffer) + length;
     return status == Status::ok ? NtStatus(Status::ok) : NtStatus(insufficient_dma_buffer);

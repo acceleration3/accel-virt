@@ -1,5 +1,7 @@
 #include "device/shim/gl_display.hpp"
 
+#include "core/trace/function_scope.hpp"
+
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <string.h>
@@ -23,14 +25,26 @@ using GetUnsignedBytev = void (*)(unsigned, unsigned char *);
 
 }  // namespace
 
-GlDisplay::GlDisplay() : display_(nullptr) {}
+GlDisplay::GlDisplay() : display_(nullptr)
+{
+    AV_SCOPE("GlDisplay::GlDisplay");
+}
 
-GlDisplay::~GlDisplay() { close(); }
+GlDisplay::~GlDisplay()
+{
+    AV_SCOPE("GlDisplay::~GlDisplay");
+    close();
+}
 
-bool GlDisplay::open() const { return display_ != nullptr; }
+bool GlDisplay::open() const
+{
+    AV_SCOPE("GlDisplay::open");
+    return display_ != nullptr;
+}
 
 bool GlDisplay::open(const uint8_t *uuid)
 {
+    AV_SCOPE("GlDisplay::open");
     if (display_ != nullptr || uuid == nullptr) return false;
 
     auto *const query = reinterpret_cast<QueryDevices>(eglGetProcAddress("eglQueryDevicesEXT"));
@@ -70,6 +84,7 @@ bool GlDisplay::open(const uint8_t *uuid)
 
 void GlDisplay::close()
 {
+    AV_SCOPE("GlDisplay::close");
     if (display_ == nullptr) return;
     (void)eglTerminate(display_);
     display_ = nullptr;
@@ -77,6 +92,7 @@ void GlDisplay::close()
 
 void *GlDisplay::create_context() const
 {
+    AV_SCOPE("GlDisplay::create_context");
     if (display_ == nullptr || eglBindAPI(EGL_OPENGL_API) != EGL_TRUE) return nullptr;
     const EGLContext context = eglCreateContext(display_, EGL_NO_CONFIG_KHR, EGL_NO_CONTEXT, nullptr);
     return context == EGL_NO_CONTEXT ? nullptr : context;
@@ -84,12 +100,14 @@ void *GlDisplay::create_context() const
 
 bool GlDisplay::make_current(void *context) const
 {
+    AV_SCOPE("GlDisplay::make_current");
     if (display_ == nullptr || context == nullptr) return false;
     return eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, context) == EGL_TRUE;
 }
 
 void GlDisplay::destroy_context(void *context) const
 {
+    AV_SCOPE("GlDisplay::destroy_context");
     if (display_ == nullptr || context == nullptr) return;
     (void)eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     (void)eglDestroyContext(display_, context);

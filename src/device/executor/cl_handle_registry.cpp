@@ -1,20 +1,27 @@
 #include "device/executor/cl_handle_registry.hpp"
 
+#include "core/trace/function_scope.hpp"
+
 namespace av {
 
 namespace {
 
 uint64_t number_of(const void *object)
 {
+    AV_SCOPE("number_of");
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(object));
 }
 
 }  // namespace
 
-ClHandleRegistry::ClHandleRegistry() : objects_{}, references_{}, kinds_{}, count_(0u) {}
+ClHandleRegistry::ClHandleRegistry() : objects_{}, references_{}, kinds_{}, count_(0u)
+{
+    AV_SCOPE("ClHandleRegistry::ClHandleRegistry");
+}
 
 bool ClHandleRegistry::remember(clproto::HandleKind kind, void *object)
 {
+    AV_SCOPE("ClHandleRegistry::remember");
     if (object == nullptr) return true;
     const uint64_t number = number_of(object);
     const uint32_t slot = slot_of(number);
@@ -29,6 +36,7 @@ bool ClHandleRegistry::remember(clproto::HandleKind kind, void *object)
 
 void *ClHandleRegistry::resolve(clproto::HandleKind kind, uint64_t wire) const
 {
+    AV_SCOPE("ClHandleRegistry::resolve");
     if (wire == 0u) return nullptr;
     const uint32_t slot = slot_of(wire);
     if (slot == count_ || kinds_[slot] != kind) return nullptr;
@@ -37,6 +45,7 @@ void *ClHandleRegistry::resolve(clproto::HandleKind kind, uint64_t wire) const
 
 void ClHandleRegistry::retain(clproto::HandleKind kind, void *object)
 {
+    AV_SCOPE("ClHandleRegistry::retain");
     const uint32_t slot = slot_of(number_of(object));
     if (slot == count_ || kinds_[slot] != kind) return;
     /* Saturated rather than wrapped: a count that wrapped to zero would be an
@@ -46,6 +55,7 @@ void ClHandleRegistry::retain(clproto::HandleKind kind, void *object)
 
 void ClHandleRegistry::release(clproto::HandleKind kind, void *object)
 {
+    AV_SCOPE("ClHandleRegistry::release");
     const uint32_t slot = slot_of(number_of(object));
     if (slot == count_ || kinds_[slot] != kind) return;
     /* A saturated count no longer says how many the guest holds, so it is
@@ -60,6 +70,7 @@ void ClHandleRegistry::release(clproto::HandleKind kind, void *object)
 
 void ClHandleRegistry::release_all(clproto::ServerDispatch &icd)
 {
+    AV_SCOPE("ClHandleRegistry::release_all");
     struct Release {
         clproto::HandleKind kind;
         cl_int (*call)(clproto::ServerDispatch &icd, void *object);
@@ -98,12 +109,21 @@ void ClHandleRegistry::release_all(clproto::ServerDispatch &icd)
     forget_all();
 }
 
-void ClHandleRegistry::forget_all() { count_ = 0u; }
+void ClHandleRegistry::forget_all()
+{
+    AV_SCOPE("ClHandleRegistry::forget_all");
+    count_ = 0u;
+}
 
-uint32_t ClHandleRegistry::count() const { return count_; }
+uint32_t ClHandleRegistry::count() const
+{
+    AV_SCOPE("ClHandleRegistry::count");
+    return count_;
+}
 
 uint32_t ClHandleRegistry::slot_of(uint64_t object) const
 {
+    AV_SCOPE("ClHandleRegistry::slot_of");
     for (uint32_t i = 0u; i < count_; i++) {
         if (objects_[i] == object) return i;
     }
@@ -112,6 +132,7 @@ uint32_t ClHandleRegistry::slot_of(uint64_t object) const
 
 bool ClHandleRegistry::invariants_hold() const
 {
+    AV_SCOPE("ClHandleRegistry::invariants_hold");
     if (count_ > max_handles) return false;
     for (uint32_t i = 0u; i < count_; i++) {
         if (objects_[i] == 0u || references_[i] == 0u) return false;

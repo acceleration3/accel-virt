@@ -1,5 +1,6 @@
 #include "core/memory/host_visible_blob.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
 #include "proto/virtio_gpu/rvk_request_writer.hpp"
@@ -7,10 +8,14 @@
 namespace av {
 
 HostVisibleBlob::HostVisibleBlob(Platform &platform)
-    : platform_(platform), resource_(0u), offset_(0u), mapped_(false), request_{}, answer_{} {}
+    : platform_(platform), resource_(0u), offset_(0u), mapped_(false), request_{}, answer_{}
+    {
+        AV_SCOPE("HostVisibleBlob::HostVisibleBlob");
+    }
 
 Status HostVisibleBlob::create(VirtioGpuDevice &device, uint32_t resource_id, uint64_t bytes)
 {
+    AV_SCOPE("HostVisibleBlob::create");
     platform_.require_irql_at_most(Irql::passive, "HostVisibleBlob::create");
     if (resource_ != 0u) return Status::invalid_state;
     if (resource_id == 0u || bytes == 0u || (bytes & (page_bytes - 1u)) != 0u)
@@ -26,6 +31,7 @@ Status HostVisibleBlob::create(VirtioGpuDevice &device, uint32_t resource_id, ui
 
 Status HostVisibleBlob::map(VirtioGpuDevice &device, uint64_t offset)
 {
+    AV_SCOPE("HostVisibleBlob::map");
     platform_.require_irql_at_most(Irql::passive, "HostVisibleBlob::map");
     if (resource_ == 0u || mapped_) return Status::invalid_state;
     RvkRequestWriter writer(request_, sizeof request_);
@@ -43,6 +49,7 @@ Status HostVisibleBlob::map(VirtioGpuDevice &device, uint64_t offset)
 
 Status HostVisibleBlob::unmap(VirtioGpuDevice &device)
 {
+    AV_SCOPE("HostVisibleBlob::unmap");
     platform_.require_irql_at_most(Irql::passive, "HostVisibleBlob::unmap");
     if (resource_ == 0u || !mapped_) return Status::invalid_state;
     RvkRequestWriter writer(request_, sizeof request_);
@@ -57,6 +64,7 @@ Status HostVisibleBlob::unmap(VirtioGpuDevice &device)
 
 Status HostVisibleBlob::destroy(VirtioGpuDevice &device)
 {
+    AV_SCOPE("HostVisibleBlob::destroy");
     platform_.require_irql_at_most(Irql::passive, "HostVisibleBlob::destroy");
     if (resource_ == 0u) return Status::invalid_state;
     if (mapped_) {
@@ -76,6 +84,7 @@ Status HostVisibleBlob::destroy(VirtioGpuDevice &device)
  * refusing, not a framing mistake of ours. */
 Status HostVisibleBlob::exchange(VirtioGpuDevice &device, size_t length, uint32_t &map_info)
 {
+    AV_SCOPE("HostVisibleBlob::exchange");
     uint32_t     written = 0u;
     const Status answered = device.ask_control(request_, length, answer_, sizeof answer_, written);
     if (answered != Status::ok) return answered;
@@ -89,19 +98,37 @@ Status HostVisibleBlob::exchange(VirtioGpuDevice &device, size_t length, uint32_
 
 void HostVisibleBlob::abandon()
 {
+    AV_SCOPE("HostVisibleBlob::abandon");
     platform_.require_irql_at_most(Irql::passive, "HostVisibleBlob::abandon");
     resource_ = 0u;
     offset_ = 0u;
     mapped_ = false;
 }
 
-bool     HostVisibleBlob::created() const  { return resource_ != 0u; }
-bool     HostVisibleBlob::mapped() const   { return mapped_; }
-uint32_t HostVisibleBlob::resource() const { return resource_; }
-uint64_t HostVisibleBlob::offset() const   { return mapped_ ? offset_ : 0u; }
+bool     HostVisibleBlob::created() const
+{
+    AV_SCOPE("HostVisibleBlob::created");
+    return resource_ != 0u;
+}
+bool     HostVisibleBlob::mapped() const
+{
+    AV_SCOPE("HostVisibleBlob::mapped");
+    return mapped_;
+}
+uint32_t HostVisibleBlob::resource() const
+{
+    AV_SCOPE("HostVisibleBlob::resource");
+    return resource_;
+}
+uint64_t HostVisibleBlob::offset() const
+{
+    AV_SCOPE("HostVisibleBlob::offset");
+    return mapped_ ? offset_ : 0u;
+}
 
 bool HostVisibleBlob::invariants_hold() const
 {
+    AV_SCOPE("HostVisibleBlob::invariants_hold");
     return !mapped_ || resource_ != 0u;
 }
 

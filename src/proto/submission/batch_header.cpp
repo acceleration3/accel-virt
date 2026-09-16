@@ -1,30 +1,48 @@
 #include "proto/submission/batch_header.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
-BatchHeader::BatchHeader() : length_(0u), fence_id_(0u) {}
+BatchHeader::BatchHeader() : length_(0u), fence_id_(0u)
+{
+    AV_SCOPE("BatchHeader::BatchHeader");
+}
 
-BatchHeader::BatchHeader(uint32_t length, uint64_t fence_id) : length_(length), fence_id_(fence_id) {}
+BatchHeader::BatchHeader(uint32_t length, uint64_t fence_id) : length_(length), fence_id_(fence_id)
+{
+    AV_SCOPE("BatchHeader::BatchHeader");
+}
 
-uint32_t BatchHeader::length() const   { return length_; }
-uint64_t BatchHeader::fence_id() const { return fence_id_; }
+uint32_t BatchHeader::length() const
+{
+    AV_SCOPE("BatchHeader::length");
+    return length_;
+}
+uint64_t BatchHeader::fence_id() const
+{
+    AV_SCOPE("BatchHeader::fence_id");
+    return fence_id_;
+}
 
 /* A u32 payload plus the header cannot wrap a u64. */
 uint64_t BatchHeader::span() const
 {
+    AV_SCOPE("BatchHeader::span");
     return (encoded_size + uint64_t{length_} + alignment - 1u) & ~(alignment - 1u);
 }
 
 bool BatchHeader::fits(uint64_t capacity) const
 {
+    AV_SCOPE("BatchHeader::fits");
     return span() <= capacity;
 }
 
 Status BatchHeader::encode(uint8_t *bytes, size_t capacity) const
 {
+    AV_SCOPE("BatchHeader::encode");
     if (capacity < encoded_size) return Status::too_large;
     WireWriter writer(bytes, capacity);
     writer.write_u32(magic);
@@ -35,6 +53,7 @@ Status BatchHeader::encode(uint8_t *bytes, size_t capacity) const
 
 Status BatchHeader::decode(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("BatchHeader::decode");
     WireReader reader(bytes, length);
     const uint32_t found_magic = reader.read_u32();
     const uint32_t payload = reader.read_u32();

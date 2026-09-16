@@ -1,6 +1,7 @@
 #include "core/pci/resource_list.hpp"
 
 #include "core/support/invariant_scope.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
@@ -20,10 +21,14 @@ constexpr uint16_t memory_large_64   = 0x0800u;
  * leave the bytes. */
 class ResourceList::Cursor {
 public:
-    Cursor(const uint8_t *bytes, size_t length) : bytes_(bytes), length_(length), at_(0u), failed_(false) {}
+    Cursor(const uint8_t *bytes, size_t length) : bytes_(bytes), length_(length), at_(0u), failed_(false)
+    {
+        AV_SCOPE("ResourceList::Cursor::Cursor");
+    }
 
     uint64_t read(size_t width)
     {
+        AV_SCOPE("ResourceList::Cursor::read");
         if (failed_ || width > length_ - at_) {
             failed_ = true;
             return 0u;
@@ -36,11 +41,16 @@ public:
 
     void skip(size_t bytes)
     {
+        AV_SCOPE("ResourceList::Cursor::skip");
         if (failed_ || bytes > length_ - at_) failed_ = true;
         else at_ += bytes;
     }
 
-    bool failed() const { return failed_; }
+    bool failed() const
+    {
+        AV_SCOPE("ResourceList::Cursor::failed");
+        return failed_;
+    }
 
 private:
     const uint8_t *bytes_;
@@ -50,10 +60,14 @@ private:
 };
 
 ResourceList::ResourceList(Platform &platform)
-    : platform_(platform), memory_starts_(), memory_lengths_(), memory_count_(0u), message_interrupts_(0u) {}
+    : platform_(platform), memory_starts_(), memory_lengths_(), memory_count_(0u), message_interrupts_(0u)
+    {
+        AV_SCOPE("ResourceList::ResourceList");
+    }
 
 Status ResourceList::add_memory(uint64_t start, uint64_t length)
 {
+    AV_SCOPE("ResourceList::add_memory");
     if (length == 0u || start + length < start) return Status::malformed;
     if (memory_count_ == max_memory_ranges) return Status::too_large;
     memory_starts_[memory_count_] = start;
@@ -64,6 +78,7 @@ Status ResourceList::add_memory(uint64_t start, uint64_t length)
 
 Status ResourceList::read_partial_descriptor(Cursor &cursor)
 {
+    AV_SCOPE("ResourceList::read_partial_descriptor");
     const uint8_t type = static_cast<uint8_t>(cursor.read(1u));
     cursor.skip(partial_flags_offset - 1u);
     const uint16_t flags = static_cast<uint16_t>(cursor.read(2u));
@@ -88,6 +103,7 @@ Status ResourceList::read_partial_descriptor(Cursor &cursor)
 
 Status ResourceList::read_full_descriptor(Cursor &cursor, uint32_t &partial_total)
 {
+    AV_SCOPE("ResourceList::read_full_descriptor");
     cursor.skip(partial_count_offset);
     const uint64_t count = cursor.read(4u);
     if (cursor.failed()) return Status::malformed;
@@ -102,6 +118,7 @@ Status ResourceList::read_full_descriptor(Cursor &cursor, uint32_t &partial_tota
 
 Status ResourceList::initialize(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("ResourceList::initialize");
     platform_.require_irql_at_most(Irql::passive, "ResourceList::initialize");
     InvariantScope<ResourceList> guard(platform_, *this, "initialize");
     memory_count_ = 0u;
@@ -125,6 +142,7 @@ Status ResourceList::initialize(const uint8_t *bytes, size_t length)
 
 Status ResourceList::find_memory(uint64_t start, uint64_t minimum_length, uint64_t &length) const
 {
+    AV_SCOPE("ResourceList::find_memory");
     platform_.require_irql_at_most(Irql::passive, "ResourceList::find_memory");
     for (uint32_t index = 0u; index < memory_count_; index++) {
         if (memory_starts_[index] != start) continue;
@@ -135,10 +153,15 @@ Status ResourceList::find_memory(uint64_t start, uint64_t minimum_length, uint64
     return Status::not_found;
 }
 
-uint32_t ResourceList::message_interrupts() const { return message_interrupts_; }
+uint32_t ResourceList::message_interrupts() const
+{
+    AV_SCOPE("ResourceList::message_interrupts");
+    return message_interrupts_;
+}
 
 bool ResourceList::invariants_hold() const
 {
+    AV_SCOPE("ResourceList::invariants_hold");
     if (memory_count_ > max_memory_ranges) return false;
     for (uint32_t index = 0u; index < memory_count_; index++) {
         const uint64_t start = memory_starts_[index];

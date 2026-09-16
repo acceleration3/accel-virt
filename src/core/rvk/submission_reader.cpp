@@ -1,15 +1,20 @@
 #include "core/rvk/submission_reader.hpp"
 
 #include "core/platform/platform.hpp"
+#include "core/trace/function_scope.hpp"
 #include "proto/submission/ring_header.hpp"
 
 namespace av {
 
-SubmissionReader::SubmissionReader(Platform &platform) : platform_(platform), staging_{} {}
+SubmissionReader::SubmissionReader(Platform &platform) : platform_(platform), staging_{}
+{
+    AV_SCOPE("SubmissionReader::SubmissionReader");
+}
 
 Status SubmissionReader::read(const uint8_t *dma, size_t size, const RingHeader &ring,
                               SubmissionDescriptor &submission)
 {
+    AV_SCOPE("SubmissionReader::read");
     platform_.require_irql_at_most(Irql::dispatch, "SubmissionReader::read");
     if (dma == nullptr || size < SubmissionDescriptor::encoded_size) return Status::malformed;
     /* Once, into private storage: what is validated is what is decoded, and the

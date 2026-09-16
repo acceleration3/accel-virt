@@ -6,6 +6,7 @@
 #include "core/display/display_sources.hpp"
 #include "core/platform/log_budget.hpp"
 #include "core/support/text_buffer.hpp"
+#include "core/trace/function_scope.hpp"
 #include "core/vidpn/vidpn_mode_set.hpp"
 
 namespace av {
@@ -14,10 +15,14 @@ CofuncModality::CofuncModality(Platform &platform, DxgkrnlInterface &dxgkrnl, Lo
                                const DisplayModeList &modes, const DisplaySources &sources,
                                const DxgkargEnumVidPnCofuncModalityRecord &request)
     : platform_(platform), sources_(sources), budget_(budget), modes_(modes), request_(request),
-      vidpn_(platform, dxgkrnl, request.hConstrainingVidPn) {}
+      vidpn_(platform, dxgkrnl, request.hConstrainingVidPn)
+      {
+          AV_SCOPE("CofuncModality::CofuncModality");
+      }
 
 NtStatus CofuncModality::enumerate()
 {
+    AV_SCOPE("CofuncModality::enumerate");
     platform_.require_irql_at_most(Irql::passive, "CofuncModality::enumerate");
     Status status = vidpn_.initialize();
     if (status == Status::ok) status = vidpn_.for_each_path(*this);
@@ -26,6 +31,7 @@ NtStatus CofuncModality::enumerate()
 
 Status CofuncModality::visit(const D3dkmdtVidPnPresentPathRecord &path)
 {
+    AV_SCOPE("CofuncModality::visit");
     platform_.require_irql_at_most(Irql::passive, "CofuncModality::visit");
     if (path.VidPnSourceId >= sources_.count() || path.VidPnTargetId >= sources_.count())
         return Status::invalid_parameter;
@@ -47,6 +53,7 @@ Status CofuncModality::visit(const D3dkmdtVidPnPresentPathRecord &path)
 
 Status CofuncModality::copy_pinned_source(uint32_t source, D3dkmdtVidPnSourceModeRecord &mode)
 {
+    AV_SCOPE("CofuncModality::copy_pinned_source");
     SourceModeSet set(platform_, vidpn_, source);
     const Status status = set.acquire();
     return status != Status::ok ? status : set.copy_pinned(mode);
@@ -54,6 +61,7 @@ Status CofuncModality::copy_pinned_source(uint32_t source, D3dkmdtVidPnSourceMod
 
 Status CofuncModality::pinned_target(uint32_t target)
 {
+    AV_SCOPE("CofuncModality::pinned_target");
     TargetModeSet set(platform_, vidpn_, target);
     D3dkmdtVidPnTargetModeRecord mode = {};
     const Status status = set.acquire();
@@ -62,6 +70,7 @@ Status CofuncModality::pinned_target(uint32_t target)
 
 Status CofuncModality::offer_sources(uint32_t source)
 {
+    AV_SCOPE("CofuncModality::offer_sources");
     SourceModeSet set(platform_, vidpn_, source);
     Status status = set.create();
     for (uint32_t index = 0u; status == Status::ok && index < modes_.count(); index++) {
@@ -77,6 +86,7 @@ Status CofuncModality::offer_sources(uint32_t source)
  * cofunctional set with STATUS_GRAPHICS_EMPTY_ADAPTER_MONITOR_MODE_SUPPORT_INTERSECTION. */
 Status CofuncModality::offer_targets(uint32_t target, const D3dkmdtVidPnSourceModeRecord *pinned_source)
 {
+    AV_SCOPE("CofuncModality::offer_targets");
     const DisplayMode *only = pinned_source != nullptr ? modes_.find(*pinned_source) : nullptr;
     if (pinned_source != nullptr && only == nullptr) return Status::ok;
     TargetModeSet set(platform_, vidpn_, target);
@@ -110,6 +120,7 @@ Status CofuncModality::offer_targets(uint32_t target, const D3dkmdtVidPnSourceMo
  * primary clone path - the only path we have - lacks it. */
 Status CofuncModality::update_support(const D3dkmdtVidPnPresentPathRecord &path)
 {
+    AV_SCOPE("CofuncModality::update_support");
     D3dkmdtVidPnPresentPathRecord update = path;
     update.ContentTransformationScalingSupport = identity_supported;
     update.ContentTransformationRotationSupport = identity_supported | rotation_offset_zero;
@@ -119,6 +130,7 @@ Status CofuncModality::update_support(const D3dkmdtVidPnPresentPathRecord &path)
 void CofuncModality::log_path(const D3dkmdtVidPnPresentPathRecord &path,
                               const D3dkmdtVidPnSourceModeRecord *pinned_source, bool target_pinned)
 {
+    AV_SCOPE("CofuncModality::log_path");
     if (!budget_.allows()) return;
     char       bytes[128];
     TextBuffer line(bytes, sizeof bytes);

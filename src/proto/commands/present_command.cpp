@@ -1,5 +1,6 @@
 #include "proto/commands/present_command.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
@@ -8,10 +9,14 @@ PresentCommand::PresentCommand(PresentOperation operation, uint32_t color, const
                                const Rectangle &destination, uint32_t flip_interval, uint32_t sub_rectangles,
                                PresentAddressSpace addresses)
     : operation_(operation), color_(color), source_(source), destination_(destination),
-      flip_interval_(flip_interval), sub_rectangles_(sub_rectangles), addresses_(addresses) {}
+      flip_interval_(flip_interval), sub_rectangles_(sub_rectangles), addresses_(addresses)
+      {
+          AV_SCOPE("PresentCommand::PresentCommand");
+      }
 
 void PresentCommand::write(WireWriter &writer) const
 {
+    AV_SCOPE("PresentCommand::write");
     writer.write_u32(magic);
     writer.write_u32(static_cast<uint32_t>(operation_));
     writer.write_u32(color_);

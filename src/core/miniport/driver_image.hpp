@@ -14,6 +14,7 @@
 #include "core/support/object_storage.hpp"
 #include "core/support/status.hpp"
 #include "core/support/text_buffer.hpp"
+#include "core/trace/function_scope.hpp"
 
 #include <stdint.h>
 
@@ -33,6 +34,7 @@ public:
     template <typename... PlatformArguments>
     int32_t enter(void *driver_object, void *registry_path, PlatformArguments &&...arguments)
     {
+        AV_SCOPE("DriverImage::enter");
         if (platform_.construct(static_cast<PlatformArguments &&>(arguments)...) != Status::ok)
             return NtStatus(Status::invalid_state).value();
         PlatformType &platform = platform_.object();
@@ -58,12 +60,17 @@ public:
     /* After DxgkDdiUnload, or when registration failed. */
     void leave()
     {
+        AV_SCOPE("DriverImage::leave");
         miniport_binding.unbind();
         miniport_.destroy();
         platform_.destroy();
     }
 
-    PlatformType &platform() { return platform_.object(); }
+    PlatformType &platform()
+    {
+        AV_SCOPE("DriverImage::platform");
+        return platform_.object();
+    }
 
 private:
     ObjectStorage<PlatformType> platform_;

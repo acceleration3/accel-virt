@@ -1,5 +1,6 @@
 #include "device/control/blob_commands.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/control/control_request.hpp"
 #include "device/host/host.hpp"
 #include "device/memory/blob_table.hpp"
@@ -11,10 +12,14 @@
 
 namespace av {
 
-BlobCommands::BlobCommands(Host &host, BlobTable &blobs) : host_(host), blobs_(blobs) {}
+BlobCommands::BlobCommands(Host &host, BlobTable &blobs) : host_(host), blobs_(blobs)
+{
+    AV_SCOPE("BlobCommands::BlobCommands");
+}
 
 bool BlobCommands::answer(ControlRequest &request, uint32_t type)
 {
+    AV_SCOPE("BlobCommands::answer");
     host_.require_main_loop("BlobCommands::answer");
     GpuResponse response;
     switch (type) {
@@ -38,6 +43,7 @@ bool BlobCommands::answer(ControlRequest &request, uint32_t type)
 /* A base-class resource, or a short request the base class refuses, is not ours. */
 bool BlobCommands::unref(ControlRequest &request, GpuResponse &response)
 {
+    AV_SCOPE("BlobCommands::unref");
     switch (blobs_.release(named_resource(request))) {
     case Status::ok: return true;
     case Status::invalid_state: response.set(GpuResponse::err_invalid_parameter); return true;
@@ -47,6 +53,7 @@ bool BlobCommands::unref(ControlRequest &request, GpuResponse &response)
 
 uint32_t BlobCommands::named_resource(ControlRequest &request)
 {
+    AV_SCOPE("BlobCommands::named_resource");
     uint8_t     bytes[32] = {};
     WireReader  reader(bytes, request.read(0u, bytes, sizeof bytes));
     BlobRequest named;
@@ -55,6 +62,7 @@ uint32_t BlobCommands::named_resource(ControlRequest &request)
 
 uint32_t BlobCommands::create(ControlRequest &request)
 {
+    AV_SCOPE("BlobCommands::create");
     uint8_t           bytes[CreateBlobRequest::fixed_size] = {};
     WireReader        reader(bytes, request.read(0u, bytes, sizeof bytes));
     CreateBlobRequest create;
@@ -71,18 +79,21 @@ uint32_t BlobCommands::create(ControlRequest &request)
 
 uint32_t BlobCommands::create_guest(ControlRequest &request, uint32_t id, uint32_t entries, uint64_t size)
 {
+    AV_SCOPE("BlobCommands::create_guest");
     return create_answer(blobs_.create_guest(id, size, request, CreateBlobRequest::fixed_size, entries));
 }
 
 /* Device-allocated mappable memory: no memory entries, no context object. */
 uint32_t BlobCommands::create_host(uint32_t id, uint32_t flags, uint32_t entries, uint64_t size)
 {
+    AV_SCOPE("BlobCommands::create_host");
     if ((flags & CreateBlobRequest::flag_mappable) == 0u || entries != 0u) return GpuResponse::err_invalid_parameter;
     return create_answer(blobs_.create_host(id, size));
 }
 
 uint32_t BlobCommands::create_answer(Status status) const
 {
+    AV_SCOPE("BlobCommands::create_answer");
     switch (status) {
     case Status::ok: return GpuResponse::ok_nodata;
     case Status::invalid_parameter: return GpuResponse::err_invalid_parameter;
@@ -94,6 +105,7 @@ uint32_t BlobCommands::create_answer(Status status) const
 
 void BlobCommands::map(ControlRequest &request, GpuResponse &response)
 {
+    AV_SCOPE("BlobCommands::map");
     uint8_t     bytes[40] = {};
     WireReader  reader(bytes, request.read(0u, bytes, sizeof bytes));
     BlobRequest map;
@@ -108,6 +120,7 @@ void BlobCommands::map(ControlRequest &request, GpuResponse &response)
 
 uint32_t BlobCommands::unmap(ControlRequest &request)
 {
+    AV_SCOPE("BlobCommands::unmap");
     uint8_t     bytes[32] = {};
     WireReader  reader(bytes, request.read(0u, bytes, sizeof bytes));
     BlobRequest unmap;

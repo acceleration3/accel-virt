@@ -12,6 +12,7 @@
 #include "core/support/nt_status.hpp"
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
+#include "core/trace/function_scope.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "proto/resources/allocation_kind.hpp"
@@ -26,16 +27,21 @@ RvkContextTable::RvkContextTable(Platform &platform, DxgkrnlInterface &dxgkrnl, 
     : platform_(platform), dxgkrnl_(dxgkrnl), allocations_(allocations),
       lock_(platform, LockRank::rvk_context_slots),
       reader_(platform), bindings_(), contexts_{}, uses_{}, chunks_(), ring_views_{}, fence_views_{}, orders_{},
-      live_{}, request_{}, requests_(platform, LockRank::rvk_control_requests) {}
+      live_{}, request_{}, requests_(platform, LockRank::rvk_control_requests)
+      {
+          AV_SCOPE("RvkContextTable::RvkContextTable");
+      }
 
 RvkContextTable::~RvkContextTable()
 {
+    AV_SCOPE("RvkContextTable::~RvkContextTable");
     for (uint32_t slot = 0u; slot < max_contexts; slot++)
         if (contexts_[slot] != nullptr) release(slot);
 }
 
 uint32_t RvkContextTable::slot_of(const void *context) const
 {
+    AV_SCOPE("RvkContextTable::slot_of");
     for (uint32_t slot = 0u; slot < max_contexts; slot++)
         if (context != nullptr && contexts_[slot] == context) return slot;
     return no_slot;
@@ -43,6 +49,7 @@ uint32_t RvkContextTable::slot_of(const void *context) const
 
 uint32_t RvkContextTable::claim(void *context, bool &duplicate)
 {
+    AV_SCOPE("RvkContextTable::claim");
     SpinLockGuard locked(lock_);
     duplicate = slot_of(context) != no_slot;
     if (duplicate) return no_slot;
@@ -59,6 +66,7 @@ uint32_t RvkContextTable::claim(void *context, bool &duplicate)
  * freeing the adapter asks this table about first. */
 Status RvkContextTable::resolve(uint32_t handle, uint32_t role, uint8_t order, Allocation *&allocation)
 {
+    AV_SCOPE("RvkContextTable::resolve");
     static constexpr AllocationKind kinds[chunk_role + 1u] = {AllocationKind::context_ring, AllocationKind::fence_page,
                                                               AllocationKind::reply_slot,
                                                               AllocationKind::host_visible_memory};
@@ -77,6 +85,7 @@ Status RvkContextTable::resolve(uint32_t handle, uint32_t role, uint8_t order, A
 Status RvkContextTable::bind(void *context, const RvkContextRecord &record, VirtioGpuDevice &device,
                              RegisterWindow &doorbells, const CapsetInfo &capset)
 {
+    AV_SCOPE("RvkContextTable::bind");
     platform_.require_irql_at_most(Irql::passive, "RvkContextTable::bind");
     InvariantScope<RvkContextTable> guard(platform_, *this, "bind");
     WaitMutexGuard                  sequence(requests_);
@@ -109,6 +118,7 @@ Status RvkContextTable::bind(void *context, const RvkContextRecord &record, Virt
 Status RvkContextTable::set_up(uint32_t slot, const RvkContextRecord &record, VirtioGpuDevice &device,
                                RegisterWindow &doorbells, const CapsetInfo &capset)
 {
+    AV_SCOPE("RvkContextTable::set_up");
     const GuestPageList ring = uses_[slot][ring_role]->pages();
     const GuestPageList fence = uses_[slot][fence_role]->pages();
     ring_views_[slot] = platform_.map_frame(ring.frame(0u));
@@ -131,6 +141,7 @@ Status RvkContextTable::set_up(uint32_t slot, const RvkContextRecord &record, Vi
 
 Status RvkContextTable::unbind(void *context, VirtioGpuDevice *device)
 {
+    AV_SCOPE("RvkContextTable::unbind");
     platform_.require_irql_at_most(Irql::passive, "RvkContextTable::unbind");
     InvariantScope<RvkContextTable> guard(platform_, *this, "unbind");
     WaitMutexGuard                  sequence(requests_);
@@ -158,6 +169,7 @@ Status RvkContextTable::unbind(void *context, VirtioGpuDevice *device)
  * given back last, so nobody claims it while its pages are still mapped. */
 void RvkContextTable::release(uint32_t slot)
 {
+    AV_SCOPE("RvkContextTable::release");
     bindings_[slot].destroy();
     if (fence_views_[slot] != nullptr) platform_.unmap_frame(fence_views_[slot]);
     if (ring_views_[slot] != nullptr) platform_.unmap_frame(ring_views_[slot]);
@@ -172,6 +184,7 @@ void RvkContextTable::release(uint32_t slot)
 
 void RvkContextTable::release_chunks(uint32_t slot, VirtioGpuDevice *device)
 {
+    AV_SCOPE("RvkContextTable::release_chunks");
     for (HostVisibleBinding &chunk : chunks_[slot]) {
         if (!chunk.bound()) continue;
         if (device != nullptr) bindings_[slot].object().release_chunk(*device, chunk.resource_id());
@@ -182,6 +195,7 @@ void RvkContextTable::release_chunks(uint32_t slot, VirtioGpuDevice *device)
 
 Status RvkContextTable::bind_chunk(void *context, HostVisibleBindRecord &record, VirtioGpuDevice &device)
 {
+    AV_SCOPE("RvkContextTable::bind_chunk");
     platform_.require_irql_at_most(Irql::passive, "RvkContextTable::bind_chunk");
     InvariantScope<RvkContextTable> guard(platform_, *this, "bind_chunk");
     WaitMutexGuard                  sequence(requests_);
@@ -197,6 +211,7 @@ Status RvkContextTable::bind_chunk(void *context, HostVisibleBindRecord &record,
 
 Status RvkContextTable::publish_chunk(uint32_t slot, HostVisibleBindRecord &record, VirtioGpuDevice &device)
 {
+    AV_SCOPE("RvkContextTable::publish_chunk");
     Allocation  *found = nullptr;
     const Status resolved = resolve(record.allocation(), chunk_role, 0u, found);
     if (resolved != Status::ok) return resolved;
@@ -217,6 +232,7 @@ Status RvkContextTable::publish_chunk(uint32_t slot, HostVisibleBindRecord &reco
 
 Status RvkContextTable::unpublish_chunk(uint32_t slot, uint32_t resource_id, VirtioGpuDevice &device)
 {
+    AV_SCOPE("RvkContextTable::unpublish_chunk");
     for (HostVisibleBinding &chunk : chunks_[slot]) {
         if (!chunk.bound() || chunk.resource_id() != resource_id) continue;
         bindings_[slot].object().release_chunk(device, resource_id);
@@ -229,6 +245,7 @@ Status RvkContextTable::unpublish_chunk(uint32_t slot, uint32_t resource_id, Vir
 
 Status RvkContextTable::submit(void *context, const uint8_t *private_data, size_t size, uint64_t &awaited)
 {
+    AV_SCOPE("RvkContextTable::submit");
     platform_.require_irql_at_most(Irql::dispatch, "RvkContextTable::submit");
     awaited = 0u;
     SpinLockGuard  locked(lock_);
@@ -248,6 +265,7 @@ Status RvkContextTable::submit(void *context, const uint8_t *private_data, size_
  * was published before the fault was seen and which reached the node after. */
 void RvkContextTable::serve(ExecutionNode &node)
 {
+    AV_SCOPE("RvkContextTable::serve");
     platform_.require_irql_at_most(Irql::dispatch, "RvkContextTable::serve");
     SpinLockGuard locked(lock_);
     for (uint32_t slot = 0u; slot < max_contexts; slot++) {
@@ -260,12 +278,14 @@ void RvkContextTable::serve(ExecutionNode &node)
 
 bool RvkContextTable::lost(uint32_t slot) const
 {
+    AV_SCOPE("RvkContextTable::lost");
     const RvkContextBinding &binding = bindings_[slot].object();
     return binding.state() == GuestContext::State::failed || binding.faulted();
 }
 
 void RvkContextTable::abandon_all()
 {
+    AV_SCOPE("RvkContextTable::abandon_all");
     platform_.require_irql_at_most(Irql::passive, "RvkContextTable::abandon_all");
     InvariantScope<RvkContextTable> guard(platform_, *this, "abandon_all");
     for (uint32_t slot = 0u; slot < max_contexts; slot++) {
@@ -280,6 +300,7 @@ void RvkContextTable::abandon_all()
 
 void *RvkContextTable::user_of(const Allocation *allocation)
 {
+    AV_SCOPE("RvkContextTable::user_of");
     platform_.require_irql_at_most(Irql::dispatch, "RvkContextTable::user_of");
     SpinLockGuard locked(lock_);
     if (allocation == nullptr) return nullptr;
@@ -294,6 +315,7 @@ void *RvkContextTable::user_of(const Allocation *allocation)
 
 uint32_t RvkContextTable::bound() const
 {
+    AV_SCOPE("RvkContextTable::bound");
     uint32_t count = 0u;
     for (const void *context : contexts_) count += context != nullptr ? 1u : 0u;
     return count;
@@ -303,6 +325,7 @@ uint32_t RvkContextTable::bound() const
  * its fence interrupts arrive on, is what a guest that never wakes needs. */
 void RvkContextTable::log_binding(uint32_t slot, uint32_t message, Status status)
 {
+    AV_SCOPE("RvkContextTable::log_binding");
     char       bytes[96];
     TextBuffer line(bytes, sizeof bytes);
     line.append("rvkgpu: rvk context on doorbell ");
@@ -318,6 +341,7 @@ void RvkContextTable::log_binding(uint32_t slot, uint32_t message, Status status
  * every allocation it runs on; a free slot holds nothing. */
 bool RvkContextTable::invariants_hold() const
 {
+    AV_SCOPE("RvkContextTable::invariants_hold");
     for (uint32_t slot = 0u; slot < max_contexts; slot++) {
         const bool bound_slot = contexts_[slot] != nullptr;
         const bool mapped = ring_views_[slot] != nullptr && fence_views_[slot] != nullptr;

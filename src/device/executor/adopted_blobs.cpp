@@ -1,13 +1,18 @@
 #include "device/executor/adopted_blobs.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/executor/imported_blob.hpp"
 
 namespace av {
 
-AdoptedBlobs::AdoptedBlobs() : blobs_{}, count_(0u) {}
+AdoptedBlobs::AdoptedBlobs() : blobs_{}, count_(0u)
+{
+    AV_SCOPE("AdoptedBlobs::AdoptedBlobs");
+}
 
 Status AdoptedBlobs::add(ImportedBlob &blob)
 {
+    AV_SCOPE("AdoptedBlobs::add");
     if (!blob.live() || blob.object() == 0u) return Status::invalid_parameter;
     if (find(blob.object()) != nullptr) return Status::conflict;
     if (count_ == capacity) return Status::no_space;
@@ -17,6 +22,7 @@ Status AdoptedBlobs::add(ImportedBlob &blob)
 
 ImportedBlob *AdoptedBlobs::find(uint64_t object)
 {
+    AV_SCOPE("AdoptedBlobs::find");
     if (object == 0u) return nullptr;
     for (uint32_t i = 0u; i < count_; i++) {
         if (blobs_[i]->object() == object) return blobs_[i];
@@ -26,6 +32,7 @@ ImportedBlob *AdoptedBlobs::find(uint64_t object)
 
 void AdoptedBlobs::remove(const ImportedBlob &blob)
 {
+    AV_SCOPE("AdoptedBlobs::remove");
     for (uint32_t i = 0u; i < count_; i++) {
         if (blobs_[i] != &blob) continue;
         /* Order means nothing here, so the last one fills the hole. */
@@ -37,14 +44,20 @@ void AdoptedBlobs::remove(const ImportedBlob &blob)
 
 void AdoptedBlobs::clear()
 {
+    AV_SCOPE("AdoptedBlobs::clear");
     for (uint32_t i = 0u; i < count_; i++) blobs_[i] = nullptr;
     count_ = 0u;
 }
 
-uint32_t AdoptedBlobs::count() const { return count_; }
+uint32_t AdoptedBlobs::count() const
+{
+    AV_SCOPE("AdoptedBlobs::count");
+    return count_;
+}
 
 bool AdoptedBlobs::invariants_hold() const
 {
+    AV_SCOPE("AdoptedBlobs::invariants_hold");
     if (count_ > capacity) return false;
     for (uint32_t i = 0u; i < count_; i++) {
         const ImportedBlob *const blob = blobs_[i];

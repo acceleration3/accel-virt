@@ -1,6 +1,7 @@
 #include "core/display/cursor_image.hpp"
 
 #include "core/ddi/dxgkarg_set_pointer_shape_record.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
@@ -12,10 +13,14 @@ constexpr uint32_t bits_per_byte = 8u;
 }  // namespace
 
 CursorImage::CursorImage(Platform &platform, const DxgkargSetPointerShapeRecord &shape)
-    : platform_(platform), shape_(shape) {}
+    : platform_(platform), shape_(shape)
+    {
+        AV_SCOPE("CursorImage::CursorImage");
+    }
 
 Status CursorImage::validate() const
 {
+    AV_SCOPE("CursorImage::validate");
     const DxgkargSetPointerShapeRecord &s = shape_;
     const bool monochrome = s.Flags == flag_monochrome;
     if (!monochrome && s.Flags != flag_color && s.Flags != flag_masked_color) return Status::invalid_parameter;
@@ -28,6 +33,7 @@ Status CursorImage::validate() const
 
 Status CursorImage::draw(uint8_t *pixels) const
 {
+    AV_SCOPE("CursorImage::draw");
     platform_.require_irql_at_most(Irql::passive, "CursorImage::draw");
     const Status status = validate();
     if (status != Status::ok) return status;
@@ -41,6 +47,7 @@ Status CursorImage::draw(uint8_t *pixels) const
  * which with a set XOR bit inverts it. */
 void CursorImage::draw_monochrome(uint8_t *pixels) const
 {
+    AV_SCOPE("CursorImage::draw_monochrome");
     const auto *const masks = static_cast<const uint8_t *>(shape_.pPixels);
     const uint64_t xor_start = uint64_t{shape_.Pitch} * shape_.Height;
     for (uint32_t y = 0u; y < shape_.Height; y++) {
@@ -63,6 +70,7 @@ void CursorImage::draw_monochrome(uint8_t *pixels) const
  * it inverts, shown as the colour. */
 void CursorImage::draw_color(uint8_t *pixels) const
 {
+    AV_SCOPE("CursorImage::draw_color");
     const auto *const source = static_cast<const uint8_t *>(shape_.pPixels);
     const bool masked = shape_.Flags == flag_masked_color;
     for (uint32_t y = 0u; y < shape_.Height; y++) {

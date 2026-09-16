@@ -2,6 +2,7 @@
 
 #include "core/platform/block_source.hpp"
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "proto/submission/command_header.hpp"
 
@@ -20,15 +21,20 @@ static_assert(Connection::command_bytes % CommandBatch::first_block == 0u && (do
 
 CommandBatch::CommandBatch(BlockSource &memory, Connection &connection)
     : memory_(memory), connection_(connection), block_(nullptr), capacity_(0u), used_(0u), last_(0u), failure_(Status::ok),
-      decode_arena_(nullptr, 0u), blobs_() {}
+      decode_arena_(nullptr, 0u), blobs_()
+      {
+          AV_SCOPE("CommandBatch::CommandBatch");
+      }
 
 CommandBatch::~CommandBatch()
 {
+    AV_SCOPE("CommandBatch::~CommandBatch");
     if (block_ != nullptr) memory_.release(block_);
 }
 
 void CommandBatch::discard()
 {
+    AV_SCOPE("CommandBatch::discard");
     used_ = 0u;
     last_ = 0u;
     failure_ = Status::ok;
@@ -36,6 +42,7 @@ void CommandBatch::discard()
 
 Status CommandBatch::end()
 {
+    AV_SCOPE("CommandBatch::end");
     ScopeExit dropped([&] { discard(); });
     if (failure_ != Status::ok) return failure_;
     return connection_.send_batch(block_, used_) == TransportResult::ok ? Status::ok : Status::invalid_state;
@@ -45,6 +52,7 @@ Status CommandBatch::end()
  * limit, whatever is left past a header. */
 bool CommandBatch::make_room()
 {
+    AV_SCOPE("CommandBatch::make_room");
     if (capacity_ - used_ >= header_bytes + command_room) return true;
     if (capacity_ == Connection::command_bytes) return capacity_ - used_ > header_bytes;
     return grow();
@@ -54,6 +62,7 @@ bool CommandBatch::make_room()
  * command is lent, and what is recorded never exceeds the block. */
 bool CommandBatch::grow()
 {
+    AV_SCOPE("CommandBatch::grow");
     const size_t wanted = capacity_ == 0u ? first_block : capacity_ * 2u;
     auto *const grown = static_cast<uint8_t *>(memory_.allocate(wanted, Pool::paged));
     if (grown == nullptr) return false;
@@ -68,6 +77,7 @@ bool CommandBatch::grow()
 
 WireWriter CommandBatch::request_writer()
 {
+    AV_SCOPE("CommandBatch::request_writer");
     if (failure_ != Status::ok) return WireWriter(nullptr, 0u);
     if (!make_room()) {
         failure_ = Status::no_memory;
@@ -79,6 +89,7 @@ WireWriter CommandBatch::request_writer()
 
 TransportResult CommandBatch::send_async(uint32_t command_id, WireWriter &writer)
 {
+    AV_SCOPE("CommandBatch::send_async");
     if (failure_ != Status::ok) return TransportResult::failed;
     if (writer.status() != Status::ok) {
         failure_ = Status::no_memory;
@@ -93,15 +104,31 @@ TransportResult CommandBatch::send_async(uint32_t command_id, WireWriter &writer
     return TransportResult::ok;
 }
 
-TransportResult CommandBatch::send_sync(uint32_t, WireWriter &, WireReader &) { return TransportResult::failed; }
+TransportResult CommandBatch::send_sync(uint32_t, WireWriter &, WireReader &)
+{
+    AV_SCOPE("CommandBatch::send_sync");
+    return TransportResult::failed;
+}
 
-void CommandBatch::end_call() {}
+void CommandBatch::end_call()
+{
+    AV_SCOPE("CommandBatch::end_call");
+}
 
-WireArena       &CommandBatch::decode_arena() { return decode_arena_; }
-ClientBlobArena &CommandBatch::blobs() { return blobs_; }
+WireArena       &CommandBatch::decode_arena()
+{
+    AV_SCOPE("CommandBatch::decode_arena");
+    return decode_arena_;
+}
+ClientBlobArena &CommandBatch::blobs()
+{
+    AV_SCOPE("CommandBatch::blobs");
+    return blobs_;
+}
 
 bool CommandBatch::invariants_hold() const
 {
+    AV_SCOPE("CommandBatch::invariants_hold");
     if (failure_ != Status::ok && failure_ != Status::no_memory) return false;
     if (used_ > capacity_ || capacity_ > Connection::command_bytes || (block_ == nullptr) != (capacity_ == 0u))
         return false;

@@ -8,6 +8,7 @@
 #define AV_GUEST_SESSION_HPP
 
 #include "core/support/status.hpp"
+#include "core/trace/function_scope.hpp"
 
 #include <stdint.h>
 
@@ -56,6 +57,7 @@ private:
     template <typename Handle>
     [[nodiscard]] Status accept(Status status, const Handle &value) const
     {
+        AV_SCOPE("GuestSession::accept");
         return status == Status::ok && value == Handle{} ? Status::malformed : status;
     }
     void                 note(Status &first, Status status);

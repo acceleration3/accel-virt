@@ -10,6 +10,7 @@
 #define AV_OBJECT_STORAGE_HPP
 
 #include "core/support/status.hpp"
+#include "core/trace/function_scope.hpp"
 
 #include <new>
 
@@ -25,6 +26,7 @@ public:
     template <typename... Arguments>
     [[nodiscard]] Status construct(Arguments &&...arguments)
     {
+        AV_SCOPE("ObjectStorage::construct");
         if (constructed_) return Status::invalid_state;
         ::new (address()) T(static_cast<Arguments &&>(arguments)...);
         constructed_ = true;
@@ -36,16 +38,37 @@ public:
      * device is exactly what it must not be handed. */
     void destroy()
     {
+        AV_SCOPE("ObjectStorage::destroy");
         if (!constructed_) return;
         constructed_ = false;
         object().~T();
     }
 
-    bool     constructed() const { return constructed_; }
-    T       &object() { return *static_cast<T *>(address()); }
-    const T &object() const { return *static_cast<const T *>(address()); }
-    void       *address() { return bytes_; }
-    const void *address() const { return bytes_; }
+    bool     constructed() const
+    {
+        AV_SCOPE("ObjectStorage::constructed");
+        return constructed_;
+    }
+    T       &object()
+    {
+        AV_SCOPE("ObjectStorage::object");
+        return *static_cast<T *>(address());
+    }
+    const T &object() const
+    {
+        AV_SCOPE("ObjectStorage::object");
+        return *static_cast<const T *>(address());
+    }
+    void       *address()
+    {
+        AV_SCOPE("ObjectStorage::address");
+        return bytes_;
+    }
+    const void *address() const
+    {
+        AV_SCOPE("ObjectStorage::address");
+        return bytes_;
+    }
 
 private:
     alignas(T) unsigned char bytes_[sizeof(T)] = {};

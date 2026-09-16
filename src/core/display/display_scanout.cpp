@@ -3,6 +3,7 @@
 #include "core/display/display_mode.hpp"
 #include "core/memory/allocation.hpp"
 #include "core/support/invariant_scope.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
@@ -18,10 +19,14 @@ DisplayScanout::DisplayScanout(Platform &platform, LogBudget &budget, ObjectStor
     : platform_(platform), resources_{ScanoutResource(platform, budget, device, 0u),
                                       ScanoutResource(platform, budget, device, 1u),
                                       ScanoutResource(platform, budget, device, 2u),
-                                      ScanoutResource(platform, budget, device, 3u)} {}
+                                      ScanoutResource(platform, budget, device, 3u)}
+                                      {
+                                          AV_SCOPE("DisplayScanout::DisplayScanout");
+                                      }
 
 Status DisplayScanout::configure(uint32_t source, const DisplayMode &mode)
 {
+    AV_SCOPE("DisplayScanout::configure");
     platform_.require_irql_at_most(Irql::passive, "DisplayScanout::configure");
     InvariantScope<DisplayScanout> guard(platform_, *this, "configure");
     if (source >= DisplaySources::max_sources) return Status::invalid_parameter;
@@ -30,6 +35,7 @@ Status DisplayScanout::configure(uint32_t source, const DisplayMode &mode)
 
 Status DisplayScanout::disable(uint32_t source)
 {
+    AV_SCOPE("DisplayScanout::disable");
     platform_.require_irql_at_most(Irql::passive, "DisplayScanout::disable");
     InvariantScope<DisplayScanout> guard(platform_, *this, "disable");
     if (source >= DisplaySources::max_sources) return Status::invalid_parameter;
@@ -46,6 +52,7 @@ Status DisplayScanout::disable(uint32_t source)
  * destroyed. */
 Status DisplayScanout::refresh(DisplaySources &sources, bool presented)
 {
+    AV_SCOPE("DisplayScanout::refresh");
     platform_.require_irql_at_most(Irql::dispatch, "DisplayScanout::refresh");
     InvariantScope<DisplayScanout> guard(platform_, *this, "refresh");
     Status carried = Status::ok;
@@ -64,6 +71,7 @@ Status DisplayScanout::refresh(DisplaySources &sources, bool presented)
 
 void DisplayScanout::release()
 {
+    AV_SCOPE("DisplayScanout::release");
     platform_.require_irql_at_most(Irql::passive, "DisplayScanout::release");
     InvariantScope<DisplayScanout> guard(platform_, *this, "release");
     for (ScanoutResource &resource : resources_) resource.release();
@@ -71,12 +79,14 @@ void DisplayScanout::release()
 
 void DisplayScanout::forget_device()
 {
+    AV_SCOPE("DisplayScanout::forget_device");
     platform_.require_irql_at_most(Irql::passive, "DisplayScanout::forget_device");
     for (ScanoutResource &resource : resources_) resource.forget_device();
 }
 
 bool DisplayScanout::invariants_hold() const
 {
+    AV_SCOPE("DisplayScanout::invariants_hold");
     for (const ScanoutResource &resource : resources_)
         if (!resource.invariants_hold()) return false;
     return true;

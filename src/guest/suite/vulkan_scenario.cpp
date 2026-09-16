@@ -1,6 +1,7 @@
 #include "guest/suite/vulkan_scenario.hpp"
 
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 
@@ -8,10 +9,14 @@ namespace av {
 
 VulkanScenario::VulkanScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
     : steps_(kmt, report, "vulkan"), link_(kmt, search, steps_, SubApi::vulkan), chain_(steps_, link_.transport()),
-      buffer_(VK_NULL_HANDLE), memory_(VK_NULL_HANDLE) {}
+      buffer_(VK_NULL_HANDLE), memory_(VK_NULL_HANDLE)
+      {
+          AV_SCOPE("VulkanScenario::VulkanScenario");
+      }
 
 void VulkanScenario::run()
 {
+    AV_SCOPE("VulkanScenario::run");
     ScopeExit closing([&] { link_.close(); });
     if (link_.open() != Status::ok) return;
     Status built = chain_.make();
@@ -22,6 +27,7 @@ void VulkanScenario::run()
 
 Status VulkanScenario::bind_buffer()
 {
+    AV_SCOPE("VulkanScenario::bind_buffer");
     KmtTransport      &transport = link_.transport();
     VkBufferCreateInfo buffer_info = {};
     buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -41,6 +47,7 @@ Status VulkanScenario::bind_buffer()
 
 Status VulkanScenario::allocate_memory()
 {
+    AV_SCOPE("VulkanScenario::allocate_memory");
     KmtTransport        &transport = link_.transport();
     const VkDevice       device = chain_.device();
     VkMemoryRequirements requirements = {};
@@ -63,6 +70,7 @@ Status VulkanScenario::allocate_memory()
  * chain names only if it made them. */
 Status VulkanScenario::destroy()
 {
+    AV_SCOPE("VulkanScenario::destroy");
     KmtTransport  &transport = link_.transport();
     const VkDevice device = chain_.device();
     if (device != VK_NULL_HANDLE) {

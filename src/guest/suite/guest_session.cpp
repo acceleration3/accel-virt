@@ -1,18 +1,27 @@
 #include "guest/suite/guest_session.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 
 namespace av {
 
 GuestSession::GuestSession(Kmt &kmt, uint32_t adapter)
     : kmt_(kmt), adapter_(adapter), device_(0u), allocations_{}, views_{}, addresses_{}, pages_{},
-      allocation_count_(0u), queue_(0u), fence_object_(0u), context_(0u), teardown_code_(0u) {}
+      allocation_count_(0u), queue_(0u), fence_object_(0u), context_(0u), teardown_code_(0u)
+      {
+          AV_SCOPE("GuestSession::GuestSession");
+      }
 
 /* A scenario reports its own teardown; a destructor has no one to tell. */
-GuestSession::~GuestSession() { static_cast<void>(tear_down()); }
+GuestSession::~GuestSession()
+{
+    AV_SCOPE("GuestSession::~GuestSession");
+    static_cast<void>(tear_down());
+}
 
 Status GuestSession::open_device()
 {
+    AV_SCOPE("GuestSession::open_device");
     if (adapter_ == 0u || device_ != 0u) return Status::invalid_state;
     uint32_t     device = 0u;
     const Status status = accept(kmt_.create_device(adapter_, device), device);
@@ -22,6 +31,7 @@ Status GuestSession::open_device()
 
 Status GuestSession::allocate(const uint8_t *descriptor, uint32_t size, uint32_t &index)
 {
+    AV_SCOPE("GuestSession::allocate");
     if (device_ == 0u || allocation_count_ == max_allocations) return Status::invalid_state;
     uint32_t     allocation = 0u;
     const Status status = accept(kmt_.create_allocation(device_, descriptor, size, allocation), allocation);
@@ -33,6 +43,7 @@ Status GuestSession::allocate(const uint8_t *descriptor, uint32_t size, uint32_t
 
 Status GuestSession::lock(uint32_t index, void *&view)
 {
+    AV_SCOPE("GuestSession::lock");
     view = nullptr;
     if (index >= allocation_count_ || views_[index] != nullptr) return Status::invalid_state;
     void        *locked = nullptr;
@@ -47,6 +58,7 @@ Status GuestSession::lock(uint32_t index, void *&view)
  * again before the allocation under it is destroyed. */
 Status GuestSession::unlock(uint32_t index)
 {
+    AV_SCOPE("GuestSession::unlock");
     if (index >= allocation_count_ || views_[index] == nullptr) return Status::invalid_state;
     const Status status = kmt_.unlock(device_, allocations_[index]);
     if (status == Status::ok) views_[index] = nullptr;
@@ -56,6 +68,7 @@ Status GuestSession::unlock(uint32_t index)
 /* A queue answered without its fence object is still destroyed at teardown. */
 Status GuestSession::open_paging_queue()
 {
+    AV_SCOPE("GuestSession::open_paging_queue");
     if (device_ == 0u || queue_ != 0u) return Status::invalid_state;
     uint32_t     queue = 0u;
     uint32_t     fence_object = 0u;
@@ -68,6 +81,7 @@ Status GuestSession::open_paging_queue()
 
 Status GuestSession::map(uint32_t index, uint64_t pages, uint64_t &address)
 {
+    AV_SCOPE("GuestSession::map");
     address = 0u;
     if (index >= allocation_count_ || fence_object_ == 0u || addresses_[index] != 0u) return Status::invalid_state;
     uint64_t fence = 0u;
@@ -86,6 +100,7 @@ Status GuestSession::map(uint32_t index, uint64_t pages, uint64_t &address)
 
 Status GuestSession::open_context()
 {
+    AV_SCOPE("GuestSession::open_context");
     if (device_ == 0u || context_ != 0u) return Status::invalid_state;
     uint32_t     context = 0u;
     const Status status = accept(kmt_.create_context(device_, context), context);
@@ -95,24 +110,28 @@ Status GuestSession::open_context()
 
 Status GuestSession::submit(uint64_t commands, uint64_t length)
 {
+    AV_SCOPE("GuestSession::submit");
     if (context_ == 0u) return Status::invalid_state;
     return kmt_.submit(context_, commands, length, nullptr, 0u);
 }
 
 Status GuestSession::wait()
 {
+    AV_SCOPE("GuestSession::wait");
     if (context_ == 0u) return Status::invalid_state;
     return kmt_.wait_for_context(device_, context_);
 }
 
 Status GuestSession::await_vertical_blank(uint32_t source)
 {
+    AV_SCOPE("GuestSession::await_vertical_blank");
     if (device_ == 0u) return Status::invalid_state;
     return kmt_.wait_for_vertical_blank(adapter_, device_, source);
 }
 
 void GuestSession::note(Status &first, Status status)
 {
+    AV_SCOPE("GuestSession::note");
     if (first != Status::ok || status == Status::ok) return;
     first = status;
     teardown_code_ = kmt_.last_code();
@@ -120,6 +139,7 @@ void GuestSession::note(Status &first, Status status)
 
 Status GuestSession::tear_down()
 {
+    AV_SCOPE("GuestSession::tear_down");
     Status first = Status::ok;
     teardown_code_ = 0u;
     if (context_ != 0u) note(first, kmt_.destroy_context(context_));
@@ -144,12 +164,17 @@ Status GuestSession::tear_down()
     return first;
 }
 
-uint32_t GuestSession::teardown_code() const { return teardown_code_; }
+uint32_t GuestSession::teardown_code() const
+{
+    AV_SCOPE("GuestSession::teardown_code");
+    return teardown_code_;
+}
 
 /* Nothing outlives the device it was made on, a fence object its queue, or a
  * mapping or a view its allocation. */
 bool GuestSession::invariants_hold() const
 {
+    AV_SCOPE("GuestSession::invariants_hold");
     bool mappings_held = true;
     for (uint32_t index = allocation_count_; index < max_allocations; index++)
         mappings_held = mappings_held && addresses_[index] == 0u && views_[index] == nullptr;

@@ -1,5 +1,6 @@
 #include "guest/suite/fence_stress_scenario.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/suite/adapter_search.hpp"
 #include "guest/suite/client_descriptor.hpp"
@@ -17,10 +18,14 @@ constexpr uint64_t command_bytes = 64u;
 FenceStressScenario::FenceStressScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search,
                                          uint32_t seconds)
     : kmt_(kmt), search_(search), steps_(kmt, report, "stress"), seconds_(seconds), completed_(0u), blanks_(0u),
-      worst_(0u), frequency_(0u) {}
+      worst_(0u), frequency_(0u)
+      {
+          AV_SCOPE("FenceStressScenario::FenceStressScenario");
+      }
 
 void FenceStressScenario::run()
 {
+    AV_SCOPE("FenceStressScenario::run");
     if (seconds_ == 0u) return;
     if (steps_.check("adapter", search_.found() ? Status::ok : Status::not_found) != Status::ok) return;
     GuestSession           session(kmt_, search_.adapter());
@@ -50,6 +55,7 @@ void FenceStressScenario::run()
  * happened rather than behind a queue of others. */
 Status FenceStressScenario::stress(GuestSession &session, uint64_t address)
 {
+    AV_SCOPE("FenceStressScenario::stress");
     const uint64_t started = kmt_.performance_counter(frequency_);
     const uint64_t deadline = started + uint64_t{seconds_} * frequency_;
     uint64_t       previous = started;
@@ -76,11 +82,13 @@ Status FenceStressScenario::stress(GuestSession &session, uint64_t address)
 
 uint32_t FenceStressScenario::completed() const
 {
+    AV_SCOPE("FenceStressScenario::completed");
     return completed_;
 }
 
 uint64_t FenceStressScenario::worst_wait_microseconds() const
 {
+    AV_SCOPE("FenceStressScenario::worst_wait_microseconds");
     if (frequency_ == 0u) return 0u;
     return worst_ * microseconds_per_second / frequency_;
 }

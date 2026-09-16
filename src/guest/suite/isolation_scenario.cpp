@@ -1,6 +1,7 @@
 #include "guest/suite/isolation_scenario.hpp"
 
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 #include "guest/transport/context_fault.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
@@ -8,10 +9,14 @@
 namespace av {
 
 IsolationScenario::IsolationScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
-    : steps_(kmt, report, "isolation"), link_(kmt, search, steps_, SubApi::vulkan), staging_{} {}
+    : steps_(kmt, report, "isolation"), link_(kmt, search, steps_, SubApi::vulkan), staging_{}
+    {
+        AV_SCOPE("IsolationScenario::IsolationScenario");
+    }
 
 void IsolationScenario::run()
 {
+    AV_SCOPE("IsolationScenario::run");
     ScopeExit closing([&] { link_.close(); });
     if (link_.open() != Status::ok) return;
     if (steps_.check("healthy_before", exercise_healthy()) != Status::ok) return;
@@ -35,6 +40,7 @@ void IsolationScenario::run()
 
 Status IsolationScenario::exercise_healthy()
 {
+    AV_SCOPE("IsolationScenario::exercise_healthy");
     KmtTransport &transport = link_.transport();
     uint32_t      answered = 0u;
     const Status  before = transport.nop(answered);
@@ -49,6 +55,7 @@ Status IsolationScenario::exercise_healthy()
 
 Status IsolationScenario::fault(KmtTransport &doomed)
 {
+    AV_SCOPE("IsolationScenario::fault");
     const Status opened = doomed.initialize();
     if (opened != Status::ok) return opened;
     return ContextFault(doomed).send();

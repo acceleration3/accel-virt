@@ -1,11 +1,17 @@
 #include "device/gpu/device_uuid.hpp"
 
+#include "core/trace/function_scope.hpp"
+
 namespace av {
 
-DeviceUuid::DeviceUuid() : bytes_{} {}
+DeviceUuid::DeviceUuid() : bytes_{}
+{
+    AV_SCOPE("DeviceUuid::DeviceUuid");
+}
 
 int32_t DeviceUuid::digit(char c) const
 {
+    AV_SCOPE("DeviceUuid::digit");
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'a' && c <= 'f') return c - 'a' + 10;
     if (c >= 'A' && c <= 'F') return c - 'A' + 10;
@@ -14,11 +20,13 @@ int32_t DeviceUuid::digit(char c) const
 
 bool DeviceUuid::separator_at(uint32_t position) const
 {
+    AV_SCOPE("DeviceUuid::separator_at");
     return position == 8u || position == 13u || position == 18u || position == 23u;
 }
 
 Status DeviceUuid::parse(const char *text)
 {
+    AV_SCOPE("DeviceUuid::parse");
     if (text == nullptr) return Status::invalid_parameter;
     uint8_t  parsed[bytes] = {};
     uint32_t nibbles = 0u;
@@ -38,6 +46,7 @@ Status DeviceUuid::parse(const char *text)
 
 bool DeviceUuid::equals(const uint8_t *uuid) const
 {
+    AV_SCOPE("DeviceUuid::equals");
     uint8_t difference = 0u;
     for (uint32_t index = 0u; index < bytes; index++) difference |= static_cast<uint8_t>(bytes_[index] ^ uuid[index]);
     return difference == 0u;

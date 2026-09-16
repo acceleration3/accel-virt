@@ -1,5 +1,6 @@
 #include "device/executor/imported_blob.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
 
 namespace av {
@@ -7,10 +8,13 @@ namespace av {
 ImportedBlob::ImportedBlob()
     : id_(0u), kind_(0u), size_(0u), pointer_(nullptr), descriptor_(-1), memory_type_(0u), object_(0u),
       wire_handle_(0u), live_(false)
-{}
+{
+    AV_SCOPE("ImportedBlob::ImportedBlob");
+}
 
 Status ImportedBlob::take(uint64_t blob_id, const RvkBlobHandle &handle)
 {
+    AV_SCOPE("ImportedBlob::take");
     if (live_) return Status::invalid_state;
     if (handle.size == 0u || handle.size % page_bytes != 0u) return Status::invalid_parameter;
     /* Exactly one kind. Two would mean the device could not decide which the
@@ -38,6 +42,7 @@ Status ImportedBlob::take(uint64_t blob_id, const RvkBlobHandle &handle)
 
 void ImportedBlob::give_back()
 {
+    AV_SCOPE("ImportedBlob::give_back");
     id_ = 0u;
     kind_ = 0u;
     size_ = 0u;
@@ -49,26 +54,68 @@ void ImportedBlob::give_back()
     live_ = false;
 }
 
-bool     ImportedBlob::holds(uint64_t blob_id) const { return live_ && id_ == blob_id; }
-bool     ImportedBlob::live() const { return live_; }
-uint64_t ImportedBlob::id() const { return id_; }
-uint32_t ImportedBlob::kind() const { return kind_; }
-uint64_t ImportedBlob::size() const { return size_; }
-void    *ImportedBlob::pointer() const { return pointer_; }
-int      ImportedBlob::descriptor() const { return descriptor_; }
-uint32_t ImportedBlob::memory_type() const { return memory_type_; }
+bool     ImportedBlob::holds(uint64_t blob_id) const
+{
+    AV_SCOPE("ImportedBlob::holds");
+    return live_ && id_ == blob_id;
+}
+bool     ImportedBlob::live() const
+{
+    AV_SCOPE("ImportedBlob::live");
+    return live_;
+}
+uint64_t ImportedBlob::id() const
+{
+    AV_SCOPE("ImportedBlob::id");
+    return id_;
+}
+uint32_t ImportedBlob::kind() const
+{
+    AV_SCOPE("ImportedBlob::kind");
+    return kind_;
+}
+uint64_t ImportedBlob::size() const
+{
+    AV_SCOPE("ImportedBlob::size");
+    return size_;
+}
+void    *ImportedBlob::pointer() const
+{
+    AV_SCOPE("ImportedBlob::pointer");
+    return pointer_;
+}
+int      ImportedBlob::descriptor() const
+{
+    AV_SCOPE("ImportedBlob::descriptor");
+    return descriptor_;
+}
+uint32_t ImportedBlob::memory_type() const
+{
+    AV_SCOPE("ImportedBlob::memory_type");
+    return memory_type_;
+}
 
 void ImportedBlob::record(uint64_t object, uint64_t wire_handle)
 {
+    AV_SCOPE("ImportedBlob::record");
     object_ = object;
     wire_handle_ = wire_handle;
 }
 
-uint64_t ImportedBlob::object() const { return object_; }
-uint64_t ImportedBlob::wire_handle() const { return wire_handle_; }
+uint64_t ImportedBlob::object() const
+{
+    AV_SCOPE("ImportedBlob::object");
+    return object_;
+}
+uint64_t ImportedBlob::wire_handle() const
+{
+    AV_SCOPE("ImportedBlob::wire_handle");
+    return wire_handle_;
+}
 
 bool ImportedBlob::invariants_hold() const
 {
+    AV_SCOPE("ImportedBlob::invariants_hold");
     if (!live_)
         return kind_ == 0u && size_ == 0u && pointer_ == nullptr && descriptor_ == -1 && memory_type_ == 0u &&
                object_ == 0u && wire_handle_ == 0u;

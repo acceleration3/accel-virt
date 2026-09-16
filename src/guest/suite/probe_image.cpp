@@ -1,5 +1,6 @@
 #include "guest/suite/probe_image.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/suite/probe_device.hpp"
 #include "guest/suite/probe_outcome.hpp"
 #include "guest/suite/vulkan_entry.hpp"
@@ -7,11 +8,15 @@
 namespace av {
 
 ProbeImage::ProbeImage(ProbeDevice &device)
-    : device_(device), image_(VK_NULL_HANDLE), memory_(VK_NULL_HANDLE), view_(VK_NULL_HANDLE) {}
+    : device_(device), image_(VK_NULL_HANDLE), memory_(VK_NULL_HANDLE), view_(VK_NULL_HANDLE)
+    {
+        AV_SCOPE("ProbeImage::ProbeImage");
+    }
 
 /* Vulkan makes destroying and freeing VK_NULL_HANDLE a no-op. */
 ProbeImage::~ProbeImage()
 {
+    AV_SCOPE("ProbeImage::~ProbeImage");
     device_.vulkan().destroy_image_view(device_.device(), view_);
     device_.vulkan().destroy_image(device_.device(), image_);
     device_.vulkan().free_memory(device_.device(), memory_);
@@ -19,6 +24,7 @@ ProbeImage::~ProbeImage()
 
 bool ProbeImage::make(uint32_t extent, ProbeOutcome &outcome)
 {
+    AV_SCOPE("ProbeImage::make");
     VulkanEntry   &vulkan = device_.vulkan();
     const VkDevice device = device_.device();
     VkImageCreateInfo info = {};
@@ -52,12 +58,14 @@ bool ProbeImage::make(uint32_t extent, ProbeOutcome &outcome)
 
 bool ProbeImage::choose_type(uint32_t allowed, uint32_t &type) const
 {
+    AV_SCOPE("ProbeImage::choose_type");
     return device_.memory_type(allowed, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, type) ||
            device_.memory_type(allowed, 0u, type);
 }
 
 bool ProbeImage::make_view(ProbeOutcome &outcome)
 {
+    AV_SCOPE("ProbeImage::make_view");
     VkImageViewCreateInfo info = {};
     info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     info.image = image_;
@@ -69,11 +77,20 @@ bool ProbeImage::make_view(ProbeOutcome &outcome)
     return outcome.accept(device_.vulkan().create_image_view(device_.device(), &info, &view_));
 }
 
-VkImage     ProbeImage::image() const { return image_; }
-VkImageView ProbeImage::view() const { return view_; }
+VkImage     ProbeImage::image() const
+{
+    AV_SCOPE("ProbeImage::image");
+    return image_;
+}
+VkImageView ProbeImage::view() const
+{
+    AV_SCOPE("ProbeImage::view");
+    return view_;
+}
 
 bool ProbeImage::invariants_hold() const
 {
+    AV_SCOPE("ProbeImage::invariants_hold");
     if (view_ != VK_NULL_HANDLE && memory_ == VK_NULL_HANDLE) return false;
     return memory_ == VK_NULL_HANDLE || image_ != VK_NULL_HANDLE;
 }

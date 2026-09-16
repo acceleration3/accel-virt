@@ -4,22 +4,28 @@
 #include "core/display/display_sources.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
 #include "core/support/text_buffer.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
 SyntheticVsync::SyntheticVsync(Platform &platform, DxgkrnlInterface &dxgkrnl, DisplaySources &sources)
     : platform_(platform), dxgkrnl_(dxgkrnl), sources_(sources), notification_(platform, dxgkrnl),
       timer_(platform, &AvVsyncTick, this), reporting_(false), running_(false), suspended_reporting_(false),
-      ticks_(0u), reported_(0u), enables_(0u), window_start_(0u) {}
+      ticks_(0u), reported_(0u), enables_(0u), window_start_(0u)
+      {
+          AV_SCOPE("SyntheticVsync::SyntheticVsync");
+      }
 
 Status SyntheticVsync::initialize()
 {
+    AV_SCOPE("SyntheticVsync::initialize");
     platform_.require_irql_at_most(Irql::passive, "SyntheticVsync::initialize");
     return timer_.initialize();
 }
 
 Status SyntheticVsync::enable()
 {
+    AV_SCOPE("SyntheticVsync::enable");
     platform_.require_irql_at_most(Irql::passive, "SyntheticVsync::enable");
     enables_++;
     reporting_ = true;
@@ -34,12 +40,14 @@ Status SyntheticVsync::enable()
 /* The blank keeps its phase: only the reporting stops. */
 void SyntheticVsync::disable()
 {
+    AV_SCOPE("SyntheticVsync::disable");
     platform_.require_irql_at_most(Irql::passive, "SyntheticVsync::disable");
     reporting_ = false;
 }
 
 void SyntheticVsync::destroy()
 {
+    AV_SCOPE("SyntheticVsync::destroy");
     platform_.require_irql_at_most(Irql::passive, "SyntheticVsync::destroy");
     reporting_ = false;
     running_ = false;
@@ -48,6 +56,7 @@ void SyntheticVsync::destroy()
 
 void SyntheticVsync::suspend()
 {
+    AV_SCOPE("SyntheticVsync::suspend");
     platform_.require_irql_at_most(Irql::passive, "SyntheticVsync::suspend");
     suspended_reporting_ = reporting_;
     reporting_ = false;
@@ -62,6 +71,7 @@ void SyntheticVsync::suspend()
 
 Status SyntheticVsync::resume()
 {
+    AV_SCOPE("SyntheticVsync::resume");
     platform_.require_irql_at_most(Irql::passive, "SyntheticVsync::resume");
     if (!suspended_reporting_) return Status::ok;
     suspended_reporting_ = false;
@@ -70,6 +80,7 @@ Status SyntheticVsync::resume()
 
 void SyntheticVsync::tick()
 {
+    AV_SCOPE("SyntheticVsync::tick");
     platform_.require_irql_at_most(Irql::dispatch, "SyntheticVsync::tick");
     ticks_++;
     if (reporting_) {
@@ -85,18 +96,21 @@ void SyntheticVsync::tick()
 
 uint32_t SyntheticVsync::reported() const
 {
+    AV_SCOPE("SyntheticVsync::reported");
     platform_.require_irql_at_most(Irql::dispatch, "SyntheticVsync::reported");
     return reported_;
 }
 
 uint32_t SyntheticVsync::enabled_count() const
 {
+    AV_SCOPE("SyntheticVsync::enabled_count");
     platform_.require_irql_at_most(Irql::dispatch, "SyntheticVsync::enabled_count");
     return enables_;
 }
 
 void SyntheticVsync::report_rate()
 {
+    AV_SCOPE("SyntheticVsync::report_rate");
     const uint64_t now = platform_.interrupt_time();
     char           bytes[96];
     TextBuffer     line(bytes, sizeof bytes);

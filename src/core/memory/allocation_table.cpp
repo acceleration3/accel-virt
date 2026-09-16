@@ -9,15 +9,20 @@
 #include "core/platform/mutex_guard.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
 AllocationTable::AllocationTable(Platform &platform, const ApertureSegment &segment,
                                  const MemorySegments &segments)
-    : platform_(platform), segment_(segment), segments_(segments), mutex_(platform, LockRank::allocation_table), allocations_(platform) {}
+    : platform_(platform), segment_(segment), segments_(segments), mutex_(platform, LockRank::allocation_table), allocations_(platform)
+    {
+        AV_SCOPE("AllocationTable::AllocationTable");
+    }
 
 Status AllocationTable::create_one(DxgkAllocationInfoRecord &info)
 {
+    AV_SCOPE("AllocationTable::create_one");
     info.hAllocation = nullptr;
     AllocationDescriptor descriptor;
     if (info.pPrivateDriverData == nullptr || info.PrivateDriverDataSize != AllocationDescriptor::encoded_size)
@@ -35,6 +40,7 @@ Status AllocationTable::create_one(DxgkAllocationInfoRecord &info)
 
 void AllocationTable::destroy_created(DxgkargCreateAllocationRecord &request, uint32_t count)
 {
+    AV_SCOPE("AllocationTable::destroy_created");
     for (uint32_t index = 0u; index < count; index++) {
         static_cast<void>(allocations_.destroy(static_cast<Allocation *>(request.pAllocationInfo[index].hAllocation)));
         request.pAllocationInfo[index].hAllocation = nullptr;
@@ -43,6 +49,7 @@ void AllocationTable::destroy_created(DxgkargCreateAllocationRecord &request, ui
 
 Status AllocationTable::create(DxgkargCreateAllocationRecord &request)
 {
+    AV_SCOPE("AllocationTable::create");
     platform_.require_irql_at_most(Irql::passive, "AllocationTable::create");
     MutexGuard lock(mutex_);
     InvariantScope<AllocationTable> guard(platform_, *this, "create");
@@ -62,6 +69,7 @@ Status AllocationTable::create(DxgkargCreateAllocationRecord &request)
 
 Status AllocationTable::destroy(const DxgkargDestroyAllocationRecord &request)
 {
+    AV_SCOPE("AllocationTable::destroy");
     platform_.require_irql_at_most(Irql::passive, "AllocationTable::destroy");
     MutexGuard lock(mutex_);
     InvariantScope<AllocationTable> guard(platform_, *this, "destroy");
@@ -80,6 +88,7 @@ Status AllocationTable::destroy(const DxgkargDestroyAllocationRecord &request)
 
 Status AllocationTable::describe(DxgkargDescribeAllocationRecord &request, const DisplaySources &sources)
 {
+    AV_SCOPE("AllocationTable::describe");
     platform_.require_irql_at_most(Irql::apc, "AllocationTable::describe");
     MutexGuard lock(mutex_);
     const Allocation *allocation = allocations_.find(request.hAllocation);
@@ -100,6 +109,7 @@ Status AllocationTable::describe(DxgkargDescribeAllocationRecord &request, const
 
 Allocation *AllocationTable::find(void *handle)
 {
+    AV_SCOPE("AllocationTable::find");
     platform_.require_irql_at_most(Irql::apc, "AllocationTable::find");
     MutexGuard lock(mutex_);
     return allocations_.find(handle);
@@ -107,6 +117,7 @@ Allocation *AllocationTable::find(void *handle)
 
 Status AllocationTable::open(Allocation &allocation, const void *device)
 {
+    AV_SCOPE("AllocationTable::open");
     platform_.require_irql_at_most(Irql::apc, "AllocationTable::open");
     MutexGuard lock(mutex_);
     return allocation.open(device);
@@ -114,15 +125,21 @@ Status AllocationTable::open(Allocation &allocation, const void *device)
 
 Status AllocationTable::close(Allocation &allocation)
 {
+    AV_SCOPE("AllocationTable::close");
     platform_.require_irql_at_most(Irql::apc, "AllocationTable::close");
     MutexGuard lock(mutex_);
     return allocation.close();
 }
 
-uint32_t AllocationTable::live() const { return allocations_.live(); }
+uint32_t AllocationTable::live() const
+{
+    AV_SCOPE("AllocationTable::live");
+    return allocations_.live();
+}
 
 bool AllocationTable::invariants_hold() const
 {
+    AV_SCOPE("AllocationTable::invariants_hold");
     return allocations_.invariants_hold() &&
            allocations_.all_of([](const Allocation &allocation) { return allocation.invariants_hold(); });
 }

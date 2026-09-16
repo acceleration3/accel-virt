@@ -3,15 +3,20 @@
 #include "core/ddi/dxgk_build_paging_buffer_update_page_table_record.hpp"
 #include "core/memory/gpu_mmu_geometry.hpp"
 #include "core/memory/page_table_entry.hpp"
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
 PageTableUpdate::PageTableUpdate(Platform &platform, const DxgkBuildPagingBufferUpdatePageTableRecord &update)
-    : platform_(platform), update_(update) {}
+    : platform_(platform), update_(update)
+    {
+        AV_SCOPE("PageTableUpdate::PageTableUpdate");
+    }
 
 Status PageTableUpdate::write() const
 {
+    AV_SCOPE("PageTableUpdate::write");
     platform_.require_irql_at_most(Irql::passive, "PageTableUpdate::write");
     const DxgkBuildPagingBufferUpdatePageTableRecord &u = update_;
     const uint64_t end = uint64_t{u.StartIndex} + u.NumPageTableEntries;

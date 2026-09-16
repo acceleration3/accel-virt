@@ -1,5 +1,6 @@
 #include "guest/suite/host_visible_scenario.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/suite/adapter_search.hpp"
 #include "guest/suite/client_descriptor.hpp"
 #include "guest/suite/guest_session.hpp"
@@ -8,10 +9,14 @@ namespace av {
 
 HostVisibleScenario::HostVisibleScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
     : kmt_(kmt), search_(search), steps_(kmt, report, "host_visible"), pattern_(pattern_bytes),
-      matched_(0u) {}
+      matched_(0u)
+      {
+          AV_SCOPE("HostVisibleScenario::HostVisibleScenario");
+      }
 
 void HostVisibleScenario::run()
 {
+    AV_SCOPE("HostVisibleScenario::run");
     if (steps_.check("adapter", search_.found() ? Status::ok : Status::not_found) != Status::ok) return;
     GuestSession           session(kmt_, search_.adapter());
     const ClientDescriptor descriptor(pattern_bytes);
@@ -31,6 +36,10 @@ void HostVisibleScenario::run()
     steps_.check_teardown(session);
 }
 
-uint32_t HostVisibleScenario::matched_bytes() const { return matched_; }
+uint32_t HostVisibleScenario::matched_bytes() const
+{
+    AV_SCOPE("HostVisibleScenario::matched_bytes");
+    return matched_;
+}
 
 }  // namespace av

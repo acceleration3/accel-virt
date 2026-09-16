@@ -2,6 +2,7 @@
 
 #include "core/support/scope_exit.hpp"
 #include "core/support/text_buffer.hpp"
+#include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/context_fault.hpp"
 #include "icd/vulkan/icd_binding.hpp"
@@ -112,13 +113,19 @@ IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &se
       entry_points_(local_rows, local_row_count),
       extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr)
 {
+    AV_SCOPE("IcdRoot::IcdRoot");
     binding_.bind(*this);
 }
 
-IcdRoot::~IcdRoot() { binding_.unbind(); }
+IcdRoot::~IcdRoot()
+{
+    AV_SCOPE("IcdRoot::~IcdRoot");
+    binding_.unbind();
+}
 
 void IcdRoot::note(const char *what, uint64_t value)
 {
+    AV_SCOPE("IcdRoot::note");
     char       line[line_bytes] = {};
     TextBuffer text(line, sizeof line);
     text.append("rvkvk: ");
@@ -130,6 +137,7 @@ void IcdRoot::note(const char *what, uint64_t value)
 
 bool IcdRoot::lost(const Connection &connection, const char *entry)
 {
+    AV_SCOPE("IcdRoot::lost");
     if (!connection.faulted()) return false;
     char       line[line_bytes] = {};
     TextBuffer text(line, sizeof line);
@@ -142,6 +150,7 @@ bool IcdRoot::lost(const Connection &connection, const char *entry)
 
 VkResult IcdRoot::negotiate(uint32_t *version)
 {
+    AV_SCOPE("IcdRoot::negotiate");
     if (version == nullptr) {
         log_.write("rvkvk: loader interface negotiation without a version");
         return VK_ERROR_INCOMPATIBLE_DRIVER;
@@ -156,23 +165,27 @@ VkResult IcdRoot::negotiate(uint32_t *version)
 
 PFN_vkVoidFunction IcdRoot::instance_proc_addr(VkInstance instance, const char *name)
 {
+    AV_SCOPE("IcdRoot::instance_proc_addr");
     if (instance == VK_NULL_HANDLE) return before_instance_.find_local(name);
     return connection_of(instance, LoaderHandle::Kind::instance) != nullptr ? entry_points_.find(name) : nullptr;
 }
 
 PFN_vkVoidFunction IcdRoot::physical_device_proc_addr(const char *name) const
 {
+    AV_SCOPE("IcdRoot::physical_device_proc_addr");
     return entry_points_.find_at_level(vkicd::generated::DispatchLevel::physical_device, name);
 }
 
 PFN_vkVoidFunction IcdRoot::device_proc_addr(VkDevice device, const char *name)
 {
+    AV_SCOPE("IcdRoot::device_proc_addr");
     if (connection_of(device, LoaderHandle::Kind::device) == nullptr) return nullptr;
     return entry_points_.find_at_level(vkicd::generated::DispatchLevel::device, name);
 }
 
 VkResult IcdRoot::enumerate_instance_extensions(const char *layer, uint32_t *count, VkExtensionProperties *properties)
 {
+    AV_SCOPE("IcdRoot::enumerate_instance_extensions");
     if (layer != nullptr) {
         log_.write("rvkvk: instance extensions of a layer asked for; this driver is no layer");
         return VK_ERROR_LAYER_NOT_PRESENT;
@@ -194,12 +207,14 @@ VkResult IcdRoot::enumerate_instance_extensions(const char *layer, uint32_t *cou
 
 VkResult IcdRoot::enumerate_instance_version(uint32_t *version)
 {
+    AV_SCOPE("IcdRoot::enumerate_instance_version");
     *version = api_version_;
     return VK_SUCCESS;
 }
 
 Status IcdRoot::open_connection(Connection *&opened)
 {
+    AV_SCOPE("IcdRoot::open_connection");
     lock_.acquire();
     ScopeExit release([&] { lock_.release(); });
     const Status made = connections_.create(opened, kmt_, memory_, send_lock_);
@@ -214,6 +229,7 @@ Status IcdRoot::open_connection(Connection *&opened)
 VkResult IcdRoot::create_instance(const VkInstanceCreateInfo *create, const VkAllocationCallbacks *allocator,
                                   VkInstance *instance)
 {
+    AV_SCOPE("IcdRoot::create_instance");
     Connection  *opened = nullptr;
     const Status status = open_connection(opened);
     if (status != Status::ok) {
@@ -236,6 +252,7 @@ VkResult IcdRoot::create_instance(const VkInstanceCreateInfo *create, const VkAl
 VkResult IcdRoot::enumerate_adapter_physical_devices(VkInstance instance, uint64_t luid, uint32_t *count,
                                                      VkPhysicalDevice *physical_devices)
 {
+    AV_SCOPE("IcdRoot::enumerate_adapter_physical_devices");
     const Connection *const connection = connection_of(instance, LoaderHandle::Kind::instance);
     if (connection == nullptr) {
         log_.write("rvkvk: vk_icdEnumerateAdapterPhysicalDevices on an instance this driver did not make");
@@ -257,6 +274,7 @@ VkResult IcdRoot::enumerate_adapter_physical_devices(VkInstance instance, uint64
 VkResult IcdRoot::enumerate_device_extensions(VkPhysicalDevice physical_device, const char *layer, uint32_t *count,
                                               VkExtensionProperties *properties)
 {
+    AV_SCOPE("IcdRoot::enumerate_device_extensions");
     LoaderHandle *const made = handle_of(physical_device, LoaderHandle::Kind::physical_device);
     if (made == nullptr) {
         log_.write("rvkvk: vkEnumerateDeviceExtensionProperties on a physical device this driver did not make");
@@ -289,6 +307,7 @@ VkResult IcdRoot::enumerate_device_extensions(VkPhysicalDevice physical_device, 
 VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDeviceCreateInfo *create,
                                 const VkAllocationCallbacks *allocator, VkDevice *device)
 {
+    AV_SCOPE("IcdRoot::create_device");
     LoaderHandle *const made = handle_of(physical_device, LoaderHandle::Kind::physical_device);
     if (made == nullptr) {
         log_.write("rvkvk: vkCreateDevice on a physical device this driver did not make");
@@ -317,6 +336,7 @@ VkResult IcdRoot::create_device(VkPhysicalDevice physical_device, const VkDevice
 
 void IcdRoot::release_device_memory(LoaderHandle &device)
 {
+    AV_SCOPE("IcdRoot::release_device_memory");
     memory_lock_.acquire();
     ScopeExit           release([&] { memory_lock_.release(); });
     DeviceMemory *const memory = device.device_memory();
@@ -327,6 +347,7 @@ void IcdRoot::release_device_memory(LoaderHandle &device)
 
 void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *allocator)
 {
+    AV_SCOPE("IcdRoot::destroy_device");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) return;
     release_device_memory(*made);
@@ -336,6 +357,7 @@ void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *alloc
 
 void IcdRoot::destroy_instance(VkInstance instance, const VkAllocationCallbacks *allocator)
 {
+    AV_SCOPE("IcdRoot::destroy_instance");
     LoaderHandle *const made = handle_of(instance, LoaderHandle::Kind::instance);
     if (made == nullptr) return;
     for (uint32_t physical = 0u;; physical++) {
@@ -353,6 +375,7 @@ void IcdRoot::destroy_instance(VkInstance instance, const VkAllocationCallbacks 
 void IcdRoot::learn_types(Connection &connection, VkPhysicalDevice physical_device, MemoryTypeTable &types,
                           const char *entry)
 {
+    AV_SCOPE("IcdRoot::learn_types");
     if (lost(connection, entry)) return;
     VkPhysicalDeviceMemoryProperties host = {};
     vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(connection.transport(), physical_device, &host);
@@ -364,6 +387,7 @@ void IcdRoot::learn_types(Connection &connection, VkPhysicalDevice physical_devi
 void IcdRoot::physical_device_memory_properties(VkPhysicalDevice physical_device,
                                                 VkPhysicalDeviceMemoryProperties *properties)
 {
+    AV_SCOPE("IcdRoot::physical_device_memory_properties");
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
     MemoryTypeTable types(kmt_, connection->adapter());
@@ -374,6 +398,7 @@ void IcdRoot::physical_device_memory_properties(VkPhysicalDevice physical_device
 void IcdRoot::physical_device_memory_properties2(VkPhysicalDevice physical_device,
                                                  VkPhysicalDeviceMemoryProperties2 *properties)
 {
+    AV_SCOPE("IcdRoot::physical_device_memory_properties2");
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
     MemoryTypeTable types(kmt_, connection->adapter());
@@ -387,6 +412,7 @@ void IcdRoot::physical_device_memory_properties2(VkPhysicalDevice physical_devic
 
 LoaderHandle *IcdRoot::allocating_device(VkDevice device)
 {
+    AV_SCOPE("IcdRoot::allocating_device");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made != nullptr && made->parent()->kind() == LoaderHandle::Kind::physical_device) return made;
     log_.write("rvkvk: memory of a device this driver did not make through a physical device");
@@ -395,6 +421,7 @@ LoaderHandle *IcdRoot::allocating_device(VkDevice device)
 
 DeviceMemory *IcdRoot::memory_of(LoaderHandle &device)
 {
+    AV_SCOPE("IcdRoot::memory_of");
     lock_.acquire();
     ScopeExit release([&] { lock_.release(); });
     if (device.device_memory() != nullptr) return device.device_memory();
@@ -410,6 +437,7 @@ DeviceMemory *IcdRoot::memory_of(LoaderHandle &device)
 VkResult IcdRoot::allocate_memory(VkDevice device, const VkMemoryAllocateInfo *info,
                                   const VkAllocationCallbacks *allocator, VkDeviceMemory *memory)
 {
+    AV_SCOPE("IcdRoot::allocate_memory");
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return VK_ERROR_DEVICE_LOST;
     if (lost(*made->connection(), "vkAllocateMemory")) return VK_ERROR_DEVICE_LOST;
@@ -423,6 +451,7 @@ VkResult IcdRoot::allocate_memory(VkDevice device, const VkMemoryAllocateInfo *i
 
 void IcdRoot::free_memory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *allocator)
 {
+    AV_SCOPE("IcdRoot::free_memory");
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return;
     memory_lock_.acquire();
@@ -434,6 +463,7 @@ void IcdRoot::free_memory(VkDevice device, VkDeviceMemory memory, const VkAlloca
 VkResult IcdRoot::map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size,
                              VkMemoryMapFlags flags, void **data)
 {
+    AV_SCOPE("IcdRoot::map_memory");
     LoaderHandle *const made = allocating_device(device);
     if (made == nullptr) return VK_ERROR_MEMORY_MAP_FAILED;
     if (lost(*made->connection(), "vkMapMemory")) return VK_ERROR_DEVICE_LOST;
@@ -446,6 +476,7 @@ VkResult IcdRoot::map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSiz
 
 VkResult IcdRoot::mapped_ranges(VkDevice device, const char *entry)
 {
+    AV_SCOPE("IcdRoot::mapped_ranges");
     const Connection *const connection = connection_of(device, LoaderHandle::Kind::device);
     if (connection == nullptr) {
         log_.write("rvkvk: mapped ranges of a device this driver did not make");
@@ -456,6 +487,7 @@ VkResult IcdRoot::mapped_ranges(VkDevice device, const char *entry)
 
 void IcdRoot::physical_device_properties(VkPhysicalDevice physical_device, VkPhysicalDeviceProperties *properties)
 {
+    AV_SCOPE("IcdRoot::physical_device_properties");
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
     PhysicalDeviceView view(connection->transport(), connection->luid(), api_version_, log_);
@@ -464,6 +496,7 @@ void IcdRoot::physical_device_properties(VkPhysicalDevice physical_device, VkPhy
 
 void IcdRoot::physical_device_properties2(VkPhysicalDevice physical_device, VkPhysicalDeviceProperties2 *properties)
 {
+    AV_SCOPE("IcdRoot::physical_device_properties2");
     Connection *const connection = connection_of(physical_device, LoaderHandle::Kind::physical_device);
     if (connection == nullptr) return;
     PhysicalDeviceView view(connection->transport(), connection->luid(), api_version_, log_);
@@ -472,6 +505,7 @@ void IcdRoot::physical_device_properties2(VkPhysicalDevice physical_device, VkPh
 
 Connection *IcdRoot::acquire_connection()
 {
+    AV_SCOPE("IcdRoot::acquire_connection");
     Connection *const adopted = pending_;
     pending_ = nullptr;
     return adopted;
@@ -479,6 +513,7 @@ Connection *IcdRoot::acquire_connection()
 
 void IcdRoot::release_connection(Connection *connection)
 {
+    AV_SCOPE("IcdRoot::release_connection");
     lock_.acquire();
     ScopeExit release([&] { lock_.release(); });
     if (connections_.destroy(connection) != Status::ok) log_.write("rvkvk: release of a connection never opened");
@@ -486,6 +521,7 @@ void IcdRoot::release_connection(Connection *connection)
 
 void *IcdRoot::wrap(LoaderHandle::Kind kind, uint64_t host, Connection *connection)
 {
+    AV_SCOPE("IcdRoot::wrap");
     lock_.acquire();
     ScopeExit           release([&] { lock_.release(); });
     LoaderHandle *const parent = kind == LoaderHandle::Kind::instance ? nullptr : handles_.instance_of(connection);
@@ -497,6 +533,7 @@ void *IcdRoot::wrap(LoaderHandle::Kind kind, uint64_t host, Connection *connecti
 LoaderHandle *IcdRoot::wrap_under(LoaderHandle::Kind kind, uint64_t host, Connection *connection,
                                   LoaderHandle *parent)
 {
+    AV_SCOPE("IcdRoot::wrap_under");
     LoaderHandle *handle = nullptr;
     const Status  status = handles_.wrap(kind, host, connection, parent, handle);
     if (status != Status::ok) {
@@ -518,6 +555,7 @@ LoaderHandle *IcdRoot::wrap_under(LoaderHandle::Kind kind, uint64_t host, Connec
 /* The registry refuses a parent destroyed since it was looked up. */
 void *IcdRoot::wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &parent)
 {
+    AV_SCOPE("IcdRoot::wrap_child");
     lock_.acquire();
     ScopeExit release([&] { lock_.release(); });
     return wrap_under(kind, host, parent.connection(), &parent);
@@ -525,6 +563,7 @@ void *IcdRoot::wrap_child(LoaderHandle::Kind kind, uint64_t host, LoaderHandle &
 
 LoaderHandle *IcdRoot::handle_of(void *handle, LoaderHandle::Kind kind)
 {
+    AV_SCOPE("IcdRoot::handle_of");
     lock_.acquire();
     ScopeExit release([&] { lock_.release(); });
     return handles_.made(handle, kind);
@@ -532,6 +571,7 @@ LoaderHandle *IcdRoot::handle_of(void *handle, LoaderHandle::Kind kind)
 
 LoaderHandle *IcdRoot::child_of(const LoaderHandle &parent, LoaderHandle::Kind kind, uint32_t index)
 {
+    AV_SCOPE("IcdRoot::child_of");
     lock_.acquire();
     ScopeExit release([&] { lock_.release(); });
     return handles_.child(parent, kind, index);
@@ -539,6 +579,7 @@ LoaderHandle *IcdRoot::child_of(const LoaderHandle &parent, LoaderHandle::Kind k
 
 Connection *IcdRoot::connection_of(void *handle, LoaderHandle::Kind kind)
 {
+    AV_SCOPE("IcdRoot::connection_of");
     lock_.acquire();
     ScopeExit                 release([&] { lock_.release(); });
     const LoaderHandle *const made = handles_.made(handle, kind);
@@ -547,6 +588,7 @@ Connection *IcdRoot::connection_of(void *handle, LoaderHandle::Kind kind)
 
 uint64_t IcdRoot::wire(void *handle, LoaderHandle::Kind kind)
 {
+    AV_SCOPE("IcdRoot::wire");
     lock_.acquire();
     ScopeExit                 release([&] { lock_.release(); });
     const LoaderHandle *const made = handles_.made(handle, kind);
@@ -555,6 +597,7 @@ uint64_t IcdRoot::wire(void *handle, LoaderHandle::Kind kind)
 
 void IcdRoot::destroy_wrapper(void *handle, LoaderHandle::Kind kind)
 {
+    AV_SCOPE("IcdRoot::destroy_wrapper");
     lock_.acquire();
     ScopeExit release([&] { lock_.release(); });
     if (handles_.destroy(handles_.made(handle, kind)) != Status::ok)
@@ -563,6 +606,7 @@ void IcdRoot::destroy_wrapper(void *handle, LoaderHandle::Kind kind)
 
 CommandBatch &IcdRoot::record_target(VkCommandBuffer command_buffer)
 {
+    AV_SCOPE("IcdRoot::record_target");
     lock_.acquire();
     ScopeExit release([&] { lock_.release(); });
     return *handles_.made(command_buffer, LoaderHandle::Kind::command_buffer)->batch();
@@ -570,6 +614,7 @@ CommandBatch &IcdRoot::record_target(VkCommandBuffer command_buffer)
 
 void IcdRoot::device_queue(VkDevice device, uint32_t family, uint32_t index, VkQueue *queue)
 {
+    AV_SCOPE("IcdRoot::device_queue");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) return;
     uint64_t host = 0u;
@@ -579,6 +624,7 @@ void IcdRoot::device_queue(VkDevice device, uint32_t family, uint32_t index, VkQ
 
 void IcdRoot::device_queue2(VkDevice device, const VkDeviceQueueInfo2 *info, VkQueue *queue)
 {
+    AV_SCOPE("IcdRoot::device_queue2");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) return;
     uint64_t host = 0u;
@@ -589,6 +635,7 @@ void IcdRoot::device_queue2(VkDevice device, const VkDeviceQueueInfo2 *info, VkQ
 VkResult IcdRoot::allocate_command_buffers(VkDevice device, const VkCommandBufferAllocateInfo *info,
                                            VkCommandBuffer *command_buffers)
 {
+    AV_SCOPE("IcdRoot::allocate_command_buffers");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) {
         log_.write("rvkvk: vkAllocateCommandBuffers on a device this driver did not make");
@@ -620,6 +667,7 @@ VkResult IcdRoot::allocate_command_buffers(VkDevice device, const VkCommandBuffe
 void IcdRoot::free_command_buffers(VkDevice device, VkCommandPool pool, uint32_t count,
                                    const VkCommandBuffer *command_buffers)
 {
+    AV_SCOPE("IcdRoot::free_command_buffers");
     Connection *const connection = connection_of(device, LoaderHandle::Kind::device);
     if (connection == nullptr) return;
     vkproto::rvk_vkFreeCommandBuffers(connection->transport(), device, pool, count, command_buffers);
@@ -630,6 +678,7 @@ void IcdRoot::free_command_buffers(VkDevice device, VkCommandPool pool, uint32_t
 
 VkResult IcdRoot::begin_command_buffer(VkCommandBuffer command_buffer, const VkCommandBufferBeginInfo *info)
 {
+    AV_SCOPE("IcdRoot::begin_command_buffer");
     if (lost(*connection_of(command_buffer, LoaderHandle::Kind::command_buffer), "vkBeginCommandBuffer"))
         return VK_ERROR_DEVICE_LOST;
     CommandBatch &batch = record_target(command_buffer);
@@ -643,6 +692,7 @@ VkResult IcdRoot::begin_command_buffer(VkCommandBuffer command_buffer, const VkC
  * batch, so what end() answers is the whole recording's answer. */
 VkResult IcdRoot::end_command_buffer(VkCommandBuffer command_buffer)
 {
+    AV_SCOPE("IcdRoot::end_command_buffer");
     CommandBatch &batch = record_target(command_buffer);
     if (lost(*connection_of(command_buffer, LoaderHandle::Kind::command_buffer), "vkEndCommandBuffer")) {
         batch.discard();
@@ -657,6 +707,7 @@ VkResult IcdRoot::end_command_buffer(VkCommandBuffer command_buffer)
 
 VkResult IcdRoot::reset_command_buffer(VkCommandBuffer command_buffer, VkCommandBufferResetFlags flags)
 {
+    AV_SCOPE("IcdRoot::reset_command_buffer");
     record_target(command_buffer).discard();
     return vkicd::generated::Wrap_vkResetCommandBuffer(command_buffer, flags);
 }
@@ -664,6 +715,7 @@ VkResult IcdRoot::reset_command_buffer(VkCommandBuffer command_buffer, VkCommand
 VkResult IcdRoot::wait_for_fences(VkDevice device, uint32_t count, const VkFence *fences, VkBool32 wait_all,
                                   uint64_t timeout)
 {
+    AV_SCOPE("IcdRoot::wait_for_fences");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) {
         log_.write("rvkvk: vkWaitForFences on a device this driver did not make");
@@ -684,6 +736,7 @@ VkResult IcdRoot::wait_for_fences(VkDevice device, uint32_t count, const VkFence
 
 VkResult IcdRoot::wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *info, uint64_t timeout)
 {
+    AV_SCOPE("IcdRoot::wait_semaphores");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) {
         log_.write("rvkvk: vkWaitSemaphores on a device this driver did not make");
@@ -706,6 +759,7 @@ VkResult IcdRoot::wait_semaphores(VkDevice device, const VkSemaphoreWaitInfo *in
  * slices instead. */
 VkResult IcdRoot::queue_wait_idle(VkQueue queue)
 {
+    AV_SCOPE("IcdRoot::queue_wait_idle");
     LoaderHandle *const made = handle_of(queue, LoaderHandle::Kind::queue);
     if (made == nullptr || made->parent()->kind() != LoaderHandle::Kind::device) {
         log_.write("rvkvk: vkQueueWaitIdle on a queue this driver did not make through a device");
@@ -729,6 +783,7 @@ VkResult IcdRoot::queue_wait_idle(VkQueue queue)
  * this ICD handed out are every queue with work on it. */
 VkResult IcdRoot::device_wait_idle(VkDevice device)
 {
+    AV_SCOPE("IcdRoot::device_wait_idle");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) {
         log_.write("rvkvk: vkDeviceWaitIdle on a device this driver did not make");
@@ -745,6 +800,7 @@ VkResult IcdRoot::device_wait_idle(VkDevice device)
 
 VkResult IcdRoot::force_context_fault(VkPhysicalDevice physical_device)
 {
+    AV_SCOPE("IcdRoot::force_context_fault");
     LoaderHandle *const made = handle_of(physical_device, LoaderHandle::Kind::physical_device);
     if (made == nullptr) {
         log_.write("rvkvk: vkRvkForceContextFault on a physical device this driver did not make");
@@ -761,6 +817,7 @@ VkResult IcdRoot::force_context_fault(VkPhysicalDevice physical_device)
 
 uint32_t IcdRoot::handles_on_connections() const
 {
+    AV_SCOPE("IcdRoot::handles_on_connections");
     uint32_t counted = 0u;
     static_cast<void>(connections_.all_of([&](const Connection &connection) {
         counted += handles_.live_on(&connection);
@@ -771,6 +828,7 @@ uint32_t IcdRoot::handles_on_connections() const
 
 bool IcdRoot::invariants_hold() const
 {
+    AV_SCOPE("IcdRoot::invariants_hold");
     /* The entry point tables are constant: a row named twice is a build
      * mistake the root's tests see as a wrong answer, not a state it reaches. */
     if (pending_ != nullptr || !handles_.invariants_hold() || handles_on_connections() != handles_.live()) return false;

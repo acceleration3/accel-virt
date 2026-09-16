@@ -1,6 +1,7 @@
 #include "guest/transport/kmt_transport.hpp"
 
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
@@ -25,13 +26,21 @@ KmtTransport::KmtTransport(GuestConnection &connection, SubApi sub_api, uint8_t 
     : connection_(connection), sub_api_(sub_api), ring_order_(ring_order), reply_bytes_(reply_bytes),
       staging_(staging), staging_bytes_(staging != nullptr ? staging_bytes : 0u), allocations_{}, locked_{},
       dma_address_(0u), context_(0u), ring_(), reply_(), fences_(), faulted_(false), decode_arena_(nullptr, 0u),
-      blobs_() {}
+      blobs_()
+      {
+          AV_SCOPE("KmtTransport::KmtTransport");
+      }
 
-KmtTransport::~KmtTransport() { teardown(); }
+KmtTransport::~KmtTransport()
+{
+    AV_SCOPE("KmtTransport::~KmtTransport");
+    teardown();
+}
 
 Status KmtTransport::setup_allocation(uint32_t index, AllocationKind kind, uint64_t bytes, bool map_gpu,
                                       bool do_lock, uint8_t *&view, uint64_t &address)
 {
+    AV_SCOPE("KmtTransport::setup_allocation");
     uint32_t      &allocation = allocations_[index];
     Kmt           &kmt = connection_.kmt();
     const uint32_t device = connection_.device();
@@ -66,6 +75,7 @@ Status KmtTransport::setup_allocation(uint32_t index, AllocationKind kind, uint6
 
 Status KmtTransport::initialize()
 {
+    AV_SCOPE("KmtTransport::initialize");
     if (context_ != 0u) return Status::invalid_state;
     if (staging_bytes_ <= CommandHeader::encoded_size) return Status::invalid_parameter;
     ScopeExit undo([&] { teardown(); });
@@ -109,6 +119,7 @@ Status KmtTransport::initialize()
 
 void KmtTransport::teardown()
 {
+    AV_SCOPE("KmtTransport::teardown");
     Kmt           &kmt = connection_.kmt();
     const uint32_t device = connection_.device();
     if (context_ != 0u) {
@@ -136,18 +147,32 @@ void KmtTransport::teardown()
     faulted_ = false;
 }
 
-bool KmtTransport::established() const { return context_ != 0u; }
-bool KmtTransport::faulted() const { return faulted_; }
-uint32_t KmtTransport::context() const { return context_; }
+bool KmtTransport::established() const
+{
+    AV_SCOPE("KmtTransport::established");
+    return context_ != 0u;
+}
+bool KmtTransport::faulted() const
+{
+    AV_SCOPE("KmtTransport::faulted");
+    return faulted_;
+}
+uint32_t KmtTransport::context() const
+{
+    AV_SCOPE("KmtTransport::context");
+    return context_;
+}
 
 WireWriter KmtTransport::request_writer()
 {
+    AV_SCOPE("KmtTransport::request_writer");
     if (staging_bytes_ <= CommandHeader::encoded_size) return WireWriter(nullptr, 0u);
     return WireWriter(staging_ + CommandHeader::encoded_size, staging_bytes_ - CommandHeader::encoded_size);
 }
 
 TransportResult KmtTransport::publish(uint32_t command_id, WireWriter &writer, uint8_t flags, uint64_t &fence)
 {
+    AV_SCOPE("KmtTransport::publish");
     fence = 0u;
     if (writer.status() != Status::ok || !established()) return TransportResult::failed;
     const uint32_t body = static_cast<uint32_t>(writer.offset());
@@ -159,6 +184,7 @@ TransportResult KmtTransport::publish(uint32_t command_id, WireWriter &writer, u
 
 TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t length, uint64_t &fence)
 {
+    AV_SCOPE("KmtTransport::publish_batch");
     const uint64_t next = fences_.peek();
     if (next == 0u) return TransportResult::failed;
     uint64_t     begin = 0u;
@@ -179,15 +205,20 @@ TransportResult KmtTransport::publish_batch(const uint8_t *batch, uint32_t lengt
 
 TransportResult KmtTransport::send_async(uint32_t command_id, WireWriter &writer)
 {
+    AV_SCOPE("KmtTransport::send_async");
     if (faulted_) return TransportResult::failed;
     uint64_t fence = 0u;
     return publish(command_id, writer, 0u, fence);
 }
 
-void KmtTransport::end_call() {}
+void KmtTransport::end_call()
+{
+    AV_SCOPE("KmtTransport::end_call");
+}
 
 TransportResult KmtTransport::send_sync(uint32_t command_id, WireWriter &writer, WireReader &reply)
 {
+    AV_SCOPE("KmtTransport::send_sync");
     if (faulted_) return TransportResult::failed;
     uint64_t              fence = 0u;
     const TransportResult sent = publish(command_id, writer, CommandHeader::generate_reply, fence);
@@ -199,6 +230,7 @@ TransportResult KmtTransport::send_sync(uint32_t command_id, WireWriter &writer,
  * would fault the context for is the caller's mistake, not the context's. */
 TransportResult KmtTransport::send_batch(const uint8_t *framed, size_t length, WireReader &reply)
 {
+    AV_SCOPE("KmtTransport::send_batch");
     reply = WireReader(nullptr, 0u);
     if (faulted_ || !established() || framed == nullptr || length == 0u || length > max_batch)
         return TransportResult::failed;
@@ -217,6 +249,7 @@ TransportResult KmtTransport::send_batch(const uint8_t *framed, size_t length, W
 
 TransportResult KmtTransport::await(uint64_t fence, WireReader &reply)
 {
+    AV_SCOPE("KmtTransport::await");
     const Status waited = connection_.kmt().wait_for_context(connection_.device(), context_);
     if (waited != Status::ok) {
         faulted_ = true;
@@ -232,6 +265,7 @@ TransportResult KmtTransport::await(uint64_t fence, WireReader &reply)
 
 Status KmtTransport::nop(uint32_t &answered)
 {
+    AV_SCOPE("KmtTransport::nop");
     WireWriter            request = request_writer();
     WireReader            answer(nullptr, 0u);
     const TransportResult sent = send_sync(CommandHeader::nop_id, request, answer);
@@ -240,11 +274,20 @@ Status KmtTransport::nop(uint32_t &answered)
     return answered != 0u ? Status::malformed : Status::ok;
 }
 
-WireArena      &KmtTransport::decode_arena() { return decode_arena_; }
-ClientBlobArena &KmtTransport::blobs()       { return blobs_; }
+WireArena      &KmtTransport::decode_arena()
+{
+    AV_SCOPE("KmtTransport::decode_arena");
+    return decode_arena_;
+}
+ClientBlobArena &KmtTransport::blobs()
+{
+    AV_SCOPE("KmtTransport::blobs");
+    return blobs_;
+}
 
 bool KmtTransport::invariants_hold() const
 {
+    AV_SCOPE("KmtTransport::invariants_hold");
     /* An established context has its DMA buffer mapped, and only an allocation
      * that exists can be locked; the ring and fence keep their own invariants,
      * tested with them. */

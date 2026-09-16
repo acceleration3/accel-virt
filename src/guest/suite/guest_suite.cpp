@@ -1,5 +1,6 @@
 #include "guest/suite/guest_suite.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/suite/guest_report.hpp"
 
@@ -12,10 +13,14 @@ GuestSuite::GuestSuite(Kmt &kmt, GuestReport &report, uint32_t stress_seconds)
       vsync_(kmt, report, search_), transport_(kmt, report, search_, SubApi::vulkan, "transport"), stress_(kmt, report, search_, stress_seconds),
       timeout_(kmt, report, search_), opengl_(kmt, report, search_, SubApi::opengl, "opengl"),
       vulkan_(kmt, report, search_), opencl_(kmt, report, search_), host_import_(kmt, report, search_),
-      isolation_(kmt, report, search_) {}
+      isolation_(kmt, report, search_)
+      {
+          AV_SCOPE("GuestSuite::GuestSuite");
+      }
 
 uint32_t GuestSuite::run_timeout()
 {
+    AV_SCOPE("GuestSuite::run_timeout");
     adapter_.run();
     timeout_.run();
     report_.check("suite", "close_adapter", search_.close(), kmt_.last_code());
@@ -25,6 +30,7 @@ uint32_t GuestSuite::run_timeout()
 
 uint32_t GuestSuite::run_rvk()
 {
+    AV_SCOPE("GuestSuite::run_rvk");
     adapter_.run();
     transport_.run();
     vulkan_.run();
@@ -41,6 +47,7 @@ uint32_t GuestSuite::run_rvk()
 
 uint32_t GuestSuite::run()
 {
+    AV_SCOPE("GuestSuite::run");
     adapter_.run();
     allocation_.run();
     mapping_.run();

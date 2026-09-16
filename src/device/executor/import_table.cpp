@@ -1,11 +1,17 @@
 #include "device/executor/import_table.hpp"
 
+#include "core/trace/function_scope.hpp"
+
 namespace av {
 
-ImportTable::ImportTable() : blobs_{}, count_(0u) {}
+ImportTable::ImportTable() : blobs_{}, count_(0u)
+{
+    AV_SCOPE("ImportTable::ImportTable");
+}
 
 Status ImportTable::take(uint64_t blob_id, const RvkBlobHandle &handle, ImportedBlob *&taken)
 {
+    AV_SCOPE("ImportTable::take");
     taken = nullptr;
     if (find(blob_id) != nullptr) return Status::conflict;
     for (uint32_t slot = 0u; slot < max_imports; slot++) {
@@ -21,6 +27,7 @@ Status ImportTable::take(uint64_t blob_id, const RvkBlobHandle &handle, Imported
 
 ImportedBlob *ImportTable::find(uint64_t blob_id)
 {
+    AV_SCOPE("ImportTable::find");
     for (uint32_t slot = 0u; slot < max_imports; slot++) {
         if (blobs_[slot].holds(blob_id)) return &blobs_[slot];
     }
@@ -29,6 +36,7 @@ ImportedBlob *ImportTable::find(uint64_t blob_id)
 
 ImportedBlob *ImportTable::drop(uint64_t blob_id)
 {
+    AV_SCOPE("ImportTable::drop");
     ImportedBlob *const blob = find(blob_id);
     if (blob == nullptr) return nullptr;
     count_--;
@@ -37,16 +45,22 @@ ImportedBlob *ImportTable::drop(uint64_t blob_id)
 
 ImportedBlob *ImportTable::any()
 {
+    AV_SCOPE("ImportTable::any");
     for (uint32_t slot = 0u; slot < max_imports; slot++) {
         if (blobs_[slot].live()) return &blobs_[slot];
     }
     return nullptr;
 }
 
-uint32_t ImportTable::count() const { return count_; }
+uint32_t ImportTable::count() const
+{
+    AV_SCOPE("ImportTable::count");
+    return count_;
+}
 
 bool ImportTable::invariants_hold() const
 {
+    AV_SCOPE("ImportTable::invariants_hold");
     uint32_t held = 0u;
     for (uint32_t slot = 0u; slot < max_imports; slot++) {
         if (!blobs_[slot].invariants_hold()) return false;

@@ -1,14 +1,19 @@
 #include "device/memory/guest_page_alias.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/host/host.hpp"
 #include "device/memory/blob_window.hpp"
 
 namespace av {
 
-GuestPageAlias::GuestPageAlias(Host &host) : host_(host), base_(nullptr), length_(0u), runs_(0u) {}
+GuestPageAlias::GuestPageAlias(Host &host) : host_(host), base_(nullptr), length_(0u), runs_(0u)
+{
+    AV_SCOPE("GuestPageAlias::GuestPageAlias");
+}
 
 GuestPageAlias::~GuestPageAlias()
 {
+    AV_SCOPE("GuestPageAlias::~GuestPageAlias");
     release();
 }
 
@@ -16,6 +21,7 @@ GuestPageAlias::~GuestPageAlias()
  * nothing and a blob the host cannot hold spends none of its mappings. */
 Status GuestPageAlias::map(const BlobWindow &pages)
 {
+    AV_SCOPE("GuestPageAlias::map");
     if (base_ != nullptr) return Status::invalid_state;
     if (pages.extents() == 0u) return Status::malformed;
     uint32_t       runs = 0u;
@@ -46,6 +52,7 @@ Status GuestPageAlias::map(const BlobWindow &pages)
 
 Status GuestPageAlias::map_runs(const BlobWindow &pages)
 {
+    AV_SCOPE("GuestPageAlias::map_runs");
     uint64_t offset = 0u;
     for (uint32_t index = 0u; index < pages.extents();) {
         uint64_t    run_bytes = 0u;
@@ -65,6 +72,7 @@ Status GuestPageAlias::map_runs(const BlobWindow &pages)
 
 void GuestPageAlias::release()
 {
+    AV_SCOPE("GuestPageAlias::release");
     if (base_ != nullptr) host_.release_range(base_, length_);
     base_ = nullptr;
     length_ = 0u;
@@ -73,21 +81,25 @@ void GuestPageAlias::release()
 
 bool GuestPageAlias::mapped() const
 {
+    AV_SCOPE("GuestPageAlias::mapped");
     return base_ != nullptr;
 }
 
 void *GuestPageAlias::base() const
 {
+    AV_SCOPE("GuestPageAlias::base");
     return base_;
 }
 
 uint64_t GuestPageAlias::length() const
 {
+    AV_SCOPE("GuestPageAlias::length");
     return length_;
 }
 
 uint32_t GuestPageAlias::runs() const
 {
+    AV_SCOPE("GuestPageAlias::runs");
     return runs_;
 }
 
@@ -95,6 +107,7 @@ uint32_t GuestPageAlias::runs() const
  * shorter than a page. */
 bool GuestPageAlias::invariants_hold() const
 {
+    AV_SCOPE("GuestPageAlias::invariants_hold");
     if ((base_ == nullptr) != (length_ == 0u) || length_ % page_size != 0u) return false;
     return runs_ <= max_runs && uint64_t{runs_} * page_size <= length_;
 }

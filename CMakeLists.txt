@@ -144,8 +144,9 @@ target_compile_definitions(av_core PUBLIC AV_CHECKED=1)
 # No sanitizer or profile flags and hidden visibility: the archive exports only
 # rvk_device.h, and tools/build_qemu.sh links it into the virtio-gpu-rvk module
 # through the generated rvk_device.pc.
-# TextBuffer is the one core/support class with a body the device core uses.
-file(GLOB_RECURSE AV_DEVICE_SOURCES CONFIGURE_DEPENDS src/device/*.cpp src/proto/*.cpp)
+# TextBuffer is the one core/support class with a body the device core uses;
+# the trace table is core/trace's, and every function opens a scope on it.
+file(GLOB_RECURSE AV_DEVICE_SOURCES CONFIGURE_DEPENDS src/device/*.cpp src/proto/*.cpp src/core/trace/*.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_EXECUTOR_ENTRY})
 list(APPEND AV_DEVICE_SOURCES src/core/support/text_buffer.cpp)
 list(REMOVE_ITEM AV_DEVICE_SOURCES ${AV_GENERATED_ALL})
@@ -428,6 +429,9 @@ add_test(NAME design_rules
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_design.py ${CMAKE_SOURCE_DIR})
 add_test(NAME symbol_tests
          COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_symbol_tests.py ${CMAKE_SOURCE_DIR})
+# Every function opens with its trace scope (docs/trace.md).
+add_test(NAME scope_marks
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/scope_marks.py --check ${CMAKE_SOURCE_DIR})
 
 # ---- any executor library, held to the ABI this repository owns (FR-001) ----
 # Not under AV_QEMU: the suite has to run sanitized, and that configuration

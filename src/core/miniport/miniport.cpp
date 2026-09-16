@@ -1,12 +1,14 @@
 #include "core/miniport/miniport.hpp"
 
 #include "core/ddi/entry_points.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
 Miniport::Miniport(Platform &platform)
     : platform_(platform), table_(), table_status_(0u), adapters_{}
 {
+    AV_SCOPE("Miniport::Miniport");
     struct Entry {
         DdiSlot    slot;
         DdiRoutine routine;
@@ -112,10 +114,15 @@ Miniport::Miniport(Platform &platform)
         table_status_ |= static_cast<unsigned>(table_.set(entry.slot, entry.routine));
 }
 
-const DdiTable &Miniport::ddi_table() const { return table_; }
+const DdiTable &Miniport::ddi_table() const
+{
+    AV_SCOPE("Miniport::ddi_table");
+    return table_;
+}
 
 ObjectStorage<Adapter> *Miniport::slot_of(void *context)
 {
+    AV_SCOPE("Miniport::slot_of");
     for (ObjectStorage<Adapter> &slot : adapters_)
         if (slot.constructed() && context == slot.address()) return &slot;
     return nullptr;
@@ -123,6 +130,7 @@ ObjectStorage<Adapter> *Miniport::slot_of(void *context)
 
 Status Miniport::add_device(void *physical_device_object, void *&context)
 {
+    AV_SCOPE("Miniport::add_device");
     platform_.require_irql_at_most(Irql::passive, "Miniport::add_device");
     context = nullptr;
     for (ObjectStorage<Adapter> &slot : adapters_) {
@@ -138,6 +146,7 @@ Status Miniport::add_device(void *physical_device_object, void *&context)
 
 Status Miniport::remove_device(void *context)
 {
+    AV_SCOPE("Miniport::remove_device");
     platform_.require_irql_at_most(Irql::passive, "Miniport::remove_device");
     ObjectStorage<Adapter> *slot = slot_of(context);
     if (slot == nullptr) return Status::invalid_parameter;
@@ -147,12 +156,14 @@ Status Miniport::remove_device(void *context)
 
 void Miniport::unload()
 {
+    AV_SCOPE("Miniport::unload");
     platform_.require_irql_at_most(Irql::passive, "Miniport::unload");
     for (ObjectStorage<Adapter> &slot : adapters_) slot.destroy();
 }
 
 uint32_t Miniport::adapter_count() const
 {
+    AV_SCOPE("Miniport::adapter_count");
     uint32_t count = 0u;
     for (const ObjectStorage<Adapter> &slot : adapters_) count += slot.constructed() ? 1u : 0u;
     return count;
@@ -160,6 +171,7 @@ uint32_t Miniport::adapter_count() const
 
 bool Miniport::invariants_hold() const
 {
+    AV_SCOPE("Miniport::invariants_hold");
     return table_status_ == 0u && table_.invariants_hold();
 }
 

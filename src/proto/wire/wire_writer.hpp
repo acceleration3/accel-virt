@@ -5,6 +5,7 @@
 #define AV_WIRE_WRITER_HPP
 
 #include "core/support/status.hpp"
+#include "core/trace/function_scope.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -33,6 +34,7 @@ public:
     template <typename T>
     void write_pod(const T &value)
     {
+        AV_SCOPE("WireWriter::write_pod");
         static_assert(__is_trivially_copyable(T), "a field on the wire is plain data");
         write(&value, sizeof(T));
     }
@@ -40,6 +42,7 @@ public:
     template <typename T>
     void write_varint(T value)
     {
+        AV_SCOPE("WireWriter::write_varint");
         write_varint_bits(static_cast<uint64_t>(value));
     }
 

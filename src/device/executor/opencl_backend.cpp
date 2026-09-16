@@ -1,5 +1,6 @@
 #include "device/executor/opencl_backend.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/imported_blob.hpp"
 #include "device/shim/opencl_device.hpp"
@@ -22,16 +23,21 @@ constexpr cl_device_type defined_types = CL_DEVICE_TYPE_DEFAULT | CL_DEVICE_TYPE
 
 }  // namespace
 
-OpenClBackend::OpenClBackend() : bound_(nullptr), handles_(), ran_(0u), lost_(false) {}
+OpenClBackend::OpenClBackend() : bound_(nullptr), handles_(), ran_(0u), lost_(false)
+{
+    AV_SCOPE("OpenClBackend::OpenClBackend");
+}
 
 bool OpenClBackend::initialize(const OpenClDevice *device)
 {
+    AV_SCOPE("OpenClBackend::initialize");
     bound_ = device;
     return bound_ != nullptr;
 }
 
 bool OpenClBackend::knows(uint32_t command_id) const
 {
+    AV_SCOPE("OpenClBackend::knows");
     if (command_id >> 16u != opencl_api) return false;
     /* The generator writes one name per id it carries. An id the profile does
      * not carry - clGetKernelSuggestedLocalWorkSize is the only one reserved
@@ -43,15 +49,21 @@ bool OpenClBackend::knows(uint32_t command_id) const
 bool OpenClBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply,
                         WireArena &arena)
 {
+    AV_SCOPE("OpenClBackend::run");
     if (!clproto::dispatch_command(*this, command_id, payload, reply, arena)) return false;
     ran_++;
     return true;
 }
 
-bool OpenClBackend::lost() const { return lost_; }
+bool OpenClBackend::lost() const
+{
+    AV_SCOPE("OpenClBackend::lost");
+    return lost_;
+}
 
 bool OpenClBackend::adopt(ImportedBlob &)
 {
+    AV_SCOPE("OpenClBackend::adopt");
     /* Nothing yet. Importing here means clCreateBufferWithProperties with a
      * dma-buf, and whether that works is a per-device question this host
      * answers differently on each of its three OpenCL platforms - so it is
@@ -60,26 +72,40 @@ bool OpenClBackend::adopt(ImportedBlob &)
     return false;
 }
 
-void OpenClBackend::abandon(ImportedBlob &) {}
+void OpenClBackend::abandon(ImportedBlob &)
+{
+    AV_SCOPE("OpenClBackend::abandon");
+}
 
 void *OpenClBackend::handle_for(clproto::HandleKind kind, uint64_t wire) const
 {
+    AV_SCOPE("OpenClBackend::handle_for");
     return handles_.resolve(kind, wire);
 }
 
 void OpenClBackend::made(clproto::HandleKind kind, void *object)
 {
+    AV_SCOPE("OpenClBackend::made");
     /* A registry with no room loses the device rather than hand the guest a
      * number this host would refuse when it came back. */
     if (!handles_.remember(kind, object)) lost_ = true;
 }
 
-void OpenClBackend::retained(clproto::HandleKind kind, void *object) { handles_.retain(kind, object); }
+void OpenClBackend::retained(clproto::HandleKind kind, void *object)
+{
+    AV_SCOPE("OpenClBackend::retained");
+    handles_.retain(kind, object);
+}
 
-void OpenClBackend::released(clproto::HandleKind kind, void *object) { handles_.release(kind, object); }
+void OpenClBackend::released(clproto::HandleKind kind, void *object)
+{
+    AV_SCOPE("OpenClBackend::released");
+    handles_.release(kind, object);
+}
 
 cl_int OpenClBackend::on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id *platforms, cl_uint *num_platforms)
 {
+    AV_SCOPE("OpenClBackend::on_clGetPlatformIDs");
     if ((platforms != nullptr && num_entries == 0u) || (platforms == nullptr && num_platforms == nullptr))
         return CL_INVALID_VALUE;
     const cl_uint available = bound_ != nullptr ? 1u : 0u;
@@ -92,6 +118,7 @@ cl_int OpenClBackend::on_clGetPlatformIDs(cl_uint num_entries, cl_platform_id *p
 cl_int OpenClBackend::on_clGetDeviceIDs(cl_platform_id platform, cl_device_type device_type, cl_uint num_entries,
                                         cl_device_id *devices, cl_uint *num_devices)
 {
+    AV_SCOPE("OpenClBackend::on_clGetDeviceIDs");
     if ((devices != nullptr && num_entries == 0u) || (devices == nullptr && num_devices == nullptr))
         return CL_INVALID_VALUE;
     if (bound_ == nullptr || (platform != nullptr && platform != bound_->platform())) return CL_INVALID_PLATFORM;
@@ -105,6 +132,7 @@ cl_int OpenClBackend::on_clGetDeviceIDs(cl_platform_id platform, cl_device_type 
 cl_context OpenClBackend::on_clCreateContextFromType(const cl_context_properties *properties,
                                                      cl_device_type device_type, cl_int *errcode_ret)
 {
+    AV_SCOPE("OpenClBackend::on_clCreateContextFromType");
     /* The decoder has already refused a CL_CONTEXT_PLATFORM that is not a
      * platform this context was shown, so the properties name the bound one or
      * none, and both mean the bound device. */
@@ -119,6 +147,7 @@ cl_context OpenClBackend::on_clCreateContextFromType(const cl_context_properties
 
 cl_int OpenClBackend::answers_type(cl_device_type device_type) const
 {
+    AV_SCOPE("OpenClBackend::answers_type");
     if (device_type == 0u || (device_type != CL_DEVICE_TYPE_ALL && (device_type & ~defined_types) != 0u))
         return CL_INVALID_DEVICE_TYPE;
     /* DEFAULT is the implementation's choice, and the only device this
@@ -128,12 +157,17 @@ cl_int OpenClBackend::answers_type(cl_device_type device_type) const
 
 void OpenClBackend::shut_down()
 {
+    AV_SCOPE("OpenClBackend::shut_down");
     handles_.release_all(*this);
     bound_ = nullptr;
     ran_ = 0u;
     lost_ = false;
 }
 
-uint64_t OpenClBackend::ran() const { return ran_; }
+uint64_t OpenClBackend::ran() const
+{
+    AV_SCOPE("OpenClBackend::ran");
+    return ran_;
+}
 
 }  // namespace av

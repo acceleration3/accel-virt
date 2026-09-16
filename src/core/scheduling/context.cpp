@@ -2,34 +2,42 @@
 
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/memory/aperture_segment.hpp"
+#include "core/trace/function_scope.hpp"
 #include "proto/submission/submission_descriptor.hpp"
 
 namespace av {
 
 Context::Context(Platform &platform, Device &device, const GpuMmuGeometry &geometry, uint32_t node, uint32_t flags)
     : platform_(platform), device_(device), node_(node), flags_(flags), root_(platform, geometry),
-      rvk_record_(), is_rvk_(false) {}
+      rvk_record_(), is_rvk_(false)
+      {
+          AV_SCOPE("Context::Context");
+      }
 
 Device &Context::device() const
 {
+    AV_SCOPE("Context::device");
     platform_.require_irql_at_most(Irql::dispatch, "Context::device");
     return device_;
 }
 
 uint32_t Context::node() const
 {
+    AV_SCOPE("Context::node");
     platform_.require_irql_at_most(Irql::dispatch, "Context::node");
     return node_;
 }
 
 uint32_t Context::flags() const
 {
+    AV_SCOPE("Context::flags");
     platform_.require_irql_at_most(Irql::dispatch, "Context::flags");
     return flags_;
 }
 
 void Context::become_rvk(const RvkContextRecord &record)
 {
+    AV_SCOPE("Context::become_rvk");
     platform_.require_irql_at_most(Irql::apc, "Context::become_rvk");
     rvk_record_ = record;
     is_rvk_ = true;
@@ -37,18 +45,21 @@ void Context::become_rvk(const RvkContextRecord &record)
 
 bool Context::is_rvk() const
 {
+    AV_SCOPE("Context::is_rvk");
     platform_.require_irql_at_most(Irql::dispatch, "Context::is_rvk");
     return is_rvk_;
 }
 
 const RvkContextRecord &Context::rvk_record() const
 {
+    AV_SCOPE("Context::rvk_record");
     platform_.require_irql_at_most(Irql::dispatch, "Context::rvk_record");
     return rvk_record_;
 }
 
 void Context::report_to(DxgkargCreateContextRecord &request)
 {
+    AV_SCOPE("Context::report_to");
     platform_.require_irql_at_most(Irql::dispatch, "Context::report_to");
     request.hContext = this;
     request.ContextInfoDmaBufferSize = dma_buffer_bytes;
@@ -64,12 +75,14 @@ void Context::report_to(DxgkargCreateContextRecord &request)
 
 Status Context::assign_root(const DxgkargSetRootPageTableRecord &root)
 {
+    AV_SCOPE("Context::assign_root");
     platform_.require_irql_at_most(Irql::passive, "Context::assign_root");
     return root_.assign(root);
 }
 
 bool Context::admits(uint64_t dma_address) const
 {
+    AV_SCOPE("Context::admits");
     platform_.require_irql_at_most(Irql::dispatch, "Context::admits");
     return root_.admits(dma_address);
 }

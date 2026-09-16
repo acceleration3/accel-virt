@@ -6,15 +6,20 @@
 #include "core/ddi/dxgkarg_control_mode_behavior_record.hpp"
 #include "core/display/hardware_cursor.hpp"
 #include "core/miniport/adapter_info_query.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
 DriverCapabilities::DriverCapabilities(Platform &platform)
     : platform_(platform), wddm_version_(wddm_3_2), highest_acceptable_address_(any_address),
-      mode_behaviors_(0u), display_extension_(0u) {}
+      mode_behaviors_(0u), display_extension_(0u)
+      {
+          AV_SCOPE("DriverCapabilities::DriverCapabilities");
+      }
 
 Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) const
 {
+    AV_SCOPE("DriverCapabilities::report_driver_caps");
     platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::report_driver_caps");
     DxgkDriverCapsRecord caps = {};
     caps.HighestAcceptableAddress = highest_acceptable_address_;
@@ -32,6 +37,7 @@ Status DriverCapabilities::report_driver_caps(const AdapterInfoQuery &query) con
 
 Status DriverCapabilities::report_wddm_device_caps(const AdapterInfoQuery &query) const
 {
+    AV_SCOPE("DriverCapabilities::report_wddm_device_caps");
     platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::report_wddm_device_caps");
     const Status input = query.require_input(interface_version_bytes);
     if (input != Status::ok) return input;
@@ -42,6 +48,7 @@ Status DriverCapabilities::report_wddm_device_caps(const AdapterInfoQuery &query
 
 Status DriverCapabilities::report_physical_adapter_caps(const AdapterInfoQuery &query, void *device_handle) const
 {
+    AV_SCOPE("DriverCapabilities::report_physical_adapter_caps");
     platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::report_physical_adapter_caps");
     uint32_t physical_adapter = 0u;
     Status   status = query.read_input(&physical_adapter, sizeof physical_adapter);
@@ -57,12 +64,14 @@ Status DriverCapabilities::report_physical_adapter_caps(const AdapterInfoQuery &
 
 Status DriverCapabilities::report_display_caps_extension(const AdapterInfoQuery &query) const
 {
+    AV_SCOPE("DriverCapabilities::report_display_caps_extension");
     platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::report_display_caps_extension");
     return query.write_output(&display_extension_, sizeof display_extension_);
 }
 
 void DriverCapabilities::answer_mode_behavior(DxgkargControlModeBehaviorRecord &request) const
 {
+    AV_SCOPE("DriverCapabilities::answer_mode_behavior");
     platform_.require_irql_at_most(Irql::passive, "DriverCapabilities::answer_mode_behavior");
     request.Satisfied = request.Request & mode_behaviors_;
     request.NotSatisfied = request.Request & ~mode_behaviors_;

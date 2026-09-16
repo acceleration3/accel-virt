@@ -3,14 +3,19 @@
 #include "core/ddi/d3dddi_patch_location_list_record.hpp"
 #include "core/ddi/dxgkarg_render_record.hpp"
 #include "core/scheduling/patch_request.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
 RenderRequest::RenderRequest(Platform &platform, DxgkargRenderRecord &request)
-    : platform_(platform), request_(request) {}
+    : platform_(platform), request_(request)
+    {
+        AV_SCOPE("RenderRequest::RenderRequest");
+    }
 
 Status RenderRequest::validate() const
 {
+    AV_SCOPE("RenderRequest::validate");
     const DxgkargRenderRecord &r = request_;
     const uint32_t patches = r.PatchLocationListInSize;
     if (r.pDmaBuffer == nullptr || r.CommandLength > r.DmaSize) return Status::invalid_parameter;
@@ -29,6 +34,7 @@ Status RenderRequest::validate() const
 
 Status RenderRequest::render()
 {
+    AV_SCOPE("RenderRequest::render");
     platform_.require_irql_at_most(Irql::passive, "RenderRequest::render");
     const Status status = validate();
     if (status != Status::ok) return status;

@@ -1,19 +1,32 @@
 #include "device/shim/gl_context.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/shim/gl_display.hpp"
 
 #include <EGL/egl.h>
 
 namespace av {
 
-GlContext::GlContext() : display_(nullptr), context_(nullptr) {}
+GlContext::GlContext() : display_(nullptr), context_(nullptr)
+{
+    AV_SCOPE("GlContext::GlContext");
+}
 
-GlContext::~GlContext() { close(); }
+GlContext::~GlContext()
+{
+    AV_SCOPE("GlContext::~GlContext");
+    close();
+}
 
-bool GlContext::open() const { return context_ != nullptr; }
+bool GlContext::open() const
+{
+    AV_SCOPE("GlContext::open");
+    return context_ != nullptr;
+}
 
 bool GlContext::open(const GlDisplay &display)
 {
+    AV_SCOPE("GlContext::open");
     if (context_ != nullptr) return false;
     void *const context = display.create_context();
     if (context == nullptr) return false;
@@ -28,18 +41,21 @@ bool GlContext::open(const GlDisplay &display)
 
 bool GlContext::make_current()
 {
+    AV_SCOPE("GlContext::make_current");
     if (context_ == nullptr) return false;
     return display_->make_current(context_);
 }
 
 void *GlContext::resolve(const char *name) const
 {
+    AV_SCOPE("GlContext::resolve");
     if (context_ == nullptr) return nullptr;
     return reinterpret_cast<void *>(eglGetProcAddress(name));
 }
 
 void GlContext::close()
 {
+    AV_SCOPE("GlContext::close");
     if (context_ == nullptr) return;
     display_->destroy_context(context_);
     display_ = nullptr;

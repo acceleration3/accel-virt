@@ -1,5 +1,6 @@
 #include "guest/transport/host_visible_chunk.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
@@ -13,12 +14,20 @@ namespace av {
 
 HostVisibleChunk::HostVisibleChunk(GuestConnection &connection, KmtTransport &transport)
     : connection_(connection), transport_(transport), allocation_(0u), view_(nullptr), resource_id_(0u),
-      pages_(0u) {}
+      pages_(0u)
+      {
+          AV_SCOPE("HostVisibleChunk::HostVisibleChunk");
+      }
 
-HostVisibleChunk::~HostVisibleChunk() { static_cast<void>(release()); }
+HostVisibleChunk::~HostVisibleChunk()
+{
+    AV_SCOPE("HostVisibleChunk::~HostVisibleChunk");
+    static_cast<void>(release());
+}
 
 Status HostVisibleChunk::allocate(uint64_t bytes)
 {
+    AV_SCOPE("HostVisibleChunk::allocate");
     if (allocation_ != 0u) return Status::invalid_state;
     Kmt           &kmt = connection_.kmt();
     const uint32_t device = connection_.device();
@@ -36,6 +45,7 @@ Status HostVisibleChunk::allocate(uint64_t bytes)
 
 Status HostVisibleChunk::lock()
 {
+    AV_SCOPE("HostVisibleChunk::lock");
     if (allocation_ == 0u || view_ != nullptr) return Status::invalid_state;
     void        *locked = nullptr;
     const Status status = connection_.kmt().lock(connection_.device(), allocation_, locked);
@@ -45,6 +55,7 @@ Status HostVisibleChunk::lock()
 
 Status HostVisibleChunk::bind()
 {
+    AV_SCOPE("HostVisibleChunk::bind");
     if (allocation_ == 0u || resource_id_ != 0u) return Status::invalid_state;
     HostVisibleBindRecord record(HostVisibleBindRecord::Operation::bind, allocation_, 0u);
     uint8_t               bytes[HostVisibleBindRecord::encoded_size] = {};
@@ -61,6 +72,7 @@ Status HostVisibleChunk::bind()
 
 Status HostVisibleChunk::release()
 {
+    AV_SCOPE("HostVisibleChunk::release");
     Kmt           &kmt = connection_.kmt();
     const uint32_t device = connection_.device();
     Status         first = Status::ok;
@@ -82,13 +94,26 @@ Status HostVisibleChunk::release()
     return first;
 }
 
-uint32_t                HostVisibleChunk::resource_id() const { return resource_id_; }
-uint64_t                HostVisibleChunk::pages() const { return pages_; }
-volatile unsigned char *HostVisibleChunk::view() const { return view_; }
+uint32_t                HostVisibleChunk::resource_id() const
+{
+    AV_SCOPE("HostVisibleChunk::resource_id");
+    return resource_id_;
+}
+uint64_t                HostVisibleChunk::pages() const
+{
+    AV_SCOPE("HostVisibleChunk::pages");
+    return pages_;
+}
+volatile unsigned char *HostVisibleChunk::view() const
+{
+    AV_SCOPE("HostVisibleChunk::view");
+    return view_;
+}
 
 /* A view and a binding are both of an allocation, and a bound chunk has pages. */
 bool HostVisibleChunk::invariants_hold() const
 {
+    AV_SCOPE("HostVisibleChunk::invariants_hold");
     if (allocation_ == 0u) return view_ == nullptr && resource_id_ == 0u;
     return (resource_id_ == 0u) == (pages_ == 0u);
 }

@@ -1,5 +1,6 @@
 #include "guest/transport/context_fault.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/client_transport.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
 #include "proto/sync_call_scope.hpp"
@@ -8,10 +9,14 @@
 
 namespace av {
 
-ContextFault::ContextFault(ClientTransport &transport) : transport_(transport) {}
+ContextFault::ContextFault(ClientTransport &transport) : transport_(transport)
+{
+    AV_SCOPE("ContextFault::ContextFault");
+}
 
 Status ContextFault::send()
 {
+    AV_SCOPE("ContextFault::send");
     WireWriter request = transport_.request_writer();
     request.write_u32(static_cast<uint32_t>(VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO));
     WireReader          answer(nullptr, 0u);

@@ -1,11 +1,14 @@
 #include "core/pci/pci_base_addresses.hpp"
 
+#include "core/trace/function_scope.hpp"
+
 namespace av {
 
 PciBaseAddresses::PciBaseAddresses(const uint8_t *config_space, size_t length)
     : registers_(), complete_(config_space != nullptr && length >= first_bar_offset + 4u * bar_count &&
                               (config_space[header_type_offset] & header_type_mask) == 0u)
 {
+    AV_SCOPE("PciBaseAddresses::PciBaseAddresses");
     if (!complete_) return;
     for (size_t bar = 0u; bar < bar_count; bar++) {
         const size_t at = first_bar_offset + 4u * bar;
@@ -16,6 +19,7 @@ PciBaseAddresses::PciBaseAddresses(const uint8_t *config_space, size_t length)
 
 Status PciBaseAddresses::address(uint8_t bar, uint64_t &address) const
 {
+    AV_SCOPE("PciBaseAddresses::address");
     if (!complete_) return Status::malformed;
     if (bar >= bar_count) return Status::invalid_parameter;
     const uint32_t value = registers_[bar];

@@ -1,15 +1,20 @@
 #include "guest/suite/probe_outcome.hpp"
 
 #include "core/support/status.hpp"
+#include "core/trace/function_scope.hpp"
 #include "guest/suite/scenario_steps.hpp"
 
 namespace av {
 
 /* Nothing measured is not a pass: one expected value was never read. */
-ProbeOutcome::ProbeOutcome() : result_(VK_SUCCESS), missing_(false), matched_(0u), expected_(1u) {}
+ProbeOutcome::ProbeOutcome() : result_(VK_SUCCESS), missing_(false), matched_(0u), expected_(1u)
+{
+    AV_SCOPE("ProbeOutcome::ProbeOutcome");
+}
 
 bool ProbeOutcome::accept(VkResult result)
 {
+    AV_SCOPE("ProbeOutcome::accept");
     if (result == VK_SUCCESS) return true;
     if (result_ == VK_SUCCESS && !missing_) result_ = result;
     return false;
@@ -17,17 +22,20 @@ bool ProbeOutcome::accept(VkResult result)
 
 void ProbeOutcome::missing()
 {
+    AV_SCOPE("ProbeOutcome::missing");
     if (result_ == VK_SUCCESS) missing_ = true;
 }
 
 void ProbeOutcome::measure(uint32_t matched, uint32_t expected)
 {
+    AV_SCOPE("ProbeOutcome::measure");
     matched_ = matched;
     expected_ = expected;
 }
 
 void ProbeOutcome::report(ScenarioSteps &steps, const char *step) const
 {
+    AV_SCOPE("ProbeOutcome::report");
     if (result_ != VK_SUCCESS) {
         static_cast<void>(steps.check_result(step, result_));
         return;
@@ -41,6 +49,7 @@ void ProbeOutcome::report(ScenarioSteps &steps, const char *step) const
 
 bool ProbeOutcome::invariants_hold() const
 {
+    AV_SCOPE("ProbeOutcome::invariants_hold");
     return !(missing_ && result_ != VK_SUCCESS) && matched_ <= expected_;
 }
 

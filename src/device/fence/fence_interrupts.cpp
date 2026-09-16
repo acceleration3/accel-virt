@@ -1,5 +1,6 @@
 #include "device/fence/fence_interrupts.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/probe/interrupt_stress_probe.hpp"
 
 #include "device/host/host.hpp"
@@ -7,10 +8,14 @@
 
 namespace av {
 
-FenceInterrupts::FenceInterrupts(Host &host) : host_(host), lock_(nullptr), connected_(false), stress_(nullptr) {}
+FenceInterrupts::FenceInterrupts(Host &host) : host_(host), lock_(nullptr), connected_(false), stress_(nullptr)
+{
+    AV_SCOPE("FenceInterrupts::FenceInterrupts");
+}
 
 FenceInterrupts::~FenceInterrupts()
 {
+    AV_SCOPE("FenceInterrupts::~FenceInterrupts");
     if (lock_ == nullptr) return;
     disconnect();
     host_.destroy_mutex(lock_);
@@ -18,6 +23,7 @@ FenceInterrupts::~FenceInterrupts()
 
 Status FenceInterrupts::initialize()
 {
+    AV_SCOPE("FenceInterrupts::initialize");
     host_.require_main_loop("FenceInterrupts::initialize");
     if (lock_ != nullptr) return Status::invalid_state;
     return host_.create_mutex(lock_);
@@ -25,6 +31,7 @@ Status FenceInterrupts::initialize()
 
 Status FenceInterrupts::connect()
 {
+    AV_SCOPE("FenceInterrupts::connect");
     host_.require_main_loop("FenceInterrupts::connect");
     if (lock_ == nullptr) return Status::invalid_state;
     host_.lock_mutex(lock_);
@@ -36,6 +43,7 @@ Status FenceInterrupts::connect()
 
 void FenceInterrupts::disconnect()
 {
+    AV_SCOPE("FenceInterrupts::disconnect");
     host_.require_main_loop("FenceInterrupts::disconnect");
     if (lock_ == nullptr) return;
     host_.lock_mutex(lock_);
@@ -46,6 +54,7 @@ void FenceInterrupts::disconnect()
 
 void FenceInterrupts::raise(uint32_t line)
 {
+    AV_SCOPE("FenceInterrupts::raise");
     if (lock_ == nullptr || line >= Doorbell::pages) return;
     host_.lock_mutex(lock_);
     const bool injected = connected_;
@@ -58,6 +67,7 @@ void FenceInterrupts::raise(uint32_t line)
 
 void FenceInterrupts::report_to(InterruptStressProbe &stress)
 {
+    AV_SCOPE("FenceInterrupts::report_to");
     host_.require_main_loop("FenceInterrupts::report_to");
     stress_ = &stress;
 }
@@ -65,11 +75,13 @@ void FenceInterrupts::report_to(InterruptStressProbe &stress)
 /* Read on the main loop, which alone changes it. */
 bool FenceInterrupts::connected() const
 {
+    AV_SCOPE("FenceInterrupts::connected");
     return connected_;
 }
 
 bool FenceInterrupts::invariants_hold() const
 {
+    AV_SCOPE("FenceInterrupts::invariants_hold");
     return lock_ != nullptr || !connected_;
 }
 

@@ -1,5 +1,6 @@
 #include "device/control/context_commands.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/capset/device_capset.hpp"
 #include "device/context/device_context.hpp"
 #include "device/context/device_context_table.hpp"
@@ -15,10 +16,14 @@
 namespace av {
 
 ContextCommands::ContextCommands(Host &host, DeviceContextTable &contexts, const DeviceCapset &capset)
-    : host_(host), contexts_(contexts), capset_(capset) {}
+    : host_(host), contexts_(contexts), capset_(capset)
+    {
+        AV_SCOPE("ContextCommands::ContextCommands");
+    }
 
 bool ContextCommands::answer(ControlRequest &request, uint32_t type)
 {
+    AV_SCOPE("ContextCommands::answer");
     host_.require_main_loop("ContextCommands::answer");
     GpuResponse response;
     switch (type) {
@@ -36,6 +41,7 @@ bool ContextCommands::answer(ControlRequest &request, uint32_t type)
 /* One capset, at index 0. */
 void ContextCommands::capset_info(ControlRequest &request, GpuResponse &response)
 {
+    AV_SCOPE("ContextCommands::capset_info");
     uint8_t       bytes[CapsetRequest::encoded_size] = {};
     WireReader    reader(bytes, request.read(0u, bytes, sizeof bytes));
     CapsetRequest info;
@@ -48,6 +54,7 @@ void ContextCommands::capset_info(ControlRequest &request, GpuResponse &response
 
 void ContextCommands::capset(ControlRequest &request, GpuResponse &response)
 {
+    AV_SCOPE("ContextCommands::capset");
     uint8_t       bytes[CapsetRequest::encoded_size] = {};
     WireReader    reader(bytes, request.read(0u, bytes, sizeof bytes));
     CapsetRequest wanted;
@@ -63,6 +70,7 @@ void ContextCommands::capset(ControlRequest &request, GpuResponse &response)
 /* Only the rvk capset: context_init's reserved bits must be clear too. */
 uint32_t ContextCommands::create(ControlRequest &request)
 {
+    AV_SCOPE("ContextCommands::create");
     uint8_t        bytes[ContextRequest::create_size] = {};
     WireReader     reader(bytes, request.read(0u, bytes, sizeof bytes));
     ContextRequest create;
@@ -80,6 +88,7 @@ uint32_t ContextCommands::create(ControlRequest &request)
 
 uint32_t ContextCommands::destroy(ControlRequest &request)
 {
+    AV_SCOPE("ContextCommands::destroy");
     uint8_t        bytes[ContextRequest::header_size] = {};
     WireReader     reader(bytes, request.read(0u, bytes, sizeof bytes));
     ContextRequest destroy;
@@ -91,6 +100,7 @@ uint32_t ContextCommands::destroy(ControlRequest &request)
 /* The command buffer is exactly one context setup. */
 uint32_t ContextCommands::submit(ControlRequest &request)
 {
+    AV_SCOPE("ContextCommands::submit");
     uint8_t        bytes[ContextRequest::submit_size] = {};
     WireReader     reader(bytes, request.read(0u, bytes, sizeof bytes));
     ContextRequest submit;

@@ -1,12 +1,18 @@
 #include "proto/wire/wire_arena.hpp"
 
+#include "core/trace/function_scope.hpp"
+
 namespace av {
 
 WireArena::WireArena(uint8_t *block, size_t capacity)
-    : block_(block), capacity_(block == nullptr ? 0u : capacity), used_(0u), refusals_(0u) {}
+    : block_(block), capacity_(block == nullptr ? 0u : capacity), used_(0u), refusals_(0u)
+    {
+        AV_SCOPE("WireArena::WireArena");
+    }
 
 void *WireArena::claim(size_t count, size_t size, size_t alignment)
 {
+    AV_SCOPE("WireArena::claim");
     if (count == 0u) return refuse();
     /* The count arrives from the wire: refuse what would wrap rather than
      * hand back room for less than was asked for. */
@@ -29,11 +35,13 @@ void *WireArena::claim(size_t count, size_t size, size_t alignment)
 
 char *WireArena::allocate_chars(size_t count)
 {
+    AV_SCOPE("WireArena::allocate_chars");
     return static_cast<char *>(claim(count, sizeof(char), alignof(char)));
 }
 
 void WireArena::attach(uint8_t *block, size_t capacity)
 {
+    AV_SCOPE("WireArena::attach");
     block_ = block;
     capacity_ = block == nullptr ? 0u : capacity;
     used_ = 0u;
@@ -41,19 +49,37 @@ void WireArena::attach(uint8_t *block, size_t capacity)
 
 void *WireArena::refuse()
 {
+    AV_SCOPE("WireArena::refuse");
     refusals_++;
     return nullptr;
 }
 
 /* Refusals survive it: they count what this block was too small for, not what
  * one decode was. */
-void   WireArena::reset() { used_ = 0u; }
-size_t WireArena::used() const { return used_; }
-size_t WireArena::capacity() const { return capacity_; }
-size_t WireArena::refusals() const { return refusals_; }
+void   WireArena::reset()
+{
+    AV_SCOPE("WireArena::reset");
+    used_ = 0u;
+}
+size_t WireArena::used() const
+{
+    AV_SCOPE("WireArena::used");
+    return used_;
+}
+size_t WireArena::capacity() const
+{
+    AV_SCOPE("WireArena::capacity");
+    return capacity_;
+}
+size_t WireArena::refusals() const
+{
+    AV_SCOPE("WireArena::refusals");
+    return refusals_;
+}
 
 bool WireArena::invariants_hold() const
 {
+    AV_SCOPE("WireArena::invariants_hold");
     /* That a block-less arena has no capacity is the constructor's doing and
      * cannot come apart afterwards - neither the block nor the capacity is ever
      * assigned again - so what is left to hold is where the mark sits. */

@@ -1,20 +1,26 @@
 #include "device/probe/interrupt_stress_probe.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/host/host.hpp"
 
 namespace av {
 
 InterruptStressProbe::InterruptStressProbe(Host &host)
     : host_(host), lock_(nullptr), raised_(0u), seen_(0u), worst_(0u), injected_while_disabled_(0u),
-      listening_(true), result_() {}
+      listening_(true), result_()
+      {
+          AV_SCOPE("InterruptStressProbe::InterruptStressProbe");
+      }
 
 InterruptStressProbe::~InterruptStressProbe()
 {
+    AV_SCOPE("InterruptStressProbe::~InterruptStressProbe");
     if (lock_ != nullptr) host_.destroy_mutex(lock_);
 }
 
 Status InterruptStressProbe::initialize()
 {
+    AV_SCOPE("InterruptStressProbe::initialize");
     host_.require_main_loop("InterruptStressProbe::initialize");
     if (lock_ != nullptr) return Status::invalid_state;
     return host_.create_mutex(lock_);
@@ -22,6 +28,7 @@ Status InterruptStressProbe::initialize()
 
 void InterruptStressProbe::raised(uint32_t)
 {
+    AV_SCOPE("InterruptStressProbe::raised");
     if (lock_ == nullptr) return;
     host_.lock_mutex(lock_);
     raised_++;
@@ -31,6 +38,7 @@ void InterruptStressProbe::raised(uint32_t)
 
 void InterruptStressProbe::disabled()
 {
+    AV_SCOPE("InterruptStressProbe::disabled");
     host_.require_main_loop("InterruptStressProbe::disabled");
     if (lock_ == nullptr) return;
     host_.lock_mutex(lock_);
@@ -40,6 +48,7 @@ void InterruptStressProbe::disabled()
 
 void InterruptStressProbe::enabled()
 {
+    AV_SCOPE("InterruptStressProbe::enabled");
     host_.require_main_loop("InterruptStressProbe::enabled");
     if (lock_ == nullptr) return;
     host_.lock_mutex(lock_);
@@ -49,6 +58,7 @@ void InterruptStressProbe::enabled()
 
 void InterruptStressProbe::acknowledged(uint64_t seen, uint64_t nanoseconds)
 {
+    AV_SCOPE("InterruptStressProbe::acknowledged");
     host_.require_main_loop("InterruptStressProbe::acknowledged");
     if (lock_ == nullptr) return;
     host_.lock_mutex(lock_);
@@ -62,6 +72,7 @@ void InterruptStressProbe::acknowledged(uint64_t seen, uint64_t nanoseconds)
  * run, and did it see more than the device ever sent. */
 void InterruptStressProbe::finish()
 {
+    AV_SCOPE("InterruptStressProbe::finish");
     host_.require_main_loop("InterruptStressProbe::finish");
     if (lock_ == nullptr || result_.ran()) return;
     host_.lock_mutex(lock_);
@@ -87,6 +98,7 @@ void InterruptStressProbe::finish()
 
 const ProbeResult &InterruptStressProbe::verdict() const
 {
+    AV_SCOPE("InterruptStressProbe::verdict");
     return result_;
 }
 

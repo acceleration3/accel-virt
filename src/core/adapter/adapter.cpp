@@ -24,6 +24,7 @@
 #include "core/ddi/dxgkarg_describe_allocation_record.hpp"
 #include "core/ddi/dxgkarg_destroy_allocation_record.hpp"
 #include "core/ddi/dxgkarg_escape_record.hpp"
+#include "core/trace/function_scope.hpp"
 #include "proto/resources/host_visible_bind_record.hpp"
 #include "core/ddi/dxgkarg_get_root_page_table_size_record.hpp"
 #include "core/ddi/dxgkarg_get_scan_line_record.hpp"
@@ -100,18 +101,27 @@ Adapter::Adapter(Platform &platform, void *physical_device_object)
       rvk_contexts_(platform, dxgkrnl_, allocations_),
       hw_queues_(platform, contexts_), hw_submissions_(platform), node_(platform), progress_(platform, node_), transition_(), identity_(platform), notification_(platform, dxgkrnl_), vsync_(platform, dxgkrnl_, sources_),
       cursor_(platform, sources_, device_), scanout_(platform, budget_, device_), presented_fence_(0u),
-      display_changed_(0u), started_(false), present_(true) {}
+      display_changed_(0u), started_(false), present_(true)
+      {
+          AV_SCOPE("Adapter::Adapter");
+      }
 
-Adapter::~Adapter() { static_cast<void>(stop_device()); }
+Adapter::~Adapter()
+{
+    AV_SCOPE("Adapter::~Adapter");
+    static_cast<void>(stop_device());
+}
 
 void *Adapter::physical_device_object() const
 {
+    AV_SCOPE("Adapter::physical_device_object");
     platform_.require_irql_at_most(Irql::isr, "Adapter::physical_device_object");
     return physical_device_object_;
 }
 
 Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface)
 {
+    AV_SCOPE("Adapter::discover_and_map");
     Status status = dxgkrnl_.initialize(dxgkrnl_interface);
     DxgkDeviceInfoRecord info = {};
     if (status == Status::ok) status = dxgkrnl_.get_device_information(info);
@@ -131,6 +141,7 @@ Status Adapter::discover_and_map(const DxgkrnlInterfaceRecord *dxgkrnl_interface
 
 Status Adapter::map_doorbells(const PciBaseAddresses &bars)
 {
+    AV_SCOPE("Adapter::map_doorbells");
     const VirtioRegion region = layout_.shared_memory(doorbell_region);
     if (!region.present()) return Status::ok;
     const Status mapped = mappings_.map_region(bars, resources_, region);
@@ -140,6 +151,7 @@ Status Adapter::map_doorbells(const PciBaseAddresses &bars)
 
 void Adapter::remember_device()
 {
+    AV_SCOPE("Adapter::remember_device");
     CapsetInfo     capset;
     CapsetExchange exchange(platform_, device_.object());
     const Status   read = exchange.read(capset);
@@ -155,6 +167,7 @@ void Adapter::remember_device()
  * still powered has nothing to make again. */
 void Adapter::open_region()
 {
+    AV_SCOPE("Adapter::open_region");
     if (!host_visible_.offered() || region_blob_.created()) return;
     const Status created = region_blob_.create(device_.object(), HostVisibleBlob::first_resource_id,
                                                host_visible_.size());
@@ -169,12 +182,14 @@ void Adapter::open_region()
  * places allocations in and then writes into nothing (docs/kb/04-memory.md). */
 void Adapter::close_region()
 {
+    AV_SCOPE("Adapter::close_region");
     region_blob_.abandon();
     host_visible_.forget();
 }
 
 void Adapter::judge_device()
 {
+    AV_SCOPE("Adapter::judge_device");
     if (!identity_.known()) return;
     CapsetInfo     capset;
     CapsetExchange exchange(platform_, device_.object());
@@ -203,6 +218,7 @@ void Adapter::judge_device()
 
 Status Adapter::power_up()
 {
+    AV_SCOPE("Adapter::power_up");
     /* The only refusal is storage already holding a device: already powered. */
     if (device_.construct(platform_, mappings_, layout_) != Status::ok) return Status::ok;
     const Status status = device_.object().start(resources_.message_interrupts());
@@ -215,6 +231,7 @@ Status Adapter::power_up()
 /* A removed device cannot acknowledge a reset; destruction still abandons it. */
 Status Adapter::power_down()
 {
+    AV_SCOPE("Adapter::power_down");
     if (!device_.constructed()) return Status::ok;
     /* A reset destroys every host context and blob, and the device object goes
      * with it. The region stays found and offered - VidMm keeps the segment -
@@ -229,6 +246,7 @@ Status Adapter::power_down()
 int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_interface, uint32_t *sources,
                               uint32_t *children)
 {
+    AV_SCOPE("Adapter::start_device");
     platform_.require_irql_at_most(Irql::passive, "Adapter::start_device");
     InvariantScope<Adapter> guard(platform_, *this, "start_device");
     if (started_) return NtStatus(Status::invalid_state).value();
@@ -271,6 +289,7 @@ int32_t Adapter::start_device(void *, const DxgkrnlInterfaceRecord *dxgkrnl_inte
 
 int32_t Adapter::stop_device()
 {
+    AV_SCOPE("Adapter::stop_device");
     platform_.require_irql_at_most(Irql::passive, "Adapter::stop_device");
     InvariantScope<Adapter> guard(platform_, *this, "stop_device");
     vsync_.destroy();
@@ -290,6 +309,7 @@ int32_t Adapter::stop_device()
 
 int32_t Adapter::dispatch_io_request(uint32_t, void *)
 {
+    AV_SCOPE("Adapter::dispatch_io_request");
     platform_.require_irql_at_most(Irql::passive, "Adapter::dispatch_io_request");
     return NtStatus(Status::not_supported).value();
 }
@@ -301,6 +321,7 @@ int32_t Adapter::dispatch_io_request(uint32_t, void *)
  * bit of the ISR, which is read to clear and so must be noticed here. */
 uint8_t Adapter::interrupt_routine(uint32_t message)
 {
+    AV_SCOPE("Adapter::interrupt_routine");
     platform_.require_irql_at_most(Irql::isr, "Adapter::interrupt_routine");
     /* A device that is being built is not one to read from: power_up
      * constructs it and then starts it, and dxgkrnl leaves the interrupt
@@ -317,6 +338,7 @@ uint8_t Adapter::interrupt_routine(uint32_t message)
 
 void Adapter::dpc_routine()
 {
+    AV_SCOPE("Adapter::dpc_routine");
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::dpc_routine");
     uint32_t completed = 0u;
     const bool harvest = device_.constructed() && present_ && device_.object().running();
@@ -347,6 +369,7 @@ void Adapter::dpc_routine()
  * is checked against that. */
 int32_t Adapter::query_child_relations(DxgkChildDescriptorRecord *relations, uint32_t size)
 {
+    AV_SCOPE("Adapter::query_child_relations");
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_child_relations");
     if (relations == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (size < (sources_.count() + 1u) * sizeof *relations) return NtStatus(NtStatus::buffer_too_small).value();
@@ -365,6 +388,7 @@ int32_t Adapter::query_child_relations(DxgkChildDescriptorRecord *relations, uin
 
 int32_t Adapter::query_child_status(DxgkChildStatusRecord *status, uint8_t)
 {
+    AV_SCOPE("Adapter::query_child_status");
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_child_status");
     if (status == nullptr || status->ChildUid >= sources_.count()) return NtStatus(Status::invalid_parameter).value();
     if (status->Type == status_rotation) return NtStatus(Status::invalid_parameter).value();
@@ -379,6 +403,7 @@ int32_t Adapter::query_child_status(DxgkChildStatusRecord *status, uint8_t)
 
 int32_t Adapter::query_device_descriptor(uint32_t child, DxgkDeviceDescriptorRecord *descriptor)
 {
+    AV_SCOPE("Adapter::query_device_descriptor");
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_device_descriptor");
     if (child >= sources_.count() || descriptor == nullptr) return NtStatus(Status::invalid_parameter).value();
     follow_display_change();
@@ -391,6 +416,7 @@ int32_t Adapter::query_device_descriptor(uint32_t child, DxgkDeviceDescriptorRec
 
 int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)
 {
+    AV_SCOPE("Adapter::set_power_state");
     platform_.require_irql_at_most(Irql::passive, "Adapter::set_power_state");
     InvariantScope<Adapter> guard(platform_, *this, "set_power_state");
     if (device != adapter_device_uid) return NtStatus(Status::ok).value();
@@ -427,6 +453,7 @@ int32_t Adapter::set_power_state(uint32_t device, int32_t power_state, int32_t)
 /* dxgkrnl forwards ACPI events it does not handle itself; nothing to do. */
 int32_t Adapter::notify_acpi_event(int32_t, uint32_t, void *, uint32_t *acpi_flags)
 {
+    AV_SCOPE("Adapter::notify_acpi_event");
     platform_.require_irql_at_most(Irql::passive, "Adapter::notify_acpi_event");
     *acpi_flags = 0u;
     return NtStatus(Status::ok).value();
@@ -434,12 +461,14 @@ int32_t Adapter::notify_acpi_event(int32_t, uint32_t, void *, uint32_t *acpi_fla
 
 void Adapter::reset_device()
 {
+    AV_SCOPE("Adapter::reset_device");
     platform_.require_irql_at_most(Irql::isr, "Adapter::reset_device");
     if (device_.constructed()) device_.object().reset_immediately();
 }
 
 int32_t Adapter::query_interface(void *)
 {
+    AV_SCOPE("Adapter::query_interface");
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_interface");
     return NtStatus(Status::not_supported).value();
 }
@@ -448,6 +477,7 @@ int32_t Adapter::query_interface(void *)
  * the device if it fails: answer a chain of one, led by this adapter. */
 int32_t Adapter::link_device(void *, LinkedDeviceRecord *linked)
 {
+    AV_SCOPE("Adapter::link_device");
     platform_.require_irql_at_most(Irql::passive, "Adapter::link_device");
     if (linked == nullptr) return NtStatus(Status::invalid_parameter).value();
     linked->ChainUid = 0u;
@@ -458,6 +488,7 @@ int32_t Adapter::link_device(void *, LinkedDeviceRecord *linked)
 
 int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
 {
+    AV_SCOPE("Adapter::query_adapter_info");
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_adapter_info");
     if (query == nullptr) return NtStatus(Status::invalid_parameter).value();
     const AdapterInfoQuery request(platform_, *query);
@@ -505,6 +536,7 @@ int32_t Adapter::query_adapter_info(const DxgkargQueryAdapterInfoRecord *query)
  * answers an escape it does not know the same way. */
 int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
 {
+    AV_SCOPE("Adapter::escape");
     platform_.require_irql_at_most(Irql::passive, "Adapter::escape");
     if (escape == nullptr || escape->pPrivateDriverData == nullptr || escape->PrivateDriverDataSize == 0u)
         return NtStatus(Status::invalid_parameter).value();
@@ -516,6 +548,7 @@ int32_t Adapter::escape(const DxgkargEscapeRecord *escape)
  * status dxgkrnl hands the caller as it is (feature 037). */
 int32_t Adapter::bind_chunk(const DxgkargEscapeRecord &escape)
 {
+    AV_SCOPE("Adapter::bind_chunk");
     auto *const       bytes = static_cast<uint8_t *>(escape.pPrivateDriverData);
     uint32_t          magic = 0u;
     if (escape.PrivateDriverDataSize >= sizeof magic) platform_.copy(&magic, bytes, sizeof magic);
@@ -533,6 +566,7 @@ int32_t Adapter::bind_chunk(const DxgkargEscapeRecord &escape)
 
 int32_t Adapter::collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect)
 {
+    AV_SCOPE("Adapter::collect_dbg_info");
     platform_.require_irql_at_most(Irql::passive, "Adapter::collect_dbg_info");
     if (collect == nullptr || (collect->pBuffer == nullptr && collect->BufferSize != 0u))
         return NtStatus(Status::invalid_parameter).value();
@@ -545,6 +579,7 @@ int32_t Adapter::collect_dbg_info(const DxgkargCollectDbgInfoRecord *collect)
 
 int32_t Adapter::create_device(DxgkargCreateDeviceRecord *request)
 {
+    AV_SCOPE("Adapter::create_device");
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_device");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const void   *runtime = request->hDevice;
@@ -555,12 +590,14 @@ int32_t Adapter::create_device(DxgkargCreateDeviceRecord *request)
 
 int32_t Adapter::destroy_device(void *device)
 {
+    AV_SCOPE("Adapter::destroy_device");
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_device");
     return NtStatus(devices_.destroy(device)).value();
 }
 
 int32_t Adapter::create_allocation(DxgkargCreateAllocationRecord *request)
 {
+    AV_SCOPE("Adapter::create_allocation");
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t created = NtStatus(allocations_.create(*request)).value();
@@ -572,6 +609,7 @@ int32_t Adapter::create_allocation(DxgkargCreateAllocationRecord *request)
  * follows the handle to find the primary's pages. */
 int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *request)
 {
+    AV_SCOPE("Adapter::destroy_allocation");
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (request->pAllocationList != nullptr)
@@ -588,6 +626,7 @@ int32_t Adapter::destroy_allocation(const DxgkargDestroyAllocationRecord *reques
 
 int32_t Adapter::describe_allocation(DxgkargDescribeAllocationRecord *request)
 {
+    AV_SCOPE("Adapter::describe_allocation");
     platform_.require_irql_at_most(Irql::passive, "Adapter::describe_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t described = NtStatus(allocations_.describe(*request, sources_)).value();
@@ -597,6 +636,7 @@ int32_t Adapter::describe_allocation(DxgkargDescribeAllocationRecord *request)
 
 int32_t Adapter::get_standard_allocation_driver_data(DxgkargGetStandardAllocationDriverDataRecord *request)
 {
+    AV_SCOPE("Adapter::get_standard_allocation_driver_data");
     platform_.require_irql_at_most(Irql::passive, "Adapter::get_standard_allocation_driver_data");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t described = NtStatus(StandardAllocation(platform_, *request).describe()).value();
@@ -606,6 +646,7 @@ int32_t Adapter::get_standard_allocation_driver_data(DxgkargGetStandardAllocatio
 
 int32_t Adapter::open_allocation(void *device, DxgkargOpenAllocationRecord *request)
 {
+    AV_SCOPE("Adapter::open_allocation");
     platform_.require_irql_at_most(Irql::passive, "Adapter::open_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     return NtStatus(devices_.open(device, *request)).value();
@@ -613,6 +654,7 @@ int32_t Adapter::open_allocation(void *device, DxgkargOpenAllocationRecord *requ
 
 int32_t Adapter::close_allocation(void *device, const DxgkargCloseAllocationRecord *request)
 {
+    AV_SCOPE("Adapter::close_allocation");
     platform_.require_irql_at_most(Irql::passive, "Adapter::close_allocation");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     return NtStatus(devices_.close(device, *request)).value();
@@ -620,6 +662,7 @@ int32_t Adapter::close_allocation(void *device, const DxgkargCloseAllocationReco
 
 int32_t Adapter::set_display_private_driver_format(const DxgkargSetDisplayPrivateDriverFormatRecord *request)
 {
+    AV_SCOPE("Adapter::set_display_private_driver_format");
     platform_.require_irql_at_most(Irql::passive, "Adapter::set_display_private_driver_format");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (request->PrimaryAllocation != nullptr && allocations_.find(request->PrimaryAllocation) == nullptr)
@@ -632,6 +675,7 @@ int32_t Adapter::set_display_private_driver_format(const DxgkargSetDisplayPrivat
 
 int32_t Adapter::create_context(void *device, DxgkargCreateContextRecord *request)
 {
+    AV_SCOPE("Adapter::create_context");
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_context");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     /* Nothing new runs on a device this adapter did not start on. */
@@ -650,6 +694,7 @@ int32_t Adapter::create_context(void *device, DxgkargCreateContextRecord *reques
 
 Status Adapter::bind_rvk(Context &context)
 {
+    AV_SCOPE("Adapter::bind_rvk");
     if (!doorbells_.constructed() || answering_device() == nullptr) return Status::not_supported;
     CapsetInfo     capset;
     CapsetExchange exchange(platform_, device_.object());
@@ -660,12 +705,14 @@ Status Adapter::bind_rvk(Context &context)
 
 VirtioGpuDevice *Adapter::answering_device()
 {
+    AV_SCOPE("Adapter::answering_device");
     /* A device is only ever constructed running: power_up destroys one whose start failed. */
     return device_.constructed() && present_ ? &device_.object() : nullptr;
 }
 
 int32_t Adapter::destroy_context(void *context)
 {
+    AV_SCOPE("Adapter::destroy_context");
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_context");
     /* DXGCONTEXT::DestroyContext destroys a context's queues first. */
     if (hw_queues_.serves(context)) return NtStatus(Status::invalid_parameter).value();
@@ -678,6 +725,7 @@ int32_t Adapter::destroy_context(void *context)
 
 int32_t Adapter::render(void *context, DxgkargRenderRecord *request)
 {
+    AV_SCOPE("Adapter::render");
     platform_.require_irql_at_most(Irql::passive, "Adapter::render");
     if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
     return NtStatus(RenderRequest(platform_, *request).render()).value();
@@ -685,6 +733,7 @@ int32_t Adapter::render(void *context, DxgkargRenderRecord *request)
 
 int32_t Adapter::patch(const DxgkargPatchRecord *request)
 {
+    AV_SCOPE("Adapter::patch");
     platform_.require_irql_at_most(Irql::passive, "Adapter::patch");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     return NtStatus(PatchRequest(platform_, *request).patch()).value();
@@ -692,6 +741,7 @@ int32_t Adapter::patch(const DxgkargPatchRecord *request)
 
 int32_t Adapter::submit_command(const DxgkargSubmitCommandRecord *request)
 {
+    AV_SCOPE("Adapter::submit_command");
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::submit_command");
     if (request == nullptr || request->NodeOrdinal != 0u) return NtStatus(Status::invalid_parameter).value();
     const Status status = node_.submit(request->SubmissionFenceId);
@@ -701,6 +751,7 @@ int32_t Adapter::submit_command(const DxgkargSubmitCommandRecord *request)
 
 int32_t Adapter::preempt_command(const DxgkargPreemptCommandRecord *request)
 {
+    AV_SCOPE("Adapter::preempt_command");
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::preempt_command");
     if (request == nullptr || request->NodeOrdinal != 0u) return NtStatus(Status::invalid_parameter).value();
     const Status status = node_.preempt(request->PreemptionFenceId);
@@ -710,6 +761,7 @@ int32_t Adapter::preempt_command(const DxgkargPreemptCommandRecord *request)
 
 int32_t Adapter::query_current_fence(DxgkargQueryCurrentFenceRecord *request)
 {
+    AV_SCOPE("Adapter::query_current_fence");
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_current_fence");
     if (request == nullptr || request->NodeOrdinal != 0u) return NtStatus(Status::invalid_parameter).value();
     request->CurrentFence = node_.current_fence();
@@ -718,6 +770,7 @@ int32_t Adapter::query_current_fence(DxgkargQueryCurrentFenceRecord *request)
 
 int32_t Adapter::build_paging_buffer(DxgkargBuildPagingBufferRecord *request)
 {
+    AV_SCOPE("Adapter::build_paging_buffer");
     platform_.require_irql_at_most(Irql::passive, "Adapter::build_paging_buffer");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     return PagingRequest(platform_, allocations_, budget_, *request).build().value();
@@ -725,6 +778,7 @@ int32_t Adapter::build_paging_buffer(DxgkargBuildPagingBufferRecord *request)
 
 int32_t Adapter::reset_from_timeout()
 {
+    AV_SCOPE("Adapter::reset_from_timeout");
     platform_.require_irql_at_most(Irql::passive, "Adapter::reset_from_timeout");
     InvariantScope<Adapter> guard(platform_, *this, "reset_from_timeout");
     node_.reset();
@@ -734,6 +788,7 @@ int32_t Adapter::reset_from_timeout()
 
 int32_t Adapter::restart_from_timeout()
 {
+    AV_SCOPE("Adapter::restart_from_timeout");
     platform_.require_irql_at_most(Irql::passive, "Adapter::restart_from_timeout");
     InvariantScope<Adapter> guard(platform_, *this, "restart_from_timeout");
     const Status status = started_ ? power_up() : Status::ok;
@@ -745,6 +800,7 @@ int32_t Adapter::restart_from_timeout()
 
 int32_t Adapter::is_supported_vidpn(DxgkargIsSupportedVidPnRecord *request)
 {
+    AV_SCOPE("Adapter::is_supported_vidpn");
     platform_.require_irql_at_most(Irql::passive, "Adapter::is_supported_vidpn");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t decided = VidPnSupportCheck(platform_, dxgkrnl_, sources_, *request).decide().value();
@@ -754,6 +810,7 @@ int32_t Adapter::is_supported_vidpn(DxgkargIsSupportedVidPnRecord *request)
 
 int32_t Adapter::recommend_functional_vidpn(const DxgkargRecommendFunctionalVidPnRecord *)
 {
+    AV_SCOPE("Adapter::recommend_functional_vidpn");
     platform_.require_irql_at_most(Irql::passive, "Adapter::recommend_functional_vidpn");
     const int32_t declined = NtStatus(NtStatus::no_recommended_functional_vidpn).value();
     log_status("rvkgpu: RecommendFunctionalVidPn", declined);
@@ -764,6 +821,7 @@ int32_t Adapter::recommend_functional_vidpn(const DxgkargRecommendFunctionalVidP
  * come out of the budget rather than one per call forever. */
 void Adapter::log_handle(const char *step, const void *handle, int32_t status)
 {
+    AV_SCOPE("Adapter::log_handle");
     if (!budget_.allows()) return;
     char       bytes[96];
     TextBuffer message(bytes, sizeof bytes);
@@ -781,6 +839,7 @@ void Adapter::log_handle(const char *step, const void *handle, int32_t status)
  * is logged, because the outputs the guest sees are then not the host's. */
 void Adapter::follow_output_count(uint32_t outputs)
 {
+    AV_SCOPE("Adapter::follow_output_count");
     platform_.require_irql_at_most(Irql::passive, "Adapter::follow_output_count");
     const Status status = sources_.set_count(outputs);
     if (status == Status::ok || !budget_.allows()) return;
@@ -795,6 +854,7 @@ void Adapter::follow_output_count(uint32_t outputs)
 
 Status Adapter::follow_display_info()
 {
+    AV_SCOPE("Adapter::follow_display_info");
     platform_.require_irql_at_most(Irql::passive, "Adapter::follow_display_info");
     if (!device_.constructed()) return Status::invalid_state;
     /* The request fits a max_request_size buffer, so the writer cannot refuse
@@ -822,6 +882,7 @@ Status Adapter::follow_display_info()
  * offered are then not theirs. */
 void Adapter::log_unlike_outputs()
 {
+    AV_SCOPE("Adapter::log_unlike_outputs");
     for (uint32_t source = 1u; source < sources_.count(); source++) {
         if (display_info_.width(source) == display_info_.width(0u) &&
             display_info_.height(source) == display_info_.height(0u))
@@ -843,6 +904,7 @@ void Adapter::log_unlike_outputs()
 
 void Adapter::follow_display_change()
 {
+    AV_SCOPE("Adapter::follow_display_change");
     platform_.require_irql_at_most(Irql::passive, "Adapter::follow_display_change");
     if (platform_.load_atomic(display_changed_) == 0u) return;
     platform_.store_atomic(display_changed_, 0u);
@@ -851,6 +913,7 @@ void Adapter::follow_display_change()
 
 void Adapter::log_status(const char *step, int32_t status)
 {
+    AV_SCOPE("Adapter::log_status");
     if (!budget_.allows()) return;
     char       bytes[96];
     TextBuffer message(bytes, sizeof bytes);
@@ -862,6 +925,7 @@ void Adapter::log_status(const char *step, int32_t status)
 
 int32_t Adapter::enum_vidpn_cofunc_modality(const DxgkargEnumVidPnCofuncModalityRecord *request)
 {
+    AV_SCOPE("Adapter::enum_vidpn_cofunc_modality");
     platform_.require_irql_at_most(Irql::passive, "Adapter::enum_vidpn_cofunc_modality");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t enumerated = CofuncModality(platform_, dxgkrnl_, budget_, modes_, sources_, *request).enumerate().value();
@@ -871,6 +935,7 @@ int32_t Adapter::enum_vidpn_cofunc_modality(const DxgkargEnumVidPnCofuncModality
 
 int32_t Adapter::commit_vidpn(const DxgkargCommitVidPnRecord *request)
 {
+    AV_SCOPE("Adapter::commit_vidpn");
     platform_.require_irql_at_most(Irql::passive, "Adapter::commit_vidpn");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t applied = VidPnCommit(platform_, dxgkrnl_, modes_, sources_, *request).apply().value();
@@ -884,6 +949,7 @@ int32_t Adapter::commit_vidpn(const DxgkargCommitVidPnRecord *request)
 
 uint32_t Adapter::scanning_out() const
 {
+    AV_SCOPE("Adapter::scanning_out");
     uint32_t sources = 0u;
     for (uint32_t source = 0u; source < sources_.count(); source++)
         if (sources_.committed_mode(source) != nullptr) sources |= 1u << source;
@@ -892,6 +958,7 @@ uint32_t Adapter::scanning_out() const
 
 void Adapter::restore_scanouts()
 {
+    AV_SCOPE("Adapter::restore_scanouts");
     for (uint32_t source = 0u; source < sources_.count(); source++) {
         if (!transition_.scanning_out(source)) continue;
         /* Said for every source power put back, because a resume that restored
@@ -903,12 +970,14 @@ void Adapter::restore_scanouts()
 
 Status Adapter::follow_commit(uint32_t source)
 {
+    AV_SCOPE("Adapter::follow_commit");
     const DisplayMode *mode = sources_.committed_mode(source);
     return mode != nullptr ? scanout_.configure(source, *mode) : scanout_.disable(source);
 }
 
 int32_t Adapter::update_active_vidpn_present_path(const D3dkmdtVidPnPresentPathRecord *path)
 {
+    AV_SCOPE("Adapter::update_active_vidpn_present_path");
     platform_.require_irql_at_most(Irql::passive, "Adapter::update_active_vidpn_present_path");
     if (path == nullptr || path->VidPnSourceId >= sources_.count() ||
         path->VidPnTargetId >= sources_.count())
@@ -918,6 +987,7 @@ int32_t Adapter::update_active_vidpn_present_path(const D3dkmdtVidPnPresentPathR
 
 int32_t Adapter::recommend_monitor_modes(const DxgkargRecommendMonitorModesRecord *request)
 {
+    AV_SCOPE("Adapter::recommend_monitor_modes");
     platform_.require_irql_at_most(Irql::passive, "Adapter::recommend_monitor_modes");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     follow_display_change();
@@ -928,6 +998,7 @@ int32_t Adapter::recommend_monitor_modes(const DxgkargRecommendMonitorModesRecor
 
 int32_t Adapter::recommend_vidpn_topology(const DxgkargRecommendVidPnTopologyRecord *)
 {
+    AV_SCOPE("Adapter::recommend_vidpn_topology");
     platform_.require_irql_at_most(Irql::passive, "Adapter::recommend_vidpn_topology");
     const int32_t declined = NtStatus(NtStatus::no_recommended_vidpn_topology).value();
     log_status("rvkgpu: RecommendVidPnTopology", declined);
@@ -937,6 +1008,7 @@ int32_t Adapter::recommend_vidpn_topology(const DxgkargRecommendVidPnTopologyRec
 /* Target 0 shows source 0. */
 int32_t Adapter::get_scan_line(DxgkargGetScanLineRecord *request)
 {
+    AV_SCOPE("Adapter::get_scan_line");
     platform_.require_irql_at_most(Irql::passive, "Adapter::get_scan_line");
     if (request == nullptr || request->VidPnTargetId >= sources_.count())
         return NtStatus(Status::invalid_parameter).value();
@@ -951,6 +1023,7 @@ int32_t Adapter::get_scan_line(DxgkargGetScanLineRecord *request)
 /* Before StartDevice there is no timer to start. */
 int32_t Adapter::control_interrupt(int32_t type, uint8_t enable)
 {
+    AV_SCOPE("Adapter::control_interrupt");
     platform_.require_irql_at_most(Irql::passive, "Adapter::control_interrupt");
     if (type != interrupt_crtc_vsync) return NtStatus(Status::not_supported).value();
     const Status status = enable != 0u ? vsync_.enable() : Status::ok;
@@ -966,6 +1039,7 @@ int32_t Adapter::control_interrupt(int32_t type, uint8_t enable)
  * (VIDMM_SEGMENT::DriverId); VidSch matches the vsync against that address. */
 int32_t Adapter::set_vidpn_source_address(const DxgkargSetVidPnSourceAddressRecord *request)
 {
+    AV_SCOPE("Adapter::set_vidpn_source_address");
     platform_.require_irql_at_most(Irql::isr, "Adapter::set_vidpn_source_address");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     if (request->hAllocation == nullptr)
@@ -982,6 +1056,7 @@ int32_t Adapter::set_vidpn_source_address(const DxgkargSetVidPnSourceAddressReco
  * to see whether it did. */
 void Adapter::log_visibility(const DxgkargSetVidPnSourceVisibilityRecord &request, int32_t status)
 {
+    AV_SCOPE("Adapter::log_visibility");
     if (!budget_.allows()) return;
     char       bytes[96];
     TextBuffer message(bytes, sizeof bytes);
@@ -995,6 +1070,7 @@ void Adapter::log_visibility(const DxgkargSetVidPnSourceVisibilityRecord &reques
 
 void Adapter::log_scanout(const DxgkargSetVidPnSourceAddressRecord &request)
 {
+    AV_SCOPE("Adapter::log_scanout");
     if (platform_.current_irql() >= Irql::dispatch || !budget_.allows()) return;
     char       bytes[96];
     TextBuffer message(bytes, sizeof bytes);
@@ -1009,6 +1085,7 @@ void Adapter::log_scanout(const DxgkargSetVidPnSourceAddressRecord &request)
 
 int32_t Adapter::set_vidpn_source_visibility(const DxgkargSetVidPnSourceVisibilityRecord *request)
 {
+    AV_SCOPE("Adapter::set_vidpn_source_visibility");
     platform_.require_irql_at_most(Irql::passive, "Adapter::set_vidpn_source_visibility");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t set = NtStatus(sources_.set_visible(request->VidPnSourceId, request->Visible != 0u)).value();
@@ -1018,6 +1095,7 @@ int32_t Adapter::set_vidpn_source_visibility(const DxgkargSetVidPnSourceVisibili
 
 int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
 {
+    AV_SCOPE("Adapter::present");
     platform_.require_irql_at_most(Irql::passive, "Adapter::present");
     if (request == nullptr || contexts_.find(context) == nullptr) return NtStatus(Status::invalid_parameter).value();
     const int32_t presented = PresentRequest(platform_, *request).present().value();
@@ -1027,6 +1105,7 @@ int32_t Adapter::present(void *context, DxgkargPresentRecord *request)
 
 int32_t Adapter::set_pointer_shape(const DxgkargSetPointerShapeRecord *request)
 {
+    AV_SCOPE("Adapter::set_pointer_shape");
     platform_.require_irql_at_most(Irql::passive, "Adapter::set_pointer_shape");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     return NtStatus(cursor_.set_shape(*request)).value();
@@ -1034,6 +1113,7 @@ int32_t Adapter::set_pointer_shape(const DxgkargSetPointerShapeRecord *request)
 
 int32_t Adapter::set_pointer_position(const DxgkargSetPointerPositionRecord *request)
 {
+    AV_SCOPE("Adapter::set_pointer_position");
     platform_.require_irql_at_most(Irql::passive, "Adapter::set_pointer_position");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     return NtStatus(cursor_.set_position(*request)).value();
@@ -1041,36 +1121,42 @@ int32_t Adapter::set_pointer_position(const DxgkargSetPointerPositionRecord *req
 
 int32_t Adapter::acquire_swizzling_range(void *)
 {
+    AV_SCOPE("Adapter::acquire_swizzling_range");
     platform_.require_irql_at_most(Irql::passive, "Adapter::acquire_swizzling_range");
     return NtStatus(Status::not_supported).value();
 }
 
 int32_t Adapter::release_swizzling_range(const void *)
 {
+    AV_SCOPE("Adapter::release_swizzling_range");
     platform_.require_irql_at_most(Irql::passive, "Adapter::release_swizzling_range");
     return NtStatus(Status::not_supported).value();
 }
 
 int32_t Adapter::set_palette(const void *)
 {
+    AV_SCOPE("Adapter::set_palette");
     platform_.require_irql_at_most(Irql::passive, "Adapter::set_palette");
     return NtStatus(Status::not_supported).value();
 }
 
 int32_t Adapter::stop_capture(const void *)
 {
+    AV_SCOPE("Adapter::stop_capture");
     platform_.require_irql_at_most(Irql::passive, "Adapter::stop_capture");
     return NtStatus(Status::not_supported).value();
 }
 
 int32_t Adapter::create_overlay(void *)
 {
+    AV_SCOPE("Adapter::create_overlay");
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_overlay");
     return NtStatus(Status::not_supported).value();
 }
 
 int32_t Adapter::query_vidpn_hw_capability(DxgkargQueryVidPnHwCapabilityRecord *request)
 {
+    AV_SCOPE("Adapter::query_vidpn_hw_capability");
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_vidpn_hw_capability");
     if (request == nullptr || request->hFunctionalVidPn == nullptr ||
         request->SourceId >= sources_.count() || request->TargetId >= sources_.count())
@@ -1081,6 +1167,7 @@ int32_t Adapter::query_vidpn_hw_capability(DxgkargQueryVidPnHwCapabilityRecord *
 
 int32_t Adapter::query_dependent_engine_group(DxgkargQueryDependentEngineGroupRecord *request)
 {
+    AV_SCOPE("Adapter::query_dependent_engine_group");
     platform_.require_irql_at_most(Irql::passive, "Adapter::query_dependent_engine_group");
     if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
@@ -1090,6 +1177,7 @@ int32_t Adapter::query_dependent_engine_group(DxgkargQueryDependentEngineGroupRe
 
 int32_t Adapter::query_engine_status(DxgkargQueryEngineStatusRecord *request)
 {
+    AV_SCOPE("Adapter::query_engine_status");
     /* VidSch asks from its timeout DPC: DdiQueryEngineStatus (dxgkrnl.sys
      * @140027dc0) only reaches for the current thread when IRQL is below 2, so
      * dispatch is a level it expects to be called at. */
@@ -1103,6 +1191,7 @@ int32_t Adapter::query_engine_status(DxgkargQueryEngineStatusRecord *request)
 
 int32_t Adapter::reset_engine(DxgkargResetEngineRecord *request)
 {
+    AV_SCOPE("Adapter::reset_engine");
     /* The same DPC resets what it found stuck; DdiResetEngine (dxgkrnl.sys
      * @14006e0a4) checks only that the driver returns at the IRQL it entered. */
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::reset_engine");
@@ -1117,6 +1206,7 @@ int32_t Adapter::reset_engine(DxgkargResetEngineRecord *request)
 
 int32_t Adapter::cancel_command(const DxgkargCancelCommandRecord *request)
 {
+    AV_SCOPE("Adapter::cancel_command");
     platform_.require_irql_at_most(Irql::passive, "Adapter::cancel_command");
     if (request == nullptr || contexts_.find(request->hContext) == nullptr)
         return NtStatus(Status::invalid_parameter).value();
@@ -1125,6 +1215,7 @@ int32_t Adapter::cancel_command(const DxgkargCancelCommandRecord *request)
 
 int32_t Adapter::notify_surprise_removal(int32_t removal_type)
 {
+    AV_SCOPE("Adapter::notify_surprise_removal");
     platform_.require_irql_at_most(Irql::passive, "Adapter::notify_surprise_removal");
     if (removal_type != removal_hibernation && removal_type != removal_pnp_notify)
         return NtStatus(Status::invalid_parameter).value();
@@ -1134,6 +1225,7 @@ int32_t Adapter::notify_surprise_removal(int32_t removal_type)
 
 int32_t Adapter::stop_device_and_release_post_display_ownership(uint32_t target, DxgkDisplayInformationRecord *display)
 {
+    AV_SCOPE("Adapter::stop_device_and_release_post_display_ownership");
     platform_.require_irql_at_most(Irql::passive, "Adapter::stop_device_and_release_post_display_ownership");
     if (display == nullptr || target >= sources_.count()) return NtStatus(Status::invalid_parameter).value();
     *display = DxgkDisplayInformationRecord{};
@@ -1142,6 +1234,7 @@ int32_t Adapter::stop_device_and_release_post_display_ownership(uint32_t target,
 
 int32_t Adapter::get_child_container_id(uint32_t child, DxgkChildContainerIdRecord *container)
 {
+    AV_SCOPE("Adapter::get_child_container_id");
     platform_.require_irql_at_most(Irql::passive, "Adapter::get_child_container_id");
     if (container == nullptr || child >= sources_.count()) return NtStatus(Status::invalid_parameter).value();
     edid_.describe(*container);
@@ -1150,35 +1243,41 @@ int32_t Adapter::get_child_container_id(uint32_t child, DxgkChildContainerIdReco
 
 int32_t Adapter::system_display_enable(uint32_t, void *, uint32_t *, uint32_t *, int32_t *)
 {
+    AV_SCOPE("Adapter::system_display_enable");
     platform_.require_irql_at_most(Irql::isr, "Adapter::system_display_enable");
     return NtStatus(Status::not_supported).value();
 }
 
 void Adapter::system_display_write(const void *, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t)
 {
+    AV_SCOPE("Adapter::system_display_write");
     platform_.require_irql_at_most(Irql::isr, "Adapter::system_display_write");
 }
 
 int32_t Adapter::set_power_component_fstate(uint32_t, uint32_t)
 {
+    AV_SCOPE("Adapter::set_power_component_fstate");
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::set_power_component_fstate");
     return NtStatus(Status::invalid_parameter).value();
 }
 
 int32_t Adapter::power_runtime_control_request(const void *, const void *, size_t, void *, size_t, size_t *)
 {
+    AV_SCOPE("Adapter::power_runtime_control_request");
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::power_runtime_control_request");
     return NtStatus(Status::not_supported).value();
 }
 
 int32_t Adapter::set_vidpn_source_address_with_multi_plane_overlay(const void *)
 {
+    AV_SCOPE("Adapter::set_vidpn_source_address_with_multi_plane_overlay");
     platform_.require_irql_at_most(Irql::isr, "Adapter::set_vidpn_source_address_with_multi_plane_overlay");
     return NtStatus(Status::not_supported).value();
 }
 
 int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRecord *metadata)
 {
+    AV_SCOPE("Adapter::get_node_metadata");
     platform_.require_irql_at_most(Irql::passive, "Adapter::get_node_metadata");
     if (metadata == nullptr || node_and_adapter != 0u) return NtStatus(Status::invalid_parameter).value();
     static constexpr char name[] = "3DNode00";
@@ -1192,12 +1291,14 @@ int32_t Adapter::get_node_metadata(uint32_t node_and_adapter, DxgkNodeMetadataRe
 
 int32_t Adapter::set_power_pstate(uint32_t, uint32_t)
 {
+    AV_SCOPE("Adapter::set_power_pstate");
     platform_.require_irql_at_most(Irql::passive, "Adapter::set_power_pstate");
     return NtStatus(Status::invalid_parameter).value();
 }
 
 int32_t Adapter::control_interrupt2(DxgkargControlInterrupt2Record control)
 {
+    AV_SCOPE("Adapter::control_interrupt2");
     platform_.require_irql_at_most(Irql::passive, "Adapter::control_interrupt2");
     if (control.InterruptType != interrupt_crtc_vsync) return NtStatus(Status::not_supported).value();
     if (control.CrtcVsyncState < vsync_enable || control.CrtcVsyncState > vsync_disable_no_phase)
@@ -1207,6 +1308,7 @@ int32_t Adapter::control_interrupt2(DxgkargControlInterrupt2Record control)
 
 int32_t Adapter::calibrate_gpu_clock(uint32_t node, uint32_t engine, DxgkGpuClockDataRecord *clock)
 {
+    AV_SCOPE("Adapter::calibrate_gpu_clock");
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::calibrate_gpu_clock");
     if (clock == nullptr || node != 0u || engine != 0u) return NtStatus(Status::invalid_parameter).value();
     uint64_t frequency = 0u;
@@ -1220,6 +1322,7 @@ int32_t Adapter::calibrate_gpu_clock(uint32_t node, uint32_t engine, DxgkGpuCloc
 
 int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord *request)
 {
+    AV_SCOPE("Adapter::submit_command_virtual");
     platform_.require_irql_at_most(Irql::passive, "Adapter::submit_command_virtual");
     if (request == nullptr || request->NodeOrdinal != 0u) return NtStatus(Status::invalid_parameter).value();
     const Context *context = contexts_.find(request->hContext);
@@ -1245,6 +1348,7 @@ int32_t Adapter::submit_command_virtual(const DxgkargSubmitCommandVirtualRecord 
  * interrupt that came first. */
 Status Adapter::submit_rvk(const DxgkargSubmitCommandVirtualRecord &request)
 {
+    AV_SCOPE("Adapter::submit_rvk");
     uint64_t             awaited = 0u;
     const Status published = rvk_contexts_.submit(request.hContext,
                                                   static_cast<const uint8_t *>(request.pDmaBufferPrivateData),
@@ -1255,6 +1359,7 @@ Status Adapter::submit_rvk(const DxgkargSubmitCommandVirtualRecord &request)
 
 void Adapter::set_root_page_table(const DxgkargSetRootPageTableRecord *request)
 {
+    AV_SCOPE("Adapter::set_root_page_table");
     platform_.require_irql_at_most(Irql::passive, "Adapter::set_root_page_table");
     Context *context = request != nullptr ? contexts_.find(request->hContext) : nullptr;
     if (context == nullptr || context->assign_root(*request) != Status::ok)
@@ -1263,12 +1368,14 @@ void Adapter::set_root_page_table(const DxgkargSetRootPageTableRecord *request)
 
 size_t Adapter::get_root_page_table_size(DxgkargGetRootPageTableSizeRecord *request)
 {
+    AV_SCOPE("Adapter::get_root_page_table_size");
     platform_.require_irql_at_most(Irql::passive, "Adapter::get_root_page_table_size");
     return request != nullptr ? static_cast<size_t>(geometry_.root_table_bytes(request->NumberOfPte)) : 0u;
 }
 
 int32_t Adapter::create_process(DxgkargCreateProcessRecord *request)
 {
+    AV_SCOPE("Adapter::create_process");
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_process");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     request->hKmdProcess = nullptr;
@@ -1277,17 +1384,20 @@ int32_t Adapter::create_process(DxgkargCreateProcessRecord *request)
 
 int32_t Adapter::destroy_process(void *)
 {
+    AV_SCOPE("Adapter::destroy_process");
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_process");
     return NtStatus(Status::ok).value();
 }
 
 void Adapter::set_stable_power_state(const DxgkargSetStablePowerStateRecord *)
 {
+    AV_SCOPE("Adapter::set_stable_power_state");
     platform_.require_irql_at_most(Irql::passive, "Adapter::set_stable_power_state");
 }
 
 int32_t Adapter::control_mode_behavior(DxgkargControlModeBehaviorRecord *request)
 {
+    AV_SCOPE("Adapter::control_mode_behavior");
     platform_.require_irql_at_most(Irql::passive, "Adapter::control_mode_behavior");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     capabilities_.answer_mode_behavior(*request);
@@ -1296,6 +1406,7 @@ int32_t Adapter::control_mode_behavior(DxgkargControlModeBehaviorRecord *request
 
 int32_t Adapter::update_monitor_link_info(DxgkargUpdateMonitorLinkInfoRecord *request)
 {
+    AV_SCOPE("Adapter::update_monitor_link_info");
     platform_.require_irql_at_most(Irql::passive, "Adapter::update_monitor_link_info");
     if (request == nullptr || request->VideoPresentTargetId >= sources_.count())
         return NtStatus(Status::invalid_parameter).value();
@@ -1305,6 +1416,7 @@ int32_t Adapter::update_monitor_link_info(DxgkargUpdateMonitorLinkInfoRecord *re
 
 int32_t Adapter::create_hw_queue(void *context, DxgkargCreateHwQueueRecord *request)
 {
+    AV_SCOPE("Adapter::create_hw_queue");
     platform_.require_irql_at_most(Irql::passive, "Adapter::create_hw_queue");
     if (request == nullptr) return NtStatus(Status::invalid_parameter).value();
     return NtStatus(hw_queues_.create(context, *request)).value();
@@ -1312,6 +1424,7 @@ int32_t Adapter::create_hw_queue(void *context, DxgkargCreateHwQueueRecord *requ
 
 int32_t Adapter::destroy_hw_queue(void *queue)
 {
+    AV_SCOPE("Adapter::destroy_hw_queue");
     platform_.require_irql_at_most(Irql::passive, "Adapter::destroy_hw_queue");
     hw_submissions_.forget(queue);
     return NtStatus(hw_queues_.destroy(queue)).value();
@@ -1319,6 +1432,7 @@ int32_t Adapter::destroy_hw_queue(void *queue)
 
 int32_t Adapter::submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueRecord *request)
 {
+    AV_SCOPE("Adapter::submit_command_to_hw_queue");
     platform_.require_irql_at_most(Irql::dispatch, "Adapter::submit_command_to_hw_queue");
     if (request == nullptr || request->DmaBufferPrivateDataSize != 0u) return NtStatus(Status::invalid_parameter).value();
     const Status status = hw_submissions_.submit(request->hHwQueue, request->HwQueueProgressFenceId,
@@ -1329,6 +1443,7 @@ int32_t Adapter::submit_command_to_hw_queue(const DxgkargSubmitCommandToHwQueueR
 
 int32_t Adapter::reset_hw_engine(const DxgkargResetHwEngineRecord *request)
 {
+    AV_SCOPE("Adapter::reset_hw_engine");
     platform_.require_irql_at_most(Irql::passive, "Adapter::reset_hw_engine");
     if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
@@ -1338,6 +1453,7 @@ int32_t Adapter::reset_hw_engine(const DxgkargResetHwEngineRecord *request)
 
 int32_t Adapter::resume_hw_engine(const DxgkargResumeHwEngineRecord *request)
 {
+    AV_SCOPE("Adapter::resume_hw_engine");
     platform_.require_irql_at_most(Irql::passive, "Adapter::resume_hw_engine");
     if (request == nullptr || request->NodeOrdinal != 0u || request->EngineOrdinal != 0u)
         return NtStatus(Status::invalid_parameter).value();
@@ -1346,6 +1462,7 @@ int32_t Adapter::resume_hw_engine(const DxgkargResumeHwEngineRecord *request)
 
 bool Adapter::invariants_hold() const
 {
+    AV_SCOPE("Adapter::invariants_hold");
     const bool powered_only_when_started = !device_.constructed() || started_;
     const bool mapped_only_when_started = mappings_.mapped_bars() == 0u || started_;
     return powered_only_when_started && mapped_only_when_started;

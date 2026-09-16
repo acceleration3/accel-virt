@@ -9,12 +9,14 @@
  * alone and the word `rvk` for the rvk scenarios alone - is read from the
  * command line itself, which is the last run of digits in it and whether one of
  * those words is in it. */
+#include "core/trace/function_scope.hpp"
 #include "um/guest_program.hpp"
 
 #include <windows.h>
 
 static uint32_t rvktest_stress_seconds(const wchar_t *line)
 {
+    AV_SCOPE("rvktest_stress_seconds");
     uint32_t seconds = 0u;
     bool         reading = false;
 
@@ -33,6 +35,7 @@ static uint32_t rvktest_stress_seconds(const wchar_t *line)
  * the rvk scenarios (feature 044) instead of the suite. */
 static av::GuestProgram::Run rvktest_run(const wchar_t *line)
 {
+    AV_SCOPE("rvktest_run");
     for (; *line != L'\0'; line++) {
         if (line[0] == L' ' && line[1] == L't' && line[2] == L'd' && line[3] == L'r')
             return av::GuestProgram::Run::timeout;

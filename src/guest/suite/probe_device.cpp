@@ -1,5 +1,6 @@
 #include "guest/suite/probe_device.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/suite/vulkan_entry.hpp"
 
 namespace av {
@@ -15,16 +16,21 @@ constexpr VkQueueFlags draws_and_computes = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COM
 
 ProbeDevice::ProbeDevice(VulkanEntry &vulkan)
     : vulkan_(vulkan), instance_(VK_NULL_HANDLE), listed_{}, listed_count_(0u), physical_device_(VK_NULL_HANDLE),
-      device_(VK_NULL_HANDLE), queue_(VK_NULL_HANDLE), family_(0u), memory_{} {}
+      device_(VK_NULL_HANDLE), queue_(VK_NULL_HANDLE), family_(0u), memory_{}
+      {
+          AV_SCOPE("ProbeDevice::ProbeDevice");
+      }
 
 ProbeDevice::~ProbeDevice()
 {
+    AV_SCOPE("ProbeDevice::~ProbeDevice");
     if (device_ != VK_NULL_HANDLE) vulkan_.destroy_device(device_);
     if (instance_ != VK_NULL_HANDLE) vulkan_.destroy_instance(instance_);
 }
 
 VkResult ProbeDevice::make_instance()
 {
+    AV_SCOPE("ProbeDevice::make_instance");
     VkApplicationInfo application = {};
     application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     application.pApplicationName = "rvkvkprobe";
@@ -37,6 +43,7 @@ VkResult ProbeDevice::make_instance()
 
 VkResult ProbeDevice::list_physical_devices()
 {
+    AV_SCOPE("ProbeDevice::list_physical_devices");
     uint32_t       room = max_physical_devices;
     const VkResult listed = vulkan_.enumerate_physical_devices(instance_, &room, listed_);
     if (listed != VK_SUCCESS && listed != VK_INCOMPLETE) return listed;
@@ -46,6 +53,7 @@ VkResult ProbeDevice::list_physical_devices()
 
 bool ProbeDevice::choose(uint64_t luid)
 {
+    AV_SCOPE("ProbeDevice::choose");
     for (uint32_t index = 0u; index < listed_count_; index++) {
         VkPhysicalDeviceIDProperties id = {};
         id.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES;
@@ -64,6 +72,7 @@ bool ProbeDevice::choose(uint64_t luid)
 
 bool ProbeDevice::choose_family()
 {
+    AV_SCOPE("ProbeDevice::choose_family");
     uint32_t                count = max_queue_families;
     VkQueueFamilyProperties families[max_queue_families] = {};
     vulkan_.queue_family_properties(physical_device_, &count, families);
@@ -77,6 +86,7 @@ bool ProbeDevice::choose_family()
 
 VkResult ProbeDevice::make_device()
 {
+    AV_SCOPE("ProbeDevice::make_device");
     vulkan_.memory_properties(physical_device_, &memory_);
     VkDeviceQueueCreateInfo queue = {};
     queue.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -95,6 +105,7 @@ VkResult ProbeDevice::make_device()
 
 bool ProbeDevice::memory_type(uint32_t allowed, VkMemoryPropertyFlags wanted, uint32_t &type) const
 {
+    AV_SCOPE("ProbeDevice::memory_type");
     for (uint32_t index = 0u; index < memory_.memoryTypeCount && index < VK_MAX_MEMORY_TYPES; index++) {
         const bool usable = (allowed >> index & 1u) != 0u;
         if (!usable || (memory_.memoryTypes[index].propertyFlags & wanted) != wanted) continue;
@@ -104,16 +115,45 @@ bool ProbeDevice::memory_type(uint32_t allowed, VkMemoryPropertyFlags wanted, ui
     return false;
 }
 
-VulkanEntry     &ProbeDevice::vulkan() const { return vulkan_; }
-VkInstance       ProbeDevice::instance() const { return instance_; }
-VkPhysicalDevice ProbeDevice::physical_device() const { return physical_device_; }
-VkDevice         ProbeDevice::device() const { return device_; }
-VkQueue          ProbeDevice::queue() const { return queue_; }
-uint32_t         ProbeDevice::family() const { return family_; }
-uint32_t         ProbeDevice::listed() const { return listed_count_; }
+VulkanEntry     &ProbeDevice::vulkan() const
+{
+    AV_SCOPE("ProbeDevice::vulkan");
+    return vulkan_;
+}
+VkInstance       ProbeDevice::instance() const
+{
+    AV_SCOPE("ProbeDevice::instance");
+    return instance_;
+}
+VkPhysicalDevice ProbeDevice::physical_device() const
+{
+    AV_SCOPE("ProbeDevice::physical_device");
+    return physical_device_;
+}
+VkDevice         ProbeDevice::device() const
+{
+    AV_SCOPE("ProbeDevice::device");
+    return device_;
+}
+VkQueue          ProbeDevice::queue() const
+{
+    AV_SCOPE("ProbeDevice::queue");
+    return queue_;
+}
+uint32_t         ProbeDevice::family() const
+{
+    AV_SCOPE("ProbeDevice::family");
+    return family_;
+}
+uint32_t         ProbeDevice::listed() const
+{
+    AV_SCOPE("ProbeDevice::listed");
+    return listed_count_;
+}
 
 bool ProbeDevice::invariants_hold() const
 {
+    AV_SCOPE("ProbeDevice::invariants_hold");
     if (listed_count_ > max_physical_devices || family_ >= max_queue_families) return false;
     if (listed_count_ != 0u && instance_ == VK_NULL_HANDLE) return false;
     if (physical_device_ != VK_NULL_HANDLE && listed_count_ == 0u) return false;

@@ -4,13 +4,18 @@
 #include "core/ddi/dxgk_page_table_level_desc_record.hpp"
 #include "core/ddi/dxgk_query_page_table_level_desc_in_record.hpp"
 #include "core/miniport/adapter_info_query.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
-GpuMmuGeometry::GpuMmuGeometry(Platform &platform) : platform_(platform), virtual_address_bits_(48u), index_bits_(9u) {}
+GpuMmuGeometry::GpuMmuGeometry(Platform &platform) : platform_(platform), virtual_address_bits_(48u), index_bits_(9u)
+{
+    AV_SCOPE("GpuMmuGeometry::GpuMmuGeometry");
+}
 
 Status GpuMmuGeometry::report_caps(const AdapterInfoQuery &query) const
 {
+    AV_SCOPE("GpuMmuGeometry::report_caps");
     platform_.require_irql_at_most(Irql::passive, "GpuMmuGeometry::report_caps");
     uint32_t physical_adapter = 0u;
     Status   status = query.read_input(&physical_adapter, physical_adapter_index_bytes);
@@ -26,6 +31,7 @@ Status GpuMmuGeometry::report_caps(const AdapterInfoQuery &query) const
 
 Status GpuMmuGeometry::report_level(const AdapterInfoQuery &query) const
 {
+    AV_SCOPE("GpuMmuGeometry::report_level");
     platform_.require_irql_at_most(Irql::passive, "GpuMmuGeometry::report_level");
     DxgkQueryPageTableLevelDescInRecord input = {};
     Status status = query.read_input(&input, sizeof input);
@@ -39,12 +45,14 @@ Status GpuMmuGeometry::report_level(const AdapterInfoQuery &query) const
 
 uint64_t GpuMmuGeometry::root_table_bytes(uint32_t entries) const
 {
+    AV_SCOPE("GpuMmuGeometry::root_table_bytes");
     platform_.require_irql_at_most(Irql::passive, "GpuMmuGeometry::root_table_bytes");
     return uint64_t{entries} * entry_bytes;
 }
 
 bool GpuMmuGeometry::root_reaches(uint64_t address, uint32_t root_entries) const
 {
+    AV_SCOPE("GpuMmuGeometry::root_reaches");
     platform_.require_irql_at_most(Irql::dispatch, "GpuMmuGeometry::root_reaches");
     const uint32_t root_shift = page_shift + index_bits_ * (level_count - 1u);
     return (address >> virtual_address_bits_) == 0u && (address >> root_shift) < root_entries;

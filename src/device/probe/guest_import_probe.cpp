@@ -1,19 +1,25 @@
 #include "device/probe/guest_import_probe.hpp"
 
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 #include "device/host/host.hpp"
 
 namespace av {
 
-GuestImportProbe::GuestImportProbe(Host &host) : host_(host), result_() {}
+GuestImportProbe::GuestImportProbe(Host &host) : host_(host), result_()
+{
+    AV_SCOPE("GuestImportProbe::GuestImportProbe");
+}
 
 uint8_t GuestImportProbe::expected(uint64_t offset) const
 {
+    AV_SCOPE("GuestImportProbe::expected");
     return static_cast<uint8_t>(offset * 17u + 3u);
 }
 
 Status GuestImportProbe::matches(void *imported, uint64_t offset)
 {
+    AV_SCOPE("GuestImportProbe::matches");
     uint8_t      seen[sample_bytes] = {};
     const Status read = host_.read_imported_memory(imported, offset, seen, sample_bytes);
     if (read != Status::ok) return read;
@@ -24,6 +30,7 @@ Status GuestImportProbe::matches(void *imported, uint64_t offset)
 
 uint64_t GuestImportProbe::copy(uint8_t *to, const uint8_t *from)
 {
+    AV_SCOPE("GuestImportProbe::copy");
     const uint64_t started = host_.monotonic_nanoseconds();
     for (uint64_t offset = 0u; offset < probe_bytes; offset++) to[offset] = from[offset];
     const uint64_t elapsed = host_.monotonic_nanoseconds() - started;
@@ -32,6 +39,7 @@ uint64_t GuestImportProbe::copy(uint8_t *to, const uint8_t *from)
 
 void GuestImportProbe::run(uint64_t guest_address)
 {
+    AV_SCOPE("GuestImportProbe::run");
     host_.require_main_loop("GuestImportProbe::run");
     if (result_.ran()) return;
     uint64_t length = probe_bytes;
@@ -91,6 +99,7 @@ void GuestImportProbe::run(uint64_t guest_address)
 
 const ProbeResult &GuestImportProbe::result() const
 {
+    AV_SCOPE("GuestImportProbe::result");
     return result_;
 }
 

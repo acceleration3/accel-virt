@@ -1,5 +1,6 @@
 #include "device/execution/batch_executor.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/execution/batch_staging.hpp"
 #include "proto/submission/command_stream.hpp"
 #include "device/execution/context_executor.hpp"
@@ -16,40 +17,49 @@ namespace av {
 BatchExecutor::BatchExecutor(Host &host, ContextExecutor &executor, BlobImports &imports, BatchStaging &staging,
                              FenceReporter &fences)
     : host_(host), executor_(executor), imports_(imports), staging_(staging), fences_(fences), fault_(FaultCode::none), reply_(),
-      batches_(0u), commands_(0u), skipped_(0u) {}
+      batches_(0u), commands_(0u), skipped_(0u)
+      {
+          AV_SCOPE("BatchExecutor::BatchExecutor");
+      }
 
 void BatchExecutor::prepare(const BlobWindow &reply)
 {
+    AV_SCOPE("BatchExecutor::prepare");
     host_.require_main_loop("BatchExecutor::prepare");
     reply_ = reply;
 }
 
 void BatchExecutor::withdraw()
 {
+    AV_SCOPE("BatchExecutor::withdraw");
     host_.require_main_loop("BatchExecutor::withdraw");
     reply_ = BlobWindow();
 }
 
 Status BatchExecutor::start()
 {
+    AV_SCOPE("BatchExecutor::start");
     host_.require_worker("BatchExecutor::start");
     return executor_.create();
 }
 
 void BatchExecutor::stop()
 {
+    AV_SCOPE("BatchExecutor::stop");
     host_.require_worker("BatchExecutor::stop");
     executor_.destroy();
 }
 
 bool BatchExecutor::started() const
 {
+    AV_SCOPE("BatchExecutor::started");
     return executor_.created();
 }
 
 /* The copy is taken once; the ring's bytes are not read again for this batch. */
 Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHeader &batch)
 {
+    AV_SCOPE("BatchExecutor::run");
     host_.require_worker("BatchExecutor::run");
     if (!executor_.created()) {
         fault_ = FaultCode::no_executor;
@@ -83,6 +93,7 @@ Status BatchExecutor::run(const RingWindow &ring, uint64_t head, const BatchHead
  * a later command cannot overwrite the answer kept. */
 FaultCode BatchExecutor::fault_for(Status status) const
 {
+    AV_SCOPE("BatchExecutor::fault_for");
     if (status == Status::malformed) return FaultCode::undecodable;
     /* A library answering outside the ABI is a different problem from a GPU
      * that died, and the guest is told which so an operator looks in the right
@@ -93,6 +104,7 @@ FaultCode BatchExecutor::fault_for(Status status) const
 
 Status BatchExecutor::run_command(const CommandHeader &header, const uint8_t *payload, bool &answered, size_t &answer)
 {
+    AV_SCOPE("BatchExecutor::run_command");
     if (header.generates_reply() && reply_.length() == 0u) {
         fault_ = FaultCode::command_framing;
         return Status::malformed;
@@ -130,6 +142,7 @@ Status BatchExecutor::run_command(const CommandHeader &header, const uint8_t *pa
 /* The slot was sized at setup, so both writes land inside it. */
 void BatchExecutor::write_reply(uint64_t fence_id, size_t answer)
 {
+    AV_SCOPE("BatchExecutor::write_reply");
     const uint32_t required = answer < 0xFFFFFFFFu ? static_cast<uint32_t>(answer) : 0xFFFFFFFFu;
     const ReplyHeader header =
         ReplyHeader(fence_id, required).within(static_cast<uint32_t>(staging_.reply_capacity()));
@@ -139,14 +152,31 @@ void BatchExecutor::write_reply(uint64_t fence_id, size_t answer)
     static_cast<void>(reply_.write(ReplyHeader::encoded_size, staging_.reply(), header.size()));
 }
 
-uint64_t BatchExecutor::batches() const  { return batches_; }
-uint64_t BatchExecutor::commands() const { return commands_; }
-uint64_t  BatchExecutor::skipped() const  { return skipped_; }
-FaultCode BatchExecutor::fault() const    { return fault_; }
+uint64_t BatchExecutor::batches() const
+{
+    AV_SCOPE("BatchExecutor::batches");
+    return batches_;
+}
+uint64_t BatchExecutor::commands() const
+{
+    AV_SCOPE("BatchExecutor::commands");
+    return commands_;
+}
+uint64_t  BatchExecutor::skipped() const
+{
+    AV_SCOPE("BatchExecutor::skipped");
+    return skipped_;
+}
+FaultCode BatchExecutor::fault() const
+{
+    AV_SCOPE("BatchExecutor::fault");
+    return fault_;
+}
 
 /* Every command run or skipped belongs to a batch that was run. */
 bool BatchExecutor::invariants_hold() const
 {
+    AV_SCOPE("BatchExecutor::invariants_hold");
     return reply_.invariants_hold() && (batches_ != 0u || (commands_ == 0u && skipped_ == 0u));
 }
 

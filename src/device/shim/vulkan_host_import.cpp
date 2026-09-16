@@ -1,13 +1,19 @@
 #include "device/shim/vulkan_host_import.hpp"
 
+#include "core/trace/function_scope.hpp"
+
 #include <sys/mman.h>
 
 namespace av {
 
-VulkanHostImport::VulkanHostImport() : held_(0u) {}
+VulkanHostImport::VulkanHostImport() : held_(0u)
+{
+    AV_SCOPE("VulkanHostImport::VulkanHostImport");
+}
 
 uint32_t VulkanHostImport::importable_types(VkDevice device, void *pointer)
 {
+    AV_SCOPE("VulkanHostImport::importable_types");
     /* Resolved through the device rather than linked, because a device made
      * without the extension has no such entry point and the loader says so. */
     auto *const properties = reinterpret_cast<PFN_vkGetMemoryHostPointerPropertiesEXT>(
@@ -24,6 +30,7 @@ uint32_t VulkanHostImport::importable_types(VkDevice device, void *pointer)
 
 uint32_t VulkanHostImport::probe_types(VkPhysicalDevice physical)
 {
+    AV_SCOPE("VulkanHostImport::probe_types");
     static constexpr const char *const extensions[] = {"VK_KHR_external_memory", "VK_EXT_external_memory_host"};
     constexpr size_t                   page = 4096u;
     float                              priority = 1.0f;
@@ -48,12 +55,14 @@ uint32_t VulkanHostImport::probe_types(VkPhysicalDevice physical)
 
 bool VulkanHostImport::imports(VkDevice device)
 {
+    AV_SCOPE("VulkanHostImport::imports");
     return ::vkGetDeviceProcAddr(device, "vkGetMemoryHostPointerPropertiesEXT") != nullptr;
 }
 
 bool VulkanHostImport::import(VkDevice device, void *pointer, uint64_t size, uint32_t memory_type,
                               uint64_t &memory)
 {
+    AV_SCOPE("VulkanHostImport::import");
     VkImportMemoryHostPointerInfoEXT imported = {};
     imported.sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT;
     imported.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT;
@@ -74,6 +83,7 @@ bool VulkanHostImport::import(VkDevice device, void *pointer, uint64_t size, uin
 
 void VulkanHostImport::release(VkDevice device, uint64_t memory)
 {
+    AV_SCOPE("VulkanHostImport::release");
     ::vkFreeMemory(device, reinterpret_cast<VkDeviceMemory>(memory), nullptr);
     held_--;
 }
@@ -81,6 +91,7 @@ void VulkanHostImport::release(VkDevice device, uint64_t memory)
 VkExternalMemoryHandleTypeFlags VulkanHostImport::buffer_host_types(VkPhysicalDevice physical,
                                                                    const VkBufferCreateInfo &create)
 {
+    AV_SCOPE("VulkanHostImport::buffer_host_types");
     if (physical == VK_NULL_HANDLE) return 0u;
     VkPhysicalDeviceExternalBufferInfo buffer = {};
     buffer.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO;
@@ -98,6 +109,7 @@ VkExternalMemoryHandleTypeFlags VulkanHostImport::buffer_host_types(VkPhysicalDe
 VkExternalMemoryHandleTypeFlags VulkanHostImport::image_host_types(VkPhysicalDevice physical,
                                                                   const VkImageCreateInfo &create)
 {
+    AV_SCOPE("VulkanHostImport::image_host_types");
     if (physical == VK_NULL_HANDLE) return 0u;
     VkPhysicalDeviceExternalImageFormatInfo external = {};
     external.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO;
@@ -121,6 +133,10 @@ VkExternalMemoryHandleTypeFlags VulkanHostImport::image_host_types(VkPhysicalDev
                : 0u;
 }
 
-uint32_t VulkanHostImport::held() const { return held_; }
+uint32_t VulkanHostImport::held() const
+{
+    AV_SCOPE("VulkanHostImport::held");
+    return held_;
+}
 
 }  // namespace av

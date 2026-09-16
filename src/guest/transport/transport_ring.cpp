@@ -1,15 +1,20 @@
 #include "guest/transport/transport_ring.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/submission/batch_header.hpp"
 #include "proto/submission/ring_header.hpp"
 #include "proto/wire/wire_reader.hpp"
 
 namespace av {
 
-TransportRing::TransportRing() : ring_(nullptr), order_(0u), tail_(0u) {}
+TransportRing::TransportRing() : ring_(nullptr), order_(0u), tail_(0u)
+{
+    AV_SCOPE("TransportRing::TransportRing");
+}
 
 Status TransportRing::initialize(uint8_t *ring, uint8_t order)
 {
+    AV_SCOPE("TransportRing::initialize");
     if (ring_ != nullptr) return Status::invalid_state;
     if (ring == nullptr || order < RingHeader::lowest_order || order > RingHeader::highest_order)
         return Status::invalid_parameter;
@@ -25,6 +30,7 @@ Status TransportRing::initialize(uint8_t *ring, uint8_t order)
 Status TransportRing::write_batch(const uint8_t *payload, uint32_t length, uint64_t fence_id, uint64_t &begin,
                                   uint64_t &end)
 {
+    AV_SCOPE("TransportRing::write_batch");
     if (ring_ == nullptr) return Status::invalid_state;
     if (fence_id == 0u || payload == nullptr) return Status::invalid_parameter;
     const BatchHeader header(length, fence_id);
@@ -47,6 +53,7 @@ Status TransportRing::write_batch(const uint8_t *payload, uint32_t length, uint6
 
 void TransportRing::write_wrapped(uint64_t counter, const uint8_t *source, uint32_t count)
 {
+    AV_SCOPE("TransportRing::write_wrapped");
     const uint64_t mask = capacity() - 1u;
     uint8_t *const data = ring_ + header_size;
     for (uint32_t i = 0u; i < count; i++) data[(counter + i) & mask] = source[i];
@@ -54,23 +61,38 @@ void TransportRing::write_wrapped(uint64_t counter, const uint8_t *source, uint3
 
 uint64_t TransportRing::read_head() const
 {
+    AV_SCOPE("TransportRing::read_head");
     if (ring_ == nullptr) return 0u;
     WireReader reader(ring_ + head_offset, sizeof(uint64_t));
     return reader.read_u64();
 }
 
-uint64_t TransportRing::tail() const { return tail_; }
-uint64_t TransportRing::head() const { return read_head(); }
-uint64_t TransportRing::capacity() const { return ring_ == nullptr ? 0u : uint64_t{1} << order_; }
+uint64_t TransportRing::tail() const
+{
+    AV_SCOPE("TransportRing::tail");
+    return tail_;
+}
+uint64_t TransportRing::head() const
+{
+    AV_SCOPE("TransportRing::head");
+    return read_head();
+}
+uint64_t TransportRing::capacity() const
+{
+    AV_SCOPE("TransportRing::capacity");
+    return ring_ == nullptr ? 0u : uint64_t{1} << order_;
+}
 
 uint64_t TransportRing::free_space() const
 {
+    AV_SCOPE("TransportRing::free_space");
     const uint64_t used = tail_ - read_head();
     return capacity() - used;
 }
 
 bool TransportRing::invariants_hold() const
 {
+    AV_SCOPE("TransportRing::invariants_hold");
     if (ring_ == nullptr) return tail_ == 0u && order_ == 0u;
     const uint64_t head = read_head();
     return tail_ >= head && tail_ - head <= capacity();

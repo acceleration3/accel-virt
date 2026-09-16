@@ -1,6 +1,7 @@
 #include "guest/suite/host_visible_import_scenario.hpp"
 
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 #include "guest/transport/kmt_transport.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 
@@ -38,10 +39,14 @@ HostVisibleImportScenario::HostVisibleImportScenario(Kmt &kmt, GuestReport &repo
       chunks_{HostVisibleChunk(link_.connection(), link_.transport()),
               HostVisibleChunk(link_.connection(), link_.transport())},
       imports_{BlobImport(link_.transport()), BlobImport(link_.transport())}, buffers_{}, memory_types_{},
-      pool_(VK_NULL_HANDLE), command_buffer_(0u), fence_(VK_NULL_HANDLE) {}
+      pool_(VK_NULL_HANDLE), command_buffer_(0u), fence_(VK_NULL_HANDLE)
+      {
+          AV_SCOPE("HostVisibleImportScenario::HostVisibleImportScenario");
+      }
 
 void HostVisibleImportScenario::run()
 {
+    AV_SCOPE("HostVisibleImportScenario::run");
     ScopeExit closing([&] { link_.close(); });
     if (link_.open() != Status::ok) return;
     Status built = chain_.make();
@@ -59,6 +64,7 @@ void HostVisibleImportScenario::run()
  * all means the answer never came. */
 Status HostVisibleImportScenario::read_memory_types()
 {
+    AV_SCOPE("HostVisibleImportScenario::read_memory_types");
     vkproto::rvk_vkGetPhysicalDeviceMemoryProperties(link_.transport(), chain_.physical_device(), &memory_types_);
     const uint32_t count = memory_types_.memoryTypeCount;
     return steps_.check_measured("memory_types", count != 0u ? Status::ok : Status::not_found, count);
@@ -66,6 +72,7 @@ Status HostVisibleImportScenario::read_memory_types()
 
 Status HostVisibleImportScenario::make_chunk(uint32_t side)
 {
+    AV_SCOPE("HostVisibleImportScenario::make_chunk");
     const SideSteps  &names = side_steps[side];
     HostVisibleChunk &chunk = chunks_[side];
     const Status      allocated = steps_.check(names.chunk, chunk.allocate(chunk_bytes));
@@ -82,6 +89,7 @@ Status HostVisibleImportScenario::make_chunk(uint32_t side)
 
 Status HostVisibleImportScenario::make_buffer(uint32_t side)
 {
+    AV_SCOPE("HostVisibleImportScenario::make_buffer");
     const SideSteps                &names = side_steps[side];
     KmtTransport                   &transport = link_.transport();
     VkExternalMemoryBufferCreateInfo external = {};
@@ -111,6 +119,7 @@ Status HostVisibleImportScenario::make_buffer(uint32_t side)
  * step reports; a search that ends without one reports the host's last status. */
 Status HostVisibleImportScenario::import_chunk(uint32_t side)
 {
+    AV_SCOPE("HostVisibleImportScenario::import_chunk");
     const char *const    step = side_steps[side].import;
     VkMemoryRequirements requirements = {};
     vkproto::rvk_vkGetBufferMemoryRequirements(link_.transport(), chain_.device(), buffers_[side], &requirements);
@@ -130,6 +139,7 @@ Status HostVisibleImportScenario::import_chunk(uint32_t side)
  * wrote it any earlier - or a view that is the source's - is seen. */
 Status HostVisibleImportScenario::copy()
 {
+    AV_SCOPE("HostVisibleImportScenario::copy");
     pattern_.clear(chunks_[destination].view());
     pattern_.write(chunks_[source].view());
     const Status recorded = record_copy();
@@ -142,6 +152,7 @@ Status HostVisibleImportScenario::copy()
 
 Status HostVisibleImportScenario::record_copy()
 {
+    AV_SCOPE("HostVisibleImportScenario::record_copy");
     KmtTransport           &transport = link_.transport();
     const VkDevice          device = chain_.device();
     VkCommandPoolCreateInfo pool_info = {};
@@ -178,6 +189,7 @@ Status HostVisibleImportScenario::record_copy()
 /* The queue query answers no result: a null queue means the answer never came. */
 Status HostVisibleImportScenario::submit_copy()
 {
+    AV_SCOPE("HostVisibleImportScenario::submit_copy");
     KmtTransport  &transport = link_.transport();
     const VkDevice device = chain_.device();
     uint64_t       queue = 0u;
@@ -204,6 +216,7 @@ Status HostVisibleImportScenario::submit_copy()
  * that never saw the fence fails copied whatever the view holds. */
 Status HostVisibleImportScenario::judge_copy(uint32_t filled_before)
 {
+    AV_SCOPE("HostVisibleImportScenario::judge_copy");
     uint32_t slices = 0u;
     VkResult waited = VK_TIMEOUT;
     while (waited == VK_TIMEOUT && slices < fence_slices) {
@@ -224,6 +237,7 @@ Status HostVisibleImportScenario::judge_copy(uint32_t filled_before)
  * buffer is not. */
 Status HostVisibleImportScenario::destroy()
 {
+    AV_SCOPE("HostVisibleImportScenario::destroy");
     KmtTransport  &transport = link_.transport();
     const VkDevice device = chain_.device();
     if (device != VK_NULL_HANDLE) {

@@ -2,16 +2,21 @@
 
 #include "core/miniport/dxgkrnl_interface.hpp"
 #include "core/support/nt_status.hpp"
+#include "core/trace/function_scope.hpp"
 #include "core/vidpn/path_visitor.hpp"
 
 namespace av {
 
 VidPn::VidPn(Platform &platform, DxgkrnlInterface &dxgkrnl, void *handle)
     : platform_(platform), dxgkrnl_(dxgkrnl), handle_(handle), interface_(nullptr), topology_(nullptr),
-      topology_interface_(nullptr) {}
+      topology_interface_(nullptr)
+      {
+          AV_SCOPE("VidPn::VidPn");
+      }
 
 Status VidPn::initialize()
 {
+    AV_SCOPE("VidPn::initialize");
     platform_.require_irql_at_most(Irql::passive, "VidPn::initialize");
     if (handle_ == nullptr) return Status::invalid_parameter;
     Status status = dxgkrnl_.query_vidpn_interface(handle_, interface_);
@@ -23,6 +28,7 @@ Status VidPn::initialize()
 
 Status VidPn::source_paths(uint32_t source, uint64_t &paths)
 {
+    AV_SCOPE("VidPn::source_paths");
     platform_.require_irql_at_most(Irql::passive, "VidPn::source_paths");
     paths = 0u;
     if (topology_interface_ == nullptr) return Status::invalid_state;
@@ -39,6 +45,7 @@ Status VidPn::source_paths(uint32_t source, uint64_t &paths)
  * released. */
 Status VidPn::for_each_path(PathVisitor &visitor)
 {
+    AV_SCOPE("VidPn::for_each_path");
     platform_.require_irql_at_most(Irql::passive, "VidPn::for_each_path");
     if (topology_interface_ == nullptr) return Status::invalid_state;
     const D3dkmdtVidPnPresentPathRecord *path = nullptr;
@@ -57,6 +64,7 @@ Status VidPn::for_each_path(PathVisitor &visitor)
 
 Status VidPn::update_path_support(const D3dkmdtVidPnPresentPathRecord &path)
 {
+    AV_SCOPE("VidPn::update_path_support");
     platform_.require_irql_at_most(Irql::passive, "VidPn::update_path_support");
     if (topology_interface_ == nullptr) return Status::invalid_state;
     return NtStatus(topology_interface_->pfnUpdatePathSupportInfo(topology_, &path)).status();
@@ -65,6 +73,7 @@ Status VidPn::update_path_support(const D3dkmdtVidPnPresentPathRecord &path)
 Status VidPn::acquire_mode_set(uint32_t source, void *&mode_set,
                                const DxgkVidPnSourceModeSetInterfaceRecord *&mode_set_interface)
 {
+    AV_SCOPE("VidPn::acquire_mode_set");
     platform_.require_irql_at_most(Irql::passive, "VidPn::acquire_mode_set");
     if (topology_interface_ == nullptr) return Status::invalid_state;
     return obtain(interface_->pfnAcquireSourceModeSet, source, mode_set, mode_set_interface);
@@ -73,6 +82,7 @@ Status VidPn::acquire_mode_set(uint32_t source, void *&mode_set,
 Status VidPn::acquire_mode_set(uint32_t target, void *&mode_set,
                                const DxgkVidPnTargetModeSetInterfaceRecord *&mode_set_interface)
 {
+    AV_SCOPE("VidPn::acquire_mode_set");
     platform_.require_irql_at_most(Irql::passive, "VidPn::acquire_mode_set");
     if (topology_interface_ == nullptr) return Status::invalid_state;
     return obtain(interface_->pfnAcquireTargetModeSet, target, mode_set, mode_set_interface);
@@ -81,6 +91,7 @@ Status VidPn::acquire_mode_set(uint32_t target, void *&mode_set,
 Status VidPn::create_mode_set(uint32_t source, void *&mode_set,
                               const DxgkVidPnSourceModeSetInterfaceRecord *&mode_set_interface)
 {
+    AV_SCOPE("VidPn::create_mode_set");
     platform_.require_irql_at_most(Irql::passive, "VidPn::create_mode_set");
     if (topology_interface_ == nullptr) return Status::invalid_state;
     return obtain(interface_->pfnCreateNewSourceModeSet, source, mode_set, mode_set_interface);
@@ -89,6 +100,7 @@ Status VidPn::create_mode_set(uint32_t source, void *&mode_set,
 Status VidPn::create_mode_set(uint32_t target, void *&mode_set,
                               const DxgkVidPnTargetModeSetInterfaceRecord *&mode_set_interface)
 {
+    AV_SCOPE("VidPn::create_mode_set");
     platform_.require_irql_at_most(Irql::passive, "VidPn::create_mode_set");
     if (topology_interface_ == nullptr) return Status::invalid_state;
     return obtain(interface_->pfnCreateNewTargetModeSet, target, mode_set, mode_set_interface);
@@ -96,6 +108,7 @@ Status VidPn::create_mode_set(uint32_t target, void *&mode_set,
 
 Status VidPn::release_mode_set(void *mode_set, const DxgkVidPnSourceModeSetInterfaceRecord *)
 {
+    AV_SCOPE("VidPn::release_mode_set");
     platform_.require_irql_at_most(Irql::passive, "VidPn::release_mode_set");
     if (topology_interface_ == nullptr) return Status::invalid_state;
     return NtStatus(interface_->pfnReleaseSourceModeSet(handle_, mode_set)).status();
@@ -103,6 +116,7 @@ Status VidPn::release_mode_set(void *mode_set, const DxgkVidPnSourceModeSetInter
 
 Status VidPn::release_mode_set(void *mode_set, const DxgkVidPnTargetModeSetInterfaceRecord *)
 {
+    AV_SCOPE("VidPn::release_mode_set");
     platform_.require_irql_at_most(Irql::passive, "VidPn::release_mode_set");
     if (topology_interface_ == nullptr) return Status::invalid_state;
     return NtStatus(interface_->pfnReleaseTargetModeSet(handle_, mode_set)).status();
@@ -110,6 +124,7 @@ Status VidPn::release_mode_set(void *mode_set, const DxgkVidPnTargetModeSetInter
 
 Status VidPn::assign_mode_set(uint32_t source, void *mode_set, const DxgkVidPnSourceModeSetInterfaceRecord *)
 {
+    AV_SCOPE("VidPn::assign_mode_set");
     platform_.require_irql_at_most(Irql::passive, "VidPn::assign_mode_set");
     if (topology_interface_ == nullptr) return Status::invalid_state;
     return NtStatus(interface_->pfnAssignSourceModeSet(handle_, source, mode_set)).status();
@@ -117,6 +132,7 @@ Status VidPn::assign_mode_set(uint32_t source, void *mode_set, const DxgkVidPnSo
 
 Status VidPn::assign_mode_set(uint32_t target, void *mode_set, const DxgkVidPnTargetModeSetInterfaceRecord *)
 {
+    AV_SCOPE("VidPn::assign_mode_set");
     platform_.require_irql_at_most(Irql::passive, "VidPn::assign_mode_set");
     if (topology_interface_ == nullptr) return Status::invalid_state;
     return NtStatus(interface_->pfnAssignTargetModeSet(handle_, target, mode_set)).status();
@@ -126,6 +142,7 @@ template <typename ModeSetInterface>
 Status VidPn::obtain(int32_t (*call)(void *, uint32_t, void **, const ModeSetInterface **), uint32_t owner,
                      void *&mode_set, const ModeSetInterface *&mode_set_interface)
 {
+    AV_SCOPE("VidPn::obtain");
     mode_set = nullptr;
     mode_set_interface = nullptr;
     const Status status = NtStatus(call(handle_, owner, &mode_set, &mode_set_interface)).status();
@@ -141,6 +158,7 @@ Status VidPn::obtain(int32_t (*call)(void *, uint32_t, void **, const ModeSetInt
 
 Status VidPn::release_path(const D3dkmdtVidPnPresentPathRecord *path)
 {
+    AV_SCOPE("VidPn::release_path");
     return NtStatus(topology_interface_->pfnReleasePathInfo(topology_, path)).status();
 }
 

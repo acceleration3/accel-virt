@@ -1,5 +1,6 @@
 #include "proto/context/context_setup.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -7,25 +8,60 @@
 namespace av {
 
 ContextSetup::ContextSetup()
-    : version_(0u, 0u), sub_api_(0u), ring_resource_(0u), ring_order_(0u), fence_resource_(0u), doorbell_(0u), reply_resource_(0u) {}
+    : version_(0u, 0u), sub_api_(0u), ring_resource_(0u), ring_order_(0u), fence_resource_(0u), doorbell_(0u), reply_resource_(0u)
+    {
+        AV_SCOPE("ContextSetup::ContextSetup");
+    }
 
 ContextSetup::ContextSetup(const ProtocolVersion &version, SubApi sub_api, uint32_t ring_resource,
                            uint8_t ring_order, uint32_t fence_resource, uint32_t doorbell,
                            uint32_t reply_resource)
     : version_(version), sub_api_(static_cast<uint32_t>(sub_api)), ring_resource_(ring_resource),
       ring_order_(ring_order), fence_resource_(fence_resource), doorbell_(doorbell),
-      reply_resource_(reply_resource) {}
+      reply_resource_(reply_resource)
+      {
+          AV_SCOPE("ContextSetup::ContextSetup");
+      }
 
-const ProtocolVersion &ContextSetup::version() const        { return version_; }
-SubApi                 ContextSetup::sub_api() const        { return static_cast<SubApi>(sub_api_); }
-uint32_t               ContextSetup::ring_resource() const  { return ring_resource_; }
-uint8_t                ContextSetup::ring_order() const     { return ring_order_; }
-uint32_t               ContextSetup::fence_resource() const { return fence_resource_; }
-uint32_t               ContextSetup::doorbell() const       { return doorbell_; }
-uint32_t               ContextSetup::reply_resource() const { return reply_resource_; }
+const ProtocolVersion &ContextSetup::version() const
+{
+    AV_SCOPE("ContextSetup::version");
+    return version_;
+}
+SubApi                 ContextSetup::sub_api() const
+{
+    AV_SCOPE("ContextSetup::sub_api");
+    return static_cast<SubApi>(sub_api_);
+}
+uint32_t               ContextSetup::ring_resource() const
+{
+    AV_SCOPE("ContextSetup::ring_resource");
+    return ring_resource_;
+}
+uint8_t                ContextSetup::ring_order() const
+{
+    AV_SCOPE("ContextSetup::ring_order");
+    return ring_order_;
+}
+uint32_t               ContextSetup::fence_resource() const
+{
+    AV_SCOPE("ContextSetup::fence_resource");
+    return fence_resource_;
+}
+uint32_t               ContextSetup::doorbell() const
+{
+    AV_SCOPE("ContextSetup::doorbell");
+    return doorbell_;
+}
+uint32_t               ContextSetup::reply_resource() const
+{
+    AV_SCOPE("ContextSetup::reply_resource");
+    return reply_resource_;
+}
 
 Status ContextSetup::encode(uint8_t *bytes, size_t capacity) const
 {
+    AV_SCOPE("ContextSetup::encode");
     if (capacity < encoded_size) return Status::too_large;
     WireWriter writer(bytes, capacity);
     writer.write_u32(magic);
@@ -43,6 +79,7 @@ Status ContextSetup::encode(uint8_t *bytes, size_t capacity) const
 
 bool ContextSetup::fields_valid() const
 {
+    AV_SCOPE("ContextSetup::fields_valid");
     const bool one_known_api = sub_api_ == static_cast<uint32_t>(SubApi::vulkan) ||
                                sub_api_ == static_cast<uint32_t>(SubApi::opengl) ||
                                sub_api_ == static_cast<uint32_t>(SubApi::opencl);
@@ -55,6 +92,7 @@ bool ContextSetup::fields_valid() const
 
 Status ContextSetup::decode(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("ContextSetup::decode");
     WireReader reader(bytes, length);
     const uint32_t found_magic = reader.read_u32();
     const uint16_t major = reader.read_u16();
@@ -76,6 +114,7 @@ Status ContextSetup::decode(const uint8_t *bytes, size_t length)
 
 Status ContextSetup::validate_against(const CapsetInfo &capset) const
 {
+    AV_SCOPE("ContextSetup::validate_against");
     if (!version_.compatible_with(capset.version()) || !capset.offers(sub_api()) ||
         !capset.accepts_ring_order(ring_order_) || doorbell_ >= capset.max_contexts())
         return Status::not_supported;

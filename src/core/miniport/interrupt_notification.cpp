@@ -2,19 +2,25 @@
 
 #include "core/ddi/entry_points.hpp"
 #include "core/miniport/dxgkrnl_interface.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
 InterruptNotification::InterruptNotification(Platform &platform, DxgkrnlInterface &dxgkrnl)
-    : platform_(platform), dxgkrnl_(dxgkrnl), data_() {}
+    : platform_(platform), dxgkrnl_(dxgkrnl), data_()
+    {
+        AV_SCOPE("InterruptNotification::InterruptNotification");
+    }
 
 Status InterruptNotification::report()
 {
+    AV_SCOPE("InterruptNotification::report");
     return dxgkrnl_.synchronize_execution(&AvSynchronizedNotify, this);
 }
 
 Status InterruptNotification::report_completed(uint32_t fence)
 {
+    AV_SCOPE("InterruptNotification::report_completed");
     platform_.require_irql_at_most(Irql::dispatch, "InterruptNotification::report_completed");
     data_ = DxgkargcbNotifyInterruptDataRecord{};
     data_.InterruptType = dma_completed;
@@ -24,6 +30,7 @@ Status InterruptNotification::report_completed(uint32_t fence)
 
 Status InterruptNotification::report_preempted(uint32_t preemption_fence, uint32_t last_completed_fence)
 {
+    AV_SCOPE("InterruptNotification::report_preempted");
     platform_.require_irql_at_most(Irql::dispatch, "InterruptNotification::report_preempted");
     data_ = DxgkargcbNotifyInterruptDataRecord{};
     data_.InterruptType = dma_preempted;
@@ -35,6 +42,7 @@ Status InterruptNotification::report_preempted(uint32_t preemption_fence, uint32
 /* MonitoredFenceSignaled's NodeOrdinal and EngineOrdinal are the first two UINTs. */
 Status InterruptNotification::report_monitored_fence_signaled(uint32_t node, uint32_t engine)
 {
+    AV_SCOPE("InterruptNotification::report_monitored_fence_signaled");
     platform_.require_irql_at_most(Irql::dispatch, "InterruptNotification::report_monitored_fence_signaled");
     data_ = DxgkargcbNotifyInterruptDataRecord{};
     data_.InterruptType = monitored_fence_signaled;
@@ -46,6 +54,7 @@ Status InterruptNotification::report_monitored_fence_signaled(uint32_t node, uin
 /* CRTC_VSYNC's PhysicalAddress spans the two UINTs after the target. */
 Status InterruptNotification::report_vsync(uint32_t target, uint64_t address)
 {
+    AV_SCOPE("InterruptNotification::report_vsync");
     platform_.require_irql_at_most(Irql::dispatch, "InterruptNotification::report_vsync");
     data_ = DxgkargcbNotifyInterruptDataRecord{};
     data_.InterruptType = crtc_vsync;
@@ -58,6 +67,7 @@ Status InterruptNotification::report_vsync(uint32_t target, uint64_t address)
 
 uint8_t InterruptNotification::notify()
 {
+    AV_SCOPE("InterruptNotification::notify");
     platform_.require_irql_at_most(Irql::isr, "InterruptNotification::notify");
     dxgkrnl_.notify_interrupt(data_);
     return 1u;

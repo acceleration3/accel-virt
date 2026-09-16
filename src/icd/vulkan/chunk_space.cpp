@@ -1,5 +1,6 @@
 #include "icd/vulkan/chunk_space.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "icd/vulkan/connection.hpp"
 
 namespace av::icd {
@@ -11,10 +12,14 @@ constexpr uint64_t max_pages = ~uint64_t{0} / ChunkSpace::page_bytes;
 }  // namespace
 
 ChunkSpace::ChunkSpace(Connection &connection)
-    : connection_(connection), chunk_(), pages_(0u), placed_(0u), firsts_(), lengths_() {}
+    : connection_(connection), chunk_(), pages_(0u), placed_(0u), firsts_(), lengths_()
+    {
+        AV_SCOPE("ChunkSpace::ChunkSpace");
+    }
 
 ChunkSpace::~ChunkSpace()
 {
+    AV_SCOPE("ChunkSpace::~ChunkSpace");
     placed_ = 0u;
     /* Nothing is left to report a refusal to. */
     static_cast<void>(close());
@@ -22,6 +27,7 @@ ChunkSpace::~ChunkSpace()
 
 Status ChunkSpace::open(uint64_t pages)
 {
+    AV_SCOPE("ChunkSpace::open");
     if (opened()) return Status::invalid_state;
     if (pages == 0u || pages > max_pages) return Status::invalid_parameter;
     const Status status = connection_.open_chunk(chunk_, pages * page_bytes);
@@ -36,6 +42,7 @@ Status ChunkSpace::open(uint64_t pages)
 
 uint32_t ChunkSpace::hole_before(uint64_t pages, uint64_t &first) const
 {
+    AV_SCOPE("ChunkSpace::hole_before");
     uint64_t end = 0u;
     for (uint32_t index = 0u; index < placed_; index++) {
         if (firsts_[index] - end >= pages) {
@@ -50,6 +57,7 @@ uint32_t ChunkSpace::hole_before(uint64_t pages, uint64_t &first) const
 
 Status ChunkSpace::place(uint64_t pages, uint64_t &offset)
 {
+    AV_SCOPE("ChunkSpace::place");
     if (!opened()) return Status::invalid_state;
     if (pages == 0u) return Status::invalid_parameter;
     if (placed_ == max_ranges) return Status::no_memory;
@@ -69,6 +77,7 @@ Status ChunkSpace::place(uint64_t pages, uint64_t &offset)
 
 Status ChunkSpace::remove(uint64_t offset)
 {
+    AV_SCOPE("ChunkSpace::remove");
     for (uint32_t index = 0u; index < placed_; index++) {
         if (firsts_[index] * page_bytes != offset) continue;
         placed_--;
@@ -83,21 +92,47 @@ Status ChunkSpace::remove(uint64_t offset)
 
 Status ChunkSpace::close()
 {
+    AV_SCOPE("ChunkSpace::close");
     if (placed_ != 0u) return Status::invalid_state;
     pages_ = 0u;
     return connection_.close_chunk(chunk_);
 }
 
-bool     ChunkSpace::opened() const { return chunk_.constructed(); }
-bool     ChunkSpace::empty() const { return placed_ == 0u; }
-uint32_t ChunkSpace::placed() const { return placed_; }
-uint64_t ChunkSpace::pages() const { return pages_; }
-uint32_t ChunkSpace::resource_id() const { return opened() ? chunk_.object().resource_id() : 0u; }
+bool     ChunkSpace::opened() const
+{
+    AV_SCOPE("ChunkSpace::opened");
+    return chunk_.constructed();
+}
+bool     ChunkSpace::empty() const
+{
+    AV_SCOPE("ChunkSpace::empty");
+    return placed_ == 0u;
+}
+uint32_t ChunkSpace::placed() const
+{
+    AV_SCOPE("ChunkSpace::placed");
+    return placed_;
+}
+uint64_t ChunkSpace::pages() const
+{
+    AV_SCOPE("ChunkSpace::pages");
+    return pages_;
+}
+uint32_t ChunkSpace::resource_id() const
+{
+    AV_SCOPE("ChunkSpace::resource_id");
+    return opened() ? chunk_.object().resource_id() : 0u;
+}
 
-volatile unsigned char *ChunkSpace::view() const { return opened() ? chunk_.object().view() : nullptr; }
+volatile unsigned char *ChunkSpace::view() const
+{
+    AV_SCOPE("ChunkSpace::view");
+    return opened() ? chunk_.object().view() : nullptr;
+}
 
 bool ChunkSpace::invariants_hold() const
 {
+    AV_SCOPE("ChunkSpace::invariants_hold");
     if (placed_ > max_ranges) return false;
     if (!opened()) return pages_ == 0u && placed_ == 0u;
     if (pages_ == 0u) return false;

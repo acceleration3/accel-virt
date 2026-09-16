@@ -1,5 +1,6 @@
 #include "device/shim/loader_host_apis.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
 
 #include <string.h>
@@ -10,12 +11,20 @@ namespace av {
 LoaderHostApis::LoaderHostApis()
     : instance_(nullptr), uuids_{}, sub_apis_{}, vulkan_kinds_{}, opencl_kinds_{}, opencl_devices_{},
       gl_displays_{}, extensions_{}, count_(0u),
-      opened_(false) {}
+      opened_(false)
+      {
+          AV_SCOPE("LoaderHostApis::LoaderHostApis");
+      }
 
-LoaderHostApis::~LoaderHostApis() { close(); }
+LoaderHostApis::~LoaderHostApis()
+{
+    AV_SCOPE("LoaderHostApis::~LoaderHostApis");
+    close();
+}
 
 void LoaderHostApis::open()
 {
+    AV_SCOPE("LoaderHostApis::open");
     if (opened_) return;
     opened_ = true;
     enumerate();
@@ -23,6 +32,7 @@ void LoaderHostApis::open()
 
 void LoaderHostApis::enumerate()
 {
+    AV_SCOPE("LoaderHostApis::enumerate");
     VkApplicationInfo application = {};
     application.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     application.pApplicationName = "rvk-executor";
@@ -66,6 +76,7 @@ void LoaderHostApis::enumerate()
 
 uint32_t LoaderHostApis::kinds_of(void *device)
 {
+    AV_SCOPE("LoaderHostApis::kinds_of");
     auto *const physical = static_cast<VkPhysicalDevice>(device);
 
     /* Asked in one call, because vkEnumerateDeviceExtensionProperties has no
@@ -87,6 +98,7 @@ uint32_t LoaderHostApis::kinds_of(void *device)
 
 void LoaderHostApis::close()
 {
+    AV_SCOPE("LoaderHostApis::close");
     for (uint32_t i = 0u; i < count_; i++) {
         gl_displays_[i].close();
         opencl_devices_[i].forget();
@@ -97,21 +109,28 @@ void LoaderHostApis::close()
     count_ = 0u;
 }
 
-uint32_t LoaderHostApis::gpu_count() { return count_; }
+uint32_t LoaderHostApis::gpu_count()
+{
+    AV_SCOPE("LoaderHostApis::gpu_count");
+    return count_;
+}
 
 void LoaderHostApis::gpu_uuid(uint32_t index, uint8_t *out)
 {
+    AV_SCOPE("LoaderHostApis::gpu_uuid");
     if (index >= count_ || out == nullptr) return;
     memcpy(out, uuids_[index], uuid_bytes);
 }
 
 uint32_t LoaderHostApis::sub_apis(uint32_t index)
 {
+    AV_SCOPE("LoaderHostApis::sub_apis");
     return index < count_ ? sub_apis_[index] : 0u;
 }
 
 uint32_t LoaderHostApis::import_kinds(uint32_t index, uint32_t sub_api)
 {
+    AV_SCOPE("LoaderHostApis::import_kinds");
     if (index >= count_) return 0u;
     if (sub_api == RVK_EXECUTOR_SUB_API_VULKAN) return vulkan_kinds_[index];
     if (sub_api == RVK_EXECUTOR_SUB_API_OPENCL) return opencl_kinds_[index];
@@ -120,11 +139,13 @@ uint32_t LoaderHostApis::import_kinds(uint32_t index, uint32_t sub_api)
 
 const GlDisplay *LoaderHostApis::gl_display(uint32_t index)
 {
+    AV_SCOPE("LoaderHostApis::gl_display");
     return index < count_ && gl_displays_[index].open() ? &gl_displays_[index] : nullptr;
 }
 
 const OpenClDevice *LoaderHostApis::opencl_device(uint32_t index)
 {
+    AV_SCOPE("LoaderHostApis::opencl_device");
     return index < count_ && opencl_devices_[index].device() != nullptr ? &opencl_devices_[index] : nullptr;
 }
 

@@ -6,20 +6,37 @@
 #include "core/memory/host_visible_segment.hpp"
 #include "core/memory/memory_segments.hpp"
 #include "core/support/invariant_scope.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
 Allocation::Allocation(Platform &platform, const MemorySegments &segments,
                        const AllocationDescriptor &descriptor, uint64_t size)
     : platform_(platform), segments_(segments), descriptor_(descriptor), size_(size), opens_(0u), owner_(nullptr),
-      aperture_(platform, static_cast<uint32_t>(size / page_bytes)) {}
+      aperture_(platform, static_cast<uint32_t>(size / page_bytes))
+      {
+          AV_SCOPE("Allocation::Allocation");
+      }
 
-const AllocationDescriptor &Allocation::descriptor() const { return descriptor_; }
-uint64_t                    Allocation::size() const { return size_; }
-uint32_t                    Allocation::opens() const { return opens_; }
+const AllocationDescriptor &Allocation::descriptor() const
+{
+    AV_SCOPE("Allocation::descriptor");
+    return descriptor_;
+}
+uint64_t                    Allocation::size() const
+{
+    AV_SCOPE("Allocation::size");
+    return size_;
+}
+uint32_t                    Allocation::opens() const
+{
+    AV_SCOPE("Allocation::opens");
+    return opens_;
+}
 
 void Allocation::report_to(DxgkAllocationInfoRecord &info)
 {
+    AV_SCOPE("Allocation::report_to");
     platform_.require_irql_at_most(Irql::apc, "Allocation::report_to");
     info.Size = size_;
     info.Alignment = 0u;
@@ -69,6 +86,7 @@ void Allocation::report_to(DxgkAllocationInfoRecord &info)
 
 Status Allocation::open(const void *device)
 {
+    AV_SCOPE("Allocation::open");
     platform_.require_irql_at_most(Irql::apc, "Allocation::open");
     InvariantScope<Allocation> guard(platform_, *this, "open");
     if (published_as_blob() && owner_ != nullptr && owner_ != device) return Status::invalid_parameter;
@@ -79,6 +97,7 @@ Status Allocation::open(const void *device)
 
 Status Allocation::close()
 {
+    AV_SCOPE("Allocation::close");
     platform_.require_irql_at_most(Irql::apc, "Allocation::close");
     InvariantScope<Allocation> guard(platform_, *this, "close");
     if (opens_ == 0u) return Status::invalid_state;
@@ -89,18 +108,21 @@ Status Allocation::close()
 
 Status Allocation::map_aperture(const DxgkBuildPagingBufferMapApertureSegmentRecord &request)
 {
+    AV_SCOPE("Allocation::map_aperture");
     platform_.require_irql_at_most(Irql::passive, "Allocation::map_aperture");
     return aperture_.map(request);
 }
 
 void Allocation::unmap_aperture(const DxgkBuildPagingBufferUnmapApertureSegmentRecord &request)
 {
+    AV_SCOPE("Allocation::unmap_aperture");
     platform_.require_irql_at_most(Irql::passive, "Allocation::unmap_aperture");
     aperture_.unmap(request);
 }
 
 GuestPageList Allocation::pages_at(uint64_t segment_address, uint32_t page_count) const
 {
+    AV_SCOPE("Allocation::pages_at");
     platform_.require_irql_at_most(Irql::dispatch, "Allocation::pages_at");
     const auto base = static_cast<uint64_t>(ApertureSegment::base_address);
     if (segment_address < base) return GuestPageList();
@@ -111,12 +133,14 @@ GuestPageList Allocation::pages_at(uint64_t segment_address, uint32_t page_count
 
 GuestPageList Allocation::pages() const
 {
+    AV_SCOPE("Allocation::pages");
     platform_.require_irql_at_most(Irql::dispatch, "Allocation::pages");
     return aperture_.whole();
 }
 
 bool Allocation::published_as_blob() const
 {
+    AV_SCOPE("Allocation::published_as_blob");
     const AllocationKind kind = descriptor_.kind();
     return kind == AllocationKind::context_ring || kind == AllocationKind::fence_page ||
            kind == AllocationKind::reply_slot || kind == AllocationKind::host_visible_memory;
@@ -124,6 +148,7 @@ bool Allocation::published_as_blob() const
 
 bool Allocation::invariants_hold() const
 {
+    AV_SCOPE("Allocation::invariants_hold");
     if ((opens_ == 0u) != (owner_ == nullptr)) return false;
     return size_ != 0u && (size_ & (page_bytes - 1u)) == 0u && size_ >= descriptor_.size() &&
            aperture_.invariants_hold();

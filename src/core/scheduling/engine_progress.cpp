@@ -1,14 +1,19 @@
 #include "core/scheduling/engine_progress.hpp"
 
 #include "core/scheduling/execution_node.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
 EngineProgress::EngineProgress(Platform &platform, ExecutionNode &node)
-    : platform_(platform), node_(node), answered_progress_(0u), answered_(false) {}
+    : platform_(platform), node_(node), answered_progress_(0u), answered_(false)
+    {
+        AV_SCOPE("EngineProgress::EngineProgress");
+    }
 
 bool EngineProgress::responsive()
 {
+    AV_SCOPE("EngineProgress::responsive");
     platform_.require_irql_at_most(Irql::dispatch, "EngineProgress::responsive");
     if (node_.pending() == 0u) return true;
     const uint64_t progress = node_.progress_time();

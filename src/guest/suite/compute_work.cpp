@@ -1,5 +1,6 @@
 #include "guest/suite/compute_work.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/suite/probe_device.hpp"
 #include "guest/suite/probe_outcome.hpp"
 #include "guest/suite/shaders/double_spv.hpp"
@@ -15,11 +16,15 @@ constexpr VkDeviceSize element_bytes = sizeof(uint32_t);
 
 ComputeWork::ComputeWork(ProbeDevice &device)
     : device_(device), elements_(device), commands_(device), shader_(VK_NULL_HANDLE), set_layout_(VK_NULL_HANDLE),
-      layout_(VK_NULL_HANDLE), pipeline_(VK_NULL_HANDLE), pool_(VK_NULL_HANDLE), set_(VK_NULL_HANDLE) {}
+      layout_(VK_NULL_HANDLE), pipeline_(VK_NULL_HANDLE), pool_(VK_NULL_HANDLE), set_(VK_NULL_HANDLE)
+      {
+          AV_SCOPE("ComputeWork::ComputeWork");
+      }
 
 /* Vulkan makes destroying VK_NULL_HANDLE a no-op; the set is the pool's. */
 ComputeWork::~ComputeWork()
 {
+    AV_SCOPE("ComputeWork::~ComputeWork");
     VulkanEntry   &vulkan = device_.vulkan();
     const VkDevice device = device_.device();
     vulkan.destroy_pipeline(device, pipeline_);
@@ -31,6 +36,7 @@ ComputeWork::~ComputeWork()
 
 void ComputeWork::run(ProbeOutcome &outcome)
 {
+    AV_SCOPE("ComputeWork::run");
     if (!elements_.make(elements * element_bytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, outcome)) return;
     for (uint32_t index = 0u; index < elements; index++)
         __builtin_memcpy(elements_.bytes() + index * element_bytes, &index, element_bytes);
@@ -45,6 +51,7 @@ void ComputeWork::run(ProbeOutcome &outcome)
 
 bool ComputeWork::make_pipeline(ProbeOutcome &outcome)
 {
+    AV_SCOPE("ComputeWork::make_pipeline");
     VulkanEntry   &vulkan = device_.vulkan();
     const VkDevice device = device_.device();
     VkShaderModuleCreateInfo shader = {};
@@ -78,6 +85,7 @@ bool ComputeWork::make_pipeline(ProbeOutcome &outcome)
 
 bool ComputeWork::make_set(ProbeOutcome &outcome)
 {
+    AV_SCOPE("ComputeWork::make_set");
     VulkanEntry   &vulkan = device_.vulkan();
     const VkDevice device = device_.device();
     const VkDescriptorPoolSize size = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1u};
@@ -106,6 +114,7 @@ bool ComputeWork::make_set(ProbeOutcome &outcome)
 
 uint32_t ComputeWork::doubled() const
 {
+    AV_SCOPE("ComputeWork::doubled");
     uint32_t matched = 0u;
     for (uint32_t index = 0u; index < elements; index++) {
         uint32_t value = 0u;
@@ -117,6 +126,7 @@ uint32_t ComputeWork::doubled() const
 
 bool ComputeWork::invariants_hold() const
 {
+    AV_SCOPE("ComputeWork::invariants_hold");
     if (pipeline_ != VK_NULL_HANDLE && layout_ == VK_NULL_HANDLE) return false;
     if (layout_ != VK_NULL_HANDLE && set_layout_ == VK_NULL_HANDLE) return false;
     return set_ == VK_NULL_HANDLE || pool_ != VK_NULL_HANDLE;

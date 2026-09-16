@@ -1,6 +1,7 @@
 #include "guest/suite/transport_scenario.hpp"
 
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 
 namespace av {
@@ -13,10 +14,14 @@ constexpr uint64_t microseconds_per_second = 1000000u;
 
 TransportScenario::TransportScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search, SubApi sub_api,
                                      const char *name)
-    : kmt_(kmt), steps_(kmt, report, name), link_(kmt, search, steps_, sub_api) {}
+    : kmt_(kmt), steps_(kmt, report, name), link_(kmt, search, steps_, sub_api)
+    {
+        AV_SCOPE("TransportScenario::TransportScenario");
+    }
 
 void TransportScenario::run()
 {
+    AV_SCOPE("TransportScenario::run");
     ScopeExit closing([&] { link_.close(); });
     if (link_.open() != Status::ok) return;
     if (first_round_trip() != Status::ok) return;
@@ -25,6 +30,7 @@ void TransportScenario::run()
 
 Status TransportScenario::timed_nop(uint32_t &answered, uint32_t &microseconds)
 {
+    AV_SCOPE("TransportScenario::timed_nop");
     uint64_t       frequency = 0u;
     const uint64_t sent_at = kmt_.performance_counter(frequency);
     /* A failed call has lost the context, which is the state a device reset
@@ -37,6 +43,7 @@ Status TransportScenario::timed_nop(uint32_t &answered, uint32_t &microseconds)
 
 Status TransportScenario::first_round_trip()
 {
+    AV_SCOPE("TransportScenario::first_round_trip");
     uint32_t     answered = 0u;
     uint32_t     microseconds = 0u;
     const Status sent = timed_nop(answered, microseconds);
@@ -47,6 +54,7 @@ Status TransportScenario::first_round_trip()
 
 void TransportScenario::warm_round_trips()
 {
+    AV_SCOPE("TransportScenario::warm_round_trips");
     uint32_t samples[warm_rounds] = {};
     for (uint32_t round = 0u; round < warm_rounds; round++) {
         uint32_t     answered = 0u;

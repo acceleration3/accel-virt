@@ -1,20 +1,26 @@
 #include "device/execution/context_executor.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/execution/executor_library.hpp"
 #include "device/host/host.hpp"
 
 namespace av {
 
 ContextExecutor::ContextExecutor(Host &host, const ExecutorLibrary &library)
-    : host_(host), library_(library), executor_(nullptr), api_(SubApi::vulkan), uuid_{}, configured_(false) {}
+    : host_(host), library_(library), executor_(nullptr), api_(SubApi::vulkan), uuid_{}, configured_(false)
+    {
+        AV_SCOPE("ContextExecutor::ContextExecutor");
+    }
 
 ContextExecutor::~ContextExecutor()
 {
+    AV_SCOPE("ContextExecutor::~ContextExecutor");
     if (executor_ != nullptr) library_.destroy(executor_);
 }
 
 void ContextExecutor::configure(SubApi api, const uint8_t *gpu_uuid)
 {
+    AV_SCOPE("ContextExecutor::configure");
     host_.require_main_loop("ContextExecutor::configure");
     api_ = api;
     for (size_t i = 0u; i < uuid_bytes; i++) uuid_[i] = gpu_uuid[i];
@@ -23,6 +29,7 @@ void ContextExecutor::configure(SubApi api, const uint8_t *gpu_uuid)
 
 Status ContextExecutor::create()
 {
+    AV_SCOPE("ContextExecutor::create");
     host_.require_worker("ContextExecutor::create");
     if (executor_ != nullptr || !configured_) return Status::invalid_state;
     executor_ = library_.create(api_, uuid_);
@@ -31,6 +38,7 @@ Status ContextExecutor::create()
 
 void ContextExecutor::destroy()
 {
+    AV_SCOPE("ContextExecutor::destroy");
     host_.require_worker("ContextExecutor::destroy");
     if (executor_ == nullptr) return;
     library_.destroy(executor_);
@@ -40,6 +48,7 @@ void ContextExecutor::destroy()
 Status ContextExecutor::execute(uint32_t command_id, const uint8_t *payload, size_t size, uint8_t *reply,
                                 size_t reply_capacity, size_t &reply_size)
 {
+    AV_SCOPE("ContextExecutor::execute");
     host_.require_worker("ContextExecutor::execute");
     reply_size = 0u;
     if (executor_ == nullptr) return Status::invalid_state;
@@ -57,6 +66,7 @@ Status ContextExecutor::execute(uint32_t command_id, const uint8_t *payload, siz
 
 Status ContextExecutor::import(uint64_t blob_id, const RvkBlobHandle &handle, uint64_t &device_memory)
 {
+    AV_SCOPE("ContextExecutor::import");
     host_.require_worker("ContextExecutor::import");
     device_memory = 0u;
     if (executor_ == nullptr) return Status::invalid_state;
@@ -70,12 +80,14 @@ Status ContextExecutor::import(uint64_t blob_id, const RvkBlobHandle &handle, ui
 
 void ContextExecutor::release(uint64_t blob_id)
 {
+    AV_SCOPE("ContextExecutor::release");
     host_.require_worker("ContextExecutor::release");
     if (executor_ != nullptr) library_.release_blob(executor_, blob_id);
 }
 
 uint16_t ContextExecutor::command_api() const
 {
+    AV_SCOPE("ContextExecutor::command_api");
     switch (api_) {
     case SubApi::vulkan: return vulkan_commands;
     case SubApi::opencl: return opencl_commands;
@@ -85,11 +97,13 @@ uint16_t ContextExecutor::command_api() const
 
 bool ContextExecutor::created() const
 {
+    AV_SCOPE("ContextExecutor::created");
     return executor_ != nullptr;
 }
 
 bool ContextExecutor::invariants_hold() const
 {
+    AV_SCOPE("ContextExecutor::invariants_hold");
     return executor_ == nullptr || configured_;
 }
 

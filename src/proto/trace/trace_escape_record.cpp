@@ -1,24 +1,51 @@
 #include "proto/trace/trace_escape_record.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
-TraceEscapeRecord::TraceEscapeRecord() : kind_(Kind::table), offset_(0u), window_(0u), total_(0u), clock_(0u) {}
+TraceEscapeRecord::TraceEscapeRecord() : kind_(Kind::table), offset_(0u), window_(0u), total_(0u), clock_(0u)
+{
+    AV_SCOPE("TraceEscapeRecord::TraceEscapeRecord");
+}
 
 TraceEscapeRecord::TraceEscapeRecord(Kind kind, uint64_t offset, uint32_t window)
     : kind_(kind), offset_(offset), window_(window), total_(0u), clock_(0u)
-{}
+{
+    AV_SCOPE("TraceEscapeRecord::TraceEscapeRecord");
+}
 
-TraceEscapeRecord::Kind TraceEscapeRecord::kind() const { return kind_; }
-uint64_t                TraceEscapeRecord::offset() const { return offset_; }
-uint32_t                TraceEscapeRecord::window() const { return window_; }
-uint64_t                TraceEscapeRecord::total() const { return total_; }
-uint64_t                TraceEscapeRecord::clock() const { return clock_; }
+TraceEscapeRecord::Kind TraceEscapeRecord::kind() const
+{
+    AV_SCOPE("TraceEscapeRecord::kind");
+    return kind_;
+}
+uint64_t                TraceEscapeRecord::offset() const
+{
+    AV_SCOPE("TraceEscapeRecord::offset");
+    return offset_;
+}
+uint32_t                TraceEscapeRecord::window() const
+{
+    AV_SCOPE("TraceEscapeRecord::window");
+    return window_;
+}
+uint64_t                TraceEscapeRecord::total() const
+{
+    AV_SCOPE("TraceEscapeRecord::total");
+    return total_;
+}
+uint64_t                TraceEscapeRecord::clock() const
+{
+    AV_SCOPE("TraceEscapeRecord::clock");
+    return clock_;
+}
 
 TraceEscapeRecord TraceEscapeRecord::answered(uint64_t total, uint32_t filled, uint64_t clock) const
 {
+    AV_SCOPE("TraceEscapeRecord::answered");
     TraceEscapeRecord answer = *this;
     answer.total_ = total;
     answer.window_ = filled;
@@ -28,6 +55,7 @@ TraceEscapeRecord TraceEscapeRecord::answered(uint64_t total, uint32_t filled, u
 
 Status TraceEscapeRecord::encode(uint8_t *bytes, size_t capacity) const
 {
+    AV_SCOPE("TraceEscapeRecord::encode");
     if (bytes == nullptr || capacity < encoded_size) return Status::invalid_parameter;
     WireWriter writer(bytes, capacity);
     writer.write_u32(magic);
@@ -43,6 +71,7 @@ Status TraceEscapeRecord::encode(uint8_t *bytes, size_t capacity) const
 
 Status TraceEscapeRecord::decode(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("TraceEscapeRecord::decode");
     TraceEscapeRecord request;
     if (request.read(bytes, length) != Status::ok) return Status::malformed;
     if (request.total_ != 0u || request.clock_ != 0u) return Status::malformed;
@@ -53,6 +82,7 @@ Status TraceEscapeRecord::decode(const uint8_t *bytes, size_t length)
 
 Status TraceEscapeRecord::accept_answer(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("TraceEscapeRecord::accept_answer");
     TraceEscapeRecord answer;
     if (answer.read(bytes, length) != Status::ok) return Status::malformed;
     if (answer.kind_ != kind_ || answer.offset_ != offset_ || answer.window_ > window_) return Status::malformed;
@@ -64,6 +94,7 @@ Status TraceEscapeRecord::accept_answer(const uint8_t *bytes, size_t length)
 
 Status TraceEscapeRecord::read(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("TraceEscapeRecord::read");
     WireReader     reader(bytes, length);
     const uint32_t found_magic = reader.read_u32();
     const uint16_t found_version = reader.read_u16();

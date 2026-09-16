@@ -1,14 +1,19 @@
 #include "proto/virtio_gpu/create_blob_request.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 
 namespace av {
 
 CreateBlobRequest::CreateBlobRequest()
-    : resource_id_(0u), memory_(0u), flags_(0u), entries_(0u), blob_id_(0u), size_(0u) {}
+    : resource_id_(0u), memory_(0u), flags_(0u), entries_(0u), blob_id_(0u), size_(0u)
+    {
+        AV_SCOPE("CreateBlobRequest::CreateBlobRequest");
+    }
 
 Status CreateBlobRequest::decode(WireReader &reader)
 {
+    AV_SCOPE("CreateBlobRequest::decode");
     if (reader.remaining() < fixed_size) return Status::malformed;
     for (size_t byte = 0u; byte < header_size; byte++) static_cast<void>(reader.read_u8());
     resource_id_ = reader.read_u32();
@@ -20,11 +25,35 @@ Status CreateBlobRequest::decode(WireReader &reader)
     return Status::ok;
 }
 
-uint32_t CreateBlobRequest::resource_id() const { return resource_id_; }
-uint32_t CreateBlobRequest::memory() const { return memory_; }
-uint32_t CreateBlobRequest::flags() const { return flags_; }
-uint32_t CreateBlobRequest::entries() const { return entries_; }
-uint64_t CreateBlobRequest::blob_id() const { return blob_id_; }
-uint64_t CreateBlobRequest::size() const { return size_; }
+uint32_t CreateBlobRequest::resource_id() const
+{
+    AV_SCOPE("CreateBlobRequest::resource_id");
+    return resource_id_;
+}
+uint32_t CreateBlobRequest::memory() const
+{
+    AV_SCOPE("CreateBlobRequest::memory");
+    return memory_;
+}
+uint32_t CreateBlobRequest::flags() const
+{
+    AV_SCOPE("CreateBlobRequest::flags");
+    return flags_;
+}
+uint32_t CreateBlobRequest::entries() const
+{
+    AV_SCOPE("CreateBlobRequest::entries");
+    return entries_;
+}
+uint64_t CreateBlobRequest::blob_id() const
+{
+    AV_SCOPE("CreateBlobRequest::blob_id");
+    return blob_id_;
+}
+uint64_t CreateBlobRequest::size() const
+{
+    AV_SCOPE("CreateBlobRequest::size");
+    return size_;
+}
 
 }  // namespace av

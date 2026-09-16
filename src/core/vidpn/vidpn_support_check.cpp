@@ -3,6 +3,7 @@
 #include "core/ddi/d3dkmdt_vidpn_present_path_record.hpp"
 #include "core/ddi/dxgkarg_is_supported_vidpn_record.hpp"
 #include "core/display/display_sources.hpp"
+#include "core/trace/function_scope.hpp"
 #include "core/vidpn/path_transformation.hpp"
 
 namespace av {
@@ -10,11 +11,15 @@ namespace av {
 VidPnSupportCheck::VidPnSupportCheck(Platform &platform, DxgkrnlInterface &dxgkrnl, const DisplaySources &sources,
                                      DxgkargIsSupportedVidPnRecord &request)
     : platform_(platform), sources_(sources), request_(request), vidpn_(platform, dxgkrnl, request.hDesiredVidPn), paths_(0u),
-      supported_(true) {}
+      supported_(true)
+      {
+          AV_SCOPE("VidPnSupportCheck::VidPnSupportCheck");
+      }
 
 /* A null VidPn asks whether the adapter can have no display at all. */
 NtStatus VidPnSupportCheck::decide()
 {
+    AV_SCOPE("VidPnSupportCheck::decide");
     platform_.require_irql_at_most(Irql::passive, "VidPnSupportCheck::decide");
     request_.IsVidPnSupported = 0u;
     if (request_.hDesiredVidPn == nullptr) {
@@ -32,6 +37,7 @@ NtStatus VidPnSupportCheck::decide()
 /* Refusing the path ends the walk; supported_ tells the refusal from a failure. */
 Status VidPnSupportCheck::visit(const D3dkmdtVidPnPresentPathRecord &path)
 {
+    AV_SCOPE("VidPnSupportCheck::visit");
     platform_.require_irql_at_most(Irql::passive, "VidPnSupportCheck::visit");
     paths_++;
     supported_ = paths_ <= max_paths && path.VidPnSourceId < sources_.count() &&

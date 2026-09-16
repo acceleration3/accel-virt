@@ -5,39 +5,48 @@
 #include "core/memory/aperture_segment.hpp"
 #include "core/memory/host_visible_segment.hpp"
 #include "core/miniport/adapter_info_query.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
 MemorySegments::MemorySegments(Platform &platform, const ApertureSegment &aperture,
                                const HostVisibleSegment &host_visible)
-    : platform_(platform), aperture_(aperture), host_visible_(host_visible) {}
+    : platform_(platform), aperture_(aperture), host_visible_(host_visible)
+    {
+        AV_SCOPE("MemorySegments::MemorySegments");
+    }
 
 uint32_t MemorySegments::count() const
 {
+    AV_SCOPE("MemorySegments::count");
     platform_.require_irql_at_most(Irql::dispatch, "MemorySegments::count");
     return host_visible_.offered() ? 2u : 1u;
 }
 
 uint32_t MemorySegments::system_memory_segment_id() const
 {
+    AV_SCOPE("MemorySegments::system_memory_segment_id");
     platform_.require_irql_at_most(Irql::dispatch, "MemorySegments::system_memory_segment_id");
     return count() + 1u;
 }
 
 bool MemorySegments::offers_host_visible() const
 {
+    AV_SCOPE("MemorySegments::offers_host_visible");
     platform_.require_irql_at_most(Irql::dispatch, "MemorySegments::offers_host_visible");
     return host_visible_.offered();
 }
 
 uint64_t MemorySegments::host_visible_bytes() const
 {
+    AV_SCOPE("MemorySegments::host_visible_bytes");
     platform_.require_irql_at_most(Irql::dispatch, "MemorySegments::host_visible_bytes");
     return host_visible_.size();
 }
 
 Status MemorySegments::report(const AdapterInfoQuery &query) const
 {
+    AV_SCOPE("MemorySegments::report");
     platform_.require_irql_at_most(Irql::passive, "MemorySegments::report");
     uint32_t                   physical_adapter = 0u;
     DxgkQuerySegmentOut4Record out = {};
@@ -72,6 +81,7 @@ Status MemorySegments::report(const AdapterInfoQuery &query) const
 
 bool MemorySegments::invariants_hold() const
 {
+    AV_SCOPE("MemorySegments::invariants_hold");
     return aperture_.invariants_hold() && host_visible_.invariants_hold();
 }
 

@@ -4,6 +4,7 @@
 #include "core/ddi/dxgk_device_descriptor_record.hpp"
 #include "core/ddi/dxgkarg_update_monitor_link_info_record.hpp"
 #include "core/display/display_mode.hpp"
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
@@ -40,17 +41,20 @@ constexpr uint8_t  digital_separate_sync_positive_hsync = 0x1Au;
 
 Edid::Edid(Platform &platform, const DisplayMode &preferred) : platform_(platform), bytes_{}
 {
+    AV_SCOPE("Edid::Edid");
     build(preferred);
 }
 
 void Edid::follow(const DisplayMode &preferred)
 {
+    AV_SCOPE("Edid::follow");
     platform_.require_irql_at_most(Irql::passive, "Edid::follow");
     build(preferred);
 }
 
 void Edid::build(const DisplayMode &preferred)
 {
+    AV_SCOPE("Edid::build");
     const uint32_t width_mm = preferred.width() * millimetres_per_inch_tenths / dots_per_inch_tenths;
     const uint32_t height_mm = preferred.height() * millimetres_per_inch_tenths / dots_per_inch_tenths;
     WireWriter writer(bytes_, timing_offset);
@@ -65,6 +69,7 @@ void Edid::build(const DisplayMode &preferred)
 
 NtStatus Edid::copy(DxgkDeviceDescriptorRecord &descriptor) const
 {
+    AV_SCOPE("Edid::copy");
     platform_.require_irql_at_most(Irql::passive, "Edid::copy");
     if (descriptor.DescriptorOffset >= block_bytes) return NtStatus(no_more_descriptor_data);
     if (descriptor.DescriptorBuffer == nullptr) return NtStatus(Status::invalid_parameter);
@@ -78,6 +83,7 @@ NtStatus Edid::copy(DxgkDeviceDescriptorRecord &descriptor) const
 /* Every field is 8 bits plus a high nibble packed with its neighbour's. */
 void Edid::describe(DxgkChildContainerIdRecord &container) const
 {
+    AV_SCOPE("Edid::describe");
     platform_.require_irql_at_most(Irql::passive, "Edid::describe");
     container.EldInfoPortId = 0u;
     container.EldInfoManufacturerName =
@@ -87,6 +93,7 @@ void Edid::describe(DxgkChildContainerIdRecord &container) const
 
 void Edid::write_preferred_timing(const DisplayMode &mode, uint32_t width_mm, uint32_t height_mm)
 {
+    AV_SCOPE("Edid::write_preferred_timing");
     const auto low_byte = [](uint32_t value) { return static_cast<uint8_t>(value & 0xFFu); };
     const auto high_nibbles = [](uint32_t first, uint32_t second) {
         return static_cast<uint8_t>(((first >> 8u) & 0x0Fu) << 4u | ((second >> 8u) & 0x0Fu));
@@ -114,6 +121,7 @@ void Edid::write_preferred_timing(const DisplayMode &mode, uint32_t width_mm, ui
 
 void Edid::write_display_descriptors()
 {
+    AV_SCOPE("Edid::write_display_descriptors");
     WireWriter writer(&bytes_[timing_offset + descriptor_bytes], 3u * descriptor_bytes + 1u);
     writer.copy_bytes(range_limits, sizeof range_limits);
     writer.copy_bytes(monitor_name, sizeof monitor_name);
@@ -123,6 +131,7 @@ void Edid::write_display_descriptors()
 
 void Edid::write_checksum()
 {
+    AV_SCOPE("Edid::write_checksum");
     uint8_t sum = 0u;
     for (uint32_t index = 0u; index + 1u < block_bytes; index++) sum = static_cast<uint8_t>(sum + bytes_[index]);
     bytes_[block_bytes - 1u] = static_cast<uint8_t>(0u - sum);
@@ -130,6 +139,7 @@ void Edid::write_checksum()
 
 void Edid::describe_link(DxgkargUpdateMonitorLinkInfoRecord &link) const
 {
+    AV_SCOPE("Edid::describe_link");
     platform_.require_irql_at_most(Irql::passive, "Edid::describe_link");
     const uint32_t stereo = (bytes_[timing_flags_offset] & timing_stereo_bits) != 0u;
     link.MonitorLinkInfoCapabilities = stereo * link_stereo;

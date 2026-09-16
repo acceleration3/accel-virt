@@ -3,6 +3,7 @@
 #include "core/ddi/dxgkarg_commit_vidpn_record.hpp"
 #include "core/display/display_mode_list.hpp"
 #include "core/display/display_sources.hpp"
+#include "core/trace/function_scope.hpp"
 #include "core/vidpn/vidpn_mode_set.hpp"
 
 namespace av {
@@ -10,11 +11,15 @@ namespace av {
 VidPnCommit::VidPnCommit(Platform &platform, DxgkrnlInterface &dxgkrnl, const DisplayModeList &modes,
                          DisplaySources &sources, const DxgkargCommitVidPnRecord &request)
     : platform_(platform), modes_(modes), sources_(sources), request_(request),
-      vidpn_(platform, dxgkrnl, request.hFunctionalVidPn) {}
+      vidpn_(platform, dxgkrnl, request.hFunctionalVidPn)
+      {
+          AV_SCOPE("VidPnCommit::VidPnCommit");
+      }
 
 /* A path powering off keeps its mode for when it powers on again. */
 NtStatus VidPnCommit::apply()
 {
+    AV_SCOPE("VidPnCommit::apply");
     platform_.require_irql_at_most(Irql::passive, "VidPnCommit::apply");
     const uint32_t source = request_.AffectedVidPnSourceId;
     if (source >= sources_.count()) return NtStatus(Status::invalid_parameter);

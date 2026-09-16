@@ -13,6 +13,7 @@
  * is one line into ExecutorRoot.
  */
 #include "core/support/object_storage.hpp"
+#include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/context_session.hpp"
 #include "device/executor/executor_root.hpp"
@@ -32,13 +33,19 @@ public:
      * are, because it offers only what a GPU here reports running. */
     av::ContextSession *create(uint32_t sub_api, const uint8_t *gpu_uuid)
     {
+        AV_SCOPE("Library::create");
         return root().open(sub_api, gpu_uuid);
     }
 
-    void destroy(av::ContextSession *session) { root().close(session); }
+    void destroy(av::ContextSession *session)
+    {
+        AV_SCOPE("Library::destroy");
+        root().close(session);
+    }
 
     av::ExecutorRoot &root()
     {
+        AV_SCOPE("Library::root");
         if (!asked_) {
             asked_ = true;
             (void)apis_.construct();
@@ -65,26 +72,38 @@ Library library;
  * only places that spelling is crossed. */
 av::ContextSession *session_of(RvkExecutor *executor)
 {
+    AV_SCOPE("session_of");
     return static_cast<av::ContextSession *>(static_cast<void *>(executor));
 }
 
 RvkExecutor *handle_of(av::ContextSession *session)
 {
+    AV_SCOPE("handle_of");
     return static_cast<RvkExecutor *>(static_cast<void *>(session));
 }
 
-uint32_t sub_apis(void *) { return library.root().sub_apis(); }
+uint32_t sub_apis(void *)
+{
+    AV_SCOPE("sub_apis");
+    return library.root().sub_apis();
+}
 
 RvkExecutor *create(void *, uint32_t sub_api, const uint8_t *gpu_uuid)
 {
+    AV_SCOPE("create");
     return handle_of(library.create(sub_api, gpu_uuid));
 }
 
-void destroy(void *, RvkExecutor *executor) { library.destroy(session_of(executor)); }
+void destroy(void *, RvkExecutor *executor)
+{
+    AV_SCOPE("destroy");
+    library.destroy(session_of(executor));
+}
 
 uint32_t execute(void *, RvkExecutor *executor, uint32_t command_id, const uint8_t *payload,
                  size_t size, uint8_t *reply, size_t reply_capacity, size_t *reply_size)
 {
+    AV_SCOPE("execute");
     av::ContextSession *const session = session_of(executor);
     size_t                    answer = 0u;
     const uint32_t result = session != nullptr
@@ -97,12 +116,14 @@ uint32_t execute(void *, RvkExecutor *executor, uint32_t command_id, const uint8
 
 uint32_t import_kinds(void *, uint32_t sub_api, const uint8_t *gpu_uuid)
 {
+    AV_SCOPE("import_kinds");
     return library.root().import_kinds(sub_api, gpu_uuid);
 }
 
 uint32_t import_blob(void *, RvkExecutor *executor, uint64_t blob_id,
                      const RvkBlobHandle *handle)
 {
+    AV_SCOPE("import_blob");
     av::ContextSession *const session = session_of(executor);
     if (session == nullptr || handle == nullptr) return RVK_UNDECODABLE;
     return session->import_blob(blob_id, *handle);
@@ -110,12 +131,14 @@ uint32_t import_blob(void *, RvkExecutor *executor, uint64_t blob_id,
 
 void release_blob(void *, RvkExecutor *executor, uint64_t blob_id)
 {
+    AV_SCOPE("release_blob");
     av::ContextSession *const session = session_of(executor);
     if (session != nullptr) session->release_blob(blob_id);
 }
 
 uint64_t imported_handle(void *, RvkExecutor *executor, uint64_t blob_id)
 {
+    AV_SCOPE("imported_handle");
     return library.root().imported_handle(session_of(executor), blob_id);
 }
 

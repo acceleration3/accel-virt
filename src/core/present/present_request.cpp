@@ -3,6 +3,7 @@
 #include "core/ddi/dxgkarg_present_record.hpp"
 #include "core/present/patched_present_addresses.hpp"
 #include "core/present/virtual_present_addresses.hpp"
+#include "core/trace/function_scope.hpp"
 #include "proto/commands/present_command.hpp"
 #include "proto/commands/rectangle.hpp"
 #include "proto/wire/wire_writer.hpp"
@@ -10,10 +11,14 @@
 namespace av {
 
 PresentRequest::PresentRequest(Platform &platform, DxgkargPresentRecord &request)
-    : platform_(platform), request_(request) {}
+    : platform_(platform), request_(request)
+    {
+        AV_SCOPE("PresentRequest::PresentRequest");
+    }
 
 Status PresentRequest::operation(PresentOperation &operation) const
 {
+    AV_SCOPE("PresentRequest::operation");
     switch (request_.Flags) {
     case flag_blt:
         operation = PresentOperation::blt;
@@ -33,6 +38,7 @@ Status PresentRequest::operation(PresentOperation &operation) const
 /* Only the sub-rectangles not yet presented are read. */
 Status PresentRequest::validate(PresentOperation operation, const PresentAddressing &addressing) const
 {
+    AV_SCOPE("PresentRequest::validate");
     const DxgkargPresentRecord &r = request_;
     if (r.pDmaBuffer == nullptr || r.MultipassOffset > r.SubRectCnt) return Status::invalid_parameter;
     if (r.SubRectCnt != 0u && r.pDstSubRects == nullptr) return Status::invalid_parameter;
@@ -50,6 +56,7 @@ Status PresentRequest::validate(PresentOperation operation, const PresentAddress
 
 NtStatus PresentRequest::present()
 {
+    AV_SCOPE("PresentRequest::present");
     platform_.require_irql_at_most(Irql::passive, "PresentRequest::present");
     PatchedPresentAddresses patched(platform_, request_);
     VirtualPresentAddresses virtual_addresses(platform_, request_);

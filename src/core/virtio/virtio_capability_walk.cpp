@@ -1,5 +1,7 @@
 #include "core/virtio/virtio_capability_walk.hpp"
 
+#include "core/trace/function_scope.hpp"
+
 namespace av {
 
 namespace {
@@ -21,10 +23,14 @@ constexpr uint8_t shared_memory_cap_len = 24u;
 /* The structures found so far; the first instance of each wins (4.1.4.1). */
 class VirtioCapabilityWalk::Collector {
 public:
-    Collector() : found_{}, multiplier_(0u), shared_{}, shared_ids_{}, shared_count_(0u) {}
+    Collector() : found_{}, multiplier_(0u), shared_{}, shared_ids_{}, shared_count_(0u)
+    {
+        AV_SCOPE("VirtioCapabilityWalk::Collector::Collector");
+    }
 
     void keep(uint8_t type, uint8_t id, const VirtioRegion &region, uint32_t multiplier)
     {
+        AV_SCOPE("VirtioCapabilityWalk::Collector::keep");
         if (type >= common_type && type <= device_type && !found_[type].present()) {
             found_[type] = region;
             if (type == notify_type) multiplier_ = multiplier;
@@ -38,6 +44,7 @@ public:
 
     Status build(VirtioPciLayout &layout) const
     {
+        AV_SCOPE("VirtioCapabilityWalk::Collector::build");
         for (uint8_t type = common_type; type <= device_type; type++)
             if (!found_[type].present()) return Status::not_supported;
         /* 4.1.4.4: 0 or an even power of two. */
@@ -54,6 +61,7 @@ public:
 private:
     bool has_shared(uint8_t id) const
     {
+        AV_SCOPE("VirtioCapabilityWalk::Collector::has_shared");
         for (uint8_t i = 0u; i < shared_count_; i++)
             if (shared_ids_[i] == id) return true;
         return false;
@@ -69,11 +77,13 @@ private:
 VirtioCapabilityWalk::VirtioCapabilityWalk(const uint8_t *config_space, size_t length)
     : bytes_{}, complete_(config_space != nullptr && length >= config_space_bytes)
 {
+    AV_SCOPE("VirtioCapabilityWalk::VirtioCapabilityWalk");
     for (size_t i = 0u; complete_ && i < config_space_bytes; i++) bytes_[i] = config_space[i];
 }
 
 uint32_t VirtioCapabilityWalk::read_u32(size_t offset) const
 {
+    AV_SCOPE("VirtioCapabilityWalk::read_u32");
     return static_cast<uint32_t>(bytes_[offset]) | static_cast<uint32_t>(bytes_[offset + 1u]) << 8u |
            static_cast<uint32_t>(bytes_[offset + 2u]) << 16u |
            static_cast<uint32_t>(bytes_[offset + 3u]) << 24u;
@@ -81,6 +91,7 @@ uint32_t VirtioCapabilityWalk::read_u32(size_t offset) const
 
 Status VirtioCapabilityWalk::visit(size_t at, Collector &collector) const
 {
+    AV_SCOPE("VirtioCapabilityWalk::visit");
     if (bytes_[at] != vendor_capability) return Status::ok;
     const uint8_t cap_len = bytes_[at + 2u];
     const uint8_t type = bytes_[at + 3u];
@@ -105,6 +116,7 @@ Status VirtioCapabilityWalk::visit(size_t at, Collector &collector) const
 
 Status VirtioCapabilityWalk::walk(VirtioPciLayout &layout) const
 {
+    AV_SCOPE("VirtioCapabilityWalk::walk");
     if (!complete_) return Status::malformed;
     if ((bytes_[status_register] & has_capabilities) == 0u) return Status::not_supported;
     Collector collector;

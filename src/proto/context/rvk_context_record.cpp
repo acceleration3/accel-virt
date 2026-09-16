@@ -1,26 +1,54 @@
 #include "proto/context/rvk_context_record.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 #include "proto/wire/wire_writer.hpp"
 
 namespace av {
 
 RvkContextRecord::RvkContextRecord()
-    : sub_api_(0u), ring_order_(0u), ring_(0u), fence_(0u), reply_(0u) {}
+    : sub_api_(0u), ring_order_(0u), ring_(0u), fence_(0u), reply_(0u)
+    {
+        AV_SCOPE("RvkContextRecord::RvkContextRecord");
+    }
 
 RvkContextRecord::RvkContextRecord(SubApi sub_api, uint8_t ring_order, uint32_t ring, uint32_t fence,
                                    uint32_t reply)
     : sub_api_(static_cast<uint32_t>(sub_api)), ring_order_(ring_order), ring_(ring), fence_(fence),
-      reply_(reply) {}
+      reply_(reply)
+      {
+          AV_SCOPE("RvkContextRecord::RvkContextRecord");
+      }
 
-SubApi   RvkContextRecord::sub_api() const { return static_cast<SubApi>(sub_api_); }
-uint8_t  RvkContextRecord::ring_order() const { return ring_order_; }
-uint32_t RvkContextRecord::ring() const { return ring_; }
-uint32_t RvkContextRecord::fence() const { return fence_; }
-uint32_t RvkContextRecord::reply() const { return reply_; }
+SubApi   RvkContextRecord::sub_api() const
+{
+    AV_SCOPE("RvkContextRecord::sub_api");
+    return static_cast<SubApi>(sub_api_);
+}
+uint8_t  RvkContextRecord::ring_order() const
+{
+    AV_SCOPE("RvkContextRecord::ring_order");
+    return ring_order_;
+}
+uint32_t RvkContextRecord::ring() const
+{
+    AV_SCOPE("RvkContextRecord::ring");
+    return ring_;
+}
+uint32_t RvkContextRecord::fence() const
+{
+    AV_SCOPE("RvkContextRecord::fence");
+    return fence_;
+}
+uint32_t RvkContextRecord::reply() const
+{
+    AV_SCOPE("RvkContextRecord::reply");
+    return reply_;
+}
 
 Status RvkContextRecord::encode(uint8_t *bytes, size_t capacity) const
 {
+    AV_SCOPE("RvkContextRecord::encode");
     WireWriter writer(bytes, capacity);
     writer.write_u32(magic);
     writer.write_u32(sub_api_);
@@ -35,6 +63,7 @@ Status RvkContextRecord::encode(uint8_t *bytes, size_t capacity) const
 
 bool RvkContextRecord::fields_valid() const
 {
+    AV_SCOPE("RvkContextRecord::fields_valid");
     const bool one_known_api = sub_api_ == static_cast<uint32_t>(SubApi::vulkan) ||
                                sub_api_ == static_cast<uint32_t>(SubApi::opengl) ||
                                sub_api_ == static_cast<uint32_t>(SubApi::opencl);
@@ -46,6 +75,7 @@ bool RvkContextRecord::fields_valid() const
 
 Status RvkContextRecord::decode(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("RvkContextRecord::decode");
     WireReader reader(bytes, length);
     const uint32_t found_magic = reader.read_u32();
     RvkContextRecord candidate;

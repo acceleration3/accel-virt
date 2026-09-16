@@ -6,6 +6,7 @@
 #include "core/ddi/d3dkmdt_staging_surface_data_record.hpp"
 #include "core/ddi/dxgkarg_get_standard_allocation_driver_data_record.hpp"
 #include "core/memory/pixel_format.hpp"
+#include "core/trace/function_scope.hpp"
 #include "proto/resources/allocation_descriptor.hpp"
 
 namespace av {
@@ -17,11 +18,15 @@ constexpr uint64_t max_u32 = 0xFFFFFFFFull;
 }  // namespace
 
 StandardAllocation::StandardAllocation(Platform &platform, DxgkargGetStandardAllocationDriverDataRecord &request)
-    : platform_(platform), request_(request) {}
+    : platform_(platform), request_(request)
+    {
+        AV_SCOPE("StandardAllocation::StandardAllocation");
+    }
 
 /* basicrender.sys refuses a surface whose pitch or size does not fit 32 bits. */
 Status StandardAllocation::layout_of(uint32_t width, uint32_t height, uint32_t format, SurfaceLayout &layout) const
 {
+    AV_SCOPE("StandardAllocation::layout_of");
     const uint64_t pitch = uint64_t{width} * PixelFormat(format).bytes_per_pixel();
     const uint64_t bytes = pitch * height;
     if (pitch == 0u || height == 0u || pitch > max_u32 || bytes > max_u32) return Status::invalid_parameter;
@@ -31,6 +36,7 @@ Status StandardAllocation::layout_of(uint32_t width, uint32_t height, uint32_t f
 
 Status StandardAllocation::describe_shared_primary(AllocationDescriptor &descriptor) const
 {
+    AV_SCOPE("StandardAllocation::describe_shared_primary");
     const auto &surface = *static_cast<const D3dkmdtSharedPrimarySurfaceDataRecord *>(request_.pCreateSurfaceData);
     SurfaceLayout layout;
     const Status status = layout_of(surface.Width, surface.Height, static_cast<uint32_t>(surface.Format), layout);
@@ -43,6 +49,7 @@ Status StandardAllocation::describe_shared_primary(AllocationDescriptor &descrip
 
 Status StandardAllocation::describe_shadow(AllocationDescriptor &descriptor) const
 {
+    AV_SCOPE("StandardAllocation::describe_shadow");
     auto &surface = *static_cast<D3dkmdtShadowSurfaceDataRecord *>(request_.pCreateSurfaceData);
     SurfaceLayout layout;
     const Status status = layout_of(surface.Width, surface.Height, static_cast<uint32_t>(surface.Format), layout);
@@ -54,6 +61,7 @@ Status StandardAllocation::describe_shadow(AllocationDescriptor &descriptor) con
 
 Status StandardAllocation::describe_staging(AllocationDescriptor &descriptor) const
 {
+    AV_SCOPE("StandardAllocation::describe_staging");
     auto &surface = *static_cast<D3dkmdtStagingSurfaceDataRecord *>(request_.pCreateSurfaceData);
     SurfaceLayout layout;
     const Status status = layout_of(surface.Width, surface.Height, staging_format, layout);
@@ -65,6 +73,7 @@ Status StandardAllocation::describe_staging(AllocationDescriptor &descriptor) co
 
 Status StandardAllocation::describe_gdi(AllocationDescriptor &descriptor) const
 {
+    AV_SCOPE("StandardAllocation::describe_gdi");
     auto &surface = *static_cast<D3dkmdtGdiSurfaceDataRecord *>(request_.pCreateSurfaceData);
     const bool texture = surface.Type == gdi_texture || surface.Type == gdi_texture_cpu_visible;
     const bool staging_surface = surface.Type == gdi_staging || surface.Type == gdi_staging_cpu_visible;
@@ -80,6 +89,7 @@ Status StandardAllocation::describe_gdi(AllocationDescriptor &descriptor) const
 
 Status StandardAllocation::describe()
 {
+    AV_SCOPE("StandardAllocation::describe");
     platform_.require_irql_at_most(Irql::passive, "StandardAllocation::describe");
     request_.AllocationPrivateDriverDataSize = AllocationDescriptor::encoded_size;
     request_.ResourcePrivateDriverDataSize = 0u;

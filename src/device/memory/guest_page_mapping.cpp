@@ -1,5 +1,6 @@
 #include "device/memory/guest_page_mapping.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/control/control_request.hpp"
 #include "device/memory/blob_window.hpp"
 #include "device/host/host.hpp"
@@ -8,12 +9,20 @@
 namespace av {
 
 GuestPageMapping::GuestPageMapping(Host &host)
-    : host_(host), pointers_(nullptr), lengths_(nullptr), capacity_(0u), count_(0u), length_(0u) {}
+    : host_(host), pointers_(nullptr), lengths_(nullptr), capacity_(0u), count_(0u), length_(0u)
+    {
+        AV_SCOPE("GuestPageMapping::GuestPageMapping");
+    }
 
-GuestPageMapping::~GuestPageMapping() { release(); }
+GuestPageMapping::~GuestPageMapping()
+{
+    AV_SCOPE("GuestPageMapping::~GuestPageMapping");
+    release();
+}
 
 Status GuestPageMapping::map(ControlRequest &request, size_t offset, uint32_t entries)
 {
+    AV_SCOPE("GuestPageMapping::map");
     host_.require_main_loop("GuestPageMapping::map");
     if (pointers_ != nullptr) return Status::invalid_state;
     if (entries == 0u || entries > max_entries) return Status::invalid_parameter;
@@ -32,6 +41,7 @@ Status GuestPageMapping::map(ControlRequest &request, size_t offset, uint32_t en
 
 Status GuestPageMapping::map_entry(uint64_t address, uint64_t length)
 {
+    AV_SCOPE("GuestPageMapping::map_entry");
     if (length == 0u || address + length < address) return Status::invalid_parameter;
     while (length != 0u) {
         uint64_t mapped = length;
@@ -53,6 +63,7 @@ Status GuestPageMapping::map_entry(uint64_t address, uint64_t length)
  * lengths; the old block is released. */
 Status GuestPageMapping::reserve(uint32_t capacity)
 {
+    AV_SCOPE("GuestPageMapping::reserve");
     void *const block = host_.allocate(capacity * (sizeof(void *) + sizeof(uint64_t)));
     if (block == nullptr) return Status::no_memory;
     auto *const pointers = static_cast<void **>(block);
@@ -71,6 +82,7 @@ Status GuestPageMapping::reserve(uint32_t capacity)
 /* An entry that crosses region boundaries needs more extents than entries. */
 Status GuestPageMapping::add_extent(void *pointer, uint64_t length)
 {
+    AV_SCOPE("GuestPageMapping::add_extent");
     const Status status = count_ < capacity_ ? Status::ok : reserve(capacity_ * 2u);
     if (status != Status::ok) return status;
     pointers_[count_] = pointer;
@@ -82,6 +94,7 @@ Status GuestPageMapping::add_extent(void *pointer, uint64_t length)
 
 void GuestPageMapping::release()
 {
+    AV_SCOPE("GuestPageMapping::release");
     host_.require_main_loop("GuestPageMapping::release");
     for (uint32_t index = 0u; index < count_; index++) host_.unmap_guest(pointers_[index], lengths_[index]);
     if (pointers_ != nullptr) host_.release(pointers_);
@@ -94,22 +107,26 @@ void GuestPageMapping::release()
 
 uint64_t GuestPageMapping::length() const
 {
+    AV_SCOPE("GuestPageMapping::length");
     return length_;
 }
 
 uint32_t GuestPageMapping::extents() const
 {
+    AV_SCOPE("GuestPageMapping::extents");
     return count_;
 }
 
 BlobWindow GuestPageMapping::window() const
 {
+    AV_SCOPE("GuestPageMapping::window");
     return BlobWindow(pointers_, lengths_, count_, length_);
 }
 
 /* The length is the extents' sum; nothing is held without a table. */
 bool GuestPageMapping::invariants_hold() const
 {
+    AV_SCOPE("GuestPageMapping::invariants_hold");
     if (count_ > capacity_ || (pointers_ != nullptr) != (capacity_ != 0u)) return false;
     uint64_t sum = 0u;
     for (uint32_t index = 0u; index < count_; index++) sum += lengths_[index];

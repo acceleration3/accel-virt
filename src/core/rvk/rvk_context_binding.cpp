@@ -1,5 +1,6 @@
 #include "core/rvk/rvk_context_binding.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "proto/context/capset_info.hpp"
 #include "proto/context/context_setup.hpp"
@@ -15,10 +16,14 @@ RvkContextBinding::RvkContextBinding(Platform &platform, RegisterWindow &doorbel
                                      size_t capacity)
     : context_(platform, doorbells), record_(record), context_id_(slot + 1u), doorbell_(slot),
       first_resource_id_(first_resource_id + resources_per_context * slot), request_(request), capacity_(capacity),
-      answer_{} {}
+      answer_{}
+      {
+          AV_SCOPE("RvkContextBinding::RvkContextBinding");
+      }
 
 Status RvkContextBinding::set_up(VirtioGpuDevice &device, const CapsetInfo &capset, const ContextPages &pages)
 {
+    AV_SCOPE("RvkContextBinding::set_up");
     const ContextSetup setup(capset.version(), record_.sub_api(), first_resource_id_, record_.ring_order(),
                              first_resource_id_ + 1u, doorbell_, first_resource_id_ + 2u);
     const Status begun = context_.set_up(capset, context_id_, setup, pages);
@@ -29,6 +34,7 @@ Status RvkContextBinding::set_up(VirtioGpuDevice &device, const CapsetInfo &caps
 
 Status RvkContextBinding::tear_down(VirtioGpuDevice &device)
 {
+    AV_SCOPE("RvkContextBinding::tear_down");
     const Status begun = context_.tear_down();
     if (begun != Status::ok) return begun;
     run_sequence(device);
@@ -37,6 +43,7 @@ Status RvkContextBinding::tear_down(VirtioGpuDevice &device)
 
 void RvkContextBinding::abandon()
 {
+    AV_SCOPE("RvkContextBinding::abandon");
     context_.abandon();
     /* Abandoned, the context is torn down, which release always accepts. */
     static_cast<void>(context_.release());
@@ -44,16 +51,22 @@ void RvkContextBinding::abandon()
 
 Status RvkContextBinding::submit(const SubmissionDescriptor &submission)
 {
+    AV_SCOPE("RvkContextBinding::submit");
     return context_.submit(submission);
 }
 
-Status RvkContextBinding::serve() { return context_.serve(); }
+Status RvkContextBinding::serve()
+{
+    AV_SCOPE("RvkContextBinding::serve");
+    return context_.serve();
+}
 
 /* Carries the sequence's requests to the device and its answers back, one at a
  * time, until the sequence has no more; a device that stops answering ends it,
  * and the context's state says whether it established or failed. */
 void RvkContextBinding::run_sequence(VirtioGpuDevice &device)
 {
+    AV_SCOPE("RvkContextBinding::run_sequence");
     for (;;) {
         size_t       length = 0u;
         const Status next = context_.next_request(request_, capacity_, length);
@@ -67,11 +80,13 @@ void RvkContextBinding::run_sequence(VirtioGpuDevice &device)
 
 uint32_t RvkContextBinding::chunk_resource(uint32_t index) const
 {
+    AV_SCOPE("RvkContextBinding::chunk_resource");
     return ContextResources(first_resource_id_).chunk(index);
 }
 
 Status RvkContextBinding::publish_chunk(VirtioGpuDevice &device, uint32_t resource_id, const GuestPageList &pages)
 {
+    AV_SCOPE("RvkContextBinding::publish_chunk");
     RvkRequestWriter writer(request_, capacity_);
     const Status     written = writer.guest_blob_pages(resource_id, pages);
     if (written != Status::ok) return written;
@@ -85,18 +100,43 @@ Status RvkContextBinding::publish_chunk(VirtioGpuDevice &device, uint32_t resour
 
 void RvkContextBinding::release_chunk(VirtioGpuDevice &device, uint32_t resource_id)
 {
+    AV_SCOPE("RvkContextBinding::release_chunk");
     RvkRequestWriter writer(request_, capacity_);
     if (writer.unref(resource_id) != Status::ok) return;
     uint32_t answered = 0u;
     static_cast<void>(device.ask_control(request_, writer.length(), answer_, sizeof answer_, answered));
 }
 
-GuestContext::State RvkContextBinding::state() const { return context_.state(); }
-bool                RvkContextBinding::established() const { return context_.state() == GuestContext::State::established; }
-uint32_t            RvkContextBinding::context_id() const { return context_id_; }
-uint64_t            RvkContextBinding::completed() const { return context_.completed(); }
-bool                RvkContextBinding::faulted() const { return context_.faulted(); }
+GuestContext::State RvkContextBinding::state() const
+{
+    AV_SCOPE("RvkContextBinding::state");
+    return context_.state();
+}
+bool                RvkContextBinding::established() const
+{
+    AV_SCOPE("RvkContextBinding::established");
+    return context_.state() == GuestContext::State::established;
+}
+uint32_t            RvkContextBinding::context_id() const
+{
+    AV_SCOPE("RvkContextBinding::context_id");
+    return context_id_;
+}
+uint64_t            RvkContextBinding::completed() const
+{
+    AV_SCOPE("RvkContextBinding::completed");
+    return context_.completed();
+}
+bool                RvkContextBinding::faulted() const
+{
+    AV_SCOPE("RvkContextBinding::faulted");
+    return context_.faulted();
+}
 
-bool RvkContextBinding::invariants_hold() const { return context_.invariants_hold(); }
+bool RvkContextBinding::invariants_hold() const
+{
+    AV_SCOPE("RvkContextBinding::invariants_hold");
+    return context_.invariants_hold();
+}
 
 }  // namespace av

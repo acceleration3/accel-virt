@@ -1,5 +1,6 @@
 #include "guest/transport/blob_import.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/client_transport.hpp"
 #include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/blob_import_request.hpp"
@@ -10,10 +11,14 @@
 
 namespace av {
 
-BlobImport::BlobImport(ClientTransport &transport) : transport_(transport), memory_(0u), host_status_(0u) {}
+BlobImport::BlobImport(ClientTransport &transport) : transport_(transport), memory_(0u), host_status_(0u)
+{
+    AV_SCOPE("BlobImport::BlobImport");
+}
 
 Status BlobImport::import(uint32_t resource_id, uint64_t offset, uint64_t size, uint32_t memory_type)
 {
+    AV_SCOPE("BlobImport::import");
     if (memory_ != 0u) return Status::invalid_state;
     uint8_t body[BlobImportRequest::encoded_size] = {};
     static_cast<void>(BlobImportRequest(resource_id, offset, size, memory_type).encode(body, sizeof body));
@@ -30,6 +35,7 @@ Status BlobImport::import(uint32_t resource_id, uint64_t offset, uint64_t size, 
  * whose leading bytes would decode. */
 Status BlobImport::judge(WireReader &answer)
 {
+    AV_SCOPE("BlobImport::judge");
     const size_t length = answer.remaining();
     if (length == 0u) return Status::not_supported;
     if (length != BlobImportAnswer::encoded_size) return Status::malformed;
@@ -44,6 +50,7 @@ Status BlobImport::judge(WireReader &answer)
 
 Status BlobImport::release()
 {
+    AV_SCOPE("BlobImport::release");
     if (memory_ == 0u) return Status::ok;
     WireWriter request = transport_.request_writer();
     request.write_u64(memory_);
@@ -55,10 +62,22 @@ Status BlobImport::release()
     return answer.remaining() == 0u ? Status::ok : Status::malformed;
 }
 
-uint64_t BlobImport::memory() const { return memory_; }
-uint32_t BlobImport::host_status() const { return host_status_; }
+uint64_t BlobImport::memory() const
+{
+    AV_SCOPE("BlobImport::memory");
+    return memory_;
+}
+uint32_t BlobImport::host_status() const
+{
+    AV_SCOPE("BlobImport::host_status");
+    return host_status_;
+}
 
 /* The host either took the import or refused it, never both. */
-bool BlobImport::invariants_hold() const { return memory_ == 0u || host_status_ == 0u; }
+bool BlobImport::invariants_hold() const
+{
+    AV_SCOPE("BlobImport::invariants_hold");
+    return memory_ == 0u || host_status_ == 0u;
+}
 
 }  // namespace av

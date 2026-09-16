@@ -1,5 +1,7 @@
 #include "um/vulkan/file_log.hpp"
 
+#include "core/trace/function_scope.hpp"
+
 #include <windows.h>
 
 namespace av {
@@ -15,15 +17,20 @@ constexpr size_t line_bytes = 256u;
 
 }  // namespace
 
-FileLog::FileLog() : file_(INVALID_HANDLE_VALUE) {}
+FileLog::FileLog() : file_(INVALID_HANDLE_VALUE)
+{
+    AV_SCOPE("FileLog::FileLog");
+}
 
 FileLog::~FileLog()
 {
+    AV_SCOPE("FileLog::~FileLog");
     if (file_ != INVALID_HANDLE_VALUE) CloseHandle(file_);
 }
 
 void FileLog::open()
 {
+    AV_SCOPE("FileLog::open");
     wchar_t path[path_chars] = {};
     size_t  length = 0u;
     for (const wchar_t *text = prefix; *text != L'\0'; text++) path[length++] = *text;
@@ -41,6 +48,7 @@ void FileLog::open()
 
 void FileLog::write(const char *line)
 {
+    AV_SCOPE("FileLog::write");
     if (file_ == INVALID_HANDLE_VALUE) return;
     char   bytes[line_bytes] = {};
     size_t length = 0u;

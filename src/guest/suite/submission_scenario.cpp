@@ -1,5 +1,6 @@
 #include "guest/suite/submission_scenario.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/suite/adapter_search.hpp"
 #include "guest/suite/client_descriptor.hpp"
 #include "guest/suite/guest_session.hpp"
@@ -16,10 +17,14 @@ constexpr uint64_t command_bytes = 64u;
 }  // namespace
 
 SubmissionScenario::SubmissionScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
-    : kmt_(kmt), search_(search), steps_(kmt, report, "submission") {}
+    : kmt_(kmt), search_(search), steps_(kmt, report, "submission")
+    {
+        AV_SCOPE("SubmissionScenario::SubmissionScenario");
+    }
 
 void SubmissionScenario::run()
 {
+    AV_SCOPE("SubmissionScenario::run");
     if (steps_.check("adapter", search_.found() ? Status::ok : Status::not_found) != Status::ok) return;
     GuestSession           session(kmt_, search_.adapter());
     const ClientDescriptor descriptor(command_buffer_bytes);

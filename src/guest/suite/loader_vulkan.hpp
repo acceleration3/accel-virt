@@ -8,6 +8,7 @@
 #ifndef AV_LOADER_VULKAN_HPP
 #define AV_LOADER_VULKAN_HPP
 
+#include "core/trace/function_scope.hpp"
 #include "guest/suite/vulkan_entry.hpp"
 
 #include <stdint.h>
@@ -173,6 +174,7 @@ private:
 template <typename Pointer>
 Pointer LoaderVulkan::resolved(Function function) const
 {
+    AV_SCOPE("LoaderVulkan::resolved");
     return reinterpret_cast<Pointer>(functions_[static_cast<uint32_t>(function)]);
 }
 

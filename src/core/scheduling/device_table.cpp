@@ -11,15 +11,20 @@
 #include "core/platform/mutex_guard.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 
 namespace av {
 
 DeviceTable::DeviceTable(Platform &platform, AllocationTable &allocations, DxgkrnlInterface &dxgkrnl)
     : platform_(platform), allocations_(allocations), dxgkrnl_(dxgkrnl), mutex_(platform, LockRank::device_table),
-      devices_(platform), opens_(platform) {}
+      devices_(platform), opens_(platform)
+      {
+          AV_SCOPE("DeviceTable::DeviceTable");
+      }
 
 Status DeviceTable::create(Adapter &adapter, DxgkargCreateDeviceRecord &request)
 {
+    AV_SCOPE("DeviceTable::create");
     platform_.require_irql_at_most(Irql::passive, "DeviceTable::create");
     MutexGuard lock(mutex_);
     InvariantScope<DeviceTable> guard(platform_, *this, "create");
@@ -31,6 +36,7 @@ Status DeviceTable::create(Adapter &adapter, DxgkargCreateDeviceRecord &request)
 
 Status DeviceTable::destroy(void *device)
 {
+    AV_SCOPE("DeviceTable::destroy");
     platform_.require_irql_at_most(Irql::passive, "DeviceTable::destroy");
     MutexGuard lock(mutex_);
     InvariantScope<DeviceTable> guard(platform_, *this, "destroy");
@@ -50,6 +56,7 @@ Status DeviceTable::destroy(void *device)
  * hDeviceSpecificAllocation holds it until the open replaces it. */
 Status DeviceTable::resolve(DxgkargOpenAllocationRecord &request)
 {
+    AV_SCOPE("DeviceTable::resolve");
     for (uint32_t index = 0u; index < request.NumAllocations; index++) {
         DxgkOpenAllocationInfoRecord &info = request.pOpenAllocation[index];
         AcquiredHandleData acquired(dxgkrnl_, info.hAllocation);
@@ -62,6 +69,7 @@ Status DeviceTable::resolve(DxgkargOpenAllocationRecord &request)
 
 Status DeviceTable::open_one(Device &device, DxgkOpenAllocationInfoRecord &info)
 {
+    AV_SCOPE("DeviceTable::open_one");
     Allocation *allocation = allocations_.find(info.hDeviceSpecificAllocation);
     info.hDeviceSpecificAllocation = nullptr;
     if (allocation == nullptr) return Status::invalid_parameter;
@@ -76,6 +84,7 @@ Status DeviceTable::open_one(Device &device, DxgkOpenAllocationInfoRecord &info)
  * handle data, which is not an answer either. */
 void DeviceTable::close_opened(DxgkargOpenAllocationRecord &request, uint32_t count)
 {
+    AV_SCOPE("DeviceTable::close_opened");
     for (uint32_t index = 0u; index < request.NumAllocations; index++) {
         DxgkOpenAllocationInfoRecord &info = request.pOpenAllocation[index];
         auto *open = static_cast<DeviceAllocation *>(info.hDeviceSpecificAllocation);
@@ -89,6 +98,7 @@ void DeviceTable::close_opened(DxgkargOpenAllocationRecord &request, uint32_t co
 
 Status DeviceTable::open(void *device, DxgkargOpenAllocationRecord &request)
 {
+    AV_SCOPE("DeviceTable::open");
     platform_.require_irql_at_most(Irql::passive, "DeviceTable::open");
     if (request.NumAllocations == 0u || request.NumAllocations > AllocationTable::max_per_call ||
         request.pOpenAllocation == nullptr)
@@ -114,6 +124,7 @@ Status DeviceTable::open(void *device, DxgkargOpenAllocationRecord &request)
 
 Status DeviceTable::close(void *device, const DxgkargCloseAllocationRecord &request)
 {
+    AV_SCOPE("DeviceTable::close");
     platform_.require_irql_at_most(Irql::passive, "DeviceTable::close");
     MutexGuard lock(mutex_);
     InvariantScope<DeviceTable> guard(platform_, *this, "close");
@@ -136,17 +147,27 @@ Status DeviceTable::close(void *device, const DxgkargCloseAllocationRecord &requ
 
 Device *DeviceTable::find(void *device)
 {
+    AV_SCOPE("DeviceTable::find");
     platform_.require_irql_at_most(Irql::apc, "DeviceTable::find");
     MutexGuard lock(mutex_);
     return devices_.find(device);
 }
 
-uint32_t DeviceTable::devices() const { return devices_.live(); }
-uint32_t DeviceTable::opens() const { return opens_.live(); }
+uint32_t DeviceTable::devices() const
+{
+    AV_SCOPE("DeviceTable::devices");
+    return devices_.live();
+}
+uint32_t DeviceTable::opens() const
+{
+    AV_SCOPE("DeviceTable::opens");
+    return opens_.live();
+}
 
 /* Every open joins a live device to an allocation that counts it. */
 bool DeviceTable::invariants_hold() const
 {
+    AV_SCOPE("DeviceTable::invariants_hold");
     const bool pools = devices_.invariants_hold() && opens_.invariants_hold();
     return pools && opens_.all_of([this](const DeviceAllocation &open) {
                return devices_.find(&open.device()) != nullptr && open.allocation().opens() != 0u;

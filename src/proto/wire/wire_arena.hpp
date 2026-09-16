@@ -13,6 +13,8 @@
 #ifndef AV_WIRE_ARENA_HPP
 #define AV_WIRE_ARENA_HPP
 
+#include "core/trace/function_scope.hpp"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -31,6 +33,7 @@ public:
     template <typename T>
     T *allocate(size_t count = 1u)
     {
+        AV_SCOPE("WireArena::allocate");
         return static_cast<T *>(claim(count, sizeof(T), alignof(T)));
     }
     /* The generated decoders name characters separately. */

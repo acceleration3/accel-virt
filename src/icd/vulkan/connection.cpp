@@ -2,6 +2,7 @@
 
 #include "core/platform/block_source.hpp"
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
@@ -13,12 +14,20 @@ namespace av::icd {
 
 Connection::Connection(Kmt &kmt, BlockSource &memory, ThreadLock &lock)
     : kmt_(kmt), memory_(memory), lock_(lock), search_(kmt), connection_(kmt), staging_(nullptr), transport_(),
-      locked_(), luid_(0u) {}
+      locked_(), luid_(0u)
+      {
+          AV_SCOPE("Connection::Connection");
+      }
 
-Connection::~Connection() { close(); }
+Connection::~Connection()
+{
+    AV_SCOPE("Connection::~Connection");
+    close();
+}
 
 Status Connection::open()
 {
+    AV_SCOPE("Connection::open");
     if (opened()) return Status::invalid_state;
     ScopeExit undo([&] { close(); });
     const PciIdentity rvkgpu(AdapterScenario::virtio_vendor, AdapterScenario::virtio_gpu_device,
@@ -40,6 +49,7 @@ Status Connection::open()
 
 void Connection::close()
 {
+    AV_SCOPE("Connection::close");
     locked_.destroy();
     transport_.destroy();
     if (staging_ != nullptr) memory_.release(staging_);
@@ -50,14 +60,35 @@ void Connection::close()
     luid_ = 0u;
 }
 
-bool             Connection::opened() const { return locked_.constructed(); }
-bool             Connection::faulted() const { return opened() && transport_.object().faulted(); }
-uint32_t         Connection::adapter() const { return opened() ? connection_.adapter() : 0u; }
-uint64_t         Connection::luid() const { return luid_; }
-ClientTransport &Connection::transport() { return locked_.object(); }
+bool             Connection::opened() const
+{
+    AV_SCOPE("Connection::opened");
+    return locked_.constructed();
+}
+bool             Connection::faulted() const
+{
+    AV_SCOPE("Connection::faulted");
+    return opened() && transport_.object().faulted();
+}
+uint32_t         Connection::adapter() const
+{
+    AV_SCOPE("Connection::adapter");
+    return opened() ? connection_.adapter() : 0u;
+}
+uint64_t         Connection::luid() const
+{
+    AV_SCOPE("Connection::luid");
+    return luid_;
+}
+ClientTransport &Connection::transport()
+{
+    AV_SCOPE("Connection::transport");
+    return locked_.object();
+}
 
 TransportResult Connection::send_batch(const uint8_t *framed, size_t length)
 {
+    AV_SCOPE("Connection::send_batch");
     lock_.acquire();
     ScopeExit  release([&] { lock_.release(); });
     WireReader unanswered(nullptr, 0u);
@@ -66,6 +97,7 @@ TransportResult Connection::send_batch(const uint8_t *framed, size_t length)
 
 Status Connection::open_chunk(ObjectStorage<HostVisibleChunk> &chunk, uint64_t bytes)
 {
+    AV_SCOPE("Connection::open_chunk");
     if (!opened() || faulted() || chunk.constructed()) return Status::invalid_state;
     lock_.acquire();
     ScopeExit release([&] { lock_.release(); });
@@ -82,6 +114,7 @@ Status Connection::open_chunk(ObjectStorage<HostVisibleChunk> &chunk, uint64_t b
 
 Status Connection::close_chunk(ObjectStorage<HostVisibleChunk> &chunk)
 {
+    AV_SCOPE("Connection::close_chunk");
     if (!chunk.constructed()) return Status::ok;
     lock_.acquire();
     ScopeExit    release([&] { lock_.release(); });
@@ -92,6 +125,7 @@ Status Connection::close_chunk(ObjectStorage<HostVisibleChunk> &chunk)
 
 bool Connection::invariants_hold() const
 {
+    AV_SCOPE("Connection::invariants_hold");
     if (!connection_.invariants_hold()) return false;
     if (!opened()) return !transport_.constructed() && staging_ == nullptr && !connection_.opened() && !search_.found();
     if (!transport_.constructed() || !transport_.object().invariants_hold()) return false;

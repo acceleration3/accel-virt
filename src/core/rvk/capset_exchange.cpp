@@ -1,15 +1,20 @@
 #include "core/rvk/capset_exchange.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "proto/context/capset_info.hpp"
 
 namespace av {
 
 CapsetExchange::CapsetExchange(Platform &platform, VirtioGpuDevice &device)
-    : platform_(platform), device_(device), query_(platform), request_{}, answer_{} {}
+    : platform_(platform), device_(device), query_(platform), request_{}, answer_{}
+    {
+        AV_SCOPE("CapsetExchange::CapsetExchange");
+    }
 
 Status CapsetExchange::read(CapsetInfo &capset)
 {
+    AV_SCOPE("CapsetExchange::read");
     platform_.require_irql_at_most(Irql::passive, "CapsetExchange::read");
     while (!query_.complete()) {
         size_t       length = 0u;

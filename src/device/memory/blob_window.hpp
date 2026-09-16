@@ -6,6 +6,7 @@
 #define AV_BLOB_WINDOW_HPP
 
 #include "core/support/status.hpp"
+#include "core/trace/function_scope.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -48,6 +49,7 @@ private:
 template <typename Copy>
 void BlobWindow::walk(uint64_t offset, size_t count, Copy copy) const
 {
+    AV_SCOPE("BlobWindow::walk");
     size_t done = 0u;
     for (uint32_t extent = 0u; done < count; extent++) {
         if (offset >= lengths_[extent]) {

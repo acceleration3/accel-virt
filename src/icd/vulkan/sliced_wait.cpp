@@ -1,5 +1,7 @@
 #include "icd/vulkan/sliced_wait.hpp"
 
+#include "core/trace/function_scope.hpp"
+
 namespace av::icd {
 
 namespace {
@@ -10,10 +12,14 @@ constexpr uint64_t saturated = ~uint64_t{0};
 }  // namespace
 
 SlicedWait::SlicedWait(uint64_t timeout, uint64_t now, uint64_t frequency)
-    : timeout_(timeout), start_(now), frequency_(frequency), slice_(0u), asked_(false) {}
+    : timeout_(timeout), start_(now), frequency_(frequency), slice_(0u), asked_(false)
+    {
+        AV_SCOPE("SlicedWait::SlicedWait");
+    }
 
 bool SlicedWait::next(uint64_t now, uint64_t &slice)
 {
+    AV_SCOPE("SlicedWait::next");
     uint64_t remaining = timeout_;
     if (asked_ && timeout_ != forever) {
         if (frequency_ == 0u) return false;
@@ -29,6 +35,7 @@ bool SlicedWait::next(uint64_t now, uint64_t &slice)
 
 uint64_t SlicedWait::elapsed_ns(uint64_t now) const
 {
+    AV_SCOPE("SlicedWait::elapsed_ns");
     const uint64_t ticks = now > start_ ? now - start_ : 0u;
     uint64_t       whole = 0u;
     uint64_t       part = 0u;
@@ -41,6 +48,7 @@ uint64_t SlicedWait::elapsed_ns(uint64_t now) const
 
 bool SlicedWait::invariants_hold() const
 {
+    AV_SCOPE("SlicedWait::invariants_hold");
     if (!asked_) return slice_ == 0u;
     return slice_ <= slice_ns && slice_ <= timeout_;
 }

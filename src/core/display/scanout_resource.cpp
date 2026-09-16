@@ -4,6 +4,7 @@
 #include "core/platform/log_budget.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/support/text_buffer.hpp"
+#include "core/trace/function_scope.hpp"
 #include "core/virtio/virtio_gpu_device.hpp"
 #include "proto/resources/guest_page_list.hpp"
 #include "proto/virtio_gpu/gpu_request_writer.hpp"
@@ -13,21 +14,27 @@ namespace av {
 ScanoutResource::ScanoutResource(Platform &platform, LogBudget &budget, ObjectStorage<VirtioGpuDevice> &device,
                                  uint32_t source)
     : platform_(platform), budget_(budget), device_(device), source_(source), width_(0u), height_(0u),
-      attached_address_(0u), reported_address_(0u), reported_(false), backing_request_(nullptr), backing_request_bytes_(0u), created_(false), scanning_out_(false) {}
+      attached_address_(0u), reported_address_(0u), reported_(false), backing_request_(nullptr), backing_request_bytes_(0u), created_(false), scanning_out_(false)
+      {
+          AV_SCOPE("ScanoutResource::ScanoutResource");
+      }
 
 ScanoutResource::~ScanoutResource()
 {
+    AV_SCOPE("ScanoutResource::~ScanoutResource");
     if (backing_request_ != nullptr) platform_.release(backing_request_);
 }
 
 bool ScanoutResource::needs_pages(uint64_t address) const
 {
+    AV_SCOPE("ScanoutResource::needs_pages");
     platform_.require_irql_at_most(Irql::dispatch, "ScanoutResource::needs_pages");
     return created_ && address != 0u && address != attached_address_ && device_.constructed();
 }
 
 uint32_t ScanoutResource::page_count() const
 {
+    AV_SCOPE("ScanoutResource::page_count");
     platform_.require_irql_at_most(Irql::dispatch, "ScanoutResource::page_count");
     const uint64_t bytes = uint64_t{width_} * height_ * bytes_per_pixel;
     return static_cast<uint32_t>((bytes + GuestPageList::page_bytes - 1u) / GuestPageList::page_bytes);
@@ -35,6 +42,7 @@ uint32_t ScanoutResource::page_count() const
 
 Status ScanoutResource::reserve()
 {
+    AV_SCOPE("ScanoutResource::reserve");
     const size_t needed = GpuRequestWriter::backing_header_size +
                           size_t{page_count()} * GpuRequestWriter::memory_entry_size;
     if (needed <= backing_request_bytes_) return Status::ok;
@@ -49,6 +57,7 @@ Status ScanoutResource::reserve()
  * refuse, and that answer is returned. */
 Status ScanoutResource::create(VirtioGpuDevice &device)
 {
+    AV_SCOPE("ScanoutResource::create");
     uint8_t          bytes[GpuRequestWriter::max_request_size] = {};
     GpuRequestWriter writer(bytes, sizeof bytes);
     static_cast<void>(writer.create_2d(first_resource_id + source_, GpuRequestWriter::format_b8g8r8a8, width_,
@@ -60,6 +69,7 @@ Status ScanoutResource::create(VirtioGpuDevice &device)
  * could not complete is a refusal, not a buffer that was too small. */
 Status ScanoutResource::attach(VirtioGpuDevice &device, const GuestPageList &pages)
 {
+    AV_SCOPE("ScanoutResource::attach");
     GpuRequestWriter writer(backing_request_, backing_request_bytes_);
     const Status     written = writer.attach_backing_pages(first_resource_id + source_, pages);
     if (written != Status::ok) return written;
@@ -68,6 +78,7 @@ Status ScanoutResource::attach(VirtioGpuDevice &device, const GuestPageList &pag
 
 Status ScanoutResource::show(VirtioGpuDevice &device, uint32_t resource)
 {
+    AV_SCOPE("ScanoutResource::show");
     uint8_t          bytes[GpuRequestWriter::max_request_size] = {};
     GpuRequestWriter writer(bytes, sizeof bytes);
     const uint32_t   width = resource != 0u ? width_ : 0u;
@@ -80,6 +91,7 @@ Status ScanoutResource::show(VirtioGpuDevice &device, uint32_t resource)
  * resource; RESOURCE_FLUSH is what puts them on the screen. */
 Status ScanoutResource::flush(VirtioGpuDevice &device)
 {
+    AV_SCOPE("ScanoutResource::flush");
     uint8_t          bytes[GpuRequestWriter::max_request_size] = {};
     GpuRequestWriter writer(bytes, sizeof bytes);
     static_cast<void>(writer.transfer_to_host_2d(first_resource_id + source_, width_, height_));
@@ -91,6 +103,7 @@ Status ScanoutResource::flush(VirtioGpuDevice &device)
 
 Status ScanoutResource::unref()
 {
+    AV_SCOPE("ScanoutResource::unref");
     if (!device_.constructed()) return Status::invalid_state;
     VirtioGpuDevice &device = device_.object();
     if (scanning_out_) {
@@ -111,6 +124,7 @@ Status ScanoutResource::unref()
 
 void ScanoutResource::release()
 {
+    AV_SCOPE("ScanoutResource::release");
     platform_.require_irql_at_most(Irql::passive, "ScanoutResource::release");
     InvariantScope<ScanoutResource> guard(platform_, *this, "release");
     if (created_) static_cast<void>(unref());
@@ -118,6 +132,7 @@ void ScanoutResource::release()
 
 Status ScanoutResource::configure(const DisplayMode &mode)
 {
+    AV_SCOPE("ScanoutResource::configure");
     platform_.require_irql_at_most(Irql::passive, "ScanoutResource::configure");
     InvariantScope<ScanoutResource> guard(platform_, *this, "configure");
     if (!device_.constructed()) return Status::invalid_state;
@@ -144,6 +159,7 @@ Status ScanoutResource::configure(const DisplayMode &mode)
 
 Status ScanoutResource::disable()
 {
+    AV_SCOPE("ScanoutResource::disable");
     platform_.require_irql_at_most(Irql::passive, "ScanoutResource::disable");
     InvariantScope<ScanoutResource> guard(platform_, *this, "disable");
     if (!scanning_out_) return Status::ok;
@@ -155,6 +171,7 @@ Status ScanoutResource::disable()
 
 void ScanoutResource::report(uint64_t address, const GuestPageList &pages, Status status)
 {
+    AV_SCOPE("ScanoutResource::report");
     if (status == Status::ok && pages.count() == page_count()) return;
     if (reported_ && address == reported_address_) return;
     reported_address_ = address;
@@ -179,12 +196,14 @@ void ScanoutResource::report(uint64_t address, const GuestPageList &pages, Statu
 
 bool ScanoutResource::invariants_hold() const
 {
+    AV_SCOPE("ScanoutResource::invariants_hold");
     const bool sized = created_ == (width_ != 0u && height_ != 0u);
     return sized && (created_ || !scanning_out_) && (scanning_out_ || attached_address_ == 0u);
 }
 
 void ScanoutResource::forget_device()
 {
+    AV_SCOPE("ScanoutResource::forget_device");
     platform_.require_irql_at_most(Irql::passive, "ScanoutResource::forget_device");
     created_ = false;
     scanning_out_ = false;
@@ -195,6 +214,7 @@ void ScanoutResource::forget_device()
 
 Status ScanoutResource::refresh(uint64_t address, const GuestPageList &pages, bool presented)
 {
+    AV_SCOPE("ScanoutResource::refresh");
     platform_.require_irql_at_most(Irql::dispatch, "ScanoutResource::refresh");
     InvariantScope<ScanoutResource> guard(platform_, *this, "refresh");
     if (!created_ || !device_.constructed()) return Status::ok;

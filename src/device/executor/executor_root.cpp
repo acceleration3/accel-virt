@@ -1,5 +1,6 @@
 #include "device/executor/executor_root.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/host_apis.hpp"
 #include "device/executor/host_gpu.hpp"
@@ -15,10 +16,14 @@ alignas(16) uint8_t decode_blocks[ExecutorRoot::sessions][DecodeArena::arena_byt
 
 }  // namespace
 
-ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, apis_(nullptr) {}
+ExecutorRoot::ExecutorRoot() : gpus_(), sessions_{}, vulkan_{}, opencl_{}, opengl_{}, apis_(nullptr)
+{
+    AV_SCOPE("ExecutorRoot::ExecutorRoot");
+}
 
 Status ExecutorRoot::initialize(HostApis &apis)
 {
+    AV_SCOPE("ExecutorRoot::initialize");
     if (apis_ != nullptr) return Status::invalid_state;
     /* A host with more GPUs than the set holds is still one this serves, with
      * the ones it kept. */
@@ -27,16 +32,22 @@ Status ExecutorRoot::initialize(HostApis &apis)
     return Status::ok;
 }
 
-uint32_t ExecutorRoot::sub_apis() const { return apis_ != nullptr ? gpus_.sub_apis() : 0u; }
+uint32_t ExecutorRoot::sub_apis() const
+{
+    AV_SCOPE("ExecutorRoot::sub_apis");
+    return apis_ != nullptr ? gpus_.sub_apis() : 0u;
+}
 
 uint32_t ExecutorRoot::import_kinds(uint32_t sub_api, const uint8_t *gpu_uuid) const
 {
+    AV_SCOPE("ExecutorRoot::import_kinds");
     const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
     return gpu != nullptr ? gpu->import_kinds(sub_api) : 0u;
 }
 
 ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid)
 {
+    AV_SCOPE("ExecutorRoot::open");
     const HostGpu *const gpu = apis_ != nullptr ? gpus_.find(gpu_uuid) : nullptr;
     if (gpu == nullptr) return nullptr;
     /* A sub-API this GPU does not run is a context the guest should never have
@@ -71,6 +82,7 @@ ContextSession *ExecutorRoot::open(uint32_t sub_api, const uint8_t *gpu_uuid)
 
 SessionBackend *ExecutorRoot::backend_in(uint32_t slot, uint32_t sub_api)
 {
+    AV_SCOPE("ExecutorRoot::backend_in");
     switch (sub_api) {
     case RVK_EXECUTOR_SUB_API_VULKAN: return &vulkan_[slot];
     case RVK_EXECUTOR_SUB_API_OPENCL: return &opencl_[slot];
@@ -81,6 +93,7 @@ SessionBackend *ExecutorRoot::backend_in(uint32_t slot, uint32_t sub_api)
 
 bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu)
 {
+    AV_SCOPE("ExecutorRoot::bind");
     switch (sub_api) {
     case RVK_EXECUTOR_SUB_API_OPENCL: return opencl_[slot].initialize(apis_->opencl_device(gpu.index()));
     case RVK_EXECUTOR_SUB_API_OPENGL: return opengl_[slot].initialize(apis_->gl_display(gpu.index()));
@@ -90,6 +103,7 @@ bool ExecutorRoot::bind(uint32_t slot, uint32_t sub_api, const HostGpu &gpu)
 
 void ExecutorRoot::close(ContextSession *session)
 {
+    AV_SCOPE("ExecutorRoot::close");
     if (!owns(session)) return;
     session->release();
     /* And the host objects the guest never destroyed. A context that dies
@@ -105,11 +119,13 @@ void ExecutorRoot::close(ContextSession *session)
 
 uint64_t ExecutorRoot::imported_handle(ContextSession *session, uint64_t blob_id)
 {
+    AV_SCOPE("ExecutorRoot::imported_handle");
     return owns(session) ? session->imported_handle(blob_id) : 0u;
 }
 
 uint32_t ExecutorRoot::live() const
 {
+    AV_SCOPE("ExecutorRoot::live");
     uint32_t running = 0u;
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         if (sessions_[slot].live()) running++;
@@ -119,6 +135,7 @@ uint32_t ExecutorRoot::live() const
 
 bool ExecutorRoot::owns(const ContextSession *session) const
 {
+    AV_SCOPE("ExecutorRoot::owns");
     for (uint32_t slot = 0u; slot < max_sessions; slot++) {
         if (&sessions_[slot] == session) return true;
     }
@@ -127,6 +144,7 @@ bool ExecutorRoot::owns(const ContextSession *session) const
 
 bool ExecutorRoot::invariants_hold() const
 {
+    AV_SCOPE("ExecutorRoot::invariants_hold");
     return gpus_.invariants_hold() && (apis_ != nullptr || gpus_.count() == 0u);
 }
 

@@ -1,5 +1,6 @@
 #include "device/capset/device_capset.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/context/device_context_table.hpp"
 #include "device/host/host.hpp"
 #include "proto/context/gpu_identity.hpp"
@@ -9,12 +10,16 @@
 
 namespace av {
 
-DeviceCapset::DeviceCapset(Host &host) : host_(host), info_(), described_(false) {}
+DeviceCapset::DeviceCapset(Host &host) : host_(host), info_(), described_(false)
+{
+    AV_SCOPE("DeviceCapset::DeviceCapset");
+}
 
 /* A device type Vulkan does not define is reported as other, so the capset
  * stays decodable. */
 void DeviceCapset::describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t features)
 {
+    AV_SCOPE("DeviceCapset::describe");
     host_.require_main_loop("DeviceCapset::describe");
     if (sub_apis == 0u) return;
     const GpuIdentity gpu = host_.gpu_identity(gpu_index);
@@ -29,17 +34,20 @@ void DeviceCapset::describe(uint32_t gpu_index, uint32_t sub_apis, uint64_t feat
 
 void DeviceCapset::withdraw_guest_import()
 {
+    AV_SCOPE("DeviceCapset::withdraw_guest_import");
     if (!described_) return;
     info_.withdraw(CapsetInfo::feature_guest_memory_import);
 }
 
 bool DeviceCapset::described() const
 {
+    AV_SCOPE("DeviceCapset::described");
     return described_;
 }
 
 const CapsetInfo &DeviceCapset::info() const
 {
+    AV_SCOPE("DeviceCapset::info");
     return info_;
 }
 

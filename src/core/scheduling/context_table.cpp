@@ -3,16 +3,21 @@
 #include "core/ddi/dxgkarg_create_context_record.hpp"
 #include "core/platform/mutex_guard.hpp"
 #include "core/scheduling/device_table.hpp"
+#include "core/trace/function_scope.hpp"
 #include "proto/context/rvk_context_record.hpp"
 #include "core/support/invariant_scope.hpp"
 
 namespace av {
 
 ContextTable::ContextTable(Platform &platform, DeviceTable &devices, const GpuMmuGeometry &geometry)
-    : platform_(platform), devices_(devices), geometry_(geometry), mutex_(platform, LockRank::context_table), contexts_(platform) {}
+    : platform_(platform), devices_(devices), geometry_(geometry), mutex_(platform, LockRank::context_table), contexts_(platform)
+    {
+        AV_SCOPE("ContextTable::ContextTable");
+    }
 
 Status ContextTable::create(void *device, DxgkargCreateContextRecord &request)
 {
+    AV_SCOPE("ContextTable::create");
     platform_.require_irql_at_most(Irql::passive, "ContextTable::create");
     MutexGuard lock(mutex_);
     InvariantScope<ContextTable> guard(platform_, *this, "create");
@@ -42,6 +47,7 @@ Status ContextTable::create(void *device, DxgkargCreateContextRecord &request)
 
 Status ContextTable::destroy(void *context)
 {
+    AV_SCOPE("ContextTable::destroy");
     platform_.require_irql_at_most(Irql::passive, "ContextTable::destroy");
     MutexGuard lock(mutex_);
     InvariantScope<ContextTable> guard(platform_, *this, "destroy");
@@ -50,13 +56,22 @@ Status ContextTable::destroy(void *context)
 
 Context *ContextTable::find(void *context)
 {
+    AV_SCOPE("ContextTable::find");
     platform_.require_irql_at_most(Irql::apc, "ContextTable::find");
     MutexGuard lock(mutex_);
     return contexts_.find(context);
 }
 
-uint32_t ContextTable::live() const { return contexts_.live(); }
+uint32_t ContextTable::live() const
+{
+    AV_SCOPE("ContextTable::live");
+    return contexts_.live();
+}
 
-bool ContextTable::invariants_hold() const { return contexts_.invariants_hold(); }
+bool ContextTable::invariants_hold() const
+{
+    AV_SCOPE("ContextTable::invariants_hold");
+    return contexts_.invariants_hold();
+}
 
 }  // namespace av

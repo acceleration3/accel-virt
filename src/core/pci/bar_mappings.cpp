@@ -4,6 +4,7 @@
 #include "core/pci/resource_list.hpp"
 #include "core/support/invariant_scope.hpp"
 #include "core/support/scope_exit.hpp"
+#include "core/trace/function_scope.hpp"
 #include "core/virtio/virtio_pci_layout.hpp"
 #include "core/virtio/virtio_region.hpp"
 
@@ -17,13 +18,21 @@ constexpr uint64_t max_mapping_length = 0xFFFFFFFFu;
 }  // namespace
 
 BarMappings::BarMappings(Platform &platform, DxgkrnlInterface &dxgkrnl)
-    : platform_(platform), dxgkrnl_(dxgkrnl), addresses_(), lengths_() {}
+    : platform_(platform), dxgkrnl_(dxgkrnl), addresses_(), lengths_()
+    {
+        AV_SCOPE("BarMappings::BarMappings");
+    }
 
-BarMappings::~BarMappings() { unmap_all(); }
+BarMappings::~BarMappings()
+{
+    AV_SCOPE("BarMappings::~BarMappings");
+    unmap_all();
+}
 
 Status BarMappings::map_bar_of(const PciBaseAddresses &bars, const ResourceList &resources,
                                const VirtioRegion &region)
 {
+    AV_SCOPE("BarMappings::map_bar_of");
     const uint8_t bar = region.bar();
     if (bar >= PciBaseAddresses::bar_count) return Status::invalid_parameter;
     const uint64_t end = region.offset() + region.length();
@@ -47,6 +56,7 @@ Status BarMappings::map_bar_of(const PciBaseAddresses &bars, const ResourceList 
 Status BarMappings::map(const PciBaseAddresses &bars, const ResourceList &resources,
                         const VirtioPciLayout &layout)
 {
+    AV_SCOPE("BarMappings::map");
     platform_.require_irql_at_most(Irql::passive, "BarMappings::map");
     InvariantScope<BarMappings> guard(platform_, *this, "map");
     if (mapped_bars() != 0u) return Status::invalid_state;
@@ -63,6 +73,7 @@ Status BarMappings::map(const PciBaseAddresses &bars, const ResourceList &resour
 Status BarMappings::map_region(const PciBaseAddresses &bars, const ResourceList &resources,
                                const VirtioRegion &region)
 {
+    AV_SCOPE("BarMappings::map_region");
     platform_.require_irql_at_most(Irql::passive, "BarMappings::map_region");
     InvariantScope<BarMappings> guard(platform_, *this, "map_region");
     if (mapped_bars() == 0u) return Status::invalid_state;
@@ -71,6 +82,7 @@ Status BarMappings::map_region(const PciBaseAddresses &bars, const ResourceList 
 
 void BarMappings::unmap_all()
 {
+    AV_SCOPE("BarMappings::unmap_all");
     platform_.require_irql_at_most(Irql::passive, "BarMappings::unmap_all");
     for (uint8_t bar = 0u; bar < PciBaseAddresses::bar_count; bar++) {
         if (addresses_[bar] == nullptr) continue;
@@ -83,6 +95,7 @@ void BarMappings::unmap_all()
 
 void *BarMappings::address_of(const VirtioRegion &region) const
 {
+    AV_SCOPE("BarMappings::address_of");
     platform_.require_irql_at_most(Irql::passive, "BarMappings::address_of");
     if (!region.present() || region.bar() >= PciBaseAddresses::bar_count) return nullptr;
     const uint64_t end = region.offset() + region.length();
@@ -93,6 +106,7 @@ void *BarMappings::address_of(const VirtioRegion &region) const
 
 uint32_t BarMappings::mapped_bars() const
 {
+    AV_SCOPE("BarMappings::mapped_bars");
     uint32_t mapped = 0u;
     for (void *address : addresses_) mapped += address != nullptr ? 1u : 0u;
     return mapped;
@@ -100,6 +114,7 @@ uint32_t BarMappings::mapped_bars() const
 
 bool BarMappings::invariants_hold() const
 {
+    AV_SCOPE("BarMappings::invariants_hold");
     for (uint8_t bar = 0u; bar < PciBaseAddresses::bar_count; bar++) {
         if ((addresses_[bar] == nullptr) != (lengths_[bar] == 0u)) return false;
     }

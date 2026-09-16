@@ -1,5 +1,6 @@
 #include "device/ring/ring_consumer.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/execution/batch_executor.hpp"
 #include "device/fence/fence_reporter.hpp"
 #include "device/host/host.hpp"
@@ -12,10 +13,14 @@ namespace av {
 
 RingConsumer::RingConsumer(Host &host, FenceReporter &fences, BatchExecutor &batches)
     : host_(host), fences_(fences), executor_(batches), ring_(), progress_(), head_(0u), last_fence_(0u), batches_(0u), prepared_(false),
-      attached_(false), faulted_(false) {}
+      attached_(false), faulted_(false)
+      {
+          AV_SCOPE("RingConsumer::RingConsumer");
+      }
 
 Status RingConsumer::prepare(const RingWindow &ring)
 {
+    AV_SCOPE("RingConsumer::prepare");
     host_.require_main_loop("RingConsumer::prepare");
     if (prepared_) return Status::invalid_state;
     RingHeader header;
@@ -32,6 +37,7 @@ Status RingConsumer::prepare(const RingWindow &ring)
 
 void RingConsumer::withdraw()
 {
+    AV_SCOPE("RingConsumer::withdraw");
     host_.require_main_loop("RingConsumer::withdraw");
     ring_ = RingWindow();
     progress_ = RingProgress();
@@ -40,6 +46,7 @@ void RingConsumer::withdraw()
 
 void RingConsumer::attach()
 {
+    AV_SCOPE("RingConsumer::attach");
     host_.require_worker("RingConsumer::attach");
     attached_ = prepared_;
     if (!attached_ || executor_.start() == Status::ok) return;
@@ -49,6 +56,7 @@ void RingConsumer::attach()
 
 void RingConsumer::detach()
 {
+    AV_SCOPE("RingConsumer::detach");
     host_.require_worker("RingConsumer::detach");
     executor_.stop();
 }
@@ -57,6 +65,7 @@ void RingConsumer::detach()
  * head is judged and published. */
 void RingConsumer::service()
 {
+    AV_SCOPE("RingConsumer::service");
     host_.require_worker("RingConsumer::service");
     if (!attached_ || faulted_) return;
     serve();
@@ -65,6 +74,7 @@ void RingConsumer::service()
 
 void RingConsumer::serve()
 {
+    AV_SCOPE("RingConsumer::serve");
     RingHeader snapshot;
     if (ring_.snapshot(snapshot) != Status::ok)
         return fault(FaultCode::ring_header, "ring header unreadable or malformed, order", ring_.order());
@@ -77,6 +87,7 @@ void RingConsumer::serve()
 
 Status RingConsumer::consume_next()
 {
+    AV_SCOPE("RingConsumer::consume_next");
     const uint64_t published = progress_.tail() - head_;
     if (published < BatchHeader::encoded_size) return Status::no_space;
     uint8_t     bytes[BatchHeader::encoded_size] = {};
@@ -112,6 +123,7 @@ Status RingConsumer::consume_next()
  * the context's binding the guest's. */
 void RingConsumer::fault(FaultCode code, const char *reason, uint64_t value)
 {
+    AV_SCOPE("RingConsumer::fault");
     char       bytes[160];
     TextBuffer message(bytes, sizeof bytes);
     message.append("virtio-gpu-rvk: context faulted, code ");
@@ -126,16 +138,37 @@ void RingConsumer::fault(FaultCode code, const char *reason, uint64_t value)
     fences_.fault(code);
 }
 
-bool     RingConsumer::attached() const   { return attached_; }
-bool     RingConsumer::faulted() const    { return faulted_; }
-uint64_t RingConsumer::head() const       { return head_; }
-uint64_t RingConsumer::last_fence() const { return last_fence_; }
-uint64_t RingConsumer::batches() const    { return batches_; }
+bool     RingConsumer::attached() const
+{
+    AV_SCOPE("RingConsumer::attached");
+    return attached_;
+}
+bool     RingConsumer::faulted() const
+{
+    AV_SCOPE("RingConsumer::faulted");
+    return faulted_;
+}
+uint64_t RingConsumer::head() const
+{
+    AV_SCOPE("RingConsumer::head");
+    return head_;
+}
+uint64_t RingConsumer::last_fence() const
+{
+    AV_SCOPE("RingConsumer::last_fence");
+    return last_fence_;
+}
+uint64_t RingConsumer::batches() const
+{
+    AV_SCOPE("RingConsumer::batches");
+    return batches_;
+}
 
 /* Every batch spans at least a header and carries a larger fence than the one
  * before it, starting from 1; nothing is consumed that was not published. */
 bool RingConsumer::invariants_hold() const
 {
+    AV_SCOPE("RingConsumer::invariants_hold");
     if (!prepared_) return !attached_ && head_ == 0u;
     return progress_.invariants_hold() && head_ <= progress_.tail() &&
            batches_ <= head_ / BatchHeader::encoded_size && batches_ <= last_fence_;

@@ -1,5 +1,6 @@
 #include "guest/suite/timeout_scenario.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/suite/adapter_search.hpp"
 #include "guest/suite/client_descriptor.hpp"
 #include "guest/suite/guest_session.hpp"
@@ -14,10 +15,14 @@ constexpr uint64_t command_bytes = 64u;
 }  // namespace
 
 TimeoutScenario::TimeoutScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
-    : kmt_(kmt), search_(search), steps_(kmt, report, "timeout") {}
+    : kmt_(kmt), search_(search), steps_(kmt, report, "timeout")
+    {
+        AV_SCOPE("TimeoutScenario::TimeoutScenario");
+    }
 
 void TimeoutScenario::run()
 {
+    AV_SCOPE("TimeoutScenario::run");
     if (steps_.check("adapter", search_.found() ? Status::ok : Status::not_found) != Status::ok) return;
     GuestSession held(kmt_, search_.adapter());
     GuestSession other(kmt_, search_.adapter());
@@ -41,6 +46,7 @@ void TimeoutScenario::run()
 
 Status TimeoutScenario::prepare(GuestSession &session, uint64_t &address)
 {
+    AV_SCOPE("TimeoutScenario::prepare");
     const ClientDescriptor descriptor(command_buffer_bytes);
     uint32_t               index = 0u;
     Status                 status = session.open_device();

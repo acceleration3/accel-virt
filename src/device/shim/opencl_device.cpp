@@ -1,15 +1,21 @@
 #include "device/shim/opencl_device.hpp"
 
+#include "core/trace/function_scope.hpp"
+
 #include <CL/cl.h>
 #include <CL/cl_ext.h>
 #include <string.h>
 
 namespace av {
 
-OpenClDevice::OpenClDevice() : platform_(nullptr), device_(nullptr) {}
+OpenClDevice::OpenClDevice() : platform_(nullptr), device_(nullptr)
+{
+    AV_SCOPE("OpenClDevice::OpenClDevice");
+}
 
 bool OpenClDevice::find(const uint8_t *uuid)
 {
+    AV_SCOPE("OpenClDevice::find");
     forget();
     if (uuid == nullptr) return false;
     cl_platform_id platforms[max_platforms];
@@ -40,12 +46,21 @@ bool OpenClDevice::find(const uint8_t *uuid)
 
 void OpenClDevice::forget()
 {
+    AV_SCOPE("OpenClDevice::forget");
     platform_ = nullptr;
     device_ = nullptr;
 }
 
-void *OpenClDevice::platform() const { return platform_; }
+void *OpenClDevice::platform() const
+{
+    AV_SCOPE("OpenClDevice::platform");
+    return platform_;
+}
 
-void *OpenClDevice::device() const { return device_; }
+void *OpenClDevice::device() const
+{
+    AV_SCOPE("OpenClDevice::device");
+    return device_;
+}
 
 }  // namespace av

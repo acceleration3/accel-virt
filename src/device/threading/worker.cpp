@@ -1,5 +1,6 @@
 #include "device/threading/worker.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/abi/entry_points.hpp"
 #include "device/host/host.hpp"
 #include "device/ring/ring_consumer.hpp"
@@ -8,12 +9,20 @@ namespace av {
 
 Worker::Worker(Host &host, RingConsumer &ring)
     : host_(host), ring_(ring), doorbell_(host), thread_(nullptr), wake_(nullptr), lock_(nullptr), queue_{}, head_(0u), count_(0u),
-      stopping_(false) {}
+      stopping_(false)
+      {
+          AV_SCOPE("Worker::Worker");
+      }
 
-Worker::~Worker() { stop(); }
+Worker::~Worker()
+{
+    AV_SCOPE("Worker::~Worker");
+    stop();
+}
 
 Status Worker::start()
 {
+    AV_SCOPE("Worker::start");
     host_.require_main_loop("Worker::start");
     if (thread_ != nullptr) return Status::invalid_state;
     stopping_ = false;
@@ -26,6 +35,7 @@ Status Worker::start()
 
 Status Worker::post(const WorkItem &item)
 {
+    AV_SCOPE("Worker::post");
     host_.require_main_loop("Worker::post");
     if (thread_ == nullptr) return Status::invalid_state;
     host_.lock_mutex(lock_);
@@ -39,6 +49,7 @@ Status Worker::post(const WorkItem &item)
 
 Status Worker::connect_doorbell(uint32_t index)
 {
+    AV_SCOPE("Worker::connect_doorbell");
     host_.require_main_loop("Worker::connect_doorbell");
     if (thread_ == nullptr) return Status::invalid_state;
     return doorbell_.connect(wake_, index);
@@ -46,12 +57,14 @@ Status Worker::connect_doorbell(uint32_t index)
 
 void Worker::disconnect_doorbell()
 {
+    AV_SCOPE("Worker::disconnect_doorbell");
     host_.require_main_loop("Worker::disconnect_doorbell");
     doorbell_.disconnect();
 }
 
 void Worker::stop()
 {
+    AV_SCOPE("Worker::stop");
     host_.require_main_loop("Worker::stop");
     if (thread_ == nullptr) return;
     doorbell_.disconnect();
@@ -65,6 +78,7 @@ void Worker::stop()
 
 void Worker::release()
 {
+    AV_SCOPE("Worker::release");
     if (lock_ != nullptr) host_.destroy_mutex(lock_);
     if (wake_ != nullptr) host_.destroy_event(wake_);
     thread_ = nullptr;
@@ -76,11 +90,13 @@ void Worker::release()
 
 bool Worker::running() const
 {
+    AV_SCOPE("Worker::running");
     return thread_ != nullptr;
 }
 
 uint32_t Worker::pending()
 {
+    AV_SCOPE("Worker::pending");
     host_.require_main_loop("Worker::pending");
     if (thread_ == nullptr) return 0u;
     host_.lock_mutex(lock_);
@@ -91,6 +107,7 @@ uint32_t Worker::pending()
 
 bool Worker::stopping()
 {
+    AV_SCOPE("Worker::stopping");
     if (thread_ == nullptr) return false;
     host_.lock_mutex(lock_);
     const bool requested = stopping_;
@@ -100,6 +117,7 @@ bool Worker::stopping()
 
 Worker::Step Worker::next(WorkItem &item)
 {
+    AV_SCOPE("Worker::next");
     host_.lock_mutex(lock_);
     Step step = stopping_ ? Step::stop : count_ == 0u ? Step::idle : Step::work;
     if (step == Step::work) {
@@ -113,6 +131,7 @@ Worker::Step Worker::next(WorkItem &item)
 
 void Worker::run()
 {
+    AV_SCOPE("Worker::run");
     host_.require_worker("Worker::run");
     for (;;) {
         host_.wait_event(wake_);
@@ -129,6 +148,7 @@ void Worker::run()
 /* A doorbell rings only a running worker's event. */
 bool Worker::invariants_hold() const
 {
+    AV_SCOPE("Worker::invariants_hold");
     return count_ <= queue_capacity && head_ < queue_capacity && doorbell_.invariants_hold() &&
            (thread_ != nullptr || !doorbell_.connected());
 }

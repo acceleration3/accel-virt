@@ -1,5 +1,6 @@
 #include "device/execution/blob_import_command.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/execution/blob_imports.hpp"
 #include "proto/submission/blob_import_answer.hpp"
 #include "proto/submission/blob_import_request.hpp"
@@ -8,10 +9,14 @@
 namespace av {
 
 BlobImportCommand::BlobImportCommand(BlobImports &imports, const CommandHeader &header, const uint8_t *body)
-    : imports_(imports), header_(header), body_(body) {}
+    : imports_(imports), header_(header), body_(body)
+    {
+        AV_SCOPE("BlobImportCommand::BlobImportCommand");
+    }
 
 Status BlobImportCommand::run(uint8_t *reply, size_t capacity, size_t &produced)
 {
+    AV_SCOPE("BlobImportCommand::run");
     produced = 0u;
     switch (header_.id()) {
     case CommandHeader::import_blob_id: return import(reply, capacity, produced);
@@ -22,11 +27,13 @@ Status BlobImportCommand::run(uint8_t *reply, size_t capacity, size_t &produced)
 
 size_t BlobImportCommand::body_size() const
 {
+    AV_SCOPE("BlobImportCommand::body_size");
     return header_.size() - CommandHeader::encoded_size;
 }
 
 Status BlobImportCommand::import(uint8_t *reply, size_t capacity, size_t &produced)
 {
+    AV_SCOPE("BlobImportCommand::import");
     BlobImportRequest request;
     const Status      decoded = request.decode(body_, body_size());
     if (decoded == Status::malformed) return Status::malformed;
@@ -54,6 +61,7 @@ Status BlobImportCommand::import(uint8_t *reply, size_t capacity, size_t &produc
 
 Status BlobImportCommand::release()
 {
+    AV_SCOPE("BlobImportCommand::release");
     if (body_size() != release_body_size) return Status::malformed;
     WireReader reader(body_, release_body_size);
     imports_.release(reader.read_u64());

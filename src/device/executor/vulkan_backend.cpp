@@ -1,5 +1,6 @@
 #include "device/executor/vulkan_backend.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "device/abi/rvk_executor.h"
 #include "device/executor/host_gpu.hpp"
 #include "device/executor/imported_blob.hpp"
@@ -28,6 +29,7 @@ thread_local VulkanBackend *inside = nullptr;
 template <typename H>
 bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
 {
+    AV_SCOPE("answer_optional");
     if (backend == nullptr) {
         memcpy(&out, &raw, sizeof out);
         return true;
@@ -42,12 +44,19 @@ bool answer_optional(const VulkanBackend *backend, uint64_t raw, H &out)
 VulkanBackend::VulkanBackend()
     : gpu_(nullptr), listed_(), extensions_(), instance_(VK_NULL_HANDLE), device_(VK_NULL_HANDLE), physical_(VK_NULL_HANDLE), host_import_(false), handles_(),
       adopted_(), import_(), importable_(), parent_(0u), ran_(0u), lost_(false)
-{}
+{
+    AV_SCOPE("VulkanBackend::VulkanBackend");
+}
 
-void VulkanBackend::initialize(const HostGpu &gpu) { gpu_ = &gpu; }
+void VulkanBackend::initialize(const HostGpu &gpu)
+{
+    AV_SCOPE("VulkanBackend::initialize");
+    gpu_ = &gpu;
+}
 
 VkPhysicalDevice VulkanBackend::bound_device(VkInstance instance)
 {
+    AV_SCOPE("VulkanBackend::bound_device");
     return gpu_ != nullptr ? listed_.find(instance, *gpu_) : VK_NULL_HANDLE;
 }
 
@@ -57,6 +66,7 @@ VkPhysicalDevice VulkanBackend::bound_device(VkInstance instance)
 VkResult VulkanBackend::on_vkEnumeratePhysicalDevices(VkInstance instance, uint32_t *pPhysicalDeviceCount,
                                                       VkPhysicalDevice *pPhysicalDevices)
 {
+    AV_SCOPE("VulkanBackend::on_vkEnumeratePhysicalDevices");
     const VkPhysicalDevice bound = bound_device(instance);
     const uint32_t         available = bound != VK_NULL_HANDLE ? 1u : 0u;
     if (pPhysicalDevices == nullptr) {
@@ -72,6 +82,7 @@ VkResult VulkanBackend::on_vkEnumeratePhysicalDevices(VkInstance instance, uint3
 VkResult VulkanBackend::on_vkEnumeratePhysicalDeviceGroups(VkInstance instance, uint32_t *pPhysicalDeviceGroupCount,
                                                            VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties)
 {
+    AV_SCOPE("VulkanBackend::on_vkEnumeratePhysicalDeviceGroups");
     const VkPhysicalDevice bound = bound_device(instance);
     const uint32_t         available = bound != VK_NULL_HANDLE ? 1u : 0u;
     if (pPhysicalDeviceGroupProperties == nullptr) {
@@ -92,26 +103,49 @@ VkResult VulkanBackend::on_vkEnumeratePhysicalDeviceGroups(VkInstance instance, 
 VkResult VulkanBackend::on_vkEnumeratePhysicalDeviceGroupsKHR(VkInstance instance, uint32_t *pPhysicalDeviceGroupCount,
                                                               VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties)
 {
+    AV_SCOPE("VulkanBackend::on_vkEnumeratePhysicalDeviceGroupsKHR");
     return on_vkEnumeratePhysicalDeviceGroups(instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
 }
 
 void VulkanBackend::made(uint64_t raw)
 {
+    AV_SCOPE("VulkanBackend::made");
     if (!handles_.remember(raw, parent_)) lost_ = true;
 }
 
-void VulkanBackend::made_through(uint64_t parent) { parent_ = parent; }
+void VulkanBackend::made_through(uint64_t parent)
+{
+    AV_SCOPE("VulkanBackend::made_through");
+    parent_ = parent;
+}
 
-void VulkanBackend::ended(uint64_t raw) { handles_.forget(raw); }
+void VulkanBackend::ended(uint64_t raw)
+{
+    AV_SCOPE("VulkanBackend::ended");
+    handles_.forget(raw);
+}
 
-void VulkanBackend::children_ended(uint64_t raw) { handles_.forget_children(raw); }
+void VulkanBackend::children_ended(uint64_t raw)
+{
+    AV_SCOPE("VulkanBackend::children_ended");
+    handles_.forget_children(raw);
+}
 
-bool VulkanBackend::knows_handle(uint64_t raw) const { return handles_.knows(raw); }
+bool VulkanBackend::knows_handle(uint64_t raw) const
+{
+    AV_SCOPE("VulkanBackend::knows_handle");
+    return handles_.knows(raw);
+}
 
-VulkanBackend *VulkanBackend::deciding() { return inside; }
+VulkanBackend *VulkanBackend::deciding()
+{
+    AV_SCOPE("VulkanBackend::deciding");
+    return inside;
+}
 
 void VulkanBackend::enable_identity(VkInstanceCreateInfo &create)
 {
+    AV_SCOPE("VulkanBackend::enable_identity");
     /* A list the loader will refuse anyway is left for it to refuse. */
     if (extensions_.take(create.enabledExtensionCount, create.ppEnabledExtensionNames) != Status::ok) return;
     extensions_.add(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
@@ -121,6 +155,7 @@ void VulkanBackend::enable_identity(VkInstanceCreateInfo &create)
 
 void VulkanBackend::enable_host_import(VkDeviceCreateInfo &create)
 {
+    AV_SCOPE("VulkanBackend::enable_host_import");
     if (extensions_.take(create.enabledExtensionCount, create.ppEnabledExtensionNames) != Status::ok) return;
     /* VK_EXT_external_memory_host requires VK_KHR_external_memory, which is
      * core from 1.1 and still valid to enable there. */
@@ -133,6 +168,7 @@ void VulkanBackend::enable_host_import(VkDeviceCreateInfo &create)
 VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                             const VkAllocationCallbacks *, VkInstance *pInstance)
 {
+    AV_SCOPE("VulkanBackend::on_vkCreateInstance");
     VkInstanceCreateInfo create = *pCreateInfo;
     enable_identity(create);
     const VkResult result = RealVulkanDispatch::on_vkCreateInstance(&create, nullptr, pInstance);
@@ -145,12 +181,14 @@ VkResult VulkanBackend::on_vkCreateInstance(const VkInstanceCreateInfo *pCreateI
 
 void VulkanBackend::on_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *)
 {
+    AV_SCOPE("VulkanBackend::on_vkDestroyInstance");
     if (instance == instance_) instance_ = VK_NULL_HANDLE;
     RealVulkanDispatch::on_vkDestroyInstance(instance, nullptr);
 }
 
 bool VulkanBackend::knows(uint32_t command_id) const
 {
+    AV_SCOPE("VulkanBackend::knows");
     if (command_id >> 16u != vulkan_api) return false;
     /* The generator writes one name per id it carries and "unknown" for the
      * rest, which is exactly the question being asked. Deciding it here rather
@@ -162,12 +200,14 @@ bool VulkanBackend::knows(uint32_t command_id) const
 bool VulkanBackend::run(uint32_t command_id, WireReader &payload, WireWriter &reply,
                         WireArena &arena)
 {
+    AV_SCOPE("VulkanBackend::run");
     return run_through(*this, command_id, payload, reply, arena);
 }
 
 bool VulkanBackend::run_through(vkproto::ServerDispatch &driver, uint32_t command_id,
                                 WireReader &payload, WireWriter &reply, WireArena &arena)
 {
+    AV_SCOPE("VulkanBackend::run_through");
     inside = this;
     const bool decoded = vkproto::dispatch_command(driver, command_id, payload, reply, arena);
     inside = nullptr;
@@ -181,6 +221,7 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
                                           const VkDeviceCreateInfo *pCreateInfo,
                                           const VkAllocationCallbacks *, VkDevice *pDevice)
 {
+    AV_SCOPE("VulkanBackend::on_vkCreateDevice");
     VkDeviceCreateInfo create = *pCreateInfo;
     enable_host_import(create);
     VkResult result = RealVulkanDispatch::on_vkCreateDevice(physicalDevice, &create, nullptr, pDevice);
@@ -206,6 +247,7 @@ VkResult VulkanBackend::on_vkCreateDevice(VkPhysicalDevice physicalDevice,
 
 void VulkanBackend::restrict_to_importable(VkPhysicalDevice physical, VkPhysicalDeviceMemoryProperties &properties)
 {
+    AV_SCOPE("VulkanBackend::restrict_to_importable");
     const auto key = reinterpret_cast<uint64_t>(physical);
     if (!importable_.known_for(key)) importable_.learn(key, import_.probe_types(physical));
     importable_.restrict(properties);
@@ -214,6 +256,7 @@ void VulkanBackend::restrict_to_importable(VkPhysicalDevice physical, VkPhysical
 void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
                                                            VkPhysicalDeviceMemoryProperties *pMemoryProperties)
 {
+    AV_SCOPE("VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties");
     RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties(physicalDevice, pMemoryProperties);
     restrict_to_importable(physicalDevice, *pMemoryProperties);
 }
@@ -221,6 +264,7 @@ void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice phys
 void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice physicalDevice,
                                                             VkPhysicalDeviceMemoryProperties2 *pMemoryProperties)
 {
+    AV_SCOPE("VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2");
     RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties2(physicalDevice, pMemoryProperties);
     restrict_to_importable(physicalDevice, pMemoryProperties->memoryProperties);
 }
@@ -228,6 +272,7 @@ void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2(VkPhysicalDevice phy
 void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2KHR(VkPhysicalDevice physicalDevice,
                                                                VkPhysicalDeviceMemoryProperties2 *pMemoryProperties)
 {
+    AV_SCOPE("VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2KHR");
     RealVulkanDispatch::on_vkGetPhysicalDeviceMemoryProperties2KHR(physicalDevice, pMemoryProperties);
     restrict_to_importable(physicalDevice, pMemoryProperties->memoryProperties);
 }
@@ -235,6 +280,7 @@ void VulkanBackend::on_vkGetPhysicalDeviceMemoryProperties2KHR(VkPhysicalDevice 
 bool VulkanBackend::backs_with_host(VkDevice device, const void *next, VkStructureType external,
                                     VkExternalMemoryHandleTypeFlags host_types) const
 {
+    AV_SCOPE("VulkanBackend::backs_with_host");
     if (!host_import_ || device != device_ || host_types == 0u) return false;
     for (auto *structure = static_cast<const VkBaseInStructure *>(next); structure != nullptr;
          structure = structure->pNext) {
@@ -246,6 +292,7 @@ bool VulkanBackend::backs_with_host(VkDevice device, const void *next, VkStructu
 VkResult VulkanBackend::on_vkCreateBuffer(VkDevice device, const VkBufferCreateInfo *pCreateInfo,
                                           const VkAllocationCallbacks *, VkBuffer *pBuffer)
 {
+    AV_SCOPE("VulkanBackend::on_vkCreateBuffer");
     VkBufferCreateInfo               create = *pCreateInfo;
     VkExternalMemoryBufferCreateInfo external = {};
     external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO;
@@ -258,6 +305,7 @@ VkResult VulkanBackend::on_vkCreateBuffer(VkDevice device, const VkBufferCreateI
 VkResult VulkanBackend::on_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
                                          const VkAllocationCallbacks *, VkImage *pImage)
 {
+    AV_SCOPE("VulkanBackend::on_vkCreateImage");
     VkImageCreateInfo               create = *pCreateInfo;
     VkExternalMemoryImageCreateInfo external = {};
     external.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
@@ -269,12 +317,14 @@ VkResult VulkanBackend::on_vkCreateImage(VkDevice device, const VkImageCreateInf
 
 void VulkanBackend::on_vkDestroyDevice(VkDevice device, const VkAllocationCallbacks *)
 {
+    AV_SCOPE("VulkanBackend::on_vkDestroyDevice");
     if (device == device_) device_ = VK_NULL_HANDLE;
     RealVulkanDispatch::on_vkDestroyDevice(device, nullptr);
 }
 
 void VulkanBackend::on_vkFreeMemory(VkDevice device, VkDeviceMemory memory, const VkAllocationCallbacks *)
 {
+    AV_SCOPE("VulkanBackend::on_vkFreeMemory");
     ImportedBlob *const imported = adopted_.find(reinterpret_cast<uint64_t>(memory));
     if (imported == nullptr) {
         RealVulkanDispatch::on_vkFreeMemory(device, memory, nullptr);
@@ -287,6 +337,7 @@ void VulkanBackend::on_vkFreeMemory(VkDevice device, VkDeviceMemory memory, cons
 
 bool VulkanBackend::importable(const ImportedBlob &blob)
 {
+    AV_SCOPE("VulkanBackend::importable");
     /* A type past every type a device can have is past the mask's width, and
      * a shift by it is undefined; a type inside the width that this device
      * does not have is never in the mask the driver answers. */
@@ -296,6 +347,7 @@ bool VulkanBackend::importable(const ImportedBlob &blob)
 
 bool VulkanBackend::adopt(ImportedBlob &blob)
 {
+    AV_SCOPE("VulkanBackend::adopt");
     /* Only a host pointer, because that is the only kind this backend offers
      * through import_kinds, and a dma-buf imported here would land in memory
      * the host cannot map on one of the two GPUs measured. And only onto a
@@ -320,6 +372,7 @@ bool VulkanBackend::adopt(ImportedBlob &blob)
 
 void VulkanBackend::abandon(ImportedBlob &blob)
 {
+    AV_SCOPE("VulkanBackend::abandon");
     adopted_.remove(blob);
     const uint64_t object = blob.object();
     if (object == 0u || device_ == VK_NULL_HANDLE) return;
@@ -330,10 +383,15 @@ void VulkanBackend::abandon(ImportedBlob &blob)
     blob.record(0u, 0u);
 }
 
-bool VulkanBackend::lost() const { return lost_; }
+bool VulkanBackend::lost() const
+{
+    AV_SCOPE("VulkanBackend::lost");
+    return lost_;
+}
 
 void VulkanBackend::shut_down()
 {
+    AV_SCOPE("VulkanBackend::shut_down");
     /* Device before instance, which is the order the API requires and the
      * order a guest would have used had it bothered. */
     if (device_ != VK_NULL_HANDLE) {
@@ -352,7 +410,11 @@ void VulkanBackend::shut_down()
     lost_ = false;
 }
 
-uint64_t VulkanBackend::ran() const { return ran_; }
+uint64_t VulkanBackend::ran() const
+{
+    AV_SCOPE("VulkanBackend::ran");
+    return ran_;
+}
 
 
 /* The generated decoder's inbound handle hook, defined here rather than in a
@@ -370,6 +432,7 @@ namespace {
 template <typename H>
 uint64_t remember(VulkanBackend *backend, H value)
 {
+    AV_SCOPE("remember");
     uint64_t raw = 0u;
     static_assert(sizeof(H) <= sizeof raw);
     memcpy(&raw, &value, sizeof value);
@@ -390,6 +453,7 @@ uint64_t remember(VulkanBackend *backend, H value)
 template <typename H>
 bool answer(const VulkanBackend *backend, uint64_t raw, H &out)
 {
+    AV_SCOPE("answer");
     if (backend == nullptr) {
         memcpy(&out, &raw, sizeof out);
         return true;
@@ -411,277 +475,465 @@ bool answer(const VulkanBackend *backend, uint64_t raw, H &out)
  * nothing is forgotten. */
 void handles_made_through(uint64_t parent) noexcept
 {
+    AV_SCOPE("handles_made_through");
     if (VulkanBackend *backend = VulkanBackend::deciding()) backend->made_through(parent);
 }
 
 void handle_ended(uint64_t handle) noexcept
 {
+    AV_SCOPE("handle_ended");
     if (VulkanBackend *backend = VulkanBackend::deciding()) backend->ended(handle);
 }
 
 void handle_children_ended(uint64_t handle) noexcept
 {
+    AV_SCOPE("handle_children_ended");
     if (VulkanBackend *backend = VulkanBackend::deciding()) backend->children_ended(handle);
 }
 
 bool wire_to_handle(uint64_t raw, VkInstance &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkPhysicalDevice &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkDevice &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkQueue &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkCommandBuffer &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkAccelerationStructureKHR &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkAccelerationStructureNV &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkBuffer &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkBufferView &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkCommandPool &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkDeferredOperationKHR &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkDescriptorPool &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkDescriptorSet &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkDescriptorSetLayout &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkDescriptorUpdateTemplate &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkDeviceMemory &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkEvent &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkFence &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkFramebuffer &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkImage &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkImageView &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkMicromapEXT &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkPipeline &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkPipelineBinaryKHR &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkPipelineCache &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkPipelineLayout &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkPrivateDataSlot &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkQueryPool &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkRenderPass &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkSampler &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkSamplerYcbcrConversion &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkSemaphore &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkShaderEXT &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkShaderModule &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkSurfaceKHR &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkSwapchainKHR &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
 bool wire_to_handle(uint64_t raw, VkValidationCacheEXT &out) noexcept
 {
+    AV_SCOPE("wire_to_handle");
     return answer_optional(VulkanBackend::deciding(), raw, out);
 }
 
-uint64_t handle_to_wire(VkAccelerationStructureKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkAccelerationStructureKHR v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkAccelerationStructureNV v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkAccelerationStructureNV v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkBuffer v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkBuffer v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkBufferView v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkBufferView v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkCommandBuffer v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkCommandBuffer v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkCommandPool v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkCommandPool v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkDeferredOperationKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDeferredOperationKHR v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkDescriptorPool v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDescriptorPool v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkDescriptorSet v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDescriptorSet v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkDescriptorSetLayout v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDescriptorSetLayout v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkDescriptorUpdateTemplate v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDescriptorUpdateTemplate v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkDevice v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDevice v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkDeviceMemory v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkDeviceMemory v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkEvent v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkEvent v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkFence v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkFence v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkFramebuffer v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkFramebuffer v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkImage v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkImage v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkImageView v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkImageView v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkInstance v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkInstance v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkMicromapEXT v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkMicromapEXT v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkPhysicalDevice v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkPhysicalDevice v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkPipeline v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkPipeline v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkPipelineBinaryKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkPipelineBinaryKHR v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkPipelineCache v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkPipelineCache v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkPipelineLayout v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkPipelineLayout v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkPrivateDataSlot v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkPrivateDataSlot v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkQueryPool v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkQueryPool v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkQueue v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkQueue v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkRenderPass v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkRenderPass v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkSampler v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkSampler v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkSamplerYcbcrConversion v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkSamplerYcbcrConversion v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkSemaphore v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkSemaphore v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkShaderEXT v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkShaderEXT v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkShaderModule v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkShaderModule v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkSurfaceKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkSurfaceKHR v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkSwapchainKHR v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkSwapchainKHR v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
-uint64_t handle_to_wire(VkValidationCacheEXT v) noexcept { return remember(VulkanBackend::deciding(), v); }
+uint64_t handle_to_wire(VkValidationCacheEXT v) noexcept
+{
+    AV_SCOPE("handle_to_wire");
+    return remember(VulkanBackend::deciding(), v);
+}
 
 }  // namespace vkproto
 

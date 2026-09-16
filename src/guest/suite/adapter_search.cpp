@@ -1,17 +1,26 @@
 #include "guest/suite/adapter_search.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/kmt/kmt.hpp"
 #include "guest/kmt/pci_identity.hpp"
 
 namespace av {
 
-AdapterSearch::AdapterSearch(Kmt &kmt) : kmt_(kmt), adapter_(0u) {}
+AdapterSearch::AdapterSearch(Kmt &kmt) : kmt_(kmt), adapter_(0u)
+{
+    AV_SCOPE("AdapterSearch::AdapterSearch");
+}
 
 /* Nothing is left to report to once the suite is gone. */
-AdapterSearch::~AdapterSearch() { static_cast<void>(close()); }
+AdapterSearch::~AdapterSearch()
+{
+    AV_SCOPE("AdapterSearch::~AdapterSearch");
+    static_cast<void>(close());
+}
 
 Status AdapterSearch::find(const PciIdentity &identity)
 {
+    AV_SCOPE("AdapterSearch::find");
     if (adapter_ != 0u) return Status::invalid_state;
     uint32_t     adapters[max_adapters] = {};
     uint32_t     count = 0u;
@@ -24,6 +33,7 @@ Status AdapterSearch::find(const PciIdentity &identity)
 
 void AdapterSearch::keep_or_close(uint32_t adapter, const PciIdentity &identity)
 {
+    AV_SCOPE("AdapterSearch::keep_or_close");
     if (adapter == 0u) return;
     PciIdentity reported;
     if (adapter_ == 0u && kmt_.query_identity(adapter, reported) == Status::ok && reported.same_as(identity)) {
@@ -36,12 +46,21 @@ void AdapterSearch::keep_or_close(uint32_t adapter, const PciIdentity &identity)
 
 Status AdapterSearch::close()
 {
+    AV_SCOPE("AdapterSearch::close");
     const uint32_t adapter = adapter_;
     adapter_ = 0u;
     return adapter != 0u ? kmt_.close_adapter(adapter) : Status::ok;
 }
 
-bool     AdapterSearch::found() const   { return adapter_ != 0u; }
-uint32_t AdapterSearch::adapter() const { return adapter_; }
+bool     AdapterSearch::found() const
+{
+    AV_SCOPE("AdapterSearch::found");
+    return adapter_ != 0u;
+}
+uint32_t AdapterSearch::adapter() const
+{
+    AV_SCOPE("AdapterSearch::adapter");
+    return adapter_;
+}
 
 }  // namespace av

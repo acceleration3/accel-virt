@@ -1,5 +1,6 @@
 #include "core/rvk/capset_query.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/context/protocol_version.hpp"
 #include "proto/virtio_gpu/gpu_response.hpp"
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
@@ -8,10 +9,14 @@
 namespace av {
 
 CapsetQuery::CapsetQuery(Platform &platform)
-    : platform_(platform), step_(Step::send_info), capset_(), described_(false) {}
+    : platform_(platform), step_(Step::send_info), capset_(), described_(false)
+    {
+        AV_SCOPE("CapsetQuery::CapsetQuery");
+    }
 
 Status CapsetQuery::next_request(uint8_t *bytes, size_t capacity, size_t &length)
 {
+    AV_SCOPE("CapsetQuery::next_request");
     platform_.require_irql_at_most(Irql::dispatch, "CapsetQuery::next_request");
     length = 0u;
     if (step_ != Step::send_info && step_ != Step::send_capset) return Status::invalid_state;
@@ -26,6 +31,7 @@ Status CapsetQuery::next_request(uint8_t *bytes, size_t capacity, size_t &length
 
 Status CapsetQuery::accept(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("CapsetQuery::accept");
     platform_.require_irql_at_most(Irql::dispatch, "CapsetQuery::accept");
     if (step_ == Step::await_info) return accept_info(bytes, length);
     if (step_ == Step::await_capset) return accept_capset(bytes, length);
@@ -35,6 +41,7 @@ Status CapsetQuery::accept(const uint8_t *bytes, size_t length)
 /* A device answers the one capset it has at index 0, big enough to be ours. */
 Status CapsetQuery::accept_info(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("CapsetQuery::accept_info");
     GpuResponseReader answer;
     if (answer.decode(bytes, length) != Status::ok) return fail(Status::malformed, "capset info answer malformed");
     if (!answer.ok()) return fail(Status::not_supported, "the device refused capset info");
@@ -49,6 +56,7 @@ Status CapsetQuery::accept_info(const uint8_t *bytes, size_t length)
 
 Status CapsetQuery::accept_capset(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("CapsetQuery::accept_capset");
     GpuResponseReader answer;
     if (answer.decode(bytes, length) != Status::ok) return fail(Status::malformed, "capset answer malformed");
     if (!answer.ok()) return fail(Status::not_supported, "the device refused the capset");
@@ -64,6 +72,7 @@ Status CapsetQuery::accept_capset(const uint8_t *bytes, size_t length)
 
 Status CapsetQuery::fail(Status status, const char *reason)
 {
+    AV_SCOPE("CapsetQuery::fail");
     platform_.log(reason);
     step_ = Step::failed;
     return status;
@@ -71,21 +80,25 @@ Status CapsetQuery::fail(Status status, const char *reason)
 
 bool CapsetQuery::complete() const
 {
+    AV_SCOPE("CapsetQuery::complete");
     return step_ == Step::done;
 }
 
 bool CapsetQuery::failed() const
 {
+    AV_SCOPE("CapsetQuery::failed");
     return step_ == Step::failed;
 }
 
 const CapsetInfo &CapsetQuery::capset() const
 {
+    AV_SCOPE("CapsetQuery::capset");
     return capset_;
 }
 
 bool CapsetQuery::invariants_hold() const
 {
+    AV_SCOPE("CapsetQuery::invariants_hold");
     return step_ != Step::done || described_;
 }
 

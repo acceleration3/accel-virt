@@ -1,6 +1,7 @@
 #include "um/gdi_kmt.hpp"
 
 #include "core/support/nt_status.hpp"
+#include "core/trace/function_scope.hpp"
 #include "guest/kmt/pci_identity.hpp"
 
 #include <windows.h>
@@ -47,15 +48,20 @@ constexpr uint32_t timed_out = 0xC00000B5u;
 
 }  // namespace
 
-GdiKmt::GdiKmt() : event_(nullptr), last_code_(0u), known_adapters_{}, known_luids_{}, known_(0u) {}
+GdiKmt::GdiKmt() : event_(nullptr), last_code_(0u), known_adapters_{}, known_luids_{}, known_(0u)
+{
+    AV_SCOPE("GdiKmt::GdiKmt");
+}
 
 GdiKmt::~GdiKmt()
 {
+    AV_SCOPE("GdiKmt::~GdiKmt");
     if (event_ != nullptr) CloseHandle(event_);
 }
 
 Status GdiKmt::initialize()
 {
+    AV_SCOPE("GdiKmt::initialize");
     if (event_ != nullptr) return Status::invalid_state;
     event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     return event_ != nullptr ? Status::ok : Status::no_memory;
@@ -63,6 +69,7 @@ Status GdiKmt::initialize()
 
 Status GdiKmt::answer(int32_t code)
 {
+    AV_SCOPE("GdiKmt::answer");
     const NtStatus status(code);
     last_code_ = static_cast<uint32_t>(status.value());
     return status.status();
@@ -70,6 +77,7 @@ Status GdiKmt::answer(int32_t code)
 
 Status GdiKmt::await_event()
 {
+    AV_SCOPE("GdiKmt::await_event");
     if (WaitForSingleObject(event_, wait_milliseconds) == WAIT_OBJECT_0) return Status::ok;
     last_code_ = timed_out;
     return NtStatus(timed_out).status();
@@ -77,6 +85,7 @@ Status GdiKmt::await_event()
 
 Status GdiKmt::enumerate_adapters(uint32_t *adapters, uint32_t capacity, uint32_t &count)
 {
+    AV_SCOPE("GdiKmt::enumerate_adapters");
     D3DKMT_ADAPTERINFO   infos[max_adapters] = {};
     D3DKMT_ENUMADAPTERS2 enumeration = {};
     enumeration.NumAdapters = max_adapters;
@@ -99,6 +108,7 @@ Status GdiKmt::enumerate_adapters(uint32_t *adapters, uint32_t capacity, uint32_
  * the one the enumeration that opened the handle reported. */
 Status GdiKmt::adapter_luid(uint32_t adapter, uint64_t &luid)
 {
+    AV_SCOPE("GdiKmt::adapter_luid");
     luid = 0u;
     for (uint32_t index = 0u; index < known_; index++) {
         if (known_adapters_[index] != adapter) continue;
@@ -110,6 +120,7 @@ Status GdiKmt::adapter_luid(uint32_t adapter, uint64_t &luid)
 
 Status GdiKmt::query_video_memory(uint32_t adapter, MemorySegmentGroup group, uint64_t &budget, uint64_t &usage)
 {
+    AV_SCOPE("GdiKmt::query_video_memory");
     D3DKMT_QUERYVIDEOMEMORYINFO query = {};
     query.hAdapter = adapter;
     query.MemorySegmentGroup = static_cast<D3DKMT_MEMORY_SEGMENT_GROUP>(group);
@@ -121,6 +132,7 @@ Status GdiKmt::query_video_memory(uint32_t adapter, MemorySegmentGroup group, ui
 
 Status GdiKmt::query_identity(uint32_t adapter, PciIdentity &identity)
 {
+    AV_SCOPE("GdiKmt::query_identity");
     D3DKMT_QUERY_DEVICE_IDS ids = {};
     D3DKMT_QUERYADAPTERINFO query = {};
     query.hAdapter = adapter;
@@ -135,6 +147,7 @@ Status GdiKmt::query_identity(uint32_t adapter, PciIdentity &identity)
 
 Status GdiKmt::query_driver_version(uint32_t adapter, uint32_t &version)
 {
+    AV_SCOPE("GdiKmt::query_driver_version");
     D3DKMT_DRIVERVERSION    reported = KMT_DRIVERVERSION_WDDM_1_0;
     D3DKMT_QUERYADAPTERINFO query = {};
     query.hAdapter = adapter;
@@ -148,6 +161,7 @@ Status GdiKmt::query_driver_version(uint32_t adapter, uint32_t &version)
 
 Status GdiKmt::close_adapter(uint32_t adapter)
 {
+    AV_SCOPE("GdiKmt::close_adapter");
     D3DKMT_CLOSEADAPTER request = {};
     request.hAdapter = adapter;
     return answer(D3DKMTCloseAdapter(&request));
@@ -155,6 +169,7 @@ Status GdiKmt::close_adapter(uint32_t adapter)
 
 Status GdiKmt::create_device(uint32_t adapter, uint32_t &device)
 {
+    AV_SCOPE("GdiKmt::create_device");
     D3DKMT_CREATEDEVICE request = {};
     request.hAdapter = adapter;
     const Status status = answer(D3DKMTCreateDevice(&request));
@@ -164,6 +179,7 @@ Status GdiKmt::create_device(uint32_t adapter, uint32_t &device)
 
 Status GdiKmt::destroy_device(uint32_t device)
 {
+    AV_SCOPE("GdiKmt::destroy_device");
     D3DKMT_DESTROYDEVICE request = {};
     request.hDevice = device;
     return answer(D3DKMTDestroyDevice(&request));
@@ -171,6 +187,7 @@ Status GdiKmt::destroy_device(uint32_t device)
 
 Status GdiKmt::create_allocation(uint32_t device, const uint8_t *descriptor, uint32_t size, uint32_t &allocation)
 {
+    AV_SCOPE("GdiKmt::create_allocation");
     allocation = 0u;
     uint8_t private_data[max_descriptor_bytes] = {};
     if (size > sizeof private_data) return answer(static_cast<int32_t>(NtStatus(Status::invalid_parameter).value()));
@@ -189,6 +206,7 @@ Status GdiKmt::create_allocation(uint32_t device, const uint8_t *descriptor, uin
 
 Status GdiKmt::destroy_allocation(uint32_t device, uint32_t allocation)
 {
+    AV_SCOPE("GdiKmt::destroy_allocation");
     const D3DKMT_HANDLE      handle = allocation;
     D3DKMT_DESTROYALLOCATION2 request = {};
     request.hDevice = device;
@@ -202,6 +220,7 @@ Status GdiKmt::destroy_allocation(uint32_t device, uint32_t allocation)
  * allocation in a CPU-visible segment is the hostmem BAR itself. */
 Status GdiKmt::lock(uint32_t device, uint32_t allocation, void *&view)
 {
+    AV_SCOPE("GdiKmt::lock");
     D3DKMT_LOCK2 request = {};
     request.hDevice = device;
     request.hAllocation = allocation;
@@ -212,6 +231,7 @@ Status GdiKmt::lock(uint32_t device, uint32_t allocation, void *&view)
 
 Status GdiKmt::unlock(uint32_t device, uint32_t allocation)
 {
+    AV_SCOPE("GdiKmt::unlock");
     D3DKMT_UNLOCK2 request = {};
     request.hDevice = device;
     request.hAllocation = allocation;
@@ -220,6 +240,7 @@ Status GdiKmt::unlock(uint32_t device, uint32_t allocation)
 
 Status GdiKmt::create_paging_queue(uint32_t device, uint32_t &queue, uint32_t &fence_object)
 {
+    AV_SCOPE("GdiKmt::create_paging_queue");
     D3DKMT_CREATEPAGINGQUEUE request = {};
     request.hDevice = device;
     request.Priority = D3DDDI_PAGINGQUEUE_PRIORITY_NORMAL;
@@ -231,6 +252,7 @@ Status GdiKmt::create_paging_queue(uint32_t device, uint32_t &queue, uint32_t &f
 
 Status GdiKmt::destroy_paging_queue(uint32_t queue)
 {
+    AV_SCOPE("GdiKmt::destroy_paging_queue");
     D3DDDI_DESTROYPAGINGQUEUE request = {};
     request.hPagingQueue = queue;
     return answer(D3DKMTDestroyPagingQueue(&request));
@@ -238,6 +260,7 @@ Status GdiKmt::destroy_paging_queue(uint32_t queue)
 
 Status GdiKmt::make_resident(uint32_t queue, uint32_t allocation, uint64_t &paging_fence)
 {
+    AV_SCOPE("GdiKmt::make_resident");
     const D3DKMT_HANDLE handle = allocation;
     const UINT          priority = D3DDDI_ALLOCATIONPRIORITY_NORMAL;
     D3DDDI_MAKERESIDENT request = {};
@@ -253,6 +276,7 @@ Status GdiKmt::make_resident(uint32_t queue, uint32_t allocation, uint64_t &pagi
 Status GdiKmt::map_gpu_virtual_address(uint32_t queue, uint32_t allocation, uint64_t pages, uint64_t &address,
                                        uint64_t &paging_fence)
 {
+    AV_SCOPE("GdiKmt::map_gpu_virtual_address");
     D3DDDI_MAPGPUVIRTUALADDRESS request = {};
     request.hPagingQueue = queue;
     request.hAllocation = allocation;
@@ -266,6 +290,7 @@ Status GdiKmt::map_gpu_virtual_address(uint32_t queue, uint32_t allocation, uint
 
 Status GdiKmt::free_gpu_virtual_address(uint32_t adapter, uint64_t address, uint64_t pages)
 {
+    AV_SCOPE("GdiKmt::free_gpu_virtual_address");
     D3DKMT_FREEGPUVIRTUALADDRESS request = {};
     request.hAdapter = adapter;
     request.BaseAddress = address;
@@ -275,6 +300,7 @@ Status GdiKmt::free_gpu_virtual_address(uint32_t adapter, uint64_t address, uint
 
 Status GdiKmt::wait_for_fence(uint32_t device, uint32_t fence_object, uint64_t fence)
 {
+    AV_SCOPE("GdiKmt::wait_for_fence");
     const D3DKMT_HANDLE                       handle = fence_object;
     const UINT64                              value = fence;
     D3DKMT_WAITFORSYNCHRONIZATIONOBJECTFROMCPU request = {};
@@ -289,6 +315,7 @@ Status GdiKmt::wait_for_fence(uint32_t device, uint32_t fence_object, uint64_t f
 
 Status GdiKmt::create_context(uint32_t device, uint32_t &context)
 {
+    AV_SCOPE("GdiKmt::create_context");
     D3DKMT_CREATECONTEXTVIRTUAL request = {};
     request.hDevice = device;
     request.NodeOrdinal = 0u;
@@ -302,6 +329,7 @@ Status GdiKmt::create_context(uint32_t device, uint32_t &context)
 Status GdiKmt::create_context_virtual(uint32_t device, const uint8_t *private_data, uint32_t size,
                                       uint32_t &context)
 {
+    AV_SCOPE("GdiKmt::create_context_virtual");
     D3DKMT_CREATECONTEXTVIRTUAL request = {};
     request.hDevice = device;
     request.NodeOrdinal = 0u;
@@ -316,6 +344,7 @@ Status GdiKmt::create_context_virtual(uint32_t device, const uint8_t *private_da
 
 Status GdiKmt::destroy_context(uint32_t context)
 {
+    AV_SCOPE("GdiKmt::destroy_context");
     D3DKMT_DESTROYCONTEXT request = {};
     request.hContext = context;
     return answer(D3DKMTDestroyContext(&request));
@@ -324,6 +353,7 @@ Status GdiKmt::destroy_context(uint32_t context)
 Status GdiKmt::submit(uint32_t context, uint64_t commands, uint64_t length, const uint8_t *private_data,
                       uint32_t private_size)
 {
+    AV_SCOPE("GdiKmt::submit");
     D3DKMT_SUBMITCOMMAND request = {};
     request.Commands = commands;
     request.CommandLength = static_cast<UINT>(length);
@@ -337,6 +367,7 @@ Status GdiKmt::submit(uint32_t context, uint64_t commands, uint64_t length, cons
 /* A CPU notification signalled behind everything the context has submitted. */
 Status GdiKmt::wait_for_context(uint32_t device, uint32_t context)
 {
+    AV_SCOPE("GdiKmt::wait_for_context");
     D3DKMT_CREATESYNCHRONIZATIONOBJECT2 notification = {};
     notification.hDevice = device;
     notification.Info.Type = D3DDDI_CPU_NOTIFICATION;
@@ -365,6 +396,7 @@ Status GdiKmt::wait_for_context(uint32_t device, uint32_t context)
  * or answers at once when it is not reporting them. */
 Status GdiKmt::wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32_t source)
 {
+    AV_SCOPE("GdiKmt::wait_for_vertical_blank");
     D3DKMT_WAITFORVERTICALBLANKEVENT wait = {};
     wait.hAdapter = adapter;
     wait.hDevice = device;
@@ -376,6 +408,7 @@ Status GdiKmt::wait_for_vertical_blank(uint32_t adapter, uint32_t device, uint32
  * copies it back out, so an answer the driver wrote lands in `data`. */
 Status GdiKmt::escape(uint32_t adapter, uint32_t device, uint32_t context, uint8_t *data, uint32_t size)
 {
+    AV_SCOPE("GdiKmt::escape");
     D3DKMT_ESCAPE request = {};
     request.hAdapter = adapter;
     request.hDevice = device;
@@ -388,6 +421,7 @@ Status GdiKmt::escape(uint32_t adapter, uint32_t device, uint32_t context, uint8
 
 uint64_t GdiKmt::performance_counter(uint64_t &frequency) const
 {
+    AV_SCOPE("GdiKmt::performance_counter");
     LARGE_INTEGER ticks = {};
     LARGE_INTEGER rate = {};
     QueryPerformanceFrequency(&rate);
@@ -396,6 +430,10 @@ uint64_t GdiKmt::performance_counter(uint64_t &frequency) const
     return static_cast<uint64_t>(ticks.QuadPart);
 }
 
-uint32_t GdiKmt::last_code() const { return last_code_; }
+uint32_t GdiKmt::last_code() const
+{
+    AV_SCOPE("GdiKmt::last_code");
+    return last_code_;
+}
 
 }  // namespace av

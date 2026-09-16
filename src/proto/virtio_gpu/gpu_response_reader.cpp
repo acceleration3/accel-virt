@@ -1,14 +1,19 @@
 #include "proto/virtio_gpu/gpu_response_reader.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "proto/wire/wire_reader.hpp"
 
 namespace av {
 
 GpuResponseReader::GpuResponseReader()
-    : type_(0u), capset_id_(0u), capset_max_version_(0u), capset_max_size_(0u), map_info_(0u), capset_() {}
+    : type_(0u), capset_id_(0u), capset_max_version_(0u), capset_max_size_(0u), map_info_(0u), capset_()
+    {
+        AV_SCOPE("GpuResponseReader::GpuResponseReader");
+    }
 
 Status GpuResponseReader::decode(const uint8_t *bytes, size_t length)
 {
+    AV_SCOPE("GpuResponseReader::decode");
     WireReader reader(bytes, length);
     GpuResponseReader candidate;
     candidate.type_ = reader.read_u32();
@@ -31,12 +36,40 @@ Status GpuResponseReader::decode(const uint8_t *bytes, size_t length)
     return Status::ok;
 }
 
-uint32_t          GpuResponseReader::type() const               { return type_; }
-bool              GpuResponseReader::ok() const                 { return type_ >= ok_range_first && type_ < error_range_first; }
-uint32_t          GpuResponseReader::capset_id() const          { return capset_id_; }
-uint32_t          GpuResponseReader::capset_max_version() const { return capset_max_version_; }
-uint32_t          GpuResponseReader::capset_max_size() const    { return capset_max_size_; }
-uint32_t          GpuResponseReader::map_info() const           { return map_info_; }
-const CapsetInfo &GpuResponseReader::capset() const             { return capset_; }
+uint32_t          GpuResponseReader::type() const
+{
+    AV_SCOPE("GpuResponseReader::type");
+    return type_;
+}
+bool              GpuResponseReader::ok() const
+{
+    AV_SCOPE("GpuResponseReader::ok");
+    return type_ >= ok_range_first && type_ < error_range_first;
+}
+uint32_t          GpuResponseReader::capset_id() const
+{
+    AV_SCOPE("GpuResponseReader::capset_id");
+    return capset_id_;
+}
+uint32_t          GpuResponseReader::capset_max_version() const
+{
+    AV_SCOPE("GpuResponseReader::capset_max_version");
+    return capset_max_version_;
+}
+uint32_t          GpuResponseReader::capset_max_size() const
+{
+    AV_SCOPE("GpuResponseReader::capset_max_size");
+    return capset_max_size_;
+}
+uint32_t          GpuResponseReader::map_info() const
+{
+    AV_SCOPE("GpuResponseReader::map_info");
+    return map_info_;
+}
+const CapsetInfo &GpuResponseReader::capset() const
+{
+    AV_SCOPE("GpuResponseReader::capset");
+    return capset_;
+}
 
 }  // namespace av

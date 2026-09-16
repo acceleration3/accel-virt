@@ -1,5 +1,6 @@
 #include "guest/suite/allocation_scenario.hpp"
 
+#include "core/trace/function_scope.hpp"
 #include "guest/suite/adapter_search.hpp"
 #include "guest/suite/client_descriptor.hpp"
 #include "guest/suite/guest_session.hpp"
@@ -13,10 +14,14 @@ constexpr uint64_t allocation_bytes = 65536u;
 }  // namespace
 
 AllocationScenario::AllocationScenario(Kmt &kmt, GuestReport &report, const AdapterSearch &search)
-    : kmt_(kmt), search_(search), steps_(kmt, report, "allocation") {}
+    : kmt_(kmt), search_(search), steps_(kmt, report, "allocation")
+    {
+        AV_SCOPE("AllocationScenario::AllocationScenario");
+    }
 
 void AllocationScenario::run()
 {
+    AV_SCOPE("AllocationScenario::run");
     if (steps_.check("adapter", search_.found() ? Status::ok : Status::not_found) != Status::ok) return;
     GuestSession     session(kmt_, search_.adapter());
     ClientDescriptor descriptor(allocation_bytes);
