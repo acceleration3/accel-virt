@@ -19,7 +19,7 @@
 #include "guest/suite/adapter_search.hpp"
 #include "guest/transport/guest_connection.hpp"
 #include "guest/transport/kmt_transport.hpp"
-#include "icd/vulkan/locked_transport.hpp"
+#include "icd/common/locked_transport.hpp"
 
 #include <stddef.h>
 #include <stdint.h>

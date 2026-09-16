@@ -1,6 +1,6 @@
 # accel-virt Constitution
 
-**Version**: 2.6.2 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-17
+**Version**: 2.6.3 · **Ratified**: 2026-09-10 · **Last amended**: 2026-09-17
 
 A paravirtual GPU for Windows guests on QEMU/KVM: a WDDM 3.2 kernel-mode
 display miniport (`rvkgpu.sys`), a custom in-process QEMU device
@@ -62,7 +62,7 @@ and libFuzzer call. The DDI entry points live in core, over mirror types whose
 layout `src/km` proves against the WDK, so the L2 harness drives the same entry
 points `dxgkrnl` calls.
 
-Seven pieces of process-lifetime state exist because the ABI leaves no
+Eight pieces of process-lifetime state exist because the ABI leaves no
 alternative, and nothing else may: `DxgkDdiAddDevice` and `DxgkDdiUnload`
 receive no context, so they reach the driver's root through the single pointer
 `MiniportBinding` holds; the kernel runs no global constructors, so
@@ -77,6 +77,11 @@ context, so the Vulkan ICD's root lives in its exports' translation unit
 (`src/um/vulkan/rvkvk_exports.cpp`, feature 045), and the generated wrappers'
 hooks and the ICD's own entry points, which are handed no context either, reach
 it through the single pointer `IcdBinding` holds (`src/icd/vulkan/icd_hooks.cpp`);
+and `opengl32.dll` calls the OpenGL ICD's `Drv*` exports with no ICD context, so
+that root lives in its exports' translation unit
+(`src/um/opengl/rvkgl_exports.cpp`, feature 050), and the generated OpenGL
+hooks reach it through the single pointer `GlIcdBinding` holds
+(`src/icd/opengl/gl_hooks.cpp`);
 and every function opens a trace scope (`AV_SCOPE`, docs/trace.md) that no
 caller can hand the binary's trace table, so each binary's table - owned by
 that binary's root above - is reached through the single pointer

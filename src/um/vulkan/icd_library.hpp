@@ -9,10 +9,10 @@
 #include "core/support/object_storage.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "um/gdi_kmt.hpp"
+#include "um/icd/file_log.hpp"
+#include "um/icd/process_heap.hpp"
+#include "um/icd/srw_lock.hpp"
 #include "um/trace/process_trace.hpp"
-#include "um/vulkan/file_log.hpp"
-#include "um/vulkan/process_heap.hpp"
-#include "um/vulkan/srw_lock.hpp"
 
 #include <stdint.h>
 

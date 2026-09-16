@@ -103,7 +103,11 @@ class CheckExtensionPolicy(unittest.TestCase):
     def test_no_table_or_two_tables_fail(self):
         result = self.check()
         self.assertEqual(result.returncode, 1)
-        self.assertIn("want one reported_extensions table in src/icd, found 0: nowhere", result.stderr)
+        self.assertIn("no ICD directory in src/icd", result.stderr)
+        self.write("src/icd/vulkan/icd_root.cpp", "// no table\n")
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("want one reported_extensions table in src/icd/vulkan, found 0: nowhere", result.stderr)
         self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv"}')
         self.write("src/icd/vulkan/other.hpp", "const ExtensionPolicy::Row *reported_extensions = nullptr;\n")
         result = self.check()
@@ -115,6 +119,38 @@ class CheckExtensionPolicy(unittest.TestCase):
         self.write("src/icd/vulkan/icd_root.cpp",
                    "/* const ExtensionPolicy::Row *reported_extensions = nullptr; */\n")
         self.assertIn("found 0", self.check().stderr)
+
+    def test_each_icd_directory_has_its_own_table(self):
+        self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv"}')
+        self.write("src/icd/opengl/gl_icd_root.cpp",
+                   "constexpr const ExtensionPolicy::Row *reported_extensions = nullptr;\n")
+        self.write("src/icd/common/extension_policy.cpp", "// the class, no table\n")
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ok, 1 reported (opengl 0, vulkan 1)", result.stdout)
+        # One directory's table does not stand in for another's.
+        self.write("src/icd/opengl/gl_icd_root.cpp", "// no table yet\n")
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("want one reported_extensions table in src/icd/opengl, found 0", result.stderr)
+        self.assertNotIn("src/icd/vulkan,", result.stderr)
+
+    def test_rows_are_judged_against_their_own_apis_list(self):
+        self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv"}')
+        self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv"}', where="src/icd/opengl/gl_icd_root.cpp")
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("extension_policy: no generated list is known for opengl", result.stderr)
+        self.assertNotIn("vulkan", result.stderr)
+
+    def test_a_table_in_the_shared_directory_belongs_to_no_icd(self):
+        self.table('{"VK_KHR_spirv_1_4", 1u, "probe.enables_spirv"}')
+        self.write("src/icd/common/extension_policy.hpp",
+                   "const ExtensionPolicy::Row *reported_extensions = nullptr;\n")
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("src/icd/common/extension_policy.hpp: a reported_extensions table in src/icd/common "
+                      "belongs to no ICD", result.stderr)
 
     def test_without_the_generated_list_rows_cannot_be_judged(self):
         (self.root / "src/proto/generated/vulkan/vk_supported_extensions.h").unlink()

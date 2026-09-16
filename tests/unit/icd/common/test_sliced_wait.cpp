@@ -4,7 +4,7 @@
  * infinite one never passes, and the arithmetic from ticks to nanoseconds
  * saturates rather than wraps at every counter value and frequency. */
 #include "harness/framework/test_registry.hpp"
-#include "icd/vulkan/sliced_wait.hpp"
+#include "icd/common/sliced_wait.hpp"
 
 #include <cstdint>
 

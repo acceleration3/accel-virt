@@ -1,4 +1,4 @@
-#include "um/vulkan/file_log.hpp"
+#include "um/icd/file_log.hpp"
 
 #include "core/trace/function_scope.hpp"
 
@@ -9,15 +9,17 @@ namespace av {
 namespace {
 
 constexpr wchar_t directory[] = L"C:\\ProgramData\\rvk";
-constexpr wchar_t prefix[] = L"C:\\ProgramData\\rvk\\rvkvk-";
+constexpr wchar_t prefix[] = L"C:\\ProgramData\\rvk\\";
 constexpr wchar_t suffix[] = L".log";
-/* The prefix, ten digits of a DWORD, the suffix and the NUL. */
-constexpr size_t path_chars = sizeof prefix / sizeof prefix[0] + 10u + sizeof suffix / sizeof suffix[0];
+constexpr size_t stem_chars = 32u;
+/* The prefix, the stem, a dash, ten digits of a DWORD, the suffix and the NUL. */
+constexpr size_t path_chars =
+    sizeof prefix / sizeof prefix[0] + stem_chars + 1u + 10u + sizeof suffix / sizeof suffix[0];
 constexpr size_t line_bytes = 256u;
 
 }  // namespace
 
-FileLog::FileLog() : file_(INVALID_HANDLE_VALUE)
+FileLog::FileLog(const wchar_t *stem) : stem_(stem), file_(INVALID_HANDLE_VALUE)
 {
     AV_SCOPE("FileLog::FileLog");
 }
@@ -34,6 +36,8 @@ void FileLog::open()
     wchar_t path[path_chars] = {};
     size_t  length = 0u;
     for (const wchar_t *text = prefix; *text != L'\0'; text++) path[length++] = *text;
+    for (size_t index = 0u; stem_[index] != L'\0' && index < stem_chars; index++) path[length++] = stem_[index];
+    path[length++] = L'-';
     wchar_t digits[10] = {};
     size_t  count = 0u;
     for (DWORD pid = GetCurrentProcessId(); count == 0u || pid != 0u; pid /= 10u)

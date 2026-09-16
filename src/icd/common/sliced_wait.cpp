@@ -1,4 +1,4 @@
-#include "icd/vulkan/sliced_wait.hpp"
+#include "icd/common/sliced_wait.hpp"
 
 #include "core/trace/function_scope.hpp"
 

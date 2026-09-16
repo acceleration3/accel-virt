@@ -6,7 +6,7 @@
  *
  * An input is a byte whose low two bits are the room the application gives (0
  * asks only how many), then whole VkExtensionProperties as the host sent them. */
-#include "icd/vulkan/extension_policy.hpp"
+#include "icd/common/extension_policy.hpp"
 
 #include <cstddef>
 #include <cstdint>

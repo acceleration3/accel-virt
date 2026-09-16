@@ -6,7 +6,7 @@
 #ifndef AV_RECORDING_THREAD_LOCK_HPP
 #define AV_RECORDING_THREAD_LOCK_HPP
 
-#include "icd/vulkan/thread_lock.hpp"
+#include "icd/common/thread_lock.hpp"
 
 #include <cstdint>
 

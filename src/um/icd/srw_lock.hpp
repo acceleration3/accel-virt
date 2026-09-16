@@ -4,7 +4,7 @@
 #ifndef AV_UM_SRW_LOCK_HPP
 #define AV_UM_SRW_LOCK_HPP
 
-#include "icd/vulkan/thread_lock.hpp"
+#include "icd/common/thread_lock.hpp"
 
 namespace av {
 

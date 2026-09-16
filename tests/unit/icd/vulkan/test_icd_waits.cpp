@@ -13,7 +13,7 @@
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/icd_root.hpp"
 #include "icd/vulkan/loader_handle.hpp"
-#include "icd/vulkan/sliced_wait.hpp"
+#include "icd/common/sliced_wait.hpp"
 #include "proto/generated/vulkan/vk_protocol_ids.h"
 #include "proto/icd_handle_registry.hpp"
 #include "proto/submission/command_header.hpp"

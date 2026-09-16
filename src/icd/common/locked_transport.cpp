@@ -1,8 +1,8 @@
-#include "icd/vulkan/locked_transport.hpp"
+#include "icd/common/locked_transport.hpp"
 
 #include "core/support/scope_exit.hpp"
 #include "core/trace/function_scope.hpp"
-#include "icd/vulkan/thread_lock.hpp"
+#include "icd/common/thread_lock.hpp"
 
 namespace av::icd {
 

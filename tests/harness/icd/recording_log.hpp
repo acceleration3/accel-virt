@@ -3,7 +3,7 @@
 #ifndef AV_RECORDING_LOG_HPP
 #define AV_RECORDING_LOG_HPP
 
-#include "icd/vulkan/log_sink.hpp"
+#include "icd/common/log_sink.hpp"
 
 #include <cstdint>
 

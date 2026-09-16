@@ -26,7 +26,7 @@
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/device_memory.hpp"
 #include "icd/vulkan/entry_points.hpp"
-#include "icd/vulkan/extension_policy.hpp"
+#include "icd/common/extension_policy.hpp"
 #include "icd/vulkan/handle_registry.hpp"
 #include "icd/vulkan/loader_handle.hpp"
 

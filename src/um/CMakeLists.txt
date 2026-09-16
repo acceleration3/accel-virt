@@ -15,9 +15,9 @@ file(GLOB_RECURSE RVKTEST_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
-# rvkvk.dll's, rvkvkprobe.exe's and rvkinspect.exe's shims are their own
+# The ICDs' shims, rvkvkprobe.exe's and rvkinspect.exe's are their own
 # targets below.
-list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/(vulkan|probe|inspect)/")
+list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/(icd|vulkan|probe|inspect)/")
 # Of the generated tree, only the guest's encoders: the rvk scenarios send real
 # Vulkan and OpenCL streams (044). The server dispatch is the host's, and the
 # OpenGL client does not link before its ICD helpers exist (050).
@@ -67,11 +67,13 @@ target_link_options(rvkvkprobe PRIVATE /ENTRY:rvkvkprobe_entry)
 target_link_libraries(rvkvkprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${VULKAN_LOADER_IMPORT})
 
 # rvkvk.dll, the Vulkan ICD (feature 045): the ICD's decisions in src/icd over
-# the transport, D3DKMT through gdi32 and the shim in vulkan/. The generated
+# the transport, D3DKMT through gdi32, the shim both ICDs share in icd/ and its
+# own in vulkan/. The generated
 # default handle_to_wire of the dispatchable types is not linked: icd_hooks.cpp
 # answers the host's own handle for those.
 file(GLOB_RECURSE RVKVK_SOURCES CONFIGURE_DEPENDS
-  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/common/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../icd/vulkan/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/kmt/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../guest/transport/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../proto/*.cpp
@@ -79,6 +81,7 @@ file(GLOB_RECURSE RVKVK_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/icd/*.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/vulkan/*.cpp)
 list(REMOVE_ITEM RVKVK_SOURCES ${RVKTEST_GENERATED})
 list(APPEND RVKVK_SOURCES

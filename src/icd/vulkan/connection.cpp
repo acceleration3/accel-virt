@@ -8,7 +8,7 @@
 #include "guest/kmt/pci_identity.hpp"
 #include "guest/suite/adapter_scenario.hpp"
 #include "guest/transport/host_visible_chunk.hpp"
-#include "icd/vulkan/thread_lock.hpp"
+#include "icd/common/thread_lock.hpp"
 #include "proto/context/sub_api.hpp"
 
 namespace av::icd {

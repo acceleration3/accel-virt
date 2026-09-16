@@ -4,7 +4,7 @@
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
 #include "icd/vulkan/connection.hpp"
-#include "icd/vulkan/log_sink.hpp"
+#include "icd/common/log_sink.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 
 namespace av::icd {

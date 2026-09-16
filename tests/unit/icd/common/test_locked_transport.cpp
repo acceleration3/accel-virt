@@ -6,7 +6,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
 #include "harness/transport/mock_transport.hpp"
-#include "icd/vulkan/locked_transport.hpp"
+#include "icd/common/locked_transport.hpp"
 #include "proto/client_transport.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 #include "proto/generated/vulkan/vk_protocol_ids.h"

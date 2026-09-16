@@ -6,7 +6,7 @@
  * hundreds of entries, a name listed many times. A device may be created with
  * exactly what would be reported. */
 #include "harness/framework/test_registry.hpp"
-#include "icd/vulkan/extension_policy.hpp"
+#include "icd/common/extension_policy.hpp"
 
 #include <cstdint>
 #include <cstring>

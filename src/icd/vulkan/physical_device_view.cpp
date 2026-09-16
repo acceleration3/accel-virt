@@ -1,7 +1,7 @@
 #include "icd/vulkan/physical_device_view.hpp"
 
 #include "core/trace/function_scope.hpp"
-#include "icd/vulkan/log_sink.hpp"
+#include "icd/common/log_sink.hpp"
 #include "proto/generated/vulkan/vk_dispatch_client.h"
 
 namespace av::icd {

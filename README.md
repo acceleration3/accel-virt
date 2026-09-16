@@ -153,9 +153,13 @@ src/km/                           Windows kernel shim — translation only; buil
 src/guest/                        the in-guest D3DKMT suite — portable, tested on Linux over MockKmt
   kmt/  suite/  transport/          the D3DKMT contract and PCI identity; scenarios, the Vulkan probe, report; KmtTransport, chunks, imports
 src/icd/                          guest user-mode ICDs' decisions — portable, tested on Linux over MockKmt
+  common/                           what both ICDs share: extension policy, locks, the locked transport, sliced waits, the log seam
   vulkan/                           rvkvk.dll: loader entry points, connections, command batches, memory types
-src/um/                           Windows user-mode shim — translation only; builds rvktest.exe, rvkvk.dll and rvkvkprobe.exe
-  vulkan/  probe/  imports/         rvkvk.dll's exports and seams; the probe's entry; import-library .def files
+  opengl/                           rvkgl.dll: the Drv* interface, pixel formats, contexts, presentation
+src/um/                           Windows user-mode shim — translation only; builds rvktest.exe, the ICDs and their probes
+  icd/                              the seams both ICDs are built over: the process heap, SRW locks, the file log
+  vulkan/  opengl/                  rvkvk.dll's and rvkgl.dll's exports and roots
+  probe/  imports/                  the probes' entries; import-library .def files
 src/device/                       QEMU device core — freestanding C++23, librvk_device.a
   host/  abi/                       the Host contract; TableHost, rvk_device.h, the C entry points
   gpu/  threading/  context/        host GPU binding; per-context workers and doorbells; the context table
