@@ -2,6 +2,7 @@
 
 #include "core/trace/function_scope.hpp"
 #include "core/trace/state_writer.hpp"
+#include "icd/opengl/window_surface.hpp"
 
 namespace av::glicd {
 
@@ -34,6 +35,25 @@ uint32_t WindowTable::held() const
 {
     AV_SCOPE("WindowTable::held");
     return count_;
+}
+
+void WindowTable::drop_gone(WindowSurface &surface)
+{
+    AV_SCOPE("WindowTable::drop_gone");
+    uint32_t kept = 0u;
+    for (uint32_t row = 0u; row < count_; row++) {
+        uint32_t width = 0u;
+        uint32_t height = 0u;
+        if (!surface.client_size(windows_[row], width, height)) continue;
+        windows_[kept] = windows_[row];
+        formats_[kept] = formats_[row];
+        kept++;
+    }
+    for (uint32_t row = kept; row < count_; row++) {
+        windows_[row] = nullptr;
+        formats_[row] = 0;
+    }
+    count_ = kept;
 }
 
 void WindowTable::report(StateWriter &writer) const

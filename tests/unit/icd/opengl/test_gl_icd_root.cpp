@@ -167,7 +167,25 @@ TEST(gl_icd_root, a_257th_window_is_out_of_memory)
       const bool set = rig.opengl32().set_pixel_format(&dcs[index], 1);
       CHECK_EQ(set, index < 255u);
   }
-  check_error(rig, Root::error_not_enough_memory); }
+  check_error(rig, Root::error_not_enough_memory);
+  /* A closed window's row makes room for the next. */
+  rig.surface().close_window(&windows[3]);
+  CHECK(rig.opengl32().set_pixel_format(&dcs[255], 1));
+  CHECK_EQ(av::glicd::GlIcdRootProbe::windows(rig.root()).held(), 256u);
+  CHECK(av::glicd::GlIcdRootProbe::windows(rig.root()).format_of(&windows[3]) == 0);
+  CHECK(rig.root().invariants_hold()); }
+
+TEST(gl_icd_root, a_swap_forgets_the_windows_that_are_gone)
+{ GlIcdRig rig;
+  rig.load_with_format();
+  void *const context = rig.current_context();
+  CHECK(context != nullptr);
+  CHECK(rig.opengl32().set_pixel_format(rig.other_dc(), 1));
+  CHECK_EQ(av::glicd::GlIcdRootProbe::windows(rig.root()).held(), 2u);
+  rig.surface().close_window(rig.surface().window_of(rig.other_dc()));
+  static_cast<void>(rig.root().swap_buffers(rig.dc()));
+  CHECK_EQ(av::glicd::GlIcdRootProbe::windows(rig.root()).held(), 1u);
+  CHECK(rig.root().invariants_hold()); }
 
 TEST(gl_icd_root, nothing_reaches_the_device_until_a_context_is_made_current)
 { GlIcdRig rig;

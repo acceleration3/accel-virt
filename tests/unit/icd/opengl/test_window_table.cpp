@@ -2,6 +2,7 @@
  * to 256 windows. */
 #include "core/trace/state_writer.hpp"
 #include "harness/framework/test_registry.hpp"
+#include "harness/icd/scripted_window_surface.hpp"
 #include "icd/opengl/window_table.hpp"
 
 #include <cstring>
@@ -57,6 +58,31 @@ TEST(window_table, refuses_no_window_a_format_below_one_and_a_257th_window)
   CHECK_EQ(table.held(), WindowTable::max_windows);
   CHECK_EQ(table.format_of(&windows[WindowTable::max_windows]), 0);
   CHECK(table.invariants_hold()); }
+
+/* A window's format lasts as long as the window: a row goes only once its
+ * window is gone, and the others keep theirs. */
+TEST(window_table, drops_the_rows_of_windows_that_are_gone)
+{ WindowTable table;
+  av::ScriptedWindowSurface surface;
+  int dcs[3] = {};
+  int windows[3] = {};
+  for (int index = 0; index < 3; index++) {
+    surface.add_dc(&dcs[index], &windows[index], 8u, 8u);
+    CHECK_STATUS(table.set_format(&windows[index], index + 1), Status::ok);
+  }
+  table.drop_gone(surface);
+  CHECK_EQ(table.held(), 3u);
+  surface.close_window(&windows[0]);
+  surface.close_window(&windows[2]);
+  table.drop_gone(surface);
+  CHECK(table.invariants_hold());
+  CHECK_EQ(table.held(), 1u);
+  CHECK_EQ(table.format_of(&windows[0]), 0);
+  CHECK_EQ(table.format_of(&windows[1]), 2);
+  CHECK_EQ(table.format_of(&windows[2]), 0);
+  /* A handle Windows reuses for a new window starts with no format. */
+  CHECK_STATUS(table.set_format(&windows[0], 5), Status::ok);
+  CHECK_EQ(table.format_of(&windows[0]), 5); }
 
 TEST(window_table, reports_each_window_and_its_format)
 { WindowTable table;

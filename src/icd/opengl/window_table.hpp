@@ -1,6 +1,8 @@
 /* The pixel format each window was given (data-model.md, research.md §7): set
  * once per window, as Windows allows, and asked for by every context create
- * and make current on a DC of that window. At most max_windows windows. */
+ * and make current on a DC of that window. At most max_windows windows. A row
+ * lasts as long as its window: an application may delete its last context and
+ * make another on the same window, which keeps its format. */
 #ifndef AV_GLICD_WINDOW_TABLE_HPP
 #define AV_GLICD_WINDOW_TABLE_HPP
 
@@ -14,6 +16,7 @@ class StateWriter;
 
 namespace av::glicd {
 
+class WindowSurface;
 struct WindowTableProbe;
 
 class WindowTable {
@@ -30,6 +33,8 @@ public:
     /* 0 for a window never given one. */
     int32_t              format_of(void *window) const;
     uint32_t             held() const;
+    /* Forgets every window `surface` says no longer exists. */
+    void                 drop_gone(WindowSurface &surface);
     void                 report(StateWriter &writer) const;
 
     bool invariants_hold() const;

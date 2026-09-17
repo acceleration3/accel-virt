@@ -93,8 +93,12 @@ bool GlIcdRoot::set_pixel_format(void *dc, int32_t index)
         return false;
     }
     lock_.acquire();
-    ScopeExit    release([&] { lock_.release(); });
-    const Status set = windows_.set_format(window, index);
+    ScopeExit release([&] { lock_.release(); });
+    Status    set = windows_.set_format(window, index);
+    if (set == Status::no_space) {
+        windows_.drop_gone(surface_);
+        set = windows_.set_format(window, index);
+    }
     if (set == Status::ok) return true;
     fail(set == Status::no_space ? error_not_enough_memory : error_invalid_pixel_format);
     return false;
@@ -240,6 +244,9 @@ bool GlIcdRoot::swap_layer_buffers(void *dc, uint32_t planes)
 bool GlIcdRoot::swap_buffers(void *dc)
 {
     AV_SCOPE("GlIcdRoot::swap_buffers");
+    lock_.acquire();
+    windows_.drop_gone(surface_);
+    lock_.release();
     GuestGlContext *const context = currents_.current();
     if (context == nullptr || windows_.format_of(surface_.window_of(dc)) != context->pixel_format()) return false;
     ClientTransport *const transport = context->wire();
