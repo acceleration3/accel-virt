@@ -70,6 +70,28 @@ const Entry        local_rows[] = {
     {"vkFlushMappedMemoryRanges", reinterpret_cast<PFN_vkVoidFunction>(&local_vkFlushMappedMemoryRanges), Level::device},
     {"vkInvalidateMappedMemoryRanges",
             reinterpret_cast<PFN_vkVoidFunction>(&local_vkInvalidateMappedMemoryRanges), Level::device},
+    {"vkCreateWin32SurfaceKHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkCreateWin32SurfaceKHR), Level::instance},
+    {"vkDestroySurfaceKHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroySurfaceKHR), Level::instance},
+    {"vkGetPhysicalDeviceSurfaceSupportKHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceSurfaceSupportKHR), Level::physical_device},
+    {"vkGetPhysicalDeviceWin32PresentationSupportKHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceWin32PresentationSupportKHR),
+            Level::physical_device},
+    {"vkGetPhysicalDeviceSurfaceCapabilitiesKHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceSurfaceCapabilitiesKHR), Level::physical_device},
+    {"vkGetPhysicalDeviceSurfaceCapabilities2KHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceSurfaceCapabilities2KHR), Level::physical_device},
+    {"vkGetPhysicalDeviceSurfaceFormatsKHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceSurfaceFormatsKHR), Level::physical_device},
+    {"vkGetPhysicalDeviceSurfaceFormats2KHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceSurfaceFormats2KHR), Level::physical_device},
+    {"vkGetPhysicalDeviceSurfacePresentModesKHR",
+            reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetPhysicalDeviceSurfacePresentModesKHR), Level::physical_device},
+    {"vkCreateSwapchainKHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkCreateSwapchainKHR), Level::device},
+    {"vkDestroySwapchainKHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkDestroySwapchainKHR), Level::device},
+    {"vkGetSwapchainImagesKHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkGetSwapchainImagesKHR), Level::device},
+    {"vkAcquireNextImageKHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkAcquireNextImageKHR), Level::device},
+    {"vkQueuePresentKHR", reinterpret_cast<PFN_vkVoidFunction>(&local_vkQueuePresentKHR), Level::device},
 };
 constexpr uint32_t local_row_count = sizeof local_rows / sizeof local_rows[0];
 /* VK_API_VERSION_1_3, spelled without the header macro's C casts. */
@@ -81,6 +103,7 @@ constexpr size_t   line_bytes = 160u;
  * arrive with T037. */
 constexpr ExtensionPolicy::Row reported_extensions[] = {
     {"VK_EXT_memory_budget", 1u, "icd_memory.the_budget_nodes_in_the_chain_are_the_adapter_s"},
+    {"VK_KHR_swapchain", 70u, "icd_presentation.a_swapchain_presents_its_frame_on_the_window"},
 };
 constexpr uint32_t reported_extension_count = sizeof reported_extensions / sizeof reported_extensions[0];
 /* The instance extensions this ICD reports. The *2 queries are its own entry
@@ -92,6 +115,8 @@ struct InstanceExtension {
 };
 constexpr InstanceExtension reported_instance_extensions[] = {
     {"VK_KHR_get_physical_device_properties2", 2u},
+    {"VK_KHR_surface", 25u},
+    {"VK_KHR_win32_surface", 6u},
 };
 constexpr uint32_t reported_instance_extension_count =
     sizeof reported_instance_extensions / sizeof reported_instance_extensions[0];
@@ -107,12 +132,13 @@ constexpr uint32_t max_allocated_at_once = 1024u;
 }  // namespace
 
 IcdRoot::IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
-                 LogSink &log, IcdBinding &binding)
+                 LogSink &log, IcdBinding &binding, WindowSurface &windows)
     : memory_(memory), kmt_(kmt), lock_(lock), send_lock_(send_lock), memory_lock_(memory_lock), log_(log),
       binding_(binding),
       api_version_(vulkan_1_3), before_instance_(local_rows, before_instance_rows),
       entry_points_(local_rows, local_row_count),
-      extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr)
+      extensions_(reported_extensions, reported_extension_count), batches_(memory), memories_(memory), handles_(memory), connections_(memory), pending_(nullptr),
+      entries_(*this), presentation_(memory, kmt, windows, log, *this, entries_)
 {
     AV_SCOPE("IcdRoot::IcdRoot");
     binding_.bind(*this);
@@ -351,6 +377,8 @@ void IcdRoot::destroy_device(VkDevice device, const VkAllocationCallbacks *alloc
     AV_SCOPE("IcdRoot::destroy_device");
     LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
     if (made == nullptr) return;
+    /* A swapchain frees its memory through the device: before the device's own. */
+    presentation_.forget_device(device);
     release_device_memory(*made);
     vkicd::generated::Wrap_vkDestroyDevice(device, allocator);
     destroy_wrapper(device, LoaderHandle::Kind::device);
@@ -367,9 +395,11 @@ void IcdRoot::destroy_instance(VkInstance instance, const VkAllocationCallbacks 
         for (uint32_t index = 0u;; index++) {
             LoaderHandle *const device = child_of(*physical_device, LoaderHandle::Kind::device, index);
             if (device == nullptr) break;
+            presentation_.forget_device(reinterpret_cast<VkDevice>(device));
             release_device_memory(*device);
         }
     }
+    presentation_.forget_instance(instance);
     vkicd::generated::Wrap_vkDestroyInstance(instance, allocator);
 }
 
@@ -866,6 +896,30 @@ bool IcdRoot::invariants_hold() const
     return connections_.all_of([](const Connection &connection) {
         return connection.opened() && connection.invariants_hold();
     });
+}
+
+PFN_vkVoidFunction IcdRoot::entry(const char *name) const
+{
+    AV_SCOPE("IcdRoot::entry");
+    return entry_points_.find(name);
+}
+
+Presentation &IcdRoot::presentation()
+{
+    AV_SCOPE("IcdRoot::presentation");
+    return presentation_;
+}
+
+bool IcdRoot::present_context(VkDevice device, VkPhysicalDevice &physical, uint32_t &adapter, uint32_t &kmt_device)
+{
+    AV_SCOPE("IcdRoot::present_context");
+    LoaderHandle *const made = handle_of(device, LoaderHandle::Kind::device);
+    if (made == nullptr) return false;
+    LoaderHandle *const parent = made->parent();
+    physical = static_cast<VkPhysicalDevice>(static_cast<void *>(parent));
+    adapter = made->connection()->adapter();
+    kmt_device = made->connection()->device();
+    return true;
 }
 
 }  // namespace av::icd

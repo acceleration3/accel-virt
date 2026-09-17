@@ -10,6 +10,8 @@
 
 #include <vulkan/vulkan_core.h>
 
+#include "icd/vulkan/win32_surface_create_record.hpp"
+
 namespace av::icd {
 
 VKAPI_ATTR VkResult VKAPI_CALL local_vk_icdNegotiateLoaderICDInterfaceVersion(uint32_t *pSupportedVersion);
@@ -81,6 +83,47 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkFlushMappedMemoryRanges(VkDevice device, 
                                                                const VkMappedMemoryRange *pMemoryRanges);
 VKAPI_ATTR VkResult VKAPI_CALL local_vkInvalidateMappedMemoryRanges(VkDevice device, uint32_t memoryRangeCount,
                                                                     const VkMappedMemoryRange *pMemoryRanges);
+
+/* WSI (feature 046). */
+VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateWin32SurfaceKHR(VkInstance instance,
+                                                             const Win32SurfaceCreateRecord *pCreateInfo,
+                                                             const VkAllocationCallbacks *pAllocator,
+                                                             VkSurfaceKHR *pSurface);
+VKAPI_ATTR void VKAPI_CALL local_vkDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface,
+                                                     const VkAllocationCallbacks *pAllocator);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice,
+                                                                          uint32_t queueFamilyIndex,
+                                                                          VkSurfaceKHR surface, VkBool32 *pSupported);
+VKAPI_ATTR VkBool32 VKAPI_CALL local_vkGetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice,
+                                                                                    uint32_t queueFamilyIndex);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+    VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR *pSurfaceCapabilities);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetPhysicalDeviceSurfaceCapabilities2KHR(
+    VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+    VkSurfaceCapabilities2KHR *pSurfaceCapabilities);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice,
+                                                                          VkSurfaceKHR surface,
+                                                                          uint32_t *pSurfaceFormatCount,
+                                                                          VkSurfaceFormatKHR *pSurfaceFormats);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetPhysicalDeviceSurfaceFormats2KHR(
+    VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
+    uint32_t *pSurfaceFormatCount, VkSurfaceFormat2KHR *pSurfaceFormats);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice physicalDevice,
+                                                                               VkSurfaceKHR surface,
+                                                                               uint32_t *pPresentModeCount,
+                                                                               VkPresentModeKHR *pPresentModes);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *pCreateInfo,
+                                                          const VkAllocationCallbacks *pAllocator,
+                                                          VkSwapchainKHR *pSwapchain);
+VKAPI_ATTR void VKAPI_CALL local_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
+                                                       const VkAllocationCallbacks *pAllocator);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
+                                                             uint32_t *pSwapchainImageCount,
+                                                             VkImage *pSwapchainImages);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout,
+                                                           VkSemaphore semaphore, VkFence fence,
+                                                           uint32_t *pImageIndex);
+VKAPI_ATTR VkResult VKAPI_CALL local_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo);
 
 }  // namespace av::icd
 

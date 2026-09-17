@@ -1,0 +1,196 @@
+/* The surfaces vkCreateWin32SurfaceKHR makes (feature 046, contracts/wsi.md):
+ * a handle per window, only for the instance that made it, gone with its
+ * instance, and a hostile create structure refused. */
+#include "harness/framework/test_registry.hpp"
+#include "harness/icd/icd_rig.hpp"
+#include "harness/icd/scripted_vulkan_device.hpp"
+#include "icd/vulkan/presentation.hpp"
+#include "icd/vulkan/surface_table.hpp"
+#include "icd/vulkan/win32_surface_create_record.hpp"
+
+#include <cstdint>
+
+namespace av::icd {
+
+/* A slot with a window and no instance: what the table must never hold. */
+struct SurfaceTableProbe {
+    static void orphan(SurfaceTable &table) { table.slots_[0].window_ = reinterpret_cast<void *>(0x99u); }
+};
+
+}  // namespace av::icd
+
+using av::IcdRig;
+using av::ScriptedVulkanDevice;
+using av::icd::Presentation;
+using av::icd::SurfaceSlot;
+using av::icd::SurfaceTableProbe;
+using av::icd::SurfaceTable;
+using av::icd::Win32SurfaceCreateRecord;
+using av::icd::win32_surface_create_info;
+
+namespace {
+
+VkInstance as_instance(std::uintptr_t number) { return reinterpret_cast<VkInstance>(number); }
+void      *as_window(std::uintptr_t number) { return reinterpret_cast<void *>(number); }
+
+Win32SurfaceCreateRecord surface_of(void *window)
+{ Win32SurfaceCreateRecord record = {};
+  record.type_ = win32_surface_create_info;
+  record.module_ = as_window(0x100u);
+  record.window_ = window;
+  return record; }
+
+/* The WSI over the rig's root: the ICD's own windows and log, and a device the
+ * entries would be called on. */
+class WsiRig {
+public:
+    WsiRig() : wsi_(rig_.platform(), rig_.kmt(), rig_.windows(), rig_.log(), rig_.root(), host_) {}
+
+    IcdRig       &rig() { return rig_; }
+    Presentation &wsi() { return wsi_; }
+
+private:
+    IcdRig               rig_;
+    ScriptedVulkanDevice host_;
+    Presentation         wsi_;
+};
+
+}  // namespace
+
+TEST(surface_table, a_surface_is_its_window_until_it_is_destroyed)
+{ SurfaceTable surfaces;
+  CHECK(surfaces.invariants_hold());
+  CHECK_EQ(surfaces.live(), 0u);
+  VkSurfaceKHR first = VK_NULL_HANDLE;
+  VkSurfaceKHR second = VK_NULL_HANDLE;
+  CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x10u), first), VK_SUCCESS);
+  CHECK(surfaces.invariants_hold());
+  CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x20u), second), VK_SUCCESS);
+  CHECK(first != VK_NULL_HANDLE);
+  CHECK(first != second);
+  CHECK_EQ(surfaces.live(), 2u);
+  CHECK(surfaces.window_of(first) == as_window(0x10u));
+  CHECK(surfaces.window_of(second) == as_window(0x20u));
+  /* A surface's handle is its slot's address, which is what makes a handle
+   * from anywhere else answer nothing. */
+  const SurfaceSlot *const slot = reinterpret_cast<const SurfaceSlot *>(first);
+  CHECK(slot->window_ == as_window(0x10u));
+  CHECK(slot->instance_ == as_instance(1u));
+  /* A handle this table never made names no window. */
+  CHECK(surfaces.window_of(reinterpret_cast<VkSurfaceKHR>(0x30u)) == nullptr);
+  CHECK(surfaces.window_of(VK_NULL_HANDLE) == nullptr);
+  surfaces.destroy(as_instance(1u), first);
+  CHECK(surfaces.invariants_hold());
+  CHECK_EQ(surfaces.live(), 1u);
+  CHECK(surfaces.window_of(first) == nullptr);
+  /* Destroying it twice, and destroying a handle from nowhere, do nothing. */
+  surfaces.destroy(as_instance(1u), first);
+  surfaces.destroy(as_instance(1u), reinterpret_cast<VkSurfaceKHR>(0x40u));
+  CHECK_EQ(surfaces.live(), 1u);
+  CHECK(surfaces.invariants_hold()); }
+
+/* The handle belongs to the instance that made it: another instance's
+ * destruction must not take it. */
+TEST(surface_table, only_the_instance_that_made_a_surface_destroys_or_forgets_it)
+{ SurfaceTable surfaces;
+  VkSurfaceKHR mine = VK_NULL_HANDLE;
+  VkSurfaceKHR theirs = VK_NULL_HANDLE;
+  CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x10u), mine), VK_SUCCESS);
+  CHECK_EQ(surfaces.create(as_instance(2u), as_window(0x20u), theirs), VK_SUCCESS);
+  surfaces.destroy(as_instance(2u), mine);
+  CHECK(surfaces.window_of(mine) == as_window(0x10u));
+  surfaces.forget(as_instance(2u));
+  CHECK(surfaces.invariants_hold());
+  CHECK_EQ(surfaces.live(), 1u);
+  CHECK(surfaces.window_of(mine) == as_window(0x10u));
+  CHECK(surfaces.window_of(theirs) == nullptr);
+  surfaces.forget(as_instance(1u));
+  CHECK_EQ(surfaces.live(), 0u);
+  CHECK(surfaces.invariants_hold()); }
+
+TEST(surface_table, a_surface_without_a_window_is_refused_and_a_full_table_is_out_of_memory)
+{ SurfaceTable surfaces;
+  VkSurfaceKHR surface = reinterpret_cast<VkSurfaceKHR>(0x1u);
+  CHECK_EQ(surfaces.create(as_instance(1u), nullptr, surface), VK_ERROR_INITIALIZATION_FAILED);
+  CHECK(surface == VK_NULL_HANDLE);
+  CHECK_EQ(surfaces.live(), 0u);
+  VkSurfaceKHR made[SurfaceTable::max_surfaces] = {};
+  for (std::uint32_t index = 0u; index < SurfaceTable::max_surfaces; index++)
+      CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x100u + index), made[index]), VK_SUCCESS);
+  CHECK_EQ(surfaces.live(), SurfaceTable::max_surfaces);
+  VkSurfaceKHR past = reinterpret_cast<VkSurfaceKHR>(0x1u);
+  CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x900u), past), VK_ERROR_OUT_OF_HOST_MEMORY);
+  CHECK(past == VK_NULL_HANDLE);
+  CHECK(surfaces.invariants_hold());
+  /* A destroyed slot is the one the next surface takes. */
+  surfaces.destroy(as_instance(1u), made[3u]);
+  VkSurfaceKHR again = VK_NULL_HANDLE;
+  CHECK_EQ(surfaces.create(as_instance(1u), as_window(0x900u), again), VK_SUCCESS);
+  CHECK(again == made[3u]);
+  CHECK_EQ(surfaces.live(), SurfaceTable::max_surfaces);
+  CHECK(surfaces.invariants_hold()); }
+
+TEST(icd_presentation, a_win32_surface_is_made_from_its_window_and_nothing_else)
+{ WsiRig rig;
+  const Win32SurfaceCreateRecord good = surface_of(as_window(0x10u));
+  VkSurfaceKHR surface = VK_NULL_HANDLE;
+  CHECK_EQ(rig.wsi().create_surface(as_instance(1u), &good, &surface), VK_SUCCESS);
+  CHECK(surface != VK_NULL_HANDLE);
+  CHECK_EQ(rig.wsi().surfaces(), 1u);
+  CHECK(rig.wsi().invariants_hold());
+  /* Every hostile create structure: no structure, another type, no window. */
+  Win32SurfaceCreateRecord wrong_type = good;
+  wrong_type.type_ = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+  Win32SurfaceCreateRecord no_window = good;
+  no_window.window_ = nullptr;
+  VkSurfaceKHR refused = reinterpret_cast<VkSurfaceKHR>(0x1u);
+  CHECK_EQ(rig.wsi().create_surface(as_instance(1u), nullptr, &refused), VK_ERROR_INITIALIZATION_FAILED);
+  CHECK(refused == VK_NULL_HANDLE);
+  refused = reinterpret_cast<VkSurfaceKHR>(0x1u);
+  CHECK_EQ(rig.wsi().create_surface(as_instance(1u), &wrong_type, &refused), VK_ERROR_INITIALIZATION_FAILED);
+  CHECK(refused == VK_NULL_HANDLE);
+  CHECK_EQ(rig.wsi().create_surface(as_instance(1u), &no_window, &refused), VK_ERROR_INITIALIZATION_FAILED);
+  CHECK_EQ(rig.wsi().surfaces(), 1u);
+  rig.wsi().destroy_surface(as_instance(1u), surface);
+  CHECK_EQ(rig.wsi().surfaces(), 0u);
+  CHECK(rig.wsi().invariants_hold()); }
+
+/* Every queue of this driver presents - the copy runs on the one it is handed -
+ * so support is a live surface and nothing more. */
+TEST(icd_presentation, every_queue_supports_a_live_surface_and_none_supports_a_lost_one)
+{ WsiRig rig;
+  const Win32SurfaceCreateRecord info = surface_of(as_window(0x10u));
+  VkSurfaceKHR surface = VK_NULL_HANDLE;
+  CHECK_EQ(rig.wsi().create_surface(as_instance(1u), &info, &surface), VK_SUCCESS);
+  VkBool32 supported = VK_FALSE;
+  CHECK_EQ(rig.wsi().surface_support(surface, &supported), VK_SUCCESS);
+  CHECK_EQ(supported, VK_TRUE);
+  rig.wsi().destroy_surface(as_instance(1u), surface);
+  supported = VK_TRUE;
+  CHECK_EQ(rig.wsi().surface_support(surface, &supported), VK_ERROR_SURFACE_LOST_KHR);
+  CHECK_EQ(supported, VK_FALSE); }
+
+/* vkDestroyInstance takes the instance's surfaces with it, as the loader
+ * expects; another instance's are untouched. */
+TEST(icd_presentation, an_instance_that_goes_takes_its_surfaces)
+{ WsiRig rig;
+  const Win32SurfaceCreateRecord info = surface_of(as_window(0x10u));
+  VkSurfaceKHR mine = VK_NULL_HANDLE;
+  VkSurfaceKHR theirs = VK_NULL_HANDLE;
+  CHECK_EQ(rig.wsi().create_surface(as_instance(1u), &info, &mine), VK_SUCCESS);
+  CHECK_EQ(rig.wsi().create_surface(as_instance(2u), &info, &theirs), VK_SUCCESS);
+  CHECK_EQ(rig.wsi().surfaces(), 2u);
+  rig.wsi().forget_instance(as_instance(2u));
+  CHECK_EQ(rig.wsi().surfaces(), 1u);
+  VkBool32 supported = VK_FALSE;
+  CHECK_EQ(rig.wsi().surface_support(mine, &supported), VK_SUCCESS);
+  CHECK_EQ(rig.wsi().surface_support(theirs, &supported), VK_ERROR_SURFACE_LOST_KHR);
+  CHECK(rig.wsi().invariants_hold()); }
+
+/* The invariant is what holds the handles apart from nothing: a window in a
+ * slot that names no instance would be a surface no instance can destroy. */
+TEST(surface_table, its_invariants_refuse_a_window_no_instance_owns)
+{ SurfaceTable surfaces;
+  CHECK(surfaces.invariants_hold());
+  SurfaceTableProbe::orphan(surfaces);
+  CHECK(!surfaces.invariants_hold()); }

@@ -230,4 +230,104 @@ VKAPI_ATTR VkResult VKAPI_CALL local_vkInvalidateMappedMemoryRanges(VkDevice dev
     return icd_binding.root().mapped_ranges(device, "vkInvalidateMappedMemoryRanges");
 }
 
+VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateWin32SurfaceKHR(VkInstance instance,
+                                                             const Win32SurfaceCreateRecord *pCreateInfo,
+                                                             const VkAllocationCallbacks *, VkSurfaceKHR *pSurface)
+{
+    AV_SCOPE("local_vkCreateWin32SurfaceKHR");
+    return icd_binding.root().presentation().create_surface(instance, pCreateInfo, pSurface);
+}
+
+VKAPI_ATTR void VKAPI_CALL local_vkDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface,
+                                                     const VkAllocationCallbacks *)
+{
+    AV_SCOPE("local_vkDestroySurfaceKHR");
+    icd_binding.root().presentation().destroy_surface(instance, surface);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice, uint32_t,
+                                                                          VkSurfaceKHR surface, VkBool32 *pSupported)
+{
+    AV_SCOPE("local_vkGetPhysicalDeviceSurfaceSupportKHR");
+    return icd_binding.root().presentation().surface_support(surface, pSupported);
+}
+
+VKAPI_ATTR VkBool32 VKAPI_CALL local_vkGetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice, uint32_t)
+{
+    AV_SCOPE("local_vkGetPhysicalDeviceWin32PresentationSupportKHR");
+    return VK_TRUE;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+    VkPhysicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR *pSurfaceCapabilities)
+{
+    AV_SCOPE("local_vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
+    return icd_binding.root().presentation().capabilities(surface, pSurfaceCapabilities);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetPhysicalDeviceSurfaceCapabilities2KHR(
+    VkPhysicalDevice, const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo, VkSurfaceCapabilities2KHR *pSurfaceCapabilities)
+{
+    AV_SCOPE("local_vkGetPhysicalDeviceSurfaceCapabilities2KHR");
+    return icd_binding.root().presentation().capabilities2(pSurfaceInfo, pSurfaceCapabilities);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice, VkSurfaceKHR surface,
+                                                                          uint32_t *pSurfaceFormatCount,
+                                                                          VkSurfaceFormatKHR *pSurfaceFormats)
+{
+    AV_SCOPE("local_vkGetPhysicalDeviceSurfaceFormatsKHR");
+    return icd_binding.root().presentation().formats(surface, pSurfaceFormatCount, pSurfaceFormats);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetPhysicalDeviceSurfaceFormats2KHR(
+    VkPhysicalDevice, const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo, uint32_t *pSurfaceFormatCount,
+    VkSurfaceFormat2KHR *pSurfaceFormats)
+{
+    AV_SCOPE("local_vkGetPhysicalDeviceSurfaceFormats2KHR");
+    return icd_binding.root().presentation().formats2(pSurfaceInfo, pSurfaceFormatCount, pSurfaceFormats);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice, VkSurfaceKHR surface,
+                                                                               uint32_t *pPresentModeCount,
+                                                                               VkPresentModeKHR *pPresentModes)
+{
+    AV_SCOPE("local_vkGetPhysicalDeviceSurfacePresentModesKHR");
+    return icd_binding.root().presentation().present_modes(surface, pPresentModeCount, pPresentModes);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoKHR *pCreateInfo,
+                                                          const VkAllocationCallbacks *, VkSwapchainKHR *pSwapchain)
+{
+    AV_SCOPE("local_vkCreateSwapchainKHR");
+    return icd_binding.root().presentation().create_swapchain(device, pCreateInfo, pSwapchain);
+}
+
+VKAPI_ATTR void VKAPI_CALL local_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
+                                                       const VkAllocationCallbacks *)
+{
+    AV_SCOPE("local_vkDestroySwapchainKHR");
+    icd_binding.root().presentation().destroy_swapchain(device, swapchain);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
+                                                             uint32_t *pSwapchainImageCount, VkImage *pSwapchainImages)
+{
+    AV_SCOPE("local_vkGetSwapchainImagesKHR");
+    return icd_binding.root().presentation().swapchain_images(device, swapchain, pSwapchainImageCount, pSwapchainImages);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout,
+                                                           VkSemaphore, VkFence, uint32_t *pImageIndex)
+{
+    AV_SCOPE("local_vkAcquireNextImageKHR");
+    return icd_binding.root().presentation().acquire(device, swapchain, timeout, pImageIndex);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL local_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
+{
+    AV_SCOPE("local_vkQueuePresentKHR");
+    return icd_binding.root().presentation().present(queue, pPresentInfo);
+}
+
 }  // namespace av::icd

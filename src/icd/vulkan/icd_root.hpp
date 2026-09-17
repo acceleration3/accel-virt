@@ -29,6 +29,8 @@
 #include "icd/common/extension_policy.hpp"
 #include "icd/vulkan/handle_registry.hpp"
 #include "icd/vulkan/loader_handle.hpp"
+#include "icd/vulkan/icd_entry_lookup.hpp"
+#include "icd/vulkan/presentation.hpp"
 
 #include <stdint.h>
 
@@ -44,6 +46,7 @@ namespace av::icd {
 
 class IcdBinding;
 class LogSink;
+class WindowSurface;
 class MemoryTypeTable;
 class ThreadLock;
 struct IcdRootProbe;
@@ -56,7 +59,7 @@ public:
 
     /* Binds itself into `binding` until destroyed. */
     IcdRoot(BlockSource &memory, Kmt &kmt, ThreadLock &lock, ThreadLock &send_lock, ThreadLock &memory_lock,
-            LogSink &log, IcdBinding &binding);
+            LogSink &log, IcdBinding &binding, WindowSurface &windows);
     ~IcdRoot();
     IcdRoot(const IcdRoot &) = delete;
     IcdRoot &operator=(const IcdRoot &) = delete;
@@ -148,6 +151,16 @@ public:
     Connection      *acquire_connection();
     void             release_connection(Connection *connection);
     void            *wrap(LoaderHandle::Kind kind, uint64_t host, Connection *connection);
+    /* The WSI entries' state (feature 046). */
+    Presentation    &presentation();
+    /* What a swapchain of `device` needs: its physical device, and the adapter
+     * and D3DKMT device its vertical blank is waited on; false for a device
+     * this ICD did not make. */
+    bool             present_context(VkDevice device, VkPhysicalDevice &physical, uint32_t &adapter,
+                                     uint32_t &kmt_device);
+    /* The entry point of that name, at whatever level it is: what the ICD's own
+     * swapchains call, having already found the device they belong to. */
+    PFN_vkVoidFunction entry(const char *name) const;
     Connection      *connection_of(void *handle, LoaderHandle::Kind kind);
     uint64_t         wire(void *handle, LoaderHandle::Kind kind);
     void             destroy_wrapper(void *handle, LoaderHandle::Kind kind);
@@ -205,6 +218,10 @@ private:
     HandleRegistry         handles_;
     ObjectPool<Connection> connections_;
     Connection            *pending_;
+    /* After the handles and connections: a swapchain's destruction calls the
+     * device it was made on. */
+    IcdEntryLookup         entries_;
+    Presentation           presentation_;
 
     friend struct IcdRootProbe;
 };

@@ -11,6 +11,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_window_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/vulkan/icd_root.hpp"
 
@@ -38,6 +39,7 @@ public:
     RecordingThreadLock  &send_lock();
     RecordingThreadLock  &memory_lock();
     RecordingLog         &log();
+    ScriptedWindowSurface &windows();
     icd::IcdRoot         &root();
 
     /* The entry point the root answers for `name` through `instance`, as the
@@ -65,6 +67,7 @@ private:
     RecordingThreadLock  send_lock_;
     RecordingThreadLock  memory_lock_;
     RecordingLog         log_;
+    ScriptedWindowSurface windows_;
     icd::IcdRoot         root_;
 };
 

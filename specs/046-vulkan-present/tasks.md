@@ -10,24 +10,24 @@ description: "Tasks: Vulkan presentation (046)"
 
 ## Phase 1: Setup
 
-- [ ] T001 Move `WindowSurface` from `src/icd/opengl/` to `src/icd/common/window_surface.hpp` (namespace `av::icd`), adding `blit_window(window, width, height, bgra_bottom_up)` (draw on the window's own DC) and `read_window(window, width, height, bgra_bottom_up)`; `ScriptedWindowSurface` and `GdiWindowSurface` follow (`src/um/icd/gdi_window_surface.*`); the GL ICD's users and tests unchanged in behaviour
-- [ ] T002 The instance extension table gains `VK_KHR_surface` (25) and `VK_KHR_win32_surface` (6); `VK_KHR_surface`, `VK_KHR_win32_surface` and `VK_KHR_swapchain` leave `ExtensionPolicy`'s withheld list; `VK_KHR_swapchain` (70) becomes a policy row naming its test
+- [X] T001 Move `WindowSurface` from `src/icd/opengl/` to `src/icd/common/window_surface.hpp` (namespace `av::icd`), adding `blit_window(window, width, height, bgra_bottom_up)` (draw on the window's own DC) and `read_window(window, width, height, bgra_bottom_up)`; `ScriptedWindowSurface` and `GdiWindowSurface` follow (`src/um/icd/gdi_window_surface.*`); the GL ICD's users and tests unchanged in behaviour
+- [X] T002 The instance extension table gains `VK_KHR_surface` (25) and `VK_KHR_win32_surface` (6); `VK_KHR_surface`, `VK_KHR_win32_surface` and `VK_KHR_swapchain` leave `ExtensionPolicy`'s withheld list; `VK_KHR_swapchain` (70) becomes a policy row naming its test
 
 **Checkpoint**: commit.
 
 ## Phase 2: US1 - A swapchain presents (P1)
 
-- [ ] T003 [US1] `SurfaceTable` (system) and the surface entries (`vkCreateWin32SurfaceKHR`, `vkDestroySurfaceKHR`, surface support queries) in `src/icd/vulkan/`; tests in `tests/unit/icd/vulkan/test_surfaces.cpp`
-- [ ] T004 [US1] `SurfaceProperties` (object): capabilities (1 and 2), formats (1 and 2), present modes per research.md §2-3, count/array protocols, a gone window; tests `test_surface_properties.cpp`
-- [ ] T005 [US1] `SwapchainImages` (object) and `Swapchain` (object): create (every refusal of contracts/wsi.md, a hostile table over `VkSwapchainCreateInfoKHR`), images, acquire, present (the host copy through a host-visible buffer, RGBA to BGRA, bottom-up, `blit_window`), destroy; `SwapchainTable` (system) and the entries; tests `test_swapchain.cpp` over IcdRig and the scripted host (the commands a present sends, the bytes blitted, the allocation-failure sweep); `tests/fuzz/fuzz_swapchain_create.cpp` with a corpus
-- [ ] T006 [US1] `FramePacer` (object): FIFO waits for the next vertical blank after the frame is drawn; IMMEDIATE does not; a failed wait is logged once and the present still succeeds; tests `test_frame_pacer.cpp`
+- [X] T003 [US1] `SurfaceTable` (system) and the surface entries (`vkCreateWin32SurfaceKHR`, `vkDestroySurfaceKHR`, surface support queries) in `src/icd/vulkan/`; tests in `tests/unit/icd/vulkan/test_surfaces.cpp`
+- [X] T004 [US1] `SurfaceProperties` (object): capabilities (1 and 2), formats (1 and 2), present modes per research.md §2-3, count/array protocols, a gone window; tests `test_surface_properties.cpp`
+- [X] T005 [US1] `SwapchainImages` (object) and `Swapchain` (object): create (every refusal of contracts/wsi.md, a hostile table over `VkSwapchainCreateInfoKHR`), images, acquire, present (the host copy through a host-visible buffer, RGBA to BGRA, bottom-up, `blit_window`), destroy; `SwapchainTable` (system) and the entries; tests `test_swapchain.cpp` over IcdRig and the scripted host (the commands a present sends, the bytes blitted, the allocation-failure sweep); `tests/fuzz/fuzz_swapchain_create.cpp` with a corpus
+- [X] T006 [US1] `FramePacer` (object): FIFO waits for the next vertical blank after the frame is drawn; IMMEDIATE does not; a failed wait is logged once and the present still succeeds; tests `test_frame_pacer.cpp`
 - [ ] T007 [US1] `test_fullstack_vulkan_icd.cpp`: a swapchain on the host GPU presents a drawn frame through the ICD; the blitted bytes are the render's; `build/images/vulkan-present.bmp`
 
 **Checkpoint**: commit.
 
 ## Phase 3: US2 - Windows that change (P1)
 
-- [ ] T008 [US2] Resize: acquire and present answer `VK_ERROR_OUT_OF_DATE_KHR` after the client size changes; a swapchain recreated with `oldSwapchain` presents at the new extent; a minimized (0x0) window refuses creation; a gone window is `VK_ERROR_SURFACE_LOST_KHR`; tests in `test_swapchain.cpp`
+- [X] T008 [US2] Resize: acquire and present answer `VK_ERROR_OUT_OF_DATE_KHR` after the client size changes; a swapchain recreated with `oldSwapchain` presents at the new extent; a minimized (0x0) window refuses creation; a gone window is `VK_ERROR_SURFACE_LOST_KHR`; tests in `test_swapchain.cpp`
 
 **Checkpoint**: commit.
 

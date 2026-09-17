@@ -19,6 +19,7 @@
 #include "harness/icd/lock_trace.hpp"
 #include "harness/icd/recording_log.hpp"
 #include "harness/icd/recording_thread_lock.hpp"
+#include "harness/icd/scripted_window_surface.hpp"
 #include "harness/platform/mock_platform.hpp"
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/icd_root.hpp"
@@ -71,12 +72,13 @@ class IcdProcess {
 public:
     explicit IcdProcess(DdiKmt &kmt)
         : lock_(trace_, 'H'), send_lock_(trace_, 'S'), memory_lock_(trace_, 'M'),
-          root_(memory_, kmt, lock_, send_lock_, memory_lock_, log_, av::icd::icd_binding)
+          root_(memory_, kmt, lock_, send_lock_, memory_lock_, log_, av::icd::icd_binding, windows_)
     {
     }
 
     av::icd::IcdRoot &root() { return root_; }
     RecordingLog     &log() { return log_; }
+    av::ScriptedWindowSurface &windows() { return windows_; }
 
 private:
     MockPlatform        memory_;
@@ -85,6 +87,7 @@ private:
     RecordingThreadLock send_lock_;
     RecordingThreadLock memory_lock_;
     RecordingLog        log_;
+    av::ScriptedWindowSurface windows_;
     av::icd::IcdRoot    root_;
 };
 

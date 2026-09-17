@@ -10,6 +10,7 @@
 #include "icd/vulkan/icd_root.hpp"
 #include "um/gdi_kmt.hpp"
 #include "um/icd/file_log.hpp"
+#include "um/icd/gdi_window_surface.hpp"
 #include "um/icd/process_heap.hpp"
 #include "um/icd/srw_lock.hpp"
 #include "um/trace/process_trace.hpp"
@@ -49,6 +50,7 @@ private:
         SrwLock      memory_lock;
         FileLog      log;
         GdiKmt       kmt;
+        GdiWindowSurface windows;
         icd::IcdRoot root;
         ProcessTrace trace;
     };

@@ -123,6 +123,8 @@ public:
         CHECK(!connection_.faulted());
         CHECK_EQ(connection_.luid(), 0u);
         CHECK_EQ(connection_.adapter(), 0u);
+        /* The D3DKMT device a swapchain's pacing waits on: none while closed. */
+        CHECK_EQ(connection_.device(), 0u);
         CHECK_EQ(kmt_.open_objects(), 0u);
         CHECK_EQ(kmt_.misuses(), 0u);
         CHECK_EQ(platform_.live_allocations(), 0u);
@@ -163,6 +165,8 @@ TEST(connection, opens_a_vulkan_context_on_the_rvkgpu_adapter_with_its_luid)
   /* The LUID of the adapter the connection kept, not the other one's. */
   CHECK_EQ(rig.connection().luid(), 0x0000000700000042ull);
   CHECK_EQ(ConnectionProbe::guest(rig.connection()).adapter(), ConnectionProbe::search(rig.connection()).adapter());
+  CHECK_EQ(rig.connection().device(), ConnectionProbe::guest(rig.connection()).device());
+  CHECK(rig.connection().device() != 0u);
   CHECK_EQ(rig.kmt().open_objects(), open_objects);
   CHECK_EQ(rig.platform().live_allocations(), 1u);
   av::RvkContextRecord record;

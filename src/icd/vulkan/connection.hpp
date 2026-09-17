@@ -58,6 +58,8 @@ public:
     bool                 faulted() const;
     /* The rvkgpu adapter's handle, 0 until open. */
     uint32_t             adapter() const;
+    /* The D3DKMT device the connection made; 0 unless open. */
+    uint32_t             device() const;
     /* The adapter's LUID, 0 until open. */
     uint64_t             luid() const;
     /* What the generated wrappers send through, only while open: the root

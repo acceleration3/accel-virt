@@ -575,7 +575,7 @@ if(AV_FUZZ)
     target_link_libraries(${name} PRIVATE av_harness)
     # The ICD's target links its core, as the ICD's unit tests do.
     if(name STREQUAL "fuzz_physical_device_view" OR name STREQUAL "fuzz_extension_policy" OR
-       name STREQUAL "fuzz_memory_type_table")
+       name STREQUAL "fuzz_memory_type_table" OR name STREQUAL "fuzz_swapchain_create")
       target_link_libraries(${name} PRIVATE av_icd)
     endif()
     if(name STREQUAL "fuzz_context_attributes" OR name STREQUAL "fuzz_pixel_format_query")

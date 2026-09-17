@@ -104,13 +104,16 @@ private:
     VkPhysicalDevice physical_device_;
 };
 
-const char *const host_extensions[] = {"VK_KHR_spirv_1_4", "VK_KHR_timeline_semaphore", "VK_KHR_swapchain"};
+/* None of these is reported: one is not implemented, one is not in the
+ * policy, and one is an instance extension. */
+const char *const host_extensions[] = {"VK_KHR_spirv_1_4", "VK_KHR_timeline_semaphore", "VK_KHR_surface"};
 
 }  // namespace
 
-/* The one extension the ICD has proven, once the host lists it, beside others
- * it does not report. */
-TEST(icd_extensions, reports_the_memory_budget_the_host_lists_and_nothing_else)
+/* The extensions the ICD has proven, once the host lists them, beside others it
+ * does not report. The swapchain is the ICD's own (feature 046), and the host
+ * lists it because the host driver presents too. */
+TEST(icd_extensions, reports_the_memory_budget_and_the_swapchain_the_host_lists_and_nothing_else)
 { ExtensionRig rig;
   const char *const listed[] = {"VK_KHR_swapchain", "VK_EXT_memory_budget", "VK_KHR_spirv_1_4"};
   rig.answer_count(VK_SUCCESS, 3u);
@@ -118,10 +121,12 @@ TEST(icd_extensions, reports_the_memory_budget_the_host_lists_and_nothing_else)
   std::uint32_t         count = 3u;
   VkExtensionProperties properties[3] = {};
   CHECK_EQ(rig.enumerate(&count, properties), VK_SUCCESS);
-  CHECK_EQ(count, 1u);
+  CHECK_EQ(count, 2u);
   CHECK(std::strcmp(properties[0].extensionName, "VK_EXT_memory_budget") == 0);
   CHECK_EQ(properties[0].specVersion, 1u);
-  CHECK_EQ(properties[1].extensionName[0], '\0'); }
+  CHECK(std::strcmp(properties[1].extensionName, "VK_KHR_swapchain") == 0);
+  CHECK_EQ(properties[1].specVersion, 1u);
+  CHECK_EQ(properties[2].extensionName[0], '\0'); }
 
 TEST(icd_extensions, reports_none_of_the_hosts_extensions_while_none_is_proven)
 { ExtensionRig rig;
@@ -217,7 +222,7 @@ TEST(icd_extensions, a_device_naming_an_extension_not_reported_is_refused_before
   CHECK_EQ(rig.create(implemented, 1u, &device), VK_ERROR_EXTENSION_NOT_PRESENT);
   CHECK(device == VK_NULL_HANDLE);
   CHECK_EQ(rig.rig().log().holding("does not report: VK_KHR_spirv_1_4"), 1u);
-  const char *const withheld[] = {"VK_KHR_swapchain"};
+  const char *const withheld[] = {"VK_KHR_surface"};
   CHECK_EQ(rig.create(withheld, 1u, &device), VK_ERROR_EXTENSION_NOT_PRESENT);
   const char *const unnamed[] = {nullptr};
   CHECK_EQ(rig.create(unnamed, 1u, &device), VK_ERROR_EXTENSION_NOT_PRESENT);

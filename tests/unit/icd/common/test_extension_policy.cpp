@@ -1,8 +1,8 @@
 /* Which of the host's device extensions the guest is told of (research.md §9):
  * only one on the host's list, implemented by the generator and named by a
- * policy row, at no newer a spec version than the row's - and never the
- * surface, swapchain or host-memory import extensions, whatever the host and
- * the policy say. The host's list is hostile: names without a terminator,
+ * policy row, at no newer a spec version than the row's - and never an
+ * instance extension or the host-memory import, whatever the host and the
+ * policy say. The host's list is hostile: names without a terminator,
  * hundreds of entries, a name listed many times. A device may be created with
  * exactly what would be reported. */
 #include "harness/framework/test_registry.hpp"
@@ -23,8 +23,8 @@ const Row rows[] = {
     {"VK_KHR_spirv_1_4", 1u, "extension_policy.test"},
     /* Named by the policy but not implemented by the generator. */
     {"VK_NV_ray_tracing", 1u, "extension_policy.test"},
-    /* Never reported, whatever names them. */
     {"VK_KHR_swapchain", 70u, "extension_policy.test"},
+    /* Never reported, whatever names them. */
     {"VK_KHR_surface", 25u, "extension_policy.test"},
     {"VK_KHR_win32_surface", 6u, "extension_policy.test"},
     {"VK_EXT_external_memory_host", 1u, "extension_policy.test"},
@@ -70,22 +70,26 @@ TEST(extension_policy, reports_only_the_host_implemented_policy_extensions)
   host.add("VK_KHR_timeline_semaphore", 2u);
   std::uint32_t count = 99u;
   CHECK_EQ(policy.report(host.entries(), host.count(), &count, nullptr), VK_SUCCESS);
-  CHECK_EQ(count, 2u);
+  CHECK_EQ(count, 3u);
   VkExtensionProperties reported[4] = {};
-  reported[2].specVersion = 0xC0FFEEu;
+  reported[3].specVersion = 0xC0FFEEu;
   count = 4u;
   CHECK_EQ(policy.report(host.entries(), host.count(), &count, reported), VK_SUCCESS);
-  CHECK_EQ(count, 2u);
+  CHECK_EQ(count, 3u);
   /* In the policy's order. */
   CHECK(std::strcmp(reported[0].extensionName, "VK_KHR_timeline_semaphore") == 0);
   CHECK_EQ(reported[0].specVersion, 2u);
   CHECK(std::strcmp(reported[1].extensionName, "VK_KHR_spirv_1_4") == 0);
-  CHECK_EQ(reported[2].specVersion, 0xC0FFEEu); }
+  /* The swapchain is this ICD's own (feature 046), so it is reported. */
+  CHECK(std::strcmp(reported[2].extensionName, "VK_KHR_swapchain") == 0);
+  CHECK_EQ(reported[2].specVersion, 70u);
+  CHECK_EQ(reported[3].specVersion, 0xC0FFEEu); }
 
-TEST(extension_policy, the_surface_swapchain_and_host_memory_extensions_are_never_reported)
+/* A surface extension is an instance extension: a device list naming one is a
+ * driver bug, whatever the host says. */
+TEST(extension_policy, the_surface_and_host_memory_extensions_are_never_reported)
 { ExtensionPolicy policy(rows, row_count);
-  const char *const withheld[] = {"VK_KHR_surface", "VK_KHR_win32_surface", "VK_KHR_swapchain",
-                                  "VK_EXT_external_memory_host"};
+  const char *const withheld[] = {"VK_KHR_surface", "VK_KHR_win32_surface", "VK_EXT_external_memory_host"};
   for (const char *name : withheld) {
       const VkExtensionProperties host = extension(name, 1u);
       std::uint32_t count = 5u;
@@ -181,10 +185,10 @@ TEST(extension_policy, a_host_listing_512_extensions_is_reported_from_whole_and_
 
 TEST(extension_policy, a_device_may_enable_exactly_what_would_be_reported)
 { ExtensionPolicy policy(rows, row_count);
-  const char *const allowed[] = {"VK_KHR_timeline_semaphore", "VK_KHR_spirv_1_4"};
-  CHECK_EQ(policy.first_refused(allowed, 2u), 2u);
+  const char *const allowed[] = {"VK_KHR_timeline_semaphore", "VK_KHR_spirv_1_4", "VK_KHR_swapchain"};
+  CHECK_EQ(policy.first_refused(allowed, 3u), 3u);
   CHECK_EQ(policy.first_refused(nullptr, 0u), 0u);
-  const char *const refused[] = {"VK_NV_ray_tracing", "VK_KHR_maintenance1", "VK_KHR_swapchain",
+  const char *const refused[] = {"VK_NV_ray_tracing", "VK_KHR_maintenance1", "VK_KHR_surface",
                                  "VK_KHR_timeline_semaphor", "", nullptr};
   for (const char *name : refused) {
       const char *const names[] = {"VK_KHR_spirv_1_4", name, "VK_KHR_timeline_semaphore"};
@@ -192,7 +196,7 @@ TEST(extension_policy, a_device_may_enable_exactly_what_would_be_reported)
   }
   ExtensionPolicy empty(nullptr, 0u);
   CHECK(empty.invariants_hold());
-  CHECK_EQ(empty.first_refused(allowed, 2u), 0u); }
+  CHECK_EQ(empty.first_refused(allowed, 3u), 0u); }
 
 TEST(extension_policy, invariants_refuse_a_row_that_names_nothing_no_test_no_version_or_a_name_twice)
 { char long_name[VK_MAX_EXTENSION_NAME_SIZE + 1u] = {};

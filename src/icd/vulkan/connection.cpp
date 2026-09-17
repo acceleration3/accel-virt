@@ -87,6 +87,13 @@ uint32_t         Connection::adapter() const
     AV_SCOPE("Connection::adapter");
     return opened() ? connection_.adapter() : 0u;
 }
+
+uint32_t Connection::device() const
+{
+    AV_SCOPE("Connection::device");
+    return opened() ? connection_.device() : 0u;
+}
+
 uint64_t         Connection::luid() const
 {
     AV_SCOPE("Connection::luid");

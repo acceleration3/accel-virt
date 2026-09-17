@@ -11,6 +11,7 @@
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_host.hpp"
 #include "harness/icd/icd_rig.hpp"
+#include "harness/icd/scripted_window_surface.hpp"
 #include "icd/vulkan/connection.hpp"
 #include "icd/vulkan/icd_binding.hpp"
 #include "icd/vulkan/icd_root.hpp"
@@ -243,18 +244,25 @@ TEST(icd_root, every_manual_entry_point_it_answers_is_its_own_and_the_rest_are_n
       const PFN_vkVoidFunction found = rig.root().instance_proc_addr(instance, name);
       if (found == nullptr) continue;
       answered++;
-      /* Mapping (T035) and device dispatch are the ICD's own too, and answer
-       * only through an instance. */
-      if (found == entry_of(&av::icd::local_vkMapMemory) || found == entry_of(&av::icd::local_vkUnmapMemory) ||
-          found == entry_of(&av::icd::local_vkGetDeviceProcAddr)) {
+      /* Mapping (T035), device dispatch and the WSI (feature 046) are the
+       * ICD's own too, and answer only through an instance. */
+      if (rig.root().instance_proc_addr(VK_NULL_HANDLE, name) == nullptr) {
           through_an_instance++;
-          CHECK(rig.root().instance_proc_addr(VK_NULL_HANDLE, name) == nullptr);
           continue;
       }
       CHECK(found == rig.root().instance_proc_addr(VK_NULL_HANDLE, name));
   }
-  CHECK_EQ(answered, 5u);
-  CHECK_EQ(through_an_instance, 3u);
+  CHECK(rig.root().instance_proc_addr(instance, "vkMapMemory") == entry_of(&av::icd::local_vkMapMemory));
+  CHECK(rig.root().instance_proc_addr(VK_NULL_HANDLE, "vkMapMemory") == nullptr);
+  CHECK(rig.root().instance_proc_addr(instance, "vkCreateSwapchainKHR") ==
+        entry_of(&av::icd::local_vkCreateSwapchainKHR));
+  /* The window-system entries of another platform are not this driver's. */
+  CHECK(rig.root().instance_proc_addr(instance, "vkCreateXlibSurfaceKHR") == nullptr);
+  CHECK(rig.root().instance_proc_addr(instance, "vkCreateHeadlessSurfaceEXT") == nullptr);
+  /* Three before the WSI, and the twelve window-system entries this platform's
+   * manual list names (the two Win32-only ones are not on it). */
+  CHECK_EQ(answered, 17u);
+  CHECK_EQ(through_an_instance, 15u);
   rig.destroy_instance(instance); }
 
 /* The Windows loader drops a driver that answers any of these null for its
@@ -326,37 +334,45 @@ TEST(icd_root, a_device_it_made_answers_device_level_entry_points_and_no_other)
   rig.destroy_instance(instance);
   CHECK(rig.root().invariants_hold()); }
 
-/* The one instance extension is VK_KHR_get_physical_device_properties2: its
+/* The instance extensions are VK_KHR_get_physical_device_properties2 - its
  * entry points are the ICD's own, and a loader client such as vulkaninfo asks
- * for the physical device's LUID only when the extension is listed - the live
- * run showed no deviceLUID without it. The count and array protocol is the
- * loader's: VK_INCOMPLETE with what fits, nothing written past the capacity. */
-TEST(icd_root, reports_physical_device_properties2_as_its_one_instance_extension)
+ * for the physical device's LUID only when the extension is listed - and the
+ * two surface extensions the WSI answers (feature 046). The count and array
+ * protocol is the loader's: VK_INCOMPLETE with what fits, nothing written past
+ * the capacity. */
+TEST(icd_root, reports_properties2_and_the_surface_extensions_as_its_instance_extensions)
 { IcdRig rig;
   const InstanceExtensions enumerate =
       rig.entry<InstanceExtensions>(VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties");
   std::uint32_t count = 5u;
   CHECK_EQ(enumerate(nullptr, &count, nullptr), VK_SUCCESS);
-  CHECK_EQ(count, 1u);
-  VkExtensionProperties properties[2] = {};
+  CHECK_EQ(count, 3u);
+  VkExtensionProperties properties[4] = {};
   properties[0].specVersion = 9u;
   count = 0u;
   CHECK_EQ(enumerate(nullptr, &count, properties), VK_INCOMPLETE);
   CHECK_EQ(count, 0u);
   CHECK_EQ(properties[0].specVersion, 9u);
   count = 2u;
+  CHECK_EQ(enumerate(nullptr, &count, properties), VK_INCOMPLETE);
+  CHECK_EQ(count, 2u);
+  count = 4u;
   CHECK_EQ(enumerate(nullptr, &count, properties), VK_SUCCESS);
-  CHECK_EQ(count, 1u);
+  CHECK_EQ(count, 3u);
   CHECK(__builtin_strcmp(properties[0].extensionName, "VK_KHR_get_physical_device_properties2") == 0);
   CHECK_EQ(properties[0].specVersion, 2u);
-  CHECK_EQ(properties[1].specVersion, 0u);
+  CHECK(__builtin_strcmp(properties[1].extensionName, "VK_KHR_surface") == 0);
+  CHECK_EQ(properties[1].specVersion, 25u);
+  CHECK(__builtin_strcmp(properties[2].extensionName, "VK_KHR_win32_surface") == 0);
+  CHECK_EQ(properties[2].specVersion, 6u);
+  CHECK_EQ(properties[3].specVersion, 0u);
   bool implemented = false;
   for (const char *const name : av::vkproto::kImplementedInstanceExtensions)
     implemented = implemented || __builtin_strcmp(name, properties[0].extensionName) == 0;
   CHECK(implemented);
-  count = 2u;
+  count = 4u;
   CHECK_EQ(enumerate("VK_LAYER_KHRONOS_validation", &count, properties), VK_ERROR_LAYER_NOT_PRESENT);
-  CHECK_EQ(count, 2u);
+  CHECK_EQ(count, 4u);
   CHECK_EQ(rig.log().holding("no layer"), 1u);
   CHECK_EQ(rig.kmt().open_objects(), 0u); }
 
@@ -451,7 +467,8 @@ TEST(icd_root, create_instance_with_no_way_to_the_host_answers_incompatible_driv
       av::RecordingThreadLock send_lock(trace, 'S');
       av::RecordingThreadLock memory_lock(trace, 'M');
       av::RecordingLog log;
-      IcdRoot root(platform, kmt, lock, send_lock, memory_lock, log, av::icd::icd_binding);
+      av::ScriptedWindowSurface windows;
+      IcdRoot root(platform, kmt, lock, send_lock, memory_lock, log, av::icd::icd_binding, windows);
       if (!refusal.no_adapter) {
           kmt.add_adapter(av::PciIdentity(av::AdapterScenario::virtio_vendor, av::AdapterScenario::virtio_gpu_device,
                                           av::AdapterScenario::virtio_vendor, av::AdapterScenario::rvk_subsystem),
