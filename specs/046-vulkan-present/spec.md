@@ -40,7 +40,15 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 
 | Class | Kind | State it owns | Responsibility (no "and") |
 |---|---|---|---|
-| | object / system | | |
+| `WindowSurface` (moved to `src/icd/common`) | interface | - | The windows an ICD draws on, as the Windows shim sees them |
+| `SurfaceTable` | system | the process's `VkSurfaceKHR` records (window, instance) | Owns the surfaces `vkCreateWin32SurfaceKHR` made |
+| `SurfaceProperties` | object | the window, the surface query answers | Answers a surface's capabilities, formats and present modes from its window |
+| `SwapchainImages` | object | the host images, their memory, the read-back buffer | Makes and releases one swapchain's host objects |
+| `Swapchain` | object | extent, format, mode, images, next index, the copy's command objects | Hands out images and puts a presented one on its window |
+| `SwapchainTable` | system | the process's swapchains | Owns the swapchains `vkCreateSwapchainKHR` made |
+| `FramePacer` | object | the adapter, the device, the vertical blank count | Holds a FIFO present until the adapter's next vertical blank |
+| `PresentProbe` (guest suite) | object | the window, the swapchain, the frame count | Proves a presented frame reaches the window at the display's rate |
+| `PresentBlit` (core) | object | the source and destination pages, the rectangle | Copies one present's pixels between CPU-backed allocations |
 
 ### Test requirements
 
@@ -63,6 +71,35 @@ Knowledge base:
 Normative headers: `third_party/windows-kit/include/` (fetched by `tools/fetch_windows_kit.sh`). Reverse-engineering targets, symbolized, in `re/ghidra-proj` (built by `tools/re/build_workspace.sh`) — read `dxgkrnl.sys` when the question is "what does the caller do with this", and `basicrender.sys` when it is "what is the minimum that works".
 
 <!-- AUTOGEN:END -->
+
+## Clarifications
+
+### Session 2026-09-17 (answered from the repository and the RE workspace)
+
+- **Why is the guest desktop black, and does that block this feature?** The
+  KMD's `ExecutionNode` completes every non-rvk DMA buffer as a loopback: the
+  blit, colour-fill and flip commands `DxgkDdiPresent` writes are never
+  executed, so DWM's (CDD's) presents never reach the scanout. → Executing
+  present commands is part of this feature (FR-004), as `PresentBlit` in the
+  KMD at `DxgkDdiPresent`, since every source DWM presents from on this
+  adapter is CPU-backed.
+- **Can a windowed Vulkan present go through D3DKMT and be composed by DWM
+  now?** No. A windowed present composed by DWM needs a redirection surface,
+  which a D3D UMD makes (feature 055), and dxgkrnl's legacy present is allowed
+  only to the VidPn source's owner (`DXGDEVICE::AllowLegacyPresent`,
+  dxgkrnl.sys @14036fb0c). → Until 055, a swapchain's frame reaches its window
+  through the `WindowSurface` seam (GDI `SetDIBitsToDevice` on the window's
+  DC), which DWM composes like any GDI window; FR-001's "never GDI" is
+  deferred to 055, recorded here and in the plan.
+- **Where can a run see a presented frame?** The runner's programs run in
+  session 0, whose windows are not on the console's scanout. → The probe reads
+  its window back (`GetDIBits` of the window's DC) and saves the frame as a
+  bitmap; the runner's screendump proves the desktop path of FR-004.
+- **Present modes.** FIFO (paced on `D3DKMTWaitForVerticalBlankEvent`) and
+  IMMEDIATE are reported; MAILBOX is not, since a synchronous present cannot
+  replace a queued frame.
+- **User Story 3 (vkd3d-proton)** needs a runtime this repository does not
+  pin; it is deferred to feature 047, which brings the D3D translation layers.
 
 ## User Scenarios & Testing *(mandatory)*
 
