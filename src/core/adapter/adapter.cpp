@@ -1136,7 +1136,7 @@ void Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Present
     if (kind == PresentOperation::flip) return;
     if (request.pAllocationList == nullptr || request.NumDstAllocations != 1u ||
         (!filling && request.NumSrcAllocations != 1u)) {
-        presents_unmoved_++;
+        log_unmoved_present("list", request, request.NumSrcAllocations, request.NumDstAllocations);
         return;
     }
     const auto *const list = static_cast<const DxgkAllocationListRecord *>(request.pAllocationList);
@@ -1144,7 +1144,7 @@ void Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Present
     DeviceAllocation *const destination =
         devices_.opened(list[request.NumSrcAllocations].hDeviceSpecificAllocation);
     if (destination == nullptr || (!filling && source == nullptr)) {
-        presents_unmoved_++;
+        log_unmoved_present("handles", request, request.NumSrcAllocations, request.NumDstAllocations);
         return;
     }
     const PresentSurface written(destination->allocation().descriptor().layout(), destination->allocation().pages());
@@ -1157,8 +1157,30 @@ void Adapter::move_presented_pixels(const DxgkargPresentRecord &request, Present
     const Rectangle   from(request.SrcRect.left, request.SrcRect.top, request.SrcRect.right, request.SrcRect.bottom);
     const Status      moved = filling ? blit.fill(request.Color, into, rectangles, count)
                                       : blit.blit(from, into, rectangles, count);
-    if (moved != Status::ok) presents_unmoved_++;
+    if (moved != Status::ok) log_unmoved_present("surfaces", request, request.NumSrcAllocations, request.NumDstAllocations);
     present_rows_ += blit.rows();
+}
+
+/* A present whose pixels stayed where they were, with what it was: the desktop
+ * not reaching the screen is invisible from the guest, so the driver says so
+ * once per present it could not carry. */
+void Adapter::log_unmoved_present(const char *why, const DxgkargPresentRecord &request, uint32_t sources,
+                                  uint32_t destinations)
+{
+    AV_SCOPE("Adapter::log_unmoved_present");
+    presents_unmoved_++;
+    if (!budget_.allows()) return;
+    char       bytes[96];
+    TextBuffer message(bytes, sizeof bytes);
+    message.append("rvkgpu: present unmoved ");
+    message.append(why);
+    message.append(" flags 0x");
+    message.append_hex(request.Flags, 8u);
+    message.append(" sources ");
+    message.append_decimal(sources);
+    message.append(" destinations ");
+    message.append_decimal(destinations);
+    platform_.log(message.text());
 }
 
 int32_t Adapter::set_pointer_shape(const DxgkargSetPointerShapeRecord *request)

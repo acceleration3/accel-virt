@@ -245,6 +245,8 @@ public:
 private:
     /* The pixels of a present nothing else executes (feature 046). */
     void move_presented_pixels(const DxgkargPresentRecord &request, PresentOperation kind, uint32_t first);
+    void log_unmoved_present(const char *why, const DxgkargPresentRecord &request, uint32_t sources,
+                             uint32_t destinations);
 
     static constexpr uint32_t config_space_bytes = 256u;
     static constexpr uint32_t adapter_device_uid = 0xFFFFFFFFu;  /* DISPLAY_ADAPTER_HW_ID */

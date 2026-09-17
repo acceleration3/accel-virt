@@ -149,8 +149,9 @@ Status PresentBlit::move_row(uint32_t from_x, uint32_t from_y, uint32_t to_x, ui
 uint8_t *PresentBlit::map_at(const PresentSurface &surface, uint64_t offset, uint32_t &within, uint32_t &available)
 {
     AV_SCOPE("PresentBlit::map_at");
+    /* Every offset here is inside a surface `reachable` proved has a page for
+     * every row, so the frame is one the allocation owns. */
     const uint64_t frame = surface.frame_at(offset, within);
-    if (frame == 0u) return nullptr;
     uint8_t *const view = platform_.map_frame(frame);
     if (view == nullptr) return nullptr;
     available = static_cast<uint32_t>(GuestPageList::page_bytes) - within;

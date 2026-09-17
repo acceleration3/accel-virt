@@ -414,6 +414,117 @@ private:
     void         *handle_;
 };
 
+/* A small surface in pages the platform can really map, created, mapped into
+ * the aperture and opened on a device: the two ends of a present whose pixels
+ * the miniport moves (feature 046). */
+class MappedSurface {
+public:
+    static constexpr std::uint32_t side = 8u;
+    static constexpr std::uint32_t pitch = side * 4u;
+    static constexpr std::uint32_t colour = 0x11223344u;
+
+    MappedSurface(Fixture &fixture, av::FakeHandleTable &handles, void *device, av::AllocationKind kind)
+        : platform_(fixture.platform()), block_(nullptr), frames_{}, encoded_{}, handle_(nullptr),
+          open_handle_(nullptr)
+    {
+        block_ = static_cast<std::uint8_t *>(platform_.allocate_contiguous(page));
+        CHECK(block_ != nullptr);
+        std::memset(block_, 0, page);
+        frames_[0] = platform_.physical_address(block_);
+        /* Only a primary is scanned out; any other kind naming a target is a
+         * descriptor the driver refuses. */
+        const av::ScanoutTarget target = kind == av::AllocationKind::shared_primary ? av::ScanoutTarget(0u, 60u, 1u)
+                                                                                   : av::ScanoutTarget();
+        const av::AllocationDescriptor descriptor(kind, true, av::SurfaceLayout(side, side, 21u, pitch), page,
+                                                  target);
+        CHECK_STATUS(descriptor.encode(encoded_, sizeof encoded_), av::Status::ok);
+        av::DxgkAllocationInfoRecord info = {};
+        info.pPrivateDriverData = encoded_;
+        info.PrivateDriverDataSize = av::AllocationDescriptor::encoded_size;
+        av::DxgkargCreateAllocationRecord create = {};
+        create.NumAllocations = 1u;
+        create.pAllocationInfo = &info;
+        CHECK_EQ(nt(fixture.adapter().create_allocation(&create)), success);
+        handle_ = info.hAllocation;
+        av::DxgkBuildPagingBufferMapApertureSegmentRecord mapping = {};
+        mapping.hAllocation = handle_;
+        mapping.SegmentId = av::ApertureSegment::segment_id;
+        mapping.NumberOfPages = 1u;
+        mapping.pMdl = platform_.attach_page_frames(frames_, 1u);
+        std::uint8_t                       dma[64] = {};
+        av::DxgkargBuildPagingBufferRecord paging = {};
+        paging.pDmaBuffer = dma;
+        paging.DmaSize = sizeof dma;
+        paging.Operation = 5;   /* DXGK_OPERATION_MAP_APERTURE_SEGMENT */
+        std::memcpy(paging.Reserved, &mapping, sizeof mapping);
+        CHECK_EQ(nt(fixture.adapter().build_paging_buffer(&paging)), success);
+        av::DxgkOpenAllocationInfoRecord opening = {};
+        opening.hAllocation = handles.insert(handle_);
+        av::DxgkargOpenAllocationRecord open = {};
+        open.NumAllocations = 1u;
+        open.pOpenAllocation = &opening;
+        CHECK_EQ(nt(fixture.adapter().open_allocation(device, &open)), success);
+        open_handle_ = opening.hDeviceSpecificAllocation;
+    }
+    ~MappedSurface() { platform_.release_contiguous(block_, page); }
+    MappedSurface(const MappedSurface &) = delete;
+    MappedSurface &operator=(const MappedSurface &) = delete;
+
+    void *open_handle() const { return open_handle_; }
+
+    void paint_all(std::uint32_t value)
+    {
+        for (std::uint32_t y = 0u; y < side; y++)
+            for (std::uint32_t x = 0u; x < side; x++)
+                std::memcpy(block_ + y * pitch + x * 4u, &value, sizeof value);
+    }
+    std::uint32_t count(std::uint32_t value) const
+    {
+        std::uint32_t found = 0u;
+        for (std::uint32_t y = 0u; y < side; y++)
+            for (std::uint32_t x = 0u; x < side; x++) {
+                std::uint32_t pixel = 0u;
+                std::memcpy(&pixel, block_ + y * pitch + x * 4u, sizeof pixel);
+                found += pixel == value ? 1u : 0u;
+            }
+        return found;
+    }
+
+private:
+    static constexpr std::uint64_t page = 0x1000u;
+
+    MockPlatform     &platform_;
+    std::uint8_t     *block_;
+    std::uint64_t     frames_[1];
+    std::uint8_t      encoded_[av::AllocationDescriptor::encoded_size];
+    void             *handle_;
+    void             *open_handle_;
+};
+
+/* The driver's own state dump, as rvk-inspect reads it: the trace escape's
+ * state kind, so a test judges what a person debugging the guest would see. */
+class StateDump {
+public:
+    explicit StateDump(Fixture &fixture) : text_{}
+    {
+        std::uint8_t data[av::TraceEscapeRecord::encoded_size + 16u * 1024u] = {};
+        const av::TraceEscapeRecord request(av::TraceEscapeRecord::Kind::state, 0u, 16u * 1024u);
+        CHECK_STATUS(request.encode(data, sizeof data), av::Status::ok);
+        DxgkargEscapeRecord escape = {};
+        escape.pPrivateDriverData = data;
+        escape.PrivateDriverDataSize = sizeof data;
+        CHECK_EQ(nt(fixture.adapter().escape(&escape)), success);
+        av::TraceEscapeRecord answer = request;
+        CHECK_STATUS(answer.accept_answer(data, sizeof data), av::Status::ok);
+        std::memcpy(text_, data + av::TraceEscapeRecord::encoded_size, answer.window());
+    }
+
+    bool holds(const char *text) const { return std::strstr(text_, text) != nullptr; }
+
+private:
+    char text_[16u * 1024u + 1u];
+};
+
 }  // namespace
 
 TEST(adapter, remembers_its_physical_device_object)
@@ -1205,6 +1316,130 @@ TEST(adapter_present, needs_a_live_context_then_presents)
   CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
   CHECK_EQ(dma[0], 0x52u);
   CHECK_EQ(patches[1].AllocationIndex, 2u);
+  /* A present naming no allocations moved no pixels, and says so: what the
+   * desktop's own presents look like from the miniport (feature 046). */
+  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved list flags 0x00000001 sources 0 destinations 0"));
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* FR-004: dxgkrnl's own presents are loopback-completed, so the pixels a blt
+ * present names move in the miniport. What the source holds is what the
+ * destination holds afterwards, and the adapter says how many rows it moved. */
+TEST(adapter_present, a_blt_between_two_opened_allocations_moves_its_pixels)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  av::FakeHandleTable handles;
+  MappedSurface source(fixture, handles, device.hDevice, av::AllocationKind::shadow);
+  MappedSurface destination(fixture, handles, device.hDevice, av::AllocationKind::shared_primary);
+  source.paint_all(MappedSurface::colour);
+  av::DxgkAllocationListRecord list[2] = {};
+  list[0].hDeviceSpecificAllocation = source.open_handle();
+  list[1].hDeviceSpecificAllocation = destination.open_handle();
+  std::uint8_t                      dma[512] = {};
+  av::D3dddiPatchLocationListRecord  patches[8] = {};
+  av::DxgkargPresentRecord          present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.pPatchLocationListOut = patches;
+  present.PatchLocationListOutSize = 8u;
+  present.Flags = 1u;   /* Blt */
+  present.pAllocationList = list;
+  present.NumSrcAllocations = 1u;
+  present.NumDstAllocations = 1u;
+  const std::int32_t side = static_cast<std::int32_t>(MappedSurface::side);
+  present.SrcRect = {0, 0, side, side};
+  present.DstRect = {0, 0, side, side};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(destination.count(MappedSurface::colour), MappedSurface::side * MappedSurface::side);
+  CHECK(fixture.adapter().invariants_hold());
+
+  /* The rows it moved are in the state dump, and nothing was left mapped. */
+  const StateDump dump(fixture);
+  CHECK(dump.holds("present_rows=8"));
+  CHECK(dump.holds("presents_unmoved=0"));
+  CHECK_EQ(fixture.platform().mapped_frames(), 0u);
+
+  /* A destination rectangle of another size than the source's is a stretch this
+   * driver does not do: the present still succeeds - dxgkrnl's DMA buffer was
+   * written - but the pixels stay where they were, and the driver says so. */
+  present.DstRect = {0, 0, side, side / 2};
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved surfaces flags 0x00000001 sources 1 destinations 1"));
+
+  /* An allocation this device never opened is one the miniport cannot reach. */
+  present.DstRect = {0, 0, side, side};
+  list[1].hDeviceSpecificAllocation = &fixture;
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK(fixture.platform().logged_line("rvkgpu: present unmoved handles flags 0x00000001 sources 1 destinations 1"));
+
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* A flip moves no pixels: the source is already the allocation the scanout
+ * address will name, and dxgkrnl programs it through SetVidPnSourceAddress. A
+ * present whose flags name no operation this driver presents, and one whose DMA
+ * buffer could not be written, move nothing either. */
+TEST(adapter_present, a_flip_an_unnamed_operation_and_a_refused_present_move_nothing)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  std::uint8_t                      dma[128] = {};
+  av::D3dddiPatchLocationListRecord patches[4] = {};
+  av::DxgkargPresentRecord          present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.pPatchLocationListOut = patches;
+  present.PatchLocationListOutSize = 4u;
+  const std::uint32_t quiet = fixture.platform().logged();
+  present.Flags = 4u;   /* Flip */
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  present.Flags = 0u;   /* no operation at all */
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), invalid_parameter);
+  present.Flags = 1u;   /* Blt, with no room for the command */
+  present.DmaSize = 0u;
+  CHECK(nt(fixture.adapter().present(context.hContext, &present)) != success);
+  const StateDump dump(fixture);
+  CHECK(dump.holds("present_rows=0"));
+  CHECK(dump.holds("presents_unmoved=0"));
+  /* Each present said what it answered, and none of them said a pixel stayed
+   * where it was: there was nothing to move. */
+  CHECK(fixture.platform().logged() > quiet);
+  CHECK(!fixture.platform().logged_line("rvkgpu: present unmoved"));
+  CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
+  CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
+
+/* A log storm is bounded: a present the miniport cannot carry still counts,
+ * and says nothing once the window's budget is spent. */
+TEST(adapter_present, a_present_that_moves_nothing_is_counted_even_when_the_log_is_spent)
+{ Fixture fixture;
+  CHECK_EQ(fixture.start(), success);
+  av::DxgkargCreateDeviceRecord device = {};
+  CHECK_EQ(nt(fixture.adapter().create_device(&device)), success);
+  av::DxgkargCreateContextRecord context = {};
+  CHECK_EQ(nt(fixture.adapter().create_context(device.hDevice, &context)), success);
+  const av::DxgkargRecommendVidPnTopologyRecord topology = {};
+  for (std::uint32_t line = 0u; line <= av::LogBudget::lines_per_window; line++)
+      static_cast<void>(fixture.adapter().recommend_vidpn_topology(&topology));
+  const std::uint32_t                spent = fixture.platform().logged();
+  std::uint8_t                       dma[128] = {};
+  av::D3dddiPatchLocationListRecord  patches[4] = {};
+  av::DxgkargPresentRecord           present = {};
+  present.pDmaBuffer = dma;
+  present.DmaSize = sizeof dma;
+  present.pPatchLocationListOut = patches;
+  present.PatchLocationListOutSize = 4u;
+  present.Flags = 1u;   /* Blt, naming no allocations: what the desktop's own presents are */
+  CHECK_EQ(nt(fixture.adapter().present(context.hContext, &present)), success);
+  CHECK_EQ(fixture.platform().logged(), spent);
+  const StateDump dump(fixture);
+  CHECK(dump.holds("presents_unmoved=1"));
   CHECK_EQ(nt(fixture.adapter().destroy_context(context.hContext)), success);
   CHECK_EQ(nt(fixture.adapter().destroy_device(device.hDevice)), success); }
 

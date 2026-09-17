@@ -311,3 +311,144 @@ TEST(present_blit, a_pitch_that_is_not_whole_pixels_is_refused)
     CHECK_EQ(blit.rows(), 0u); }
   CHECK_EQ(destination.count(0xFFFFFFFFu), 0u);
   CHECK_EQ(platform.mapped_frames(), 0u); }
+
+/* A present that would scale in either axis is refused: the desktop's presents
+ * are one to one, and a stretch would be a different picture. */
+TEST(present_blit, a_present_that_would_stretch_a_rectangle_is_refused)
+{ MockPlatform platform;
+  Surface      source(platform, 0u);
+  Surface      destination(platform, 0u);
+  source.paint_all(0x77u);
+  destination.paint_all(0u);
+  const PresentSurface from = source.present();
+  const PresentSurface into = destination.present();
+  PresentBlit          blit(platform, &from, into);
+  /* As wide, half as tall. */
+  CHECK_STATUS(blit.blit(Rectangle(0, 0, side, side), Rectangle(0, 0, side, side / 2u), nullptr, 0u),
+               Status::not_supported);
+  CHECK_EQ(blit.rows(), 0u);
+  CHECK_EQ(destination.count(0x77u), 0u); }
+
+/* A sub-rectangle that cannot be moved stops the present there: the rectangles
+ * after it are not moved, and the ones before it keep what they moved. */
+TEST(present_blit, a_sub_rectangle_that_fails_stops_the_present)
+{ MockPlatform platform;
+  Surface      source(platform, 0u);
+  Surface      destination(platform, 0u);
+  source.paint_all(0x88u);
+  destination.paint_all(0u);
+  const PresentSurface from = source.present();
+  const PresentSurface into = destination.present();
+  const RectRecord     pieces[2] = {rect(0, 0, side, 1), rect(0, 2, side, 3)};
+  { PresentBlit blit(platform, &from, into);
+    /* The first row maps its destination and its source; the second row's
+     * destination does not map. */
+    platform.fail_frame_map_at(3u);
+    CHECK_STATUS(blit.blit(Rectangle(0, 0, side, side), Rectangle(0, 0, side, side), pieces, 2u), Status::not_found);
+    CHECK_EQ(blit.rows(), 1u);
+    CHECK_EQ(destination.count(0x88u), side);
+    CHECK(blit.invariants_hold()); }
+  { PresentBlit blit(platform, nullptr, into);
+    /* A fill maps only its destination, so the second rectangle's row is the
+     * second map. */
+    platform.fail_frame_map_at(2u);
+    CHECK_STATUS(blit.fill(0x99u, Rectangle(0, 0, side, side), pieces, 2u), Status::not_found);
+    CHECK_EQ(blit.rows(), 1u);
+    CHECK_EQ(destination.count(0x99u), side); }
+  platform.fail_frame_map_at(0u);
+  CHECK_EQ(platform.mapped_frames(), 0u); }
+
+/* A present may name a source rectangle that is partly, or wholly, outside the
+ * source surface: what is outside it has no pixels, so those rows and columns
+ * are left as they were rather than read from somewhere else. */
+TEST(present_blit, a_source_rectangle_outside_the_source_moves_only_what_is_inside)
+{ MockPlatform platform;
+  Surface      source(platform, 0u);
+  Surface      destination(platform, 0u);
+  source.paint_all(0xAAu);
+  destination.paint_all(0u);
+  const PresentSurface from = source.present();
+  const PresentSurface into = destination.present();
+  /* Two rows above the source's first row: those destination rows keep what
+   * they had, and the two below them are the source's first two. */
+  { PresentBlit blit(platform, &from, into);
+    CHECK_STATUS(blit.blit(Rectangle(0, -2, side, 2), Rectangle(0, 0, side, 4), nullptr, 0u), Status::ok);
+    CHECK_EQ(blit.rows(), 2u);
+    CHECK_EQ(destination.at(0u, 0u), 0u);
+    CHECK_EQ(destination.at(0u, 1u), 0u);
+    CHECK_EQ(destination.at(0u, 2u), 0xAAu);
+    CHECK_EQ(destination.count(0xAAu), 2u * side); }
+  /* Two rows past the source's last: the same the other way round. */
+  { PresentBlit blit(platform, &from, into);
+    destination.paint_all(0u);
+    CHECK_STATUS(blit.blit(Rectangle(0, side - 2, side, side + 2), Rectangle(0, 0, side, 4), nullptr, 0u),
+                 Status::ok);
+    CHECK_EQ(blit.rows(), 2u);
+    CHECK_EQ(destination.count(0xAAu), 2u * side); }
+  /* A source rectangle entirely to the right of the source: no column of it is
+   * in the surface, so nothing moves and it is not a failure. */
+  { PresentBlit blit(platform, &from, into);
+    destination.paint_all(0u);
+    CHECK_STATUS(blit.blit(Rectangle(side, 0, side + 4, 4), Rectangle(0, 0, 4, 4), nullptr, 0u), Status::ok);
+    CHECK_EQ(blit.rows(), 0u);
+    CHECK_EQ(destination.count(0xAAu), 0u);
+    CHECK(blit.invariants_hold()); }
+  CHECK_EQ(platform.mapped_frames(), 0u); }
+
+/* A row whose bytes cross a page boundary is moved a page at a time: the pages
+ * of an allocation are guest frames, and only one of them is mapped at once.
+ * A surface whose pitch does not divide a page has such a row. */
+TEST(present_blit, a_row_that_crosses_a_page_is_moved_in_both_of_them)
+{ MockPlatform            platform;
+  constexpr std::uint32_t pages = 2u;
+  constexpr std::uint64_t bytes = pages * GuestPageList::page_bytes;
+  constexpr std::uint32_t wide = 12u;
+  constexpr std::uint32_t wide_pitch = wide * PresentSurface::pixel_bytes;   /* 48: no divisor of a page */
+  constexpr std::uint32_t rows = 170u;                                       /* 8160 bytes of the two pages */
+  auto *const             source_block = static_cast<std::uint8_t *>(platform.allocate_contiguous(bytes));
+  auto *const             destination_block = static_cast<std::uint8_t *>(platform.allocate_contiguous(bytes));
+  CHECK(source_block != nullptr);
+  CHECK(destination_block != nullptr);
+  std::memset(destination_block, 0, bytes);
+  /* Every pixel of a row is the row's own number, so a row moved into the
+   * wrong one is visible. */
+  for (std::uint32_t y = 0u; y < rows; y++)
+      for (std::uint32_t x = 0u; x < wide; x++) {
+          const std::uint32_t value = y + 1u;
+          std::memcpy(source_block + y * wide_pitch + x * PresentSurface::pixel_bytes, &value, sizeof value);
+      }
+  std::uint64_t source_frames[pages] = {};
+  std::uint64_t destination_frames[pages] = {};
+  for (std::uint32_t index = 0u; index < pages; index++) {
+      source_frames[index] = platform.physical_address(source_block) + index * GuestPageList::page_bytes;
+      destination_frames[index] = platform.physical_address(destination_block) + index * GuestPageList::page_bytes;
+  }
+  const SurfaceLayout  layout(wide, rows, format, wide_pitch);
+  const PresentSurface from(layout, GuestPageList(source_frames, pages));
+  const PresentSurface into(layout, GuestPageList(destination_frames, pages));
+  { PresentBlit blit(platform, &from, into);
+    CHECK_STATUS(blit.blit(Rectangle(0, 0, wide, rows), Rectangle(0, 0, wide, rows), nullptr, 0u), Status::ok);
+    CHECK_EQ(blit.rows(), rows);
+    CHECK(blit.invariants_hold());
+    /* The row that starts in one page and ends in the next is whole. */
+    const std::uint32_t crossing = static_cast<std::uint32_t>(GuestPageList::page_bytes / wide_pitch);
+    for (std::uint32_t x = 0u; x < wide; x++) {
+        std::uint32_t moved = 0u;
+        std::memcpy(&moved, destination_block + crossing * wide_pitch + x * PresentSurface::pixel_bytes,
+                    sizeof moved);
+        CHECK_EQ(moved, crossing + 1u);
+    }
+    CHECK_EQ(std::memcmp(source_block, destination_block, std::size_t{rows} * wide_pitch), 0); }
+  CHECK_EQ(platform.mapped_frames(), 0u);
+  /* A page the allocation never got - a frame of zero - is not a surface this
+   * can reach at all: nothing of the present moves, rather than its first page
+   * moving and the rest being read from wherever frame zero is. */
+  std::uint64_t        holed[pages] = {destination_frames[0], 0u};
+  const PresentSurface holey(layout, GuestPageList(holed, pages));
+  { PresentBlit blit(platform, &from, holey);
+    CHECK_STATUS(blit.blit(Rectangle(0, 0, wide, rows), Rectangle(0, 0, wide, rows), nullptr, 0u),
+                 Status::not_supported);
+    CHECK_EQ(blit.rows(), 0u); }
+  CHECK_EQ(platform.mapped_frames(), 0u);
+  platform.release_contiguous(source_block, bytes);
+  platform.release_contiguous(destination_block, bytes); }
