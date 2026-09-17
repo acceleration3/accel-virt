@@ -24,6 +24,8 @@
 
 namespace av {
 
+class ImageSink;
+
 class GlEntry;
 class GuestReport;
 class Kmt;
@@ -42,7 +44,8 @@ public:
     /* solid.frag's vec4(0.25, 0.5, 0.75, 1.0) as UNORM bytes. */
     static constexpr uint8_t colour[4] = {64u, 128u, 191u, 255u};
 
-    GlProbe(Kmt &kmt, GuestReport &report, GlEntry &gl);
+    /* `images` keeps a picture of every render the probe judges. */
+    GlProbe(Kmt &kmt, GuestReport &report, GlEntry &gl, ImageSink &images);
     GlProbe(const GlProbe &) = delete;
     GlProbe &operator=(const GlProbe &) = delete;
 
@@ -65,6 +68,7 @@ private:
 
     GuestReport  &report_;
     GlEntry      &gl_;
+    ImageSink    &images_;
     ScenarioSteps steps_;
 };
 

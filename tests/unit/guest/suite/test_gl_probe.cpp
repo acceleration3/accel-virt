@@ -7,6 +7,7 @@
  * run, and leaves no context or object behind. */
 #include "guest/suite/gl_probe.hpp"
 #include "guest/suite/guest_report.hpp"
+#include "harness/guest/scripted_image_sink.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_gl.hpp"
@@ -14,6 +15,7 @@
 #include <cstdint>
 #include <cstring>
 
+using av::ScriptedImageSink;
 using av::GlProbe;
 using av::GuestReport;
 using av::MockKmt;
@@ -37,15 +39,17 @@ public:
 
     ScriptedGl  &gl() { return gl_; }
     GuestReport &report() { return report_; }
+    const ScriptedImageSink &images() const { return images_; }
     void         run()
     {
-        GlProbe probe(kmt_, report_, gl_);
+        GlProbe probe(kmt_, report_, gl_, images_);
         probe.run();
         report_.finish();
     }
     bool holds(const char *line) const { return std::strstr(report_.text(), line) != nullptr; }
 
 private:
+    ScriptedImageSink images_;
     MockKmt     kmt_;
     ScriptedGl  gl_;
     GuestReport report_;
@@ -69,7 +73,20 @@ TEST(gl_probe, every_step_passes_on_a_gl_that_does_what_it_is_asked)
                                          "ok opengl.recreated 32\n"
                                          "rvkglprobe: 9 passed, 0 failed\n") == 0);
   CHECK_EQ(rig.gl().calls(Call::swap_buffers), 2u);
-  CHECK_EQ(rig.gl().calls(Call::force_fault), 1u); }
+  CHECK_EQ(rig.gl().calls(Call::force_fault), 1u);
+  /* A picture of each render the probe judged: the two 8x4 draws, 24 bytes a
+   * row, and the 2x2 shared texture, each pixel the colour it read back. */
+  CHECK_EQ(rig.images().saved(), 3u);
+  CHECK_EQ(rig.images().size("opengl-draw"), 54u + 4u * 24u);
+  CHECK_EQ(rig.images().size("opengl-recreated"), 54u + 4u * 24u);
+  CHECK_EQ(rig.images().size("opengl-share"), 54u + 2u * 8u);
+  const std::uint8_t *const drawn = rig.images().bytes("opengl-draw");
+  CHECK(drawn != nullptr);
+  if (drawn != nullptr) {
+      const std::uint8_t bgr[3] = {GlProbe::colour[2], GlProbe::colour[1], GlProbe::colour[0]};
+      CHECK(std::memcmp(drawn + 54u, bgr, 3u) == 0);
+      CHECK(std::memcmp(drawn + 54u + 3u * 23u, bgr, 3u) == 0);
+  } }
 
 TEST(gl_probe, no_format_or_no_context_ends_the_run)
 { const struct {

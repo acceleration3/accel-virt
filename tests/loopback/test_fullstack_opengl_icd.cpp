@@ -10,6 +10,7 @@
 #include "device/abi/rvk_executor.h"
 #include "guest/suite/gl_probe.hpp"
 #include "guest/suite/guest_report.hpp"
+#include "harness/guest/directory_image_sink.hpp"
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -261,7 +262,8 @@ TEST(fullstack_opengl_icd, the_gl_probe_passes_every_step_on_the_host_gpu)
     CHECK(process.opengl32().load(GlIcdRoot::icd_version, 1u) == FakeOpengl32::Load::loaded);
     av::Opengl32GlEntry gl(process.opengl32(), process.threads(), process.dc(), window_side, window_side);
     av::GuestReport     report("rvkglprobe");
-    av::GlProbe         probe(rig.kmt(), report, gl);
+    av::DirectoryImageSink images(AV_IMAGE_DIR);
+    av::GlProbe         probe(rig.kmt(), report, gl, images);
     probe.run();
     report.finish();
     std::fprintf(stderr, "%s", report.text());

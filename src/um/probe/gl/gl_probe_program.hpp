@@ -5,6 +5,7 @@
 #ifndef AV_UM_GL_PROBE_PROGRAM_HPP
 #define AV_UM_GL_PROBE_PROGRAM_HPP
 
+#include "um/probe/windows_image_sink.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "um/gdi_kmt.hpp"
 #include "um/probe/gl/probe_window.hpp"
@@ -29,6 +30,7 @@ private:
     GuestReport    report_;
     ProbeWindow    window_;
     WindowsGlEntry gl_;
+    WindowsImageSink images_;
 };
 
 }  // namespace av

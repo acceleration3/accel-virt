@@ -23,11 +23,11 @@ uint32_t low_part(uint64_t luid)
 
 }  // namespace
 
-VulkanProbe::VulkanProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan)
-    : kmt_(kmt), vulkan_(vulkan), steps_(kmt, report, "vulkan"), adapter_luid_(0u)
-    {
-        AV_SCOPE("VulkanProbe::VulkanProbe");
-    }
+VulkanProbe::VulkanProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan, ImageSink &images)
+    : kmt_(kmt), vulkan_(vulkan), images_(images), steps_(kmt, report, "vulkan"), adapter_luid_(0u)
+{
+    AV_SCOPE("VulkanProbe::VulkanProbe");
+}
 
 void VulkanProbe::run()
 {
@@ -44,7 +44,7 @@ void VulkanProbe::run()
             computed.report(steps_, "compute");
         }
         {
-            DrawWork     draw(device);
+            DrawWork     draw(device, images_);
             ProbeOutcome drawn;
             draw.run(drawn);
             drawn.report(steps_, "draw");

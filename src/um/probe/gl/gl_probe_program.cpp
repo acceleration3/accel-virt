@@ -8,7 +8,7 @@
 
 namespace av {
 
-GlProbeProgram::GlProbeProgram() : kmt_(), report_("rvkglprobe"), window_(), gl_(window_)
+GlProbeProgram::GlProbeProgram() : kmt_(), report_("rvkglprobe"), window_(), gl_(window_), images_()
 {
     AV_SCOPE("GlProbeProgram::GlProbeProgram");
 }
@@ -22,7 +22,7 @@ uint32_t GlProbeProgram::run()
     } else if (!window_.open()) {
         report_.check("program", "window", Status::not_found, window_.last_error());
     } else {
-        GlProbe probe(kmt_, report_, gl_);
+        GlProbe probe(kmt_, report_, gl_, images_);
         probe.run();
     }
     report_.finish();

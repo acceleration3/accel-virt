@@ -7,7 +7,7 @@
 
 namespace av {
 
-ProbeProgram::ProbeProgram() : kmt_(), report_("rvkvkprobe"), vulkan_(&vkGetInstanceProcAddr)
+ProbeProgram::ProbeProgram() : kmt_(), report_("rvkvkprobe"), vulkan_(&vkGetInstanceProcAddr), images_()
 {
     AV_SCOPE("ProbeProgram::ProbeProgram");
 }
@@ -17,7 +17,7 @@ uint32_t ProbeProgram::run()
     AV_SCOPE("ProbeProgram::run");
     const Status initialized = kmt_.initialize();
     if (initialized == Status::ok) {
-        VulkanProbe probe(kmt_, report_, vulkan_);
+        VulkanProbe probe(kmt_, report_, vulkan_, images_);
         probe.run();
     } else {
         report_.check("program", "initialize", initialized, 0u);

@@ -15,6 +15,7 @@
 
 namespace av {
 
+class ImageSink;
 class ProbeDevice;
 class ProbeOutcome;
 struct DrawWorkProbe;
@@ -27,7 +28,8 @@ public:
      * one of the rounding a driver may choose (127.5 is either neighbour). */
     static constexpr uint8_t colour[4] = {64u, 128u, 191u, 255u};
 
-    explicit DrawWork(ProbeDevice &device);
+    /* `images` keeps the picture the step judges, as vulkan-draw. */
+    DrawWork(ProbeDevice &device, ImageSink &images);
     ~DrawWork();
     DrawWork(const DrawWork &) = delete;
     DrawWork &operator=(const DrawWork &) = delete;
@@ -47,6 +49,7 @@ private:
     uint32_t coloured() const;
 
     ProbeDevice     &device_;
+    ImageSink       &images_;
     ProbeImage       image_;
     ProbeBuffer      readback_;
     ProbeCommands    commands_;

@@ -20,6 +20,8 @@
 
 namespace av {
 
+class ImageSink;
+
 class GuestReport;
 class Kmt;
 class ProbeDevice;
@@ -30,7 +32,8 @@ public:
     static constexpr uint32_t elements = ComputeWork::elements;
     static constexpr uint32_t extent = DrawWork::extent;
 
-    VulkanProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan);
+    /* `images` keeps the draw step's picture. */
+    VulkanProbe(Kmt &kmt, GuestReport &report, VulkanEntry &vulkan, ImageSink &images);
     VulkanProbe(const VulkanProbe &) = delete;
     VulkanProbe &operator=(const VulkanProbe &) = delete;
 
@@ -46,6 +49,7 @@ private:
 
     Kmt         &kmt_;
     VulkanEntry &vulkan_;
+    ImageSink   &images_;
     ScenarioSteps steps_;
     uint64_t     adapter_luid_;
 };

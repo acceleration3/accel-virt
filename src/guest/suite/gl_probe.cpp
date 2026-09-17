@@ -1,8 +1,11 @@
 #include "guest/suite/gl_probe.hpp"
 
+#include "core/support/text_buffer.hpp"
 #include "core/trace/function_scope.hpp"
+#include "guest/suite/bmp_image.hpp"
 #include "guest/suite/gl_entry.hpp"
 #include "guest/suite/guest_report.hpp"
+#include "guest/suite/image_sink.hpp"
 
 namespace av {
 
@@ -65,8 +68,8 @@ uint32_t matching(const uint8_t *rgba, uint32_t count)
 
 }  // namespace
 
-GlProbe::GlProbe(Kmt &kmt, GuestReport &report, GlEntry &gl)
-    : report_(report), gl_(gl), steps_(kmt, report, "opengl")
+GlProbe::GlProbe(Kmt &kmt, GuestReport &report, GlEntry &gl, ImageSink &images)
+    : report_(report), gl_(gl), images_(images), steps_(kmt, report, "opengl")
 {
     AV_SCOPE("GlProbe::GlProbe");
 }
@@ -153,6 +156,12 @@ void GlProbe::draw_step(const char *name)
     gl_.bind_vertex_array(0u);
     gl_.delete_vertex_array(array);
     gl_.delete_program(made);
+    char       picture[ImageSink::max_name];
+    TextBuffer named(picture, sizeof picture);
+    named.append("opengl-");
+    named.append(name);
+    /* glReadPixels returns the bottom row first. */
+    images_.save(named.text(), BmpImage(pixels, width, height, BmpImage::Rows::bottom_first));
     const uint32_t count = width * height;
     const uint32_t matched = matching(pixels, count);
     const bool     drawn = swapped && error == 0u && count != 0u && matched == count;
@@ -180,6 +189,7 @@ void GlProbe::share_step(void *current)
         if (shared) {
             gl_.bind_texture(texture);
             gl_.read_texture(read);
+            images_.save("opengl-share", BmpImage(read, share_extent, share_extent, BmpImage::Rows::bottom_first));
             for (uint32_t at = 0u; at < sizeof read; at += bytes_per_pixel)
                 matched += __builtin_memcmp(read + at, share_texels + at, bytes_per_pixel) == 0 ? 1u : 0u;
         }

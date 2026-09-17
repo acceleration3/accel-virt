@@ -14,6 +14,7 @@
 #include "guest/suite/shaders/solid_spv.hpp"
 #include "guest/suite/shaders/triangle_spv.hpp"
 #include "guest/suite/vulkan_probe.hpp"
+#include "harness/guest/scripted_image_sink.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_vulkan.hpp"
@@ -56,10 +57,11 @@ public:
     MockKmt        &kmt() { return kmt_; }
     ScriptedVulkan &vulkan() { return vulkan_; }
     GuestReport    &report() { return report_; }
+    const av::ScriptedImageSink &images() const { return images_; }
 
     void run()
     {
-        VulkanProbe probe(kmt_, report_, vulkan_);
+        VulkanProbe probe(kmt_, report_, vulkan_, images_);
         probe.run();
         report_.finish();
     }
@@ -71,6 +73,7 @@ public:
 private:
     MockKmt        kmt_;
     ScriptedVulkan vulkan_;
+    av::ScriptedImageSink images_;
     GuestReport    report_;
 };
 
@@ -166,7 +169,8 @@ TEST(vulkan_probe, no_adapter_ends_the_run)
 { MockKmt kmt;
   ScriptedVulkan vulkan;
   GuestReport report("rvkvkprobe");
-  { VulkanProbe probe(kmt, report, vulkan);
+  av::ScriptedImageSink images;
+  { VulkanProbe probe(kmt, report, vulkan, images);
     probe.run(); }
   report.finish();
   CHECK(std::strcmp(report.text(), "ok vulkan.instance\n"

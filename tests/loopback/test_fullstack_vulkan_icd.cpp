@@ -10,6 +10,7 @@
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/loader_vulkan.hpp"
 #include "guest/suite/vulkan_probe.hpp"
+#include "harness/guest/directory_image_sink.hpp"
 #include "harness/executor/executor_library_file.hpp"
 #include "harness/executor/widest_host_gpu.hpp"
 #include "harness/framework/test_registry.hpp"
@@ -110,7 +111,8 @@ TEST(fullstack_vulkan_icd, the_probe_passes_every_step_through_the_icd)
   GuestReport report("rvkvkprobe");
   { IcdProcess process(rig.kmt());
     LoaderVulkan vulkan(&av::bound_icd_instance_proc_addr);
-    { VulkanProbe probe(rig.kmt(), report, vulkan);
+    av::DirectoryImageSink images(AV_IMAGE_DIR);
+    { VulkanProbe probe(rig.kmt(), report, vulkan, images);
       probe.run(); }
     CHECK(process.root().invariants_hold());
     for (std::uint32_t index = 0u; report.failed() != 0u && index < process.log().lines(); index++)

@@ -9,6 +9,7 @@
 #include "guest/suite/scenario_steps.hpp"
 #include "guest/suite/shaders/solid_spv.hpp"
 #include "guest/suite/shaders/triangle_spv.hpp"
+#include "harness/guest/scripted_image_sink.hpp"
 #include "harness/framework/test_registry.hpp"
 #include "harness/guest/mock_kmt.hpp"
 #include "harness/guest/scripted_vulkan.hpp"
@@ -54,13 +55,14 @@ public:
     DrawRig() : steps_(kmt_, report_, "vulkan") {}
 
     ScriptedVulkan &vulkan() { return vulkan_; }
+    const av::ScriptedImageSink &images() const { return images_; }
 
     const char *run()
     {
         {
             ProbeDevice device(vulkan_);
             make(device);
-            DrawWork     work(device);
+            DrawWork     work(device, images_);
             ProbeOutcome outcome;
             CHECK(work.invariants_hold());
             work.run(outcome);
@@ -73,7 +75,8 @@ public:
     }
 
 private:
-    ScriptedVulkan vulkan_;
+    ScriptedVulkan         vulkan_;
+    av::ScriptedImageSink images_;
     MockKmt        kmt_;
     GuestReport    report_;
     ScenarioSteps  steps_;
@@ -89,7 +92,29 @@ TEST(draw_work, every_pixel_comes_back_the_colour)
   CHECK_EQ(rig.vulkan().calls(Call::queue_submit), 1u);
   /* The image in the device-local type, the readback in the host-visible one. */
   CHECK_EQ(rig.vulkan().allocated_type(0u), 0u);
-  CHECK_EQ(rig.vulkan().allocated_type(1u), 1u); }
+  CHECK_EQ(rig.vulkan().allocated_type(1u), 1u);
+  /* The picture of the 64x64 render: 192 bytes a row, the colour in BGR. */
+  CHECK_EQ(rig.images().saved(), 1u);
+  CHECK_EQ(rig.images().size("vulkan-draw"), 54u + 64u * 192u);
+  const std::uint8_t *const drawn = rig.images().bytes("vulkan-draw");
+  CHECK(drawn != nullptr);
+  if (drawn != nullptr) {
+      const std::uint8_t bgr[3] = {DrawWork::colour[2], DrawWork::colour[1], DrawWork::colour[0]};
+      CHECK(std::memcmp(drawn + 54u, bgr, 3u) == 0);
+      CHECK(std::memcmp(drawn + 54u + 64u * 192u - 3u, bgr, 3u) == 0);
+  } }
+
+/* A render that fails before its copy is made leaves no picture. */
+TEST(draw_work, a_draw_that_never_ran_saves_no_picture)
+{ ScriptedVulkan vulkan;
+  vulkan.fail(Call::create_render_pass, 1u, VK_ERROR_OUT_OF_HOST_MEMORY);
+  ProbeDevice device(vulkan);
+  make(device);
+  av::ScriptedImageSink images;
+  { DrawWork work(device, images);
+    ProbeOutcome outcome;
+    work.run(outcome); }
+  CHECK_EQ(images.saved(), 0u); }
 
 TEST(draw_work, a_black_pixel_is_counted_out)
 { DrawRig rig;
@@ -102,7 +127,8 @@ TEST(draw_work, a_channel_one_off_is_the_colour_and_two_off_is_not)
 { ScriptedVulkan vulkan;
   ProbeDevice device(vulkan);
   make(device);
-  DrawWork work(device);
+  av::ScriptedImageSink images;
+  DrawWork work(device, images);
   ProbeOutcome outcome;
   work.run(outcome);
   unsigned char *const bytes = DrawWorkProbe::readback(work);
@@ -153,12 +179,13 @@ TEST(draw_work, invariants_refuse_objects_without_what_they_stand_on)
 { ScriptedVulkan vulkan;
   ProbeDevice device(vulkan);
   make(device);
-  DrawWork one(device);
+  av::ScriptedImageSink images;
+  DrawWork one(device, images);
   ProbeOutcome outcome;
   one.run(outcome);
   DrawWorkProbe::framebuffer_without_pass(one);
   CHECK(!one.invariants_hold());
-  DrawWork two(device);
+  DrawWork two(device, images);
   two.run(outcome);
   DrawWorkProbe::pipeline_without_layout(two);
   CHECK(!two.invariants_hold()); }

@@ -81,6 +81,10 @@ GL_STEPS = ("pixel_format", "context", "version", "draw", "share", "busy", "attr
 # Renderers that are not a GPU: Mesa's software rasterizers, and what
 # opengl32.dll answers itself when no ICD took the window.
 SOFTWARE_RENDERERS = ("llvmpipe", "softpipe", "swiftshader", "gdi generic")
+# The renders each probe judged, which it leaves beside itself as bitmaps for a
+# person to open (docs/testing.md); pulled into <work>/images.
+VULKAN_PICTURES = ("vulkan-draw",)
+GL_PICTURES = ("opengl-draw", "opengl-share", "opengl-recreated")
 # A physical device's section in vulkaninfo's full text output (Vulkan-Tools
 # DumpGpu) starts with its name alone on a line. Device groups and presentable
 # surfaces name devices too, always with more on the line. --summary prints no
@@ -1135,6 +1139,7 @@ class GuestRun:
         self.khronos_key()
         listed = self.vulkaninfo()
         steps = self.probe()
+        self.pictures("vulkan", VULKAN_PICTURES)
         adapter = self.probed_luid(steps, "adapter_luid")
         device = self.probed_luid(steps, "physical_device")
         if device != adapter:
@@ -1314,6 +1319,20 @@ class GuestRun:
             raise StepFailed("opengl", f"the renderer {renderer} is not a host GPU")
         self.say(f"opengl ok: {int(summary.group(1))} passed, renderer {renderer}, "
                  f"version {notes.get('version', '(none)')}")
+        self.pictures("opengl", GL_PICTURES)
+
+    def pictures(self, step, names):
+        """The probe's renders into <work>/images: a probe whose steps all
+        passed wrote each one, so a missing picture fails the run."""
+        images = self.work / "images"
+        images.mkdir(exist_ok=True)
+
+        def pull():
+            for name in names:
+                self.agent.pull(f"{GUEST_DIRECTORY}\\{name}.bmp", images / f"{name}.bmp")
+
+        self.step(f"{step}.images", pull)
+        self.say(f"{step}.images ok: {len(names)} in {images}")
 
     def whole_machine(self):
         """What only a whole guest session answers, and what makes a run long:

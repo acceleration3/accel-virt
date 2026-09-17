@@ -350,11 +350,15 @@ foreach(src ${AV_UNIT_TESTS})
     target_link_libraries(${name} PRIVATE ${CMAKE_DL_LIBS})
     add_dependencies(${name} rvk_executor)
     target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+    # The probe's renders, as bitmaps a person can open (docs/testing.md).
+    target_compile_definitions(${name} PRIVATE AV_IMAGE_DIR="${CMAKE_BINARY_DIR}/images")
   endif()
   if(name STREQUAL "test_fullstack_vulkan_icd")
     target_link_libraries(${name} PRIVATE av_icd ${CMAKE_DL_LIBS})
     add_dependencies(${name} rvk_executor)
     target_compile_definitions(${name} PRIVATE AV_EXECUTOR_LIBRARY="$<TARGET_FILE:rvk_executor>")
+    # The probe's renders, as bitmaps a person can open (docs/testing.md).
+    target_compile_definitions(${name} PRIVATE AV_IMAGE_DIR="${CMAKE_BINARY_DIR}/images")
     # The Vulkan loader unloads a driver when its last instance goes, and a
     # leak in it is then reported from an unknown module no suppression can
     # name.

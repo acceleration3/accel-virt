@@ -156,7 +156,7 @@ target_link_libraries(rvkgl PRIVATE ${RVKTEST_IMPORTS} ${USER32_IMPORT})
 
 # rvkglprobe.exe, feature 050's experiment through the system opengl32.dll.
 file(GLOB RVKGLPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/gl/*.cpp)
-add_executable(rvkglprobe ${RVKGLPROBE_SOURCES})
+add_executable(rvkglprobe ${RVKGLPROBE_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/probe/windows_image_sink.cpp)
 add_dependencies(rvkglprobe rvkglprobe_imports)
 target_link_options(rvkglprobe PRIVATE /ENTRY:rvkglprobe_entry)
 target_link_libraries(rvkglprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${RVKGLPROBE_IMPORTS})

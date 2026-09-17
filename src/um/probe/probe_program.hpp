@@ -6,6 +6,7 @@
 #ifndef AV_PROBE_PROGRAM_HPP
 #define AV_PROBE_PROGRAM_HPP
 
+#include "um/probe/windows_image_sink.hpp"
 #include "guest/suite/guest_report.hpp"
 #include "guest/suite/loader_vulkan.hpp"
 #include "um/gdi_kmt.hpp"
@@ -29,6 +30,7 @@ private:
     GdiKmt       kmt_;
     GuestReport  report_;
     LoaderVulkan vulkan_;
+    WindowsImageSink images_;
 };
 
 }  // namespace av

@@ -1,6 +1,8 @@
 #include "guest/suite/draw_work.hpp"
 
 #include "core/trace/function_scope.hpp"
+#include "guest/suite/bmp_image.hpp"
+#include "guest/suite/image_sink.hpp"
 #include "guest/suite/probe_device.hpp"
 #include "guest/suite/probe_outcome.hpp"
 #include "guest/suite/shaders/solid_spv.hpp"
@@ -17,13 +19,13 @@ constexpr float        full_extent = static_cast<float>(DrawWork::extent);
 
 }  // namespace
 
-DrawWork::DrawWork(ProbeDevice &device)
-    : device_(device), image_(device), readback_(device), commands_(device), render_pass_(VK_NULL_HANDLE),
+DrawWork::DrawWork(ProbeDevice &device, ImageSink &images)
+    : device_(device), images_(images), image_(device), readback_(device), commands_(device), render_pass_(VK_NULL_HANDLE),
       framebuffer_(VK_NULL_HANDLE), vertex_(VK_NULL_HANDLE), fragment_(VK_NULL_HANDLE), layout_(VK_NULL_HANDLE),
       pipeline_(VK_NULL_HANDLE)
-      {
-          AV_SCOPE("DrawWork::DrawWork");
-      }
+{
+    AV_SCOPE("DrawWork::DrawWork");
+}
 
 /* Vulkan makes destroying VK_NULL_HANDLE a no-op. */
 DrawWork::~DrawWork()
@@ -48,6 +50,8 @@ void DrawWork::run(ProbeOutcome &outcome)
     if (!commands_.begin(outcome)) return;
     record();
     if (!commands_.run(outcome)) return;
+    /* The copy is the image as rendered, top row first. */
+    images_.save("vulkan-draw", BmpImage(readback_.bytes(), extent, extent, BmpImage::Rows::top_first));
     outcome.measure(coloured(), pixels);
 }
 

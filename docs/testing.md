@@ -157,6 +157,18 @@ realize. A qtest QEMU answers `host_threads` and `host_state` through
 stack runs from the handler through libc into `qemu-system-x86_64`, and the
 process ends.
 
+### Render pictures
+
+Every render check keeps a picture of what it judged, as a 24-bit BMP
+(`BmpImage`, `ImageSink`): the Vulkan probe's `vulkan-draw` (64x64), and the
+OpenGL probe's `opengl-draw`, `opengl-share` (the 2x2 shared texture) and
+`opengl-recreated`. In the guest the probes write them beside themselves in
+`C:\rvk`, and `run_guest_suite.py --vulkan` / `--opengl` pull them into
+`<work>/images/` (a passing probe without its pictures fails the run). The
+full-stack tests on the host GPU write them to `build/images/`. Both scenes are
+a full-viewport triangle in solid.frag's colour, so a correct picture is one
+flat colour, RGB (64, 128, 191).
+
 ### The mock platform
 
 `Platform` is an abstract base with exactly two implementations — that is what

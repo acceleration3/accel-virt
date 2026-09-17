@@ -59,6 +59,10 @@ ADAPTER_LUID = 0xD3A1
 LUID structure's eight bytes, LowPart first and little-endian."""
 
 
+VULKAN_PICTURE = "C:\\rvk\\vulkan-draw.bmp"
+GL_PICTURES = ("opengl-draw", "opengl-share", "opengl-recreated")
+
+
 def vulkaninfo_gpu(index, luid_bytes="a1d30000-00000000", name="rvk (NVIDIA GeForce RTX 4090)"):
     """One physical device as vulkaninfo's full text output prints it
     (Vulkan-Tools DumpGpu and DumpVkPhysicalDeviceIDProperties): a GPUn header,
@@ -390,7 +394,9 @@ class GuestSuiteRun(unittest.TestCase):
         outputs.update(behaviour.pop("outputs", {}))
         exits = {"reg": 1}
         exits.update(behaviour.pop("exits", {}))
-        self.script(outputs=outputs, files=dict(GUEST_FILES, **{ICD_LOG: "rvkvk: loader interface negotiation\r\n"}),
+        pictures = behaviour.pop("pictures", {VULKAN_PICTURE: "BM vulkan"})
+        self.script(outputs=outputs, files=dict(GUEST_FILES, **{ICD_LOG: "rvkvk: loader interface negotiation\r\n"},
+                                                **pictures),
                     **exits, **behaviour)
 
     def test_a_vulkan_run_finds_the_icd_through_the_adapter_alone_and_runs_the_probe(self):
@@ -423,6 +429,8 @@ class GuestSuiteRun(unittest.TestCase):
         self.assertNotIn("guest: report ok", result.stdout)
         self.assertEqual((self.work / "vulkaninfo.txt").read_text(newline=""), VULKANINFO)
         self.assertEqual((self.work / "vulkan.txt").read_text(newline=""), PROBE_REPORT)
+        self.assertEqual((self.work / "images" / "vulkan-draw.bmp").read_text(), "BM vulkan")
+        self.assertIn(f"guest: vulkan.images ok: 1 in {self.work / 'images'}", result.stdout)
         self.assertEqual((self.work / "diag" / "rvkvk-4242.log").read_text(newline=""),
                          "rvkvk: loader interface negotiation\r\n")
         self.assertIn("vulkaninfo ok", (self.work / "verdict.txt").read_text())
@@ -583,12 +591,14 @@ class GuestSuiteRun(unittest.TestCase):
                  "ok opengl.recreated 4096\r\n"
                  "rvkglprobe: 9 passed, 0 failed\r\n")
 
-    def opengl_script(self, report=None, code=0):
+    def opengl_script(self, report=None, code=0, pictures=None):
         outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
                    "rvkglprobe": self.GL_REPORT if report is None else report,
                    "collect": COLLECTED + "file C:\\ProgramData\\rvk\\rvkgl-4242.log\r\n"}
+        if pictures is None:
+            pictures = {f"C:\\rvk\\{name}.bmp": f"BM {name}" for name in GL_PICTURES}
         self.script(outputs=outputs, rvkglprobe=code,
-                    files=dict(GUEST_FILES, **{"C:\\ProgramData\\rvk\\rvkgl-4242.log": ""}))
+                    files=dict(GUEST_FILES, **{"C:\\ProgramData\\rvk\\rvkgl-4242.log": ""}, **pictures))
 
     def test_an_opengl_run_proves_every_step_through_the_system_opengl32(self):
         """Feature 050, T043: the probe runs with its report written to a guest
@@ -610,6 +620,11 @@ class GuestSuiteRun(unittest.TestCase):
                       "version 4.6 (Compatibility Profile) Mesa 26.2.2", result.stdout)
         self.assertIn("opengl ok", (self.work / "verdict.txt").read_text())
         self.assertTrue((self.work / "diag" / "rvkgl-4242.log").exists())
+        # The renders the probe judged, as pictures a person can open.
+        for name in GL_PICTURES:
+            self.assertEqual((self.work / "images" / f"{name}.bmp").read_text(), f"BM {name}")
+            self.assertIn(f"pull C:\\rvk\\{name}.bmp", lines)
+        self.assertIn(f"guest: opengl.images ok: {len(GL_PICTURES)} in {self.work / 'images'}", result.stdout)
         self.assertNotIn("--discovery", "\n".join(lines))
         self.assert_clean()
 
@@ -636,6 +651,21 @@ class GuestSuiteRun(unittest.TestCase):
                                         "--gl-probe", self.scratch / "rvkglprobe.exe")
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(f"guest: {reason}", result.stdout)
+
+    def test_a_passing_probe_without_its_pictures_fails(self):
+        """A probe that judged a render wrote its picture; a missing one means
+        the pixels were judged from something no one can look at."""
+        self.opengl_script(pictures={"C:\\rvk\\opengl-draw.bmp": "BM"})
+        result = self.run_suite("--opengl", "--executor", "/nowhere/librvk_executor.so",
+                                "--gl-probe", self.scratch / "rvkglprobe.exe")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("guest: opengl.images failed: guest agent error: no file C:\\rvk\\opengl-share.bmp",
+                      result.stdout)
+        self.vulkan_script(pictures={})
+        result = self.run_suite("--vulkan", "--executor", "/nowhere/librvk_executor.so", *self.vulkan_runtime())
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("guest: vulkan.images failed: guest agent error: no file C:\\rvk\\vulkan-draw.bmp",
+                      result.stdout)
 
     def test_an_opengl_run_is_its_own_boot_and_needs_the_real_executor_and_the_probe(self):
         self.opengl_script()
@@ -670,7 +700,7 @@ class GuestSuiteRun(unittest.TestCase):
     def test_rvk_and_vulkan_are_separate_boots(self):
         result = self.run_suite("--rvk", "--vulkan")
         self.assertEqual(result.returncode, 2)
-        self.assertIn("--rvk, --vulkan and --opengl-discovery are separate boots", result.stderr)
+        self.assertIn("--rvk, --vulkan, --opengl-discovery and --opengl are separate boots", result.stderr)
 
     def test_a_run_that_injects_a_stall_runs_the_timeout_scenario_alone(self):
         """US3: with the host holding one context, every other scenario would be
