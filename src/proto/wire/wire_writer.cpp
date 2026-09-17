@@ -1,19 +1,13 @@
 #include "proto/wire/wire_writer.hpp"
 
-#include "core/trace/function_scope.hpp"
-
 namespace av {
 
 WireWriter::WireWriter(uint8_t *bytes, size_t capacity)
     : bytes_(bytes), capacity_(bytes != nullptr ? capacity : 0u), offset_(0u), wanted_(0u),
-      status_(Status::ok)
-      {
-          AV_SCOPE("WireWriter::WireWriter");
-      }
+      status_(Status::ok) {}
 
 uint8_t *WireWriter::claim(size_t count)
 {
-    AV_SCOPE("WireWriter::claim");
     /* Counted before the room is checked, and counted whether or not this one
      * fits: the answer's length is the answer's, not the prefix that fitted. */
     wanted_ += count;
@@ -28,50 +22,30 @@ uint8_t *WireWriter::claim(size_t count)
 
 void WireWriter::write_little_endian(uint64_t value, size_t count)
 {
-    AV_SCOPE("WireWriter::write_little_endian");
     uint8_t *start = claim(count);
     for (size_t i = 0u; start != nullptr && i < count; i++)
         start[i] = static_cast<uint8_t>(value >> (8u * i));
 }
 
-void WireWriter::write_u8(uint8_t value)
-{
-    AV_SCOPE("WireWriter::write_u8");
-    write_little_endian(value, 1u);
-}
-void WireWriter::write_u16(uint16_t value)
-{
-    AV_SCOPE("WireWriter::write_u16");
-    write_little_endian(value, 2u);
-}
-void WireWriter::write_u32(uint32_t value)
-{
-    AV_SCOPE("WireWriter::write_u32");
-    write_little_endian(value, 4u);
-}
-void WireWriter::write_u64(uint64_t value)
-{
-    AV_SCOPE("WireWriter::write_u64");
-    write_little_endian(value, 8u);
-}
+void WireWriter::write_u8(uint8_t value)   { write_little_endian(value, 1u); }
+void WireWriter::write_u16(uint16_t value) { write_little_endian(value, 2u); }
+void WireWriter::write_u32(uint32_t value) { write_little_endian(value, 4u); }
+void WireWriter::write_u64(uint64_t value) { write_little_endian(value, 8u); }
 
 void WireWriter::copy_bytes(const uint8_t *source, size_t count)
 {
-    AV_SCOPE("WireWriter::copy_bytes");
     uint8_t *start = claim(count);
     for (size_t i = 0u; start != nullptr && i < count; i++) start[i] = source[i];
 }
 
 void WireWriter::write_zeros(size_t count)
 {
-    AV_SCOPE("WireWriter::write_zeros");
     uint8_t *start = claim(count);
     for (size_t i = 0u; start != nullptr && i < count; i++) start[i] = 0u;
 }
 
 void WireWriter::write(const void *source, size_t count)
 {
-    AV_SCOPE("WireWriter::write");
     copy_bytes(static_cast<const uint8_t *>(source), count);
 }
 
@@ -79,7 +53,6 @@ void WireWriter::write(const void *source, size_t count)
  * leaves nothing behind - what every other write here promises. */
 void WireWriter::write_varint_bits(uint64_t value)
 {
-    AV_SCOPE("WireWriter::write_varint_bits");
     uint8_t groups[10] = {};
     size_t  count = 0u;
     do {
@@ -91,25 +64,12 @@ void WireWriter::write_varint_bits(uint64_t value)
     copy_bytes(groups, count);
 }
 
-Status WireWriter::status() const
-{
-    AV_SCOPE("WireWriter::status");
-    return status_;
-}
-size_t WireWriter::offset() const
-{
-    AV_SCOPE("WireWriter::offset");
-    return offset_;
-}
-size_t WireWriter::wanted() const
-{
-    AV_SCOPE("WireWriter::wanted");
-    return wanted_;
-}
+Status WireWriter::status() const { return status_; }
+size_t WireWriter::offset() const { return offset_; }
+size_t WireWriter::wanted() const { return wanted_; }
 
 bool WireWriter::invariants_hold() const
 {
-    AV_SCOPE("WireWriter::invariants_hold");
     return offset_ <= capacity_ && (bytes_ != nullptr || capacity_ == 0u);
 }
 

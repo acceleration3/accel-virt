@@ -88,7 +88,10 @@ Never leave commented-out code; git has it.
 as the first line of every function definition in `src/`, naming the function
 as written (docs/trace.md). `tools/scope_marks.py --apply` writes them;
 `ctest -R scope_marks` fails a definition without one. The exceptions are the
-one-line ABI entry points, `constexpr` functions, and `src/core/trace/` itself.
+one-line ABI entry points, `constexpr` functions, `src/core/trace/` itself,
+every `TraceHost` and the clock it reads (a scope there recurses), and the
+wire's per-member primitives in `src/proto/wire/` (they cannot block, and
+their scopes tripled a traced decode); a mark in an exempt file fails too.
 
 **Names**: classes `PascalCase`, methods and locals `snake_case`, private data
 members trailing underscore. No `Manager`, `Helper`, `Utils`, `Handler`,

@@ -6,7 +6,6 @@
 #define AV_WIRE_READER_HPP
 
 #include "core/support/status.hpp"
-#include "core/trace/function_scope.hpp"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -36,7 +35,6 @@ public:
     template <typename T>
     [[nodiscard]] bool read_pod(T &out)
     {
-        AV_SCOPE("WireReader::read_pod");
         static_assert(__is_trivially_copyable(T), "a field on the wire is plain data");
         return read(&out, sizeof(T));
     }
@@ -45,7 +43,6 @@ public:
     template <typename T>
     [[nodiscard]] bool read_varint(T &out)
     {
-        AV_SCOPE("WireReader::read_varint");
         uint64_t value = 0u;
         if (!read_varint_bits(value, sizeof(T) * 8u)) return false;
         out = static_cast<T>(value);

@@ -360,7 +360,11 @@ beneath it (`tools/codegen/rvk_codegen/emit/{icd_entries,client_dispatch,server_
 
 The serializers and deserializers run once per struct member and per array
 element, so a scope in each would multiply a command's decode cost for frames
-that never block; the frame of the call they serve says where a thread is.
+that never block; the frame of the call they serve says where a thread is. The
+hand-written primitives under them - `WireReader`, `WireWriter` and
+`WireArena` in `src/proto/wire/` - are exempt from marks for the same reason
+(`tools/scope_marks.py` fails a mark written there): with them marked, a bound
+device decoded a `VkInstanceCreateInfo` in ~3 us against ~1 us unbound.
 `tools/scope_marks.py --check` keeps skipping generated files (the generator's
 tests in `tests/tools/test_generated_trace_scopes.py` hold its output to this),
 while `--names` and the MCP server's name map include them.

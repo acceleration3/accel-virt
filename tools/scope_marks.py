@@ -36,9 +36,15 @@ FNV_PRIME = 16777619
 # and the clock one reads), would recurse into itself: a scope's enter asks the
 # host for the thread, whose scope enters again. The layout proofs are data
 # the kernel build checks at compile time; generated code is its generator's.
+# The wire's reads and writes are leaf primitives called once per struct
+# member: they cannot block, so a hang is never inside one, and their scopes
+# tripled the time a bound device took to decode a command.
 EXCLUDED_DIRECTORIES = ("src/core/trace/", "src/proto/generated/")
 EXCLUDED_FILES = ("src/km/ddi_record_layout.cpp", "src/km/ddi_table_layout.cpp",
-                  "src/um/trace/interrupt_clock.cpp")
+                  "src/um/trace/interrupt_clock.cpp",
+                  "src/proto/wire/wire_reader.cpp", "src/proto/wire/wire_reader.hpp",
+                  "src/proto/wire/wire_writer.cpp", "src/proto/wire/wire_writer.hpp",
+                  "src/proto/wire/wire_arena.cpp", "src/proto/wire/wire_arena.hpp")
 EXCLUDED_SUFFIXES = ("_trace_host.cpp", "_trace_host.hpp")
 SOURCE_SUFFIXES = (".cpp", ".hpp")
 DEFINITION_KINDS = {
@@ -120,6 +126,23 @@ def sources(root):
                 or relative.endswith(EXCLUDED_SUFFIXES)):
             continue
         yield path, relative
+
+
+def forbidden_marks(root):
+    """A mark in an excluded file - outside the directories the tool leaves to
+    others - is one somebody wrote by hand where none may be."""
+    found = []
+    base = pathlib.Path(root) / "src"
+    for path in sorted(base.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if path.suffix not in SOURCE_SUFFIXES or not path.is_file() or relative.startswith(EXCLUDED_DIRECTORIES):
+            continue
+        if relative not in EXCLUDED_FILES and not relative.endswith(EXCLUDED_SUFFIXES):
+            continue
+        for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+            for name in MARK_ANYWHERE.findall(line):
+                found.append(f"{relative}:{number}: {name} is in a file that must not be marked")
+    return found
 
 
 def qualified_name(cursor):
@@ -381,6 +404,7 @@ def main():
     with concurrent.futures.ProcessPoolExecutor() as pool:
         for relative, found, _marks in pool.map(examine, jobs, chunksize=4):
             findings += found
+    findings += forbidden_marks(root)
     findings += collisions(all_marks(root))
     for finding in findings:
         print(finding, file=sys.stderr)

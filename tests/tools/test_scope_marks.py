@@ -129,6 +129,32 @@ class ScopeMarks(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("twice is exempt and must not be marked", result.stderr)
 
+    def test_wire_primitives_and_trace_hosts_are_never_marked(self):
+        """The per-member wire reads and writes run dozens of times per command
+        and cannot block, and a trace host is what every scope calls: neither
+        needs a mark, apply never writes one, and one written by hand fails."""
+        plain = "struct WireReader {\n    int read_u8();\n    int n_;\n};\nint WireReader::read_u8()\n{\n    return n_;\n}\n"
+        for relative in ("src/proto/wire/wire_reader.cpp", "src/proto/wire/wire_writer.hpp",
+                         "src/proto/wire/wire_arena.cpp", "src/device/shim/posix_trace_host.cpp",
+                         "src/um/trace/interrupt_clock.cpp"):
+            with self.subTest(relative=relative):
+                self.tree.write(relative, plain)
+                self.assertEqual(self.check().returncode, 0)
+                self.assertEqual(self.apply().returncode, 0)
+                self.assertEqual(self.read(relative), plain)
+                self.tree.write(relative, INCLUDE + "\n" + plain.replace(
+                    "{\n    return", '{\n    AV_SCOPE("WireReader::read_u8");\n    return'))
+                result = self.check()
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(f"{relative}:8: WireReader::read_u8 is in a file that must not be marked",
+                              result.stderr)
+                self.tree.write(relative, plain)
+        # Only those files: a reader beside them is judged as any other.
+        self.tree.write("src/proto/wire/wire_view.cpp", plain)
+        result = self.check()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("WireReader::read_u8 has no scope mark", result.stderr)
+
     def test_file_local_helpers_are_marked_with_their_bare_names(self):
         self.tree.write("src/core/local.cpp",
                         "namespace av {\n\nnamespace {\n\nint length_of(const char *text)\n{\n    return text != 0;\n}\n\n"
