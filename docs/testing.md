@@ -157,6 +157,25 @@ realize. A qtest QEMU answers `host_threads` and `host_state` through
 stack runs from the handler through libc into `qemu-system-x86_64`, and the
 process ends.
 
+### The OpenGL ICD
+
+`rvkgl.dll`'s decisions live in `src/icd/opengl/` (feature 050), tested the way
+the Vulkan ICD's are: `GlIcdRoot` over the seams (`WindowSurface`,
+`ThreadSlot`, the system opengl32 it creates HGLRCs through) with
+`ScriptedWindowSurface`, `ScriptedThreadSlot` and `FakeOpengl32`, which loads
+the ICD through its 15 exports and refuses it as `pgldrvLoadAndAllocDriverInfo`
+does, installs a proc table per thread only for 336 or 306 entries, and names
+an extension function (`wglGetProcAddress`) only to a thread with a context
+current - the rule the first live boot tripped over. `GlIcdRig` runs a context
+over MockKmt and a scripted host; `GlProbe` runs its nine steps
+(`pixel_format`, `context`, `version`, `draw`, `share`, `busy`, `attribs`,
+`lost`, `recreated`) over `ScriptedGl` in unit tests, over `FakeOpengl32` on
+`FullStackRig` and the host GPU in `test_fullstack_opengl_icd.cpp`, and over the
+system `opengl32.dll` in the guest as `rvkglprobe.exe`, which
+`run_guest_suite.py --opengl` runs as the gate's fourth boot. The GL and WGL
+parsers that read application bytes have hostile tables and fuzz targets
+(`fuzz_context_attributes`, `fuzz_pixel_format_query`).
+
 ### Render pictures
 
 Every render check keeps a picture of what it judged, as a 24-bit BMP

@@ -178,6 +178,21 @@ line. The palette entries, `DrvSwapMultipleBuffers` and `DrvPresentBuffers` are
 not exported: opengl32 tolerates their absence. The choice is made once per
 process, so a probe that fails to load the ICD has to be a new process.
 
+**What the live guest showed** (feature 050, T009 and T043, Windows 11 build
+26200). The count above is 15, not 14: `DrvCreateLayerContext` is exported too,
+and it is the one opengl32 calls - `wglCreateContext` became
+`DrvCreateLayerContext(hdc, 0)` and never `DrvCreateContext`. A window a
+session-0 service makes has a DC for which `D3DKMTOpenAdapterFromHdc` fails
+(`STATUS_INVALID_PARAMETER`), and opengl32 then takes the first adapter
+`D3DKMTEnumAdapters2` lists, which is rvkgpu's in these guests - so the ICD
+finds its adapter by enumeration too, and no interactive session is needed.
+`wglGetProcAddress` answers only a thread that has a context of the ICD
+current: asked with none, it answers null and `ERROR_PROC_NOT_FOUND`, which is
+how every extension function (`wglCreateContextAttribsARB` first) is reached.
+With stack probes off, a program with no C runtime faults on any frame larger
+than the 4 KiB its main thread commits; `src/um/stack_probe.cpp` supplies the
+`__chkstk` the compiler calls.
+
 ## Presenting from Vulkan
 
 `VK_KHR_win32_surface` + `VK_KHR_swapchain` on Windows are implemented by the

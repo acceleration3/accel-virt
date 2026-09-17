@@ -250,6 +250,14 @@ goes with the last of them. While any import holds a blob, `RESOURCE_UNREF` of
 it answers `ERR_INVALID_PARAMETER`, so its id is never re-created over other
 pages under a live import.
 
+An OpenGL context imports once (feature 050): its guest ICD binds one
+host-visible chunk as its blob arena and imports all of it at offset 0 with
+memory type 0, and the OpenGL backend adopts that host range as the context's
+region - bulk data a GL command names by offset into the arena (a
+`glReadPixels` destination, a texture upload, a buffer map's copy) is read and
+written there in place. A second import into the same context is refused; the
+wire handle it answers is the region's address, which no GL command names.
+
 A body of any length but its command's is command framing, fault 5, as for a
 NOP with a body. Every other refusal is an answer, and the context runs on:
 
