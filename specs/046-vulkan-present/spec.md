@@ -47,8 +47,11 @@ Constitution Principle III and [`CLAUDE.md`](../../CLAUDE.md). Restated here bec
 | `Swapchain` | object | extent, format, mode, images, next index, the copy's command objects | Hands out images and puts a presented one on its window |
 | `SwapchainTable` | system | the process's swapchains | Owns the swapchains `vkCreateSwapchainKHR` made |
 | `FramePacer` | object | the adapter, the device, the vertical blank count | Holds a FIFO present until the adapter's next vertical blank |
-| `PresentProbe` (guest suite) | object | the window, the swapchain, the frame count | Proves a presented frame reaches the window at the display's rate |
 | `PresentBlit` (core) | object | the source and destination pages, the rectangle | Copies one present's pixels between CPU-backed allocations |
+| `PresentSurface` (core) | object | one allocation's layout and guest pages | Says where in the guest's pages a byte of a surface is |
+| `PresentArea` (core) | object | one rectangle's four edges, in 64 bits | Clips a present's rectangle to a surface or to another rectangle |
+| `PresentWork` (guest suite, planned as `PresentProbe`) | object | the window, the surface, the swapchain, the frames | Presents the draw's triangle on the probe's own window |
+| `WindowFrame` (guest suite) | interface | - | The probe's own window, as the guest's shim sees it |
 
 ### Test requirements
 
