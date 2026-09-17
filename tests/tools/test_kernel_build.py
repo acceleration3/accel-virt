@@ -100,7 +100,10 @@ class KernelPlatformLinks(unittest.TestCase):
             {"platform": KERNEL_PLATFORM_ROUND_TRIP},
             sources=("src/km/kernel_platform.cpp", "src/core/platform/spin_lock.cpp",
                      "src/core/platform/spin_lock_guard.cpp", "src/core/platform/mutex.cpp",
-                     "src/core/platform/mutex_guard.cpp"),
+                     "src/core/platform/mutex_guard.cpp", "src/core/platform/lock_marks.cpp",
+                     # Every function opens a trace scope, and the locks mark the table.
+                     "src/core/trace/function_scope.cpp", "src/core/trace/scope_binding.cpp",
+                     "src/core/trace/trace_table.cpp", "src/core/trace/trace_layout.cpp"),
             include_directories=("src",))
         self.addCleanup(project.remove)
         configured = project.configure()
