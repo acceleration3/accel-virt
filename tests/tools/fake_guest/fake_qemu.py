@@ -10,7 +10,7 @@ The script is JSON at $FAKE_GUEST_SCRIPT:
              program for the ones in PROGRAMS
   files      {"C:\\guest\\path": "content"}: what guest-file-read returns, byte
              per character (latin-1), so a dump's binary header can be scripted
-  rvktest, rvkvkprobe, vulkaninfo, reg
+  rvktest, rvkvkprobe, rvkglprobe, vulkaninfo, reg
              exit code of that program; one run as `cmd.exe /c PROGRAM > FILE`
              leaves its output in FILE
   panic      {"during": stage, "code": n, "loop": bool}: the guest bugchecks when
@@ -58,7 +58,7 @@ SNAPSHOT_STATE = 2
 HOSTMEM_BASE = 0xC0000000
 """Where this fake's guest programmed that BAR."""
 MODERN_BAR_BASE = 0xB0000000
-PROGRAMS = ("rvktest", "rvkvkprobe", "vulkaninfo", "reg")
+PROGRAMS = ("rvktest", "rvkvkprobe", "rvkglprobe", "vulkaninfo", "reg")
 """The programs the runner starts itself rather than through provision.ps1."""
 
 

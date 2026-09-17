@@ -1,0 +1,8 @@
+LIBRARY user32.dll
+EXPORTS
+CreateWindowExW
+DefWindowProcW
+DestroyWindow
+GetDC
+RegisterClassExW
+ReleaseDC

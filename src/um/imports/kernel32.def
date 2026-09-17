@@ -10,15 +10,19 @@ CreateThread
 CreateToolhelp32Snapshot
 ExitProcess
 GetCommandLineW
+GetCurrentProcess
 GetCurrentProcessId
 GetCurrentThreadId
 GetLastError
 GetModuleFileNameW
 GetModuleHandleExW
+GetModuleHandleW
 GetProcessHeap
 GetStdHandle
 HeapAlloc
 HeapFree
+K32EnumProcessModules
+K32GetModuleBaseNameW
 MapViewOfFile
 OpenEventW
 OpenFileMappingW
@@ -32,6 +36,7 @@ ReleaseSRWLockExclusive
 RtlLookupFunctionEntry
 RtlVirtualUnwind
 SetEvent
+SetLastError
 SetUnhandledExceptionFilter
 TryAcquireSRWLockExclusive
 UnmapViewOfFile

@@ -1,0 +1,17 @@
+LIBRARY rvkgl.dll
+EXPORTS
+DrvValidateVersion
+DrvSetCallbackProcs
+DrvDescribePixelFormat
+DrvSetPixelFormat
+DrvCreateContext
+DrvCreateLayerContext
+DrvDeleteContext
+DrvSetContext
+DrvReleaseContext
+DrvCopyContext
+DrvShareLists
+DrvGetProcAddress
+DrvDescribeLayerPlane
+DrvSwapLayerBuffers
+DrvSwapBuffers

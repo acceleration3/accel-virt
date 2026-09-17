@@ -12,7 +12,7 @@ INF = ROOT / "src" / "km" / "rvkgpu.inf"
 DEVICE = ROOT / "src" / "device" / "qemu" / "virtio-gpu-pci-rvk.c"
 DRIVER_BUILD = ROOT / "src" / "km" / "CMakeLists.txt"
 MANIFEST = ROOT / "src" / "um" / "vulkan" / "rvkvk.json"
-PACKAGE_FILES = ("rvkgpu.sys", "rvkvk.dll", "rvkvk.json")
+PACKAGE_FILES = ("rvkgpu.sys", "rvkvk.dll", "rvkvk.json", "rvkgl.dll")
 REDHAT_QUMRANET = 0x1AF4
 VIRTIO_GPU = 0x1050
 
@@ -82,6 +82,28 @@ class DriverPackage(unittest.TestCase):
             files = re.search(r"\[Rvkgpu_Files\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
             self.assertIn(image, files.split())
 
+    def test_registers_the_opengl_icd_through_the_adapter_and_nowhere_else(self):
+        """Feature 050, contracts/icd_interface.md: dxgkrnl's DpiGetAdapterInfo
+        reads OpenGLDriverName as a string and OpenGLVersion and OpenGLFlags as
+        type-checked REG_DWORDs from the software key; opengl32 asks for them
+        with KMTQAITYPE_UMOPENGLINFO. Flags must be 1, or opengl32 describes
+        pixel formats itself and never asks the ICD. The WOW values wait for
+        a 32-bit ICD (061), and the global OpenGLDrivers key is the pre-WDDM
+        path FR-001 forbids."""
+        software = self.inf["Rvkgpu_Install"]["AddReg"]
+        section = re.search(rf"\[{re.escape(software)}\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
+        values = {match.group(1): (match.group(2), match.group(3))
+                  for match in re.finditer(r"^HKR,,\s*(OpenGL\w*),\s*(0x[0-9A-Fa-f]{8}),\s*(.+?)\s*$",
+                                           section, re.M)}
+        self.assertEqual(values, {"OpenGLDriverName": ("0x00010000", '"%13%\\rvkgl.dll"'),
+                                  "OpenGLVersion": ("0x00010001", "2"),
+                                  "OpenGLFlags": ("0x00010001", "1")})
+        self.assertNotIn("OpenGLDrivers", self.text)
+        self.assertNotIn("Wow", self.text)
+        self.assertIn("rvkgl.dll = 1", self.text)
+        files = re.search(r"\[Rvkgpu_Files\]([\s\S]*?)(?:\n\[|\Z)", self.text).group(1)
+        self.assertIn("rvkgl.dll", files.split())
+
     def test_the_manifest_names_the_icd_beside_it(self):
         """A relative library_path is joined to the manifest's directory only
         when it holds a backslash (Vulkan-Loader loader.c:2460)."""
@@ -133,7 +155,7 @@ class Provisioning(unittest.TestCase):
                  if "=" in line and not line.lstrip().startswith(";")}
         runner = (ROOT / "tools" / "guest" / "run_guest_suite.py").read_text()
         staged = set(re.findall(r'PACKAGE_DIRECTORY \+ "\\\\([\w.]+)"', runner))
-        self.assertEqual(named, {"rvkgpu.sys", "rvkvk.dll", "rvkvk.json"})
+        self.assertEqual(named, {"rvkgpu.sys", "rvkvk.dll", "rvkvk.json", "rvkgl.dll"})
         self.assertEqual(staged, named | {"rvkgpu.inf"})
         script = (ROOT / "tools" / "guest" / "provision.ps1").read_text()
         self.assertIn("New-FileCatalog -Path $Package ", script)

@@ -65,6 +65,9 @@ STRESS_WORST = re.compile(rb"^ok stress\.worst_wait_us (\d+)\r?$", re.M)
 REGION_LINE = re.compile(r"^rvkgpu: host-visible region status 0x([0-9a-fA-F]{8})\r?$", re.M)
 HOST_VISIBLE_WRITTEN = re.compile(rb"^ok host_visible\.pattern (\d+)\r?$", re.M)
 PROBE_SUMMARY = re.compile(rb"^rvkvkprobe: (\d+) passed, (\d+) failed\r?$", re.M)
+# rvkglprobe --discovery's facts (feature 050): `discovery <key> <text> value=0x.. error=..`.
+DISCOVERY_LINE = re.compile(r"^discovery (\w+) (.*?)\r?$", re.M)
+DISCOVERY_OPEN = re.compile(r"^discovery open_adapter_from_hdc (\w+) value=0x([0-9A-Fa-f]+) error=(\d+)\r?$", re.M)
 PROBE_STEP = re.compile(rb"^ok vulkan\.(\w+)(?: (\S+))?\r?$", re.M)
 # Every step of feature 045's proof, in the probe's order: a probe that stops
 # printing one has not proven it, whatever its summary counts.
@@ -166,6 +169,8 @@ def arguments():
     parser.add_argument("--icd", default=str(ROOT / "build" / "guest" / "rvkvk.dll"),
                         help="the Vulkan ICD the package installs beside rvkgpu.sys (feature 045)")
     parser.add_argument("--icd-manifest", default=str(ROOT / "src" / "um" / "vulkan" / "rvkvk.json"))
+    parser.add_argument("--gl-icd", default=str(ROOT / "build" / "guest" / "rvkgl.dll"),
+                        help="the OpenGL ICD the package names (feature 050)")
     parser.add_argument("--provision", default=str(ROOT / "tools" / "guest" / "provision.ps1"))
     parser.add_argument("--firmware", default="/usr/share/edk2/x64/OVMF_CODE.4m.fd")
     parser.add_argument("--firmware-vars", default="/usr/share/edk2/x64/OVMF_VARS.4m.fd")
@@ -208,6 +213,10 @@ def arguments():
                         help="find the Vulkan ICD through the Khronos loader and run rvkvkprobe.exe instead of the "
                              "suite; needs the fetched runtime and --executor naming the real library (feature 045)")
     parser.add_argument("--probe", default=str(ROOT / "build" / "guest" / "rvkvkprobe.exe"))
+    parser.add_argument("--opengl-discovery", action="store_true",
+                        help="run rvkglprobe.exe --discovery through the system opengl32.dll and record what it "
+                             "loaded, instead of the suite (feature 050, T008)")
+    parser.add_argument("--gl-probe", default=str(ROOT / "build" / "guest" / "rvkglprobe.exe"))
     parser.add_argument("--vulkan-runtime", default=str(ROOT / "third_party" / "vulkan-runtime"),
                         help="where tools/fetch_vulkan_runtime.py put vulkan-1.dll and vulkaninfo.exe")
     parser.add_argument("--vulkan-pins", default=str(ROOT / "tools" / "vulkan_runtime_pins.txt"))
@@ -233,8 +242,8 @@ def arguments():
     parsed = parser.parse_args()
     if not parsed.image:
         parser.error("no image: pass --image or set AV_GUEST_IMAGE")
-    if parsed.rvk and parsed.vulkan:
-        parser.error("--rvk and --vulkan are separate boots: pass one")
+    if sum((parsed.rvk, parsed.vulkan, parsed.opengl_discovery)) > 1:
+        parser.error("--rvk, --vulkan and --opengl-discovery are separate boots: pass one")
     return parsed
 
 
@@ -466,10 +475,12 @@ class GuestRun:
     def prepare(self):
         required = [self.args.image, self.args.provision]
         if not self.args.prepare_image:
-            required += [self.args.driver, self.args.inf, self.args.icd, self.args.icd_manifest, self.args.test,
-                         self.args.inspect]
+            required += [self.args.driver, self.args.inf, self.args.icd, self.args.icd_manifest,
+                         self.args.gl_icd, self.args.test, self.args.inspect]
         if self.args.vulkan:
             required.append(self.args.probe)
+        if self.args.opengl_discovery:
+            required.append(self.args.gl_probe)
         for path in required:
             if not os.path.isfile(path):
                 raise StepFailed("prepare", f"{path} does not exist")
@@ -575,6 +586,7 @@ class GuestRun:
                       (self.args.inf, PACKAGE_DIRECTORY + "\\rvkgpu.inf"),
                       (self.args.icd, PACKAGE_DIRECTORY + "\\rvkvk.dll"),
                       (self.args.icd_manifest, PACKAGE_DIRECTORY + "\\rvkvk.json"),
+                      (self.args.gl_icd, PACKAGE_DIRECTORY + "\\rvkgl.dll"),
                       (self.args.test, GUEST_DIRECTORY + "\\rvktest.exe"),
                       (self.args.inspect, GUEST_DIRECTORY + "\\rvkinspect.exe")]
         if self.args.vulkan:
@@ -584,6 +596,9 @@ class GuestRun:
             files += [(runtime / "vulkan-1.dll", GUEST_DIRECTORY + "\\vulkan-1.dll"),
                       (runtime / "vulkaninfo.exe", GUEST_DIRECTORY + "\\vulkaninfo.exe"),
                       (self.args.probe, GUEST_DIRECTORY + "\\rvkvkprobe.exe")]
+
+        if self.args.opengl_discovery:
+            files.append((self.args.gl_probe, GUEST_DIRECTORY + "\\rvkglprobe.exe"))
 
         def send():
             make = f"New-Item -ItemType Directory -Force -Path {PACKAGE_DIRECTORY}"
@@ -1213,6 +1228,9 @@ class GuestRun:
         if self.args.vulkan:
             self.vulkan()
             return
+        if self.args.opengl_discovery:
+            self.opengl_discovery()
+            return
         if self.args.rvk:
             self.rvk()
             return
@@ -1225,6 +1243,33 @@ class GuestRun:
         else:
             self.host_visible(self.suite())
             self.vsync()
+
+    def opengl_discovery(self):
+        """Feature 050, T008-T009: what the system opengl32.dll does for a window
+        a session-0 program makes - whether the adapter's ICD is what it loads -
+        recorded rather than judged, since the answer decides how the ICD is
+        built (research.md §9). Only a probe that made no report fails."""
+        report = GUEST_DIRECTORY + "\\discovery.txt"
+        command = f"{GUEST_DIRECTORY}\\rvkglprobe.exe --discovery > {report} 2>&1"
+        code, _out, _error = self.step("discovery.run", lambda: self.agent.run(CMD, ["/c", command],
+                                                                             self.args.step_timeout))
+        self.step("discovery.pull", lambda: self.agent.pull(report, self.work / "discovery.txt"))
+        text = (self.work / "discovery.txt").read_text(errors="replace")
+        if code != 0:
+            raise StepFailed("discovery", f"the probe exited {code} (its window could not be made); "
+                                          "see discovery.txt")
+        facts = dict(DISCOVERY_LINE.findall(text))
+        if "rvkgl_loaded" not in facts:
+            raise StepFailed("discovery", "the probe reported no rvkgl_loaded line")
+        loaded = "loaded" if facts["rvkgl_loaded"].startswith("yes") else "not loaded"
+        opened = DISCOVERY_OPEN.search(text)
+        if opened is not None and opened.group(1) == "ok":
+            adapter = f"the DC opened an adapter (LUID {int(opened.group(2), 16):#x})"
+        elif opened is not None:
+            adapter = f"the DC opened no adapter (status {int(opened.group(3)):#010X})".replace("0X", "0x")
+        else:
+            adapter = "the probe did not open the DC's adapter"
+        self.say(f"discovery ok: rvkgl.dll {loaded}, {adapter}")
 
     def whole_machine(self):
         """What only a whole guest session answers, and what makes a run long:

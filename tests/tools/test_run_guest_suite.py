@@ -93,7 +93,8 @@ class GuestSuiteRun(unittest.TestCase):
         self.image.write_bytes(b"prepared image")
         self.os_stat = os.stat(self.image)
         for name in ("rvkgpu.sys", "rvkgpu.pdb", "rvkvk.dll", "rvkvk.json", "rvktest.exe", "rvkvkprobe.exe",
-                     "rvkinspect.exe", "OVMF_VARS.fd", "OVMF_CODE.fd"):
+                     "rvkinspect.exe", "rvkgl.dll", "rvkglprobe.exe", "OVMF_VARS.fd",
+                     "OVMF_CODE.fd"):
             (self.scratch / name).write_bytes(name.encode() * 100)
         self.work = self.scratch / "work"
         self.journal = self.scratch / "journal.txt"
@@ -116,6 +117,7 @@ class GuestSuiteRun(unittest.TestCase):
                      "--driver", self.scratch / "rvkgpu.sys", "--test", self.scratch / "rvktest.exe",
                      "--inspect", self.scratch / "rvkinspect.exe",
                      "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
+                     "--gl-icd", self.scratch / "rvkgl.dll",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
         return subprocess.run([sys.executable, "-B", str(RUNNER), *map(str, arguments)], capture_output=True,
@@ -154,7 +156,7 @@ class GuestSuiteRun(unittest.TestCase):
                           "setmode -Width 2560 -Height 1600", "setmode -Width 1280 -Height 800",
                           "monitortimeout -Minutes 1", "monitortimeout -Minutes 0",
                           "sleepstates", "check", "collect"])
-        self.assertEqual(events.count("file"), 7)
+        self.assertEqual(events.count("file"), 8)
         self.assertEqual(events.count("pull"), 2)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.sys 1000", lines)
         self.assertIn("file C:\\rvk\\package\\rvkgpu.inf", "\n".join(lines))
@@ -162,6 +164,8 @@ class GuestSuiteRun(unittest.TestCase):
         # package missing a file it names (feature 045).
         self.assertIn("file C:\\rvk\\package\\rvkvk.dll 900", lines)
         self.assertIn("file C:\\rvk\\package\\rvkvk.json 1000", lines)
+        # The OpenGL ICD is in the package too, which names it (feature 050).
+        self.assertIn("file C:\\rvk\\package\\rvkgl.dll 900", lines)
         # The inspector is in every run, so a hung or crashed program can be
         # read from the host whatever the run is for (docs/trace.md).
         self.assertIn("file C:\\rvk\\rvkinspect.exe 1400", lines)
@@ -501,6 +505,71 @@ class GuestSuiteRun(unittest.TestCase):
                 self.assertIn(f"guest: {reason}", result.stdout)
                 self.assertEqual((self.work / "vulkan.txt").read_text(newline=""), report)
 
+    DISCOVERY = ("discovery register_class ok value=0x000000000000C0DE error=0\r\n"
+                 "discovery open_adapter_from_hdc ok value=0x0000000000006431 error=0\r\n"
+                 "discovery set_pixel_format ok value=0x0000000000000001 error=0\r\n"
+                 "discovery rvkgl_loaded yes value=0x0000000000000000 error=0\r\n"
+                 "discovery loaded rvkgl.dll value=0x00007FFA10000000 error=0\r\n")
+
+    def discovery_script(self, **behaviour):
+        outputs = {"check": ONE_MONITOR + "device: PCI\\VEN_1AF4 status=OK problem=0 service=rvkgpu\n",
+                   "rvkglprobe": self.DISCOVERY,
+                   "collect": COLLECTED + "file C:\\ProgramData\\rvk\\rvkgl-4242.log\r\n"}
+        outputs.update(behaviour.pop("outputs", {}))
+        self.script(outputs=outputs,
+                    files=dict(GUEST_FILES, **{"C:\\ProgramData\\rvk\\rvkgl-4242.log":
+                                               "DrvValidateVersion 0x0000000000000002\r\n"}),
+                    **behaviour)
+
+    def test_an_opengl_discovery_run_records_what_opengl32_did_and_the_icd_log(self):
+        """Feature 050, T008: the probe runs through the system opengl32.dll with
+        its report written to a guest file and pulled; the run records which ICD
+        loaded and the adapter the window's DC opened, and keeps rvkgl's log."""
+        self.discovery_script()
+        result = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "rvkglprobe.exe")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        lines = self.journal_lines()
+        self.assertIn("file C:\\rvk\\rvkglprobe.exe 1400", lines)
+        self.assertIn("file C:\\rvk\\package\\rvkgl.dll 900", lines)
+        self.assertIn("exec C:\\Windows\\System32\\cmd.exe /c C:\\rvk\\rvkglprobe.exe --discovery "
+                      "> C:\\rvk\\discovery.txt 2>&1", lines)
+        self.assertIn("pull C:\\rvk\\discovery.txt", lines)
+        self.assertEqual(self.stage_calls(), ["sign", "install", "check", "collect"])
+        self.assertEqual((self.work / "discovery.txt").read_text(newline=""), self.DISCOVERY)
+        self.assertIn("guest: discovery ok: rvkgl.dll loaded, the DC opened an adapter (LUID 0x6431)", result.stdout)
+        self.assertEqual((self.work / "diag" / "rvkgl-4242.log").read_text(newline=""),
+                         "DrvValidateVersion 0x0000000000000002\r\n")
+        self.assertNotIn("rvkvkprobe", "\n".join(lines))
+        self.assert_clean()
+
+    def test_an_opengl_discovery_run_reports_another_icd_or_a_refused_open_and_fails_only_without_a_report(self):
+        other = ("discovery open_adapter_from_hdc failed value=0x0000000000000000 error=3221225485\r\n"
+                 "discovery rvkgl_loaded no value=0x0000000000000000 error=0\r\n")
+        self.discovery_script(outputs={"rvkglprobe": other})
+        result = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "rvkglprobe.exe")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("guest: discovery ok: rvkgl.dll not loaded, the DC opened no adapter (status 0xC000000D)",
+                      result.stdout)
+        self.discovery_script(outputs={"rvkglprobe": ""})
+        silent = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "rvkglprobe.exe")
+        self.assertEqual(silent.returncode, 1)
+        self.assertIn("guest: discovery failed: the probe reported no rvkgl_loaded line", silent.stdout)
+        self.discovery_script(rvkglprobe=1)
+        failed = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "rvkglprobe.exe")
+        self.assertEqual(failed.returncode, 1)
+        self.assertIn("guest: discovery failed: the probe exited 1 (its window could not be made); "
+                      "see discovery.txt", failed.stdout)
+
+    def test_opengl_discovery_is_its_own_boot(self):
+        self.discovery_script()
+        for other in ("--rvk", "--vulkan"):
+            refused = self.run_suite("--opengl-discovery", other)
+            self.assertEqual(refused.returncode, 2)
+            self.assertIn("separate boots", refused.stderr)
+        missing = self.run_suite("--opengl-discovery", "--gl-probe", self.scratch / "noprobe.exe")
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn("guest: prepare failed: " + str(self.scratch / "noprobe.exe") + " does not exist", missing.stdout)
+
     def test_a_vulkan_run_without_the_pinned_runtime_or_the_probe_is_refused_before_qemu(self):
         self.vulkan_script()
         absent = self.run_suite("--vulkan", *self.vulkan_runtime(vulkaninfo_exe=None))
@@ -523,7 +592,7 @@ class GuestSuiteRun(unittest.TestCase):
     def test_rvk_and_vulkan_are_separate_boots(self):
         result = self.run_suite("--rvk", "--vulkan")
         self.assertEqual(result.returncode, 2)
-        self.assertIn("--rvk and --vulkan are separate boots", result.stderr)
+        self.assertIn("--rvk, --vulkan and --opengl-discovery are separate boots", result.stderr)
 
     def test_a_run_that_injects_a_stall_runs_the_timeout_scenario_alone(self):
         """US3: with the host holding one context, every other scenario would be
@@ -814,6 +883,7 @@ class GuestSuiteRun(unittest.TestCase):
                      "--driver", self.scratch / "rvkgpu.sys", "--test", self.scratch / "rvktest.exe",
                      "--inspect", self.scratch / "rvkinspect.exe",
                      "--icd", self.scratch / "rvkvk.dll", "--icd-manifest", self.scratch / "rvkvk.json",
+                     "--gl-icd", self.scratch / "rvkgl.dll",
                      "--firmware", self.scratch / "OVMF_CODE.fd", "--firmware-vars", self.scratch / "OVMF_VARS.fd",
                      "--boot-timeout", "10", "--step-timeout", "5", "--agent-timeout", "2", *extra]
         runner = subprocess.Popen([sys.executable, "-B", str(RUNNER), *map(str, arguments)], stdout=subprocess.PIPE,
@@ -892,6 +962,7 @@ class GuestSuiteRun(unittest.TestCase):
                                    "--test", str(self.scratch / "rvktest.exe"),
                                    "--inspect", str(self.scratch / "rvkinspect.exe"),
                                    "--icd", str(self.scratch / "rvkvk.dll"),
+                                   "--gl-icd", str(self.scratch / "rvkgl.dll"),
                                    "--icd-manifest", str(self.scratch / "rvkvk.json"),
                                    "--firmware", str(self.scratch / "OVMF_CODE.fd"),
                                    "--firmware-vars", str(self.scratch / "OVMF_VARS.fd"),
@@ -944,6 +1015,9 @@ class GuestSuiteRun(unittest.TestCase):
         missing = self.run_suite("--test", self.scratch / "absent.exe")
         self.assertEqual(missing.returncode, 1)
         self.assertIn("absent.exe does not exist", missing.stdout)
+        no_gl = self.run_suite("--gl-icd", self.scratch / "nogl.dll")
+        self.assertEqual(no_gl.returncode, 1)
+        self.assertIn("guest: prepare failed: " + str(self.scratch / "nogl.dll") + " does not exist", no_gl.stdout)
         uninspected = self.run_suite("--inspect", self.scratch / "noinspect.exe")
         self.assertEqual(uninspected.returncode, 1)
         self.assertIn("guest: prepare failed: " + str(self.scratch / "noinspect.exe") + " does not exist",

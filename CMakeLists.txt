@@ -396,7 +396,8 @@ ExternalProject_Add(rvktest
   BUILD_ALWAYS ON
   INSTALL_COMMAND ""
   BUILD_BYPRODUCTS ${CMAKE_BINARY_DIR}/guest/rvktest.exe ${CMAKE_BINARY_DIR}/guest/rvkvk.dll
-                   ${CMAKE_BINARY_DIR}/guest/rvkvkprobe.exe ${CMAKE_BINARY_DIR}/guest/rvkinspect.exe)
+                   ${CMAKE_BINARY_DIR}/guest/rvkvkprobe.exe ${CMAKE_BINARY_DIR}/guest/rvkinspect.exe
+                   ${CMAKE_BINARY_DIR}/guest/rvkgl.dll ${CMAKE_BINARY_DIR}/guest/rvkglprobe.exe)
 ExternalProject_Add_StepDependencies(rvktest configure
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_toolchain.cmake
   ${CMAKE_SOURCE_DIR}/cmake/windows_user_flags.cmake)
@@ -424,6 +425,27 @@ add_test(NAME rvkvk_image
                  ${CMAKE_BINARY_DIR}/guest/rvkvk.dll --dll --only-exports
                  --require-export vk_icdNegotiateLoaderICDInterfaceVersion
                  --require-export vk_icdGetInstanceProcAddr)
+
+# The OpenGL ICD exports exactly the Drv* entries opengl32 looks up (feature
+# 050, contracts/icd_interface.md); user32 is what its window calls will need.
+add_test(NAME rvkgl_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkgl.dll --dll --only-exports --allow-import user32.dll
+                 --require-export DrvValidateVersion --require-export DrvSetCallbackProcs
+                 --require-export DrvDescribePixelFormat --require-export DrvSetPixelFormat
+                 --require-export DrvCreateContext --require-export DrvCreateLayerContext
+                 --require-export DrvDeleteContext --require-export DrvSetContext
+                 --require-export DrvReleaseContext --require-export DrvCopyContext
+                 --require-export DrvShareLists --require-export DrvGetProcAddress
+                 --require-export DrvDescribeLayerPlane --require-export DrvSwapLayerBuffers
+                 --require-export DrvSwapBuffers)
+
+# The OpenGL probe calls the system opengl32.dll and makes a window (050).
+add_test(NAME rvkglprobe_image
+         COMMAND python3 -B ${CMAKE_SOURCE_DIR}/tools/check_guest_image.py
+                 ${CMAKE_BINARY_DIR}/guest/rvkglprobe.exe
+                 --allow-import opengl32.dll --allow-import user32.dll
+                 --require-import wglCreateContext --require-import D3DKMTOpenAdapterFromHdc)
 
 # ---- gate scripts are tested like any other code ---------------------------
 add_test(NAME tools_tests

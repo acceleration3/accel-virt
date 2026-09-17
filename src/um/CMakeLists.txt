@@ -17,7 +17,7 @@ file(GLOB_RECURSE RVKTEST_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 # The ICDs' shims, rvkvkprobe.exe's and rvkinspect.exe's are their own
 # targets below.
-list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/(icd|vulkan|probe|inspect)/")
+list(FILTER RVKTEST_SOURCES EXCLUDE REGEX "/um/(icd|vulkan|opengl|probe|inspect)/")
 # Of the generated tree, only the guest's encoders: the rvk scenarios send real
 # Vulkan and OpenCL streams (044). The server dispatch is the host's, and the
 # OpenGL client does not link before its ICD helpers exist (050).
@@ -108,3 +108,37 @@ file(GLOB RVKINSPECT_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/inspe
 add_executable(rvkinspect ${RVKINSPECT_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/icd/process_heap.cpp)
 target_link_options(rvkinspect PRIVATE /ENTRY:rvkinspect_entry)
 target_link_libraries(rvkinspect PRIVATE rvkguest ${RVKTEST_IMPORTS})
+
+# rvkgl.dll, the OpenGL ICD (feature 050). Its discovery build (T007) answers
+# opengl32 with nothing behind it, logging every call; T030 replaces it with
+# the ICD over src/icd/opengl.
+file(GLOB_RECURSE RVKGL_SOURCES CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/support/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../core/platform/lock_marks.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/trace/*.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/icd/file_log.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/opengl/*.cpp)
+add_library(rvkgl SHARED ${RVKGL_SOURCES})
+add_dependencies(rvkgl rvktest_imports)
+set_target_properties(rvkgl PROPERTIES PREFIX "")
+target_include_directories(rvkgl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_options(rvkgl PRIVATE /ENTRY:rvkgl_entry /DEF:${CMAKE_CURRENT_SOURCE_DIR}/opengl/rvkgl.def)
+set_property(TARGET rvkgl APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/opengl/rvkgl.def)
+target_link_libraries(rvkgl PRIVATE ${RVKTEST_IMPORTS})
+
+# rvkglprobe.exe, feature 050's experiment through the system opengl32.dll.
+set(RVKGLPROBE_IMPORTS "")
+foreach(module opengl32 user32)
+  set(library ${CMAKE_CURRENT_BINARY_DIR}/${module}.lib)
+  add_custom_command(OUTPUT ${library}
+    COMMAND llvm-dlltool -m i386:x86-64 -d ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def -l ${library}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/imports/${module}.def)
+  list(APPEND RVKGLPROBE_IMPORTS ${library})
+endforeach()
+add_custom_target(rvkglprobe_imports DEPENDS ${RVKGLPROBE_IMPORTS})
+file(GLOB RVKGLPROBE_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/probe/gl/*.cpp)
+add_executable(rvkglprobe ${RVKGLPROBE_SOURCES})
+add_dependencies(rvkglprobe rvkglprobe_imports)
+target_link_options(rvkglprobe PRIVATE /ENTRY:rvkglprobe_entry)
+target_link_libraries(rvkglprobe PRIVATE rvkguest ${RVKTEST_IMPORTS} ${RVKGLPROBE_IMPORTS})
