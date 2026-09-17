@@ -215,3 +215,30 @@ choices are:
 Option 2 is the correct first implementation: it works with DWM running on
 WARP and with any host driver. Option 3 is the destination, and it depends on
 the UMD.
+
+### What feature 046 built, and why it is not option 2 yet
+
+`D3DKMTPresent` is not reachable from an ICD that is not a D3D user-mode
+driver. Reversing `dxgkrnl.sys` (26100.1150) shows both doors shut:
+`DXGDEVICE::AllowLegacyPresent` (@14036fb0c) refuses a legacy present unless
+the device owns the VidPn source, which only the session's display owner does;
+and a redirected present - the one DWM composites - is presented from the
+user-mode driver's redirection surface, which a process without a UMD never
+creates. A window's present therefore has no kernel path from the ICD alone.
+
+So 046's swapchain presents like this: the swapchain's images are host images,
+`vkQueuePresentKHR` copies the acquired one through a host-visible buffer into
+guest memory (the chunks of feature 045), turns it bottom-up into the window's
+channel order, and puts it on the window with `SetDIBitsToDevice` on the
+window's own DC. FIFO then waits for the adapter's next vertical blank through
+`D3DKMTWaitForVerticalBlankEvent`. It composites correctly - the desktop owns
+the window, so the frame is where the application put it - at the cost of one
+copy back and a GDI blit. FR-001 ("never GDI") is deferred to feature 055 with
+the UMD, which is what makes option 2 reachable.
+
+The desktop's own presents are a separate matter: dxgkrnl writes them as DMA
+buffers for the miniport's node, and this driver's `ExecutionNode` completes
+anything that is not an rvk context as a loopback, so nothing ever executed the
+blits. `PresentBlit` (`src/core/present/`) now moves those pixels in the
+miniport, between allocations whose guest pages the aperture mapping recorded,
+and `adapter/0 present_rows` in a state dump says how many rows it moved.

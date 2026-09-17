@@ -84,6 +84,19 @@ host shapes wrongly reaches the ICD's own parsing, which has hostile tables and
 fuzz targets (`fuzz_physical_device_view`, `fuzz_extension_policy`,
 `fuzz_memory_type_table`).
 
+The window-system extensions (feature 046) are tested in the same layers.
+`SurfaceTable`, `SurfaceProperties`, `Swapchain` and `Presentation` are
+portable, and what they call is injected: `EntryLookup` is the ICD's own entry
+table in the driver (`IcdEntryLookup`) and a `ScriptedVulkanDevice` in a test -
+a scripted GPU that hands out images, records the commands a present's copy
+makes and holds the bytes a test paints, so a unit test judges the frame the
+swapchain blitted; `WindowSurface` is `GdiWindowSurface` in the driver and
+`ScriptedWindowSurface` in a test, which keeps every blit. `Swapchain`'s
+creation is judged against `contracts/wsi.md` by a hostile table and by
+`fuzz_swapchain_create`, whose input is a whole `VkSwapchainCreateInfoKHR` -
+an application's structure is foreign bytes, so every enumeration field is read
+as the integer it is (`foreign_enum.hpp`).
+
 ### The trace tracker in user mode
 
 What decides in the tracker's Windows side is portable and tested like the
@@ -179,8 +192,10 @@ parsers that read application bytes have hostile tables and fuzz targets
 ### Render pictures
 
 Every render check keeps a picture of what it judged, as a 24-bit BMP
-(`BmpImage`, `ImageSink`): the Vulkan probe's `vulkan-draw` (64x64), and the
-OpenGL probe's `opengl-draw`, `opengl-share` (the 2x2 shared texture) and
+(`BmpImage`, `ImageSink`): the Vulkan probe's `vulkan-draw` (64x64),
+`vulkan-present` (the window the swapchain presented onto, read back) and
+`vulkan-resized` (the same window after it grew to 96x96), and the OpenGL
+probe's `opengl-draw`, `opengl-share` (the 2x2 shared texture) and
 `opengl-recreated`. In the guest the probes write them beside themselves in
 `C:\rvk`, and `run_guest_suite.py --vulkan` / `--opengl` pull them into
 `<work>/images/` (a passing probe without its pictures fails the run). The
@@ -647,7 +662,8 @@ can leave the guest with no display.
   exactly one `GPUn:` section whose `deviceLUID` LowPart is the one the probe
   printed as `vulkan.adapter_luid`, requires every probe step (`instance`,
   `adapter_luid`, `physical_device`, `device`, `compute`, `draw`, `lost`,
-  `recreated`) and `rvkvkprobe: N passed, 0 failed`, and requires
+  `recreated`, and feature 046's `surface`, `present`, `pacing` and `resized`)
+  and `rvkvkprobe: N passed, 0 failed`, and requires
   `vulkan.physical_device` to equal `vulkan.adapter_luid`. The collect stage
   copies the ICD's `C:\ProgramData\rvk\*.log` into `diag/` on every run.
 - **The program** is `src/um/`: `GdiKmt` translates `Kmt` into gdi32's D3DKMT

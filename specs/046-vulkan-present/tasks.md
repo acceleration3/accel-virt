@@ -21,7 +21,7 @@ description: "Tasks: Vulkan presentation (046)"
 - [X] T004 [US1] `SurfaceProperties` (object): capabilities (1 and 2), formats (1 and 2), present modes per research.md §2-3, count/array protocols, a gone window; tests `test_surface_properties.cpp`
 - [X] T005 [US1] `SwapchainImages` (object) and `Swapchain` (object): create (every refusal of contracts/wsi.md, a hostile table over `VkSwapchainCreateInfoKHR`), images, acquire, present (the host copy through a host-visible buffer, RGBA to BGRA, bottom-up, `blit_window`), destroy; `SwapchainTable` (system) and the entries; tests `test_swapchain.cpp` over IcdRig and the scripted host (the commands a present sends, the bytes blitted, the allocation-failure sweep); `tests/fuzz/fuzz_swapchain_create.cpp` with a corpus
 - [X] T006 [US1] `FramePacer` (object): FIFO waits for the next vertical blank after the frame is drawn; IMMEDIATE does not; a failed wait is logged once and the present still succeeds; tests `test_frame_pacer.cpp`
-- [ ] T007 [US1] `test_fullstack_vulkan_icd.cpp`: a swapchain on the host GPU presents a drawn frame through the ICD; the blitted bytes are the render's; `build/images/vulkan-present.bmp`
+- [X] T007 [US1] `test_fullstack_vulkan_icd.cpp`: a swapchain on the host GPU presents a drawn frame through the ICD; the blitted bytes are the render's; `build/images/vulkan-present.bmp`
 
 **Checkpoint**: commit.
 
@@ -33,19 +33,19 @@ description: "Tasks: Vulkan presentation (046)"
 
 ## Phase 4: The probe and the guest
 
-- [ ] T009 `VulkanEntry` gains the WSI calls; `ScriptedVulkan` answers them; `VulkanProbe` gains `surface`, `present` (60 FIFO frames of the draw's triangle; the window read back through `read_window`, every pixel the colour; saved as `vulkan-present`), `pacing` (the 60 frames' rate within 2% of the vertical blank rate the adapter measures) and `resized` (a resize, out of date, recreated, presented); tests `test_vulkan_probe.cpp`; `rvkvkprobe.exe` makes a 64x64 `WS_POPUP` window (the GL probe's `ProbeWindow`, moved to `src/um/probe/`)
-- [ ] T010 `run_guest_suite.py --vulkan` requires the new steps and pulls `vulkan-present`; tests in `test_run_guest_suite.py`
+- [X] T009 `VulkanEntry` gains the WSI calls; `ScriptedVulkan` answers them; `VulkanProbe` gains `surface`, `present` (60 FIFO frames of the draw's triangle; the window read back through `read_window`, every pixel the colour; saved as `vulkan-present`), `pacing` (the 60 frames' rate within 2% of the vertical blank rate the adapter measures) and `resized` (a resize, out of date, recreated, presented); tests `test_vulkan_probe.cpp`; `rvkvkprobe.exe` makes a 64x64 `WS_POPUP` window (the GL probe's `ProbeWindow`, moved to `src/um/probe/`)
+- [X] T010 `run_guest_suite.py --vulkan` requires the new steps and pulls `vulkan-present`; tests in `test_run_guest_suite.py`
 
 **Checkpoint**: commit.
 
 ## Phase 5: The desktop reaches the scanout (FR-004)
 
-- [ ] T011 `PresentBlit` (object) in `src/core/present/`: a blit or colour fill between allocations whose pages the KMD knows (aperture pages), per sub-rectangle, clipped to both; `Adapter::present` runs it after writing the DMA command; tests `test_present_blit.cpp` (every rectangle edge, a source without pages, overlapping rectangles, a rectangle past either allocation)
+- [X] T011 `PresentBlit` (object) in `src/core/present/`: a blit or colour fill between allocations whose pages the KMD knows (aperture pages), per sub-rectangle, clipped to both; `Adapter::present` runs it after writing the DMA command; tests `test_present_blit.cpp` (every rectangle edge, a source without pages, overlapping rectangles, a rectangle past either allocation)
 - [ ] T012 Live: the suite boot's screendump shows the desktop (not all black); record what DWM presents from
 
 **Checkpoint**: commit.
 
 ## Phase 6: Polish and merge
 
-- [ ] T013 docs: `docs/testing.md` (WSI layers, the present step, the desktop), `docs/kb/07-usermode.md` (the present path before a UMD, citing the RE)
+- [X] T013 docs: `docs/testing.md` (WSI layers, the present step, the desktop), `docs/kb/07-usermode.md` (the present path before a UMD, citing the RE)
 - [ ] T014 Coverage and fuzz smoke; `AV_GATE_JOBS=6 AV_GUEST_IMAGE=... tools/gate.sh`; merge; push
